@@ -1,0 +1,426 @@
+// OpenSeller.ma - SQLite Development Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Role {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  guardName String   @default("web")
+  users     User[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("roles")
+}
+
+model User {
+  id              Int       @id @default(autoincrement())
+  uuid            String    @unique @default(uuid())
+  email           String?   @unique
+  phone           String?   @unique
+  password        String
+  roleId          Int
+  role            Role      @relation(fields: [roleId], references: [id])
+  isActive        Boolean   @default(false)
+  kycStatus       String    @default("PENDING")
+  emailVerifiedAt DateTime?
+  phoneVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  profile         UserProfile?
+  kycDocuments    KycDocument[]
+  brands          Brand[]
+  leadImports     LeadImportBatch[]
+  leads           Lead[]
+  assignedLeads   Lead[]          @relation("AgentLeads")
+  orders          Order[]
+  wallet          Wallet?
+  payoutRequests  PayoutRequest[] @relation("VendorPayouts")
+  notifications   Notification[]
+
+  ownedProducts    Product[]          @relation("ProductOwner")
+  inventory        ProductInventory[]
+  claims           AffiliateClaim[]
+  supportRequests  SupportRequest[]
+
+  conversations    ConversationParticipant[]
+  messages         Message[]
+
+  @@map("users")
+}
+
+model UserProfile {
+  userId    Int     @id
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName  String?
+  avatarUrl String?
+  city      String?
+  address   String?
+  language  String  @default("fr")
+
+  @@map("user_profiles")
+}
+
+model KycDocument {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  user         User     @relation(fields: [userId], references: [id])
+  documentType String
+  documentUrl  String
+  status       String   @default("PENDING")
+  createdAt    DateTime @default(now())
+
+  @@map("kyc_documents")
+}
+
+model Brand {
+  id             Int       @id @default(autoincrement())
+  vendorId       Int
+  vendor         User      @relation(fields: [vendorId], references: [id])
+  name           String
+  slug           String    @unique
+  logoUrl        String?
+  primaryColor   String?
+  secondaryColor String?
+  slogan         String?
+  description    String?
+  designSettings String?
+  isApproved     Boolean   @default(false)
+  approvedAt     DateTime?
+  status         String    @default("DRAFT")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  bankAccounts   BrandBankAccount[]
+  leads          Lead[]
+  orders         Order[]
+
+  @@map("brands")
+}
+
+model BrandBankAccount {
+  id         Int    @id @default(autoincrement())
+  brandId    Int
+  brand      Brand  @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  bankName   String
+  ribAccount String
+  iceNumber  String?
+  isPrimary  Boolean @default(false)
+
+  @@map("brand_bank_accounts")
+}
+
+model Category {
+  id       Int        @id @default(autoincrement())
+  nameAr   String
+  nameFr   String
+  nameEn   String?
+  parentId Int?
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
+  slug     String     @unique
+  imageUrl String?
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id                Int      @id @default(autoincrement())
+  sku               String   @unique
+  nameAr            String
+  nameFr            String
+  nameEn            String?
+  description       String?
+  categoryId        Int
+  category          Category @relation(fields: [categoryId], references: [id])
+  baseCostMad       Float
+  retailPriceMad    Float
+  isCustomizable    Boolean  @default(true)
+  minProductionDays Int      @default(3)
+  
+  // Arch modifications
+  ownerId           Int?
+  owner             User?     @relation("ProductOwner", fields: [ownerId], references: [id])
+  visibility        String    @default("REGULAR") // REGULAR, AFFILIATE, NONE
+  status            String    @default("APPROVED") // PENDING, APPROVED, REJECTED
+  
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  images           ProductImage[]
+  orderItems       OrderItem[]
+  inventories      ProductInventory[]
+  claims           AffiliateClaim[]
+
+  @@map("products")
+}
+
+model ProductImage {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  imageUrl  String
+  isPrimary Boolean @default(false)
+  sortOrder Int     @default(0)
+
+  @@map("product_images")
+}
+
+model LeadImportBatch {
+  id            Int      @id @default(autoincrement())
+  vendorId      Int
+  vendor        User     @relation(fields: [vendorId], references: [id])
+  fileName      String
+  totalRows     Int      @default(0)
+  validRows     Int      @default(0)
+  duplicateRows Int      @default(0)
+  status        String   @default("PENDING")
+  createdAt     DateTime @default(now())
+
+  leads Lead[]
+
+  @@map("lead_import_batches")
+}
+
+model Lead {
+  id              Int       @id @default(autoincrement())
+  vendorId        Int
+  vendor          User      @relation(fields: [vendorId], references: [id])
+  brandId         Int?
+  brand           Brand?    @relation(fields: [brandId], references: [id])
+  importBatchId   Int?
+  importBatch     LeadImportBatch? @relation(fields: [importBatchId], references: [id])
+  fullName        String
+  phone           String
+  whatsapp        String?
+  city            String?
+  address         String?
+  status          String    @default("NEW")
+  assignedAgentId Int?
+  assignedAgent   User?     @relation("AgentLeads", fields: [assignedAgentId], references: [id])
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  order Order?
+
+  @@map("leads")
+}
+
+model Order {
+  id              Int      @id @default(autoincrement())
+  orderNumber     String   @unique
+  vendorId        Int
+  vendor          User     @relation(fields: [vendorId], references: [id])
+  brandId         Int
+  brand           Brand    @relation(fields: [brandId], references: [id])
+  leadId          Int?     @unique
+  lead            Lead?    @relation(fields: [leadId], references: [id])
+  customerName    String
+  customerPhone   String
+  customerCity    String
+  customerAddress String
+  totalAmountMad  Float
+  vendorEarningMad Float
+  platformFeeMad  Float
+  status          String   @default("PENDING")
+  paymentMethod   String   @default("COD")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  items OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id             Int     @id @default(autoincrement())
+  orderId        Int
+  order          Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId      Int
+  product        Product @relation(fields: [productId], references: [id])
+  quantity       Int
+  unitPriceMad   Float
+  totalPriceMad  Float
+
+  @@map("order_items")
+}
+
+model Wallet {
+  id               Int      @id @default(autoincrement())
+  userId           Int      @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balanceMad       Float    @default(0)
+  totalEarnedMad   Float    @default(0)
+  totalWithdrawnMad Float   @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  transactions WalletTransaction[]
+
+  @@map("wallets")
+}
+
+model WalletTransaction {
+  id             Int      @id @default(autoincrement())
+  walletId       Int
+  wallet         Wallet   @relation(fields: [walletId], references: [id])
+  type           String
+  amountMad      Float
+  balanceAfterMad Float
+  description    String?
+  createdAt      DateTime @default(now())
+
+  @@map("wallet_transactions")
+}
+
+model PayoutRequest {
+  id         Int       @id @default(autoincrement())
+  vendorId   Int
+  vendor     User      @relation("VendorPayouts", fields: [vendorId], references: [id])
+  amountMad  Float
+  status     String    @default("PENDING")
+  bankName   String
+  ribAccount String
+  iceNumber  String?
+  processedAt DateTime?
+  receiptUrl String?
+  createdAt  DateTime  @default(now())
+
+  @@map("payout_requests")
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model MoroccanCity {
+  id      Int     @id @default(autoincrement())
+  nameAr  String
+  nameFr  String  @unique
+  nameEn  String?
+  region  String?
+  isMajor Boolean @default(false)
+
+  @@map("moroccan_cities")
+}
+
+model ActivityLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  action    String
+  modelType String?
+  modelId   Int?
+  changes   String?
+  createdAt DateTime @default(now())
+
+  @@map("activity_logs")
+}
+
+model ProductInventory {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id])
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id])
+  quantity   Int      @default(0)
+  acquiredAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("product_inventory")
+}
+
+model AffiliateClaim {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id])
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id])
+  status     String   @default("ACTIVE") // ACTIVE, REVOKED
+  claimedAt  DateTime @default(now())
+
+  @@map("affiliate_claims")
+}
+
+model SupportRequest {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+  type        String   // DELIVERY_FULFILLMENT, GENERAL_SUPPORT, etc.
+  subject     String
+  description String
+  status      String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("support_requests")
+}
+
+// ==========================================
+// CHAT & MESSAGING SYSTEM
+// ==========================================
+
+model Conversation {
+  id        Int      @id @default(autoincrement())
+  type      String   @default("DIRECT") // DIRECT, GROUP, SUPPORT
+  title     String?  // Optional for groups/support
+  status    String   @default("ACTIVE") // ACTIVE, ARCHIVED, CLOSED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id             Int          @id @default(autoincrement())
+  conversationId Int
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         Int
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String       @default("MEMBER") // MEMBER, ADMIN
+  lastReadAt     DateTime?
+  joinedAt       DateTime     @default(now())
+
+  @@unique([conversationId, userId])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id             Int          @id @default(autoincrement())
+  conversationId Int
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       Int
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  content        String
+  messageType    String       @default("TEXT") // TEXT, IMAGE, FILE, SYSTEM
+  attachmentUrl  String?
+  isRead         Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@map("messages")
+}
