@@ -1,12 +1,27 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { authApi, User } from '../lib/api';
+import { authApi } from '../lib/api';
+
+export interface AuthUser {
+  uuid: string;
+  email: string | null;
+  phone: string | null;
+  fullName?: string;
+  role: string;
+  roleName?: string;
+  kycStatus: string;
+  isActive: boolean;
+  mode?: 'SELLER' | 'AFFILIATE';
+  isInfluencer?: boolean;
+  referralCode?: string;
+  [key: string]: any;
+}
 
 interface AuthContextType {
-  user: User | null;
+  user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (data: { email?: string; phone?: string; password: string }) => Promise<User>;
-  register: (data: { email?: string; phone?: string; password: string; fullName: string }) => Promise<void>;
+  login: (data: { email?: string; phone?: string; password: string }) => Promise<AuthUser>;
+  register: (data: { email?: string; phone?: string; password: string; fullName: string; role?: string }) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -14,7 +29,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const refreshUser = async () => {
@@ -46,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user;
   };
 
-  const register = async (data: { email?: string; phone?: string; password: string; fullName: string }) => {
+  const register = async (data: { email?: string; phone?: string; password: string; fullName: string; role?: string }) => {
     const response = await authApi.register(data);
     const { user, tokens } = response.data.data;
     localStorage.setItem('accessToken', tokens.accessToken);

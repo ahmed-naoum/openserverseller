@@ -48,8 +48,8 @@ export default function ProductDetail() {
 
     const type = product.visibility === 'AFFILIATE' ? 'PRODUCT_CLAIM' : 'DELIVERY_FULFILLMENT';
 
-    if (type === 'PRODUCT_CLAIM' && user?.role !== 'AFFILIATE') {
-      toast.error('Seuls les affiliés peuvent réclamer ce produit.');
+    if (type === 'PRODUCT_CLAIM' && user?.mode !== 'AFFILIATE') {
+      toast.error('Vous devez passer en mode Affilié pour réclamer ce produit.');
       return;
     }
 
@@ -115,14 +115,14 @@ export default function ProductDetail() {
                    >
                      {isSubmitting ? 'Traitement...' : product.visibility === 'AFFILIATE' ? 'Réclamer le produit' : 'Acheter le produit'}
                    </button>
-                   {(!isAuthenticated || user?.role === 'CALL_CENTER_AGENT' || user?.role === 'UNCONFIRMED') && (
-                     <p className="text-sm text-center text-red-500 mt-2 flex items-center justify-center gap-1">
-                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-                       </svg>
-                       Action restreinte (View-Only ou Non connecté)
-                     </p>
-                   )}
+                    {(!isAuthenticated || user?.role === 'CALL_CENTER_AGENT' || user?.role === 'UNCONFIRMED' || (product.visibility === 'AFFILIATE' && user?.mode !== 'AFFILIATE')) && (
+                      <p className="text-sm text-center text-red-500 mt-2 flex items-center justify-center gap-1">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                        </svg>
+                        {product.visibility === 'AFFILIATE' && user?.mode !== 'AFFILIATE' ? 'Passez en mode Affilié pour réclamer' : 'Action restreinte (View-Only ou Non connecté)'}
+                      </p>
+                    )}
                 </div>
              </div>
           </div>

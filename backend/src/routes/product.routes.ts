@@ -11,9 +11,17 @@ router.get(
   '/',
   optionalAuth,
   asyncHandler(async (req: Request, res: Response) => {
-    const { page = 1, limit = 20, category, search, status, myProducts } = req.query;
+    const { page = 1, limit = 20, category, search, status, myProducts, visibility } = req.query;
 
     const where: any = { isActive: true };
+
+    // Filter by visibility: REGULAR, AFFILIATE, or both
+    if (visibility && visibility !== 'ALL') {
+      where.visibility = visibility;
+    } else if (!req.user || (req.user.roleName !== 'SUPER_ADMIN' && req.user.roleName !== 'ADMIN')) {
+      // Public/regular users see REGULAR products
+      where.visibility = 'REGULAR';
+    }
 
     if (myProducts === 'true' && req.user) {
       where.ownerId = req.user.id;

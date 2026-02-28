@@ -1,10 +1,31 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../contexts/AuthContext';
-import { ordersApi, leadsApi, walletApi, brandsApi } from '../../lib/api';
+import { ordersApi, leadsApi, walletApi, brandsApi, dashboardApi } from '../../lib/api';
 import { Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
 export default function VendorDashboard() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
+  const queryClient = useQueryClient();
+
+  const { data: dashboardData } = useQuery({
+    queryKey: ['vendor-dashboard'],
+    queryFn: () => dashboardApi.sellerAffiliate(),
+  });
+
+  const switchModeMutation = useMutation({
+    mutationFn: (mode: 'SELLER' | 'AFFILIATE') => dashboardApi.switchMode(mode),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vendor-dashboard'] });
+      refreshUser();
+      toast.success('Mode switched successfully!');
+    },
+    onError: () => {
+      toast.error('Failed to switch mode');
+    },
+  });
+
+  const currentMode = dashboardData?.data?.mode || user?.mode || 'SELLER';
 
   const { data: walletData } = useQuery({
     queryKey: ['wallet'],
@@ -42,12 +63,42 @@ export default function VendorDashboard() {
     <div className="space-y-6">
       {/* Welcome Section */}
       <div className="card p-6">
-        <h2 className="text-2xl font-bold text-gray-900">
-          Bienvenue, {user?.fullName || 'Vendeur'}! 👋
-        </h2>
-        <p className="text-gray-600 mt-1">
-          Voici un aperçu de votre activité sur OpenSeller.ma
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">
+              Bienvenue, {user?.fullName || 'Vendeur'}! 👋
+            </h2>
+            <p className="text-gray-600 mt-1">
+              Voici un aperçu de votre activité sur OpenSeller.ma
+            </p>
+          </div>
+          
+          {/* Mode Switcher */}
+          <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
+            <button
+              onClick={() => switchModeMutation.mutate('SELLER')}
+              disabled={currentMode === 'SELLER'}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition ${
+                currentMode === 'SELLER'
+                  ? 'bg-white text-primary-600 shadow'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Mode Vendeur
+            </button>
+            <button
+              onClick={() => switchModeMutation.mutate('AFFILIATE')}
+              disabled={currentMode === 'AFFILIATE'}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition ${
+                currentMode === 'AFFILIATE'
+                  ? 'bg-white text-primary-600 shadow'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Mode Affilié
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Stats Grid */}

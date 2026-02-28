@@ -30,14 +30,29 @@ const generateOTP = (): string => {
   return Math.floor(Math.pow(10, length - 1) + Math.random() * 9 * Math.pow(10, length - 1)).toString();
 };
 
+const normalizePhoneNumber = (phone: string): string | null => {
+  if (!phone) return null;
+  const cleaned = phone.replace(/[\s\-]/g, '');
+  if (/^\+212[5678][0-9]{8}$/.test(cleaned)) return cleaned;
+  if (/^0[5678][0-9]{8}$/.test(cleaned)) return '+212' + cleaned.slice(1);
+  if (/^[5678][0-9]{8}$/.test(cleaned)) return '+212' + cleaned;
+  return null;
+};
+
 router.post(
   '/register',
   [
     body('email').optional().isEmail().normalizeEmail(),
-    body('phone').optional().matches(/^\+212[0-9]{9}$/),
+    body('phone').optional().custom((value) => {
+      const normalized = normalizePhoneNumber(value);
+      if (!normalized) {
+        throw new Error('Invalid Moroccan phone number format');
+      }
+      return true;
+    }),
     body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
     body('fullName').trim().isLength({ min: 2 }),
-    body('role').optional().isIn(['VENDOR', 'CALL_CENTER_AGENT']),
+    body('role').optional().isIn(['VENDOR', 'CALL_CENTER_AGENT', 'GROSSELLER', 'INFLUENCER', 'CONFIRMATION_AGENT']),
   ],
   asyncHandler(async (req, res) => {
     const errors = validationResult(req);
@@ -46,6 +61,7 @@ router.post(
     }
 
     const { email, phone, password, fullName, role = 'VENDOR' } = req.body;
+    const normalizedPhone = phone ? normalizePhoneNumber(phone) : undefined;
 
     if (!email && !phone) {
       throw new AppException(400, 'Email or phone is required');
@@ -55,7 +71,7 @@ router.post(
       where: {
         OR: [
           ...(email ? [{ email }] : []),
-          ...(phone ? [{ phone }] : []),
+          ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
         ],
       },
     });
@@ -77,7 +93,7 @@ router.post(
     const user = await prisma.user.create({
       data: {
         email,
-        phone,
+        phone: normalizedPhone,
         password: hashedPassword,
         roleId: userRole.id,
         kycStatus: 'PENDING',
@@ -128,7 +144,7 @@ router.post(
   '/login',
   [
     body('email').optional().isEmail().normalizeEmail(),
-    body('phone').optional().matches(/^\+212[0-9]{9}$/),
+    body('phone').optional().matches(/^\+212[5678][0-9]{8}$/),
     body('password').notEmpty(),
   ],
   asyncHandler(async (req, res) => {
@@ -203,7 +219,7 @@ router.post(
   '/verify-otp',
   [
     body('email').optional().isEmail().normalizeEmail(),
-    body('phone').optional().matches(/^\+212[0-9]{9}$/),
+    body('phone').optional().matches(/^\+212[5678][0-9]{8}$/),
     body('otp').isLength({ min: 6, max: 6 }),
   ],
   asyncHandler(async (req, res) => {
@@ -247,7 +263,7 @@ router.post(
   '/resend-otp',
   [
     body('email').optional().isEmail().normalizeEmail(),
-    body('phone').optional().matches(/^\+212[0-9]{9}$/),
+    body('phone').optional().matches(/^\+212[5678][0-9]{8}$/),
   ],
   asyncHandler(async (req, res) => {
     const { email, phone } = req.body;
@@ -279,7 +295,7 @@ router.post(
   '/forgot-password',
   [
     body('email').optional().isEmail().normalizeEmail(),
-    body('phone').optional().matches(/^\+212[0-9]{9}$/),
+    body('phone').optional().matches(/^\+212[5678][0-9]{8}$/),
   ],
   asyncHandler(async (req, res) => {
     const { email, phone } = req.body;
@@ -314,7 +330,7 @@ router.post(
   '/reset-password',
   [
     body('email').optional().isEmail().normalizeEmail(),
-    body('phone').optional().matches(/^\+212[0-9]{9}$/),
+    body('phone').optional().matches(/^\+212[5678][0-9]{8}$/),
     body('otp').isLength({ min: 6, max: 6 }),
     body('password').isLength({ min: 8 }),
   ],

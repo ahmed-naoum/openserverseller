@@ -28,6 +28,15 @@ model User {
   password        String
   roleId          Int
   role            Role      @relation(fields: [roleId], references: [id])
+  
+  // Seller-Affiliate mode switching
+  mode            String    @default("SELLER") // SELLER, AFFILIATE
+  
+  // Influencer fields
+  referralCode    String?   @unique
+  isInfluencer    Boolean   @default(false)
+  totalEarnings   Float     @default(0)
+  
   isActive        Boolean   @default(false)
   kycStatus       String    @default("PENDING")
   emailVerifiedAt DateTime?
@@ -55,6 +64,10 @@ model User {
 
   conversations    ConversationParticipant[]
   messages         Message[]
+
+  // Influencer relations
+  referralLinks    ReferralLink[]
+  commissions      InfluencerCommission[]
 
   @@map("users")
 }
@@ -163,6 +176,7 @@ model Product {
   orderItems       OrderItem[]
   inventories      ProductInventory[]
   claims           AffiliateClaim[]
+  referralLinks    ReferralLink[]
 
   @@map("products")
 }
@@ -423,4 +437,59 @@ model Message {
   updatedAt      DateTime     @updatedAt
 
   @@map("messages")
+}
+
+// ==========================================
+// INFLUENCER SYSTEM
+// ==========================================
+
+model ReferralLink {
+  id          Int       @id @default(autoincrement())
+  influencerId Int
+  influencer  User      @relation(fields: [influencerId], references: [id], onDelete: Cascade)
+  productId   Int
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  code        String    @unique
+  clicks      Int       @default(0)
+  conversions Int       @default(0)
+  earnings    Float     @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([influencerId, productId])
+  @@map("referral_links")
+
+  commissions      InfluencerCommission[]
+}
+
+model InfluencerCampaign {
+  id          Int      @id @default(autoincrement())
+  name        String
+  slug        String   @unique
+  description String?
+  productIds  Int[]    // Array of product IDs
+  commission  Float    // Percentage (e.g., 10 = 10%)
+  startDate   DateTime?
+  endDate     DateTime?
+  status      String   @default("DRAFT") // DRAFT, ACTIVE, PAUSED, ENDED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("influencer_campaigns")
+}
+
+model InfluencerCommission {
+  id             Int       @id @default(autoincrement())
+  influencerId   Int
+  influencer     User      @relation(fields: [influencerId], references: [id], onDelete: Cascade)
+  referralLinkId Int
+  referralLink   ReferralLink @relation(fields: [referralLinkId], references: [id])
+  orderId        Int?
+  amount         Float
+  status         String    @default("PENDING") // PENDING, APPROVED, PAID
+  paidAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@map("influencer_commissions")
 }

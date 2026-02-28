@@ -24,6 +24,8 @@ import AdminOrders from './pages/admin/Orders';
 import AdminFinance from './pages/admin/Finance';
 import AdminFulfillment from './pages/admin/Fulfillment';
 import GrossellerDashboard from './pages/grosseller/Dashboard';
+import InfluencerDashboard from './pages/influencer/Dashboard';
+import ConfirmationDashboard from './pages/confirmation/Dashboard';
 import Chat from './pages/common/Chat';
 import AccountVerification from './pages/verify/AccountVerification';
 import PublicMarketplace from './pages/marketplace/PublicMarketplace';
@@ -45,6 +47,7 @@ function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/marketplace" element={<PublicMarketplace />} />
+        <Route path="/marketplace/:view" element={<PublicMarketplace />} />
         <Route path="/product/:id" element={<ProductDetail />} />
 
         {/* Verification Route */}
@@ -62,10 +65,32 @@ function App() {
         }>
           <Route index element={<GrossellerDashboard />} />
           <Route path="chat" element={<Chat />} />
-          {/* We will add grosseller subroutes later once confirmed */}
         </Route>
 
-        {/* Vendor Dashboard */}
+        {/* Influencer Dashboard */}
+        <Route path="/influencer" element={
+          <RoleGuard allowedRoles={['INFLUENCER']}>
+            <DashboardLayout />
+          </RoleGuard>
+        }>
+          <Route index element={<InfluencerDashboard />} />
+          <Route path="links" element={<InfluencerDashboard />} />
+          <Route path="commissions" element={<InfluencerDashboard />} />
+          <Route path="campaigns" element={<InfluencerDashboard />} />
+          <Route path="chat" element={<Chat />} />
+        </Route>
+
+        {/* Confirmation Agent Dashboard */}
+        <Route path="/confirmation" element={
+          <RoleGuard allowedRoles={['CONFIRMATION_AGENT']}>
+            <DashboardLayout />
+          </RoleGuard>
+        }>
+          <Route index element={<ConfirmationDashboard />} />
+          <Route path="chat" element={<Chat />} />
+        </Route>
+
+        {/* Vendor Dashboard (Seller-Affiliate with mode switching) */}
         <Route path="/dashboard" element={
           <RoleGuard allowedRoles={['VENDOR']}>
             <DashboardLayout />

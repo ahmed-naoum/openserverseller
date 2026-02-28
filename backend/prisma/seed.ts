@@ -34,6 +34,21 @@ async function main() {
       update: {},
       create: { name: 'FULFILLMENT_OPERATOR', guardName: 'web' },
     }),
+    prisma.role.upsert({
+      where: { name: 'GROSSELLER' },
+      update: {},
+      create: { name: 'GROSSELLER', guardName: 'web' },
+    }),
+    prisma.role.upsert({
+      where: { name: 'INFLUENCER' },
+      update: {},
+      create: { name: 'INFLUENCER', guardName: 'web' },
+    }),
+    prisma.role.upsert({
+      where: { name: 'CONFIRMATION_AGENT' },
+      update: {},
+      create: { name: 'CONFIRMATION_AGENT', guardName: 'web' },
+    }),
   ]);
 
   const roleMap = Object.fromEntries(roles.map((r) => [r.name, r.id]));

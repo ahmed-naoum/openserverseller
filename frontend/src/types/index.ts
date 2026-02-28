@@ -6,8 +6,12 @@ export interface User {
   avatarUrl?: string;
   city?: string;
   role: string;
+  roleName?: string;
   kycStatus: string;
   isActive: boolean;
+  mode?: 'SELLER' | 'AFFILIATE';
+  isInfluencer?: boolean;
+  referralCode?: string;
   wallet?: {
     balanceMad: number | string;
     totalEarnedMad: number | string;
@@ -19,6 +23,25 @@ export interface User {
     slug: string;
   };
 }
+
+export type UserRole = 
+  | 'VENDOR' 
+  | 'GROSSELLER' 
+  | 'CALL_CENTER_AGENT' 
+  | 'CONFIRMATION_AGENT' 
+  | 'INFLUENCER' 
+  | 'SUPER_ADMIN' 
+  | 'ADMIN';
+
+export const ROLE_LABELS: Record<UserRole, { ar: string; fr: string; icon: string }> = {
+  VENDOR: { ar: 'بائع/موزع', fr: 'Vendeur', icon: 'user' },
+  GROSSELLER: { ar: 'تاجر جملة', fr: 'Grossiste', icon: 'briefcase' },
+  CALL_CENTER_AGENT: { ar: 'وكيل اتصال', fr: 'Agent Call Center', icon: 'headphones' },
+  CONFIRMATION_AGENT: { ar: 'وكيل تأكيد', fr: 'Agent Confirmation', icon: 'check-square' },
+  INFLUENCER: { ar: 'مؤثر', fr: 'Influenceur', icon: 'megaphone' },
+  SUPER_ADMIN: { ar: 'مدير النظام', fr: 'Super Admin', icon: 'settings' },
+  ADMIN: { ar: 'مدير', fr: 'Admin', icon: 'shield' },
+};
 
 export interface Brand {
   id: string;
@@ -44,6 +67,7 @@ export interface Product {
   retailPriceMad: number | string;
   isCustomizable: boolean;
   minProductionDays: number;
+  visibility: 'REGULAR' | 'AFFILIATE' | 'NONE';
   category?: Category;
   primaryImage?: string;
   variants?: ProductVariant[];
@@ -232,3 +256,40 @@ export const PAYOUT_STATUS_LABELS: Record<PayoutStatus, { ar: string; fr: string
   REJECTED: { ar: 'مرفوض', fr: 'Rejeté', color: 'red' },
   CANCELLED: { ar: 'ملغي', fr: 'Annulé', color: 'gray' },
 };
+
+export interface ReferralLink {
+  id: string;
+  influencerId: string;
+  productId: string;
+  product?: Product;
+  code: string;
+  clicks: number;
+  conversions: number;
+  earnings: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface InfluencerCampaign {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  productIds: number[];
+  commission: number;
+  startDate?: string;
+  endDate?: string;
+  status: 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'ENDED';
+}
+
+export interface InfluencerCommission {
+  id: string;
+  influencerId: string;
+  referralLinkId: string;
+  referralLink?: ReferralLink;
+  orderId?: string;
+  amount: number;
+  status: 'PENDING' | 'APPROVED' | 'PAID';
+  paidAt?: string;
+  createdAt: string;
+}

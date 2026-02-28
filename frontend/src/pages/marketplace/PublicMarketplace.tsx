@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { productsApi } from '../../lib/api';
+import { Link, useSearchParams } from 'react-router-dom';
+import { productsApi, marketplaceApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 
 export default function PublicMarketplace() {
-  const [viewMode, setViewMode] = useState<'regular' | 'affiliate'>('regular');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialView = searchParams.get('view') === 'affiliate' ? 'affiliate' : 'regular';
+  const [viewMode, setViewMode] = useState<'regular' | 'affiliate'>(initialView);
   const [products, setProducts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -15,22 +17,21 @@ export default function PublicMarketplace() {
   const fetchProducts = async () => {
     try {
       setIsLoading(true);
-      // We pass the visibility to our custom list or handle via custom params
-      // Since existing list params are limited, we'll append to search or a custom generic filter if supported. 
-      // For now, let's just fetch all and filter client side if API doesn't support visibility param yet,
-      // or assume our updated API will handle generic params.
-      const res = await productsApi.list({ limit: 100 } as any);
-      const allProducts = res.data.data.products;
-      
-      const filtered = allProducts.filter((p: any) => 
-        viewMode === 'regular' ? p.visibility === 'REGULAR' : p.visibility === 'AFFILIATE'
-      );
-      setProducts(filtered);
+      const res = await marketplaceApi.products({ 
+        view: viewMode === 'regular' ? 'REGULAR' : 'AFFILIATE',
+        limit: 100 
+      });
+      setProducts(res.data.data.products || []);
     } catch (error: any) {
       toast.error('Failed to load products');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleViewChange = (view: 'regular' | 'affiliate') => {
+    setViewMode(view);
+    setSearchParams({ view });
   };
 
   return (
@@ -46,7 +47,7 @@ export default function PublicMarketplace() {
           {/* View Switcher */}
           <div className="flex bg-white rounded-xl shadow-sm border border-gray-200 p-1">
             <button
-              onClick={() => setViewMode('regular')}
+              onClick={() => handleViewChange('regular')}
               className={`px-6 py-2 rounded-lg text-sm font-medium transition-colors ${
                 viewMode === 'regular' 
                   ? 'bg-primary-50 text-primary-700' 
@@ -56,7 +57,7 @@ export default function PublicMarketplace() {
               Régulier
             </button>
             <button
-              onClick={() => setViewMode('affiliate')}
+              onClick={() => handleViewChange('affiliate')}
               className={`px-6 py-2 rounded-lg text-sm font-medium transition-colors ${
                 viewMode === 'affiliate' 
                   ? 'bg-primary-50 text-primary-700' 

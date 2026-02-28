@@ -7,12 +7,14 @@ declare global {
   namespace Express {
     interface Request {
       user?: {
-        id: bigint;
+        id: number;
         uuid: string;
         email: string | null;
         phone: string | null;
-        roleId: bigint;
+        roleId: number;
         roleName: string;
+        mode: string;
+        isInfluencer: boolean;
       };
     }
   }
@@ -66,6 +68,8 @@ export const authenticate = async (
       phone: user.phone,
       roleId: user.roleId,
       roleName: user.role.name,
+      mode: user.mode,
+      isInfluencer: user.isInfluencer,
     };
 
     await prisma.user.update({
@@ -135,6 +139,8 @@ export const optionalAuth = async (
         phone: user.phone,
         roleId: user.roleId,
         roleName: user.role.name,
+        mode: user.mode,
+        isInfluencer: user.isInfluencer,
       };
     }
 

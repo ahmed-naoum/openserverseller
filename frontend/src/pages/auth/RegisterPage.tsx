@@ -3,6 +3,57 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import toast from 'react-hot-toast';
 
+interface FormErrors {
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  password?: string;
+  confirmPassword?: string;
+}
+
+interface FormDataType {
+  fullName: string;
+  email: string;
+  phone: string;
+  password: string;
+  confirmPassword: string;
+  role: string;
+}
+
+const normalizePhone = (phone: string): string => {
+  if (!phone) return '';
+  const cleaned = phone.replace(/[\s\-]/g, '');
+  if (cleaned.startsWith('+212')) return cleaned;
+  if (/^[5678][0-9]{8}$/.test(cleaned)) return '+212' + cleaned;
+  if (/^0[5678][0-9]{8}$/.test(cleaned)) return '+212' + cleaned.slice(1);
+  return phone;
+};
+
+const validateField = (name: string, value: string, allValues?: FormDataType): string | undefined => {
+  switch (name) {
+    case 'fullName':
+      if (!value.trim()) return 'Le nom complet est requis';
+      if (value.trim().length < 2) return 'Le nom doit contenir au moins 2 caractères';
+      return undefined;
+    case 'email':
+      if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Format d\'email invalide';
+      return undefined;
+    case 'phone':
+      if (value && !/^\+212[5678][0-9]{8}$/.test(value)) return 'Format: +212 6XX-XXXXXX (ex: +212667619014)';
+      return undefined;
+    case 'password':
+      if (!value) return 'Le mot de passe est requis';
+      if (value.length < 8) return 'Le mot de passe doit contenir au moins 8 caractères';
+      return undefined;
+    case 'confirmPassword':
+      if (!value) return 'Veuillez confirmer votre mot de passe';
+      if (allValues && value !== allValues.password) return 'Les mots de passe ne correspondent pas';
+      return undefined;
+    default:
+      return undefined;
+  }
+};
+
 export default function RegisterPage() {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
@@ -13,16 +64,66 @@ export default function RegisterPage() {
     confirmPassword: '',
     role: 'VENDOR',
   });
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
   const { register } = useAuth();
   const navigate = useNavigate();
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    const processedValue = name === 'phone' ? normalizePhone(value) : value;
+    setFormData({ ...formData, [name]: processedValue });
+    
+    if (touched[name]) {
+      const error = validateField(name, processedValue, formData);
+      setErrors(prev => ({ ...prev, [name]: error }));
+    }
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    const processedValue = name === 'phone' ? normalizePhone(value) : value;
+    setTouched(prev => ({ ...prev, [name]: true }));
+    setFormData(prev => ({ ...prev, [name]: processedValue }));
+    const error = validateField(name, processedValue, { ...formData, [name]: processedValue });
+    setErrors(prev => ({ ...prev, [name]: error }));
+  };
+
+  const validateStep1 = (): boolean => {
+    const newErrors: FormErrors = {};
+    let isValid = true;
+    
+    ['fullName', 'email', 'phone', 'password', 'confirmPassword'].forEach(field => {
+      const error = validateField(field, formData[field as keyof typeof formData], formData);
+      if (error) {
+        newErrors[field as keyof FormErrors] = error;
+        isValid = false;
+      }
+    });
+    
+    setErrors(newErrors);
+    setTouched({ fullName: true, email: true, phone: true, password: true, confirmPassword: true });
+    
+    return isValid;
+  };
+
+  const getInputClass = (fieldName: string) => {
+    const baseClass = 'input';
+    if (touched[fieldName] && errors[fieldName as keyof FormErrors]) {
+      return `${baseClass} border-red-500 focus:border-red-500 focus:ring-red-500`;
+    }
+    if (touched[fieldName] && !errors[fieldName as keyof FormErrors]) {
+      return `${baseClass} border-green-500 focus:border-green-500 focus:ring-green-500`;
+    }
+    return baseClass;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (step === 1) {
-      if (formData.password !== formData.confirmPassword) {
-        toast.error('Les mots de passe ne correspondent pas');
+      if (!validateStep1()) {
         return;
       }
       setStep(2);
@@ -83,60 +184,85 @@ export default function RegisterPage() {
                   <label className="label">Nom complet</label>
                   <input
                     type="text"
-                    className="input"
+                    name="fullName"
+                    className={getInputClass('fullName')}
                     placeholder="Votre nom complet"
                     value={formData.fullName}
-                    onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
                     required
                   />
+                  {touched.fullName && errors.fullName && (
+                    <p className="text-red-500 text-sm mt-1">{errors.fullName}</p>
+                  )}
                 </div>
 
                 <div>
                   <label className="label">Email</label>
                   <input
                     type="email"
-                    className="input"
+                    name="email"
+                    className={getInputClass('email')}
                     placeholder="votre@email.com"
                     value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
                     required
                   />
+                  {touched.email && errors.email && (
+                    <p className="text-red-500 text-sm mt-1">{errors.email}</p>
+                  )}
                 </div>
 
                 <div>
                   <label className="label">Téléphone (optionnel)</label>
                   <input
                     type="tel"
-                    className="input"
+                    name="phone"
+                    className={getInputClass('phone')}
                     placeholder="+212 6XX-XXXXXX"
                     value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
                   />
+                  {touched.phone && errors.phone && (
+                    <p className="text-red-500 text-sm mt-1">{errors.phone}</p>
+                  )}
                 </div>
 
                 <div>
                   <label className="label">Mot de passe</label>
                   <input
                     type="password"
-                    className="input"
+                    name="password"
+                    className={getInputClass('password')}
                     placeholder="••••••••"
                     value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
                     required
                     minLength={8}
                   />
+                  {touched.password && errors.password && (
+                    <p className="text-red-500 text-sm mt-1">{errors.password}</p>
+                  )}
                 </div>
 
                 <div>
                   <label className="label">Confirmer le mot de passe</label>
                   <input
                     type="password"
-                    className="input"
+                    name="confirmPassword"
+                    className={getInputClass('confirmPassword')}
                     placeholder="••••••••"
                     value={formData.confirmPassword}
-                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
                     required
                   />
+                  {touched.confirmPassword && errors.confirmPassword && (
+                    <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>
+                  )}
                 </div>
 
                 <button type="submit" className="btn-primary w-full">

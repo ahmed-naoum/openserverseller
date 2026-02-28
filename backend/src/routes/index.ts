@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { auditLog } from '../middleware/security.js';
 import authRoutes from './auth.routes.js';
 import userRoutes from './user.routes.js';
 import brandRoutes from './brand.routes.js';
@@ -18,6 +19,8 @@ import uploadRoutes from './upload.routes.js';
 import inventoryRoutes from './inventory.routes.js';
 import fulfillmentRoutes from './fulfillment.routes.js';
 import chatRoutes from './chat.routes.js';
+import dashboardRoutes from './dashboard.routes.js';
+import influencerRoutes from './influencer.routes.js';
 
 const router = Router();
 
@@ -31,23 +34,25 @@ router.get('/health', (req, res) => {
 });
 
 router.use('/auth', authRoutes);
-router.use('/users', userRoutes);
-router.use('/brands', brandRoutes);
-router.use('/products', productRoutes);
+router.use('/users', auditLog, userRoutes);
+router.use('/brands', auditLog, brandRoutes);
+router.use('/products', auditLog, productRoutes);
 router.use('/categories', categoryRoutes);
-router.use('/leads', leadRoutes);
-router.use('/orders', orderRoutes);
-router.use('/wallet', walletRoutes);
-router.use('/payouts', payoutRoutes);
+router.use('/leads', auditLog, leadRoutes);
+router.use('/orders', auditLog, orderRoutes);
+router.use('/wallet', auditLog, walletRoutes);
+router.use('/payouts', auditLog, payoutRoutes);
 router.use('/couriers', courierRoutes);
 router.use('/warehouse', warehouseRoutes);
 router.use('/notifications', notificationRoutes);
-router.use('/admin', adminRoutes);
+router.use('/admin', auditLog, adminRoutes);
 router.use('/public', publicRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/upload', uploadRoutes);
-router.use('/inventory', inventoryRoutes);
+router.use('/inventory', auditLog, inventoryRoutes);
 router.use('/fulfillment', fulfillmentRoutes);
 router.use('/chat', chatRoutes);
+router.use('/dashboard', dashboardRoutes);
+router.use('/influencer', auditLog, influencerRoutes);
 
 export default router;

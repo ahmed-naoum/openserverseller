@@ -12,6 +12,7 @@ import routes from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { setupPassport } from './config/passport.js';
+import { securityHeaders, ipFilter, auditLog, sanitizeInput, validateRequestSize } from './middleware/security.js';
 
 const app = express();
 const server = createServer(app);
@@ -49,7 +50,31 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(morgan('combined'));
 app.use(requestLogger);
-app.use(`${API_PREFIX}`, limiter);
+
+app.use(securityHeaders);
+app.use(ipFilter);
+app.use(sanitizeInput);
+app.use(validateRequestSize(5 * 1024 * 1024));
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Too many authentication attempts, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const apiLimiter = rateLimit({
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10),
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100', 10),
+  message: { error: 'Too many requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use(`${API_PREFIX}/auth/login`, authLimiter);
+app.use(`${API_PREFIX}/auth/register`, authLimiter);
+app.use(`${API_PREFIX}`, apiLimiter);
 
 app.use('/uploads', express.static('uploads'));
 

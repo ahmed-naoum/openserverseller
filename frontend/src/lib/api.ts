@@ -4,7 +4,7 @@ interface ImportMetaEnv {
   readonly VITE_API_URL: string;
 }
 
-const API_URL = (import.meta.env as any).VITE_API_URL || 'http://localhost:3001/api/v1';
+const API_URL = (import.meta.env as any).VITE_API_URL || 'http://187.77.166.69:3001/api/v1';
 
 export interface User {
   id: number;
@@ -183,4 +183,32 @@ export const fulfillmentApi = {
     api.get('/fulfillment', { params }),
   fulfillRequest: (id: string, data: { actionType: string; productId?: number; quantity?: number }) =>
     api.post(`/fulfillment/${id}/fulfill`, data),
+};
+
+export const dashboardApi = {
+  sellerAffiliate: () => api.get('/dashboard/seller-affiliate'),
+  switchMode: (mode: 'SELLER' | 'AFFILIATE') => api.patch('/dashboard/seller-affiliate/switch-mode', { mode }),
+  grosseller: () => api.get('/dashboard/grosseller'),
+  agent: () => api.get('/dashboard/agent'),
+  confirmation: () => api.get('/dashboard/confirmation'),
+  influencer: () => api.get('/dashboard/influencer'),
+  admin: () => api.get('/dashboard/admin'),
+};
+
+export const influencerApi = {
+  enable: () => api.post('/influencer/enable'),
+  createLink: (productId: number) => api.post('/influencer/links', { productId }),
+  getLinks: () => api.get('/influencer/links'),
+  getLinkStats: (code: string) => api.get(`/influencer/links/${code}/stats`),
+  trackConversion: (code: string, orderId: number) => api.post('/influencer/track-conversion', { code, orderId }),
+  getCommissions: () => api.get('/influencer/commissions'),
+  getCampaigns: () => api.get('/influencer/campaigns'),
+  joinCampaign: (id: number, productIds: number[]) => api.post(`/influencer/campaigns/${id}/join`, { productIds }),
+  getProfile: () => api.get('/influencer/profile'),
+};
+
+export const marketplaceApi = {
+  products: (params?: { view?: 'REGULAR' | 'AFFILIATE'; category?: string; search?: string; page?: number; limit?: number }) =>
+    api.get('/public/marketplace/products', { params }),
+  stats: () => api.get('/public/marketplace/stats'),
 };

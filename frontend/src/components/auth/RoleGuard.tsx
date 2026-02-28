@@ -43,6 +43,10 @@ function getDefaultPath(role: string): string {
       return '/courier';
     case 'GROSSELLER':
       return '/grosseller';
+    case 'INFLUENCER':
+      return '/influencer';
+    case 'CONFIRMATION_AGENT':
+      return '/confirmation';
     case 'UNCONFIRMED':
       return '/verify';
     default:
