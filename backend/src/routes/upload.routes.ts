@@ -109,7 +109,7 @@ router.post(
     const files = (req.files as Express.Multer.File[]).map((file) => ({
       url: `/uploads/${file.filename}`,
       filename: file.filename,
-      size: file.file.size,
+      size: file.size,
     }));
 
     res.json({

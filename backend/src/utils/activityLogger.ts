@@ -4,19 +4,19 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 export const logActivity = async (
-  userId: bigint | null,
+  userId: number | null,
   action: string,
   modelType?: string,
-  modelId?: bigint,
+  modelId?: number,
   changes?: any
 ) => {
   try {
     await prisma.activityLog.create({
       data: {
-        userId,
+        userId: userId || undefined,
         action,
         modelType,
-        modelId,
+        modelId: modelId || undefined,
         changes,
       },
     });
@@ -35,7 +35,7 @@ export const activityLogger = (action: string) => {
           req.user.id,
           action,
           req.baseUrl.split('/').pop(),
-          body?.data?.id ? BigInt(body.data.id) : undefined,
+          body?.data?.id ? Number(body.data.id) : undefined,
           { body: req.body, params: req.params, query: req.query }
         ).catch(console.error);
       }

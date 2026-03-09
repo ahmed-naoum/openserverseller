@@ -209,6 +209,7 @@ function AddUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
               <option value="VENDOR">Vendeur</option>
               <option value="GROSELLER">Grossiste</option>
               <option value="CALL_CENTER_AGENT">Agent Call Center</option>
+              <option value="CONFIRMATION_AGENT">Agent de Confirmation</option>
               <option value="FINANCE_ADMIN">Admin Finance</option>
               <option value="SUPER_ADMIN">Super Admin</option>
             </select>
@@ -309,6 +310,7 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
               <option value="VENDOR">Vendeur</option>
               <option value="GROSELLER">Grossiste</option>
               <option value="CALL_CENTER_AGENT">Agent Call Center</option>
+              <option value="CONFIRMATION_AGENT">Agent de Confirmation</option>
               <option value="FINANCE_ADMIN">Admin Finance</option>
               <option value="SUPER_ADMIN">Super Admin</option>
             </select>
@@ -420,7 +422,7 @@ export default function AdminUsers() {
 
       {/* Role Filter */}
       <div className="flex gap-2 overflow-x-auto pb-2">
-        {['', 'VENDOR', 'CALL_CENTER_AGENT', 'INFLUENCER', 'FINANCE_ADMIN', 'SUPER_ADMIN'].map((role) => (
+        {['', 'VENDOR', 'CALL_CENTER_AGENT', 'CONFIRMATION_AGENT', 'INFLUENCER', 'FINANCE_ADMIN', 'SUPER_ADMIN'].map((role) => (
           <button
             key={role}
             onClick={() => setRoleFilter(role)}

@@ -54,9 +54,9 @@ export const setupSocketHandlers = (io: SocketServer) => {
     socket.on('lead:assigned', async (data: { leadId: string; agentId: string }) => {
       try {
         const lead = await prisma.lead.update({
-          where: { id: BigInt(data.leadId) },
+          where: { id: Number(data.leadId) },
           data: { 
-            assignedAgentId: BigInt(data.agentId),
+            assignedAgentId: Number(data.agentId),
             status: 'ASSIGNED',
           },
           include: {
@@ -82,7 +82,7 @@ export const setupSocketHandlers = (io: SocketServer) => {
     socket.on('order:status-change', async (data: { orderId: string; status: string }) => {
       try {
         const order = await prisma.order.update({
-          where: { id: BigInt(data.orderId) },
+          where: { id: Number(data.orderId) },
           data: { status: data.status as any },
           include: {
             vendor: true,
@@ -109,7 +109,7 @@ export const setupSocketHandlers = (io: SocketServer) => {
       try {
         const notification = await prisma.notification.create({
           data: {
-            userId: BigInt(data.userId),
+            userId: Number(data.userId),
             type: data.type,
             title: data.title,
             body: data.body,

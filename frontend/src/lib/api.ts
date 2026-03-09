@@ -243,6 +243,10 @@ export const influencerApi = {
     api.get('/influencer/customers', { params }),
   deleteLead: (id: number) => api.delete(`/influencer/leads/${id}`),
   pushLeadToCallCenter: (id: number) => api.post(`/influencer/leads/${id}/push-callcenter`),
+  getCampaigns: () => api.get('/influencer/campaigns'),
+  createCampaign: (data: any) => api.post('/influencer/campaigns', data),
+  updateCampaign: (id: number, data: any) => api.patch(`/influencer/campaigns/${id}`, data),
+  deleteCampaign: (id: number) => api.delete(`/influencer/campaigns/${id}`),
 };
 
 export const marketplaceApi = {

@@ -117,7 +117,7 @@ router.post(
       try {
         const ipRes = await fetch('https://api.ipify.org?format=json');
         if (ipRes.ok) {
-          const ipData = await ipRes.json();
+          const ipData = (await ipRes.json()) as { ip: string };
           registrationIp = ipData.ip;
         }
       } catch (e) {

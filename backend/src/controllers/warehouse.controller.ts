@@ -41,7 +41,7 @@ export const getProductionJobs = async (req: Request, res: Response) => {
 
   const where: any = {};
   if (status) where.status = status;
-  if (warehouseId) where.batch = { warehouseId: BigInt(warehouseId as string) };
+  if (warehouseId) where.batch = { warehouseId: Number(warehouseId as string) };
 
   const [jobs, total] = await Promise.all([
     prisma.productionJob.findMany({
@@ -82,7 +82,7 @@ export const updateJobStatus = async (req: Request, res: Response) => {
   const { status, notes } = req.body;
 
   const job = await prisma.productionJob.findUnique({
-    where: { id: BigInt(id) },
+    where: { id: Number(id) },
   });
 
   if (!job) {
@@ -90,7 +90,7 @@ export const updateJobStatus = async (req: Request, res: Response) => {
   }
 
   const updatedJob = await prisma.productionJob.update({
-    where: { id: BigInt(id) },
+    where: { id: Number(id) },
     data: {
       status,
       ...(status === 'IN_PROGRESS' && { startedAt: new Date(), assignedTo: req.user!.id }),
@@ -124,7 +124,7 @@ export const getInventory = async (req: Request, res: Response) => {
   const { warehouseId, lowStock, page = 1, limit = 50 } = req.query;
 
   const where: any = {};
-  if (warehouseId) where.warehouseId = BigInt(warehouseId as string);
+  if (warehouseId) where.warehouseId = Number(warehouseId as string);
   if (lowStock === 'true') where.quantity = { lte: 10 };
 
   const [inventory, total] = await Promise.all([
@@ -170,8 +170,8 @@ export const updateInventory = async (req: Request, res: Response) => {
   const existing = await prisma.inventory.findUnique({
     where: {
       warehouseId_productId: {
-        warehouseId: BigInt(warehouseId),
-        productId: BigInt(productId),
+        warehouseId: Number(warehouseId),
+        productId: Number(productId),
       },
     },
   });
@@ -181,8 +181,8 @@ export const updateInventory = async (req: Request, res: Response) => {
     inventory = await prisma.inventory.update({
       where: {
         warehouseId_productId: {
-          warehouseId: BigInt(warehouseId),
-          productId: BigInt(productId),
+          warehouseId: Number(warehouseId),
+          productId: Number(productId),
         },
       },
       data: {
@@ -197,8 +197,8 @@ export const updateInventory = async (req: Request, res: Response) => {
   } else {
     inventory = await prisma.inventory.create({
       data: {
-        warehouseId: BigInt(warehouseId),
-        productId: BigInt(productId),
+        warehouseId: Number(warehouseId),
+        productId: Number(productId),
         quantity,
         reservedQuantity: 0,
       },
@@ -220,7 +220,7 @@ export const createProductionBatch = async (req: Request, res: Response) => {
   const batch = await prisma.productionBatch.create({
     data: {
       batchNumber,
-      warehouseId: BigInt(warehouseId),
+      warehouseId: Number(warehouseId),
       status: 'PENDING',
     },
   });
@@ -229,7 +229,7 @@ export const createProductionBatch = async (req: Request, res: Response) => {
     await prisma.productionJob.createMany({
       data: orderIds.map((orderId: string) => ({
         batchId: batch.id,
-        orderId: BigInt(orderId),
+        orderId: Number(orderId),
         status: 'PENDING',
       })),
     });

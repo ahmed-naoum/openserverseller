@@ -84,6 +84,9 @@ model User {
   agentAssignments       AgentInfluencerAssignment[] @relation("AgentAssignments")
   influencerAssignments  AgentInfluencerAssignment[] @relation("InfluencerAssignments")
 
+  orderStatusHistories OrderStatusHistory[]
+  productionJobs       ProductionJob[]
+
   @@map("users")
 }
 
@@ -95,6 +98,7 @@ model UserProfile {
   city      String?
   address   String?
   language  String  @default("fr")
+  metadata  Json?
   
   // Influencer Specific
   instagramUsername  String?
@@ -200,6 +204,8 @@ model Product {
   images           ProductImage[]
   orderItems       OrderItem[]
   inventories      ProductInventory[]
+  warehouseInventories Inventory[]
+  brandCustomizations BrandProductCustomization[]
   claims           AffiliateClaim[]
   referralLinks    ReferralLink[]
   supportRequests  SupportRequest[]
@@ -329,21 +335,175 @@ model Order {
   items OrderItem[]
   walletTransactions WalletTransaction[]
   influencerCommissions InfluencerCommission[]
+  statusHistory   OrderStatusHistory[]
+  shipment        Shipment?
+  returns         OrderReturn[]
+  productionJobs  ProductionJob[]
 
   @@map("orders")
 }
 
 model OrderItem {
-  id             Int     @id @default(autoincrement())
-  orderId        Int
-  order          Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId      Int
-  product        Product @relation(fields: [productId], references: [id])
-  quantity       Int
-  unitPriceMad   Float
-  totalPriceMad  Float
+  id              Int     @id @default(autoincrement())
+  orderId         Int
+  order           Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId       Int
+  product         Product @relation(fields: [productId], references: [id])
+  quantity        Int
+  unitPriceMad    Float
+  totalPriceMad   Float
+  customizationId Int?
+  customization   BrandProductCustomization? @relation(fields: [customizationId], references: [id])
 
   @@map("order_items")
+}
+
+model OrderStatusHistory {
+  id          Int      @id @default(autoincrement())
+  orderId     Int
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  oldStatus   String?
+  newStatus   String
+  changedBy   Int
+  changedByUser User   @relation(fields: [changedBy], references: [id])
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  @@map("order_status_history")
+}
+
+model BrandProductCustomization {
+  id            Int      @id @default(autoincrement())
+  brandId       Int
+  productId     Int
+  product       Product  @relation(fields: [productId], references: [id])
+  name          String
+  options       Json?
+  customPriceMad Float?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  orderItems    OrderItem[]
+
+  @@map("brand_product_customizations")
+}
+
+model Warehouse {
+  id        Int      @id @default(autoincrement())
+  name      String
+  location  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  batches   ProductionBatch[]
+  inventory Inventory[]
+
+  @@map("warehouses")
+}
+
+model ProductionBatch {
+  id          Int      @id @default(autoincrement())
+  batchNumber String   @unique
+  warehouseId Int
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  status      String   @default("PENDING")
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  jobs        ProductionJob[]
+
+  @@map("production_batches")
+}
+
+model ProductionJob {
+  id          Int      @id @default(autoincrement())
+  batchId     Int
+  batch       ProductionBatch @relation(fields: [batchId], references: [id])
+  orderId     Int
+  order       Order    @relation(fields: [orderId], references: [id])
+  status      String   @default("PENDING")
+  assignedTo  Int?
+  assignedUser User?    @relation(fields: [assignedTo], references: [id])
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  @@map("production_jobs")
+}
+
+model Inventory {
+  id              Int       @id @default(autoincrement())
+  warehouseId     Int
+  warehouse       Warehouse @relation(fields: [warehouseId], references: [id])
+  productId       Int
+  product         Product   @relation(fields: [productId], references: [id])
+  quantity        Int       @default(0)
+  reservedQuantity Int      @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([warehouseId, productId])
+  @@map("inventories")
+}
+
+model Courier {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String?
+  email     String?
+  isActive  Boolean  @default(true)
+  shipments Shipment[]
+
+  @@map("couriers")
+}
+
+model Shipment {
+  id              Int      @id @default(autoincrement())
+  orderId         Int      @unique
+  order           Order    @relation(fields: [orderId], references: [id])
+  courierId       Int
+  courier         Courier  @relation(fields: [courierId], references: [id])
+  trackingNumber  String?  @unique
+  status          String   @default("PENDING")
+  shippedAt       DateTime?
+  deliveredAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  trackingEvents  ShipmentTrackingEvent[]
+  deliveryProof   ShipmentDeliveryProof?
+
+  @@map("shipments")
+}
+
+model ShipmentTrackingEvent {
+  id          Int      @id @default(autoincrement())
+  shipmentId  Int
+  shipment    Shipment @relation(fields: [shipmentId], references: [id])
+  status      String
+  location    String?
+  eventTime   DateTime @default(now())
+  notes       String?
+
+  @@map("shipment_tracking_events")
+}
+
+model ShipmentDeliveryProof {
+  id          Int      @id @default(autoincrement())
+  shipmentId  Int      @unique
+  shipment    Shipment @relation(fields: [shipmentId], references: [id])
+  imageUrl    String
+  signedBy    String?
+  createdAt   DateTime @default(now())
+
+  @@map("shipment_delivery_proofs")
+}
+
+model OrderReturn {
+  id          Int      @id @default(autoincrement())
+  orderId     Int
+  order       Order    @relation(fields: [orderId], references: [id])
+  reason      String
+  status      String   @default("PENDING")
+  createdAt   DateTime @default(now())
+
+  @@map("order_returns")
 }
 
 model Wallet {

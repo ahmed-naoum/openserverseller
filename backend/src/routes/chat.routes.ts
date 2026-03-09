@@ -27,7 +27,7 @@ router.get(
                 participants: {
                     include: {
                         user: {
-                            include: { profile: true },
+                            include: { profile: true, role: true },
                         },
                     },
                 },
@@ -52,7 +52,7 @@ router.get(
                     participants: c.participants.map((p) => ({
                         userId: p.userId,
                         fullName: p.user.profile?.fullName,
-                        role: p.user.roleName,
+                        role: p.user.role.name,
                     })),
                 })),
             },
@@ -88,7 +88,7 @@ router.get(
                 where: { conversationId: conversation.id },
                 include: {
                     sender: {
-                        include: { profile: true },
+                        include: { profile: true, role: true },
                     },
                 },
                 orderBy: { createdAt: 'desc' },
@@ -110,7 +110,7 @@ router.get(
                     sender: {
                         id: m.senderId,
                         fullName: m.sender.profile?.fullName,
-                        role: m.sender.roleName,
+                        role: m.sender.role.name,
                         isMe: m.senderId === req.user!.id,
                     },
                 })).reverse(), // Reverse to get chronological order for chat UI
@@ -180,7 +180,7 @@ router.post(
             include: {
                 participants: {
                     include: {
-                        user: { include: { profile: true } },
+                        user: { include: { profile: true, role: true } },
                     },
                 },
             },
@@ -227,7 +227,7 @@ router.post(
                 attachmentUrl,
             },
             include: {
-                sender: { include: { profile: true } },
+                sender: { include: { profile: true, role: true } },
             },
         });
 

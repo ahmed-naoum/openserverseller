@@ -237,7 +237,7 @@ export default function InfluencerMarketplace() {
                         }
 
                         if (claim.status === 'APPROVED') {
-                          if (generatedLink?.productId === product.id) {
+                          if (generatedLink?.productId === product.id && generatedLink?.url) {
                             return (
                               <div className="p-3 bg-influencer-50 border border-influencer-100 rounded-xl space-y-2">
                                 <div className="flex items-center gap-1.5 text-influencer-700 text-xs font-bold">
@@ -251,7 +251,7 @@ export default function InfluencerMarketplace() {
                                     className="w-full text-xs py-1.5 px-2 rounded-lg bg-white border border-influencer-200 text-gray-600 focus:outline-none"
                                   />
                                   <button 
-                                    onClick={() => copyToClipboard(generatedLink.url)}
+                                    onClick={() => copyToClipboard(generatedLink.url || '')}
                                     className="p-1.5 bg-influencer-100 hover:bg-influencer-200 text-influencer-700 rounded-lg transition-colors flex-shrink-0"
                                   >
                                     <Copy className="w-4 h-4" />

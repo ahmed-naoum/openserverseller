@@ -60,7 +60,7 @@ export interface Brand {
 }
 
 export interface Product {
-  id: string;
+  id: string | number;
   sku: string;
   nameAr: string;
   nameFr: string;
@@ -97,6 +97,7 @@ export interface ProductVariant {
 export interface ProductImage {
   id: string;
   imageUrl: string;
+  url?: string;
   isPrimary: boolean;
   sortOrder: number;
 }
@@ -286,5 +287,23 @@ export interface InfluencerCommission {
   amount: number;
   status: 'PENDING' | 'APPROVED' | 'PAID';
   paidAt?: string;
+  createdAt: string;
+}
+
+export interface InfluencerCampaign {
+  id: number;
+  name: string;
+  description?: string;
+  productId?: number | string;
+  productIds?: (number | string)[];
+  product?: Product;
+  commissionRate: number;
+  commission?: number | string;
+  status: 'ACTIVE' | 'PAUSED' | 'ENDED';
+  startDate?: string;
+  startsAt?: string;
+  endDate?: string;
+  endsAt?: string;
+  isActive: boolean;
   createdAt: string;
 }

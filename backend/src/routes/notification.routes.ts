@@ -51,7 +51,7 @@ router.patch(
 
     await prisma.notification.updateMany({
       where: {
-        id: BigInt(id),
+        id: Number(id),
         userId: req.user!.id,
       },
       data: { isRead: true },

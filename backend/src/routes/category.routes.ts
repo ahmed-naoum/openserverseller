@@ -73,7 +73,7 @@ router.post(
         nameAr,
         nameFr,
         nameEn,
-        parentId: parentId ? BigInt(parentId) : null,
+        parentId: parentId ? Number(parentId) : null,
         slug,
         imageUrl,
       },

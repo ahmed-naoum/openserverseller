@@ -158,7 +158,7 @@ router.get(
     const { code } = req.params;
 
     const link = await prisma.referralLink.findUnique({
-      where: { code },
+      where: { code: code as string },
       include: {
         product: { include: { images: { where: { isPrimary: true }, take: 1 } } }
       }
@@ -183,7 +183,7 @@ router.get(
     const { code } = req.params;
 
     const link = await prisma.referralLink.findUnique({
-      where: { code },
+      where: { code: code as string },
       include: {
         product: { include: { images: { orderBy: { sortOrder: 'asc' } }, category: true } },
         influencer: { include: { profile: true } }

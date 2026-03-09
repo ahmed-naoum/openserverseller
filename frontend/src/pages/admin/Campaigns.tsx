@@ -24,7 +24,7 @@ export default function AdminCampaigns() {
     description: '',
     commission: '5',
     status: 'ACTIVE',
-    productIds: [] as number[],
+    productIds: [] as (number | string)[],
     startDate: '',
     endDate: ''
   });
@@ -83,7 +83,7 @@ export default function AdminCampaigns() {
     setForm({
       name: campaign.name,
       description: campaign.description || '',
-      commission: campaign.commission.toString(),
+      commission: campaign.commission?.toString() || campaign.commissionRate?.toString() || '5',
       status: campaign.status,
       productIds: campaign.productIds || [],
       startDate: campaign.startDate ? format(new Date(campaign.startDate), 'yyyy-MM-dd') : '',
@@ -106,7 +106,7 @@ export default function AdminCampaigns() {
     setShowModal(true);
   };
 
-  const toggleProduct = (id: number) => {
+  const toggleProduct = (id: number | string) => {
     setForm(prev => ({
       ...prev,
       productIds: prev.productIds.includes(id)
