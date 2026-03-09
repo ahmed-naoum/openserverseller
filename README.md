@@ -1,5 +1,7 @@
 # OpenSeller.ma - Moroccan Dropshipping Platform
 
+[![Architecture](https://img.shields.io/badge/Documentation-Technical_Architecture-blue)](./TECHNICAL.md)
+
 A complete white-label dropshipping platform for cosmetics and dietary supplements in Morocco.
 
 ## 🚀 Features
