@@ -1,25 +1,45 @@
-import { Router, Response } from 'express';
+import { Router, Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { authenticate, authorize } from '../middleware/auth.js';
+import { authenticate } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 const prisma = new PrismaClient();
 
+const getGeoLocation = async (ip: string): Promise<string | null> => {
+  try {
+    // Skip local IPs for geolocation API
+    if (ip === '127.0.0.1' || ip === '::1' || ip.startsWith('192.168.') || ip.startsWith('10.')) {
+      return null;
+    }
+    const response = await fetch(`http://ip-api.com/json/${ip}`);
+    if (response.ok) {
+      const data = await response.json() as { status: string; city: string };
+      if (data.status === 'success') {
+        return data.city;
+      }
+    }
+  } catch (error) {
+    console.error('GeoLocation Error:', error);
+  }
+  return null;
+};
+
 const generateTokens = (userId: string) => {
   const accessToken = jwt.sign(
     { userId },
-    process.env.JWT_SECRET!,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    process.env.JWT_SECRET as string,
+    { expiresIn: (process.env.JWT_EXPIRES_IN || '7d') as any }
   );
-  
+
   const refreshToken = jwt.sign(
     { userId, type: 'refresh' },
-    process.env.JWT_SECRET!,
-    { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d' }
+    process.env.JWT_SECRET as string,
+    { expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '30d') as any }
   );
 
   return { accessToken, refreshToken };
@@ -54,7 +74,7 @@ router.post(
     body('fullName').trim().isLength({ min: 2 }),
     body('role').optional().isIn(['VENDOR', 'CALL_CENTER_AGENT', 'GROSSELLER', 'INFLUENCER', 'CONFIRMATION_AGENT']),
   ],
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       throw new AppException(400, 'Validation failed');
@@ -90,7 +110,24 @@ router.post(
       throw new AppException(400, 'Invalid role specified');
     }
 
-    const user = await prisma.user.create({
+    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+    let registrationIp = Array.isArray(rawIp) ? rawIp[0] : rawIp.split(',')[0].trim();
+
+    if (registrationIp === '::1' || registrationIp === '127.0.0.1') {
+      try {
+        const ipRes = await fetch('https://api.ipify.org?format=json');
+        if (ipRes.ok) {
+          const ipData = await ipRes.json();
+          registrationIp = ipData.ip;
+        }
+      } catch (e) {
+        console.error('Failed to resolve local to public IP');
+      }
+    }
+
+    const detectedCity = await getGeoLocation(registrationIp);
+
+    const user = (await prisma.user.create({
       data: {
         email,
         phone: normalizedPhone,
@@ -98,21 +135,30 @@ router.post(
         roleId: userRole.id,
         kycStatus: 'PENDING',
         isActive: false,
+        registrationIp,
+        detectedCity,
         profile: {
           create: {
             fullName,
             language: 'fr',
-          },
+            instagramUsername: (req.body as any).instagramUsername || null,
+            tiktokUsername: (req.body as any).tiktokUsername || null,
+            facebookUsername: (req.body as any).facebookUsername || null,
+            xUsername: (req.body as any).xUsername || null,
+            youtubeUsername: (req.body as any).youtubeUsername || null,
+            snapchatUsername: (req.body as any).snapchatUsername || null,
+          } as any,
         },
       },
       include: {
         profile: true,
         role: true,
       },
-    });
+    })) as any;
 
     const otp = generateOTP();
-    const otpExpiry = new Date(Date.now() + parseInt(process.env.OTP_EXPIRY_MINUTES || '5', 10) * 60 * 1000);
+    // In a real application, you would store otpExpiry and otp
+    // const otpExpiry = new Date(Date.now() + parseInt(process.env.OTP_EXPIRY_MINUTES || '5', 10) * 60 * 1000);
 
     console.log(`[DEV] OTP for ${email || phone}: ${otp}`);
 
@@ -141,19 +187,155 @@ router.post(
 );
 
 router.post(
+  '/register-influencer',
+  [
+    body('email').optional().isEmail().normalizeEmail(),
+    body('phone').optional().custom((value, { req }) => {
+      if (!value) return true;
+      const normalized = normalizePhoneNumber(value);
+      if (!normalized) {
+        throw new Error('Invalid Moroccan phone number format');
+      }
+      return true;
+    }),
+    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+    body('fullName').trim().isLength({ min: 2 }),
+    body('instagramUsername').optional().trim(),
+    body('tiktokUsername').optional().trim(),
+    body('facebookUsername').optional().trim(),
+    body('xUsername').optional().trim(),
+    body('youtubeUsername').optional().trim(),
+    body('snapchatUsername').optional().trim(),
+  ],
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new AppException(400, 'Validation failed');
+    }
+
+    const { email, phone, password, fullName, instagramUsername, tiktokUsername, facebookUsername, xUsername, youtubeUsername, snapchatUsername } = req.body;
+    const normalizedPhone = phone ? normalizePhoneNumber(phone) : undefined;
+
+    // We will do a basic existence check
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          ...(email ? [{ email }] : []),
+          ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
+        ],
+      },
+    });
+
+    if (existingUser) {
+      throw new AppException(409, 'User already exists with this email or phone');
+    }
+
+    // Manual verification fallback. Skip automated scraping.
+    const actualUsername = instagramUsername;
+    const actualTiktok = tiktokUsername;
+    const actualFacebook = facebookUsername;
+    const actualX = xUsername;
+    const actualYoutube = youtubeUsername;
+    const actualSnapchat = snapchatUsername;
+
+    // Step 2: Create User with PENDING status
+    const hashedPassword = await bcrypt.hash(password, parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10));
+
+    const influencerRole = await prisma.role.findUnique({
+      where: { name: 'INFLUENCER' },
+    });
+
+    if (!influencerRole) {
+      throw new AppException(500, 'Influencer role not configured in the system');
+    }
+
+    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+    let registrationIp = Array.isArray(rawIp) ? rawIp[0] : rawIp.split(',')[0].trim();
+
+    if (registrationIp === '::1' || registrationIp === '127.0.0.1') {
+      try {
+        const ipRes = await fetch('https://api.ipify.org?format=json');
+        if (ipRes.ok) {
+          const ipData = (await ipRes.json()) as { ip: string };
+          registrationIp = ipData.ip;
+        }
+      } catch (e) {
+        console.error('Failed to resolve local to public IP');
+      }
+    }
+
+    const detectedCity = await getGeoLocation(registrationIp);
+
+    const user = (await prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        roleId: influencerRole.id,
+        isInfluencer: true,
+        referralCode: uuidv4().slice(0, 8).toUpperCase(),
+        kycStatus: 'PENDING', // Needs admin approval
+        isActive: false,
+        registrationIp,
+        detectedCity,
+        profile: {
+          create: {
+            fullName,
+            language: 'fr',
+            instagramUsername: actualUsername,
+            tiktokUsername: actualTiktok,
+            facebookUsername: actualFacebook,
+            xUsername: actualX,
+            youtubeUsername: actualYoutube,
+            snapchatUsername: actualSnapchat,
+          },
+        },
+      },
+      include: {
+        profile: true,
+        role: true,
+      },
+    })) as any;
+
+    const { accessToken, refreshToken } = generateTokens(user.uuid);
+
+    const userProfile = user.profile;
+
+    res.status(201).json({
+      status: 'success',
+      message: 'Influencer registration successful. Your account is pending admin approval.',
+      data: {
+        user: {
+          uuid: user.uuid,
+          email: user.email,
+          fullName: userProfile?.fullName,
+          role: user.role?.name,
+          kycStatus: user.kycStatus,
+          instagramFollowers: userProfile?.instagramFollowers,
+        },
+        tokens: {
+          accessToken,
+          refreshToken,
+        },
+      },
+    });
+  })
+);
+
+router.post(
   '/login',
   [
     body('email').optional().isEmail().normalizeEmail(),
     body('phone').optional().matches(/^\+212[5678][0-9]{8}$/),
     body('password').notEmpty(),
   ],
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       throw new AppException(400, 'Validation failed');
     }
 
     const { email, phone, password } = req.body;
+    const normalizedPhone = phone ? normalizePhoneNumber(phone) : undefined;
 
     if (!email && !phone) {
       throw new AppException(400, 'Email or phone is required');
@@ -163,7 +345,7 @@ router.post(
       where: {
         OR: [
           ...(email ? [{ email }] : []),
-          ...(phone ? [{ phone }] : []),
+          ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
         ],
       },
       include: {
@@ -198,13 +380,25 @@ router.post(
       message: 'Login successful',
       data: {
         user: {
+          id: user.id,
           uuid: user.uuid,
           email: user.email,
           phone: user.phone,
           fullName: user.profile?.fullName,
           role: user.role.name,
           kycStatus: user.kycStatus,
+          isActive: user.isActive,
+          mode: user.mode,
+          isInfluencer: user.isInfluencer || user.role.name === 'INFLUENCER',
+          instagramUsername: ((user as any).profile)?.instagramUsername,
+          tiktokUsername: ((user as any).profile)?.tiktokUsername,
+          facebookUsername: ((user as any).profile)?.facebookUsername,
+          xUsername: ((user as any).profile)?.xUsername,
+          youtubeUsername: ((user as any).profile)?.youtubeUsername,
+          snapchatUsername: ((user as any).profile)?.snapchatUsername,
+          referralCode: user.referralCode,
           avatarUrl: user.profile?.avatarUrl,
+          instagramFollowers: (user.profile as any)?.instagramFollowers,
         },
         tokens: {
           accessToken,
@@ -222,14 +416,15 @@ router.post(
     body('phone').optional().matches(/^\+212[5678][0-9]{8}$/),
     body('otp').isLength({ min: 6, max: 6 }),
   ],
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { email, phone, otp } = req.body;
+    const normalizedPhone = phone ? normalizePhoneNumber(phone) : undefined;
 
     const user = await prisma.user.findFirst({
       where: {
         OR: [
           ...(email ? [{ email }] : []),
-          ...(phone ? [{ phone }] : []),
+          ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
         ],
       },
     });
@@ -239,6 +434,9 @@ router.post(
     }
 
     console.log(`[DEV] Verifying OTP: ${otp} for ${email || phone}`);
+
+    // In a real application, you would verify the OTP against a stored value
+    // and its expiry. For this example, we're just logging and proceeding.
 
     if (email) {
       await prisma.user.update({
@@ -265,14 +463,15 @@ router.post(
     body('email').optional().isEmail().normalizeEmail(),
     body('phone').optional().matches(/^\+212[5678][0-9]{8}$/),
   ],
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { email, phone } = req.body;
+    const normalizedPhone = phone ? normalizePhoneNumber(phone) : undefined;
 
     const user = await prisma.user.findFirst({
       where: {
         OR: [
           ...(email ? [{ email }] : []),
-          ...(phone ? [{ phone }] : []),
+          ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
         ],
       },
     });
@@ -282,6 +481,8 @@ router.post(
     }
 
     const otp = generateOTP();
+    // In a real application, you would store this OTP and its expiry in the database
+    // and send it via email/SMS.
     console.log(`[DEV] New OTP for ${email || phone}: ${otp}`);
 
     res.json({
@@ -299,12 +500,13 @@ router.post(
   ],
   asyncHandler(async (req, res) => {
     const { email, phone } = req.body;
+    const normalizedPhone = phone ? normalizePhoneNumber(phone) : undefined;
 
     const user = await prisma.user.findFirst({
       where: {
         OR: [
           ...(email ? [{ email }] : []),
-          ...(phone ? [{ phone }] : []),
+          ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
         ],
       },
     });
@@ -317,6 +519,8 @@ router.post(
     }
 
     const otp = generateOTP();
+    // In a real application, you would store this OTP and its expiry in the database
+    // and send it via email/SMS.
     console.log(`[DEV] Password reset OTP for ${email || phone}: ${otp}`);
 
     res.json({
@@ -336,12 +540,13 @@ router.post(
   ],
   asyncHandler(async (req, res) => {
     const { email, phone, otp, password } = req.body;
+    const normalizedPhone = phone ? normalizePhoneNumber(phone) : undefined;
 
     const user = await prisma.user.findFirst({
       where: {
         OR: [
           ...(email ? [{ email }] : []),
-          ...(phone ? [{ phone }] : []),
+          ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
         ],
       },
     });
@@ -350,6 +555,8 @@ router.post(
       throw new AppException(404, 'User not found');
     }
 
+    // In a real application, you would verify the OTP against a stored value
+    // and its expiry before allowing password reset.
     console.log(`[DEV] Reset password OTP: ${otp}`);
 
     const hashedPassword = await bcrypt.hash(password, parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10));
@@ -438,6 +645,7 @@ router.get(
       status: 'success',
       data: {
         user: {
+          id: user.id,
           uuid: user.uuid,
           email: user.email,
           phone: user.phone,
@@ -445,10 +653,19 @@ router.get(
           avatarUrl: user.profile?.avatarUrl,
           city: user.profile?.city,
           address: user.profile?.address,
-          language: user.profile?.language,
+          language: (user.profile as any)?.language,
           role: user.role.name,
+          mode: user.mode,
           kycStatus: user.kycStatus,
           isActive: user.isActive,
+          isInfluencer: user.isInfluencer || user.role.name === 'INFLUENCER',
+          instagramUsername: ((user as any).profile)?.instagramUsername,
+          tiktokUsername: ((user as any).profile)?.tiktokUsername,
+          facebookUsername: ((user as any).profile)?.facebookUsername,
+          xUsername: ((user as any).profile)?.xUsername,
+          youtubeUsername: ((user as any).profile)?.youtubeUsername,
+          snapchatUsername: ((user as any).profile)?.snapchatUsername,
+          referralCode: user.referralCode,
           emailVerified: !!user.emailVerifiedAt,
           phoneVerified: !!user.phoneVerifiedAt,
           wallet: user.wallet ? {
@@ -468,7 +685,7 @@ router.post(
   [
     body('refreshToken').notEmpty(),
   ],
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { refreshToken } = req.body;
 
     try {
@@ -507,7 +724,7 @@ router.post(
 router.post(
   '/logout',
   authenticate,
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (_req: Request, res: Response) => {
     res.json({
       status: 'success',
       message: 'Logged out successfully',

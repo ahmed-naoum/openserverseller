@@ -1,199 +1,189 @@
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { inventoryApi, productsApi, payoutsApi } from '../../lib/api';
-import AddProductModal from './AddProductModal';
+import { dashboardApi } from '../../lib/api';
+import { Link } from 'react-router-dom';
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<'inventory' | 'selling' | 'payouts'>('inventory');
-  const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
-
-  const { data: inventoryData, isLoading: isLoadingInventory } = useQuery({
-    queryKey: ['grosseller-inventory'],
-    queryFn: () => inventoryApi.purchased(),
-    enabled: activeTab === 'inventory',
+  const { data: dashboardData, isLoading } = useQuery({
+    queryKey: ['grosseller-dashboard'],
+    queryFn: () => dashboardApi.grosseller(),
   });
 
-  const { data: productsData, isLoading: isLoadingProducts, refetch: refetchProducts } = useQuery({
-    queryKey: ['grosseller-products'],
-    queryFn: () => productsApi.list({ myProducts: 'true', status: 'ALL' }),
-    enabled: activeTab === 'selling',
-  });
+  const stats = dashboardData?.data?.data?.stats || {
+    totalPurchasedValue: 0,
+    recentSalesValue: 0,
+    pendingPayoutsAmount: 0,
+    lowStockAlerts: 0,
+  };
+  
+  const products = dashboardData?.data?.data?.products || [];
+  const pendingProducts = dashboardData?.data?.data?.pendingProducts || [];
+  const approvedProducts = dashboardData?.data?.data?.approvedProducts || [];
+  const recentOrders = dashboardData?.data?.data?.recentOrders || [];
 
-  const { data: payoutsData, isLoading: isLoadingPayouts } = useQuery({
-    queryKey: ['grosseller-payouts'],
-    queryFn: () => payoutsApi.list(),
-    enabled: activeTab === 'payouts',
-  });
-
-  const inventory = inventoryData?.data?.data?.inventory || [];
-  const products = productsData?.data?.data?.products || [];
-  const payouts = payoutsData?.data?.data?.payouts || [];
+  if (isLoading) {
+    return <div className="flex h-64 items-center justify-center text-gray-500">Chargement de la vue d'ensemble...</div>;
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Tableau de bord Grosseller</h1>
-        <button onClick={() => setIsAddProductModalOpen(true)} className="btn-primary">
-          <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Ajouter un Produit
-        </button>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Vue d'ensemble Grosseller</h1>
+          <p className="mt-1 text-sm text-gray-500">Bienvenue. Voici l'état de votre activité B2B.</p>
+        </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 border-b border-gray-200">
-        {[
-          { id: 'inventory', label: 'Inventaire Acheté' },
-          { id: 'selling', label: 'Mes Produits (Vente)' },
-          { id: 'payouts', label: 'Paiements' },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === tab.id
-                ? 'border-primary-500 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab Content */}
-      <div className="card p-6 min-h-[400px]">
-        {activeTab === 'inventory' && (
-          <div>
-            <h2 className="text-lg font-semibold mb-4">Mon Inventaire Acheté</h2>
-            {isLoadingInventory ? (
-              <div className="text-center py-12 text-gray-500">Chargement de l'inventaire...</div>
-            ) : inventory.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {inventory.map((item: any) => (
-                  <div key={item.id} className="border border-gray-100 rounded-xl p-4 flex gap-4 items-center">
-                    <div className="w-16 h-16 bg-gray-100 rounded-lg flex-shrink-0">
-                      {item.product?.primaryImage ? (
-                        <img src={item.product.primaryImage} alt="" className="w-full h-full object-cover rounded-lg" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">Image</div>
-                      )}
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-gray-900">{item.product?.nameFr}</h3>
-                      <p className="text-sm text-gray-500">Quantité: {item.quantity}</p>
-                      <p className="text-xs text-primary-600 font-medium mt-1">Acquis le {new Date(item.acquiredAt).toLocaleDateString()}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12 text-gray-500">
-                Vous n'avez pas encore acheté de produits.
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'selling' && (
-          <div>
-            <h2 className="text-lg font-semibold mb-4">Mes Produits (Proposés & En Vente)</h2>
-            {isLoadingProducts ? (
-              <div className="text-center py-12 text-gray-500">Chargement de vos produits...</div>
-            ) : products.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {products.map((product: any) => (
-                  <div key={product.id} className="border border-gray-100 rounded-xl p-4 flex gap-4 items-center relative overflow-hidden">
-                    <div className="absolute top-2 right-2">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        product.status === 'APPROVED' ? 'bg-green-100 text-green-700' : 
-                        product.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
-                      }`}>
-                        {product.status === 'APPROVED' ? 'Approuvé' : product.status === 'PENDING' ? 'En Attente' : 'Rejeté'}
-                      </span>
-                    </div>
-                    <div className="w-16 h-16 bg-gray-100 rounded-lg flex-shrink-0">
-                      {product.primaryImage ? (
-                        <img src={product.primaryImage} alt="" className="w-full h-full object-cover rounded-lg" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">Image</div>
-                      )}
-                    </div>
-                    <div className="pt-2">
-                      <h3 className="font-semibold text-gray-900">{product.nameFr}</h3>
-                      <p className="text-sm text-gray-500">{product.category?.nameFr}</p>
-                      <p className="text-xs font-medium mt-1">Prix Détail: {product.retailPriceMad} MAD</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12 text-gray-500">
-                Vous n'avez pas encore proposé de produits.
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'payouts' && (
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold">Historique des Paiements</h2>
-              <button className="btn-primary py-1 px-3 text-sm">Demander un Paiement</button>
+      {/* Top Stats Bar */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        {/* Total Purchased Inventory Value */}
+        <div className="card p-5 border-l-4 border-l-grosseller-500">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Valeur d'Inventaire Acheté</p>
+              <h3 className="text-2xl font-bold text-gray-900 mt-1">{Number(stats.totalPurchasedValue).toLocaleString()} MAD</h3>
             </div>
-            
-            {isLoadingPayouts ? (
-              <div className="text-center py-12 text-gray-500">Chargement des paiements...</div>
-            ) : payouts.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead className="bg-gray-50 border-b border-gray-100">
-                    <tr>
-                      <th className="py-2 px-4 text-sm font-medium text-gray-500">Montant</th>
-                      <th className="py-2 px-4 text-sm font-medium text-gray-500">Banque & RIB</th>
-                      <th className="py-2 px-4 text-sm font-medium text-gray-500">Statut</th>
-                      <th className="py-2 px-4 text-sm font-medium text-gray-500">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {payouts.map((payout: any) => (
-                      <tr key={payout.id}>
-                        <td className="py-3 px-4 font-semibold text-gray-900">{Number(payout.amountMad).toLocaleString()} MAD</td>
-                        <td className="py-3 px-4 text-sm text-gray-600">
-                          <div>{payout.bankName}</div>
-                          <div className="text-xs text-gray-400 font-mono">{payout.ribAccount.substring(0, 10)}...</div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                            payout.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
-                            payout.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
-                          }`}>
-                            {payout.status}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-sm text-gray-500">
-                          {new Date(payout.createdAt).toLocaleDateString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <div className="p-2 bg-grosseller-50 text-grosseller-600 rounded-lg">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+            </div>
+          </div>
+        </div>
+
+        {/* Recent Sales (30 Days) */}
+        <div className="card p-5 border-l-4 border-l-green-500">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Ventes (30 jours)</p>
+              <h3 className="text-2xl font-bold text-gray-900 mt-1">{Number(stats.recentSalesValue).toLocaleString()} MAD</h3>
+            </div>
+            <div className="p-2 bg-green-50 text-green-600 rounded-lg">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            </div>
+          </div>
+        </div>
+
+        {/* Pending Payouts */}
+        <div className="card p-5 border-l-4 border-l-orange-500">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Paiements en Attente</p>
+              <h3 className="text-2xl font-bold text-gray-900 mt-1">{Number(stats.pendingPayoutsAmount).toLocaleString()} MAD</h3>
+            </div>
+            <div className="p-2 bg-orange-50 text-orange-600 rounded-lg">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+            </div>
+          </div>
+        </div>
+
+        {/* Low Stock Alerts */}
+        <div className="card p-5 border-l-4 border-l-red-500">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Alertes Stock Faible</p>
+              <h3 className="text-2xl font-bold text-gray-900 mt-1">{stats.lowStockAlerts}</h3>
+            </div>
+            <div className="p-2 bg-red-50 text-red-600 rounded-lg">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Secondary Stats Group */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="card p-4 flex items-center gap-4">
+          <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500 font-medium">Actifs au Marché</p>
+            <p className="text-xl font-bold">{approvedProducts.length} Produits</p>
+          </div>
+        </div>
+        <div className="card p-4 flex items-center gap-4">
+          <div className="p-3 bg-yellow-50 text-yellow-600 rounded-lg">
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500 font-medium">En Attente d'Approbation</p>
+            <p className="text-xl font-bold">{pendingProducts.length} Produits</p>
+          </div>
+        </div>
+        <div className="card p-4 flex items-center gap-4">
+          <div className="p-3 bg-purple-50 text-purple-600 rounded-lg">
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500 font-medium">Total de vos Produits</p>
+            <p className="text-xl font-bold">{products.length} Produits</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Quick Actions */}
+        <div className="card p-6 h-fit">
+          <h2 className="text-lg font-bold text-gray-900 mb-4">Actions Rapides</h2>
+          <div className="space-y-3">
+            <Link to="/grosseller/add-product" className="w-full flex items-center justify-between p-3 rounded-lg bg-grosseller-50 text-grosseller-700 hover:bg-grosseller-100 transition-colors border border-grosseller-100">
+              <div className="flex items-center gap-3">
+                <svg className="w-5 h-5 text-grosseller-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                <span className="font-medium">Ajouter au Marché</span>
               </div>
+            </Link>
+            <Link to="/grosseller/payouts" className="w-full flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+              <div className="flex items-center gap-3">
+                <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span className="font-medium text-gray-700">Demander un Paiement</span>
+              </div>
+            </Link>
+            <Link to="/grosseller/marketplace" className="w-full flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+              <div className="flex items-center gap-3">
+                <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                <span className="font-medium text-gray-700">Explorer le Marché</span>
+              </div>
+            </Link>
+          </div>
+        </div>
+
+        {/* Recent Activity Feed */}
+        <div className="card p-6 lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-900">Activité Récente</h2>
+            <Link to="/grosseller/orders" className="text-sm font-medium text-grosseller-600 hover:text-grosseller-700">Voir tout</Link>
+          </div>
+          
+          <div className="space-y-4">
+            {recentOrders && recentOrders.length > 0 ? (
+              recentOrders.map((order: any) => (
+                <div key={order.id} className="flex items-start gap-4 p-3 rounded-lg border border-gray-100 bg-gray-50">
+                  <div className="p-2 bg-white rounded-md shadow-sm border border-gray-200 text-grosseller-600">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900 leading-tight">
+                      Vente: {order.items?.map((i: any) => i.product?.nameFr).join(', ') || order.orderNumber}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[10px] font-mono text-gray-400">#{order.orderNumber}</span>
+                      <span className="w-1 h-1 bg-gray-300 rounded-full" />
+                      <p className="text-xs text-gray-500">
+                        Gains: <span className="font-semibold text-green-600">{order.vendorEarningMad} MAD</span>
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-xs text-gray-400">
+                    {new Date(order.createdAt).toLocaleDateString()}
+                  </span>
+                </div>
+              ))
             ) : (
-              <div className="text-center py-12 text-gray-500">
-                Vous n'avez aucun paiement ou retrait.
+              <div className="text-center py-6">
+                <p className="text-gray-500 text-sm">Aucune activité récente.</p>
               </div>
             )}
           </div>
-        )}
+        </div>
       </div>
-
-      <AddProductModal 
-        isOpen={isAddProductModalOpen} 
-        onClose={() => setIsAddProductModalOpen(false)} 
-        onSuccess={() => refetchProducts()} 
-      />
     </div>
   );
 }

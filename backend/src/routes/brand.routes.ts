@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { body, param, validationResult } from 'express-validator';
+import { body, validationResult } from 'express-validator';
 import { PrismaClient } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
@@ -36,7 +36,6 @@ router.get(
             select: {
               leads: true,
               orders: true,
-              productCustoms: true,
             },
           },
         },
@@ -70,9 +69,8 @@ router.get(
           },
           bankAccounts: b.bankAccounts,
           stats: {
-            leads: b._count.leads,
-            orders: b._count.orders,
-            products: b._count.productCustoms,
+            leads: (b as any)._count.leads,
+            orders: (b as any)._count.orders,
           },
           createdAt: b.createdAt,
         })),
@@ -100,17 +98,6 @@ router.get(
           include: { profile: true },
         },
         bankAccounts: true,
-        productCustoms: {
-          include: {
-            product: {
-              include: {
-                images: { where: { isPrimary: true } },
-                category: true,
-              },
-            },
-          },
-          take: 20,
-        },
       },
     });
 
@@ -201,7 +188,7 @@ router.patch(
 
     const brand = await prisma.brand.findFirst({
       where: {
-        id: BigInt(id),
+        id: Number(id),
         vendorId: req.user!.id,
       },
     });
@@ -213,7 +200,7 @@ router.patch(
     const { name, slogan, description, primaryColor, secondaryColor, logoUrl, designSettings } = req.body;
 
     const updatedBrand = await prisma.brand.update({
-      where: { id: BigInt(id) },
+      where: { id: Number(id) },
       data: {
         ...(name && { name }),
         ...(slogan !== undefined && { slogan }),
@@ -242,7 +229,7 @@ router.post(
 
     const brand = await prisma.brand.findFirst({
       where: {
-        id: BigInt(id),
+        id: Number(id),
         vendorId: req.user!.id,
       },
       include: { bankAccounts: true },
@@ -261,7 +248,7 @@ router.post(
     }
 
     const updatedBrand = await prisma.brand.update({
-      where: { id: BigInt(id) },
+      where: { id: Number(id) },
       data: {
         status: 'PENDING_APPROVAL',
       },
@@ -283,12 +270,11 @@ router.post(
     const { id } = req.params;
 
     const brand = await prisma.brand.update({
-      where: { id: BigInt(id) },
+      where: { id: Number(id) },
       data: {
         status: 'APPROVED',
         isApproved: true,
         approvedAt: new Date(),
-        approvedById: req.user!.id,
       },
     });
 
@@ -308,7 +294,7 @@ router.post(
     const { id } = req.params;
 
     const brand = await prisma.brand.update({
-      where: { id: BigInt(id) },
+      where: { id: Number(id) },
       data: {
         status: 'REJECTED',
       },
@@ -337,7 +323,7 @@ router.post(
 
     const brand = await prisma.brand.findFirst({
       where: {
-        id: BigInt(id),
+        id: Number(id),
         vendorId: req.user!.id,
       },
     });
@@ -380,7 +366,7 @@ router.delete(
 
     const brand = await prisma.brand.findFirst({
       where: {
-        id: BigInt(brandId),
+        id: Number(brandId),
         vendorId: req.user!.id,
       },
     });
@@ -391,7 +377,7 @@ router.delete(
 
     await prisma.brandBankAccount.delete({
       where: {
-        id: BigInt(accountId),
+        id: Number(accountId),
         brandId: brand.id,
       },
     });

@@ -98,31 +98,6 @@ async function main() {
 
   const categoryMap = Object.fromEntries(categories.map((c) => [c.slug, c.id]));
 
-  // Seed Products
-  console.log('📦 Creating products...');
-  const productsData = [
-    { sku: 'COS-001', nameAr: 'كريم ترطيب الوجه', nameFr: 'Crème Hydratante Visage', categoryId: categoryMap['skincare'], baseCostMad: 45, retailPriceMad: 120 },
-    { sku: 'COS-002', nameAr: 'سيروم فيتامين سي', nameFr: 'Sérum Vitamine C', categoryId: categoryMap['skincare'], baseCostMad: 65, retailPriceMad: 180 },
-    { sku: 'OIL-001', nameAr: 'زيت الأركان الأصلي', nameFr: 'Huile d\'Argan Pure', categoryId: categoryMap['natural-oils'], baseCostMad: 80, retailPriceMad: 220 },
-    { sku: 'SUP-001', nameAr: 'كبسولات الكولاجين', nameFr: 'Gélules Collagène', categoryId: categoryMap['supplements'], baseCostMad: 90, retailPriceMad: 250 },
-    { sku: 'SUP-002', nameAr: 'زيت السمك أوميغا 3', nameFr: 'Omega 3 Poisson', categoryId: categoryMap['supplements'], baseCostMad: 70, retailPriceMad: 190 },
-  ];
-
-  for (const product of productsData) {
-    await prisma.product.upsert({
-      where: { sku: product.sku },
-      update: {},
-      create: {
-        ...product,
-        description: `Description de ${product.nameFr}`,
-        isCustomizable: true,
-        minProductionDays: 3,
-        isActive: true,
-      },
-    });
-  }
-  console.log(`✅ Created ${productsData.length} products`);
-
   // Seed Demo Users
   console.log('👥 Creating demo users...');
   const hashedPassword = await bcrypt.hash('password123', 12);
@@ -179,34 +154,80 @@ async function main() {
     include: { profile: true, wallet: true },
   });
 
-  const agent = await prisma.user.upsert({
-    where: { email: 'agent@openseller.ma' },
-    update: {},
-    create: {
-      email: 'agent@openseller.ma',
-      phone: '+212600000003',
-      password: hashedPassword,
-      roleId: roleMap['CALL_CENTER_AGENT'],
-      isActive: true,
-      kycStatus: 'APPROVED',
-      emailVerifiedAt: new Date(),
-      profile: {
-        create: {
-          fullName: 'Fatima Zahra',
-          city: 'Casablanca',
-          language: 'fr',
+  await Promise.all([
+    prisma.user.upsert({
+      where: { email: 'agent@openseller.ma' },
+      update: {},
+      create: {
+        email: 'agent@openseller.ma',
+        phone: '+212600000003',
+        password: hashedPassword,
+        roleId: roleMap['CALL_CENTER_AGENT'],
+        isActive: true,
+        kycStatus: 'APPROVED',
+        emailVerifiedAt: new Date(),
+        profile: {
+          create: {
+            fullName: 'Fatima Zahra',
+            city: 'Casablanca',
+            language: 'fr',
+          },
         },
       },
-    },
-    include: { profile: true },
-  });
+    }),
+    prisma.user.upsert({
+      where: { email: 'confirmation@openseller.ma' },
+      update: {},
+      create: {
+        email: 'confirmation@openseller.ma',
+        phone: '+212600000004',
+        password: hashedPassword,
+        roleId: roleMap['CONFIRMATION_AGENT'],
+        isActive: true,
+        kycStatus: 'APPROVED',
+        emailVerifiedAt: new Date(),
+        profile: {
+          create: {
+            fullName: 'Ahmed Naoum',
+            city: 'Casablanca',
+            language: 'fr',
+          },
+        },
+      },
+    }),
+    prisma.user.upsert({
+      where: { email: 'influencer@openseller.ma' },
+      update: {},
+      create: {
+        email: 'influencer@openseller.ma',
+        phone: '+212600000005',
+        password: hashedPassword,
+        roleId: roleMap['INFLUENCER'],
+        isActive: true,
+        kycStatus: 'APPROVED',
+        isInfluencer: true,
+        emailVerifiedAt: new Date(),
+        profile: {
+          create: {
+            fullName: 'Ali Influencer',
+            city: 'Marrakech',
+            language: 'fr',
+            instagramUsername: 'ali_influencer',
+            instagramFollowers: 15000,
+          },
+        },
+      },
+    })
+  ]);
 
-  console.log(`✅ Created 3 demo users`);
+  console.log(`✅ Created 5 demo users`);
 
   // Seed Demo Brand
   console.log('🏷️ Creating demo brand...');
-  const brand = await prisma.brand.create({
-    data: {
+  const brand = await prisma.brand.upsert({
+    where: { slug: 'beautycare-ma' },
+    update: {},
+    create: {
       vendorId: vendor.id,
       name: 'BeautyCare Ma',
       slug: 'beautycare-ma',
@@ -240,6 +261,8 @@ async function main() {
   Super Admin : admin@openseller.ma
   Vendor      : vendor@openseller.ma
   Agent       : agent@openseller.ma
+  Conf. Agent : confirmation@openseller.ma
+  Influencer  : influencer@openseller.ma
   ─────────────────────────────────────────────────
   `);
 }

@@ -16,9 +16,10 @@ router.get(
     const where: any = { isActive: true };
 
     // Filter by visibility: REGULAR, AFFILIATE, or both
+    const userRole = req.user?.roleName;
     if (visibility && visibility !== 'ALL') {
       where.visibility = visibility;
-    } else if (!req.user || (req.user.roleName !== 'SUPER_ADMIN' && req.user.roleName !== 'ADMIN')) {
+    } else if (!req.user || (userRole !== 'SUPER_ADMIN' && userRole !== 'ADMIN' && userRole !== 'INFLUENCER')) {
       // Public/regular users see REGULAR products
       where.visibility = 'REGULAR';
     }
@@ -100,16 +101,32 @@ router.get(
 
 router.get(
   '/:id',
+  optionalAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
-    const product = await prisma.product.findUnique({
-      where: { id: Number(id) },
-      include: {
-        category: true,
-        images: { orderBy: { sortOrder: 'asc' } },
-      },
-    });
+    const [product, inventory, claim, pendingRequest] = await Promise.all([
+      prisma.product.findUnique({
+        where: { id: Number(id) },
+        include: {
+          category: true,
+          images: { orderBy: { sortOrder: 'asc' } },
+        },
+      }),
+      req.user ? prisma.productInventory.findFirst({
+        where: { userId: req.user.id, productId: Number(id) }
+      }) : Promise.resolve(null),
+      req.user ? prisma.affiliateClaim.findFirst({
+        where: { userId: req.user.id, productId: Number(id), status: 'ACTIVE' }
+      }) : Promise.resolve(null),
+      req.user ? prisma.supportRequest.findFirst({
+        where: {
+          userId: req.user.id,
+          productId: Number(id),
+          status: { in: ['OPEN', 'IN_PROGRESS'] }
+        }
+      }) : Promise.resolve(null)
+    ]);
 
     if (!product) {
       throw new AppException(404, 'Product not found');
@@ -117,7 +134,15 @@ router.get(
 
     res.json({
       status: 'success',
-      data: { product },
+      data: {
+        product,
+        userStatus: {
+          isBought: !!inventory,
+          isClaimed: !!claim,
+          isPending: !!pendingRequest,
+          pendingRequestId: pendingRequest?.id
+        }
+      },
     });
   })
 );
@@ -130,17 +155,18 @@ router.post(
     body('sku').notEmpty().trim(),
     body('nameAr').notEmpty().trim(),
     body('nameFr').notEmpty().trim(),
-    body('categoryId').notEmpty(),
+    body('categoryId').isInt(),
     body('baseCostMad').isFloat({ min: 0 }),
     body('retailPriceMad').isFloat({ min: 0 }),
   ],
   asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      throw new AppException(400, 'Validation failed');
+      console.error('Validation Errors:', errors.array());
+      throw new AppException(400, 'Validation failed', errors.array());
     }
 
-    const { sku, nameAr, nameFr, nameEn, description, categoryId, baseCostMad, retailPriceMad, isCustomizable, minProductionDays, isActive, visibility, status } = req.body;
+    const { sku, nameAr, nameFr, nameEn, description, categoryId, baseCostMad, retailPriceMad, isCustomizable, minProductionDays, stockQuantity, imageUrl, isActive, visibility, status } = req.body;
 
     const existingProduct = await prisma.product.findUnique({
       where: { sku },
@@ -153,6 +179,10 @@ router.post(
     const isGrosseller = req.user!.roleName === 'GROSSELLER';
     const finalStatus = isGrosseller ? 'PENDING' : (status ?? 'APPROVED');
 
+    const finalOwnerId = (req.user!.roleName === 'SUPER_ADMIN' || req.user!.roleName === 'ADMIN') && req.body.ownerId
+      ? Number(req.body.ownerId)
+      : Number(req.user!.id);
+
     const product = await prisma.product.create({
       data: {
         sku,
@@ -164,13 +194,19 @@ router.post(
         baseCostMad,
         retailPriceMad,
         isCustomizable: isCustomizable ?? true,
-        minProductionDays: minProductionDays ?? 3,
+        minProductionDays: Number(minProductionDays ?? 3),
+        stockQuantity: stockQuantity ? Number(stockQuantity) : 0,
         isActive: isActive ?? true,
         visibility: visibility ?? 'REGULAR',
         status: finalStatus,
-        ownerId: Number(req.user!.id),
+        ownerId: finalOwnerId,
+        ...(imageUrl ? {
+          images: {
+            create: [{ imageUrl, isPrimary: true, sortOrder: 0 }]
+          }
+        } : {})
       },
-      include: { category: true },
+      include: { category: true, images: true },
     });
 
     res.status(201).json({

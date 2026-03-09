@@ -11,19 +11,37 @@ router.get(
   '/',
   authenticate,
   asyncHandler(async (req, res) => {
-    const { page = 1, limit = 50, status, brandId, agentId, search } = req.query;
+    const { page = 1, limit = 50, status, brandId, agentId, search, viewMode } = req.query;
 
     const where: any = {};
 
     if (req.user!.roleName === 'VENDOR') {
       where.vendorId = req.user!.id;
     } else if (req.user!.roleName === 'CALL_CENTER_AGENT') {
-      where.assignedAgentId = req.user!.id;
+      if (viewMode === 'ALL') {
+        where.OR = [
+          { assignedAgentId: req.user!.id },
+          { status: { in: ['AVAILABLE'] } },
+        ];
+      } else {
+        where.assignedAgentId = req.user!.id;
+      }
     }
 
-    if (status) where.status = status;
-    if (brandId) where.brandId = BigInt(brandId as string);
-    if (agentId) where.assignedAgentId = BigInt(agentId as string);
+    if (status) {
+      const statusStr = status as string;
+      if (statusStr.includes(',')) {
+        where.status = { in: statusStr.split(',').map(s => s.trim()) };
+      } else {
+        where.status = statusStr;
+      }
+    } else if (viewMode !== 'ALL') {
+      // By default, hide leads that have already been converted to orders
+      where.status = { not: 'PUSHED_TO_DELIVERY' };
+    }
+
+    if (brandId) where.brandId = Number(brandId as string);
+    if (agentId) where.assignedAgentId = Number(agentId as string);
 
     if (search) {
       where.OR = [
@@ -69,15 +87,14 @@ router.get(
           city: l.city,
           address: l.address,
           status: l.status,
-          conversionProbability: l.conversionProbability,
           notes: l.notes,
           brand: l.brand ? { id: l.brand.id, name: l.brand.name } : null,
           assignedAgent: l.assignedAgent
             ? {
-                id: l.assignedAgent.id,
-                uuid: l.assignedAgent.uuid,
-                fullName: l.assignedAgent.profile?.fullName,
-              }
+              id: l.assignedAgent.id,
+              uuid: l.assignedAgent.uuid,
+              fullName: l.assignedAgent.profile?.fullName,
+            }
             : null,
           recentCalls: l.callLogs.length,
           lastCall: l.callLogs[0]?.createdAt || null,
@@ -89,6 +106,203 @@ router.get(
           total,
           totalPages: Math.ceil(total / Number(limit)),
         },
+      },
+    });
+  })
+);
+
+router.get(
+  '/available',
+  authenticate,
+  authorize('CALL_CENTER_AGENT'),
+  asyncHandler(async (req, res) => {
+    const agentId = req.user!.id;
+    const { influencerId } = req.query;
+
+    // Check if this agent has influencer assignments
+    const assignments = await prisma.agentInfluencerAssignment.findMany({
+      where: { agentId },
+      include: {
+        influencer: { include: { profile: true } },
+      },
+      orderBy: { assignedAt: 'desc' },
+    });
+
+    let assignedInfluencers = assignments.map(a => ({
+      id: a.influencer.id,
+      fullName: a.influencer.profile?.fullName || a.influencer.email,
+    }));
+
+    const activeLead = await prisma.lead.findFirst({
+      where: {
+        assignedAgentId: req.user!.id,
+        status: 'ASSIGNED',
+      },
+      select: { id: true },
+    });
+
+    // If agent has no specific assignments, they see NO leads and NO filter options
+    if (assignedInfluencers.length === 0) {
+      res.json({
+        status: 'success',
+        data: {
+          leads: [],
+          hasActiveLead: !!activeLead,
+          activeLeadId: activeLead?.id || null,
+          assignedInfluencers: [], // Return empty array so dropdown doesn't show all system influencers
+        },
+      });
+      return;
+    }
+
+    const where: any = {
+      status: { in: ['AVAILABLE'] },
+      assignedAgentId: null,
+    };
+
+    // If a specific influencer is requested, filter by them
+    // Otherwise, filter by all of their assigned influencers
+    const filterByInfluencers = influencerId
+      ? [Number(influencerId)]
+      : assignments.map(a => a.influencerId);
+
+    if (filterByInfluencers.length > 0) {
+      // Get all referral links owned by the filter influencers
+      const referralLinks = await prisma.referralLink.findMany({
+        where: { influencerId: { in: filterByInfluencers } },
+        select: { id: true },
+      });
+      const linkIds = referralLinks.map(l => l.id);
+
+      // If none of the influencers have referral links, there can be no leads
+      if (linkIds.length === 0) {
+        res.json({
+          status: 'success',
+          data: {
+            leads: [],
+            hasActiveLead: !!activeLead,
+            activeLeadId: activeLead?.id || null,
+            assignedInfluencers,
+          },
+        });
+        return;
+      }
+      where.referralLinkId = { in: linkIds };
+    }
+
+    const leads = await prisma.lead.findMany({
+      where,
+      take: 20,
+      orderBy: { createdAt: 'desc' },
+      include: { brand: true },
+    });
+
+    res.json({
+      status: 'success',
+      data: {
+        leads,
+        hasActiveLead: !!activeLead,
+        activeLeadId: activeLead?.id || null,
+        assignedInfluencers,
+      },
+    });
+  })
+);
+
+router.post(
+  '/:id/claim',
+  authenticate,
+  authorize('CALL_CENTER_AGENT'),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    const lead = await prisma.lead.findFirst({
+      where: { id: Number(id), status: { in: ['AVAILABLE'] }, assignedAgentId: null },
+    });
+
+    if (!lead) {
+      throw new AppException(400, 'Lead is no longer available');
+    }
+
+    const claimedLead = await prisma.$transaction(async (tx) => {
+      await tx.leadAssignment.create({
+        data: { leadId: lead.id, agentId: req.user!.id },
+      });
+
+      await tx.leadStatusHistory.create({
+        data: {
+          leadId: lead.id,
+          oldStatus: lead.status, // use actual old status
+          newStatus: 'ASSIGNED',
+          changedBy: req.user!.id,
+          notes: 'Agent claimed lead manually',
+        },
+      });
+
+      return tx.lead.update({
+        where: { id: lead.id },
+        data: { assignedAgentId: req.user!.id, status: 'ASSIGNED' },
+      });
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Lead claimed successfully',
+      data: { lead: claimedLead },
+    });
+  })
+);
+
+router.get(
+  '/:id/detail',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    const lead = await prisma.lead.findUnique({
+      where: { id: Number(id) },
+      include: {
+        brand: true,
+        vendor: { include: { profile: true } },
+        assignedAgent: { include: { profile: true } },
+        callLogs: { orderBy: { createdAt: 'desc' } },
+        statusHistory: { orderBy: { createdAt: 'desc' } },
+        referralLink: {
+          include: {
+            influencer: { include: { profile: true } },
+            product: { include: { images: true } }
+          }
+        },
+      },
+    });
+
+    if (!lead) {
+      throw new AppException(404, 'Lead not found');
+    }
+
+    const { vendor, referralLink, ...leadData } = lead;
+    const influencer = referralLink?.influencer
+      ? { ...referralLink.influencer, fullName: referralLink.influencer.profile?.fullName || referralLink.influencer.email }
+      : null;
+    const product = referralLink?.product
+      ? {
+        ...referralLink.product,
+        image: referralLink.product.images?.find(i => i.isPrimary)?.imageUrl || referralLink.product.images?.[0]?.imageUrl,
+        name: referralLink.product.nameFr || referralLink.product.nameAr,
+        retailPrice: referralLink.product.retailPriceMad
+      }
+      : null;
+    const vendorFormatted = vendor
+      ? { ...vendor, fullName: vendor.profile?.fullName || vendor.email }
+      : null;
+
+    res.json({
+      status: 'success',
+      data: {
+        lead: { ...leadData, referralLink },
+        influencer,
+        product,
+        vendor: vendorFormatted
       },
     });
   })
@@ -107,7 +321,7 @@ router.post(
 
     const brand = await prisma.brand.findFirst({
       where: {
-        id: BigInt(brandId),
+        id: Number(brandId),
         vendorId: req.user!.id,
       },
     });
@@ -119,7 +333,7 @@ router.post(
     const batch = await prisma.leadImportBatch.create({
       data: {
         vendorId: req.user!.id,
-        fileName: `import-${Date.now()}.csv`,
+        fileName: `import -${Date.now()}.csv`,
         totalRows: leads.length,
         status: 'PROCESSING',
       },
@@ -134,14 +348,14 @@ router.post(
     for (const lead of leads) {
       try {
         if (!lead.fullName || !lead.phone) {
-          errors.push(`Missing required fields for lead: ${JSON.stringify(lead)}`);
+          errors.push(`Missing required fields for lead: ${JSON.stringify(lead)} `);
           continue;
         }
 
         const normalizedPhone = lead.phone.replace(/^0/, '+212');
 
         if (!phoneRegex.test(normalizedPhone)) {
-          errors.push(`Invalid phone format: ${lead.phone}`);
+          errors.push(`Invalid phone format: ${lead.phone} `);
           continue;
         }
 
@@ -168,13 +382,12 @@ router.post(
             city: lead.city,
             address: lead.address,
             status: 'NEW',
-            metadata: lead.metadata || {},
           },
         });
 
         validRows++;
       } catch (error) {
-        errors.push(`Error processing lead: ${error}`);
+        errors.push(`Error processing lead: ${error} `);
       }
     }
 
@@ -222,7 +435,7 @@ router.post(
 
     const brand = await prisma.brand.findFirst({
       where: {
-        id: BigInt(brandId),
+        id: Number(brandId),
         vendorId: req.user!.id,
       },
     });
@@ -284,6 +497,7 @@ router.patch(
       'NOT_INTERESTED',
       'CALLBACK_REQUESTED',
       'ORDERED',
+      'PUSHED_TO_DELIVERY',
       'UNREACHABLE',
       'INVALID',
     ];
@@ -292,7 +506,7 @@ router.patch(
       throw new AppException(400, 'Invalid status');
     }
 
-    const where: any = { id: BigInt(id) };
+    const where: any = { id: Number(id) };
 
     if (req.user!.roleName === 'VENDOR') {
       where.vendorId = req.user!.id;
@@ -342,7 +556,7 @@ router.post(
     const { agentId } = req.body;
 
     const lead = await prisma.lead.findUnique({
-      where: { id: BigInt(id) },
+      where: { id: Number(id) },
     });
 
     if (!lead) {
@@ -351,7 +565,7 @@ router.post(
 
     const agent = await prisma.user.findFirst({
       where: {
-        id: BigInt(agentId),
+        id: Number(agentId),
         role: { name: 'CALL_CENTER_AGENT' },
         isActive: true,
       },
@@ -417,7 +631,7 @@ router.post(
       where: {
         status: 'NEW',
         assignedAgentId: null,
-        ...(brandId && { brandId: BigInt(brandId) }),
+        ...(brandId && { brandId: Number(brandId) }),
       },
       take: Number(limit),
     });
@@ -477,7 +691,7 @@ router.post(
 
     const lead = await prisma.lead.findFirst({
       where: {
-        id: BigInt(id),
+        id: Number(id),
         assignedAgentId: req.user!.id,
       },
     });
@@ -500,6 +714,128 @@ router.post(
       status: 'success',
       message: 'Call logged successfully',
       data: { callLog },
+    });
+  })
+);
+
+router.post(
+  '/:id/push-to-delivery',
+  authenticate,
+  authorize('CALL_CENTER_AGENT'),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { productId, quantity = 1, paymentMethod = 'COD' } = req.body;
+
+    const lead = await prisma.lead.findFirst({
+      where: {
+        id: Number(id),
+        assignedAgentId: req.user!.id,
+        status: 'ORDERED',
+      },
+      include: {
+        brand: true,
+      },
+    });
+
+    if (!lead) {
+      throw new AppException(404, 'Lead not found, not assigned to you, or not in ORDERED status');
+    }
+
+    // Check if an order already exists for this lead (e.g. out of sync status or double click)
+    const existingOrder = await prisma.order.findUnique({
+      where: { leadId: lead.id }
+    });
+
+    if (existingOrder) {
+      await prisma.lead.update({
+        where: { id: lead.id },
+        data: { status: 'PUSHED_TO_DELIVERY' }
+      });
+      return res.json({
+        status: 'success',
+        message: 'Order already exists, lead status synchronized',
+        data: { order: existingOrder },
+      });
+    }
+
+    let resolvedBrandId = lead.brandId;
+    if (!resolvedBrandId) {
+      const fallbackBrand = await prisma.brand.findFirst();
+      if (!fallbackBrand) {
+        throw new AppException(400, 'System has no brands at all to associate with order');
+      }
+      resolvedBrandId = fallbackBrand.id;
+    }
+
+    let productToOrder = null;
+    if (productId && Number(productId) !== 0) {
+      productToOrder = await prisma.product.findUnique({ where: { id: Number(productId) } });
+    } else {
+      productToOrder = await prisma.product.findFirst({
+        where: { ownerId: lead.vendorId, isActive: true },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
+    if (!productToOrder) {
+      throw new AppException(400, 'No active product found for this brand to create an order');
+    }
+
+    const unitPrice = productToOrder.retailPriceMad;
+    const totalAmountMad = unitPrice * Number(quantity);
+    const commissionPercentage = parseFloat(process.env.PLATFORM_COMMISSION_PERCENTAGE || '15');
+    const platformFeeMad = totalAmountMad * (commissionPercentage / 100);
+    const vendorEarningMad = totalAmountMad - platformFeeMad;
+
+    const generateOrderNumber = (): string => {
+      const date = new Date();
+      const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
+      const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+      return `OS - ${dateStr} -${random} `;
+    };
+
+    const order = await prisma.$transaction(async (tx) => {
+      const newOrder = await tx.order.create({
+        data: {
+          orderNumber: generateOrderNumber(),
+          vendorId: lead.vendorId,
+          brandId: resolvedBrandId,
+          leadId: lead.id,
+          customerName: lead.fullName,
+          customerPhone: lead.phone,
+          customerCity: lead.city || 'Unknown',
+          customerAddress: lead.address || 'Unknown',
+          totalAmountMad,
+          vendorEarningMad,
+          platformFeeMad,
+          paymentMethod,
+          status: 'PENDING',
+          items: {
+            create: [
+              {
+                productId: productToOrder!.id,
+                quantity: Number(quantity),
+                unitPriceMad: unitPrice,
+                totalPriceMad: totalAmountMad,
+              },
+            ],
+          },
+        },
+      });
+
+      // Update lead status so it disappears from the active list
+      await tx.lead.update({
+        where: { id: lead.id },
+        data: { status: 'PUSHED_TO_DELIVERY' }
+      });
+
+      return newOrder;
+    });
+
+    res.status(201).json({
+      status: 'success',
+      message: 'Order created and pushed to delivery',
+      data: { order },
     });
   })
 );

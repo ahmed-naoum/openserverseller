@@ -1,10 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
-interface ImportMetaEnv {
-  readonly VITE_API_URL: string;
-}
-
-const API_URL = (import.meta.env as any).VITE_API_URL || 'http://187.77.166.69:3001/api/v1';
+const API_URL = (import.meta.env as any).VITE_API_URL || 'http://localhost:3001/api/v1';
 
 export interface User {
   id: number;
@@ -76,6 +72,8 @@ export const authApi = {
     api.post('/auth/login', data),
   register: (data: { email?: string; phone?: string; password: string; fullName: string; role?: string }) =>
     api.post('/auth/register', data),
+  registerInfluencer: (data: { email?: string; phone?: string; password: string; fullName: string; instagramUsername?: string; tiktokUsername?: string; facebookUsername?: string; }) =>
+    api.post('/auth/register-influencer', data),
   logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),
   forgotPassword: (data: { email?: string; phone?: string }) =>
@@ -107,13 +105,18 @@ export const productsApi = {
 };
 
 export const leadsApi = {
-  list: (params?: { status?: string; page?: number; limit?: number }) =>
+  list: (params?: { status?: string; page?: number; limit?: number; search?: string; viewMode?: string }) =>
     api.get('/leads', { params }),
   create: (data: any) => api.post('/leads', data),
   import: (data: { brandId: string; leads: any[] }) => api.post('/leads/import', data),
   updateStatus: (id: string, data: { status: string; notes?: string }) =>
     api.patch(`/leads/${id}/status`, data),
   assign: (id: string, data: { agentId: string }) => api.post(`/leads/${id}/assign`, data),
+  available: (params?: { influencerId?: number }) => api.get('/leads/available', { params }),
+  claim: (id: number) => api.post(`/leads/${id}/claim`),
+  detail: (id: number) => api.get(`/leads/${id}/detail`),
+  pushToDelivery: (id: number, data: { productId?: number; quantity?: number; paymentMethod?: string }) =>
+    api.post(`/leads/${id}/push-to-delivery`, data),
 };
 
 export const ordersApi = {
@@ -123,6 +126,7 @@ export const ordersApi = {
   create: (data: any) => api.post('/orders', data),
   updateStatus: (id: string, data: { status: string; notes?: string }) =>
     api.patch(`/orders/${id}/status`, data),
+  revertToLead: (id: number) => api.post(`/orders/${id}/revert-to-lead`),
 };
 
 export const walletApi = {
@@ -143,6 +147,14 @@ export const publicApi = {
   categories: () => api.get('/public/categories'),
   featuredProducts: () => api.get('/public/products/featured'),
   stats: () => api.get('/public/stats'),
+  getReferralLinkData: (code: string) => api.get(`/influencer/links/${code}/public`),
+  submitReferralLead: (data: { referralCode: string; fullName: string; phone: string; city: string; address: string }) => api.post('/public/leads', data),
+};
+
+export const uploadApi = {
+  image: (data: FormData) => api.post('/upload/image', data, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
 };
 
 export const adminApi = {
@@ -153,11 +165,29 @@ export const adminApi = {
   updateUser: (uuid: string, data: any) => api.patch(`/users/${uuid}/admin-edit`, data),
   activateUser: (uuid: string) => api.patch(`/users/${uuid}/activate`),
   deactivateUser: (uuid: string) => api.patch(`/users/${uuid}/deactivate`),
+  updateKycStatus: (uuid: string, status: string) => api.patch(`/users/${uuid}/kyc-status`, { status }),
   approveBrand: (id: string) => api.post(`/brands/${id}/approve`),
   rejectBrand: (id: string) => api.post(`/brands/${id}/reject`),
   approvePayout: (id: string, data?: { receiptUrl?: string }) =>
     api.patch(`/payouts/${id}/approve`, data),
   rejectPayout: (id: string) => api.patch(`/payouts/${id}/reject`),
+  getAffiliateClaims: (params?: { status?: string }) => api.get('/admin/affiliate-claims', { params }),
+  updateAffiliateClaim: (id: number, status: string) => api.patch(`/admin/affiliate-claims/${id}`, { status }),
+  // Campaigns
+  getCampaigns: () => api.get('/admin/campaigns'),
+  createCampaign: (data: any) => api.post('/admin/campaigns', data),
+  updateCampaign: (id: number, data: any) => api.patch(`/admin/campaigns/${id}`, data),
+  deleteCampaign: (id: number) => api.delete(`/admin/campaigns/${id}`),
+  getCustomers: (params?: { page?: number; limit?: number; search?: string }) =>
+    api.get('/admin/customers', { params }),
+  // Agent-Influencer Assignments
+  getInfluencers: () => api.get('/admin/influencers'),
+  getAgentInfluencerAssignments: (agentId?: number) =>
+    api.get('/admin/agent-influencer-assignments', { params: agentId ? { agentId } : {} }),
+  setAgentInfluencerAssignments: (agentId: number, influencerIds: number[]) =>
+    api.post('/admin/agent-influencer-assignments', { agentId, influencerIds }),
+  removeAgentInfluencerAssignment: (agentId: number, influencerId: number) =>
+    api.delete(`/admin/agent-influencer-assignments/${agentId}/${influencerId}`),
 };
 
 export const chatApi = {
@@ -180,9 +210,13 @@ export const fulfillmentApi = {
   createRequest: (data: { type: string; subject: string; description: string; productId?: number }) =>
     api.post('/fulfillment', data),
   listRequests: (params?: { status?: string; type?: string; page?: number; limit?: number }) =>
+    api.get('/fulfillment/my-requests', { params }),
+  adminListRequests: (params?: { status?: string; type?: string; page?: number; limit?: number }) =>
     api.get('/fulfillment', { params }),
   fulfillRequest: (id: string, data: { actionType: string; productId?: number; quantity?: number }) =>
     api.post(`/fulfillment/${id}/fulfill`, data),
+  rejectRequest: (id: string) =>
+    api.patch(`/fulfillment/${id}/reject`),
 };
 
 export const dashboardApi = {
@@ -202,9 +236,13 @@ export const influencerApi = {
   getLinkStats: (code: string) => api.get(`/influencer/links/${code}/stats`),
   trackConversion: (code: string, orderId: number) => api.post('/influencer/track-conversion', { code, orderId }),
   getCommissions: () => api.get('/influencer/commissions'),
-  getCampaigns: () => api.get('/influencer/campaigns'),
-  joinCampaign: (id: number, productIds: number[]) => api.post(`/influencer/campaigns/${id}/join`, { productIds }),
   getProfile: () => api.get('/influencer/profile'),
+  getClaims: () => api.get('/influencer/claims'),
+  claimProduct: (productId: number) => api.post('/influencer/claims', { productId }),
+  getCustomers: (params?: { page?: number; limit?: number; search?: string }) =>
+    api.get('/influencer/customers', { params }),
+  deleteLead: (id: number) => api.delete(`/influencer/leads/${id}`),
+  pushLeadToCallCenter: (id: number) => api.post(`/influencer/leads/${id}/push-callcenter`),
 };
 
 export const marketplaceApi = {
@@ -212,3 +250,5 @@ export const marketplaceApi = {
     api.get('/public/marketplace/products', { params }),
   stats: () => api.get('/public/marketplace/stats'),
 };
+
+

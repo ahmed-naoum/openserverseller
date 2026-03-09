@@ -11,6 +11,9 @@ export interface User {
   isActive: boolean;
   mode?: 'SELLER' | 'AFFILIATE';
   isInfluencer?: boolean;
+  instagramUsername?: string;
+  tiktokUsername?: string;
+  facebookUsername?: string;
   referralCode?: string;
   wallet?: {
     balanceMad: number | string;
@@ -24,13 +27,13 @@ export interface User {
   };
 }
 
-export type UserRole = 
-  | 'VENDOR' 
-  | 'GROSSELLER' 
-  | 'CALL_CENTER_AGENT' 
-  | 'CONFIRMATION_AGENT' 
-  | 'INFLUENCER' 
-  | 'SUPER_ADMIN' 
+export type UserRole =
+  | 'VENDOR'
+  | 'GROSSELLER'
+  | 'CALL_CENTER_AGENT'
+  | 'CONFIRMATION_AGENT'
+  | 'INFLUENCER'
+  | 'SUPER_ADMIN'
   | 'ADMIN';
 
 export const ROLE_LABELS: Record<UserRole, { ar: string; fr: string; icon: string }> = {
@@ -119,6 +122,7 @@ export interface Order {
   customerName: string;
   customerPhone: string;
   customerCity: string;
+  customerAddress?: string;
   totalAmountMad: number | string;
   vendorEarningMad: number | string;
   platformFeeMad: number | string;
@@ -194,34 +198,34 @@ export interface PaginatedResponse<T> {
   };
 }
 
-export type LeadStatus = 
-  | 'NEW' 
-  | 'ASSIGNED' 
-  | 'CONTACTED' 
-  | 'INTERESTED' 
-  | 'NOT_INTERESTED' 
-  | 'CALLBACK_REQUESTED' 
-  | 'ORDERED' 
-  | 'UNREACHABLE' 
+export type LeadStatus =
+  | 'NEW'
+  | 'ASSIGNED'
+  | 'CONTACTED'
+  | 'INTERESTED'
+  | 'NOT_INTERESTED'
+  | 'CALLBACK_REQUESTED'
+  | 'ORDERED'
+  | 'UNREACHABLE'
   | 'INVALID';
 
-export type OrderStatus = 
-  | 'PENDING' 
-  | 'CONFIRMED' 
-  | 'IN_PRODUCTION' 
-  | 'READY_FOR_SHIPPING' 
-  | 'SHIPPED' 
-  | 'DELIVERED' 
-  | 'CANCELLED' 
-  | 'RETURNED' 
+export type OrderStatus =
+  | 'PENDING'
+  | 'CONFIRMED'
+  | 'IN_PRODUCTION'
+  | 'READY_FOR_SHIPPING'
+  | 'SHIPPED'
+  | 'DELIVERED'
+  | 'CANCELLED'
+  | 'RETURNED'
   | 'REFUNDED';
 
-export type PayoutStatus = 
-  | 'PENDING' 
-  | 'APPROVED' 
-  | 'PROCESSING' 
-  | 'COMPLETED' 
-  | 'REJECTED' 
+export type PayoutStatus =
+  | 'PENDING'
+  | 'APPROVED'
+  | 'PROCESSING'
+  | 'COMPLETED'
+  | 'REJECTED'
   | 'CANCELLED';
 
 export const LEAD_STATUS_LABELS: Record<LeadStatus, { ar: string; fr: string; color: string }> = {
@@ -270,24 +274,15 @@ export interface ReferralLink {
   createdAt: string;
 }
 
-export interface InfluencerCampaign {
-  id: string;
-  name: string;
-  slug: string;
-  description?: string;
-  productIds: number[];
-  commission: number;
-  startDate?: string;
-  endDate?: string;
-  status: 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'ENDED';
-}
+
 
 export interface InfluencerCommission {
   id: string;
   influencerId: string;
   referralLinkId: string;
-  referralLink?: ReferralLink;
+  referralLink: ReferralLink & { product: Product };
   orderId?: string;
+  order?: Order;
   amount: number;
   status: 'PENDING' | 'APPROVED' | 'PAID';
   paidAt?: string;

@@ -27,7 +27,7 @@ router.get(
     }
 
     if (status) where.status = status;
-    if (brandId) where.brandId = BigInt(brandId as string);
+    if (brandId) where.brandId = Number(brandId as string);
 
     if (startDate || endDate) {
       where.createdAt = {};
@@ -45,11 +45,7 @@ router.get(
               product: {
                 include: { images: { where: { isPrimary: true }, take: 1 } },
               },
-              customization: true,
             },
-          },
-          shipment: {
-            include: { courier: true },
           },
           lead: true,
         },
@@ -82,15 +78,7 @@ router.get(
             quantity: item.quantity,
             unitPriceMad: item.unitPriceMad,
             totalPriceMad: item.totalPriceMad,
-            customization: item.customization,
           })),
-          shipment: o.shipment
-            ? {
-                trackingNumber: o.shipment.trackingNumber,
-                status: o.shipment.status,
-                courier: o.shipment.courier.name,
-              }
-            : null,
           createdAt: o.createdAt,
         })),
         pagination: {
@@ -144,7 +132,7 @@ router.get(
         },
         lead: true,
         returns: true,
-        walletTransaction: true,
+        walletTransactions: true,
       },
     });
 
@@ -192,14 +180,14 @@ router.post(
 
     if (req.user!.roleName === 'CALL_CENTER_AGENT' && leadId) {
       const lead = await prisma.lead.findUnique({
-        where: { id: BigInt(leadId) },
+        where: { id: Number(leadId) },
       });
       if (lead) vendorId = lead.vendorId;
     }
 
     const brand = await prisma.brand.findFirst({
       where: {
-        id: BigInt(brandId),
+        id: Number(brandId),
         vendorId,
         status: 'APPROVED',
       },
@@ -214,7 +202,7 @@ router.post(
 
     for (const item of items) {
       const product = await prisma.product.findUnique({
-        where: { id: BigInt(item.productId) },
+        where: { id: Number(item.productId) },
       });
 
       if (!product || !product.isActive) {
@@ -225,7 +213,7 @@ router.post(
 
       if (item.customizationId) {
         const customization = await prisma.brandProductCustomization.findUnique({
-          where: { id: BigInt(item.customizationId) },
+          where: { id: Number(item.customizationId) },
         });
         if (customization && customization.customPriceMad) {
           unitPrice = customization.customPriceMad;
@@ -237,7 +225,7 @@ router.post(
 
       orderItems.push({
         productId: product.id,
-        customizationId: item.customizationId ? BigInt(item.customizationId) : null,
+        customizationId: item.customizationId ? Number(item.customizationId) : null,
         quantity: item.quantity,
         unitPriceMad: unitPrice,
         totalPriceMad: totalPrice,
@@ -256,7 +244,7 @@ router.post(
           orderNumber: generateOrderNumber(),
           vendorId,
           brandId: brand.id,
-          leadId: leadId ? BigInt(leadId) : null,
+          leadId: leadId ? Number(leadId) : null,
           customerName,
           customerPhone: customerPhone.replace(/^0/, '+212'),
           customerCity,
@@ -287,13 +275,13 @@ router.post(
 
       if (leadId) {
         await tx.lead.update({
-          where: { id: BigInt(leadId) },
+          where: { id: Number(leadId) },
           data: { status: 'ORDERED' },
         });
 
         await tx.leadStatusHistory.create({
           data: {
-            leadId: BigInt(leadId),
+            leadId: Number(leadId),
             oldStatus: 'INTERESTED',
             newStatus: 'ORDERED',
             changedBy: req.user!.id,
@@ -387,10 +375,7 @@ router.patch(
           },
         });
 
-        await tx.order.update({
-          where: { id: order.id },
-          data: { walletTransaction: { connect: { id: wallet.id } } },
-        });
+        // Handled by orderId in walletTransaction.create
       }
 
       return updated;
@@ -400,6 +385,50 @@ router.patch(
       status: 'success',
       message: 'Order status updated',
       data: { order: updatedOrder },
+    });
+  })
+);
+
+router.post(
+  '/:id/revert-to-lead',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    const order = await prisma.order.findUnique({
+      where: { id: Number(id) },
+      include: { items: true },
+    });
+
+    if (!order) {
+      throw new AppException(404, 'Order not found');
+    }
+
+    if (!order.leadId) {
+      throw new AppException(400, 'This order was not created from a lead');
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete order items
+      await tx.orderItem.deleteMany({
+        where: { orderId: order.id },
+      });
+
+      // 2. Delete the order
+      await tx.order.delete({
+        where: { id: order.id },
+      });
+
+      // 3. Revert the lead status
+      await tx.lead.update({
+        where: { id: order.leadId! },
+        data: { status: 'ORDERED' },
+      });
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Order reverted to lead successfully',
     });
   })
 );

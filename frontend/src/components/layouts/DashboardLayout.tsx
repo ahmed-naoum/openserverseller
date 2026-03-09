@@ -1,38 +1,67 @@
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { dashboardApi } from '../../lib/api';
+import toast from 'react-hot-toast';
 
 const navigation = {
   vendor: [
     { name: 'Tableau de bord', href: '/dashboard', icon: 'home' },
     { name: 'Inventaire', href: '/dashboard/inventory', icon: 'package' },
     { name: 'Mes Marques', href: '/dashboard/brands', icon: 'tag' },
-    { name: 'Catalogue', href: '/dashboard/products', icon: 'package' },
     { name: 'Prospects', href: '/dashboard/leads', icon: 'users' },
     { name: 'Commandes', href: '/dashboard/orders', icon: 'shopping-cart' },
     { name: 'Portefeuille', href: '/dashboard/wallet', icon: 'credit-card' },
+    { name: 'Marché Public', href: '/dashboard/marketplace', icon: 'shopping-cart' },
     { name: 'Messages', href: '/dashboard/chat', icon: 'chat' },
   ],
   grosseller: [
-    { name: 'Tableau de bord', href: '/grosseller', icon: 'home' },
-    { name: 'Mes Produits Actifs', href: '#', icon: 'package' },
-    { name: 'Ajouter au Marché', href: '#', icon: 'tag' },
-    { name: 'En attente', href: '#', icon: 'clock' },
-    { name: 'Paiements', href: '#', icon: 'dollar-sign' },
+    { name: 'Vue d\'ensemble', href: '/grosseller', icon: 'home' },
+    { name: 'Mon Profil', href: '/grosseller/profile', icon: 'users' },
+    { name: 'Inventaire Acheté', href: '/grosseller/inventory', icon: 'package' },
+    { name: 'Ajouter un Produit', href: '/grosseller/add-product', icon: 'tag' },
+    { name: 'En Vente', href: '/grosseller/selling', icon: 'shopping-cart' },
+    { name: 'En Attente', href: '/grosseller/pending', icon: 'clock' },
+    { name: 'Approuvés', href: '/grosseller/approved', icon: 'package' },
+    { name: 'Paiements', href: '/grosseller/payouts', icon: 'dollar-sign' },
+    { name: 'Commandes', href: '/grosseller/orders', icon: 'shopping-cart' },
+    { name: 'Analytique', href: '/grosseller/analytics', icon: 'credit-card' },
+    { name: 'Support', href: '/grosseller/support', icon: 'chat' },
+    { name: 'Marché Public', href: '/grosseller/marketplace', icon: 'shopping-cart' },
     { name: 'Messages', href: '/grosseller/chat', icon: 'chat' },
+  ],
+  influencer: [
+    { name: 'Accueil', href: '/influencer', icon: 'home' },
+    { name: 'Mon Profil', href: '/influencer/profile', icon: 'users' },
+    { name: 'Mon Inventaire', href: '/influencer/inventory', icon: 'package' },
+    { name: 'Mes Liens', href: '/influencer/links', icon: 'tag' },
+
+    { name: 'Portefeuille', href: '/influencer/wallet', icon: 'dollar-sign' },
+    { name: 'Analytics', href: '/influencer/analytics', icon: 'credit-card' },
+    { name: 'Leads', href: '/influencer/leads', icon: 'users' },
+    { name: 'Notifications', href: '/influencer/notifications', icon: 'chat' },
+    { name: 'Marché Public', href: '/influencer/marketplace', icon: 'shopping-cart' },
+    { name: 'Messages', href: '/influencer/chat', icon: 'chat' },
   ],
   agent: [
     { name: 'Tableau de bord', href: '/agent', icon: 'home' },
-    { name: 'Mes Prospects', href: '/agent/leads', icon: 'users' },
+    { name: '⚡ Réclamer des Leads', href: '/agent/leads', icon: 'users' },
+    { name: '📋 Tous les Prospects', href: '/agent/my-leads', icon: 'users' },
+    { name: 'Commandes', href: '/agent/orders', icon: 'shopping-cart' },
+    { name: 'Marché Public', href: '/agent/marketplace', icon: 'shopping-cart' },
     { name: 'Messages', href: '/agent/chat', icon: 'chat' },
   ],
   admin: [
     { name: 'Tableau de bord', href: '/admin', icon: 'home' },
     { name: 'Utilisateurs', href: '/admin/users', icon: 'users' },
+    { name: 'Clients', href: '/admin/customers', icon: 'users' },
     { name: 'Marques', href: '/admin/brands', icon: 'tag' },
     { name: 'Produits', href: '/admin/products', icon: 'package' },
+    { name: 'Demandes Affiliation', href: '/admin/affiliate-claims', icon: 'user-check' },
+    { name: 'Gestion Campagnes', href: '/admin/campaigns', icon: 'zap' },
     { name: 'Commandes', href: '/admin/orders', icon: 'shopping-cart' },
     { name: 'Finance', href: '/admin/finance', icon: 'dollar-sign' },
     { name: 'Fulfillment', href: '/admin/fulfillment', icon: 'clock' },
+    { name: 'Marché Public', href: '/admin/marketplace', icon: 'shopping-cart' },
     { name: 'Messages', href: '/admin/chat', icon: 'chat' },
   ],
 };
@@ -83,20 +112,51 @@ const icons: Record<string, JSX.Element> = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
     </svg>
   ),
+  zap: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+    </svg>
+  ),
+  'user-check': (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
 };
 
 export default function DashboardLayout() {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const location = useLocation();
 
   const getNavItems = () => {
     if (location.pathname.startsWith('/admin')) return navigation.admin;
     if (location.pathname.startsWith('/agent')) return navigation.agent;
     if (location.pathname.startsWith('/grosseller')) return navigation.grosseller;
+    if (location.pathname.startsWith('/influencer')) return navigation.influencer;
     return navigation.vendor;
   };
 
   const navItems = getNavItems();
+  const isVendorDashboard = !location.pathname.startsWith('/admin') && !location.pathname.startsWith('/agent') && !location.pathname.startsWith('/grosseller') && !location.pathname.startsWith('/influencer');
+  const currentMode = user?.mode || 'SELLER';
+
+  const handleSwitchMode = async () => {
+    try {
+      const newMode = currentMode === 'SELLER' ? 'AFFILIATE' : 'SELLER';
+      await dashboardApi.switchMode(newMode);
+      await refreshUser();
+      toast.success(newMode === 'SELLER' ? 'Mode Vendeur activé' : 'Mode Affilié activé');
+    } catch {
+      toast.error('Erreur lors du changement de mode');
+    }
+  };
+
+  const getRoleLabel = () => {
+    if (isVendorDashboard) {
+      return currentMode === 'AFFILIATE' ? 'Affilié' : 'VENDOR';
+    }
+    return user?.role || '';
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -109,7 +169,9 @@ export default function DashboardLayout() {
       <aside className="fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200 z-30">
         <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary-500 rounded-lg flex items-center justify-center">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+              location.pathname.startsWith('/grosseller') ? 'bg-grosseller-500' : location.pathname.startsWith('/influencer') ? 'bg-influencer-500' : 'bg-primary-500'
+            }`}>
               <span className="text-white font-bold text-lg">O</span>
             </div>
             <span className="font-bold text-xl text-gray-900">OpenSeller</span>
@@ -119,13 +181,16 @@ export default function DashboardLayout() {
         <nav className="p-4 space-y-1">
           {navItems.map((item) => {
             const isActive = location.pathname === item.href;
+            const isGrosseller = location.pathname.startsWith('/grosseller');
+            const isInfluencer = location.pathname.startsWith('/influencer');
+            
             return (
               <Link
                 key={item.name}
                 to={item.href}
                 className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   isActive
-                    ? 'bg-primary-50 text-primary-700'
+                    ? (isGrosseller ? 'bg-grosseller-50 text-grosseller-700' : isInfluencer ? 'bg-influencer-50 text-influencer-700' : 'bg-primary-50 text-primary-700')
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
@@ -135,6 +200,31 @@ export default function DashboardLayout() {
             );
           })}
         </nav>
+
+        {/* Mode Switcher for Vendors */}
+        {isVendorDashboard && (
+          <div className="absolute bottom-4 left-4 right-4">
+            <button
+              onClick={handleSwitchMode}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 hover:bg-gray-100 transition-all group"
+            >
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold transition-colors ${
+                currentMode === 'AFFILIATE' ? 'bg-pink-500' : 'bg-primary-500'
+              }`}>
+                {currentMode === 'AFFILIATE' ? 'A' : 'V'}
+              </div>
+              <div className="text-left flex-1">
+                <p className="text-xs font-bold text-gray-900">
+                  {currentMode === 'AFFILIATE' ? 'Mode Affilié' : 'Mode Vendeur'}
+                </p>
+                <p className="text-[10px] text-gray-400">Cliquez pour basculer</p>
+              </div>
+              <svg className="w-4 h-4 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+            </button>
+          </div>
+        )}
       </aside>
 
       {/* Main content */}
@@ -151,7 +241,9 @@ export default function DashboardLayout() {
             <div className="flex items-center gap-4">
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900">{user?.fullName}</p>
-                <p className="text-xs text-gray-500">{user?.role}</p>
+                <p className={`text-xs font-semibold ${
+                  isVendorDashboard && currentMode === 'AFFILIATE' ? 'text-pink-500' : 'text-gray-500'
+                }`}>{getRoleLabel()}</p>
               </div>
               <button
                 onClick={handleLogout}

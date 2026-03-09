@@ -1,342 +1,469 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { motion, useScroll, useTransform } from 'framer-motion';
 import { publicApi } from '../lib/api';
+import { 
+  ShoppingBag, 
+  Truck, 
+  CircleDollarSign,
+  Palette,
+  TrendingUp,
+  Globe,
+  Sparkles,
+  ArrowRight,
+  MonitorSmartphone,
+  CheckCircle2,
+  Megaphone,
+  Camera,
+  Package
+} from 'lucide-react';
 
 export default function HomePage() {
-  const [stats, setStats] = useState({ vendors: 0, products: 0, orders: 0 });
   const [isVisible, setIsVisible] = useState(false);
+  const { scrollYProgress } = useScroll();
+  const yPos = useTransform(scrollYProgress, [0, 1], [0, -100]);
+  
+  // Dummy stats simulating real-time activity
+  const [stats, setStats] = useState({ vendors: 843, products: 215, orders: 12450 });
+  const [featuredProducts, setFeaturedProducts] = useState<any[]>([]);
 
   useEffect(() => {
     setIsVisible(true);
-    publicApi.stats().then((res) => {
-      setStats(res.data.data.stats);
+    // Animate stats up
+    const duration = 2000;
+    const steps = 50;
+    const stepTime = duration / steps;
+    let currentStep = 0;
+
+    const targetStats = { vendors: 843, products: 215, orders: 12450 };
+
+    const interval = setInterval(() => {
+      currentStep++;
+      setStats({
+        vendors: Math.floor((targetStats.vendors / steps) * currentStep),
+        products: Math.floor((targetStats.products / steps) * currentStep),
+        orders: Math.floor((targetStats.orders / steps) * currentStep)
+      });
+
+      if (currentStep >= steps) {
+        clearInterval(interval);
+        setStats(targetStats);
+      }
+    }, stepTime);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fetch featured products
+  useEffect(() => {
+    publicApi.featuredProducts().then(res => {
+      setFeaturedProducts(res.data?.data?.products || []);
     }).catch(() => {});
   }, []);
 
   const features = [
     {
-      icon: '🎨',
-      title: 'Votre Marque',
-      titleAr: 'علامتك التجارية',
-      description: 'Créez votre marque avec votre logo, couleurs et packaging personnalisé',
+      icon: <Palette className="w-8 h-8 text-primary-500" />,
+      title: 'Votre Propre Marque',
+      desc: 'Logo, couleurs, et packaging. Nous créons votre identité visuelle sur-mesure.',
+      colSpan: 'col-span-1 md:col-span-2',
+      bgClass: 'bg-gradient-to-br from-primary-50 to-white'
     },
     {
-      icon: '📦',
-      title: '+200 Produits',
-      titleAr: '+200 منتج',
-      description: 'Catalogue de cosmétiques et compléments alimentaires prêts à vendre',
+      icon: <ShoppingBag className="w-8 h-8 text-emerald-500" />,
+      title: '+200 Produits Prêts',
+      desc: 'Cosmétiques de haute qualité formulés et certifiés.',
+      colSpan: 'col-span-1 md:col-span-1',
+      bgClass: 'bg-white'
     },
     {
-      icon: '🚚',
+      icon: <Truck className="w-8 h-8 text-blue-500" />,
       title: 'Livraison COD',
-      titleAr: 'الدفع عند الاستلام',
-      description: 'Livraison partout au Maroc avec encaissement à la livraison',
+      desc: 'Nous gérons la confirmation et la livraison au Maroc.',
+      colSpan: 'col-span-1 md:col-span-1',
+      bgClass: 'bg-white'
     },
     {
-      icon: '💰',
-      title: 'Revenus Instantanés',
-      titleAr: 'أرباح فورية',
-      description: 'Gagnez jusqu\'à 85% de marge sur chaque vente',
-    },
-  ];
-
-  const steps = [
-    {
-      number: '01',
-      title: 'Créez votre marque',
-      titleAr: 'أنشئ علامتك التجارية',
-      description: 'Uploadez votre logo, choisissez vos couleurs et créez votre identité visuelle unique.',
-    },
-    {
-      number: '02',
-      title: 'Importez vos prospects',
-      titleAr: 'استورد عملاءك المحتملين',
-      description: 'Uploadez votre liste de contacts CSV ou connectez votre boutique en ligne.',
-    },
-    {
-      number: '03',
-      title: 'Générez des ventes',
-      titleAr: 'حقق المبيعات',
-      description: 'Nos agents call-center transforment vos prospects en commandes COD.',
-    },
-  ];
-
-  const products = [
-    { name: 'Crème Hydratante', nameAr: 'كريم ترطيب', price: '120 MAD', category: 'Soins Visage' },
-    { name: 'Sérum Vitamine C', nameAr: 'سيروم فيتامين سي', price: '180 MAD', category: 'Anti-Âge' },
-    { name: 'Huile d\'Argan Pure', nameAr: 'زيت الأركان الأصلي', price: '220 MAD', category: 'Huiles' },
-    { name: 'Shampoing Argan', nameAr: 'شامبو الأركان', price: '110 MAD', category: 'Cheveux' },
-    { name: 'Gélules Collagène', nameAr: 'كبسولات الكولاجين', price: '250 MAD', category: 'Compléments' },
-    { name: 'Parfum Rose', nameAr: 'عطر الورد', price: '350 MAD', category: 'Parfums' },
+      icon: <MonitorSmartphone className="w-8 h-8 text-indigo-500" />,
+      title: 'Dashboard Temps Réel',
+      desc: 'Suivez vos commandes, vos marges et gérez votre wallet.',
+      colSpan: 'col-span-1 md:col-span-2',
+      bgClass: 'bg-indigo-50'
+    }
   ];
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-gray-100 z-50">
+    <div className="min-h-screen bg-white selection:bg-primary-100 font-inter overflow-x-hidden">
+      
+      {/* Dynamic Navbar */}
+      <motion.nav 
+        initial={{ y: -100 }}
+        animate={{ y: 0 }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
+        className="fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-md border-b border-gray-100 z-50 transition-all duration-300"
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-primary-500 rounded-xl flex items-center justify-center">
-                <span className="text-white font-bold text-xl">O</span>
+          <div className="flex items-center justify-between h-20">
+            <Link to="/" className="flex items-center gap-3 group">
+              <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center shadow-lg shadow-primary-500/20 group-hover:scale-105 transition-transform">
+                <span className="text-white font-bold text-2xl tracking-tighter">OS</span>
               </div>
-              <span className="font-bold text-xl text-gray-900">OpenSeller.ma</span>
+              <span className="font-extrabold text-2xl bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-700">
+                OpenSeller
+              </span>
+            </Link>
+            
+            <div className="hidden lg:flex items-center gap-8 font-medium text-gray-600">
+              <a href="#features" className="hover:text-primary-600 transition-colors">Concept</a>
+              <Link to="/marketplace" className="hover:text-primary-600 transition-colors flex items-center gap-1">
+                <ShoppingBag className="w-4 h-4" /> Marketplace
+              </Link>
+              <a href="#influencers" className="hover:text-pink-500 transition-colors flex items-center gap-1">
+                <Sparkles className="w-4 h-4" /> Programme Influenceurs
+              </a>
+              <a href="#pricing" className="hover:text-primary-600 transition-colors">Tarifs</a>
             </div>
-            <div className="hidden md:flex items-center gap-8">
-              <a href="#features" className="text-gray-600 hover:text-gray-900">Fonctionnalités</a>
-              <a href="#how-it-works" className="text-gray-600 hover:text-gray-900">Comment ça marche</a>
-              <a href="#products" className="text-gray-600 hover:text-gray-900">Produits</a>
-              <a href="#pricing" className="text-gray-600 hover:text-gray-900">Tarifs</a>
-            </div>
-            <div className="flex items-center gap-3">
-              <Link to="/login" className="btn-ghost">Connexion</Link>
-              <Link to="/register" className="btn-primary">Commencer</Link>
+
+            <div className="flex items-center gap-4">
+              <Link to="/login" className="font-semibold text-gray-700 hover:text-primary-600 transition-colors">
+                Me Connecter
+              </Link>
+              <Link to="/register" className="btn-primary shadow-lg shadow-primary-500/25 hover:shadow-primary-500/40 hover:-translate-y-0.5 transition-all">
+                Démarrer
+              </Link>
             </div>
           </div>
         </div>
-      </nav>
+      </motion.nav>
 
       {/* Hero Section */}
-      <section className="pt-24 pb-16 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-primary-50 via-white to-emerald-50">
-        <div className="max-w-7xl mx-auto">
-          <div className={`text-center transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
-            <span className="inline-flex items-center px-4 py-1.5 bg-primary-100 text-primary-700 rounded-full text-sm font-medium mb-6">
-              🚀 La première plateforme de dropshipping white-label au Maroc
-            </span>
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 mb-6 leading-tight">
-              Lancez votre marque de<br />
-              <span className="text-gradient">Cosmétiques & Compléments</span>
-            </h1>
-            <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-              Créez votre propre marque, personnalisez plus de 200 produits, 
-              et générez des revenus sans stock ni logistique.
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link to="/register" className="btn-primary btn-lg">
-                Créer mon compte gratuit
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
+      <section className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 px-4 sm:px-6 lg:px-8 overflow-hidden">
+        {/* Background Gradients */}
+        <div className="absolute top-0 right-0 -mr-40 -mt-40 w-[800px] h-[800px] bg-primary-100/50 rounded-full blur-3xl opacity-50 mix-blend-multiply"></div>
+        <div className="absolute bottom-0 left-0 -ml-40 -mb-40 w-[600px] h-[600px] bg-emerald-100/50 rounded-full blur-3xl opacity-50 mix-blend-multiply"></div>
+
+        <div className="max-w-7xl mx-auto relative z-10">
+          <div className="text-center max-w-4xl mx-auto">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+            >
+              <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-50 text-primary-700 font-semibold text-sm mb-8 ring-1 ring-primary-100">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-500"></span>
+                </span>
+                La Plateforme Dropshipping White-Label #1 au Maroc
+              </span>
+            </motion.div>
+
+            <motion.h1 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.1 }}
+              className="text-5xl sm:text-6xl lg:text-7xl font-extrabold text-gray-900 tracking-tight mb-8 leading-[1.1]"
+            >
+              Votre Marque de Cosmétiques, <br className="hidden sm:block" />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-600 to-emerald-500">
+                Sans Aucun Stock.
+              </span>
+            </motion.h1>
+
+            <motion.p 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              className="text-xl text-gray-600 mb-10 max-w-2xl mx-auto leading-relaxed"
+            >
+              Vous vendez, nous fabriquons, confirmons et livrons vos clients en Cash-On-Delivery. Encaissez vos marges instantanément.
+            </motion.p>
+
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+              className="flex flex-col sm:flex-row items-center justify-center gap-4"
+            >
+              <Link to="/register" className="btn-primary btn-lg w-full sm:w-auto text-lg h-14 px-8 shadow-xl shadow-primary-500/20 hover:scale-105 transition-transform flex items-center justify-center gap-2">
+                Je Crée Ma Marque <ArrowRight className="w-5 h-5" />
               </Link>
-              <a href="#how-it-works" className="btn-outline btn-lg">
-                Comment ça marche ?
-              </a>
-            </div>
+              <Link to="/influencer/register" className="w-full sm:w-auto text-lg h-14 px-8 rounded-xl font-semibold text-gray-700 bg-white border-2 border-gray-200 hover:border-pink-300 hover:text-pink-600 hover:bg-pink-50 transition-all flex items-center justify-center gap-2">
+                <Camera className="w-5 h-5" /> Je suis un Influenceur
+              </Link>
+            </motion.div>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-8 mt-16 max-w-3xl mx-auto">
-            <div className="text-center">
-              <div className="text-3xl sm:text-4xl font-bold text-gray-900">{stats.vendors}+</div>
-              <div className="text-gray-500 mt-1">Vendeurs actifs</div>
+          {/* Animated Stats Bar */}
+          <motion.div 
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.5 }}
+            className="mt-20 max-w-4xl mx-auto bg-white rounded-2xl shadow-xl shadow-gray-200/50 border border-gray-100 p-8"
+          >
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 divide-y md:divide-y-0 md:divide-x divide-gray-100 text-center">
+              <div className="pt-4 md:pt-0">
+                <div className="text-5xl font-extrabold text-gray-900 mb-2">{stats.vendors.toLocaleString()}+</div>
+                <div className="text-gray-500 font-medium">Vendeurs Partenaires</div>
+              </div>
+              <div className="pt-4 md:pt-0">
+                <div className="text-5xl font-extrabold text-primary-600 mb-2">{stats.products.toLocaleString()}</div>
+                <div className="text-gray-500 font-medium">Produits en Catalogue</div>
+              </div>
+              <div className="pt-4 md:pt-0">
+                <div className="text-5xl font-extrabold text-gray-900 mb-2">{stats.orders.toLocaleString()}</div>
+                <div className="text-gray-500 font-medium">Commandes Livrées</div>
+              </div>
             </div>
-            <div className="text-center">
-              <div className="text-3xl sm:text-4xl font-bold text-gray-900">{stats.products}+</div>
-              <div className="text-gray-500 mt-1">Produits</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl sm:text-4xl font-bold text-gray-900">{stats.orders}+</div>
-              <div className="text-gray-500 mt-1">Commandes</div>
-            </div>
-          </div>
+          </motion.div>
         </div>
       </section>
 
-      {/* Features */}
-      <section id="features" className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-              Tout ce dont vous avez besoin pour réussir
+      {/* Featured Products Section */}
+      {featuredProducts.length > 0 && (
+        <section className="py-24 px-4 sm:px-6 lg:px-8 bg-white">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex items-center justify-between mb-12">
+              <div>
+                <h2 className="text-3xl sm:text-4xl font-bold text-gray-900">Nos Produits Phares</h2>
+                <p className="text-gray-500 mt-2">Découvrez notre gamme de produits cosmétiques prêts à vendre.</p>
+              </div>
+              <Link 
+                to="/marketplace" 
+                className="hidden sm:flex items-center gap-2 px-6 py-3 bg-primary-50 text-primary-700 rounded-xl font-bold hover:bg-primary-100 transition-colors"
+              >
+                Voir tout <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {featuredProducts.slice(0, 8).map((product: any, i: number) => (
+                <motion.div
+                  key={product.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.05 }}
+                  className="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+                >
+                  <Link to={`/product/${product.id}`} className="block">
+                    <div className="aspect-square bg-gray-50 flex items-center justify-center overflow-hidden">
+                      {product.images?.[0]?.imageUrl ? (
+                        <img 
+                          src={product.images[0].imageUrl} 
+                          alt={product.nameFr} 
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
+                        />
+                      ) : (
+                        <Package className="w-12 h-12 text-gray-300" />
+                      )}
+                    </div>
+                    <div className="p-4">
+                      <p className="text-xs text-primary-600 font-semibold mb-1">{product.category?.nameFr}</p>
+                      <h3 className="font-bold text-gray-900 line-clamp-1">{product.nameFr}</h3>
+                      <div className="mt-2 flex items-center justify-between">
+                        <span className="text-lg font-black text-gray-900">{product.retailPriceMad} <span className="text-xs font-bold text-gray-400">MAD</span></span>
+                        <span className="w-8 h-8 bg-primary-100 text-primary-600 rounded-lg flex items-center justify-center group-hover:bg-primary-600 group-hover:text-white transition-all">
+                          <ArrowRight className="w-4 h-4" />
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                </motion.div>
+              ))}
+            </div>
+
+            <div className="mt-8 text-center sm:hidden">
+              <Link 
+                to="/marketplace" 
+                className="inline-flex items-center gap-2 px-8 py-4 bg-primary-600 text-white rounded-xl font-bold hover:bg-primary-700 transition-all shadow-lg shadow-primary-200"
+              >
+                Voir tout le Marketplace <ArrowRight className="w-5 h-5" />
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Influencer Specific Section (Requested by User) */}
+      <section id="influencers" className="py-24 px-4 sm:px-6 lg:px-8 bg-gray-900 text-white relative overflow-hidden">
+        {/* Abstract shapes */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-pink-500 rounded-full blur-[100px] opacity-20 transform translate-x-1/2 -translate-y-1/2"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-purple-500 rounded-full blur-[100px] opacity-20 transform -translate-x-1/2 translate-y-1/2"></div>
+
+        <div className="max-w-7xl mx-auto relative z-10 grid lg:grid-cols-2 gap-16 items-center">
+          <motion.div
+            initial={{ opacity: 0, x: -50 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+          >
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-pink-500/10 text-pink-400 font-semibold mb-6 border border-pink-500/20">
+              <Megaphone className="w-4 h-4" /> Programme Influenceurs (VIP)
+            </div>
+            <h2 className="text-4xl sm:text-5xl font-bold mb-6 leading-tight">
+              Monétisez votre audience, <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">
+                nous gérons le reste.
+              </span>
             </h2>
-            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Une plateforme complète pour lancer et développer votre business de dropshipping
+            <p className="text-xl text-gray-400 mb-8 leading-relaxed">
+              Vous avez plus de 5,000 abonnés sur Instagram ? Rejoignez notre réseau exclusif. Recommandez des produits de haute qualité à votre audience et percevez des commissions instantanées sur chaque vente générée.
             </p>
-          </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {features.map((feature, index) => (
-              <div key={index} className="card-hover p-6">
-                <div className="text-4xl mb-4">{feature.icon}</div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">{feature.title}</h3>
-                <p className="text-gray-600 text-sm">{feature.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+            
+            <ul className="space-y-4 mb-10">
+              {['Commissions parmi les plus hautes du marché', 'Tracking des ventes en temps réel', 'Plus de 200 produits cosmétiques à promouvoir', 'Paiements rapides et transparents'].map((item, i) => (
+                <li key={i} className="flex items-center gap-3 text-gray-300">
+                  <CheckCircle2 className="w-6 h-6 text-pink-500 flex-shrink-0" />
+                  <span className="text-lg">{item}</span>
+                </li>
+              ))}
+            </ul>
 
-      {/* How it works */}
-      <section id="how-it-works" className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-              Comment ça marche ?
-            </h2>
-            <p className="text-lg text-gray-600">3 étapes simples pour démarrer</p>
-          </div>
-          <div className="grid md:grid-cols-3 gap-8">
-            {steps.map((step, index) => (
-              <div key={index} className="relative">
-                <div className="text-8xl font-bold text-primary-100 absolute -top-4 left-0">{step.number}</div>
-                <div className="relative z-10 pt-8">
-                  <h3 className="text-xl font-semibold text-gray-900 mb-3">{step.title}</h3>
-                  <p className="text-gray-600">{step.description}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Products Grid */}
-      <section id="products" className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-              Notre Catalogue Produits
-            </h2>
-            <p className="text-lg text-gray-600">Plus de 200 produits personnalisables</p>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {products.map((product, index) => (
-              <div key={index} className="card-hover overflow-hidden group">
-                <div className="aspect-square bg-gradient-to-br from-primary-100 to-emerald-100 flex items-center justify-center">
-                  <span className="text-4xl group-hover:scale-110 transition-transform">✨</span>
-                </div>
-                <div className="p-3">
-                  <div className="text-xs text-primary-600 font-medium">{product.category}</div>
-                  <div className="font-medium text-gray-900 text-sm">{product.name}</div>
-                  <div className="text-sm font-bold text-gray-900 mt-1">{product.price}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="text-center mt-10">
-            <Link to="/register" className="btn-primary">
-              Voir tout le catalogue
+            <Link to="/influencer/register" className="inline-flex items-center gap-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white px-8 py-4 rounded-xl font-bold text-lg hover:shadow-lg hover:shadow-pink-500/25 transition-all hover:scale-105">
+              Rejoindre en tant qu'Influenceur <ArrowRight className="w-5 h-5" />
             </Link>
-          </div>
-        </div>
-      </section>
+          </motion.div>
 
-      {/* Pricing */}
-      <section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-              Tarification simple et transparente
-            </h2>
-            <p className="text-lg text-gray-600">Pas de frais cachés. Payez uniquement quand vous vendez.</p>
-          </div>
-          <div className="card p-8 text-center">
-            <div className="text-6xl font-bold text-gray-900 mb-2">15%</div>
-            <div className="text-gray-600 mb-8">Commission sur chaque vente (vous gardez 85%)</div>
-            <div className="grid md:grid-cols-3 gap-6 text-left">
-              <div className="p-4 bg-green-50 rounded-lg">
-                <div className="font-semibold text-green-700 mb-2">✓ Inclus</div>
-                <ul className="text-sm text-gray-600 space-y-1">
-                  <li>• Marque illimitée</li>
-                  <li>• Catalogue complet</li>
-                  <li>• Designer de packaging</li>
-                </ul>
-              </div>
-              <div className="p-4 bg-blue-50 rounded-lg">
-                <div className="font-semibold text-blue-700 mb-2">✓ Support</div>
-                <ul className="text-sm text-gray-600 space-y-1">
-                  <li>• Agents call-center</li>
-                  <li>• Livraison COD</li>
-                  <li>• Support WhatsApp</li>
-                </ul>
-              </div>
-              <div className="p-4 bg-purple-50 rounded-lg">
-                <div className="font-semibold text-purple-700 mb-2">✓ Paiements</div>
-                <ul className="text-sm text-gray-600 space-y-1">
-                  <li>• Wallet instantané</li>
-                  <li>• Retraits RIB/ICE</li>
-                  <li>• Rapports détaillés</li>
-                </ul>
-              </div>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="relative"
+          >
+            <div className="aspect-[4/5] bg-gradient-to-tr from-gray-800 to-gray-700 rounded-3xl overflow-hidden border border-gray-600 shadow-2xl relative">
+               {/* Mockup UI representation inside the card */}
+               <div className="absolute inset-0 p-8 flex flex-col justify-between">
+                  <div>
+                    <div className="w-16 h-16 bg-gradient-to-br from-pink-400 to-purple-500 rounded-2xl mb-6 shadow-lg"></div>
+                    <div className="w-3/4 h-8 bg-gray-600 rounded-lg mb-4 opacity-50"></div>
+                    <div className="w-1/2 h-4 bg-gray-600 rounded-lg opacity-50"></div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div className="bg-gray-800 p-4 rounded-xl border border-gray-600 flex justify-between items-center">
+                       <div>
+                         <div className="text-sm text-gray-400">Gains ce mois</div>
+                         <div className="text-2xl font-bold text-white">12,450 MAD</div>
+                       </div>
+                       <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center text-green-400">
+                          <TrendingUp className="w-6 h-6" />
+                       </div>
+                    </div>
+                    <div className="w-full h-12 bg-pink-500 rounded-xl opacity-80 backdrop-blur-sm"></div>
+                  </div>
+               </div>
             </div>
-            <Link to="/register" className="btn-primary btn-lg mt-8">
-              Commencer gratuitement
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-primary-500">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-            Prêt à lancer votre marque ?
-          </h2>
-          <p className="text-xl text-primary-100 mb-8">
-            Rejoignez des centaines de vendeurs qui génèrent des revenus avec OpenSeller.ma
-          </p>
-          <Link to="/register" className="inline-flex items-center gap-2 bg-white text-primary-600 px-8 py-3 rounded-lg font-semibold hover:bg-primary-50 transition-colors">
-            Créer mon compte gratuit
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
-          </Link>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="py-12 px-4 sm:px-6 lg:px-8 bg-gray-900 text-gray-400">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-4 gap-8">
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 bg-primary-500 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold">O</span>
+            {/* Floating badge */}
+            <div className="absolute -bottom-6 -left-6 bg-white p-6 rounded-2xl shadow-xl border border-gray-100 hidden md:block animate-bounce-slow">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                  <span className="text-2xl">💰</span>
                 </div>
-                <span className="font-bold text-white">OpenSeller.ma</span>
+                <div>
+                  <div className="text-sm font-bold text-gray-900">Nouvelle Commission!</div>
+                  <div className="text-green-600 font-semibold">+150.00 MAD</div>
+                </div>
               </div>
-              <p className="text-sm">La plateforme de dropshipping white-label #1 au Maroc</p>
             </div>
-            <div>
-              <h4 className="font-semibold text-white mb-4">Produit</h4>
-              <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-white">Fonctionnalités</a></li>
-                <li><a href="#" className="hover:text-white">Tarifs</a></li>
-                <li><a href="#" className="hover:text-white">Catalogue</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold text-white mb-4">Ressources</h4>
-              <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-white">Blog</a></li>
-                <li><a href="#" className="hover:text-white">Formation</a></li>
-                <li><a href="#" className="hover:text-white">Support</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold text-white mb-4">Contact</h4>
-              <ul className="space-y-2 text-sm">
-                <li>contact@openseller.ma</li>
-                <li>+212 5XX-XXXXXX</li>
-                <li>Casablanca, Maroc</li>
-              </ul>
-            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Bento Grid Features */}
+      <section id="features" className="py-24 px-4 sm:px-6 lg:px-8 bg-gray-50">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16 max-w-3xl mx-auto">
+            <h2 className="text-4xl font-bold text-gray-900 mb-6">Un écosystème conçu pour les Marques</h2>
+            <p className="text-xl text-gray-600">Tout ce dont vous avez besoin pour lancer et scaler votre business E-commerce, réuni au même endroit.</p>
           </div>
-          <div className="border-t border-gray-800 mt-12 pt-8 text-center text-sm">
-            © 2025 OpenSeller.ma. Tous droits réservés.
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {features.map((feature, i) => (
+              <motion.div 
+                key={i}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: i * 0.1 }}
+                className={`${feature.colSpan} ${feature.bgClass} rounded-3xl p-8 border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-300 group cursor-default overflow-hidden relative`}
+              >
+                <div className="absolute top-0 right-0 p-8 opacity-0 group-hover:opacity-10 transform translate-x-4 -translate-y-4 transition-all duration-500">
+                  {feature.icon}
+                </div>
+                <div className="mb-6 bg-white w-16 h-16 rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                  {feature.icon}
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-3">{feature.title}</h3>
+                <p className="text-gray-600 text-lg">{feature.desc}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing CTA */}
+      <section id="pricing" className="py-24 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-5xl mx-auto text-center">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            className="bg-gray-900 rounded-[3rem] p-12 lg:p-20 shadow-2xl relative overflow-hidden"
+          >
+            {/* Glow effect */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary-500/20 rounded-full blur-[120px] pointer-events-none"></div>
+
+            <div className="relative z-10 text-white">
+              <h2 className="text-4xl lg:text-6xl font-extrabold mb-6">Tarification ultra-simple.</h2>
+              <p className="text-xl lg:text-2xl text-gray-300 mb-12 max-w-2xl mx-auto">
+                Pas d'abonnement. Pas de frais cachés. Nous réussissons quand vous réussissez.
+              </p>
+              
+              <div className="bg-white/10 backdrop-blur-md rounded-3xl p-8 lg:p-12 border border-white/20 max-w-3xl mx-auto mb-12">
+                <div className="text-gray-300 font-semibold mb-2 uppercase tracking-wider">Vous Vendez, Vous Gagnez</div>
+                <div className="flex items-baseline justify-center gap-2 mb-4">
+                  <span className="text-7xl lg:text-8xl font-black text-white">85%</span>
+                  <span className="text-2xl text-gray-400">/ de marge</span>
+                </div>
+                <p className="text-lg text-gray-400">Nous ne prenons que 15% pour couvrir la fabrication, le packaging, la confirmation, et la livraison COD.</p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row justify-center gap-4">
+                <Link to="/register" className="btn-primary btn-lg h-16 px-10 text-lg rounded-2xl shadow-xl shadow-primary-500/25 hover:scale-105 transition-transform">
+                  Créer ma marque maintenant
+                </Link>
+                <a href="#how-it-works" className="btn-lg h-16 px-10 text-lg rounded-2xl bg-gray-800 text-white hover:bg-gray-700 transition-colors flex items-center justify-center border border-gray-700">
+                  Calculer mes profils
+                </a>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Footer (Simplified & Modernized) */}
+      <footer className="bg-white border-t border-gray-100 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold">O</span>
+            </div>
+            <span className="font-bold text-gray-900 text-xl">OpenSeller.ma</span>
+          </div>
+          <div className="flex items-center gap-6 text-sm font-medium text-gray-500">
+            <Link to="/register" className="hover:text-gray-900">Vendeurs</Link>
+            <Link to="/influencer/register" className="hover:text-gray-900">Influenceurs</Link>
+            <a href="#" className="hover:text-gray-900">Contact</a>
+            <a href="#" className="hover:text-gray-900">Conditions</a>
+          </div>
+          <div className="text-sm text-gray-400">
+            © 2026 OpenSeller.ma. Tous droits réservés.
           </div>
         </div>
       </footer>
-
-      {/* WhatsApp Float */}
-      <a
-        href="https://wa.me/212600000000"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="fixed bottom-6 right-6 w-14 h-14 bg-green-500 rounded-full flex items-center justify-center shadow-lg hover:bg-green-600 transition-colors z-50"
-      >
-        <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-        </svg>
-      </a>
+      
     </div>
   );
 }

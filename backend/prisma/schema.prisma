@@ -42,6 +42,11 @@ model User {
   emailVerifiedAt DateTime?
   phoneVerifiedAt DateTime?
   lastLoginAt     DateTime?
+  
+  // Tracking
+  registrationIp  String?
+  detectedCity    String?
+  
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?
@@ -64,10 +69,20 @@ model User {
 
   conversations    ConversationParticipant[]
   messages         Message[]
+  activityLogs     ActivityLog[]
+
+  // Agent/Lead management relations
+  leadStatusHistories LeadStatusHistory[]
+  callLogs            CallLog[]
+  leadAssignments     LeadAssignment[]
 
   // Influencer relations
   referralLinks    ReferralLink[]
   commissions      InfluencerCommission[]
+
+  // Agent-Influencer assignment relations
+  agentAssignments       AgentInfluencerAssignment[] @relation("AgentAssignments")
+  influencerAssignments  AgentInfluencerAssignment[] @relation("InfluencerAssignments")
 
   @@map("users")
 }
@@ -80,6 +95,15 @@ model UserProfile {
   city      String?
   address   String?
   language  String  @default("fr")
+  
+  // Influencer Specific
+  instagramUsername  String?
+  instagramFollowers Int?
+  tiktokUsername     String?
+  facebookUsername   String?
+  xUsername          String?
+  youtubeUsername    String?
+  snapchatUsername   String?
 
   @@map("user_profiles")
 }
@@ -161,6 +185,7 @@ model Product {
   retailPriceMad    Float
   isCustomizable    Boolean  @default(true)
   minProductionDays Int      @default(3)
+  stockQuantity     Int      @default(0)
   
   // Arch modifications
   ownerId           Int?
@@ -177,6 +202,7 @@ model Product {
   inventories      ProductInventory[]
   claims           AffiliateClaim[]
   referralLinks    ReferralLink[]
+  supportRequests  SupportRequest[]
 
   @@map("products")
 }
@@ -229,8 +255,54 @@ model Lead {
   updatedAt       DateTime  @updatedAt
 
   order Order?
+  referralLinkId  Int?
+  referralLink    ReferralLink? @relation(fields: [referralLinkId], references: [id])
+  statusHistory   LeadStatusHistory[]
+  callLogs        CallLog[]
+  assignments     LeadAssignment[]
 
   @@map("leads")
+}
+
+model LeadStatusHistory {
+  id         Int      @id @default(autoincrement())
+  leadId     Int
+  lead       Lead     @relation(fields: [leadId], references: [id])
+  oldStatus  String
+  newStatus  String
+  changedBy  Int
+  changer    User     @relation(fields: [changedBy], references: [id])
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  @@map("lead_status_history")
+}
+
+model CallLog {
+  id                  Int      @id @default(autoincrement())
+  leadId              Int
+  lead                Lead     @relation(fields: [leadId], references: [id])
+  agentId             Int
+  agent               User     @relation(fields: [agentId], references: [id])
+  callDurationSeconds Int?
+  outcome             String   // ANSWERED, NO_ANSWER, BUSY, etc.
+  recordingUrl        String?
+  notes               String?
+  createdAt           DateTime @default(now())
+
+  @@map("call_logs")
+}
+
+model LeadAssignment {
+  id           Int       @id @default(autoincrement())
+  leadId       Int
+  lead         Lead      @relation(fields: [leadId], references: [id])
+  agentId      Int
+  agent        User      @relation(fields: [agentId], references: [id])
+  assignedAt   DateTime  @default(now())
+  unassignedAt DateTime?
+
+  @@map("lead_assignments")
 }
 
 model Order {
@@ -255,6 +327,8 @@ model Order {
   updatedAt       DateTime @updatedAt
 
   items OrderItem[]
+  walletTransactions WalletTransaction[]
+  influencerCommissions InfluencerCommission[]
 
   @@map("orders")
 }
@@ -295,6 +369,8 @@ model WalletTransaction {
   amountMad      Float
   balanceAfterMad Float
   description    String?
+  orderId        Int?
+  order          Order?   @relation(fields: [orderId], references: [id])
   createdAt      DateTime @default(now())
 
   @@map("wallet_transactions")
@@ -343,6 +419,7 @@ model MoroccanCity {
 model ActivityLog {
   id        Int      @id @default(autoincrement())
   userId    Int?
+  user      User?    @relation(fields: [userId], references: [id])
   action    String
   modelType String?
   modelId   Int?
@@ -371,9 +448,11 @@ model AffiliateClaim {
   user       User     @relation(fields: [userId], references: [id])
   productId  Int
   product    Product  @relation(fields: [productId], references: [id])
-  status     String   @default("ACTIVE") // ACTIVE, REVOKED
+  status     String   @default("PENDING") // PENDING, APPROVED, REJECTED, REVOKED
   claimedAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
+  @@unique([userId, productId])
   @@map("affiliate_claims")
 }
 
@@ -381,10 +460,12 @@ model SupportRequest {
   id          Int      @id @default(autoincrement())
   userId      Int
   user        User     @relation(fields: [userId], references: [id])
-  type        String   // DELIVERY_FULFILLMENT, GENERAL_SUPPORT, etc.
+  type        String   // DELIVERY_FULFILLMENT, PRODUCT_CLAIM, senior_SUPPORT, etc.
   subject     String
   description String
   status      String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  productId   Int?
+  product     Product? @relation(fields: [productId], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -461,6 +542,7 @@ model ReferralLink {
   @@map("referral_links")
 
   commissions      InfluencerCommission[]
+  leads            Lead[]
 }
 
 model InfluencerCampaign {
@@ -486,10 +568,27 @@ model InfluencerCommission {
   referralLinkId Int
   referralLink   ReferralLink @relation(fields: [referralLinkId], references: [id])
   orderId        Int?
+  order          Order?    @relation(fields: [orderId], references: [id])
   amount         Float
   status         String    @default("PENDING") // PENDING, APPROVED, PAID
   paidAt         DateTime?
   createdAt      DateTime  @default(now())
 
   @@map("influencer_commissions")
+}
+
+// ==========================================
+// AGENT-INFLUENCER ASSIGNMENT
+// ==========================================
+
+model AgentInfluencerAssignment {
+  id            Int      @id @default(autoincrement())
+  agentId       Int
+  agent         User     @relation("AgentAssignments", fields: [agentId], references: [id], onDelete: Cascade)
+  influencerId  Int
+  influencer    User     @relation("InfluencerAssignments", fields: [influencerId], references: [id], onDelete: Cascade)
+  assignedAt    DateTime @default(now())
+
+  @@unique([agentId, influencerId])
+  @@map("agent_influencer_assignments")
 }

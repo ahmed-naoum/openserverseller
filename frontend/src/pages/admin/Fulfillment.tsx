@@ -9,7 +9,7 @@ export default function AdminFulfillment() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['fulfillment-requests', { status: statusFilter }],
-    queryFn: () => fulfillmentApi.listRequests({ status: statusFilter || undefined }),
+    queryFn: () => fulfillmentApi.adminListRequests({ status: statusFilter || undefined }),
   });
 
   const requests = data?.data?.data?.requests || [];
@@ -26,6 +26,17 @@ export default function AdminFulfillment() {
     }
   });
 
+  const rejectMutation = useMutation({
+    mutationFn: (id: string) => fulfillmentApi.rejectRequest(id),
+    onSuccess: () => {
+      toast.success('Demande rejetée / Droits révoqués !');
+      queryClient.invalidateQueries({ queryKey: ['fulfillment-requests'] });
+    },
+    onError: () => {
+      toast.error('Erreur lors du rejet.');
+    }
+  });
+
   const handleAction = (req: any, actionType: string) => {
     let quantity = undefined;
     if (actionType === 'GRANT_INVENTORY') {
@@ -34,12 +45,17 @@ export default function AdminFulfillment() {
        quantity = parseInt(qty, 10);
     }
     
-    // Only GRANT_INVENTORY for DELIVERY_FULFILLMENT.
-    // GRANT_CLAIM for PRODUCT_CLAIM.
-    // CLOSE to just reject/close.
-    
     if (confirm(`Êtes-vous sûr de vouloir exécuter l'action: ${actionType} ?`)) {
       fulfillMutation.mutate({ id: req.id.toString(), actionType, quantity });
+    }
+  };
+
+  const handleReject = (req: any) => {
+    const label = req.status === 'RESOLVED' 
+      ? 'Révoquer les droits accordés et fermer cette demande' 
+      : 'Rejeter cette demande';
+    if (confirm(`${label} ?`)) {
+      rejectMutation.mutate(req.id.toString());
     }
   };
 
@@ -91,16 +107,42 @@ export default function AdminFulfillment() {
                 <tr key={req.id} className="hover:bg-gray-50">
                   <td className="py-3 px-4 font-medium">#{req.id}</td>
                   <td className="py-3 px-4 text-sm">
-                     <span className="font-semibold text-gray-900">{req.user?.fullName}</span>
-                     <br/><span className="text-gray-500 text-xs">{req.user?.role}</span>
+                     <span className="font-semibold text-gray-900">{req.user?.profile?.fullName || req.user?.email || 'Inconnu'}</span>
+                     <br/><span className="text-gray-500 text-xs px-1.5 py-0.5 bg-gray-100 rounded mt-1 inline-block">{req.user?.role}</span>
                   </td>
                   <td className="py-3 px-4">
-                    <span className="badge-gray mb-1">{req.type}</span>
-                    <p className="text-sm font-medium">{req.subject}</p>
-                    <p className="text-xs text-gray-500 max-w-xs truncate">{req.description}</p>
+                    <div className="flex items-center gap-3">
+                      {req.product && (
+                        <div className="w-10 h-10 rounded border border-gray-200 bg-gray-50 flex-shrink-0 overflow-hidden">
+                          {req.product.images?.[0] ? (
+                            <img src={req.product.images[0].imageUrl} className="w-full h-full object-cover" alt="" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-300">📦</div>
+                          )}
+                        </div>
+                      )}
+                      <div>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                          req.type === 'PRODUCT_CLAIM' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {req.type}
+                        </span>
+                        <p className="text-sm font-bold text-gray-800 mt-1">
+                          {req.product?.nameFr || req.subject}
+                        </p>
+                        {req.productId && (
+                          <p className="text-[10px] text-primary-600 font-medium">ID Produit: {req.productId}</p>
+                        )}
+                      </div>
+                    </div>
                   </td>
                   <td className="py-3 px-4">
-                    <span className={`badge-${req.status === 'OPEN' ? 'warning' : req.status === 'CLOSED' ? 'danger' : 'success'}`}>
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                      req.status === 'OPEN' ? 'bg-amber-100 text-amber-700' : 
+                      req.status === 'CLOSED' ? 'bg-red-100 text-red-700' : 
+                      req.status === 'RESOLVED' ? 'bg-green-100 text-green-700' :
+                      'bg-blue-100 text-blue-700'
+                    }`}>
                       {req.status}
                     </span>
                   </td>
@@ -108,32 +150,44 @@ export default function AdminFulfillment() {
                     {new Date(req.createdAt).toLocaleDateString()}
                   </td>
                   <td className="py-3 px-4">
-                    {req.status !== 'CLOSED' && req.status !== 'RESOLVED' && (
-                      <div className="flex flex-col gap-2">
-                        {req.type === 'DELIVERY_FULFILLMENT' && (
-                          <button
-                            onClick={() => handleAction(req, 'GRANT_INVENTORY')}
-                            className="text-xs bg-primary-100 text-primary-700 hover:bg-primary-200 font-medium py-1 px-2 rounded"
-                          >
-                            Accorder Inventaire
-                          </button>
-                        )}
-                        {req.type === 'PRODUCT_CLAIM' && (
-                          <button
-                            onClick={() => handleAction(req, 'GRANT_CLAIM')}
-                            className="text-xs bg-purple-100 text-purple-700 hover:bg-purple-200 font-medium py-1 px-2 rounded"
-                          >
-                            Accorder Réclamation
-                          </button>
-                        )}
+                    <div className="flex gap-2 flex-wrap">
+                      {/* Approve buttons — only for OPEN / IN_PROGRESS */}
+                      {req.status !== 'CLOSED' && req.status !== 'RESOLVED' && (
+                        <>
+                          {req.type === 'DELIVERY_FULFILLMENT' && (
+                            <button
+                              onClick={() => handleAction(req, 'GRANT_INVENTORY')}
+                              className="text-xs bg-primary-600 text-white hover:bg-primary-700 font-bold py-1.5 px-3 rounded-lg transition-colors shadow-sm"
+                            >
+                              Accorder
+                            </button>
+                          )}
+                          {req.type === 'PRODUCT_CLAIM' && (
+                            <button
+                              onClick={() => handleAction(req, 'GRANT_CLAIM')}
+                              className="text-xs bg-purple-600 text-white hover:bg-purple-700 font-bold py-1.5 px-3 rounded-lg transition-colors shadow-sm"
+                            >
+                              Accorder
+                            </button>
+                          )}
+                        </>
+                      )}
+
+                      {/* Reject / Revoke — available on ALL statuses except CLOSED */}
+                      {req.status !== 'CLOSED' && (
                         <button
-                          onClick={() => handleAction(req, 'CLOSE')}
-                          className="text-xs text-red-600 hover:text-red-700 font-medium py-1 px-2 rounded border border-transparent hover:border-red-200"
+                          onClick={() => handleReject(req)}
+                          disabled={rejectMutation.isPending}
+                          className={`text-xs font-bold py-1.5 px-3 rounded-lg transition-colors ${
+                            req.status === 'RESOLVED'
+                              ? 'bg-red-600 text-white hover:bg-red-700 shadow-sm'
+                              : 'text-red-600 hover:bg-red-50 border border-red-200'
+                          }`}
                         >
-                          Fermer
+                          {req.status === 'RESOLVED' ? '🔄 Révoquer' : 'Rejeter'}
                         </button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

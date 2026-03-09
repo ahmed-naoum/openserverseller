@@ -14,11 +14,12 @@ router.get(
     asyncHandler(async (req, res) => {
         const { page = 1, limit = 20 } = req.query;
 
-        const where: any = { userId: req.user!.id };
+        const inventoryWhere: any = { userId: req.user!.id };
+        const myProductsWhere: any = { ownerId: req.user!.id }; // Products the grosseller created
 
-        const [inventory, total] = await Promise.all([
+        const [inventory, myProducts, myRequests] = await Promise.all([
             prisma.productInventory.findMany({
-                where,
+                where: inventoryWhere,
                 include: {
                     product: {
                         include: {
@@ -30,28 +31,125 @@ router.get(
                         }
                     }
                 },
-                skip: (Number(page) - 1) * Number(limit),
-                take: Number(limit),
                 orderBy: { acquiredAt: 'desc' },
             }),
-            prisma.productInventory.count({ where }),
+            req.user?.roleName === 'GROSSELLER' ? prisma.product.findMany({
+                where: myProductsWhere,
+                include: {
+                    category: true,
+                    images: {
+                        where: { isPrimary: true },
+                        take: 1
+                    }
+                },
+                orderBy: { createdAt: 'desc' }
+            }) : Promise.resolve([]),
+            prisma.supportRequest.findMany({
+                where: {
+                    userId: req.user!.id,
+                    status: { in: ['OPEN', 'IN_PROGRESS'] },
+                    productId: { not: null }
+                },
+                include: {
+                    product: {
+                        include: {
+                            category: true,
+                            images: {
+                                where: { isPrimary: true },
+                                take: 1
+                            }
+                        }
+                    }
+                },
+                orderBy: { createdAt: 'desc' }
+            })
         ]);
+
+        // Map purchased inventory
+        const purchasedItems = inventory.map(inv => ({
+            id: inv.id,
+            quantity: inv.quantity,
+            acquiredAt: inv.acquiredAt,
+            product: {
+                ...inv.product,
+                primaryImage: inv.product.images[0]?.imageUrl
+            }
+        }));
+
+        // Map owned products as inventory items
+        const ownedItems = myProducts.map((prod: any) => ({
+            id: `owned-${prod.id}`,
+            quantity: prod.stockQuantity || 0,
+            acquiredAt: prod.createdAt,
+            isOwned: true,
+            status: prod.status, // PENDING, APPROVED, etc.
+            product: {
+                ...prod,
+                primaryImage: prod.images[0]?.imageUrl
+            }
+        }));
+
+        // Map requested items (pending approvals from marketplace)
+        const requestedItems = myRequests
+            .filter((req: any) => req.product)
+            .map((req: any) => ({
+                id: `req-${req.id}`,
+                quantity: 0,
+                acquiredAt: req.createdAt,
+                isOwned: false,
+                isPendingRequest: true,
+                status: 'PENDING',
+                product: {
+                    ...req.product,
+                    primaryImage: req.product.images?.[0]?.imageUrl
+                }
+            }));
+
+        // Combine and sort
+        const rawCombined = [...purchasedItems, ...ownedItems, ...requestedItems];
+
+        // Deduplicate by product ID
+        // Priority: 1. Purchased (>0 quantity usually), 2. Pending Request, 3. Owned (0 quantity base)
+        const uniqueProducts = new Map();
+
+        const getRank = (i: any) => {
+            if (i.isOwned) return 3;
+            if (i.isPendingRequest) return 2;
+            return 1;
+        };
+
+        for (const item of rawCombined) {
+            const prodId = item.product?.id;
+            if (prodId) {
+                const existing = uniqueProducts.get(prodId);
+                if (!existing) {
+                    uniqueProducts.set(prodId, item);
+                } else {
+                    if (getRank(item as any) < getRank(existing as any)) {
+                        uniqueProducts.set(prodId, item);
+                    }
+                }
+            }
+        }
+
+        const combinedInventory = Array.from(uniqueProducts.values()).sort((a, b) =>
+            new Date(b.acquiredAt).getTime() - new Date(a.acquiredAt).getTime()
+        );
+
+        // Manual Pagination
+        const startIndex = (Number(page) - 1) * Number(limit);
+        const endIndex = startIndex + Number(limit);
+        const paginatedInventory = combinedInventory.slice(startIndex, endIndex);
 
         res.json({
             status: 'success',
             data: {
-                inventory: inventory.map(inv => ({
-                    ...inv,
-                    product: {
-                        ...inv.product,
-                        primaryImage: inv.product.images[0]?.imageUrl
-                    }
-                })),
+                inventory: paginatedInventory,
                 pagination: {
                     page: Number(page),
                     limit: Number(limit),
-                    total,
-                    totalPages: Math.ceil(total / Number(limit)),
+                    total: combinedInventory.length,
+                    totalPages: Math.ceil(combinedInventory.length / Number(limit)),
                 },
             },
         });
@@ -62,7 +160,7 @@ router.get(
 router.get(
     '/claimed',
     authenticate,
-    authorize('AFFILIATE'),
+    authorize('VENDOR', 'INFLUENCER', 'AFFILIATE'),
     asyncHandler(async (req, res) => {
         const { page = 1, limit = 20 } = req.query;
 

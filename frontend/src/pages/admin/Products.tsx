@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { productsApi, publicApi } from '../../lib/api';
+import { productsApi, publicApi, adminApi } from '../../lib/api';
 import AddProductModal from '../grosseller/AddProductModal';
 
 export default function AdminProducts() {
@@ -11,6 +11,11 @@ export default function AdminProducts() {
   const { data: categoriesData } = useQuery({
     queryKey: ['categories'],
     queryFn: () => publicApi.categories(),
+  });
+
+  const { data: vendorsData } = useQuery({
+    queryKey: ['vendors'],
+    queryFn: () => adminApi.users({ role: 'VENDOR' }),
   });
 
   const { data, isLoading, refetch } = useQuery({
@@ -196,6 +201,7 @@ export default function AdminProducts() {
         onClose={() => setIsAddProductModalOpen(false)} 
         onSuccess={() => refetch()} 
         isAdmin={true} 
+        vendors={vendorsData?.data?.data?.users || []}
       />
     </div>
   );

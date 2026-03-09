@@ -12,6 +12,12 @@ export interface AuthUser {
   isActive: boolean;
   mode?: 'SELLER' | 'AFFILIATE';
   isInfluencer?: boolean;
+  instagramUsername?: string;
+  tiktokUsername?: string;
+  facebookUsername?: string;
+  xUsername?: string;
+  youtubeUsername?: string;
+  snapchatUsername?: string;
   referralCode?: string;
   [key: string]: any;
 }
@@ -22,6 +28,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (data: { email?: string; phone?: string; password: string }) => Promise<AuthUser>;
   register: (data: { email?: string; phone?: string; password: string; fullName: string; role?: string }) => Promise<void>;
+  registerInfluencer: (data: { email?: string; phone?: string; password: string; fullName: string; instagramUsername?: string; tiktokUsername?: string; facebookUsername?: string; xUsername?: string; youtubeUsername?: string; snapchatUsername?: string; }) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -69,6 +76,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(user);
   };
 
+  const registerInfluencer = async (data: { email?: string; phone?: string; password: string; fullName: string; instagramUsername?: string; tiktokUsername?: string; facebookUsername?: string; xUsername?: string; youtubeUsername?: string; snapchatUsername?: string; }) => {
+    const response = await authApi.registerInfluencer(data);
+    const { user, tokens } = response.data.data;
+    localStorage.setItem('accessToken', tokens.accessToken);
+    localStorage.setItem('refreshToken', tokens.refreshToken);
+    setUser(user);
+  };
+
   const logout = async () => {
     try {
       await authApi.logout();
@@ -88,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         login,
         register,
+        registerInfluencer,
         logout,
         refreshUser,
       }}

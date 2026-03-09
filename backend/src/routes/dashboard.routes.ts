@@ -85,6 +85,9 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
 
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
     const [
       profile,
       brands,
@@ -94,7 +97,11 @@ router.get(
       wallet,
       payouts,
       recentOrders,
-      notifications
+      notifications,
+      totalPurchasedInventory,
+      recentSales,
+      pendingPayoutsAgg,
+      lowStockProducts
     ] = await Promise.all([
       prisma.userProfile.findUnique({ where: { userId } }),
       prisma.brand.findMany({ where: { vendorId: userId } }),
@@ -126,8 +133,28 @@ router.get(
         where: { userId },
         orderBy: { createdAt: 'desc' },
         take: 10
+      }),
+      // New Stats
+      prisma.productInventory.findMany({
+        where: { userId },
+        include: { product: true }
+      }),
+      prisma.order.aggregate({
+        where: { vendorId: userId, createdAt: { gte: thirtyDaysAgo }, status: { not: 'CANCELLED' } },
+        _sum: { vendorEarningMad: true }
+      }),
+      prisma.payoutRequest.aggregate({
+        where: { vendorId: userId, status: 'PENDING' },
+        _sum: { amountMad: true }
+      }),
+      prisma.product.count({
+        where: { ownerId: userId, stockQuantity: { lt: 10 }, status: 'APPROVED' }
       })
     ]);
+
+    const totalPurchasedValue = totalPurchasedInventory.reduce((acc, item) => {
+      return acc + (item.quantity * (item.product?.baseCostMad || 0));
+    }, 0);
 
     res.json({
       profile,
@@ -138,7 +165,13 @@ router.get(
       wallet,
       payouts,
       recentOrders,
-      notifications
+      notifications,
+      stats: {
+        totalPurchasedValue,
+        recentSalesValue: recentSales._sum.vendorEarningMad || 0,
+        pendingPayoutsAmount: pendingPayoutsAgg._sum.amountMad || 0,
+        lowStockAlerts: lowStockProducts
+      }
     });
   })
 );

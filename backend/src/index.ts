@@ -6,7 +6,6 @@ import compression from 'compression';
 import morgan from 'morgan';
 import { createServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
-import { rateLimit } from 'express-rate-limit';
 
 import routes from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -25,14 +24,6 @@ const io = new SocketServer(server, {
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const API_PREFIX = process.env.API_PREFIX || '/api/v1';
-
-const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10),
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100', 10),
-  message: { error: 'Too many requests, please try again later.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
 
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -56,26 +47,6 @@ app.use(ipFilter);
 app.use(sanitizeInput);
 app.use(validateRequestSize(5 * 1024 * 1024));
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: { error: 'Too many authentication attempts, please try again later.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-const apiLimiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10),
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100', 10),
-  message: { error: 'Too many requests, please try again later.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-app.use(`${API_PREFIX}/auth/login`, authLimiter);
-app.use(`${API_PREFIX}/auth/register`, authLimiter);
-app.use(`${API_PREFIX}`, apiLimiter);
-
 app.use('/uploads', express.static('uploads'));
 
 setupPassport();
@@ -87,12 +58,12 @@ app.use(errorHandler);
 
 io.on('connection', (socket) => {
   console.log(`Client connected: ${socket.id}`);
-  
+
   socket.on('join-room', (room: string) => {
     socket.join(room);
     console.log(`Socket ${socket.id} joined room ${room}`);
   });
-  
+
   socket.on('disconnect', () => {
     console.log(`Client disconnected: ${socket.id}`);
   });

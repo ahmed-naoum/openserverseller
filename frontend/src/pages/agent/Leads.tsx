@@ -1,196 +1,326 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { leadsApi } from '../../lib/api';
+import { socket, connectToCallCenter, disconnectSocket } from '../../lib/socket';
 import toast from 'react-hot-toast';
+import { format } from 'date-fns';
 
 export default function AgentLeads() {
-  const [statusFilter, setStatusFilter] = useState('');
-  const [selectedLead, setSelectedLead] = useState<any>(null);
-  const [statusUpdate, setStatusUpdate] = useState('');
-  const [notes, setNotes] = useState('');
-  const queryClient = useQueryClient();
+  const [availableLeads, setAvailableLeads] = useState<any[]>([]);
+  const [myLeads, setMyLeads] = useState<any[]>([]);
+  const [hasActiveLead, setHasActiveLead] = useState(false);
+  const [activeLeadId, setActiveLeadId] = useState<number | null>(null);
+  const [assignedInfluencers, setAssignedInfluencers] = useState<any[]>([]);
+  const [selectedInfluencerId, setSelectedInfluencerId] = useState<number | ''>('');
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [claiming, setClaiming] = useState<number | null>(null);
+  const navigate = useNavigate();
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['leads', { status: statusFilter }],
-    queryFn: () => leadsApi.list({ status: statusFilter || undefined }),
-  });
+  const loadData = useCallback(async () => {
+    try {
+      const [availRes, myRes] = await Promise.all([
+        leadsApi.available(selectedInfluencerId ? { influencerId: selectedInfluencerId } : undefined),
+        leadsApi.list({ status: statusFilter })
+      ]);
+      const availData = availRes.data?.data || availRes.data;
+      setAvailableLeads(availData?.leads || []);
+      setHasActiveLead(availData?.hasActiveLead || false);
+      setActiveLeadId(availData?.activeLeadId || null);
+      setAssignedInfluencers(availData?.assignedInfluencers || []);
 
-  const leads = data?.data?.data?.leads || [];
+      const myData = myRes.data?.data || myRes.data;
+      setMyLeads(myData?.leads || []);
+    } catch (error) {
+      console.error('Failed to load leads:', error);
+    }
+  }, [selectedInfluencerId, statusFilter]);
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => leadsApi.updateStatus(id, data),
-    onSuccess: () => {
-      toast.success('Statut mis à jour!');
-      setSelectedLead(null);
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
-    },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Erreur');
-    },
-  });
+  useEffect(() => {
+    loadData();
+    connectToCallCenter();
 
-  const statusColors: Record<string, string> = {
-    NEW: 'primary',
-    ASSIGNED: 'purple',
-    CONTACTED: 'warning',
-    INTERESTED: 'success',
-    NOT_INTERESTED: 'danger',
-    CALLBACK_REQUESTED: 'orange',
-    ORDERED: 'success',
-    UNREACHABLE: 'gray',
-    INVALID: 'danger',
-  };
+    // Real-time events
+    socket.on('new-available-lead', (lead: any) => {
+      // Basic client-side filter if an influencer is selected
+      if (selectedInfluencerId && lead.influencer?.id !== selectedInfluencerId) return;
 
-  const handleUpdateStatus = () => {
-    if (!selectedLead || !statusUpdate) return;
-    updateMutation.mutate({
-      id: selectedLead.id,
-      data: { status: statusUpdate, notes },
+      setAvailableLeads(prev => [lead, ...prev]);
+      toast('⚡ Nouveau lead disponible!', { icon: '🔔', duration: 4000 });
     });
+
+    socket.on('lead-claimed', ({ leadId }: { leadId: number }) => {
+      setAvailableLeads(prev => prev.filter(l => l.id !== leadId));
+    });
+
+    // Poll every 8s as fallback
+    const interval = setInterval(loadData, 8000);
+
+    return () => {
+      clearInterval(interval);
+      socket.off('new-available-lead');
+      socket.off('lead-claimed');
+      disconnectSocket();
+    };
+  }, [loadData]);
+
+  const handleClaim = async (leadId: number) => {
+    if (hasActiveLead) {
+      toast.error('Terminez votre lead en cours avant d\'en réclamer un autre.');
+      if (activeLeadId) navigate(`/agent/leads/${activeLeadId}`);
+      return;
+    }
+    setClaiming(leadId);
+    try {
+      await leadsApi.claim(leadId);
+      toast.success('Lead réclamé! Redirection...');
+      navigate(`/agent/leads/${leadId}`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Ce lead a déjà été pris!');
+      loadData();
+    } finally {
+      setClaiming(null);
+    }
   };
 
+  // We still want to let the user see the page header and dropdown even while loading
+  // So we'll remove the blocking full-page loader.
+  
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Mes Prospects</h1>
-          <p className="text-gray-500 mt-1">{leads.length} prospects assignés</p>
+          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Gestion des Leads</h1>
+          <p className="text-sm text-gray-500 mt-1">Réclamez des leads et contactez-les en premier!</p>
         </div>
-      </div>
-
-      {/* Filters */}
-      <div className="flex gap-2 overflow-x-auto pb-2">
-        {['', 'NEW', 'ASSIGNED', 'CONTACTED', 'INTERESTED', 'ORDERED'].map((status) => (
+        {hasActiveLead && activeLeadId && (
           <button
-            key={status}
-            onClick={() => setStatusFilter(status)}
-            className={`px-4 py-2 rounded-lg whitespace-nowrap text-sm font-medium transition-colors ${
-              statusFilter === status ? 'bg-primary-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
+            onClick={() => navigate(`/agent/leads/${activeLeadId}`)}
+            className="px-5 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-bold hover:bg-amber-600 transition-all animate-pulse"
           >
-            {status || 'Tous'}
+            ⚡ Continuer mon lead en cours
           </button>
-        ))}
+        )}
       </div>
 
-      {/* Leads Grid */}
-      {isLoading ? (
-        <div className="text-center py-12">Chargement...</div>
-      ) : leads.length === 0 ? (
-        <div className="card p-12 text-center">
-          <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-3xl">📞</span>
+      {/* Available Leads Pool */}
+      <div className="space-y-4">
+        {/* Fixed Header with Filter */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <h2 className="text-lg font-bold text-gray-900">⚡ Leads Disponibles</h2>
+              {availableLeads.length > 0 && (
+                <span className="absolute -top-1 -right-8 bg-red-500 text-white text-[10px] font-black rounded-full w-5 h-5 flex items-center justify-center animate-bounce">
+                  {availableLeads.length}
+                </span>
+              )}
+            </div>
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Aucun prospect assigné</h3>
-          <p className="text-gray-500">Les prospects apparaîtront ici</p>
+          
+          {assignedInfluencers.length > 0 && (
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-500 font-medium whitespace-nowrap">Influenceur:</label>
+              <select
+                value={selectedInfluencerId}
+                onChange={(e) => setSelectedInfluencerId(e.target.value === '' ? '' : Number(e.target.value))}
+                className="input py-1.5 px-3 border-gray-200 bg-white text-sm min-w-[180px]"
+              >
+                <option value="">Tous mes influenceurs</option>
+                {assignedInfluencers.map(inf => (
+                  <option key={inf.id} value={inf.id}>{inf.fullName}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {leads.map((lead: any) => (
-            <div key={lead.id} className="card-hover p-5">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
-                    <span className="text-primary-700 font-semibold">{lead.fullName.charAt(0)}</span>
+
+        {/* Conditional Leads/Empty Render */}
+        {availableLeads.length > 0 ? (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {availableLeads.map((lead) => (
+              <div
+                key={lead.id}
+                className="relative bg-white rounded-2xl border-2 border-dashed border-green-300 p-5 hover:border-green-500 hover:shadow-lg transition-all group"
+              >
+                {/* Pulse indicator */}
+                <div className="absolute top-3 right-3">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center text-green-700 font-bold">
+                    {lead.fullName?.charAt(0) || '?'}
                   </div>
                   <div>
-                    <div className="font-semibold text-gray-900">{lead.fullName}</div>
-                    <div className="text-sm text-gray-500">{lead.city || 'Ville inconnue'}</div>
+                    <p className="font-bold text-gray-900">{lead.fullName}</p>
+                    <p className="text-xs text-gray-400">{lead.city || 'Ville inconnue'}</p>
                   </div>
                 </div>
-                <span className={`badge-${statusColors[lead.status]}`}>{lead.status}</span>
-              </div>
 
-              <div className="space-y-2 mb-4">
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <span>📞</span>
-                  <a href={`tel:${lead.phone}`} className="hover:text-primary-600">{lead.phone}</a>
-                </div>
-                {lead.whatsapp && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <span>💬</span>
-                    <a href={`https://wa.me/${lead.phone.replace('+', '')}`} target="_blank" rel="noopener noreferrer" className="hover:text-green-600">
-                      WhatsApp
-                    </a>
+                {lead.product && (
+                  <div className="flex items-center gap-2 mb-3 p-2 bg-gray-50 rounded-lg">
+                    {lead.product.image && (
+                      <img src={lead.product.image} alt="" className="w-8 h-8 rounded-lg object-cover" />
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-700 truncate">{lead.product.name}</p>
+                      <p className="text-[10px] text-gray-400">SKU: {lead.product.sku}</p>
+                    </div>
                   </div>
                 )}
-              </div>
 
-              <div className="flex gap-2">
-                <a
-                  href={`tel:${lead.phone}`}
-                  className="btn-primary btn-sm flex-1"
-                >
-                  📞 Appeler
-                </a>
-                <button
-                  onClick={() => {
-                    setSelectedLead(lead);
-                    setStatusUpdate(lead.status);
-                    setNotes(lead.notes || '');
-                  }}
-                  className="btn-secondary btn-sm"
-                >
-                  Modifier
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+                {lead.influencer && (
+                  <p className="text-[10px] text-gray-400 mb-3">
+                    Référé par: <span className="text-gray-600 font-medium">{lead.influencer.fullName}</span>
+                  </p>
+                )}
 
-      {/* Status Update Modal */}
-      {selectedLead && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-md w-full">
-            <div className="p-6 border-b border-gray-100">
-              <h2 className="text-xl font-bold text-gray-900">Mettre à jour le prospect</h2>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="label">Statut</label>
-                <select
-                  className="input"
-                  value={statusUpdate}
-                  onChange={(e) => setStatusUpdate(e.target.value)}
-                >
-                  <option value="NEW">Nouveau</option>
-                  <option value="CONTACTED">Contacté</option>
-                  <option value="INTERESTED">Intéressé</option>
-                  <option value="NOT_INTERESTED">Pas intéressé</option>
-                  <option value="CALLBACK_REQUESTED">Rappel demandé</option>
-                  <option value="ORDERED">Commandé</option>
-                  <option value="UNREACHABLE">Injoignable</option>
-                  <option value="INVALID">Invalide</option>
-                </select>
-              </div>
-              <div>
-                <label className="label">Notes</label>
-                <textarea
-                  className="input"
-                  rows={3}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Ajoutez des notes sur l'appel..."
-                />
-              </div>
-              <div className="flex gap-3">
-                <button onClick={() => setSelectedLead(null)} className="btn-secondary flex-1">
-                  Annuler
-                </button>
+                <p className="text-[10px] text-gray-400 mb-3">
+                  {format(new Date(lead.createdAt), 'dd MMM yyyy HH:mm')}
+                </p>
+
                 <button
-                  onClick={handleUpdateStatus}
-                  className="btn-primary flex-1"
-                  disabled={updateMutation.isPending}
+                  onClick={() => handleClaim(lead.id)}
+                  disabled={claiming === lead.id || hasActiveLead}
+                  className={`w-full py-2.5 rounded-xl text-sm font-extrabold transition-all ${
+                    hasActiveLead
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : claiming === lead.id
+                        ? 'bg-green-300 text-white cursor-wait'
+                        : 'bg-green-500 text-white hover:bg-green-600 hover:scale-[1.02] active:scale-95 shadow-lg shadow-green-200'
+                  }`}
                 >
-                  {updateMutation.isPending ? 'Mise à jour...' : 'Enregistrer'}
+                  {claiming === lead.id ? '⏳ Réclamation...' : hasActiveLead ? '🔒 Bloqué (Lead en cours)' : '⚡ RÉCLAMER'}
                 </button>
               </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-12 text-center mt-4">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="text-3xl">📭</span>
             </div>
+            <p className="text-gray-500 font-medium">Aucun lead disponible</p>
+            <p className="text-gray-400 text-sm mt-1">Les nouveaux leads apparaîtront ici en temps réel.</p>
+          </div>
+        )}
+      </div>
+
+      {/* My Claimed Leads */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900">📋 Mes Leads ({myLeads.length})</h2>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-500">Statut:</span>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none cursor-pointer"
+            >
+              <option value="">Tous les statuts</option>
+              <option value="ASSIGNED">Assigné</option>
+              <option value="CONTACTED">Contacté</option>
+              <option value="INTERESTED">Intéressé</option>
+              <option value="ORDERED">Commandé</option>
+              <option value="CALLBACK_REQUESTED">Rappel demandé</option>
+              <option value="NOT_INTERESTED">Pas intéressé</option>
+              <option value="UNREACHABLE">Injoignable</option>
+              <option value="INVALID">Invalide</option>
+            </select>
           </div>
         </div>
-      )}
+
+        {myLeads.length > 0 ? (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {myLeads.map((lead: any) => (
+              <div key={lead.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-all">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
+                      <span className="text-primary-700 font-semibold">{lead.fullName.charAt(0)}</span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">{lead.fullName}</p>
+                      <p className="text-sm text-gray-500">{lead.city || 'Ville inconnue'}</p>
+                    </div>
+                  </div>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                    lead.status === 'ASSIGNED' ? 'bg-amber-100 text-amber-800' :
+                    lead.status === 'CONTACTED' ? 'bg-blue-100 text-blue-800' :
+                    lead.status === 'INTERESTED' ? 'bg-green-100 text-green-800' :
+                    lead.status === 'ORDERED' ? 'bg-emerald-100 text-emerald-800' :
+                    lead.status === 'NOT_INTERESTED' ? 'bg-red-100 text-red-800' :
+                    lead.status === 'UNREACHABLE' ? 'bg-gray-100 text-gray-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {lead.status}
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 mb-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-600 flex items-center gap-2">
+                      📞 <a href={`tel:${lead.phone}`} className="hover:text-primary-600 font-medium">{lead.phone}</a>
+                    </p>
+                    <a
+                      href={`https://wa.me/212${(lead.whatsapp || lead.phone || '').replace(/[^0-9]/g, '').replace(/^(212|0)/, '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-green-600 font-bold hover:underline flex items-center gap-1 bg-green-50 px-2.5 py-1 rounded-lg"
+                      title="Contacter sur WhatsApp"
+                    >
+                      💬 WhatsApp
+                    </a>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => navigate(`/agent/leads/${lead.id}`)}
+                      className={`flex-1 py-2 text-white rounded-xl text-xs font-bold transition-all ${
+                        lead.status === 'ASSIGNED' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-800 hover:bg-gray-900'
+                      }`}
+                    >
+                      {lead.status === 'ASSIGNED' ? '▶ Traiter' : '👁️ Détails'}
+                    </button>
+                    <a
+                      href={`tel:${lead.phone}`}
+                      className="flex-1 py-2 bg-primary-500 text-white rounded-xl text-xs font-bold hover:bg-primary-600 transition-all text-center flex justify-center items-center gap-1"
+                    >
+                      📞 Appeler
+                    </a>
+                  </div>
+                  {lead.status === 'ORDERED' && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          await leadsApi.pushToDelivery(lead.id, { productId: 0 });
+                          toast.success('Commande créée avec succès !');
+                          loadData();
+                        } catch (err: any) {
+                          toast.error(err.response?.data?.message || 'Erreur lors de la création de la commande');
+                        }
+                      }}
+                       className="w-full py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold hover:bg-emerald-600 transition-all shadow-md flex justify-center items-center gap-2"
+                    >
+                      🚚 Envoyer à la livraison
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
+            <p className="text-gray-400">Réclamez des leads depuis la section ci-dessus!</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -54,6 +54,7 @@ router.get(
       status: 'success',
       data: {
         users: users.map((u) => ({
+          id: u.id,
           uuid: u.uuid,
           email: u.email,
           phone: u.phone,
@@ -63,8 +64,7 @@ router.get(
           kycStatus: u.kycStatus,
           walletBalance: u.wallet?.balanceMad || 0,
           createdAt: u.createdAt,
-        })),
-        pagination: {
+        })), pagination: {
           page: Number(page),
           limit: Number(limit),
           total,
@@ -370,7 +370,7 @@ router.patch(
 router.patch(
   '/:uuid/kyc-status',
   authenticate,
-  authorize('SUPER_ADMIN'),
+  authorize('SUPER_ADMIN', 'CONFIRMATION_AGENT'),
   asyncHandler(async (req, res) => {
     const { uuid } = req.params;
     const { status } = req.body;

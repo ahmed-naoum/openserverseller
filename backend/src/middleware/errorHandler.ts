@@ -68,6 +68,7 @@ export const errorHandler = (
   res.status(statusCode).json({
     status,
     message: err.message || 'Internal server error',
+    errors: (err as any).errors,
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 };
@@ -82,12 +83,14 @@ export const notFoundHandler = (req: Request, res: Response) => {
 export class AppException extends Error {
   statusCode: number;
   status: string;
+  errors?: any[];
   code?: string;
 
-  constructor(statusCode: number, message: string, code?: string) {
+  constructor(statusCode: number, message: string, errors?: any[], code?: string) {
     super(message);
     this.statusCode = statusCode;
     this.status = `${statusCode}`.startsWith('4') ? 'fail' : 'error';
+    this.errors = errors;
     this.code = code;
     Error.captureStackTrace(this, this.constructor);
   }

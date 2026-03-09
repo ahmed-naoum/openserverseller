@@ -293,28 +293,28 @@ export default function RegisterPage() {
                         <span className="text-xl">🏪</span>
                       </div>
                       <div>
-                        <div className="font-semibold text-gray-900">Vendeur / Brand Owner</div>
+                        <div className="font-semibold text-gray-900">Vendeur / Affilié</div>
                         <div className="text-sm text-gray-500">Créez votre marque et vendez des produits</div>
                       </div>
                     </div>
                   </label>
 
-                  <label className={`block p-4 border-2 rounded-lg cursor-pointer transition-colors ${formData.role === 'CALL_CENTER_AGENT' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                  <label className={`block p-4 border-2 rounded-lg cursor-pointer transition-colors ${formData.role === 'GROSSELLER' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-gray-300'}`}>
                     <input
                       type="radio"
                       name="role"
-                      value="CALL_CENTER_AGENT"
-                      checked={formData.role === 'CALL_CENTER_AGENT'}
+                      value="GROSSELLER"
+                      checked={formData.role === 'GROSSELLER'}
                       onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                       className="sr-only"
                     />
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <span className="text-xl">🎧</span>
+                        <span className="text-xl">🏪</span>
                       </div>
                       <div>
-                        <div className="font-semibold text-gray-900">Agent Call Center</div>
-                        <div className="text-sm text-gray-500">Transformez les prospects en clients</div>
+                        <div className="font-semibold text-gray-900">groseller</div>
+                        <div className="text-sm text-gray-500">Achetez et vendez en gros volume</div>
                       </div>
                     </div>
                   </label>

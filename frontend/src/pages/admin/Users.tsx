@@ -1,8 +1,127 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { X } from 'lucide-react';
+
+function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; onClose: () => void; agent: any }) {
+  const [selectedInfluencers, setSelectedInfluencers] = useState<number[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [influencers, setInfluencers] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!isOpen || !agent) return;
+    setLoading(true);
+
+    Promise.all([
+      adminApi.getInfluencers(),
+      adminApi.getAgentInfluencerAssignments(agent.id),
+    ]).then(([infRes, assignRes]) => {
+      setInfluencers(infRes.data?.data || []);
+      const currentIds = (assignRes.data?.data || []).map((a: any) => a.influencerId);
+      setSelectedInfluencers(currentIds);
+    }).catch(() => {
+      toast.error('Erreur lors du chargement');
+    }).finally(() => setLoading(false));
+  }, [isOpen, agent]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await adminApi.setAgentInfluencerAssignments(agent.id, selectedInfluencers);
+      toast.success(`${selectedInfluencers.length} influenceur(s) assigné(s) à ${agent.fullName || 'cet agent'}`);
+      onClose();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Erreur lors de la sauvegarde');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleInfluencer = (id: number) => {
+    setSelectedInfluencers(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  if (!isOpen || !agent) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col shadow-xl">
+        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-indigo-50 to-purple-50">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">Assigner Influenceurs</h2>
+            <p className="text-sm text-gray-500 mt-0.5">Agent: <span className="font-semibold text-indigo-700">{agent.fullName || agent.email}</span></p>
+          </div>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-white/80 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-6 overflow-y-auto flex-1">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-indigo-200 border-t-indigo-500"></div>
+            </div>
+          ) : influencers.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-gray-500 font-medium">Aucun influenceur trouvé</p>
+              <p className="text-gray-400 text-sm mt-1">Créez des comptes influenceurs d'abord.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs text-gray-400 font-medium uppercase tracking-wider mb-3">
+                {selectedInfluencers.length} sélectionné(s) sur {influencers.length}
+              </p>
+              {influencers.map((inf: any) => (
+                <label
+                  key={inf.id}
+                  className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                    selectedInfluencers.includes(inf.id)
+                      ? 'border-indigo-500 bg-indigo-50/50'
+                      : 'border-gray-100 hover:border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedInfluencers.includes(inf.id)}
+                    onChange={() => toggleInfluencer(inf.id)}
+                    className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-purple-700 font-bold text-sm">{inf.fullName?.charAt(0) || '?'}</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{inf.fullName}</p>
+                    <p className="text-[11px] text-gray-400">{inf.email || inf.phone} · <span className={`font-bold ${inf.isActive ? 'text-green-600' : 'text-red-500'}`}>{inf.isActive ? 'Actif' : 'Inactif'}</span></p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="p-6 border-t border-gray-100 bg-gray-50 flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+          >
+            Annuler
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || loading}
+            className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 shadow-sm"
+          >
+            {saving ? 'Sauvegarde...' : `Sauvegarder (${selectedInfluencers.length})`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function AddUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [formData, setFormData] = useState({
@@ -222,6 +341,7 @@ export default function AdminUsers() {
   const [search, setSearch] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
+  const [assigningAgent, setAssigningAgent] = useState<any>(null);
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -292,9 +412,15 @@ export default function AdminUsers() {
         />
       )}
 
+      <AssignInfluencersModal
+        isOpen={!!assigningAgent}
+        onClose={() => setAssigningAgent(null)}
+        agent={assigningAgent}
+      />
+
       {/* Role Filter */}
       <div className="flex gap-2 overflow-x-auto pb-2">
-        {['', 'VENDOR', 'CALL_CENTER_AGENT', 'FINANCE_ADMIN', 'SUPER_ADMIN'].map((role) => (
+        {['', 'VENDOR', 'CALL_CENTER_AGENT', 'INFLUENCER', 'FINANCE_ADMIN', 'SUPER_ADMIN'].map((role) => (
           <button
             key={role}
             onClick={() => setRoleFilter(role)}
@@ -357,6 +483,14 @@ export default function AdminUsers() {
                       >
                         Éditer
                       </button>
+                      {user.role === 'CALL_CENTER_AGENT' && (
+                        <button
+                          onClick={() => setAssigningAgent(user)}
+                          className="text-indigo-600 hover:text-indigo-700 text-sm font-medium"
+                        >
+                          Influenceurs
+                        </button>
+                      )}
                       {user.isActive ? (
                         <button
                           onClick={() => deactivateMutation.mutate(user.uuid)}
@@ -383,3 +517,4 @@ export default function AdminUsers() {
     </div>
   );
 }
+
