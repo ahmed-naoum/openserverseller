@@ -87,4 +87,54 @@ router.post(
   })
 );
 
+router.patch(
+  '/:id',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    const category = await prisma.category.update({
+      where: { id: Number(id) },
+      data: updateData,
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Category updated successfully',
+      data: { category },
+    });
+  })
+);
+
+router.delete(
+  '/:id',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    // Optional: Check if category has products before deleting, or let Prisma handle cascade/restrict
+    // Currently Prisma schema has Products and Categories as implicitly Many-to-Many
+    // and parent/children relations.
+    const childrenCount = await prisma.category.count({
+      where: { parentId: Number(id) }
+    });
+
+    if (childrenCount > 0) {
+      throw new AppException(400, 'Cannot delete a category that has sub-categories');
+    }
+
+    await prisma.category.delete({
+      where: { id: Number(id) },
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Category deleted successfully',
+    });
+  })
+);
+
 export default router;

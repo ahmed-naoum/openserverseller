@@ -3,10 +3,13 @@ import nodemailer from 'nodemailer';
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: false,
+  secure: process.env.SMTP_SECURE === 'true', // false for STARTTLS (port 587), true for SSL (port 465)
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
+  },
+  tls: {
+    rejectUnauthorized: false, // Allow self-signed certificates
   },
 });
 
@@ -19,7 +22,7 @@ export interface EmailOptions {
 
 export const sendEmail = async (options: EmailOptions): Promise<void> => {
   const mailOptions = {
-    from: process.env.EMAIL_FROM || 'noreply@openseller.ma',
+    from: process.env.EMAIL_FROM || 'noreply@silacod.com',
     to: options.to,
     subject: options.subject,
     text: options.text,
@@ -38,10 +41,10 @@ export const sendEmail = async (options: EmailOptions): Promise<void> => {
 export const sendOTPEmail = async (email: string, otp: string, purpose: string = 'vérification'): Promise<void> => {
   await sendEmail({
     to: email,
-    subject: `Code de ${purpose} - OpenSeller.ma`,
+    subject: `Code de ${purpose} - SILACOD`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #22c55e;">OpenSeller.ma</h2>
+        <h2 style="color: #22c55e;">SILACOD</h2>
         <p>Votre code de ${purpose} est:</p>
         <div style="background: #f3f4f6; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; border-radius: 8px;">
           ${otp}
@@ -57,11 +60,11 @@ export const sendOTPEmail = async (email: string, otp: string, purpose: string =
 export const sendWelcomeEmail = async (email: string, name: string): Promise<void> => {
   await sendEmail({
     to: email,
-    subject: 'Bienvenue sur OpenSeller.ma! 🎉',
+    subject: 'Bienvenue sur SILACOD! 🎉',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #22c55e;">Bienvenue, ${name}! 🎉</h2>
-        <p>Merci de rejoindre OpenSeller.ma, la plateforme de dropshipping white-label #1 au Maroc.</p>
+        <p>Merci de rejoindre SILACOD, la plateforme de dropshipping white-label #1 au Maroc.</p>
         <p>Vous pouvez maintenant:</p>
         <ul>
           <li>Créer votre marque personnalisée</li>
@@ -87,10 +90,10 @@ export const sendPayoutEmail = async (email: string, amount: string, status: str
 
   await sendEmail({
     to: email,
-    subject: `Mise à jour de votre demande de retrait - OpenSeller.ma`,
+    subject: `Mise à jour de votre demande de retrait - SILACOD`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #22c55e;">OpenSeller.ma</h2>
+        <h2 style="color: #22c55e;">SILACOD</h2>
         <p>Votre demande de retrait de <strong>${amount} MAD</strong> a été ${statusMessages[status] || 'mise à jour'}.</p>
         <p>Connectez-vous à votre espace pour plus de détails.</p>
       </div>

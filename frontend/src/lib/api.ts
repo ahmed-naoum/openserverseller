@@ -78,7 +78,7 @@ export const authApi = {
   me: () => api.get('/auth/me'),
   forgotPassword: (data: { email?: string; phone?: string }) =>
     api.post('/auth/forgot-password', data),
-  resetPassword: (data: { email?: string; phone?: string; otp: string; password: string }) =>
+  resetPassword: (data: { token: string; password: string }) =>
     api.post('/auth/reset-password', data),
   verifyOtp: (data: { email?: string; phone?: string; otp: string }) =>
     api.post('/auth/verify-otp', data),
@@ -102,6 +102,7 @@ export const productsApi = {
   update: (id: string, data: any) => api.patch(`/products/${id}`, data),
   updateStatus: (id: string, data: { status: string }) => api.patch(`/products/${id}/status`, data),
   customize: (id: string, data: any) => api.post(`/products/${id}/customize`, data),
+  delete: (id: string) => api.delete(`/products/${id}`),
 };
 
 export const leadsApi = {
@@ -142,6 +143,14 @@ export const payoutsApi = {
     api.post('/payouts', data),
 };
 
+export const categoriesApi = {
+  list: () => api.get('/categories'),
+  create: (data: { nameAr: string; nameFr: string; nameEn?: string; slug: string; parentId?: number; imageUrl?: string }) =>
+    api.post('/categories', data),
+  update: (id: number, data: any) => api.patch(`/categories/${id}`, data),
+  delete: (id: number) => api.delete(`/categories/${id}`),
+};
+
 export const publicApi = {
   cities: () => api.get('/public/cities'),
   categories: () => api.get('/public/categories'),
@@ -155,6 +164,15 @@ export const uploadApi = {
   image: (data: FormData) => api.post('/upload/image', data, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
+  productImages: (data: FormData, onProgress?: (progress: number) => void) =>
+    api.post('/upload/product-images', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          onProgress(Math.round((progressEvent.loaded * 100) / progressEvent.total));
+        }
+      },
+    }),
 };
 
 export const adminApi = {

@@ -351,8 +351,8 @@ export default function AdminCampaigns() {
                                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
                              />
                              <div className="flex items-center gap-2 flex-1 min-w-0">
-                               {p.images?.[0]?.url ? (
-                                 <img src={p.images[0].url} className="w-6 h-6 rounded object-cover" />
+                               {p.images?.[0]?.imageUrl ? (
+                                 <img src={p.images[0].imageUrl} className="w-6 h-6 rounded object-cover" />
                                ) : <Package className="w-4 h-4 text-gray-300" />}
                                <span className="text-xs font-bold text-gray-700 truncate">{p.nameFr}</span>
                              </div>

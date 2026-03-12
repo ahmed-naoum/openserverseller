@@ -41,7 +41,7 @@ router.get(
       const categoryRecord = await prisma.category.findUnique({
         where: { slug: category as string },
       });
-      if (categoryRecord) where.categoryId = categoryRecord.id;
+      if (categoryRecord) where.categories = { some: { id: categoryRecord.id } };
     }
 
     if (search) {
@@ -56,7 +56,7 @@ router.get(
       prisma.product.findMany({
         where,
         include: {
-          category: true,
+          categories: true,
           images: {
             where: { isPrimary: true },
             take: 1,
@@ -85,8 +85,8 @@ router.get(
           visibility: p.visibility,
           status: p.status,
           ownerId: p.ownerId,
-          category: p.category,
-          primaryImage: p.images[0]?.imageUrl,
+          categories: (p as any).categories, // Bypass strict types if necessary since include was used
+          primaryImage: (p as any).images?.[0]?.imageUrl,
         })),
         pagination: {
           page: Number(page),
@@ -109,7 +109,7 @@ router.get(
       prisma.product.findUnique({
         where: { id: Number(id) },
         include: {
-          category: true,
+          categories: true,
           images: { orderBy: { sortOrder: 'asc' } },
         },
       }),
@@ -135,7 +135,10 @@ router.get(
     res.json({
       status: 'success',
       data: {
-        product,
+        product: {
+          ...product,
+          category: product?.categories?.[0] || null
+        },
         userStatus: {
           isBought: !!inventory,
           isClaimed: !!claim,
@@ -155,7 +158,8 @@ router.post(
     body('sku').notEmpty().trim(),
     body('nameAr').notEmpty().trim(),
     body('nameFr').notEmpty().trim(),
-    body('categoryId').isInt(),
+    body('categoryIds').isArray({ min: 1 }),
+    body('categoryIds.*').isInt(),
     body('baseCostMad').isFloat({ min: 0 }),
     body('retailPriceMad').isFloat({ min: 0 }),
   ],
@@ -166,7 +170,7 @@ router.post(
       throw new AppException(400, 'Validation failed', errors.array());
     }
 
-    const { sku, nameAr, nameFr, nameEn, description, categoryId, baseCostMad, retailPriceMad, isCustomizable, minProductionDays, stockQuantity, imageUrl, isActive, visibility, status } = req.body;
+    const { sku, nameAr, nameFr, nameEn, description, categoryIds, baseCostMad, retailPriceMad, isCustomizable, minProductionDays, stockQuantity, imageUrl, imageUrls, isActive, visibility, status, videoUrls, landingPageUrls } = req.body;
 
     const existingProduct = await prisma.product.findUnique({
       where: { sku },
@@ -183,6 +187,11 @@ router.post(
       ? Number(req.body.ownerId)
       : Number(req.user!.id);
 
+    // Support both imageUrls (array) and legacy imageUrl (single string)
+    const allImageUrls: string[] = Array.isArray(imageUrls) && imageUrls.length > 0
+      ? imageUrls.filter((u: string) => u && u.trim())
+      : (imageUrl ? [imageUrl] : []);
+
     const product = await prisma.product.create({
       data: {
         sku,
@@ -190,7 +199,7 @@ router.post(
         nameFr,
         nameEn,
         description,
-        categoryId: Number(categoryId),
+        categories: { connect: categoryIds.map((id: any) => ({ id: Number(id) })) },
         baseCostMad,
         retailPriceMad,
         isCustomizable: isCustomizable ?? true,
@@ -200,13 +209,19 @@ router.post(
         visibility: visibility ?? 'REGULAR',
         status: finalStatus,
         ownerId: finalOwnerId,
-        ...(imageUrl ? {
+        videoUrls: Array.isArray(videoUrls) ? videoUrls : [],
+        landingPageUrls: Array.isArray(landingPageUrls) ? landingPageUrls : [],
+        ...(allImageUrls.length > 0 ? {
           images: {
-            create: [{ imageUrl, isPrimary: true, sortOrder: 0 }]
+            create: allImageUrls.map((url: string, index: number) => ({
+              imageUrl: url.trim(),
+              isPrimary: index === 0,
+              sortOrder: index,
+            }))
           }
         } : {})
       },
-      include: { category: true, images: true },
+      include: { categories: true, images: { orderBy: { sortOrder: 'asc' } } },
     });
 
     res.status(201).json({
@@ -250,11 +265,70 @@ router.patch(
   authorize('SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const updateData = req.body;
+    const { 
+      imageUrls, 
+      categoryIds, 
+      ownerId, 
+      videoUrlsInput, 
+      landingPageUrlsInput, 
+      videoUrls, 
+      landingPageUrls, 
+      ...rest 
+    } = req.body;
+
+    // Build clean Prisma update data
+    const updateData: any = { ...rest };
+
+    // Handle category relation
+    if (categoryIds && Array.isArray(categoryIds)) {
+      updateData.categories = { set: categoryIds.map((id: any) => ({ id: Number(id) })) };
+    }
+
+    // Handle owner relation
+    if (ownerId) {
+      updateData.owner = { connect: { id: Number(ownerId) } };
+    }
+
+    // Handle video URLs
+    if (videoUrls && Array.isArray(videoUrls)) {
+      updateData.videoUrls = videoUrls;
+    }
+
+    // Handle landing page URLs
+    if (landingPageUrls && Array.isArray(landingPageUrls)) {
+      updateData.landingPageUrls = landingPageUrls;
+    }
+
+    // Ensure numeric fields are numbers
+    if (updateData.baseCostMad) updateData.baseCostMad = Number(updateData.baseCostMad);
+    if (updateData.retailPriceMad) updateData.retailPriceMad = Number(updateData.retailPriceMad);
+    if (updateData.stockQuantity !== undefined) updateData.stockQuantity = Number(updateData.stockQuantity);
+    if (updateData.minProductionDays !== undefined) updateData.minProductionDays = Number(updateData.minProductionDays);
+
+    // If imageUrls array is provided, replace all images
+    if (Array.isArray(imageUrls)) {
+      const validUrls = imageUrls.filter((u: string) => u && u.trim());
+      await prisma.$transaction(async (tx) => {
+        // Delete existing images
+        await tx.productImage.deleteMany({ where: { productId: Number(id) } });
+        // Create new images
+        if (validUrls.length > 0) {
+          await tx.productImage.createMany({
+            data: validUrls.map((url: string, index: number) => ({
+              productId: Number(id),
+              imageUrl: url.trim(),
+              isPrimary: index === 0,
+              sortOrder: index,
+            }))
+          });
+        }
+      });
+    }
 
     const product = await prisma.product.update({
       where: { id: Number(id) },
       data: updateData,
+      include: { categories: true, images: { orderBy: { sortOrder: 'asc' } } },
     });
 
     res.json({

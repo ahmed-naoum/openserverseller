@@ -26,17 +26,17 @@ export const sendSMS = async (to: string, message: string): Promise<void> => {
 };
 
 export const sendOTPSMS = async (phone: string, otp: string, purpose: string = 'vérification'): Promise<void> => {
-  const message = `OpenSeller.ma: Votre code de ${purpose} est ${otp}. Valable ${process.env.OTP_EXPIRY_MINUTES || 5} minutes.`;
+  const message = `SILACOD: Votre code de ${purpose} est ${otp}. Valable ${process.env.OTP_EXPIRY_MINUTES || 5} minutes.`;
   await sendSMS(phone, message);
 };
 
 export const sendOrderConfirmationSMS = async (phone: string, orderNumber: string): Promise<void> => {
-  const message = `OpenSeller.ma: Votre commande ${orderNumber} a été confirmée. Merci pour votre confiance!`;
+  const message = `SILACOD: Votre commande ${orderNumber} a été confirmée. Merci pour votre confiance!`;
   await sendSMS(phone, message);
 };
 
 export const sendDeliverySMS = async (phone: string, orderNumber: string, trackingNumber?: string): Promise<void> => {
   const tracking = trackingNumber ? ` Suivi: ${trackingNumber}` : '';
-  const message = `OpenSeller.ma: Votre commande ${orderNumber} est en cours de livraison.${tracking}`;
+  const message = `SILACOD: Votre commande ${orderNumber} est en cours de livraison.${tracking}`;
   await sendSMS(phone, message);
 };

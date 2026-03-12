@@ -78,7 +78,7 @@ export function PWAPrompt() {
         <div className="flex-1">
           <h3 className="font-semibold text-gray-900">Installer l'application</h3>
           <p className="text-sm text-gray-500 mt-1">
-            Ajoutez OpenSeller à votre écran d'accueil pour un accès rapide.
+            Ajoutez SILACOD à votre écran d'accueil pour un accès rapide.
           </p>
           <div className="flex gap-2 mt-3">
             <button

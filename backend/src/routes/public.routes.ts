@@ -43,7 +43,7 @@ router.get(
     const products = await prisma.product.findMany({
       where: { isActive: true },
       include: {
-        category: true,
+        categories: true,
         images: { where: { isPrimary: true }, take: 1 },
       },
       take: 12,
@@ -95,7 +95,7 @@ router.get(
       const categoryRecord = await prisma.category.findUnique({
         where: { slug: category as string },
       });
-      if (categoryRecord) where.categoryId = categoryRecord.id;
+      if (categoryRecord) where.categories = { some: { id: categoryRecord.id } };
     }
 
     if (search) {
@@ -110,8 +110,8 @@ router.get(
       prisma.product.findMany({
         where,
         include: {
-          category: true,
-          images: { where: { isPrimary: true }, take: 1 },
+          categories: true,
+          images: { orderBy: { sortOrder: 'asc' } },
           owner: { include: { profile: true, brands: true } }
         },
         skip: (Number(page) - 1) * Number(limit),

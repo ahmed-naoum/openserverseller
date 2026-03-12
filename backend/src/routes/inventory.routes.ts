@@ -23,7 +23,7 @@ router.get(
                 include: {
                     product: {
                         include: {
-                            category: true,
+                            categories: true,
                             images: {
                                 where: { isPrimary: true },
                                 take: 1
@@ -36,7 +36,7 @@ router.get(
             req.user?.roleName === 'GROSSELLER' ? prisma.product.findMany({
                 where: myProductsWhere,
                 include: {
-                    category: true,
+                    categories: true,
                     images: {
                         where: { isPrimary: true },
                         take: 1
@@ -53,7 +53,7 @@ router.get(
                 include: {
                     product: {
                         include: {
-                            category: true,
+                            categories: true,
                             images: {
                                 where: { isPrimary: true },
                                 take: 1
@@ -172,7 +172,7 @@ router.get(
                 include: {
                     product: {
                         include: {
-                            category: true,
+                            categories: true,
                             images: {
                                 where: { isPrimary: true },
                                 take: 1

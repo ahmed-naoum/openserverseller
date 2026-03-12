@@ -511,21 +511,70 @@ router.post(
       },
     });
 
-    if (!user) {
+    if (!user || (!email && !user.email)) {
+      // Return success even if not found to prevent email enumeration
       return res.json({
         status: 'success',
-        message: 'If an account exists, a reset code will be sent',
+        message: 'If an account exists, a reset code will be sent to your email.',
       });
     }
 
-    const otp = generateOTP();
-    // In a real application, you would store this OTP and its expiry in the database
-    // and send it via email/SMS.
-    console.log(`[DEV] Password reset OTP for ${email || phone}: ${otp}`);
+    const targetEmail = email || user.email;
+
+    // Remove any existing reset tokens for this email
+    await prisma.passwordReset.deleteMany({
+      where: { email: targetEmail as string }
+    });
+
+    const resetToken = uuidv4();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await prisma.passwordReset.create({
+      data: {
+        email: targetEmail as string,
+        token: resetToken,
+        expiresAt
+      }
+    });
+
+    // Instead of importing at the top (which might cause circular deps or issues if not compiled yet)
+    // We can directly require our new mailer
+    const { sendEmail } = await import('../utils/mailer.js');
+
+    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`;
+    const emailSent = await sendEmail({
+      to: targetEmail as string,
+      subject: 'Réinitialisation de votre mot de passe SILACOD',
+      text: `Bonjour,\n\nVous avez demandé la réinitialisation de votre mot de passe. Veuillez cliquer sur ce lien: ${resetLink}\n\nCe lien expirera dans une heure.`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 8px; overflow: hidden;">
+          <div style="background-color: #6366f1; padding: 24px; text-align: center;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">SILACOD</h1>
+          </div>
+          <div style="padding: 24px;">
+            <h2 style="color: #333; margin-top: 0;">Réinitialisation de mot de passe</h2>
+            <p style="color: #555; line-height: 1.6;">Bonjour,</p>
+            <p style="color: #555; line-height: 1.6;">Nous avons reçu une demande de réinitialisation de votre mot de passe pour votre compte SILACOD.</p>
+            <div style="text-align: center; margin: 32px 0;">
+              <a href="${resetLink}" style="background-color: #6366f1; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Réinitialiser mon mot de passe</a>
+            </div>
+            <p style="color: #555; line-height: 1.6;">Si vous n'avez pas demandé de réinitialisation de mot de passe, vous pouvez ignorer cet e-mail. Ce lien expirera dans 1 heure.</p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+            <p style="color: #888; font-size: 12px; text-align: center;">© ${new Date().getFullYear()} SILACOD. Tous droits réservés.</p>
+          </div>
+        </div>
+      `
+    });
+
+    if (!emailSent) {
+      console.error(`[AUTH] Failed to send password reset email to ${targetEmail}`);
+      // In a real app we might throw a 500 error here, but to prevent enumeration 
+      // we'll just log it.
+    }
 
     res.json({
       status: 'success',
-      message: 'If an account exists, a reset code will be sent',
+      message: 'If an account exists, a reset code will be sent to your email.',
     });
   })
 );
@@ -533,38 +582,44 @@ router.post(
 router.post(
   '/reset-password',
   [
-    body('email').optional().isEmail().normalizeEmail(),
-    body('phone').optional().matches(/^\+212[5678][0-9]{8}$/),
-    body('otp').isLength({ min: 6, max: 6 }),
-    body('password').isLength({ min: 8 }),
+    body('token').isString().notEmpty(),
+    body('password').isString().isLength({ min: 8 }),
   ],
   asyncHandler(async (req, res) => {
-    const { email, phone, otp, password } = req.body;
-    const normalizedPhone = phone ? normalizePhoneNumber(phone) : undefined;
+    const { token, password } = req.body;
+
+    const resetRecord = await prisma.passwordReset.findUnique({
+      where: { token }
+    });
+
+    if (!resetRecord) {
+      throw new AppException(400, 'Invalid or expired reset token');
+    }
+
+    if (resetRecord.expiresAt < new Date()) {
+      await prisma.passwordReset.delete({ where: { id: resetRecord.id } });
+      throw new AppException(400, 'Reset token has expired');
+    }
 
     const user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          ...(email ? [{ email }] : []),
-          ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
-        ],
-      },
+      where: { email: resetRecord.email }
     });
 
     if (!user) {
       throw new AppException(404, 'User not found');
     }
 
-    // In a real application, you would verify the OTP against a stored value
-    // and its expiry before allowing password reset.
-    console.log(`[DEV] Reset password OTP: ${otp}`);
-
     const hashedPassword = await bcrypt.hash(password, parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10));
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { password: hashedPassword },
-    });
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: user.id },
+        data: { password: hashedPassword },
+      }),
+      prisma.passwordReset.delete({
+        where: { id: resetRecord.id },
+      })
+    ]);
 
     res.json({
       status: 'success',

@@ -69,7 +69,7 @@ export default function VendorDashboard() {
               Bienvenue, {user?.fullName || 'Vendeur'}! 👋
             </h2>
             <p className="text-gray-600 mt-1">
-              Voici un aperçu de votre activité sur OpenSeller.ma
+              Voici un aperçu de votre activité sur SILACOD
             </p>
           </div>
           

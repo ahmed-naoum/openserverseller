@@ -106,7 +106,7 @@ async function main() {
     where: { email: 'admin@openseller.ma' },
     update: {},
     create: {
-      email: 'admin@openseller.ma',
+      email: 'admin@silacod.com',
       phone: '+212600000001',
       password: hashedPassword,
       roleId: roleMap['SUPER_ADMIN'],
@@ -128,7 +128,7 @@ async function main() {
     where: { email: 'vendor@openseller.ma' },
     update: {},
     create: {
-      email: 'vendor@openseller.ma',
+      email: 'vendor@silacod.com',
       phone: '+212600000002',
       password: hashedPassword,
       roleId: roleMap['VENDOR'],
@@ -159,7 +159,7 @@ async function main() {
       where: { email: 'agent@openseller.ma' },
       update: {},
       create: {
-        email: 'agent@openseller.ma',
+        email: 'agent@silacod.com',
         phone: '+212600000003',
         password: hashedPassword,
         roleId: roleMap['CALL_CENTER_AGENT'],

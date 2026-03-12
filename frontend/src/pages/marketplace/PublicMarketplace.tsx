@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { marketplaceApi, publicApi } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -7,7 +7,8 @@ import {
   Filter, 
   Grid, 
   List, 
-  ChevronRight, 
+  ChevronRight,
+  ChevronLeft,
   ShoppingBag, 
   Sparkles, 
   ArrowRight,
@@ -20,6 +21,93 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
+
+function ProductCardCarousel({ images, alt }: { images: { imageUrl: string }[]; alt: string }) {
+  const [current, setCurrent] = useState(0);
+  const [hovered, setHovered] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const count = images.length;
+
+  // Auto-rotate every 4s, pause on hover
+  useEffect(() => {
+    if (count <= 1) return;
+    if (hovered) {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      return;
+    }
+    intervalRef.current = setInterval(() => {
+      setCurrent(prev => (prev + 1) % count);
+    }, 4000);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [count, hovered]);
+
+  const goTo = (dir: -1 | 1, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCurrent(prev => (prev + dir + count) % count);
+  };
+
+  if (count === 0) return null;
+  if (count === 1) {
+    return (
+      <img 
+        src={images[0].imageUrl} 
+        alt={alt} 
+        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" 
+      />
+    );
+  }
+
+  return (
+    <div 
+      className="relative w-full h-full"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {images.map((img, i) => (
+        <img
+          key={i}
+          src={img.imageUrl}
+          alt={`${alt} ${i + 1}`}
+          className="absolute inset-0 w-full h-full object-cover transition-all duration-500"
+          style={{
+            opacity: i === current ? 1 : 0,
+            transform: i === current ? 'scale(1)' : 'scale(1.05)',
+          }}
+        />
+      ))}
+
+      {/* Left/Right arrows */}
+      <button
+        onClick={(e) => goTo(-1, e)}
+        className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/80 backdrop-blur-sm shadow-md flex items-center justify-center text-gray-700 hover:bg-white hover:scale-110 transition-all opacity-0 group-hover:opacity-100 z-10"
+      >
+        <ChevronLeft size={16} />
+      </button>
+      <button
+        onClick={(e) => goTo(1, e)}
+        className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/80 backdrop-blur-sm shadow-md flex items-center justify-center text-gray-700 hover:bg-white hover:scale-110 transition-all opacity-0 group-hover:opacity-100 z-10"
+      >
+        <ChevronRight size={16} />
+      </button>
+
+      {/* Dot indicators */}
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1 z-10">
+        {images.map((_, i) => (
+          <button
+            key={i}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setCurrent(i); }}
+            className={`rounded-full transition-all duration-300 ${
+              i === current 
+                ? 'w-4 h-1.5 bg-white shadow-sm' 
+                : 'w-1.5 h-1.5 bg-white/50 hover:bg-white/80'
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function PublicMarketplace() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -154,7 +242,7 @@ export default function PublicMarketplace() {
                 className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-50 text-primary-700 text-sm font-semibold mb-4 border border-primary-100"
               >
                 <Sparkles className="w-4 h-4" />
-                Catalogue Public OpenSeller
+                Catalogue Public SILACOD
               </motion.div>
               <motion.h1 
                 initial={{ opacity: 0, y: 10 }}
@@ -316,12 +404,8 @@ export default function PublicMarketplace() {
                           to={`../product/${product.id}`}
                           className="block aspect-square relative group overflow-hidden bg-gray-50"
                         >
-                        {product.images?.[0]?.url ? (
-                          <img 
-                            src={product.images[0].url} 
-                            alt={product.nameFr} 
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" 
-                          />
+                        {product.images?.length > 0 ? (
+                          <ProductCardCarousel images={product.images} alt={product.nameFr} />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-gray-300">
                              <Package className="w-12 h-12" />

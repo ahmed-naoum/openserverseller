@@ -138,8 +138,8 @@ export default function AdminAffiliateClaims() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 overflow-hidden border border-gray-200">
-                            {claim.product?.images?.[0]?.url ? (
-                              <img src={claim.product.images[0].url} alt="" className="w-full h-full object-cover" />
+                            {claim.product?.images?.[0]?.imageUrl ? (
+                              <img src={claim.product.images[0].imageUrl} alt="" className="w-full h-full object-cover" />
                             ) : (
                               <Package className="w-5 h-5" />
                             )}

@@ -107,16 +107,16 @@ router.get(
       prisma.brand.findMany({ where: { vendorId: userId } }),
       prisma.product.findMany({
         where: { ownerId: userId },
-        include: { category: true, images: { where: { isPrimary: true }, take: 1 } },
+        include: { categories: true, images: { where: { isPrimary: true }, take: 1 } },
         orderBy: { createdAt: 'desc' }
       }),
       prisma.product.findMany({
         where: { ownerId: userId, status: 'PENDING' },
-        include: { category: true }
+        include: { categories: true }
       }),
       prisma.product.findMany({
         where: { ownerId: userId, status: 'APPROVED' },
-        include: { category: true }
+        include: { categories: true }
       }),
       prisma.wallet.findUnique({ where: { userId } }),
       prisma.payoutRequest.findMany({
@@ -341,7 +341,7 @@ router.get(
       }),
       prisma.product.findMany({
         where: { status: 'PENDING' },
-        include: { category: true, owner: { include: { profile: true } } },
+        include: { categories: true, owner: { include: { profile: true } } },
         take: 20
       }),
       prisma.payoutRequest.findMany({

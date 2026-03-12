@@ -49,7 +49,7 @@ export default function LoginPage() {
             <div className="w-12 h-12 bg-primary-500 rounded-xl flex items-center justify-center">
               <span className="text-white font-bold text-2xl">O</span>
             </div>
-            <span className="font-bold text-2xl text-gray-900">OpenSeller.ma</span>
+            <span className="font-bold text-2xl text-gray-900">SILACOD</span>
           </Link>
           <h1 className="text-2xl font-bold text-gray-900">Connexion</h1>
           <p className="text-gray-600 mt-2">Accédez à votre espace vendeur</p>

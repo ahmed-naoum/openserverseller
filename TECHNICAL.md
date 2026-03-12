@@ -1,6 +1,6 @@
 # Technical Documentation & System Architecture
 
-This document provides a deep dive into the technical architecture, data structures, and workflows of the OpenSeller.ma platform.
+This document provides a deep dive into the technical architecture, data structures, and workflows of the SILACOD platform.
 
 ## 1. System Architecture
 

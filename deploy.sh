@@ -1,14 +1,14 @@
 #!/bin/bash
 # ============================================
-# OpenSeller.ma - Quick Deploy Script
+# SILACOD - Quick Deploy Script
 # Run from project root: bash deploy.sh
 # ============================================
 
 set -e
 
-echo "🚀 Deploying OpenSeller.ma..."
+echo "🚀 Deploying SILACOD..."
 
-cd /var/www/openseller
+cd /var/www/silacod
 git pull origin main
 
 # Backend

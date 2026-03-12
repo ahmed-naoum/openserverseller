@@ -73,7 +73,7 @@ export { io };
 
 server.listen(PORT, () => {
   console.log(`
-  🚀 OpenSeller.ma Backend Server Started
+  🚀 SILACOD Backend Server Started
   ─────────────────────────────────────
   Environment: ${process.env.NODE_ENV || 'development'}
   URL: http://localhost:${PORT}

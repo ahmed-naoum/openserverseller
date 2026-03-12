@@ -4,7 +4,7 @@ export const config = {
     timeout: 10000,
   },
   app: {
-    name: 'OpenSeller.ma',
+    name: 'SILACOD',
     description: 'Plateforme de Dropshipping White-Label au Maroc',
     version: '1.0.0',
   },

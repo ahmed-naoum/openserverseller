@@ -113,7 +113,7 @@ router.get(
             product: {
               include: {
                 images: { orderBy: { sortOrder: 'asc' } },
-                category: true,
+                categories: true,
               },
             },
             customization: true,

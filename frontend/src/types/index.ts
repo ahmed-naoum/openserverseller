@@ -75,6 +75,8 @@ export interface Product {
   primaryImage?: string;
   variants?: ProductVariant[];
   images?: ProductImage[];
+  videoUrls?: string[];
+  landingPageUrls?: string[];
 }
 
 export interface Category {

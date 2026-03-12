@@ -19,7 +19,7 @@ export default function AdminDashboard() {
       {/* Welcome */}
       <div className="card p-6">
         <h2 className="text-2xl font-bold text-gray-900">Tableau de bord Admin 🛡️</h2>
-        <p className="text-gray-600 mt-1">Vue d'ensemble de la plateforme OpenSeller.ma</p>
+        <p className="text-gray-600 mt-1">Vue d'ensemble de la plateforme SILACOD</p>
       </div>
 
       {/* Main Stats */}

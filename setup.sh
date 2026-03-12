@@ -1,13 +1,13 @@
 #!/bin/bash
 # ============================================
-# OpenSeller.ma - Ubuntu VPS Setup Script
+# SILACOD - Ubuntu VPS Setup Script
 # Run as root: bash setup.sh
 # ============================================
 
 set -e
 
 echo "=========================================="
-echo "  OpenSeller.ma - VPS Setup"
+echo "  SILACOD - VPS Setup"
 echo "=========================================="
 
 # ---- 1. System Update ----
@@ -35,7 +35,7 @@ echo ""
 sudo -u postgres psql -c "CREATE USER openseller WITH PASSWORD '${DB_PASS}';"
 sudo -u postgres psql -c "CREATE DATABASE openseller_db OWNER openseller;"
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE openseller_db TO openseller;"
-echo "✅ PostgreSQL ready! DATABASE_URL: postgresql://openseller:${DB_PASS}@localhost:5432/openseller_db"
+echo "✅ PostgreSQL ready! DATABASE_URL: postgresql://silacod:${DB_PASS}@localhost:5432/silacod_db"
 
 # ---- 4. Install Redis ----
 echo ""
@@ -67,8 +67,8 @@ if [ -d "openseller" ]; then
   cd openseller
   git pull origin main
 else
-  git clone https://github.com/ahmed-naoum/openserverseller.git openseller
-  cd openseller
+  git clone https://github.com/ahmed-naoum/openserverseller.git silacod
+  cd silacod
 fi
 
 # Backend setup
@@ -127,7 +127,7 @@ npm run build
 # ---- 8. Configure Nginx ----
 echo ""
 echo ">>> [8/8] Configuring Nginx..."
-cat > /etc/nginx/sites-available/openseller << NGINX_CONF
+cat > /etc/nginx/sites-available/silacod << NGINX_CONF
 server {
     listen 80;
     server_name ${DOMAIN};
@@ -194,7 +194,7 @@ fi
 
 echo ""
 echo "=========================================="
-echo "  ✅ OpenSeller.ma Setup Complete!"
+echo "  ✅ SILACOD Setup Complete!"
 echo "=========================================="
 echo ""
 echo "  🌐 Frontend: http://${DOMAIN}"

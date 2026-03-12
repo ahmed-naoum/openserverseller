@@ -1,11 +1,12 @@
 import { Routes, Route } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
 
 // Pages
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/auth/LoginPage';
 import RegisterPage from './pages/auth/RegisterPage';
-import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
+import ForgotPassword from './pages/auth/ForgotPassword';
+import ResetPassword from './pages/auth/ResetPassword';
 import InfluencerRegister from './pages/auth/InfluencerRegister';
 import DashboardLayout from './components/layouts/DashboardLayout';
 import VendorDashboard from './pages/vendor/Dashboard';
@@ -24,6 +25,7 @@ import AdminDashboard from './pages/admin/Dashboard';
 import AdminUsers from './pages/admin/Users';
 import AdminBrands from './pages/admin/Brands';
 import AdminProducts from './pages/admin/Products';
+import AdminCategories from './pages/admin/AdminCategories';
 import AdminOrders from './pages/admin/Orders';
 import AdminFinance from './pages/admin/Finance';
 import AdminFulfillment from './pages/admin/Fulfillment';
@@ -73,7 +75,8 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/influencer/register" element={<InfluencerRegister />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/marketplace" element={<PublicMarketplace />} />
         <Route path="/marketplace/:view" element={<PublicMarketplace />} />
         <Route path="/product/:id" element={<ProductDetail />} />
@@ -184,6 +187,7 @@ function App() {
           <Route path="users" element={<AdminUsers />} />
           <Route path="customers" element={<AdminCustomers />} />
           <Route path="brands" element={<AdminBrands />} />
+          <Route path="categories" element={<AdminCategories />} />
           <Route path="products" element={<AdminProducts />} />
           <Route path="orders" element={<AdminOrders />} />
           <Route path="finance" element={<AdminFinance />} />
@@ -196,26 +200,158 @@ function App() {
         </Route>
       </Routes>
 
+
       <Toaster
         position="top-right"
+        containerStyle={{ top: 20, right: 20 }}
+        gutter={10}
         toastOptions={{
           duration: 4000,
           style: {
-            background: '#363636',
-            color: '#fff',
-          },
-          success: {
-            style: {
-              background: '#22c55e',
-            },
-          },
-          error: {
-            style: {
-              background: '#ef4444',
-            },
+            padding: 0,
+            background: 'transparent',
+            boxShadow: 'none',
           },
         }}
-      />
+      >
+        {(t) => {
+          const isSuccess = t.type === 'success';
+          const isError = t.type === 'error';
+          const isLoading = t.type === 'loading';
+
+          const bgColor = isSuccess
+            ? 'rgba(16, 185, 129, 0.95)'
+            : isError
+            ? 'rgba(239, 68, 68, 0.95)'
+            : isLoading
+            ? 'rgba(59, 130, 246, 0.95)'
+            : 'rgba(30, 30, 30, 0.95)';
+
+          const glowColor = isSuccess
+            ? '0 8px 32px rgba(16, 185, 129, 0.3), 0 2px 8px rgba(16, 185, 129, 0.2)'
+            : isError
+            ? '0 8px 32px rgba(239, 68, 68, 0.3), 0 2px 8px rgba(239, 68, 68, 0.2)'
+            : isLoading
+            ? '0 8px 32px rgba(59, 130, 246, 0.3), 0 2px 8px rgba(59, 130, 246, 0.2)'
+            : '0 8px 32px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.15)';
+
+          return (
+            <div
+              role="alert"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '14px 18px',
+                borderRadius: '14px',
+                background: bgColor,
+                backdropFilter: 'blur(16px)',
+                WebkitBackdropFilter: 'blur(16px)',
+                boxShadow: glowColor,
+                color: '#fff',
+                fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+                fontSize: '14px',
+                fontWeight: 500,
+                lineHeight: 1.4,
+                maxWidth: '420px',
+                minWidth: '300px',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                position: 'relative',
+                overflow: 'hidden',
+                transform: t.visible ? 'translateX(0)' : 'translateX(120%)',
+                opacity: t.visible ? 1 : 0,
+                transition: 'all 0.4s cubic-bezier(0.22, 1, 0.36, 1)',
+              }}
+            >
+              {/* Animated Icon */}
+              <div
+                style={{
+                  flexShrink: 0,
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {isSuccess && (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" style={{ strokeDasharray: 30, strokeDashoffset: t.visible ? 0 : 30, transition: 'stroke-dashoffset 0.5s ease 0.2s' }} />
+                  </svg>
+                )}
+                {isError && (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" style={{ strokeDasharray: 20, strokeDashoffset: t.visible ? 0 : 20, transition: 'stroke-dashoffset 0.4s ease 0.15s' }} />
+                    <line x1="6" y1="6" x2="18" y2="18" style={{ strokeDasharray: 20, strokeDashoffset: t.visible ? 0 : 20, transition: 'stroke-dashoffset 0.4s ease 0.3s' }} />
+                  </svg>
+                )}
+                {isLoading && (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 1s linear infinite' }}>
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                  </svg>
+                )}
+                {!isSuccess && !isError && !isLoading && (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                )}
+              </div>
+
+              {/* Message */}
+              <div style={{ flex: 1, letterSpacing: '0.01em' }}>
+                {typeof t.message === 'function' ? t.message(t) : t.message}
+              </div>
+
+              {/* Close button */}
+              {!isLoading && (
+                <button
+                  onClick={() => toast.dismiss(t.id)}
+                  style={{
+                    flexShrink: 0,
+                    background: 'rgba(255, 255, 255, 0.15)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    padding: '4px 6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'background 0.2s',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)')}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              )}
+
+              {/* Auto-dismiss progress bar */}
+              {!isLoading && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    height: '3px',
+                    background: 'rgba(255, 255, 255, 0.4)',
+                    borderRadius: '0 0 14px 14px',
+                    width: t.visible ? '0%' : '100%',
+                    transition: t.visible ? `width ${(t.duration || 4000) / 1000}s linear` : 'none',
+                  }}
+                />
+              )}
+            </div>
+          );
+        }}
+      </Toaster>
     </AuthProvider>
   );
 }

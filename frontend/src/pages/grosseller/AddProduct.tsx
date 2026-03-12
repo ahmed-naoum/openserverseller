@@ -22,6 +22,8 @@ export default function AddProduct() {
     stockQuantity: '',
     minProductionDays: '3',
     visibility: 'REGULAR',
+    videoUrlsInput: '',
+    landingPageUrlsInput: '',
   });
 
   const { data: categoriesData, isLoading: categoriesLoading } = useQuery({
@@ -71,6 +73,8 @@ export default function AddProduct() {
         stockQuantity: Number(formData.stockQuantity),
         minProductionDays: Number(formData.minProductionDays),
         imageUrl: imageUrl,
+        videoUrls: formData.videoUrlsInput.split('\n').map(u => u.trim()).filter(Boolean),
+        landingPageUrls: formData.landingPageUrlsInput.split('\n').map(u => u.trim()).filter(Boolean),
       });
 
       toast.success('Produit ajouté avec succès. En attente d\'approbation.');
@@ -258,10 +262,10 @@ export default function AddProduct() {
           </div>
         )}
 
-        {/* Step 3: Images & Finish */}
+        {/* Step 3: Images & Media */}
         {currentStep === 3 && (
           <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-            <h2 className="text-lg font-bold text-gray-900">Image Principale</h2>
+            <h2 className="text-lg font-bold text-gray-900 border-b pb-2">Images & Médias</h2>
             
             <div className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-xl p-8 hover:bg-gray-50 transition-colors">
               {imagePreview ? (
@@ -288,7 +292,32 @@ export default function AddProduct() {
               )}
             </div>
 
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex gap-3">
+            <div className="grid grid-cols-2 gap-5 mt-6">
+              <div>
+                <label className="label">Liens Vidéos (Un par ligne)</label>
+                <textarea
+                  rows={3}
+                  className="input focus:ring-grosseller-500 focus:border-grosseller-500"
+                  value={formData.videoUrlsInput}
+                  onChange={(e) => setFormData({ ...formData, videoUrlsInput: e.target.value })}
+                  placeholder="https://youtube.com/watch?v=...&#10;https://vimeo.com/..."
+                ></textarea>
+                <p className="text-xs text-gray-500 mt-1">Ajoutez des liens YouTube, Vimeo ou mp4.</p>
+              </div>
+              <div>
+                <label className="label">Pages de Vente (Un par ligne)</label>
+                <textarea
+                  rows={3}
+                  className="input focus:ring-grosseller-500 focus:border-grosseller-500"
+                  value={formData.landingPageUrlsInput}
+                  onChange={(e) => setFormData({ ...formData, landingPageUrlsInput: e.target.value })}
+                  placeholder="https://monsite.com/produit&#10;https://monlandingpage.com"
+                ></textarea>
+                <p className="text-xs text-gray-500 mt-1">Ajoutez des liens vers vos pages de vente externes.</p>
+              </div>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex gap-3 mt-6">
               <svg className="w-5 h-5 text-yellow-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
               <div>
                 <h4 className="font-medium text-yellow-800 text-sm">Prêt à soumettre</h4>

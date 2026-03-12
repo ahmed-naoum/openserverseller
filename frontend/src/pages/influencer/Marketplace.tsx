@@ -159,9 +159,9 @@ export default function InfluencerMarketplace() {
                 className="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl hover:shadow-influencer-500/5 hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col"
               >
                 <div className="block aspect-[4/3] relative overflow-hidden bg-gray-50">
-                  {product.images?.[0]?.url ? (
+                  {product.images?.[0]?.imageUrl ? (
                     <img 
-                      src={product.images[0].url} 
+                      src={product.images[0].imageUrl} 
                       alt={product.nameFr} 
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
                     />

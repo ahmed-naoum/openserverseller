@@ -20,56 +20,66 @@ model Role {
   @@map("roles")
 }
 
+model PasswordReset {
+  id        Int      @id @default(autoincrement())
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("password_resets")
+}
+
 model User {
-  id              Int       @id @default(autoincrement())
-  uuid            String    @unique @default(uuid())
-  email           String?   @unique
-  phone           String?   @unique
-  password        String
-  roleId          Int
-  role            Role      @relation(fields: [roleId], references: [id])
-  
+  id       Int     @id @default(autoincrement())
+  uuid     String  @unique @default(uuid())
+  email    String? @unique
+  phone    String? @unique
+  password String
+  roleId   Int
+  role     Role    @relation(fields: [roleId], references: [id])
+
   // Seller-Affiliate mode switching
-  mode            String    @default("SELLER") // SELLER, AFFILIATE
-  
+  mode String @default("SELLER") // SELLER, AFFILIATE
+
   // Influencer fields
-  referralCode    String?   @unique
-  isInfluencer    Boolean   @default(false)
-  totalEarnings   Float     @default(0)
-  
+  referralCode  String? @unique
+  isInfluencer  Boolean @default(false)
+  totalEarnings Float   @default(0)
+
   isActive        Boolean   @default(false)
   kycStatus       String    @default("PENDING")
   emailVerifiedAt DateTime?
   phoneVerifiedAt DateTime?
   lastLoginAt     DateTime?
-  
+
   // Tracking
-  registrationIp  String?
-  detectedCity    String?
-  
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  deletedAt       DateTime?
+  registrationIp String?
+  detectedCity   String?
 
-  profile         UserProfile?
-  kycDocuments    KycDocument[]
-  brands          Brand[]
-  leadImports     LeadImportBatch[]
-  leads           Lead[]
-  assignedLeads   Lead[]          @relation("AgentLeads")
-  orders          Order[]
-  wallet          Wallet?
-  payoutRequests  PayoutRequest[] @relation("VendorPayouts")
-  notifications   Notification[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
-  ownedProducts    Product[]          @relation("ProductOwner")
-  inventory        ProductInventory[]
-  claims           AffiliateClaim[]
-  supportRequests  SupportRequest[]
+  profile        UserProfile?
+  kycDocuments   KycDocument[]
+  brands         Brand[]
+  leadImports    LeadImportBatch[]
+  leads          Lead[]
+  assignedLeads  Lead[]            @relation("AgentLeads")
+  orders         Order[]
+  wallet         Wallet?
+  payoutRequests PayoutRequest[]   @relation("VendorPayouts")
+  notifications  Notification[]
 
-  conversations    ConversationParticipant[]
-  messages         Message[]
-  activityLogs     ActivityLog[]
+  ownedProducts   Product[]          @relation("ProductOwner")
+  inventory       ProductInventory[]
+  claims          AffiliateClaim[]
+  supportRequests SupportRequest[]
+
+  conversations ConversationParticipant[]
+  messages      Message[]
+  activityLogs  ActivityLog[]
 
   // Agent/Lead management relations
   leadStatusHistories LeadStatusHistory[]
@@ -77,15 +87,16 @@ model User {
   leadAssignments     LeadAssignment[]
 
   // Influencer relations
-  referralLinks    ReferralLink[]
-  commissions      InfluencerCommission[]
+  referralLinks ReferralLink[]
+  commissions   InfluencerCommission[]
 
   // Agent-Influencer assignment relations
-  agentAssignments       AgentInfluencerAssignment[] @relation("AgentAssignments")
-  influencerAssignments  AgentInfluencerAssignment[] @relation("InfluencerAssignments")
+  agentAssignments      AgentInfluencerAssignment[] @relation("AgentAssignments")
+  influencerAssignments AgentInfluencerAssignment[] @relation("InfluencerAssignments")
 
   orderStatusHistories OrderStatusHistory[]
   productionJobs       ProductionJob[]
+  favorites            Favorite[]
 
   @@map("users")
 }
@@ -99,7 +110,7 @@ model UserProfile {
   address   String?
   language  String  @default("fr")
   metadata  Json?
-  
+
   // Influencer Specific
   instagramUsername  String?
   instagramFollowers Int?
@@ -142,17 +153,17 @@ model Brand {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  bankAccounts   BrandBankAccount[]
-  leads          Lead[]
-  orders         Order[]
+  bankAccounts BrandBankAccount[]
+  leads        Lead[]
+  orders       Order[]
 
   @@map("brands")
 }
 
 model BrandBankAccount {
-  id         Int    @id @default(autoincrement())
+  id         Int     @id @default(autoincrement())
   brandId    Int
-  brand      Brand  @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  brand      Brand   @relation(fields: [brandId], references: [id], onDelete: Cascade)
   bankName   String
   ribAccount String
   iceNumber  String?
@@ -177,38 +188,51 @@ model Category {
 }
 
 model Product {
-  id                Int      @id @default(autoincrement())
-  sku               String   @unique
-  nameAr            String
-  nameFr            String
-  nameEn            String?
-  description       String?
-  categoryId        Int
-  category          Category @relation(fields: [categoryId], references: [id])
+  id              Int     @id @default(autoincrement())
+  sku             String  @unique
+  ref             String? @unique // URL-friendly reference string
+  nameAr          String
+  nameFr          String
+  nameEn          String?
+  description     String?
+  longDescription String? // Rich HTML content
+
+  categories Category[] // Implicit M-To-M relation
+
   baseCostMad       Float
   retailPriceMad    Float
-  isCustomizable    Boolean  @default(true)
-  minProductionDays Int      @default(3)
-  stockQuantity     Int      @default(0)
-  
-  // Arch modifications
-  ownerId           Int?
-  owner             User?     @relation("ProductOwner", fields: [ownerId], references: [id])
-  visibility        String    @default("REGULAR") // REGULAR, AFFILIATE, NONE
-  status            String    @default("APPROVED") // PENDING, APPROVED, REJECTED
-  
-  isActive          Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  isCustomizable    Boolean @default(true)
+  minProductionDays Int     @default(3)
+  stockQuantity     Int     @default(0)
+  stockStatus       String  @default("available") // "available", "out_of_stock", "pre_order"
 
-  images           ProductImage[]
-  orderItems       OrderItem[]
-  inventories      ProductInventory[]
+  // Downloads and Links
+  ficheTechniqueUrl String?
+  canvaLink         String?
+  mockupLink        String?
+
+  // Arch modifications
+  ownerId         Int?
+  owner           User?    @relation("ProductOwner", fields: [ownerId], references: [id])
+  visibility      String   @default("REGULAR") // REGULAR, AFFILIATE, NONE
+  status          String   @default("APPROVED") // PENDING, APPROVED, REJECTED
+  videoUrls       String[] @default([])
+  landingPageUrls String[] @default([])
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  images               ProductImage[]
+  orderItems           OrderItem[]
+  inventories          ProductInventory[]
   warehouseInventories Inventory[]
-  brandCustomizations BrandProductCustomization[]
-  claims           AffiliateClaim[]
-  referralLinks    ReferralLink[]
-  supportRequests  SupportRequest[]
+  brandCustomizations  BrandProductCustomization[]
+  claims               AffiliateClaim[]
+  referralLinks        ReferralLink[]
+  supportRequests      SupportRequest[]
+  wholesalePrices      WholesalePriceTier[]
+  favorites            Favorite[]
 
   @@map("products")
 }
@@ -222,6 +246,41 @@ model ProductImage {
   sortOrder Int     @default(0)
 
   @@map("product_images")
+}
+
+model WholesalePriceTier {
+  id           Int      @id @default(autoincrement())
+  productId    Int
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  minQuantity  Int
+  maxQuantity  Int
+  pricePerUnit Float
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("wholesale_price_tiers")
+}
+
+model Favorite {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@map("favorites")
+}
+
+model PlatformSettings {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique // e.g. "site_name", "fees", "media"
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("platform_settings")
 }
 
 model LeadImportBatch {
@@ -241,11 +300,11 @@ model LeadImportBatch {
 }
 
 model Lead {
-  id              Int       @id @default(autoincrement())
+  id              Int              @id @default(autoincrement())
   vendorId        Int
-  vendor          User      @relation(fields: [vendorId], references: [id])
+  vendor          User             @relation(fields: [vendorId], references: [id])
   brandId         Int?
-  brand           Brand?    @relation(fields: [brandId], references: [id])
+  brand           Brand?           @relation(fields: [brandId], references: [id])
   importBatchId   Int?
   importBatch     LeadImportBatch? @relation(fields: [importBatchId], references: [id])
   fullName        String
@@ -253,33 +312,33 @@ model Lead {
   whatsapp        String?
   city            String?
   address         String?
-  status          String    @default("NEW")
+  status          String           @default("NEW")
   assignedAgentId Int?
-  assignedAgent   User?     @relation("AgentLeads", fields: [assignedAgentId], references: [id])
+  assignedAgent   User?            @relation("AgentLeads", fields: [assignedAgentId], references: [id])
   notes           String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
-  order Order?
-  referralLinkId  Int?
-  referralLink    ReferralLink? @relation(fields: [referralLinkId], references: [id])
-  statusHistory   LeadStatusHistory[]
-  callLogs        CallLog[]
-  assignments     LeadAssignment[]
+  order          Order?
+  referralLinkId Int?
+  referralLink   ReferralLink?       @relation(fields: [referralLinkId], references: [id])
+  statusHistory  LeadStatusHistory[]
+  callLogs       CallLog[]
+  assignments    LeadAssignment[]
 
   @@map("leads")
 }
 
 model LeadStatusHistory {
-  id         Int      @id @default(autoincrement())
-  leadId     Int
-  lead       Lead     @relation(fields: [leadId], references: [id])
-  oldStatus  String
-  newStatus  String
-  changedBy  Int
-  changer    User     @relation(fields: [changedBy], references: [id])
-  notes      String?
-  createdAt  DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+  leadId    Int
+  lead      Lead     @relation(fields: [leadId], references: [id])
+  oldStatus String
+  newStatus String
+  changedBy Int
+  changer   User     @relation(fields: [changedBy], references: [id])
+  notes     String?
+  createdAt DateTime @default(now())
 
   @@map("lead_status_history")
 }
@@ -291,7 +350,7 @@ model CallLog {
   agentId             Int
   agent               User     @relation(fields: [agentId], references: [id])
   callDurationSeconds Int?
-  outcome             String   // ANSWERED, NO_ANSWER, BUSY, etc.
+  outcome             String // ANSWERED, NO_ANSWER, BUSY, etc.
   recordingUrl        String?
   notes               String?
   createdAt           DateTime @default(now())
@@ -312,43 +371,43 @@ model LeadAssignment {
 }
 
 model Order {
-  id              Int      @id @default(autoincrement())
-  orderNumber     String   @unique
-  vendorId        Int
-  vendor          User     @relation(fields: [vendorId], references: [id])
-  brandId         Int
-  brand           Brand    @relation(fields: [brandId], references: [id])
-  leadId          Int?     @unique
-  lead            Lead?    @relation(fields: [leadId], references: [id])
-  customerName    String
-  customerPhone   String
-  customerCity    String
-  customerAddress String
-  totalAmountMad  Float
+  id               Int      @id @default(autoincrement())
+  orderNumber      String   @unique
+  vendorId         Int
+  vendor           User     @relation(fields: [vendorId], references: [id])
+  brandId          Int
+  brand            Brand    @relation(fields: [brandId], references: [id])
+  leadId           Int?     @unique
+  lead             Lead?    @relation(fields: [leadId], references: [id])
+  customerName     String
+  customerPhone    String
+  customerCity     String
+  customerAddress  String
+  totalAmountMad   Float
   vendorEarningMad Float
-  platformFeeMad  Float
-  status          String   @default("PENDING")
-  paymentMethod   String   @default("COD")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  platformFeeMad   Float
+  status           String   @default("PENDING")
+  paymentMethod    String   @default("COD")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  items OrderItem[]
-  walletTransactions WalletTransaction[]
+  items                 OrderItem[]
+  walletTransactions    WalletTransaction[]
   influencerCommissions InfluencerCommission[]
-  statusHistory   OrderStatusHistory[]
-  shipment        Shipment?
-  returns         OrderReturn[]
-  productionJobs  ProductionJob[]
+  statusHistory         OrderStatusHistory[]
+  shipment              Shipment?
+  returns               OrderReturn[]
+  productionJobs        ProductionJob[]
 
   @@map("orders")
 }
 
 model OrderItem {
-  id              Int     @id @default(autoincrement())
+  id              Int                        @id @default(autoincrement())
   orderId         Int
-  order           Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order           Order                      @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId       Int
-  product         Product @relation(fields: [productId], references: [id])
+  product         Product                    @relation(fields: [productId], references: [id])
   quantity        Int
   unitPriceMad    Float
   totalPriceMad   Float
@@ -359,40 +418,40 @@ model OrderItem {
 }
 
 model OrderStatusHistory {
-  id          Int      @id @default(autoincrement())
-  orderId     Int
-  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  oldStatus   String?
-  newStatus   String
-  changedBy   Int
-  changedByUser User   @relation(fields: [changedBy], references: [id])
-  notes       String?
-  createdAt   DateTime @default(now())
+  id            Int      @id @default(autoincrement())
+  orderId       Int
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  oldStatus     String?
+  newStatus     String
+  changedBy     Int
+  changedByUser User     @relation(fields: [changedBy], references: [id])
+  notes         String?
+  createdAt     DateTime @default(now())
 
   @@map("order_status_history")
 }
 
 model BrandProductCustomization {
-  id            Int      @id @default(autoincrement())
-  brandId       Int
-  productId     Int
-  product       Product  @relation(fields: [productId], references: [id])
-  name          String
-  options       Json?
+  id             Int         @id @default(autoincrement())
+  brandId        Int
+  productId      Int
+  product        Product     @relation(fields: [productId], references: [id])
+  name           String
+  options        Json?
   customPriceMad Float?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  orderItems    OrderItem[]
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  orderItems     OrderItem[]
 
   @@map("brand_product_customizations")
 }
 
 model Warehouse {
-  id        Int      @id @default(autoincrement())
+  id        Int               @id @default(autoincrement())
   name      String
   location  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
   batches   ProductionBatch[]
   inventory Inventory[]
 
@@ -400,121 +459,121 @@ model Warehouse {
 }
 
 model ProductionBatch {
-  id          Int      @id @default(autoincrement())
-  batchNumber String   @unique
+  id          Int             @id @default(autoincrement())
+  batchNumber String          @unique
   warehouseId Int
-  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
-  status      String   @default("PENDING")
+  warehouse   Warehouse       @relation(fields: [warehouseId], references: [id])
+  status      String          @default("PENDING")
   completedAt DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime        @default(now())
   jobs        ProductionJob[]
 
   @@map("production_batches")
 }
 
 model ProductionJob {
-  id          Int      @id @default(autoincrement())
-  batchId     Int
-  batch       ProductionBatch @relation(fields: [batchId], references: [id])
-  orderId     Int
-  order       Order    @relation(fields: [orderId], references: [id])
-  status      String   @default("PENDING")
-  assignedTo  Int?
-  assignedUser User?    @relation(fields: [assignedTo], references: [id])
-  startedAt   DateTime?
-  completedAt DateTime?
-  createdAt   DateTime @default(now())
+  id           Int             @id @default(autoincrement())
+  batchId      Int
+  batch        ProductionBatch @relation(fields: [batchId], references: [id])
+  orderId      Int
+  order        Order           @relation(fields: [orderId], references: [id])
+  status       String          @default("PENDING")
+  assignedTo   Int?
+  assignedUser User?           @relation(fields: [assignedTo], references: [id])
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime        @default(now())
 
   @@map("production_jobs")
 }
 
 model Inventory {
-  id              Int       @id @default(autoincrement())
-  warehouseId     Int
-  warehouse       Warehouse @relation(fields: [warehouseId], references: [id])
-  productId       Int
-  product         Product   @relation(fields: [productId], references: [id])
-  quantity        Int       @default(0)
-  reservedQuantity Int      @default(0)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id               Int       @id @default(autoincrement())
+  warehouseId      Int
+  warehouse        Warehouse @relation(fields: [warehouseId], references: [id])
+  productId        Int
+  product          Product   @relation(fields: [productId], references: [id])
+  quantity         Int       @default(0)
+  reservedQuantity Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@unique([warehouseId, productId])
   @@map("inventories")
 }
 
 model Courier {
-  id        Int      @id @default(autoincrement())
+  id        Int        @id @default(autoincrement())
   name      String
   phone     String?
   email     String?
-  isActive  Boolean  @default(true)
+  isActive  Boolean    @default(true)
   shipments Shipment[]
 
   @@map("couriers")
 }
 
 model Shipment {
-  id              Int      @id @default(autoincrement())
-  orderId         Int      @unique
-  order           Order    @relation(fields: [orderId], references: [id])
-  courierId       Int
-  courier         Courier  @relation(fields: [courierId], references: [id])
-  trackingNumber  String?  @unique
-  status          String   @default("PENDING")
-  shippedAt       DateTime?
-  deliveredAt     DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  trackingEvents  ShipmentTrackingEvent[]
-  deliveryProof   ShipmentDeliveryProof?
+  id             Int                     @id @default(autoincrement())
+  orderId        Int                     @unique
+  order          Order                   @relation(fields: [orderId], references: [id])
+  courierId      Int
+  courier        Courier                 @relation(fields: [courierId], references: [id])
+  trackingNumber String?                 @unique
+  status         String                  @default("PENDING")
+  shippedAt      DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  trackingEvents ShipmentTrackingEvent[]
+  deliveryProof  ShipmentDeliveryProof?
 
   @@map("shipments")
 }
 
 model ShipmentTrackingEvent {
-  id          Int      @id @default(autoincrement())
-  shipmentId  Int
-  shipment    Shipment @relation(fields: [shipmentId], references: [id])
-  status      String
-  location    String?
-  eventTime   DateTime @default(now())
-  notes       String?
+  id         Int      @id @default(autoincrement())
+  shipmentId Int
+  shipment   Shipment @relation(fields: [shipmentId], references: [id])
+  status     String
+  location   String?
+  eventTime  DateTime @default(now())
+  notes      String?
 
   @@map("shipment_tracking_events")
 }
 
 model ShipmentDeliveryProof {
-  id          Int      @id @default(autoincrement())
-  shipmentId  Int      @unique
-  shipment    Shipment @relation(fields: [shipmentId], references: [id])
-  imageUrl    String
-  signedBy    String?
-  createdAt   DateTime @default(now())
+  id         Int      @id @default(autoincrement())
+  shipmentId Int      @unique
+  shipment   Shipment @relation(fields: [shipmentId], references: [id])
+  imageUrl   String
+  signedBy   String?
+  createdAt  DateTime @default(now())
 
   @@map("shipment_delivery_proofs")
 }
 
 model OrderReturn {
-  id          Int      @id @default(autoincrement())
-  orderId     Int
-  order       Order    @relation(fields: [orderId], references: [id])
-  reason      String
-  status      String   @default("PENDING")
-  createdAt   DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+  orderId   Int
+  order     Order    @relation(fields: [orderId], references: [id])
+  reason    String
+  status    String   @default("PENDING")
+  createdAt DateTime @default(now())
 
   @@map("order_returns")
 }
 
 model Wallet {
-  id               Int      @id @default(autoincrement())
-  userId           Int      @unique
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  balanceMad       Float    @default(0)
-  totalEarnedMad   Float    @default(0)
-  totalWithdrawnMad Float   @default(0)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                Int      @id @default(autoincrement())
+  userId            Int      @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balanceMad        Float    @default(0)
+  totalEarnedMad    Float    @default(0)
+  totalWithdrawnMad Float    @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   transactions WalletTransaction[]
 
@@ -522,32 +581,32 @@ model Wallet {
 }
 
 model WalletTransaction {
-  id             Int      @id @default(autoincrement())
-  walletId       Int
-  wallet         Wallet   @relation(fields: [walletId], references: [id])
-  type           String
-  amountMad      Float
+  id              Int      @id @default(autoincrement())
+  walletId        Int
+  wallet          Wallet   @relation(fields: [walletId], references: [id])
+  type            String
+  amountMad       Float
   balanceAfterMad Float
-  description    String?
-  orderId        Int?
-  order          Order?   @relation(fields: [orderId], references: [id])
-  createdAt      DateTime @default(now())
+  description     String?
+  orderId         Int?
+  order           Order?   @relation(fields: [orderId], references: [id])
+  createdAt       DateTime @default(now())
 
   @@map("wallet_transactions")
 }
 
 model PayoutRequest {
-  id         Int       @id @default(autoincrement())
-  vendorId   Int
-  vendor     User      @relation("VendorPayouts", fields: [vendorId], references: [id])
-  amountMad  Float
-  status     String    @default("PENDING")
-  bankName   String
-  ribAccount String
-  iceNumber  String?
+  id          Int       @id @default(autoincrement())
+  vendorId    Int
+  vendor      User      @relation("VendorPayouts", fields: [vendorId], references: [id])
+  amountMad   Float
+  status      String    @default("PENDING")
+  bankName    String
+  ribAccount  String
+  iceNumber   String?
   processedAt DateTime?
-  receiptUrl String?
-  createdAt  DateTime  @default(now())
+  receiptUrl  String?
+  createdAt   DateTime  @default(now())
 
   @@map("payout_requests")
 }
@@ -603,14 +662,14 @@ model ProductInventory {
 }
 
 model AffiliateClaim {
-  id         Int      @id @default(autoincrement())
-  userId     Int
-  user       User     @relation(fields: [userId], references: [id])
-  productId  Int
-  product    Product  @relation(fields: [productId], references: [id])
-  status     String   @default("PENDING") // PENDING, APPROVED, REJECTED, REVOKED
-  claimedAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id])
+  status    String   @default("PENDING") // PENDING, APPROVED, REJECTED, REVOKED
+  claimedAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([userId, productId])
   @@map("affiliate_claims")
@@ -620,7 +679,7 @@ model SupportRequest {
   id          Int      @id @default(autoincrement())
   userId      Int
   user        User     @relation(fields: [userId], references: [id])
-  type        String   // DELIVERY_FULFILLMENT, PRODUCT_CLAIM, senior_SUPPORT, etc.
+  type        String // DELIVERY_FULFILLMENT, PRODUCT_CLAIM, senior_SUPPORT, etc.
   subject     String
   description String
   status      String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
@@ -639,7 +698,7 @@ model SupportRequest {
 model Conversation {
   id        Int      @id @default(autoincrement())
   type      String   @default("DIRECT") // DIRECT, GROUP, SUPPORT
-  title     String?  // Optional for groups/support
+  title     String? // Optional for groups/support
   status    String   @default("ACTIVE") // ACTIVE, ARCHIVED, CLOSED
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -685,54 +744,54 @@ model Message {
 // ==========================================
 
 model ReferralLink {
-  id          Int       @id @default(autoincrement())
+  id           Int      @id @default(autoincrement())
   influencerId Int
-  influencer  User      @relation(fields: [influencerId], references: [id], onDelete: Cascade)
-  productId   Int
-  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
-  code        String    @unique
-  clicks      Int       @default(0)
-  conversions Int       @default(0)
-  earnings    Float     @default(0)
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  influencer   User     @relation(fields: [influencerId], references: [id], onDelete: Cascade)
+  productId    Int
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  code         String   @unique
+  clicks       Int      @default(0)
+  conversions  Int      @default(0)
+  earnings     Float    @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  commissions InfluencerCommission[]
+  leads       Lead[]
 
   @@unique([influencerId, productId])
   @@map("referral_links")
-
-  commissions      InfluencerCommission[]
-  leads            Lead[]
 }
 
 model InfluencerCampaign {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   name        String
-  slug        String   @unique
+  slug        String    @unique
   description String?
-  productIds  Int[]    // Array of product IDs
-  commission  Float    // Percentage (e.g., 10 = 10%)
+  productIds  Int[] // Array of product IDs
+  commission  Float // Percentage (e.g., 10 = 10%)
   startDate   DateTime?
   endDate     DateTime?
-  status      String   @default("DRAFT") // DRAFT, ACTIVE, PAUSED, ENDED
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status      String    @default("DRAFT") // DRAFT, ACTIVE, PAUSED, ENDED
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@map("influencer_campaigns")
 }
 
 model InfluencerCommission {
-  id             Int       @id @default(autoincrement())
+  id             Int          @id @default(autoincrement())
   influencerId   Int
-  influencer     User      @relation(fields: [influencerId], references: [id], onDelete: Cascade)
+  influencer     User         @relation(fields: [influencerId], references: [id], onDelete: Cascade)
   referralLinkId Int
   referralLink   ReferralLink @relation(fields: [referralLinkId], references: [id])
   orderId        Int?
-  order          Order?    @relation(fields: [orderId], references: [id])
+  order          Order?       @relation(fields: [orderId], references: [id])
   amount         Float
-  status         String    @default("PENDING") // PENDING, APPROVED, PAID
+  status         String       @default("PENDING") // PENDING, APPROVED, PAID
   paidAt         DateTime?
-  createdAt      DateTime  @default(now())
+  createdAt      DateTime     @default(now())
 
   @@map("influencer_commissions")
 }
@@ -742,12 +801,12 @@ model InfluencerCommission {
 // ==========================================
 
 model AgentInfluencerAssignment {
-  id            Int      @id @default(autoincrement())
-  agentId       Int
-  agent         User     @relation("AgentAssignments", fields: [agentId], references: [id], onDelete: Cascade)
-  influencerId  Int
-  influencer    User     @relation("InfluencerAssignments", fields: [influencerId], references: [id], onDelete: Cascade)
-  assignedAt    DateTime @default(now())
+  id           Int      @id @default(autoincrement())
+  agentId      Int
+  agent        User     @relation("AgentAssignments", fields: [agentId], references: [id], onDelete: Cascade)
+  influencerId Int
+  influencer   User     @relation("InfluencerAssignments", fields: [influencerId], references: [id], onDelete: Cascade)
+  assignedAt   DateTime @default(now())
 
   @@unique([agentId, influencerId])
   @@map("agent_influencer_assignments")

@@ -134,7 +134,7 @@ export const getInventory = async (req: Request, res: Response) => {
         product: {
           include: {
             images: { where: { isPrimary: true }, take: 1 },
-            category: true,
+            categories: true,
           },
         },
         warehouse: true,

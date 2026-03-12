@@ -1,4 +1,4 @@
-# OpenSeller.ma - Moroccan Dropshipping Platform
+# SILACOD - Moroccan Dropshipping Platform
 
 [![Architecture](https://img.shields.io/badge/Documentation-Technical_Architecture-blue)](./TECHNICAL.md)
 
@@ -76,7 +76,7 @@ npm run dev
 ## 📁 Project Structure
 
 ```
-openseller/
+silacod/
 ├── backend/
 │   ├── prisma/
 │   │   ├── schema.prisma    # Database schema
@@ -105,9 +105,9 @@ After running the seed:
 
 | Role | Email | Password |
 |------|-------|----------|
-| Super Admin | admin@openseller.ma | password123 |
-| Vendor | vendor@openseller.ma | password123 |
-| Agent | agent@openseller.ma | password123 |
+| Super Admin | admin@silacod.com | password123 |
+| Vendor | vendor@silacod.com | password123 |
+| Agent | agent@silacod.com | password123 |
 
 ## 📡 API Endpoints
 

@@ -52,7 +52,7 @@ export const sendOTPWhatsApp = async (phone: string, otp: string): Promise<any> 
     to: phone,
     type: 'text',
     text: {
-      body: `🔒 *OpenSeller.ma*\n\nVotre code de vérification est: *${otp}*\n\nCe code expire dans ${process.env.OTP_EXPIRY_MINUTES || 5} minutes.`,
+      body: `🔒 *SILACOD*\n\nVotre code de vérification est: *${otp}*\n\nCe code expire dans ${process.env.OTP_EXPIRY_MINUTES || 5} minutes.`,
     },
   });
 };
@@ -91,7 +91,7 @@ export const sendDeliveryUpdateWhatsApp = async (
       body: `🚚 *Mise à jour de livraison*\n\n` +
         `Commande: *${orderNumber}*\n` +
         `Statut: *${status}*${tracking}\n\n` +
-        `_OpenSeller.ma_`,
+        `_SILACOD_`,
     },
   });
 };
@@ -110,7 +110,7 @@ export const sendPayoutNotificationWhatsApp = async (
       body: `${statusEmoji} *Mise à jour de retrait*\n\n` +
         `Montant: *${amount} MAD*\n` +
         `Statut: *${status}*\n\n` +
-        `_OpenSeller.ma_`,
+        `_SILACOD_`,
     },
   });
 };

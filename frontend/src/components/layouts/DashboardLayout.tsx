@@ -55,6 +55,7 @@ const navigation = {
     { name: 'Utilisateurs', href: '/admin/users', icon: 'users' },
     { name: 'Clients', href: '/admin/customers', icon: 'users' },
     { name: 'Marques', href: '/admin/brands', icon: 'tag' },
+    { name: 'Catégories', href: '/admin/categories', icon: 'tag' },
     { name: 'Produits', href: '/admin/products', icon: 'package' },
     { name: 'Demandes Affiliation', href: '/admin/affiliate-claims', icon: 'user-check' },
     { name: 'Gestion Campagnes', href: '/admin/campaigns', icon: 'zap' },
@@ -174,7 +175,7 @@ export default function DashboardLayout() {
             }`}>
               <span className="text-white font-bold text-lg">O</span>
             </div>
-            <span className="font-bold text-xl text-gray-900">OpenSeller</span>
+            <span className="font-bold text-xl text-gray-900">SILACOD</span>
           </Link>
         </div>
 

@@ -116,9 +116,9 @@ export default function ReferralForm() {
         >
           <div className="bg-white rounded-[2rem] p-4 shadow-xl shadow-gray-200/40 border border-gray-100">
             <div className="aspect-[4/3] rounded-3xl overflow-hidden bg-gray-50 mb-6 relative">
-              {product.images?.[0]?.url ? (
+              {product.images?.[0]?.imageUrl ? (
                 <img 
-                  src={product.images[0].url} 
+                  src={product.images[0].imageUrl} 
                   alt={product.nameFr} 
                   className="w-full h-full object-cover"
                 />

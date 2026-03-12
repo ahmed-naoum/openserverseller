@@ -109,7 +109,7 @@ export default function HomePage() {
                 <span className="text-white font-bold text-2xl tracking-tighter">OS</span>
               </div>
               <span className="font-extrabold text-2xl bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-700">
-                OpenSeller
+                SILACOD
               </span>
             </Link>
             
@@ -450,7 +450,7 @@ export default function HomePage() {
             <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold">O</span>
             </div>
-            <span className="font-bold text-gray-900 text-xl">OpenSeller.ma</span>
+            <span className="font-bold text-gray-900 text-xl">SILACOD</span>
           </div>
           <div className="flex items-center gap-6 text-sm font-medium text-gray-500">
             <Link to="/register" className="hover:text-gray-900">Vendeurs</Link>
@@ -459,7 +459,7 @@ export default function HomePage() {
             <a href="#" className="hover:text-gray-900">Conditions</a>
           </div>
           <div className="text-sm text-gray-400">
-            © 2026 OpenSeller.ma. Tous droits réservés.
+            © 2026 SILACOD. Tous droits réservés.
           </div>
         </div>
       </footer>

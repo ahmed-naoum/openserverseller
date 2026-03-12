@@ -157,7 +157,7 @@ export default function RegisterPage() {
             <div className="w-12 h-12 bg-primary-500 rounded-xl flex items-center justify-center">
               <span className="text-white font-bold text-2xl">O</span>
             </div>
-            <span className="font-bold text-2xl text-gray-900">OpenSeller.ma</span>
+            <span className="font-bold text-2xl text-gray-900">SILACOD</span>
           </Link>
           <h1 className="text-2xl font-bold text-gray-900">Créer votre compte</h1>
           <p className="text-gray-600 mt-2">Rejoignez des centaines de vendeurs</p>
@@ -275,7 +275,7 @@ export default function RegisterPage() {
               <>
                 <div className="text-center mb-6">
                   <h3 className="text-lg font-semibold text-gray-900">Choisissez votre rôle</h3>
-                  <p className="text-gray-600 text-sm mt-1">Comment souhaitez-vous utiliser OpenSeller?</p>
+                  <p className="text-gray-600 text-sm mt-1">Comment souhaitez-vous utiliser SILACOD?</p>
                 </div>
 
                 <div className="space-y-3">

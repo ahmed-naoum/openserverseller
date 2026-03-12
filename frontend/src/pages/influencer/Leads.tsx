@@ -372,7 +372,7 @@ export default function InfluencerLeads() {
                     {pushedLeads.map((commission) => {
                       const status = (commission.order?.status || 'PENDING') as keyof typeof STATUS_BADGES;
                       const badge = STATUS_BADGES[status] || { label: status, color: 'bg-gray-100 text-gray-800' };
-                      const productImage = (commission as any).referralLink?.product?.images?.[0]?.url;
+                      const productImage = (commission as any).referralLink?.product?.images?.[0]?.imageUrl;
                       return (
                         <tr key={commission.id} className="hover:bg-gray-50/50 transition-colors">
                           <td className="px-6 py-4">

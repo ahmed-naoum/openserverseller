@@ -47,7 +47,7 @@ export const productSchema = z.object({
   nameFr: z.string().min(2, 'French name is required').max(200),
   nameEn: z.string().max(200).optional(),
   description: z.string().max(5000).optional(),
-  categoryId: z.number().int().positive('Valid category required'),
+  categoryIds: z.array(z.number().int().positive()).min(1, 'At least one category required'),
   baseCostMad: z.number().positive('Base cost must be positive'),
   retailPriceMad: z.number().positive('Retail price must be positive'),
   minProductionDays: z.number().int().min(1).max(365).default(3),

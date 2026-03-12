@@ -185,7 +185,7 @@ router.get(
     const link = await prisma.referralLink.findUnique({
       where: { code: code as string },
       include: {
-        product: { include: { images: { orderBy: { sortOrder: 'asc' } }, category: true } },
+        product: { include: { images: { orderBy: { sortOrder: 'asc' } }, categories: true } },
         influencer: { include: { profile: true } }
       }
     }) as any;
@@ -338,8 +338,16 @@ router.post(
       });
     });
 
-    // Emit to all agents in the callcenter room
-    io.to('callcenter').emit('new-available-lead', {
+    const influencerProfile = await prisma.userProfile.findUnique({
+      where: { userId }
+    });
+
+    const assignments = await prisma.agentInfluencerAssignment.findMany({
+      where: { influencerId: userId },
+      select: { agentId: true }
+    });
+
+    const leadData = {
       id: updatedLead.id,
       fullName: updatedLead.fullName,
       phone: updatedLead.phone,
@@ -349,7 +357,15 @@ router.post(
         name: (lead.referralLink.product as any).nameFr || (lead.referralLink.product as any).nameAr,
         image: (lead.referralLink.product as any).images?.[0]?.url
       } : null,
+      influencer: {
+        id: userId,
+        fullName: influencerProfile?.fullName || req.user!.email
+      },
       createdAt: updatedLead.createdAt
+    };
+
+    assignments.forEach(a => {
+      io.to(`user:${a.agentId}`).emit('new-available-lead', leadData);
     });
 
     res.json({

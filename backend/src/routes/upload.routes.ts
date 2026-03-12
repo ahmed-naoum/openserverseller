@@ -1,11 +1,21 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import multer from 'multer';
+import sharp from 'sharp';
+import path from 'path';
+import fs from 'fs';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
+import { io } from '../index.js';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+// Ensure uploads/products directory exists
+const productsUploadDir = path.join(process.cwd(), 'uploads', 'products');
+if (!fs.existsSync(productsUploadDir)) {
+  fs.mkdirSync(productsUploadDir, { recursive: true });
+}
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -16,6 +26,8 @@ const storage = multer.diskStorage({
     cb(null, uniqueSuffix + '-' + file.originalname);
   },
 });
+
+const productImageStorage = multer.memoryStorage();
 
 const upload = multer({
   storage,
@@ -30,6 +42,73 @@ const upload = multer({
   },
 });
 
+const productImageUpload = multer({
+  storage: productImageStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Seuls les formats PNG, JPG et JPEG sont acceptés'));
+    }
+  },
+});
+
+// ─── Product Images Upload (PNG/JPG → WebP) ─────────────────────────
+router.post(
+  '/product-images',
+  authenticate,
+  authorize('SUPER_ADMIN', 'ADMIN', 'GROSSELLER'),
+  productImageUpload.array('images', 10),
+  asyncHandler(async (req, res) => {
+    if (!req.files || (req.files as Express.Multer.File[]).length === 0) {
+      throw new AppException(400, 'Aucune image envoyée');
+    }
+
+    const files = req.files as Express.Multer.File[];
+    const socketId = req.body.socketId;
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const results: { url: string; filename: string; size: number }[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const webpFilename = `${Date.now()}-${Math.round(Math.random() * 1e6)}.webp`;
+      const outputPath = path.join(productsUploadDir, webpFilename);
+
+      // Convert to WebP
+      const info = await sharp(file.buffer)
+        .resize({ width: 1200, withoutEnlargement: true })
+        .webp({ quality: 82 })
+        .toFile(outputPath);
+
+      const fileUrl = `${baseUrl}/uploads/products/${webpFilename}`;
+
+      results.push({
+        url: fileUrl,
+        filename: webpFilename,
+        size: info.size,
+      });
+
+      // Emit progress via Socket.IO
+      if (socketId) {
+        io.to(socketId).emit('upload-progress', {
+          current: i + 1,
+          total: files.length,
+          filename: file.originalname,
+          url: fileUrl,
+        });
+      }
+    }
+
+    res.json({
+      status: 'success',
+      data: { images: results },
+    });
+  })
+);
+
+// ─── Generic image upload ─────────────────────────────────────────────
 router.post(
   '/image',
   authenticate,
