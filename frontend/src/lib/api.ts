@@ -80,8 +80,17 @@ export const authApi = {
     api.post('/auth/forgot-password', data),
   resetPassword: (data: { token: string; password: string }) =>
     api.post('/auth/reset-password', data),
+  verifyResetToken: (token: string) =>
+    api.get(`/auth/verify-reset-token/${token}`),
   verifyOtp: (data: { email?: string; phone?: string; otp: string }) =>
     api.post('/auth/verify-otp', data),
+  googleAuth: (data: { credential: string; role?: string }) =>
+    api.post('/auth/google', data),
+  login2FA: (data: { twoFactorToken: string; code: string }) =>
+    api.post('/auth/login/2fa', data),
+  setup2FA: () => api.post('/auth/2fa/setup'),
+  verify2FA: (data: { code: string; secret?: string }) =>
+    api.post('/auth/2fa/verify', data),
 };
 
 export const brandsApi = {
@@ -103,6 +112,8 @@ export const productsApi = {
   updateStatus: (id: string, data: { status: string }) => api.patch(`/products/${id}/status`, data),
   customize: (id: string, data: any) => api.post(`/products/${id}/customize`, data),
   delete: (id: string) => api.delete(`/products/${id}`),
+  cloneForUser: (id: string, data: { userId: number; newSku?: string; newName?: string }) =>
+    api.post(`/products/${id}/clone`, data),
 };
 
 export const leadsApi = {
@@ -110,6 +121,8 @@ export const leadsApi = {
     api.get('/leads', { params }),
   create: (data: any) => api.post('/leads', data),
   import: (data: { brandId: string; leads: any[] }) => api.post('/leads/import', data),
+  importWithProduct: (data: { productId: number; leads: any[] }) => api.post('/leads/import', data),
+  getMyProducts: () => api.get('/leads/my-products'),
   updateStatus: (id: string, data: { status: string; notes?: string }) =>
     api.patch(`/leads/${id}/status`, data),
   assign: (id: string, data: { agentId: string }) => api.post(`/leads/${id}/assign`, data),
@@ -184,13 +197,16 @@ export const adminApi = {
   activateUser: (uuid: string) => api.patch(`/users/${uuid}/activate`),
   deactivateUser: (uuid: string) => api.patch(`/users/${uuid}/deactivate`),
   updateKycStatus: (uuid: string, status: string) => api.patch(`/users/${uuid}/kyc-status`, { status }),
+  reset2FA: (uuid: string) => api.post(`/users/${uuid}/reset-2fa`),
+  sendPasswordResetLink: (uuid: string) => api.post(`/users/${uuid}/send-password-reset`),
   approveBrand: (id: string) => api.post(`/brands/${id}/approve`),
   rejectBrand: (id: string) => api.post(`/brands/${id}/reject`),
   approvePayout: (id: string, data?: { receiptUrl?: string }) =>
     api.patch(`/payouts/${id}/approve`, data),
   rejectPayout: (id: string) => api.patch(`/payouts/${id}/reject`),
   getAffiliateClaims: (params?: { status?: string }) => api.get('/admin/affiliate-claims', { params }),
-  updateAffiliateClaim: (id: number, status: string) => api.patch(`/admin/affiliate-claims/${id}`, { status }),
+  updateAffiliateClaim: (id: number, data: { status: string; actionType?: string; cloneName?: string; cloneDescription?: string; clonePrice?: number; cloneImageUrls?: string[] }) => 
+    api.patch(`/admin/affiliate-claims/${id}`, data),
   // Campaigns
   getCampaigns: () => api.get('/admin/campaigns'),
   createCampaign: (data: any) => api.post('/admin/campaigns', data),
@@ -231,7 +247,7 @@ export const fulfillmentApi = {
     api.get('/fulfillment/my-requests', { params }),
   adminListRequests: (params?: { status?: string; type?: string; page?: number; limit?: number }) =>
     api.get('/fulfillment', { params }),
-  fulfillRequest: (id: string, data: { actionType: string; productId?: number; quantity?: number }) =>
+  fulfillRequest: (id: string, data: { actionType: string; productId?: number; quantity?: number; cloneName?: string; cloneDescription?: string; clonePrice?: number; cloneImageUrls?: string[] }) =>
     api.post(`/fulfillment/${id}/fulfill`, data),
   rejectRequest: (id: string) =>
     api.patch(`/fulfillment/${id}/reject`),
@@ -268,9 +284,15 @@ export const influencerApi = {
 };
 
 export const marketplaceApi = {
-  products: (params?: { view?: 'REGULAR' | 'AFFILIATE'; category?: string; search?: string; page?: number; limit?: number }) =>
+  products: (params?: { view?: 'REGULAR' | 'AFFILIATE' | 'INFLUENCER'; category?: string; search?: string; page?: number; limit?: number }) =>
     api.get('/public/marketplace/products', { params }),
   stats: () => api.get('/public/marketplace/stats'),
 };
-
-
+export const announcementApi = {
+  getAdminAnnouncements: () => api.get('/announcements'),
+  createAnnouncement: (data: any) => api.post('/announcements', data),
+  updateAnnouncement: (id: number, data: any) => api.patch(`/announcements/${id}`, data),
+  toggleAnnouncement: (id: number, isActive: boolean) => api.patch(`/announcements/${id}/toggle`, { isActive }),
+  deleteAnnouncement: (id: number) => api.delete(`/announcements/${id}`),
+  getMyAnnouncements: () => api.get('/announcements/my-announcements'),
+};

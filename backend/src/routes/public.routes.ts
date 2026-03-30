@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { optionalAuth } from '../middleware/auth.js';
+import rateLimit from 'express-rate-limit';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -41,7 +42,11 @@ router.get(
   '/products/featured',
   asyncHandler(async (_req: Request, res: Response) => {
     const products = await prisma.product.findMany({
-      where: { isActive: true },
+      where: { 
+        isActive: true, 
+        status: 'APPROVED',
+        NOT: { visibility: { has: 'NONE' } }
+      },
       include: {
         categories: true,
         images: { where: { isPrimary: true }, take: 1 },
@@ -88,7 +93,7 @@ router.get(
     const where: any = {
       isActive: true,
       status: 'APPROVED',
-      visibility: view as string
+      visibility: { has: view as string }
     };
 
     if (category) {
@@ -157,8 +162,8 @@ router.get(
   '/marketplace/stats',
   asyncHandler(async (_req: Request, res: Response) => {
     const [regularCount, affiliateCount] = await Promise.all([
-      prisma.product.count({ where: { isActive: true, status: 'APPROVED', visibility: 'REGULAR' } }),
-      prisma.product.count({ where: { isActive: true, status: 'APPROVED', visibility: 'AFFILIATE' } })
+      prisma.product.count({ where: { isActive: true, status: 'APPROVED', visibility: { has: 'REGULAR' } } }),
+      prisma.product.count({ where: { isActive: true, status: 'APPROVED', visibility: { has: 'AFFILIATE' } } })
     ]);
 
     res.json({
@@ -171,8 +176,26 @@ router.get(
   })
 );
 
+// Advanced rate limiter for orders (max 3 per day per IP + User Agent)
+const orderRateLimiter = rateLimit({
+  windowMs: 24 * 60 * 60 * 1000, // 24 hours
+  max: 20,
+  keyGenerator: (req) => {
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    return `${ip}-${userAgent}`;
+  },
+  handler: (req, res, next, options) => {
+    res.status(429).json({
+      status: 'error',
+      message: 'Vous avez atteint la limite de commandes pour aujourd\'hui. Veuillez réessayer demain.',
+    });
+  },
+});
+
 router.post(
   '/leads',
+  orderRateLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { referralCode, fullName, phone, city, address } = req.body;
 

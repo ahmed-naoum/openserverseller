@@ -1,4 +1,4 @@
-// OpenSeller.ma - PostgreSQL Production Schema
+// Silacod.ma - PostgreSQL Production Schema
 
 generator client {
   provider = "prisma-client-js"
@@ -53,6 +53,11 @@ model User {
   phoneVerifiedAt DateTime?
   lastLoginAt     DateTime?
 
+  // 2FA and SSO
+  twoFactorSecret    String?
+  isTwoFactorEnabled Boolean @default(false)
+  googleId           String? @unique
+
   // Tracking
   registrationIp String?
   detectedCity   String?
@@ -97,6 +102,7 @@ model User {
   orderStatusHistories OrderStatusHistory[]
   productionJobs       ProductionJob[]
   favorites            Favorite[]
+  targetedAnnouncements Announcement[]     @relation("TargetedAnnouncements")
 
   @@map("users")
 }
@@ -199,25 +205,28 @@ model Product {
 
   categories Category[] // Implicit M-To-M relation
 
-  baseCostMad       Float
-  retailPriceMad    Float
-  isCustomizable    Boolean @default(true)
-  minProductionDays Int     @default(3)
-  stockQuantity     Int     @default(0)
-  stockStatus       String  @default("available") // "available", "out_of_stock", "pre_order"
+  baseCostMad        Float
+  retailPriceMad     Float
+  affiliatePriceMad  Float?
+  influencerPriceMad Float?
+  isCustomizable     Boolean @default(true)
+  minProductionDays  Int     @default(3)
+  stockQuantity      Int     @default(0)
+  stockStatus        String  @default("available") // "available", "out_of_stock", "pre_order"
 
   // Downloads and Links
-  ficheTechniqueUrl String?
+  ficheTechniqueUrl  String?
   canvaLink         String?
   mockupLink        String?
 
   // Arch modifications
   ownerId         Int?
   owner           User?    @relation("ProductOwner", fields: [ownerId], references: [id])
-  visibility      String   @default("REGULAR") // REGULAR, AFFILIATE, NONE
+  visibility      String[] @default(["REGULAR"]) // REGULAR, AFFILIATE, INFLUENCER, NONE
   status          String   @default("APPROVED") // PENDING, APPROVED, REJECTED
   videoUrls       String[] @default([])
   landingPageUrls String[] @default([])
+  commissionMad   Float    @default(0) // Affiliate commission per sale in MAD
 
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -622,6 +631,24 @@ model Notification {
   createdAt DateTime @default(now())
 
   @@map("notifications")
+}
+
+model Announcement {
+  id           Int      @id @default(autoincrement())
+  type         String   // GLOBAL, ROLE, USER
+  severity     String   @default("INFO") // INFO, WARNING, IMPORTANT
+  priority     Int      @default(0)
+  placement    String   @default("TOP")  // TOP, BOTTOM
+  targetRole   String?  // e.g., 'VENDOR', 'INFLUENCER', 'AGENT'
+  targetUserId Int?     
+  targetUser   User?    @relation("TargetedAnnouncements", fields: [targetUserId], references: [id], onDelete: Cascade)
+  title        String
+  content      String   @db.Text
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("announcements")
 }
 
 model MoroccanCity {

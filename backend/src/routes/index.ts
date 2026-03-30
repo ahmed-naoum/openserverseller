@@ -21,6 +21,7 @@ import fulfillmentRoutes from './fulfillment.routes.js';
 import chatRoutes from './chat.routes.js';
 import dashboardRoutes from './dashboard.routes.js';
 import influencerRoutes from './influencer.routes.js';
+import announcementRoutes from './announcement.routes.js';
 
 const router = Router();
 
@@ -53,6 +54,7 @@ router.use('/inventory', auditLog, inventoryRoutes);
 router.use('/fulfillment', fulfillmentRoutes);
 router.use('/chat', chatRoutes);
 router.use('/dashboard', dashboardRoutes);
+router.use('/announcements', announcementRoutes);
 router.use('/influencer', auditLog, influencerRoutes);
 
 export default router;

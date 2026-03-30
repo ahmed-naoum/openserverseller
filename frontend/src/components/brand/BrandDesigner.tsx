@@ -20,8 +20,8 @@ const packagingTypes = [
 export default function BrandDesigner({
   onSave,
   initialDesign,
-  primaryColor = '#22c55e',
-  secondaryColor = '#16a34a',
+  primaryColor = '#2c2f74',
+  secondaryColor = '#f26342',
   logoUrl,
 }: BrandDesignerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -294,7 +294,7 @@ export default function BrandDesigner({
                 onChange={(e) => setSelectedColor(e.target.value)}
               />
               <div className="flex gap-2">
-                {['#22c55e', '#3b82f6', '#8b5cf6', '#ef4444', '#f59e0b', '#ec4899'].map((color) => (
+                {['#2c2f74', '#f26342', '#3b82f6', '#8b5cf6', '#ef4444', '#ec4899'].map((color) => (
                   <button
                     key={color}
                     onClick={() => setSelectedColor(color)}

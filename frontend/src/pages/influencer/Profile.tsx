@@ -97,7 +97,7 @@ export default function InfluencerProfile() {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6">
       {/* Profile Header */}
       <div className="card overflow-hidden">
         <div className="h-32 bg-gradient-to-br from-influencer-500 via-influencer-400 to-purple-500" />

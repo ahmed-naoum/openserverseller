@@ -30,11 +30,11 @@ systemctl start postgresql
 systemctl enable postgresql
 
 # Create DB user & database
-read -sp "Enter a password for the 'openseller' database user: " DB_PASS
+read -sp "Enter a password for the 'silacod' database user: " DB_PASS
 echo ""
-sudo -u postgres psql -c "CREATE USER openseller WITH PASSWORD '${DB_PASS}';"
-sudo -u postgres psql -c "CREATE DATABASE openseller_db OWNER openseller;"
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE openseller_db TO openseller;"
+sudo -u postgres psql -c "CREATE USER silacod WITH PASSWORD '${DB_PASS}';"
+sudo -u postgres psql -c "CREATE DATABASE silacod_db OWNER silacod;"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE silacod_db TO silacod;"
 echo "✅ PostgreSQL ready! DATABASE_URL: postgresql://silacod:${DB_PASS}@localhost:5432/silacod_db"
 
 # ---- 4. Install Redis ----
@@ -62,9 +62,9 @@ echo ">>> [7/8] Cloning project..."
 mkdir -p /var/www
 cd /var/www
 
-if [ -d "openseller" ]; then
-  echo "Directory /var/www/openseller already exists. Pulling latest..."
-  cd openseller
+if [ -d "silacod" ]; then
+  echo "Directory /var/www/silacod already exists. Pulling latest..."
+  cd silacod
   git pull origin main
 else
   git clone https://github.com/ahmed-naoum/openserverseller.git silacod
@@ -74,7 +74,7 @@ fi
 # Backend setup
 echo ""
 echo "Setting up backend..."
-cd /var/www/openseller/backend
+cd /var/www/silacod/backend
 npm install
 
 # Create .env from template
@@ -120,7 +120,7 @@ pm2 save
 # Frontend setup
 echo ""
 echo "Setting up frontend..."
-cd /var/www/openseller/frontend
+cd /var/www/silacod/frontend
 npm install
 npm run build
 
@@ -134,7 +134,7 @@ server {
 
     # Frontend (static files)
     location / {
-        root /var/www/openseller/frontend/dist;
+        root /var/www/silacod/frontend/dist;
         index index.html;
         try_files \$uri \$uri/ /index.html;
     }
@@ -164,12 +164,12 @@ server {
 
     # Uploaded files
     location /uploads/ {
-        alias /var/www/openseller/backend/uploads/;
+        alias /var/www/silacod/backend/uploads/;
     }
 }
 NGINX_CONF
 
-ln -sf /etc/nginx/sites-available/openseller /etc/nginx/sites-enabled/
+ln -sf /etc/nginx/sites-available/silacod /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl restart nginx
 
@@ -200,11 +200,11 @@ echo ""
 echo "  🌐 Frontend: http://${DOMAIN}"
 echo "  🔌 API:      http://${DOMAIN}/api/v1"
 echo "  📊 PM2:      pm2 status"
-echo "  📋 Logs:     pm2 logs openseller-api"
+echo "  📋 Logs:     pm2 logs silacod-api"
 echo ""
 echo "  Useful commands:"
-echo "    pm2 restart openseller-api"
-echo "    pm2 logs openseller-api"
-echo "    sudo -u postgres psql openseller_db"
-echo "    cd /var/www/openseller && bash deploy.sh"
+echo "    pm2 restart silacod-api"
+echo "    pm2 logs silacod-api"
+echo "    sudo -u postgres psql silacod_db"
+echo "    cd /var/www/silacod && bash deploy.sh"
 echo ""

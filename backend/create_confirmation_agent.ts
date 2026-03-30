@@ -17,10 +17,10 @@ async function main() {
     }
 
     const agent = await prisma.user.upsert({
-        where: { email: 'confirmation@openseller.ma' },
+        where: { email: 'confirmation@silacod.ma' },
         update: {},
         create: {
-            email: 'confirmation@openseller.ma',
+            email: 'confirmation@silacod.ma',
             phone: '+212699999999',
             password: hashedPassword,
             roleId: role.id,

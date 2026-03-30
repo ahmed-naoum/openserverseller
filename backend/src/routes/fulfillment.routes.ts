@@ -161,13 +161,17 @@ router.post(
     authenticate,
     authorize('SUPER_ADMIN', 'CONFIRMATION_AGENT'),
     [
-        body('actionType').notEmpty().isIn(['GRANT_INVENTORY', 'GRANT_CLAIM', 'CLOSE_ONLY', 'CLOSE']),
+        body('actionType').notEmpty().isIn(['GRANT_INVENTORY', 'GRANT_CLAIM', 'CLONE_PRODUCT', 'CLOSE_ONLY', 'CLOSE']),
         body('productId').optional().isInt(),
-        body('quantity').optional().isInt({ min: 1 })
+        body('quantity').optional().isInt({ min: 1 }),
+        body('cloneName').optional().isString(),
+        body('cloneDescription').optional().isString(),
+        body('clonePrice').optional().isFloat({ min: 0 }),
+        body('cloneImageUrls').optional().isArray()
     ],
     asyncHandler(async (req, res) => {
         const { id } = req.params;
-        const { actionType, productId, quantity } = req.body;
+        const { actionType, productId, quantity, cloneName, cloneDescription, clonePrice, cloneImageUrls } = req.body;
 
         const supportRequest = await prisma.supportRequest.findUnique({
             where: { id: Number(id) }
@@ -177,8 +181,8 @@ router.post(
             throw new AppException(404, 'Support request not found');
         }
 
-        if (supportRequest.status === 'RESOLVED' || supportRequest.status === 'CLOSED') {
-            throw new AppException(400, 'Request is already resolved or closed');
+        if (supportRequest.status === 'RESOLVED') {
+            throw new AppException(400, 'Request is already resolved');
         }
 
         await prisma.$transaction(async (tx) => {
@@ -206,6 +210,94 @@ router.post(
                         status: 'ACTIVE'
                     }
                 });
+            } else if (actionType === 'CLONE_PRODUCT') {
+                if (!finalProductId) throw new AppException(400, 'Product ID is required for cloning');
+
+                // Fetch original product
+                const original = await tx.product.findUnique({
+                    where: { id: Number(finalProductId) },
+                    include: { categories: true, images: { orderBy: { sortOrder: 'asc' } } },
+                });
+                if (!original) throw new AppException(404, 'Original product not found');
+
+                // Get user info
+                const targetUser = await tx.user.findUnique({
+                    where: { id: supportRequest.userId },
+                    include: { profile: true, role: true },
+                });
+                if (!targetUser) throw new AppException(404, 'User not found');
+
+                const cloneSku = `${original.sku}-U${supportRequest.userId}`;
+                
+                // Check if clone SKU already exists, add timestamp if needed
+                const existingSku = await tx.product.findUnique({ where: { sku: cloneSku } });
+                const finalSku = existingSku ? `${cloneSku}-${Date.now()}` : cloneSku;
+
+                const finalCloneName = cloneName || `${original.nameFr} (${targetUser.profile?.fullName || targetUser.email})`;
+
+                // Clone the product
+                const clonedProduct = await tx.product.create({
+                    data: {
+                        sku: finalSku,
+                        nameAr: cloneName || original.nameAr,
+                        nameFr: finalCloneName,
+                        nameEn: cloneName || original.nameEn,
+                        description: cloneDescription || original.description,
+                        longDescription: cloneDescription || original.longDescription,
+                        baseCostMad: Number(original.baseCostMad),
+                        retailPriceMad: clonePrice ? Number(clonePrice) : Number(original.retailPriceMad),
+                        affiliatePriceMad: original.affiliatePriceMad ? Number(original.affiliatePriceMad) : null,
+                        influencerPriceMad: original.influencerPriceMad ? Number(original.influencerPriceMad) : null,
+                        isCustomizable: original.isCustomizable,
+                        minProductionDays: original.minProductionDays,
+                        stockQuantity: original.stockQuantity,
+                        visibility: ['NONE'],
+                        status: 'APPROVED',
+                        ownerId: supportRequest.userId,
+                        videoUrls: original.videoUrls,
+                        landingPageUrls: original.landingPageUrls,
+                        commissionMad: Number(original.commissionMad),
+                        categories: {
+                            connect: (original as any).categories.map((c: any) => ({ id: c.id })),
+                        },
+                        ...((Array.isArray(cloneImageUrls) && cloneImageUrls.length > 0) ? {
+                            images: {
+                                create: cloneImageUrls.filter((u: any) => u && typeof u === 'string').map((url: string, idx: number) => ({
+                                    imageUrl: url,
+                                    isPrimary: idx === 0,
+                                    sortOrder: idx,
+                                })),
+                            },
+                        } : ((original as any).images?.length > 0) ? {
+                            images: {
+                                create: (original as any).images.map((img: any, idx: number) => ({
+                                    imageUrl: img.imageUrl,
+                                    isPrimary: idx === 0,
+                                    sortOrder: idx,
+                                })),
+                            },
+                        } : {}),
+                    },
+                });
+
+                // Grant the cloned product
+                if (targetUser.role.name === 'INFLUENCER') {
+                    await tx.affiliateClaim.create({
+                        data: {
+                            userId: supportRequest.userId,
+                            productId: clonedProduct.id,
+                            status: 'ACTIVE',
+                        },
+                    });
+                } else {
+                    await tx.productInventory.create({
+                        data: {
+                            userId: supportRequest.userId,
+                            productId: clonedProduct.id,
+                            quantity: 1,
+                        },
+                    });
+                }
             }
 
             // 2. Mark request as resolved or closed

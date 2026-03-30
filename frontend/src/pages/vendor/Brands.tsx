@@ -10,8 +10,8 @@ export default function VendorBrands() {
     name: '',
     slogan: '',
     description: '',
-    primaryColor: '#22c55e',
-    secondaryColor: '#16a34a',
+    primaryColor: '#2c2f74',
+    secondaryColor: '#f26342',
   });
 
   const { data, isLoading, refetch } = useQuery({
@@ -27,7 +27,7 @@ export default function VendorBrands() {
       await brandsApi.create(formData);
       toast.success('Marque créée avec succès!');
       setShowCreateModal(false);
-      setFormData({ name: '', slogan: '', description: '', primaryColor: '#22c55e', secondaryColor: '#16a34a' });
+      setFormData({ name: '', slogan: '', description: '', primaryColor: '#2c2f74', secondaryColor: '#f26342' });
       refetch();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erreur');
@@ -78,7 +78,7 @@ export default function VendorBrands() {
             <div key={brand.id} className="card-hover overflow-hidden">
               <div 
                 className="h-32 flex items-center justify-center"
-                style={{ backgroundColor: brand.primaryColor || '#22c55e' }}
+                style={{ backgroundColor: brand.primaryColor || '#2c2f74' }}
               >
                 {brand.logoUrl ? (
                   <img src={brand.logoUrl} alt={brand.name} className="h-20 object-contain" />

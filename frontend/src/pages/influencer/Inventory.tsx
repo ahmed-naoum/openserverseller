@@ -200,8 +200,14 @@ export default function InfluencerInventory() {
                 <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-4">SKU: {claim.product.sku}</p>
                 
                 <div className="mt-auto pt-4 border-t border-gray-50 flex items-center justify-between">
-                  <div className="text-influencer-600 font-black text-sm">
-                    {claim.product.retailPriceMad} <span className="text-[10px]">MAD</span>
+                  <div className="flex flex-col gap-1">
+                    <div className="text-[10px] font-bold text-gray-400 uppercase leading-none">Prix Influencer</div>
+                    <div className="text-influencer-600 font-black text-sm leading-none">
+                      {claim.product.influencerPriceMad || claim.product.retailPriceMad} <span className="text-[10px]">MAD</span>
+                    </div>
+                    <div className="text-[10px] font-bold text-influencer-500">
+                      Comm: {`${Math.round((claim.product.influencerPriceMad || claim.product.retailPriceMad || 0) * 0.15 * 100) / 100} MAD`}
+                    </div>
                   </div>
                   
                   {claim.status === 'APPROVED' ? (

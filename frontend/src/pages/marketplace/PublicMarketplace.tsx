@@ -114,11 +114,11 @@ export default function PublicMarketplace() {
   const { user, isAuthenticated } = useAuth();
 
   // Determine the default view based on user role/mode
-  const getDefaultView = (): 'REGULAR' | 'AFFILIATE' => {
+  const getDefaultView = (): 'REGULAR' | 'AFFILIATE' | 'INFLUENCER' => {
     if (!isAuthenticated || !user) return 'REGULAR'; // Public default
     const role = user.role || user.roleName || '';
     if (role === 'SUPER_ADMIN' || role === 'FINANCE_ADMIN') return 'REGULAR'; // Admin sees all, default to REGULAR
-    if (role === 'INFLUENCER') return 'AFFILIATE';
+    if (role === 'INFLUENCER') return 'INFLUENCER';
     if (role === 'VENDOR') return user.mode === 'AFFILIATE' ? 'AFFILIATE' : 'REGULAR';
     if (role === 'GROSSELLER') return 'REGULAR';
     return 'REGULAR';
@@ -132,7 +132,7 @@ export default function PublicMarketplace() {
     return false; // Everyone else is locked
   };
 
-  const [viewMode, setViewMode] = useState<'REGULAR' | 'AFFILIATE'>(
+  const [viewMode, setViewMode] = useState<'REGULAR' | 'AFFILIATE' | 'INFLUENCER'>(
     (searchParams.get('view') as any) || getDefaultView()
   );
   const [search, setSearch] = useState(searchParams.get('search') || '');
@@ -217,7 +217,7 @@ export default function PublicMarketplace() {
     if (window.innerWidth < 1024) setIsSidebarOpen(false);
   };
 
-  const handleViewChange = (newView: 'REGULAR' | 'AFFILIATE') => {
+  const handleViewChange = (newView: 'REGULAR' | 'AFFILIATE' | 'INFLUENCER') => {
     setViewMode(newView);
     setSearchParams(prev => {
       prev.set('view', newView);
@@ -228,128 +228,143 @@ export default function PublicMarketplace() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB] selection:bg-primary-100">
+    <div className="min-h-[calc(100vh-80px)] bg-[#F9FAFB] selection:bg-primary-100 animate-in fade-in slide-in-from-bottom-2 duration-1000 ease-out">
       
-      {/* Marketplace Hero Header */}
-      <div className="bg-white border-b border-gray-200 overflow-hidden relative">
-        <div className="absolute top-0 right-0 -mt-20 -mr-20 w-96 h-96 bg-primary-50 rounded-full blur-3xl opacity-60"></div>
-        <div className="max-w-7xl mx-auto  relative z-10 text-center lg:text-left">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+      {/* Ultimate Marketplace Hero Header */}
+      <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-12 pt-8">
+        <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-[#1a1c4b] via-[#2c2f74] to-[#4b3e8c] p-8 lg:p-10 text-white shadow-[0_20px_60px_-15px_rgba(44,47,116,0.6)] border border-white/10">
+          <div className="relative z-20 flex flex-col lg:flex-row lg:items-center justify-between gap-12">
             <div className="max-w-2xl">
               <motion.div 
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-50 text-primary-700 text-sm font-semibold mb-4 border border-primary-100"
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-white/5 backdrop-blur-xl text-white border border-white/20 text-[9px] font-black uppercase tracking-widest mb-4 shadow-2xl"
               >
-                <Sparkles className="w-4 h-4" />
-                Catalogue Public SILACOD
+                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                Sourcing Premium Actif
               </motion.div>
-              <motion.h1 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="text-4xl sm:text-5xl font-extrabold text-gray-900 tracking-tight mb-4"
-              >
-                Marketplace <span className="text-primary-600">B2B</span>
-              </motion.h1>
-              <motion.p 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="text-lg text-gray-600 max-w-xl"
-              >
-              </motion.p>
+              <h1 className="text-4xl sm:text-5xl font-black tracking-tighter mb-4 leading-[1.1]">
+                Marketplace <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">Elite</span>
+              </h1>
+              <p className="text-primary-100/80 font-medium text-base sm:text-lg leading-relaxed max-w-xl">
+                L'écosystème de produits le plus exclusif. Sourcez, affiliez, et scalez avec des marges garanties.
+              </p>
             </div>
             
-            {/* Simple View Toggle - only shown if user can toggle */}
+            {/* Premium App-like View Toggle */}
             {canToggle() && (
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
+              initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.3 }}
-              className="flex items-center p-1.5 bg-gray-100 rounded-2xl border border-gray-200 w-fit mx-auto lg:mx-0 shadow-inner"
+              transition={{ delay: 0.2, type: 'spring', stiffness: 200, damping: 20 }}
+              className="flex items-center p-2.5 bg-black/20 backdrop-blur-2xl rounded-[2rem] w-fit mx-auto lg:mx-0 shadow-inner border border-white/10"
             >
               <button
                 onClick={() => handleViewChange('REGULAR')}
-                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${
+                className={`flex items-center gap-3 px-8 py-5 rounded-[1.5rem] text-xs font-black uppercase tracking-widest transition-all duration-500 ease-out ${
                   viewMode === 'REGULAR' 
-                    ? 'bg-white text-primary-700 shadow-md ring-1 ring-gray-200' 
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'bg-white text-[#1a1c4b] shadow-[0_10px_40px_-10px_rgba(255,255,255,0.5)] scale-105 transform' 
+                    : 'text-white/60 hover:text-white hover:bg-white/10'
                 }`}
               >
-                <Store className="w-4 h-4" /> Vendeurs (B2B)
+                <Store className="w-5 h-5 flex-shrink-0" /> <span className="hidden sm:block">Vendeurs</span>
               </button>
               <button
                 onClick={() => handleViewChange('AFFILIATE')}
-                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${
+                className={`flex items-center gap-3 px-8 py-5 rounded-[1.5rem] text-xs font-black uppercase tracking-widest transition-all duration-500 ease-out ${
                   viewMode === 'AFFILIATE' 
-                    ? 'bg-white text-pink-600 shadow-md ring-1 ring-gray-200' 
-                    : 'text-gray-500 hover:text-pink-600'
+                    ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-[0_10px_40px_-10px_rgba(244,63,94,0.5)] scale-105 transform' 
+                    : 'text-white/60 hover:text-pink-300 hover:bg-white/10'
                 }`}
               >
-                <Megaphone className="w-4 h-4" /> Influenceurs
+                <Megaphone className="w-5 h-5 flex-shrink-0" /> <span className="hidden sm:block">Affiliés</span>
+              </button>
+              <button
+                onClick={() => handleViewChange('INFLUENCER')}
+                className={`flex items-center gap-3 px-8 py-5 rounded-[1.5rem] text-xs font-black uppercase tracking-widest transition-all duration-500 ease-out ${
+                  viewMode === 'INFLUENCER' 
+                    ? 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-[0_10px_40px_-10px_rgba(139,92,246,0.5)] scale-105 transform' 
+                    : 'text-white/60 hover:text-purple-300 hover:bg-white/10'
+                }`}
+              >
+                <Sparkles className="w-5 h-5 flex-shrink-0" /> <span className="hidden sm:block">Influenceurs</span>
               </button>
             </motion.div>
             )}
           </div>
+          
+          {/* Deep Cinematic Background Elements */}
+          <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-indigo-500/20 via-purple-500/5 to-transparent rounded-full blur-3xl -mr-[400px] -mt-[400px] pointer-events-none" />
+          <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-pink-500/10 via-rose-500/5 to-transparent rounded-full blur-3xl -ml-[300px] -mb-[300px] pointer-events-none" />
+          
+          {/* Subtle Grid Pattern Overlay */}
+          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] mix-blend-overlay pointer-events-none"></div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col lg:flex-row gap-8">
+      <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-12 py-12">
+        <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 relative">
           
           {/* Mobile Sidebar Toggle */}
           <button 
             onClick={() => setIsSidebarOpen(true)}
-            className="lg:hidden flex items-center justify-center gap-2 w-full bg-white border border-gray-200 py-4 rounded-xl font-bold text-gray-700 shadow-sm"
+            className="lg:hidden flex items-center justify-center gap-2 w-full bento-card py-4 text-xs font-black uppercase tracking-widest text-slate-600 shadow-sm"
           >
-            <Filter opacity-60 className="w-5 h-5" /> Filtrer par Catégorie
+            <Filter className="w-4 h-4" /> Filtrer le Catalogue
           </button>
 
-          {/* Sidebar (Desktop) */}
           <aside className="hidden lg:block w-72 flex-shrink-0">
-            <div className="sticky top-28 bg-white rounded-3xl border border-gray-200 p-6 shadow-sm overflow-hidden">
-               <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400 mb-6 flex items-center gap-2">
-                 <LayoutGrid className="w-4 h-4" /> Catégories
+            <div className="sticky top-28 bento-card border border-white/60 bg-white/70 backdrop-blur-2xl p-8 space-y-8 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] rounded-[2.5rem]">
+               <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                 <LayoutGrid size={14} /> Rayons Privés
                </h3>
-               <nav className="space-y-1">
+               <nav className="flex flex-col gap-3">
                  <button
                    onClick={() => handleCategorySelect('')}
-                   className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all ${
+                   className={`w-full flex items-center justify-between px-5 py-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all duration-300 ${
                      selectedCategory === '' 
-                       ? 'bg-primary-50 text-primary-700' 
-                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                       ? 'bg-gradient-to-r from-primary-600 to-indigo-600 text-white shadow-xl shadow-primary-500/30 scale-105' 
+                       : 'bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800 hover:scale-[1.02] border border-slate-100 shadow-sm'
                    }`}
                  >
-                   <span>Toutes les catégories</span>
-                   <ChevronRight className={`w-4 h-4 transition-transform ${selectedCategory === '' ? 'rotate-90' : ''}`} />
+                   <span>Global</span>
+                   <ChevronRight className={`w-3 h-3 transition-transform duration-300 ${selectedCategory === '' ? 'rotate-90 text-white/70' : ''}`} />
                  </button>
                  {categories.map((cat) => (
                    <button
                      key={cat.id}
                      onClick={() => handleCategorySelect(cat.slug)}
-                     className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all ${
+                     className={`w-full flex items-center justify-between px-5 py-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all duration-300 group ${
                        selectedCategory === cat.slug
-                         ? 'bg-primary-50 text-primary-700' 
-                         : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                         ? 'bg-gradient-to-r from-primary-600 to-indigo-600 text-white shadow-xl shadow-primary-500/30 scale-105' 
+                         : 'bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800 hover:scale-[1.02] border border-slate-100 shadow-sm'
                      }`}
                    >
                      <span className="truncate">{cat.nameFr}</span>
                      <div className="flex items-center gap-2">
-                       <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-black ${selectedCategory === cat.slug ? 'bg-primary-200' : 'bg-gray-100 text-gray-400'}`}>
+                       <span className={`text-[9px] px-2 py-1 rounded-lg border transition-colors ${
+                         selectedCategory === cat.slug 
+                           ? 'bg-white/20 border-white/20 text-white backdrop-blur-md' 
+                           : 'bg-slate-50 border-slate-200 text-slate-400 group-hover:bg-primary-50 group-hover:text-primary-600 group-hover:border-primary-100'
+                       }`}>
                          {cat._count.products}
                        </span>
-                       <ChevronRight className={`w-4 h-4 transition-transform ${selectedCategory === cat.slug ? 'rotate-90' : ''}`} />
                      </div>
                    </button>
                  ))}
                </nav>
 
-               <div className="mt-8 pt-6 border-t border-gray-100">
-                  <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-6 text-white text-center">
-                     <p className="text-xs font-bold uppercase tracking-widest opacity-80 mb-2">Besoin d'aide?</p>
-                     <p className="text-sm mb-4">Contactez notre service client pour un devis sur mesure.</p>
-                     <button className="w-full bg-white text-indigo-600 py-2.5 rounded-xl text-sm font-bold hover:bg-opacity-90 transition-all">Support WhatsApp</button>
+               <div className="mt-8 pt-8 border-t border-slate-200">
+                  <div className="relative overflow-hidden bg-[#0A0A0A] rounded-3xl p-6 border border-white/10 shadow-2xl group">
+                     {/* Animated Gradient Border Effect internally represented by absolute divs */}
+                     <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-20 group-hover:opacity-40 transition-opacity duration-500 blur-xl"></div>
+                     <div className="relative z-10">
+                       <p className="text-[10px] font-black text-white/50 uppercase tracking-[0.2em] mb-3 flex items-center gap-2"><Sparkles size={12} className="text-amber-400"/> Conciergerie</p>
+                       <p className="text-sm font-black text-white leading-snug tracking-tight mb-5">
+                         Vous cherchez la perle rare hors catalogue ?
+                       </p>
+                       <button className="w-full bg-white text-black py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-100 hover:scale-105 transition-all shadow-xl shadow-white/10">Sourcing Elite</button>
+                     </div>
                   </div>
                </div>
             </div>
@@ -357,18 +372,24 @@ export default function PublicMarketplace() {
 
           {/* Main Content */}
           <main className="flex-1">
-            {/* Search Bar */}
-            <div className="relative mb-8 group">
-              <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none">
-                <Search className="h-5 w-5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+            {/* Elite Search Bar */}
+            <div className="relative mb-12 group/search">
+              <div className="absolute inset-y-0 left-0 pl-8 flex items-center pointer-events-none">
+                <Search className="h-6 w-6 text-slate-300 group-focus-within/search:text-primary-500 transition-colors duration-300" />
               </div>
               <input
                 type="text"
-                placeholder="Rechercher par nom de produit, SKU..."
+                placeholder="Rechercher l'article parfait..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="block w-full pl-14 pr-6 py-4.5 bg-white border-2 border-transparent shadow-sm rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0 focus:border-primary-500 group-focus-within:shadow-xl group-focus-within:shadow-primary-500/5 transition-all text-lg font-medium"
+                className="block w-full pl-20 pr-8 py-6 bg-white/70 backdrop-blur-3xl border border-white/60 shadow-[0_8px_40px_-12px_rgba(0,0,0,0.08)] focus:shadow-[0_20px_60px_-15px_rgba(var(--color-primary-500),0.2)] focus:bg-white rounded-[2.5rem] text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-primary-500/10 transition-all text-xl font-black tracking-tight"
               />
+              {/* Optional: Command K visual prompt */}
+              <div className="absolute inset-y-0 right-0 pr-8 flex items-center pointer-events-none">
+                 <div className="hidden sm:flex items-center gap-1 px-3 py-1.5 bg-slate-100 rounded-xl border border-slate-200 text-xs font-black text-slate-400 tracking-widest uppercase shadow-inner">
+                   Ctrl K
+                 </div>
+              </div>
             </div>
 
             {/* Grid */}
@@ -378,7 +399,7 @@ export default function PublicMarketplace() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6"
+                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-8"
                 >
                   {[...Array(6)].map((_, i) => (
                     <div key={i} className="bg-white rounded-3xl h-[400px] animate-pulse border border-gray-100 shadow-sm" />
@@ -389,78 +410,122 @@ export default function PublicMarketplace() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6"
+                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-8"
                 >
                   {products.map((product, i) => (
                     <motion.div
                       layout
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.05 }}
+                      initial={{ opacity: 0, scale: 0.95, y: 30 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      transition={{ delay: i * 0.05, type: 'spring', damping: 25, stiffness: 200 }}
                       key={product.id}
-                      className="group bg-white rounded-[2rem] border border-gray-100 shadow-sm hover:shadow-2xl hover:shadow-primary-500/10 hover:-translate-y-2 transition-all duration-500 overflow-hidden flex flex-col"
+                      className="bento-card p-0 flex flex-col group/item border border-white/60 shadow-[0_15px_40px_-15px_rgba(0,0,0,0.05)] hover:shadow-[0_30px_60px_-20px_rgba(var(--color-primary-500),0.2)] bg-white/70 backdrop-blur-xl relative"
                     >
                         <Link 
                           to={`../product/${product.id}`}
-                          className="block aspect-square relative group overflow-hidden bg-gray-50"
+                          className="block aspect-square relative overflow-hidden bg-slate-100 rounded-t-[2.5rem]"
                         >
                         {product.images?.length > 0 ? (
-                          <ProductCardCarousel images={product.images} alt={product.nameFr} />
+                           <div className="w-full h-full transform transition-transform duration-700 ease-out group-hover/item:scale-110">
+                             <ProductCardCarousel images={product.images} alt={product.nameFr} />
+                           </div>
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-gray-300">
-                             <Package className="w-12 h-12" />
+                          <div className="w-full h-full flex items-center justify-center text-slate-200 transform transition-transform duration-700 ease-out group-hover/item:scale-110">
+                             <Package className="w-16 h-16 opacity-50" />
                           </div>
                         )}
-                        <div className="absolute top-4 left-4 flex flex-col gap-2">
-                           <span className="px-3 py-1 bg-white/90 backdrop-blur-sm rounded-full text-[10px] font-black uppercase tracking-widest text-gray-900 shadow-sm w-fit">
+                        
+                        {/* Dramatic Lighting Overlay */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 via-transparent to-black/10 opacity-0 group-hover/item:opacity-100 transition-opacity duration-500 pointer-events-none" />
+
+                        <div className="absolute top-5 left-5 right-5 flex items-start justify-between z-10">
+                           <span className="px-4 py-2 bg-white/90 backdrop-blur-2xl rounded-2xl border border-white/50 text-[9px] font-black uppercase tracking-widest text-slate-800 shadow-xl shadow-black/5 transform transition-transform group-hover/item:-translate-y-1">
                              {product.category?.nameFr}
                            </span>
-                           {product.userStatus?.isBought && (
-                              <span className="px-3 py-1 bg-green-500/90 backdrop-blur-sm rounded-full text-[10px] font-black uppercase tracking-widest text-white shadow-sm w-fit">
-                                Déjà acheté
-                              </span>
-                            )}
-                            {product.userStatus?.isClaimed && (
-                              <span className="px-3 py-1 bg-purple-500/90 backdrop-blur-sm rounded-full text-[10px] font-black uppercase tracking-widest text-white shadow-sm w-fit">
-                                Déjà claimé
-                              </span>
-                            )}
-                           {product.userStatus?.isPending && (
-                             <span className="px-3 py-1 bg-amber-500/90 backdrop-blur-sm rounded-full text-[10px] font-black uppercase tracking-widest text-white shadow-sm w-fit">
-                               En attente
-                             </span>
-                           )}
+
+                           {/* Status Indicators */}
+                           <div className="flex flex-col gap-2 items-end">
+                             {product.userStatus?.isBought && (
+                                <span className="px-3 py-1.5 bg-emerald-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-[0_0_20px_rgba(16,185,129,0.4)] border border-emerald-400">
+                                  En stock
+                                </span>
+                              )}
+                              {product.userStatus?.isClaimed && (
+                                <span className="px-3 py-1.5 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-[0_0_20px_rgba(139,92,246,0.4)] border border-purple-400">
+                                  Partenaire
+                                </span>
+                              )}
+                             {product.userStatus?.isPending && (
+                               <span className="px-3 py-1.5 bg-amber-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-[0_0_20px_rgba(245,158,11,0.4)] border border-amber-400 animate-pulse">
+                                  Examen
+                               </span>
+                             )}
+                           </div>
+                        </div>
+
+                        {/* Floating Action Button */}
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover/item:opacity-100 scale-50 group-hover/item:scale-100 transition-all duration-500 ease-out z-20">
+                          <div className="w-16 h-16 bg-white/95 backdrop-blur-3xl rounded-full flex items-center justify-center text-primary-600 shadow-2xl shadow-black/20 border border-white/50">
+                            <ArrowRight strokeWidth={3} className="w-6 h-6 -rotate-45" />
+                          </div>
                         </div>
                       </Link>
                       
-                      <div className="p-6 flex-1 flex flex-col">
-                        <div className="flex-1">
-                          <h3 className="text-xl font-bold text-gray-900 mb-1 leading-tight line-clamp-2 hover:text-primary-600 transition-colors">
+                      <div className="p-8 flex-1 flex flex-col bg-white rounded-b-[2.5rem] z-10 transform transition-transform duration-500 group-hover/item:-translate-y-2">
+                        <div className="flex-1 text-center">
+                          <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mb-3 flex items-center justify-center gap-1.5 opacity-70">
+                            <Package size={12} /> {product.sku}
+                          </p>
+                          <h3 className="text-2xl font-black text-slate-900 tracking-tight leading-none group-hover/item:text-primary-600 transition-colors mb-2">
                             <Link to={`../product/${product.id}`}>{product.nameFr}</Link>
                           </h3>
-                          <p className="text-sm text-gray-400 font-medium mb-4">SKU: {product.sku}</p>
                         </div>
                         
-                        <div className="mt-auto border-t border-gray-50 pt-4 flex items-center justify-between">
-                           <div>
-                             <div className="text-[10px] font-bold text-gray-400 uppercase">Prix Public</div>
-                             <div className="text-2xl font-black text-gray-900 leading-none">{product.retailPriceMad} <span className="text-sm font-bold">MAD</span></div>
+                        <div className="mt-8">
+                           <div className="flex items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100 group-hover/item:bg-white group-hover/item:border-primary-100 transition-colors">
+                             {viewMode === 'AFFILIATE' && (
+                               <>
+                                 <div className="text-center flex-1 border-r border-slate-200/60">
+                                   <div className="text-[9px] font-black text-indigo-500 uppercase tracking-widest mb-1.5">Impact / Com.</div>
+                                   <div className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-500 tracking-tight leading-none">
+                                     {product.commissionMad > 0 ? product.commissionMad : Math.round((product.retailPriceMad || 0) * 0.1 * 100) / 100} <span className="text-[10px] uppercase font-black text-indigo-400/50">MAD</span>
+                                   </div>
+                                 </div>
+                                 <div className="text-center flex-1">
+                                   <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Valeur Retail</div>
+                                   <div className="text-lg font-black text-slate-800 tracking-tight leading-none">
+                                     {product.affiliatePriceMad || product.retailPriceMad} <span className="text-[9px] uppercase font-black text-slate-400">MAD</span>
+                                   </div>
+                                 </div>
+                               </>
+                             )}
+
+                             {viewMode === 'INFLUENCER' && (
+                               <>
+                                 <div className="text-center flex-1 border-r border-slate-200/60">
+                                   <div className="text-[9px] font-black text-purple-500 uppercase tracking-widest mb-1.5">Rémunération</div>
+                                   <div className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-500 to-pink-500 tracking-tight leading-none">
+                                     {Math.round((product.influencerPriceMad || product.retailPriceMad || 0) * 0.15 * 100) / 100} <span className="text-[10px] uppercase font-black text-purple-400/50">MAD</span>
+                                   </div>
+                                 </div>
+                                 <div className="text-center flex-1">
+                                   <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Valeur Retail</div>
+                                   <div className="text-lg font-black text-slate-800 tracking-tight leading-none">
+                                     {product.influencerPriceMad || product.retailPriceMad} <span className="text-[9px] uppercase font-black text-slate-400">MAD</span>
+                                   </div>
+                                 </div>
+                               </>
+                             )}
+
+                             {viewMode === 'REGULAR' && (
+                               <div className="text-center w-full">
+                                 <div className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1.5">Valeur Marché</div>
+                                 <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">
+                                   {product.retailPriceMad} <span className="text-[10px] uppercase font-black text-slate-400">MAD</span>
+                                 </div>
+                               </div>
+                             )}
                            </div>
-                           
-                           {(product.userStatus?.isBought || product.userStatus?.isClaimed) ? (
-                             <Link to="../inventory" className="flex items-center gap-2 px-4 py-2 bg-green-100 text-green-700 rounded-xl font-bold text-xs hover:bg-green-600 hover:text-white transition-all">
-                               <Package className="w-4 h-4" />
-                               Inventaire
-                             </Link>
-                           ) : product.userStatus?.isPending ? (
-                             <div className="px-4 py-2 bg-amber-100 text-amber-700 rounded-xl font-bold text-xs">
-                               En attente
-                             </div>
-                           ) : (
-                             <Link to={`../product/${product.id}`} className="w-12 h-12 bg-primary-100 text-primary-600 rounded-2xl flex items-center justify-center group-hover:bg-primary-600 group-hover:text-white transition-all duration-300">
-                                <ArrowRight className="w-6 h-6" />
-                             </Link>
-                           )}
                         </div>
                       </div>
                     </motion.div>
@@ -472,19 +537,19 @@ export default function PublicMarketplace() {
                   animate={{ opacity: 1, scale: 1 }}
                   className="bg-white rounded-[3rem] py-24 px-8 text-center border-2 border-dashed border-gray-200"
                 >
-                  <div className="w-20 h-20 bg-gray-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
-                    <ShoppingBag className="w-10 h-10 text-gray-400" />
+                  <div className="w-20 h-20 bg-slate-50 rounded-[1.5rem] flex items-center justify-center mx-auto mb-6">
+                    <ShoppingBag className="w-10 h-10 text-slate-300" />
                   </div>
-                  <h3 className="text-2xl font-bold text-gray-900 mb-2">Aucun produit trouvé</h3>
-                  <p className="text-gray-500 max-w-sm mx-auto">Nous n'avons trouvé aucun produit correspondant à vos filtres actuels. Essayez de réinitialiser la recherche.</p>
+                  <h3 className="text-2xl font-black text-slate-800 tracking-tight mb-2">Aucun produit trouvé</h3>
+                  <p className="text-slate-400 text-sm max-w-sm mx-auto leading-relaxed">Nous n'avons trouvé aucun produit correspondant à vos filtres actuels. Essayez de réinitialiser la recherche.</p>
                   <button 
                     onClick={() => {
                       setSearch('');
                       setSelectedCategory('');
                     }}
-                    className="mt-8 text-primary-600 font-bold hover:underline"
+                    className="mt-8 text-xs font-black uppercase tracking-widest text-primary-600 hover:text-primary-700 transition-colors"
                   >
-                    Réinitialiser tous les filtres
+                    Réinitialiser les filtres
                   </button>
                 </motion.div>
               )}

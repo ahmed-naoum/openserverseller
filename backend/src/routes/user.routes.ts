@@ -3,6 +3,8 @@ import { body, param, query, validationResult } from 'express-validator';
 import { PrismaClient } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
+import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -363,6 +365,64 @@ router.patch(
       status: 'success',
       message: 'User deactivated successfully',
       data: { uuid: user.uuid, isActive: user.isActive },
+    });
+  })
+);
+
+router.post(
+  '/:uuid/reset-2fa',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req, res) => {
+    const { uuid } = req.params;
+
+    const user = await prisma.user.update({
+      where: { uuid },
+      data: {
+        isTwoFactorEnabled: false,
+        twoFactorSecret: null,
+      } as any,
+    });
+
+    res.json({
+      status: 'success',
+      message: '2FA has been disabled for this user.',
+    });
+  })
+);
+
+router.post(
+  '/:uuid/send-password-reset',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req, res) => {
+    const { uuid } = req.params;
+
+    const user = await prisma.user.findUnique({
+      where: { uuid },
+    });
+
+    if (!user || (!user.email && !user.phone)) {
+      throw new AppException(404, 'User not found or lacks contact info');
+    }
+
+    const resetToken = uuidv4();
+    const expiresAt = new Date(Date.now() + 3600000); // 1 hour
+
+    await prisma.passwordReset.create({
+      data: {
+        email: user.email || user.phone || 'unknown',
+        token: resetToken,
+        expiresAt,
+      },
+    });
+
+    // In a real application, you would send an email or SMS here
+    console.log(`[DEV ONLY] Password reset link for ${user.email || user.phone}: ${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`);
+
+    res.json({
+      status: 'success',
+      message: 'Password reset link logic initiated (check console in Dev Mode).',
     });
   })
 );

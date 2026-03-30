@@ -70,7 +70,7 @@ export interface Product {
   retailPriceMad: number | string;
   isCustomizable: boolean;
   minProductionDays: number;
-  visibility: 'REGULAR' | 'AFFILIATE' | 'NONE';
+  visibility: string[];
   category?: Category;
   primaryImage?: string;
   variants?: ProductVariant[];

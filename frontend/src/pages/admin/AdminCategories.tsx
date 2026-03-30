@@ -288,7 +288,7 @@ function CategoryModal({ isOpen, onClose, category, allCategories, onSuccess }: 
                     required
                     value={formData.nameFr}
                     onChange={(e) => setFormData({ ...formData, nameFr: e.target.value })}
-                    className="input-field"
+                    className="input"
                     placeholder="Cosmétiques"
                   />
                 </div>
@@ -300,7 +300,7 @@ function CategoryModal({ isOpen, onClose, category, allCategories, onSuccess }: 
                     dir="rtl"
                     value={formData.nameAr}
                     onChange={(e) => setFormData({ ...formData, nameAr: e.target.value })}
-                    className="input-field"
+                    className="input"
                     placeholder="مستحضرات التجميل"
                   />
                 </div>
@@ -313,7 +313,7 @@ function CategoryModal({ isOpen, onClose, category, allCategories, onSuccess }: 
                   required
                   value={formData.slug}
                   onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                  className="input-field font-mono text-sm"
+                  className="input font-mono text-sm"
                   placeholder="cosmetiques"
                 />
               </div>
@@ -323,7 +323,7 @@ function CategoryModal({ isOpen, onClose, category, allCategories, onSuccess }: 
                 <select
                   value={formData.parentId}
                   onChange={(e) => setFormData({ ...formData, parentId: e.target.value })}
-                  className="input-field"
+                  className="input"
                 >
                   <option value="">-- Aucune (Catégorie Principale) --</option>
                   {allCategories
@@ -350,7 +350,7 @@ function CategoryModal({ isOpen, onClose, category, allCategories, onSuccess }: 
                     type="url"
                     value={formData.imageUrl}
                     onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                    className="input-field flex-1"
+                    className="input flex-1"
                     placeholder="https://example.com/image.png"
                   />
                 </div>

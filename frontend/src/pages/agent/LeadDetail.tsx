@@ -4,6 +4,20 @@ import { leadsApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 
+const STATUS_LABELS: Record<string, { label: string, icon: string, color: string, ring: string }> = {
+  NEW: { label: 'Nouveau', icon: '🆕', color: 'bg-blue-100 text-blue-800', ring: 'bg-blue-500' },
+  AVAILABLE: { label: 'Disponible', icon: '🟢', color: 'bg-emerald-100 text-emerald-800', ring: 'bg-emerald-500' },
+  ASSIGNED: { label: 'Assigné', icon: '👤', color: 'bg-amber-100 text-amber-800', ring: 'bg-amber-500' },
+  CONTACTED: { label: 'Contacté', icon: '📞', color: 'bg-blue-100 text-blue-800', ring: 'bg-blue-500' },
+  INTERESTED: { label: 'Intéressé', icon: '✅', color: 'bg-green-100 text-green-800', ring: 'bg-green-500' },
+  ORDERED: { label: 'Commandé', icon: '🛒', color: 'bg-emerald-100 text-emerald-800', ring: 'bg-emerald-600' },
+  CALLBACK_REQUESTED: { label: 'Rappel demandé', icon: '🔁', color: 'bg-orange-100 text-orange-800', ring: 'bg-orange-500' },
+  NOT_INTERESTED: { label: 'Pas intéressé', icon: '❌', color: 'bg-red-100 text-red-800', ring: 'bg-red-500' },
+  UNREACHABLE: { label: 'Injoignable', icon: '📵', color: 'bg-gray-100 text-gray-800', ring: 'bg-gray-500' },
+  INVALID: { label: 'Invalide', icon: '🚫', color: 'bg-red-100 text-red-800', ring: 'bg-red-600' },
+  PUSHED_TO_DELIVERY: { label: 'En livraison', icon: '🚚', color: 'bg-indigo-100 text-indigo-800', ring: 'bg-indigo-500' },
+};
+
 export default function AgentLeadDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -203,7 +217,7 @@ export default function AgentLeadDetail() {
 
       {/* Notes */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-        <h2 className="font-bold text-gray-900 mb-3">📝 Notes</h2>
+        <h2 className="font-bold text-gray-900 mb-3 block">📝 Notes</h2>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}

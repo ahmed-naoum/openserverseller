@@ -32,9 +32,12 @@ import AdminFulfillment from './pages/admin/Fulfillment';
 import AdminAffiliateClaims from './pages/admin/AffiliateClaims';
 import AdminCampaigns from './pages/admin/Campaigns';
 import AdminCustomers from './pages/admin/Customers';
+import AdminAnnouncements from './pages/admin/Announcements';
+import AdminLeadHistory from './pages/admin/LeadHistory';
 import GrossellerDashboard from './pages/grosseller/Dashboard';
 import GrossellerProfile from './pages/grosseller/Profile';
 import GrossellerInventory from './pages/grosseller/Inventory';
+import GrossellerMarketplace from './pages/grosseller/Marketplace';
 import GrossellerAddProduct from './pages/grosseller/AddProduct';
 import GrossellerSelling from './pages/grosseller/Selling';
 import GrossellerPending from './pages/grosseller/Pending';
@@ -59,6 +62,10 @@ import AccountVerification from './pages/verify/AccountVerification';
 import PublicMarketplace from './pages/marketplace/PublicMarketplace';
 import ProductDetail from './pages/marketplace/ProductDetail';
 import ReferralForm from './pages/public/ReferralForm';
+import ThankYouPage from './pages/public/ThankYouPage';
+import PendingVerificationPage from './pages/auth/PendingVerificationPage';
+import SettingsPage from './pages/common/SettingsPage';
+import NotFoundPage from './pages/common/NotFoundPage';
 
 // Context
 import { AuthProvider } from './contexts/AuthContext';
@@ -81,6 +88,8 @@ function App() {
         <Route path="/marketplace/:view" element={<PublicMarketplace />} />
         <Route path="/product/:id" element={<ProductDetail />} />
         <Route path="/r/:code" element={<ReferralForm />} />
+        <Route path="/thank-you" element={<ThankYouPage />} />
+        <Route path="/pending-verification" element={<PendingVerificationPage />} />
 
         {/* Verification Route */}
         <Route path="/verify" element={
@@ -106,9 +115,10 @@ function App() {
           <Route path="orders" element={<GrossellerOrders />} />
           <Route path="analytics" element={<GrossellerAnalytics />} />
           <Route path="support" element={<GrossellerSupport />} />
-          <Route path="marketplace" element={<PublicMarketplace />} />
+          <Route path="marketplace" element={<GrossellerMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
 
         {/* Influencer Dashboard */}
@@ -129,6 +139,7 @@ function App() {
           <Route path="marketplace" element={<InfluencerMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
 
         {/* Confirmation Agent Dashboard */}
@@ -141,6 +152,7 @@ function App() {
           <Route path="marketplace" element={<PublicMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
 
         {/* Vendor Dashboard (Seller-Affiliate with mode switching) */}
@@ -159,6 +171,7 @@ function App() {
           <Route path="marketplace" element={<PublicMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
 
         {/* Agent Dashboard */}
@@ -175,6 +188,7 @@ function App() {
           <Route path="marketplace" element={<PublicMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
 
         {/* Admin Dashboard */}
@@ -193,11 +207,17 @@ function App() {
           <Route path="finance" element={<AdminFinance />} />
           <Route path="fulfillment" element={<AdminFulfillment />} />
           <Route path="affiliate-claims" element={<AdminAffiliateClaims />} />
+          <Route path="announcements" element={<AdminAnnouncements />} />
           <Route path="campaigns" element={<AdminCampaigns />} />
+          <Route path="lead-history" element={<AdminLeadHistory />} />
           <Route path="marketplace" element={<PublicMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
+
+        {/* Catch-all 404 Route */}
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
 
 

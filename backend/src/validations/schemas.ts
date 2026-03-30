@@ -51,7 +51,7 @@ export const productSchema = z.object({
   baseCostMad: z.number().positive('Base cost must be positive'),
   retailPriceMad: z.number().positive('Retail price must be positive'),
   minProductionDays: z.number().int().min(1).max(365).default(3),
-  visibility: z.enum(['REGULAR', 'AFFILIATE', 'NONE']).default('REGULAR'),
+  visibility: z.array(z.enum(['REGULAR', 'AFFILIATE', 'INFLUENCER', 'NONE'])).default(['REGULAR']),
   isCustomizable: z.boolean().default(true),
   isActive: z.boolean().default(true),
 });

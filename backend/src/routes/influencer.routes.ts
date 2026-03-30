@@ -86,8 +86,8 @@ router.post(
       where: { id: productId }
     });
 
-    if (!product || product.visibility !== 'AFFILIATE') {
-      throw new AppException(404, 'Affiliate product not found');
+    if (!product || !(product.visibility.includes('AFFILIATE') || product.visibility.includes('INFLUENCER'))) {
+      throw new AppException(404, 'Product not found or not available for influencers');
     }
 
     const claim = await prisma.affiliateClaim.upsert({

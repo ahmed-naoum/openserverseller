@@ -10,8 +10,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
-        name: 'OpenSeller',
-        short_name: 'OpenSeller',
+        name: 'Silacod',
+        short_name: 'Silacod',
         description: 'Moroccan Dropshipping Platform',
         theme_color: '#ffffff',
         icons: [

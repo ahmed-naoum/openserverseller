@@ -266,7 +266,14 @@ router.get(
         vendor: { include: { profile: true } },
         assignedAgent: { include: { profile: true } },
         callLogs: { orderBy: { createdAt: 'desc' } },
-        statusHistory: { orderBy: { createdAt: 'desc' } },
+        statusHistory: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            changer: {
+              include: { profile: true }
+            }
+          }
+        },
         referralLink: {
           include: {
             influencer: { include: { profile: true } },
@@ -313,21 +320,46 @@ router.post(
   authenticate,
   authorize('VENDOR'),
   asyncHandler(async (req, res) => {
-    const { brandId, leads } = req.body;
+    const { brandId, productId, leads } = req.body;
 
     if (!leads || !Array.isArray(leads) || leads.length === 0) {
       throw new AppException(400, 'Leads array is required');
     }
 
-    const brand = await prisma.brand.findFirst({
-      where: {
-        id: Number(brandId),
-        vendorId: req.user!.id,
-      },
-    });
+    // Resolve brand - either from brandId or find/create a default one for the vendor
+    let resolvedBrandId: number;
 
-    if (!brand) {
-      throw new AppException(404, 'Brand not found');
+    if (brandId) {
+      const brand = await prisma.brand.findFirst({
+        where: {
+          id: Number(brandId),
+          vendorId: req.user!.id,
+        },
+      });
+
+      if (!brand) {
+        throw new AppException(404, 'Brand not found');
+      }
+      resolvedBrandId = brand.id;
+    } else {
+      // For product-based imports, find the vendor's first brand or create one
+      let brand = await prisma.brand.findFirst({
+        where: { vendorId: req.user!.id },
+      });
+
+      if (!brand) {
+        brand = await prisma.brand.create({
+          data: {
+            vendorId: req.user!.id,
+            name: 'Ma Marque',
+            slug: `brand-${req.user!.id}-${Date.now()}`,
+            status: 'APPROVED',
+            isApproved: true,
+            approvedAt: new Date(),
+          },
+        });
+      }
+      resolvedBrandId = brand.id;
     }
 
     const batch = await prisma.leadImportBatch.create({
@@ -374,7 +406,7 @@ router.post(
         await prisma.lead.create({
           data: {
             vendorId: req.user!.id,
-            brandId: brand.id,
+            brandId: resolvedBrandId,
             importBatchId: batch.id,
             fullName: lead.fullName,
             phone: normalizedPhone,
@@ -423,7 +455,6 @@ router.post(
   [
     body('fullName').notEmpty().trim(),
     body('phone').matches(/^(\+212|0)[0-9]{9}$/),
-    body('brandId').notEmpty(),
   ],
   asyncHandler(async (req, res) => {
     const errors = validationResult(req);
@@ -431,17 +462,34 @@ router.post(
       throw new AppException(400, 'Validation failed');
     }
 
-    const { fullName, phone, whatsapp, city, address, brandId, notes } = req.body;
+    const { fullName, phone, whatsapp, city, address, brandId, productId, notes } = req.body;
 
-    const brand = await prisma.brand.findFirst({
-      where: {
-        id: Number(brandId),
-        vendorId: req.user!.id,
-      },
-    });
+    // Resolve brand
+    let resolvedBrandId: number;
 
-    if (!brand) {
-      throw new AppException(404, 'Brand not found');
+    if (brandId) {
+      const brand = await prisma.brand.findFirst({
+        where: { id: Number(brandId), vendorId: req.user!.id },
+      });
+      if (!brand) throw new AppException(404, 'Brand not found');
+      resolvedBrandId = brand.id;
+    } else {
+      let brand = await prisma.brand.findFirst({
+        where: { vendorId: req.user!.id },
+      });
+      if (!brand) {
+        brand = await prisma.brand.create({
+          data: {
+            vendorId: req.user!.id,
+            name: 'Ma Marque',
+            slug: `brand-${req.user!.id}-${Date.now()}`,
+            status: 'APPROVED',
+            isApproved: true,
+            approvedAt: new Date(),
+          },
+        });
+      }
+      resolvedBrandId = brand.id;
     }
 
     const normalizedPhone = phone.replace(/^0/, '+212');
@@ -460,7 +508,7 @@ router.post(
     const lead = await prisma.lead.create({
       data: {
         vendorId: req.user!.id,
-        brandId: brand.id,
+        brandId: resolvedBrandId,
         fullName,
         phone: normalizedPhone,
         whatsapp: whatsapp || normalizedPhone,
@@ -836,6 +884,69 @@ router.post(
       status: 'success',
       message: 'Order created and pushed to delivery',
       data: { order },
+    });
+  })
+);
+
+// Get products the current user has bought or claimed
+router.get(
+  '/my-products',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const userId = req.user!.id;
+
+    // Products from inventory (bought)
+    const inventoryProducts = await prisma.productInventory.findMany({
+      where: { userId },
+      include: {
+        product: {
+          include: { images: { where: { isPrimary: true }, take: 1 } },
+        },
+      },
+    });
+
+    // Products from affiliate claims (claimed & approved)
+    const claimedProducts = await prisma.affiliateClaim.findMany({
+      where: { userId, status: 'APPROVED' },
+      include: {
+        product: {
+          include: { images: { where: { isPrimary: true }, take: 1 } },
+        },
+      },
+    });
+
+    // Merge and deduplicate
+    const productMap = new Map<number, any>();
+
+    for (const inv of inventoryProducts) {
+      if (!productMap.has(inv.productId)) {
+        productMap.set(inv.productId, {
+          id: inv.product.id,
+          sku: inv.product.sku,
+          name: inv.product.nameFr || inv.product.nameAr,
+          image: inv.product.images[0]?.imageUrl || null,
+          retailPrice: inv.product.retailPriceMad,
+          source: 'INVENTORY',
+        });
+      }
+    }
+
+    for (const claim of claimedProducts) {
+      if (!productMap.has(claim.productId)) {
+        productMap.set(claim.productId, {
+          id: claim.product.id,
+          sku: claim.product.sku,
+          name: claim.product.nameFr || claim.product.nameAr,
+          image: claim.product.images[0]?.imageUrl || null,
+          retailPrice: claim.product.retailPriceMad,
+          source: 'AFFILIATE_CLAIM',
+        });
+      }
+    }
+
+    res.json({
+      status: 'success',
+      data: { products: Array.from(productMap.values()) },
     });
   })
 );

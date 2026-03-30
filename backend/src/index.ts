@@ -12,6 +12,7 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { setupPassport } from './config/passport.js';
 import { securityHeaders, ipFilter, auditLog, sanitizeInput, validateRequestSize } from './middleware/security.js';
+import { startLeadsReassignmentCron } from './jobs/leadReassignment.js';
 
 const app = express();
 const server = createServer(app);
@@ -70,6 +71,9 @@ io.on('connection', (socket) => {
 });
 
 export { io };
+
+// Start background jobs
+startLeadsReassignmentCron();
 
 server.listen(PORT, () => {
   console.log(`

@@ -15,13 +15,13 @@ const transporter = nodemailer.createTransport({
 (async () => {
   try {
     const info = await transporter.sendMail({
-      from: '"OpenSeller" <mailuser@silacod.com>',
+      from: '"Silacod" <mailuser@silacod.com>',
       to: 'naoum00007@gmail.com',
-      subject: 'Test Email - OpenSeller SMTP',
-      text: 'This is a test email from OpenSeller to verify SMTP is working.',
+      subject: 'Test Email - Silacod SMTP',
+      text: 'This is a test email from Silacod to verify SMTP is working.',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 12px;">
-          <h2 style="color: #22c55e;">OpenSeller.ma ✅</h2>
+          <h2 style="color: #22c55e;">Silacod.ma ✅</h2>
           <p>This is a <strong>test email</strong> to confirm SMTP is working correctly.</p>
           <p>If you received this, your email configuration is correct!</p>
           <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">

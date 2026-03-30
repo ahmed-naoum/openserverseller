@@ -26,9 +26,11 @@ interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (data: { email?: string; phone?: string; password: string }) => Promise<AuthUser>;
-  register: (data: { email?: string; phone?: string; password: string; fullName: string; role?: string }) => Promise<void>;
-  registerInfluencer: (data: { email?: string; phone?: string; password: string; fullName: string; instagramUsername?: string; tiktokUsername?: string; facebookUsername?: string; xUsername?: string; youtubeUsername?: string; snapchatUsername?: string; }) => Promise<void>;
+  login: (data: { email?: string; phone?: string; password: string }) => Promise<{ user?: AuthUser; requiresTwoFactor?: boolean; twoFactorToken?: string; message?: string }>;
+  login2FA: (data: { twoFactorToken: string; code: string }) => Promise<AuthUser>;
+  googleAuth: (data: { credential: string; role?: string }) => Promise<{ user?: AuthUser; requiresTwoFactor?: boolean; twoFactorToken?: string; message?: string }>;
+  register: (data: { email?: string; phone?: string; password: string; fullName: string; role?: string }) => Promise<AuthUser>;
+  registerInfluencer: (data: { email?: string; phone?: string; password: string; fullName: string; instagramUsername?: string; tiktokUsername?: string; facebookUsername?: string; xUsername?: string; youtubeUsername?: string; snapchatUsername?: string; }) => Promise<AuthUser>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -61,6 +63,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (data: { email?: string; phone?: string; password: string }) => {
     const response = await authApi.login(data);
+    
+    if (response.data.data?.requiresTwoFactor) {
+      return { 
+        requiresTwoFactor: true, 
+        twoFactorToken: response.data.data.twoFactorToken,
+        message: response.data.message
+      };
+    }
+
+    const { user, tokens } = response.data.data;
+    localStorage.setItem('accessToken', tokens.accessToken);
+    localStorage.setItem('refreshToken', tokens.refreshToken);
+    setUser(user);
+    return { user };
+  };
+
+  const login2FA = async (data: { twoFactorToken: string; code: string }) => {
+    const response = await authApi.login2FA(data);
     const { user, tokens } = response.data.data;
     localStorage.setItem('accessToken', tokens.accessToken);
     localStorage.setItem('refreshToken', tokens.refreshToken);
@@ -68,20 +88,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user;
   };
 
-  const register = async (data: { email?: string; phone?: string; password: string; fullName: string; role?: string }) => {
-    const response = await authApi.register(data);
+  const googleAuth = async (data: { credential: string; role?: string }) => {
+    const response = await authApi.googleAuth(data);
+    
+    if (response.data.data?.requiresTwoFactor) {
+      return { 
+        requiresTwoFactor: true, 
+        twoFactorToken: response.data.data.twoFactorToken,
+        message: response.data.message
+      };
+    }
+
     const { user, tokens } = response.data.data;
     localStorage.setItem('accessToken', tokens.accessToken);
     localStorage.setItem('refreshToken', tokens.refreshToken);
     setUser(user);
+    return { user };
+  };
+
+  const register = async (data: { email?: string; phone?: string; password: string; fullName: string; role?: string }) => {
+    const response = await authApi.register(data);
+    const { user, tokens } = response.data.data;
+    
+    // Don't auto-login if account is not active
+    if (user.isActive !== false) {
+      localStorage.setItem('accessToken', tokens.accessToken);
+      localStorage.setItem('refreshToken', tokens.refreshToken);
+      setUser(user);
+    }
+    return user;
   };
 
   const registerInfluencer = async (data: { email?: string; phone?: string; password: string; fullName: string; instagramUsername?: string; tiktokUsername?: string; facebookUsername?: string; xUsername?: string; youtubeUsername?: string; snapchatUsername?: string; }) => {
     const response = await authApi.registerInfluencer(data);
     const { user, tokens } = response.data.data;
-    localStorage.setItem('accessToken', tokens.accessToken);
-    localStorage.setItem('refreshToken', tokens.refreshToken);
-    setUser(user);
+    
+    // Don't auto-login if account is not active
+    if (user.isActive !== false) {
+      localStorage.setItem('accessToken', tokens.accessToken);
+      localStorage.setItem('refreshToken', tokens.refreshToken);
+      setUser(user);
+    }
+    return user;
   };
 
   const logout = async () => {
@@ -102,6 +150,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isAuthenticated: !!user,
         login,
+        login2FA,
+        googleAuth,
         register,
         registerInfluencer,
         logout,

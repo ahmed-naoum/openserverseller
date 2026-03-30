@@ -1,24 +1,19 @@
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { leadsApi, brandsApi, publicApi } from '../../lib/api';
 import toast from 'react-hot-toast';
+import { Search, Filter, Phone, Mail, MapPin, Building2, UploadCloud, Plus, ChevronRight, User } from 'lucide-react';
 
 export default function VendorLeads() {
   const [showImportModal, setShowImportModal] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
   const [selectedBrand, setSelectedBrand] = useState('');
   const [csvData, setCsvData] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
   const [newLead, setNewLead] = useState({
-    fullName: '',
-    phone: '',
-    whatsapp: '',
-    city: '',
-    address: '',
     brandId: '',
-    notes: '',
   });
 
   const { data: brandsData } = useQuery({
@@ -43,22 +38,9 @@ export default function VendorLeads() {
   const importMutation = useMutation({
     mutationFn: (data: { brandId: string; leads: any[] }) => leadsApi.import(data),
     onSuccess: () => {
-      toast.success('Prospects importés avec succès!');
+      toast.success('Leads importés avec succès!');
       setShowImportModal(false);
       setCsvData([]);
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
-    },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Erreur');
-    },
-  });
-
-  const createMutation = useMutation({
-    mutationFn: (data: any) => leadsApi.create(data),
-    onSuccess: () => {
-      toast.success('Prospect ajouté!');
-      setShowAddModal(false);
-      setNewLead({ fullName: '', phone: '', whatsapp: '', city: '', address: '', brandId: '', notes: '' });
       queryClient.invalidateQueries({ queryKey: ['leads'] });
     },
     onError: (error: any) => {
@@ -102,88 +84,134 @@ export default function VendorLeads() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pt-6 animate-in fade-in duration-500">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Prospects</h1>
-          <p className="text-gray-500 mt-1">{leads.length} prospects au total</p>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight leading-none">Base de Leads</h1>
+          <p className="text-slate-500 mt-2 font-medium flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            {leads.length} Leads disponibles pour conversion
+          </p>
         </div>
         <div className="flex gap-3">
-          <button onClick={() => setShowAddModal(true)} className="btn-secondary">
-            + Ajouter
-          </button>
-          <button onClick={() => setShowImportModal(true)} className="btn-primary">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-            Importer CSV
+          <Link 
+            to="/dashboard/orders" 
+            className="btn-premium px-6 py-3 bg-[#2c2f74] text-white flex items-center gap-2 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-indigo-500/20 hover:-translate-y-0.5 transition-all"
+          >
+            <Plus size={16} /> Ajouter un Lead via Commandes
+          </Link>
+          <button 
+            onClick={() => setShowImportModal(true)} 
+            className="px-6 py-3 bg-white text-slate-600 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800 flex items-center gap-2 rounded-xl text-xs font-black uppercase tracking-widest shadow-sm transition-all"
+          >
+            <UploadCloud size={16} /> Importer Leads (CSV)
           </button>
         </div>
       </div>
 
-      {/* Filter */}
-      <div className="flex gap-4">
+      {/* Filter Bento Block */}
+      <div className="bento-card bg-white border-none p-6 shadow-sm flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-3 text-sm font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-4 py-2 rounded-xl">
+          <Filter size={14} /> Filtres
+        </div>
         <select
-          className="input w-48"
+          className="bg-white border text-sm font-medium border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all text-slate-700 w-full sm:w-auto shadow-sm"
           value={selectedBrand}
           onChange={(e) => setSelectedBrand(e.target.value)}
         >
-          <option value="">Toutes les marques</option>
+          <option value="">Toutes les marques (Global)</option>
           {brands.map((brand: any) => (
             <option key={brand.id} value={brand.id}>{brand.name}</option>
           ))}
         </select>
       </div>
 
-      {/* Leads Table */}
+      {/* Leads Main Area */}
       {isLoading ? (
-        <div className="text-center py-12">Chargement...</div>
+        <div className="text-center py-20 flex flex-col items-center">
+          <div className="w-12 h-12 border-4 border-slate-200 border-t-primary-500 rounded-full animate-spin mb-4" />
+          <p className="font-black text-slate-400 uppercase tracking-widest text-xs">Chargement de la base...</p>
+        </div>
       ) : leads.length === 0 ? (
-        <div className="card p-12 text-center">
-          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-3xl">📞</span>
+        <div className="bento-card border-none bg-white p-12 text-center shadow-sm">
+          <div className="w-24 h-24 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner border border-indigo-100">
+            <User size={40} className="text-indigo-400" />
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Aucun prospect</h3>
-          <p className="text-gray-500 mb-6">Importez vos prospects pour commencer</p>
-          <button onClick={() => setShowImportModal(true)} className="btn-primary">
-            Importer des prospects
-          </button>
+          <h3 className="text-2xl font-black text-slate-900 tracking-tight leading-none mb-3">Votre base est vide</h3>
+          <p className="text-slate-500 font-medium mb-8 max-w-sm mx-auto">Commencez par importer une liste de leads ou convertissez vos commandes en leads depuis le panneau de gestion.</p>
+          <div className="flex items-center justify-center gap-4">
+             <Link to="/dashboard/orders" className="btn-premium px-8 py-4 bg-[#2c2f74] text-white flex items-center gap-2 rounded-[1.5rem] text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-500/20 hover:-translate-y-1 transition-transform">
+               Aller aux Commandes <ChevronRight size={16} />
+             </Link>
+          </div>
         </div>
       ) : (
-        <div className="card overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Nom</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Téléphone</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Ville</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Marque</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Statut</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Agent</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Date</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {leads.map((lead: any) => (
-                <tr key={lead.id} className="hover:bg-gray-50">
-                  <td className="py-3 px-4 font-medium text-gray-900">{lead.fullName}</td>
-                  <td className="py-3 px-4 text-gray-600">{lead.phone}</td>
-                  <td className="py-3 px-4 text-gray-600">{lead.city || '-'}</td>
-                  <td className="py-3 px-4 text-gray-600">{lead.brand?.name || '-'}</td>
-                  <td className="py-3 px-4">
-                    <span className={`badge-${statusColors[lead.status] || 'gray'}`}>
-                      {lead.status}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-gray-600">{lead.assignedAgent?.fullName || '-'}</td>
-                  <td className="py-3 px-4 text-gray-500 text-sm">
-                    {new Date(lead.createdAt).toLocaleDateString('fr-FR')}
-                  </td>
+        <div className="bento-card border-none bg-white overflow-hidden shadow-sm p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  <th className="text-left py-4 px-6 text-[10px] uppercase font-black tracking-widest text-slate-400">Origine & Contact</th>
+                  <th className="text-left py-4 px-6 text-[10px] uppercase font-black tracking-widest text-slate-400">Coordonnées</th>
+                  <th className="text-left py-4 px-6 text-[10px] uppercase font-black tracking-widest text-slate-400">Marque Partenaire</th>
+                  <th className="text-left py-4 px-6 text-[10px] uppercase font-black tracking-widest text-slate-400">Statut CRM</th>
+                  <th className="text-left py-4 px-6 text-[10px] uppercase font-black tracking-widest text-slate-400">Agent Délégué</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {leads.map((lead: any) => (
+                  <tr key={lead.id} className="hover:bg-slate-50/50 transition-colors group">
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 font-black shrink-0 border border-slate-200">
+                          {lead.fullName.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                           <div className="font-bold text-slate-900">{lead.fullName}</div>
+                           <div className="text-xs text-slate-400 mt-0.5">{new Date(lead.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2 text-sm text-slate-600 font-medium">
+                          <Phone size={14} className="text-slate-400" /> {lead.phone}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-slate-400">
+                          <MapPin size={12} /> {lead.city || 'Non renseigné'}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6">
+                      {lead.brand ? (
+                        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold border border-indigo-100">
+                          <Building2 size={12} /> {lead.brand.name}
+                        </div>
+                      ) : (
+                        <span className="text-slate-300 italic text-sm">-</span>
+                      )}
+                    </td>
+                    <td className="py-4 px-6">
+                      <span className={`px-3 py-1.5 rounded-lg text-[10px] uppercase font-black tracking-widest shadow-sm badge-${statusColors[lead.status] || 'gray'}`}>
+                        {lead.status}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6">
+                      {lead.assignedAgent ? (
+                        <div className="flex items-center gap-2">
+                           <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 text-[10px] font-black">{lead.assignedAgent.fullName.charAt(0)}</div>
+                           <span className="text-sm font-semibold text-slate-700">{lead.assignedAgent.fullName}</span>
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded bg-slate-100 text-slate-400 text-[10px] font-black uppercase tracking-widest">En attente</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -225,8 +253,8 @@ export default function VendorLeads() {
 
               {csvData.length > 0 && (
                 <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm font-medium text-gray-700 mb-2">
-                    {csvData.length} prospects détectés
+                  <p className="text-sm font-medium text-slate-700 mb-2">
+                    {csvData.length} Leads détectés
                   </p>
                   <div className="text-xs text-gray-500 max-h-32 overflow-y-auto">
                     {csvData.slice(0, 5).map((row, i) => (
@@ -256,83 +284,6 @@ export default function VendorLeads() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-lg w-full">
-            <div className="p-6 border-b border-gray-100">
-              <h2 className="text-xl font-bold text-gray-900">Ajouter un prospect</h2>
-            </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                createMutation.mutate(newLead);
-              }}
-              className="p-6 space-y-4"
-            >
-              <div>
-                <label className="label">Nom complet *</label>
-                <input
-                  type="text"
-                  className="input"
-                  value={newLead.fullName}
-                  onChange={(e) => setNewLead({ ...newLead, fullName: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label className="label">Téléphone *</label>
-                <input
-                  type="tel"
-                  className="input"
-                  placeholder="+212 6XX-XXXXXX"
-                  value={newLead.phone}
-                  onChange={(e) => setNewLead({ ...newLead, phone: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Ville</label>
-                  <select
-                    className="input"
-                    value={newLead.city}
-                    onChange={(e) => setNewLead({ ...newLead, city: e.target.value })}
-                  >
-                    <option value="">Sélectionner</option>
-                    {cities.map((city: any) => (
-                      <option key={city.id} value={city.nameFr}>{city.nameFr}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Marque *</label>
-                  <select
-                    className="input"
-                    value={newLead.brandId}
-                    onChange={(e) => setNewLead({ ...newLead, brandId: e.target.value })}
-                    required
-                  >
-                    <option value="">Sélectionner</option>
-                    {brands.map((brand: any) => (
-                      <option key={brand.id} value={brand.id}>{brand.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button type="button" onClick={() => setShowAddModal(false)} className="btn-secondary flex-1">
-                  Annuler
-                </button>
-                <button type="submit" className="btn-primary flex-1" disabled={createMutation.isPending}>
-                  {createMutation.isPending ? 'Ajout...' : 'Ajouter'}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

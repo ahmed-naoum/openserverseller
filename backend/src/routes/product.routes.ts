@@ -18,10 +18,10 @@ router.get(
     // Filter by visibility: REGULAR, AFFILIATE, or both
     const userRole = req.user?.roleName;
     if (visibility && visibility !== 'ALL') {
-      where.visibility = visibility;
+      where.visibility = { has: visibility };
     } else if (!req.user || (userRole !== 'SUPER_ADMIN' && userRole !== 'ADMIN' && userRole !== 'INFLUENCER')) {
       // Public/regular users see REGULAR products
-      where.visibility = 'REGULAR';
+      where.visibility = { has: 'REGULAR' };
     }
 
     if (myProducts === 'true' && req.user) {
@@ -80,6 +80,8 @@ router.get(
           description: p.description,
           baseCostMad: p.baseCostMad,
           retailPriceMad: p.retailPriceMad,
+          affiliatePriceMad: p.affiliatePriceMad,
+          influencerPriceMad: p.influencerPriceMad,
           isCustomizable: p.isCustomizable,
           minProductionDays: p.minProductionDays,
           visibility: p.visibility,
@@ -105,7 +107,11 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
-    const [product, inventory, claim, pendingRequest] = await Promise.all([
+    if (isNaN(Number(id))) {
+      throw new AppException(400, 'Invalid product ID');
+    }
+
+    const [product, inventory, claim, pendingPurchase, pendingClaim] = await Promise.all([
       prisma.product.findUnique({
         where: { id: Number(id) },
         include: {
@@ -123,13 +129,44 @@ router.get(
         where: {
           userId: req.user.id,
           productId: Number(id),
+          type: 'DELIVERY_FULFILLMENT',
           status: { in: ['OPEN', 'IN_PROGRESS'] }
+        }
+      }) : Promise.resolve(null),
+      req.user ? prisma.affiliateClaim.findFirst({
+        where: {
+          userId: req.user.id,
+          productId: Number(id),
+          status: 'PENDING'
         }
       }) : Promise.resolve(null)
     ]);
 
     if (!product) {
       throw new AppException(404, 'Product not found');
+    }
+
+    // Public (unauthenticated): only return image, title, price, and category
+    if (!req.user) {
+      const primaryImage = (product as any).images?.[0]?.imageUrl || null;
+      res.json({
+        status: 'success',
+        data: {
+          product: {
+            id: product.id,
+            nameFr: product.nameFr,
+            nameAr: product.nameAr,
+            retailPriceMad: product.retailPriceMad,
+            affiliatePriceMad: product.affiliatePriceMad,
+            influencerPriceMad: product.influencerPriceMad,
+            visibility: product.visibility,
+            category: product?.categories?.[0] || null,
+            images: (product as any).images || [],
+          },
+          userStatus: null
+        },
+      });
+      return;
     }
 
     res.json({
@@ -142,8 +179,10 @@ router.get(
         userStatus: {
           isBought: !!inventory,
           isClaimed: !!claim,
-          isPending: !!pendingRequest,
-          pendingRequestId: pendingRequest?.id
+          isPending: !!pendingPurchase || !!pendingClaim,
+          isPurchasePending: !!pendingPurchase,
+          isClaimPending: !!pendingClaim,
+          pendingRequestId: pendingPurchase?.id || pendingClaim?.id
         }
       },
     });
@@ -160,8 +199,9 @@ router.post(
     body('nameFr').notEmpty().trim(),
     body('categoryIds').isArray({ min: 1 }),
     body('categoryIds.*').isInt(),
-    body('baseCostMad').isFloat({ min: 0 }),
     body('retailPriceMad').isFloat({ min: 0 }),
+    body('affiliatePriceMad').optional({ nullable: true }).isFloat({ min: 0 }),
+    body('influencerPriceMad').optional({ nullable: true }).isFloat({ min: 0 }),
   ],
   asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
@@ -170,7 +210,7 @@ router.post(
       throw new AppException(400, 'Validation failed', errors.array());
     }
 
-    const { sku, nameAr, nameFr, nameEn, description, categoryIds, baseCostMad, retailPriceMad, isCustomizable, minProductionDays, stockQuantity, imageUrl, imageUrls, isActive, visibility, status, videoUrls, landingPageUrls } = req.body;
+    const { sku, nameAr, nameFr, nameEn, description, categoryIds, baseCostMad, retailPriceMad, affiliatePriceMad, influencerPriceMad, isCustomizable, minProductionDays, stockQuantity, imageUrl, imageUrls, isActive, visibility, status, videoUrls, landingPageUrls, commissionMad } = req.body;
 
     const existingProduct = await prisma.product.findUnique({
       where: { sku },
@@ -200,17 +240,20 @@ router.post(
         nameEn,
         description,
         categories: { connect: categoryIds.map((id: any) => ({ id: Number(id) })) },
-        baseCostMad,
+        baseCostMad: baseCostMad ? Number(baseCostMad) : 0,
         retailPriceMad,
+        affiliatePriceMad: affiliatePriceMad ? Number(affiliatePriceMad) : null,
+        influencerPriceMad: influencerPriceMad ? Number(influencerPriceMad) : null,
         isCustomizable: isCustomizable ?? true,
         minProductionDays: Number(minProductionDays ?? 3),
         stockQuantity: stockQuantity ? Number(stockQuantity) : 0,
         isActive: isActive ?? true,
-        visibility: visibility ?? 'REGULAR',
+        visibility: Array.isArray(visibility) ? visibility : typeof visibility === 'string' ? [visibility] : ['REGULAR'],
         status: finalStatus,
         ownerId: finalOwnerId,
         videoUrls: Array.isArray(videoUrls) ? videoUrls : [],
         landingPageUrls: Array.isArray(landingPageUrls) ? landingPageUrls : [],
+        commissionMad: commissionMad ? Number(commissionMad) : 0,
         ...(allImageUrls.length > 0 ? {
           images: {
             create: allImageUrls.map((url: string, index: number) => ({
@@ -268,6 +311,7 @@ router.patch(
     const { 
       imageUrls, 
       categoryIds, 
+      categoryId, // extracting to prevent it from going into rest
       ownerId, 
       videoUrlsInput, 
       landingPageUrlsInput, 
@@ -299,11 +343,24 @@ router.patch(
       updateData.landingPageUrls = landingPageUrls;
     }
 
+    if (rest.visibility && Array.isArray(rest.visibility)) {
+      updateData.visibility = rest.visibility;
+    } else if (rest.visibility) {
+      updateData.visibility = [rest.visibility];
+    }
+    delete updateData.visibility; // Remove the string prop if it was in `rest`
+    if (rest.visibility) {
+       updateData.visibility = Array.isArray(rest.visibility) ? rest.visibility : [rest.visibility];
+    }
+
     // Ensure numeric fields are numbers
-    if (updateData.baseCostMad) updateData.baseCostMad = Number(updateData.baseCostMad);
     if (updateData.retailPriceMad) updateData.retailPriceMad = Number(updateData.retailPriceMad);
+    if (updateData.affiliatePriceMad) updateData.affiliatePriceMad = Number(updateData.affiliatePriceMad);
+    if (updateData.influencerPriceMad) updateData.influencerPriceMad = Number(updateData.influencerPriceMad);
     if (updateData.stockQuantity !== undefined) updateData.stockQuantity = Number(updateData.stockQuantity);
     if (updateData.minProductionDays !== undefined) updateData.minProductionDays = Number(updateData.minProductionDays);
+    if (updateData.commissionMad !== undefined) updateData.commissionMad = Number(updateData.commissionMad);
+
 
     // If imageUrls array is provided, replace all images
     if (Array.isArray(imageUrls)) {
@@ -353,6 +410,130 @@ router.delete(
     res.json({
       status: 'success',
       message: 'Product deleted successfully',
+    });
+  })
+);
+
+// Clone a product for a specific user (admin only)
+router.post(
+  '/:id/clone',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  [
+    body('userId').isInt({ min: 1 }),
+    body('newSku').optional().isString(),
+    body('newName').optional().isString(),
+  ],
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new AppException(400, 'Validation failed', errors.array());
+    }
+
+    const { id } = req.params;
+    const { userId, newSku, newName } = req.body;
+
+    // Fetch original product with all relations
+    const original = await prisma.product.findUnique({
+      where: { id: Number(id) },
+      include: {
+        categories: true,
+        images: { orderBy: { sortOrder: 'asc' } },
+      },
+    });
+
+    if (!original) {
+      throw new AppException(404, 'Product not found');
+    }
+
+    // Generate unique SKU
+    const cloneSku = newSku || `${original.sku}-U${userId}`;
+    
+    // Check if SKU already exists
+    const existingSku = await prisma.product.findUnique({ where: { sku: cloneSku } });
+    if (existingSku) {
+      throw new AppException(409, `Le SKU "${cloneSku}" existe déjà. Veuillez en choisir un autre.`);
+    }
+
+    // Get user info for naming
+    const targetUser = await prisma.user.findUnique({
+      where: { id: Number(userId) },
+      include: { profile: true, role: true },
+    });
+
+    if (!targetUser) {
+      throw new AppException(404, 'User not found');
+    }
+
+    const clonedProduct = await prisma.$transaction(async (tx) => {
+      // 1. Create cloned product
+      const cloneName = newName || `${original.nameFr} (${targetUser.profile?.fullName || targetUser.email})`;
+      
+      const product = await tx.product.create({
+        data: {
+          sku: cloneSku,
+          nameAr: original.nameAr,
+          nameFr: cloneName,
+          nameEn: original.nameEn,
+          description: original.description,
+          longDescription: original.longDescription,
+          baseCostMad: Number(original.baseCostMad),
+          retailPriceMad: Number(original.retailPriceMad),
+          affiliatePriceMad: original.affiliatePriceMad ? Number(original.affiliatePriceMad) : null,
+          influencerPriceMad: original.influencerPriceMad ? Number(original.influencerPriceMad) : null,
+          isCustomizable: original.isCustomizable,
+          minProductionDays: original.minProductionDays,
+          stockQuantity: original.stockQuantity,
+          visibility: ['NONE'], // Private — only for this user
+          status: 'APPROVED',
+          ownerId: Number(userId),
+          videoUrls: original.videoUrls,
+          landingPageUrls: original.landingPageUrls,
+          commissionMad: Number(original.commissionMad),
+          categories: {
+            connect: (original as any).categories.map((c: any) => ({ id: c.id })),
+          },
+          // Clone images
+          ...(((original as any).images?.length > 0) ? {
+            images: {
+              create: (original as any).images.map((img: any, index: number) => ({
+                imageUrl: img.imageUrl,
+                isPrimary: index === 0,
+                sortOrder: index,
+              })),
+            },
+          } : {}),
+        },
+        include: { categories: true, images: { orderBy: { sortOrder: 'asc' } } },
+      });
+
+      // 2. Grant the cloned product to the user
+      const userRole = targetUser.role.name;
+      if (userRole === 'INFLUENCER') {
+        await tx.affiliateClaim.create({
+          data: {
+            userId: Number(userId),
+            productId: product.id,
+            status: 'ACTIVE',
+          },
+        });
+      } else {
+        await tx.productInventory.create({
+          data: {
+            userId: Number(userId),
+            productId: product.id,
+            quantity: 1,
+          },
+        });
+      }
+
+      return product;
+    });
+
+    res.status(201).json({
+      status: 'success',
+      message: 'Product cloned successfully',
+      data: { product: clonedProduct },
     });
   })
 );

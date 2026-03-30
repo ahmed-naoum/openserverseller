@@ -6,6 +6,36 @@ import jwt from 'jsonwebtoken';
 import { authenticate } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { v4 as uuidv4 } from 'uuid';
+import speakeasy from 'speakeasy';
+import QRCode from 'qrcode';
+import { OAuth2Client } from 'google-auth-library';
+import rateLimit from 'express-rate-limit';
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID || 'UNCONFIGURED_CLIENT_ID');
+
+const authLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // Limit each IP to 10 register requests per windowMs
+  message: { status: 'error', message: 'Too many registration attempts from this IP, please try again after an hour' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const loginLimiter = rateLimit({
+  windowMs: 20 * 1000, // 20 seconds
+  max: 30, // Limit each IP to 30 login requests per windowMs
+  message: { status: 'error', message: 'Too many login attempts from this IP, please try again after 20 seconds' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const passwordResetLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // Limit each IP to 3 password reset requests per windowMs
+  message: { status: 'error', message: 'Too many password reset attempts, please try again after an hour' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -45,6 +75,14 @@ const generateTokens = (userId: string) => {
   return { accessToken, refreshToken };
 };
 
+const generateTwoFactorToken = (userId: string) => {
+  return jwt.sign(
+    { userId, type: '2fa' },
+    process.env.JWT_SECRET as string,
+    { expiresIn: '5m' }
+  );
+};
+
 const generateOTP = (): string => {
   const length = parseInt(process.env.OTP_LENGTH || '6', 10);
   return Math.floor(Math.pow(10, length - 1) + Math.random() * 9 * Math.pow(10, length - 1)).toString();
@@ -61,6 +99,7 @@ const normalizePhoneNumber = (phone: string): string | null => {
 
 router.post(
   '/register',
+  authLimiter,
   [
     body('email').optional().isEmail().normalizeEmail(),
     body('phone').optional().custom((value) => {
@@ -175,6 +214,7 @@ router.post(
           fullName: user.profile?.fullName,
           role: user.role.name,
           kycStatus: user.kycStatus,
+          isActive: user.isActive,
         },
         tokens: {
           accessToken,
@@ -188,6 +228,7 @@ router.post(
 
 router.post(
   '/register-influencer',
+  authLimiter,
   [
     body('email').optional().isEmail().normalizeEmail(),
     body('phone').optional().custom((value, { req }) => {
@@ -269,6 +310,7 @@ router.post(
     const user = (await prisma.user.create({
       data: {
         email,
+        phone: normalizedPhone || null,
         password: hashedPassword,
         roleId: influencerRole.id,
         isInfluencer: true,
@@ -323,6 +365,7 @@ router.post(
 
 router.post(
   '/login',
+  loginLimiter,
   [
     body('email').optional().isEmail().normalizeEmail(),
     body('phone').optional().matches(/^\+212[5678][0-9]{8}$/),
@@ -368,6 +411,18 @@ router.post(
       throw new AppException(403, 'Account is not activated. Please complete verification.');
     }
 
+    if ((user as any).isTwoFactorEnabled) {
+      const twoFactorToken = generateTwoFactorToken(user.uuid);
+      return res.json({
+        status: 'success',
+        message: 'Two-factor authentication required',
+        data: {
+          requiresTwoFactor: true,
+          twoFactorToken,
+        },
+      });
+    }
+
     await prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
@@ -405,6 +460,304 @@ router.post(
           refreshToken,
         },
       },
+    });
+  })
+);
+
+router.post(
+  '/login/2fa',
+  [
+    body('twoFactorToken').notEmpty(),
+    body('code').notEmpty(),
+  ],
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new AppException(400, 'Validation failed');
+    }
+
+    const { twoFactorToken, code } = req.body;
+
+    let payload: any;
+    try {
+      payload = jwt.verify(twoFactorToken, process.env.JWT_SECRET as string);
+      if (payload.type !== '2fa') throw new Error('Invalid token type');
+    } catch (e) {
+      throw new AppException(401, 'Invalid or expired 2FA token');
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { uuid: payload.userId },
+      include: { profile: true, role: true },
+    });
+
+    if (!user || (!(user as any).isTwoFactorEnabled) || (!(user as any).twoFactorSecret)) {
+      throw new AppException(400, '2FA is not enabled for this user');
+    }
+
+    const isValid = speakeasy.totp.verify({
+      secret: (user as any).twoFactorSecret,
+      encoding: 'base32',
+      token: code,
+    });
+
+    if (!isValid) {
+      throw new AppException(401, 'Invalid 2FA code');
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+
+    const { accessToken, refreshToken } = generateTokens(user.uuid);
+
+    res.json({
+      status: 'success',
+      message: 'Login successful',
+      data: {
+        user: {
+          id: user.id,
+          uuid: user.uuid,
+          email: user.email,
+          phone: user.phone,
+          fullName: user.profile?.fullName,
+          role: user.role.name,
+          kycStatus: user.kycStatus,
+          isActive: user.isActive,
+          mode: user.mode,
+          isInfluencer: user.isInfluencer || user.role.name === 'INFLUENCER',
+          avatarUrl: user.profile?.avatarUrl,
+        },
+        tokens: {
+          accessToken,
+          refreshToken,
+        },
+      },
+    });
+  })
+);
+
+router.post(
+  '/google',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { credential, role } = req.body; 
+    
+    if (!credential) {
+      throw new AppException(400, 'Google credential is required');
+    }
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    if (!payload || (!payload.email)) {
+      throw new AppException(400, 'Invalid Google token');
+    }
+
+    let user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { googleId: payload.sub } as any,
+          { email: payload.email }
+        ]
+      },
+      include: { profile: true, role: true },
+    });
+
+    if (user) {
+      if (!(user as any).googleId) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { googleId: payload.sub } as any,
+          include: { profile: true, role: true },
+        });
+      }
+
+      if ((user as any).isTwoFactorEnabled) {
+        const twoFactorToken = generateTwoFactorToken(user.uuid);
+        return res.json({
+          status: 'success',
+          message: 'Two-factor authentication required',
+          data: {
+            requiresTwoFactor: true,
+            twoFactorToken,
+          },
+        });
+      }
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      });
+
+      const { accessToken, refreshToken } = generateTokens(user.uuid);
+
+      return res.json({
+        status: 'success',
+        message: 'Login successful',
+        data: {
+          user: {
+            id: user.id,
+            uuid: user.uuid,
+            email: user.email,
+            phone: user.phone,
+            fullName: user.profile?.fullName,
+            role: (user as any).role?.name || 'USER',
+            kycStatus: user.kycStatus,
+            isActive: user.isActive,
+            mode: user.mode,
+            isInfluencer: user.isInfluencer || user.role.name === 'INFLUENCER',
+            avatarUrl: user.profile?.avatarUrl,
+          },
+          tokens: {
+            accessToken,
+            refreshToken,
+          },
+        },
+      });
+    }
+
+    const userRole = await prisma.role.findUnique({
+      where: { name: role || 'VENDOR' },
+    });
+
+    if (!userRole) {
+      throw new AppException(400, 'Invalid role specified');
+    }
+
+    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+    let registrationIp = Array.isArray(rawIp) ? rawIp[0] : rawIp.split(',')[0].trim();
+    if (registrationIp === '::1' || registrationIp === '127.0.0.1') {
+      try {
+        const ipRes = await fetch('https://api.ipify.org?format=json');
+        if (ipRes.ok) {
+          const ipData = (await ipRes.json()) as { ip: string };
+          registrationIp = ipData.ip;
+        }
+      } catch (e) {}
+    }
+
+    const detectedCity = await getGeoLocation(registrationIp);
+
+    user = await prisma.user.create({
+      data: {
+        email: payload.email,
+        googleId: payload.sub,
+        password: await bcrypt.hash(uuidv4(), 10),
+        roleId: userRole.id,
+        isInfluencer: role === 'INFLUENCER',
+        kycStatus: 'PENDING',
+        isActive: false, 
+        registrationIp,
+        detectedCity,
+        emailVerifiedAt: new Date(),
+        profile: {
+          create: {
+            fullName: payload.name || payload.email,
+            avatarUrl: payload.picture,
+            language: 'fr',
+          },
+        },
+      } as any,
+      include: { profile: true, role: true },
+    });
+
+    const { accessToken, refreshToken } = generateTokens(user.uuid);
+    
+    return res.status(201).json({
+      status: 'success',
+      message: 'Registration successful. Account pending activation.',
+      data: {
+        user: {
+          uuid: user.uuid,
+          email: user.email,
+          fullName: user.profile?.fullName,
+          role: user.role.name,
+          kycStatus: user.kycStatus,
+        },
+        tokens: {
+          accessToken,
+          refreshToken,
+        },
+        requiresVerification: true,
+      },
+    });
+  })
+);
+
+router.post(
+  '/2fa/setup',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const user = req.user!;
+    
+    if ((user as any).isTwoFactorEnabled) {
+      throw new AppException(400, '2FA is already enabled');
+    }
+
+    const secretObj = speakeasy.generateSecret({ name: `Silacod (${user.email || user.phone || 'User'})` });
+    const secret = secretObj.base32;
+    const otpauthUrl = secretObj.otpauth_url as string;
+
+    const qrCodeUrl = await QRCode.toDataURL(otpauthUrl);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { twoFactorSecret: secret } as any,
+    });
+
+    res.json({
+      status: 'success',
+      data: {
+        secret,
+        qrCodeUrl,
+      },
+    });
+  })
+);
+
+router.post(
+  '/2fa/verify',
+  authenticate,
+  [
+    body('code').notEmpty().withMessage('Verification code is required'),
+    body('secret').optional(),
+  ],
+  asyncHandler(async (req: Request, res: Response) => {
+    const { code, secret: providedSecret } = req.body;
+
+    const dbUser = await prisma.user.findUnique({ where: { id: req.user!.id } });
+    if (!dbUser) throw new AppException(404, 'User not found');
+
+    const secret = providedSecret || (dbUser as any).twoFactorSecret;
+    if (!secret) {
+      throw new AppException(400, '2FA setup was not initiated');
+    }
+
+    const isValid = speakeasy.totp.verify({
+      secret,
+      encoding: 'base32',
+      token: code,
+    });
+
+    if (!isValid) {
+      throw new AppException(400, 'Invalid verification code');
+    }
+
+    await prisma.user.update({
+      where: { id: dbUser.id },
+      data: {
+        twoFactorSecret: secret,
+        isTwoFactorEnabled: true,
+      } as any,
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Two-factor authentication has been enabled successfully.',
     });
   })
 );
@@ -494,6 +847,7 @@ router.post(
 
 router.post(
   '/forgot-password',
+  passwordResetLimiter,
   [
     body('email').optional().isEmail().normalizeEmail(),
     body('phone').optional().matches(/^\+212[5678][0-9]{8}$/),
@@ -624,6 +978,31 @@ router.post(
     res.json({
       status: 'success',
       message: 'Password reset successfully',
+    });
+  })
+);
+
+router.get(
+  '/verify-reset-token/:token',
+  asyncHandler(async (req, res) => {
+    const { token } = req.params;
+
+    const resetRecord = await prisma.passwordReset.findUnique({
+      where: { token }
+    });
+
+    if (!resetRecord) {
+      throw new AppException(400, 'Invalid or expired reset token');
+    }
+
+    if (resetRecord.expiresAt < new Date()) {
+      await prisma.passwordReset.delete({ where: { id: resetRecord.id } });
+      throw new AppException(400, 'Reset token has expired');
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Token is valid',
     });
   })
 );

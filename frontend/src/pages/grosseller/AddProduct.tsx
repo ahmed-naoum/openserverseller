@@ -21,7 +21,7 @@ export default function AddProduct() {
     retailPriceMad: '',
     stockQuantity: '',
     minProductionDays: '3',
-    visibility: 'REGULAR',
+    visibility: ['REGULAR'] as string[],
     videoUrlsInput: '',
     landingPageUrlsInput: '',
   });
@@ -67,7 +67,7 @@ export default function AddProduct() {
 
       await productsApi.create({
         ...formData,
-        categoryId: Number(formData.categoryId),
+        categoryIds: [Number(formData.categoryId)],
         baseCostMad: Number(formData.baseCostMad),
         retailPriceMad: Number(formData.retailPriceMad),
         stockQuantity: Number(formData.stockQuantity),
@@ -172,11 +172,14 @@ export default function AddProduct() {
                   value={formData.categoryId}
                   onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
                 >
-                  <option value="">Sélectionner une catégorie</option>
+                  <option value="" disabled>Sélectionner une catégorie</option>
                   {!categoriesLoading && categories.map((cat: any) => (
                     <option key={cat.id} value={cat.id}>{cat.nameFr}</option>
                   ))}
                 </select>
+                {!categoriesLoading && categories.length === 0 && (
+                  <p className="text-xs text-amber-500 mt-1">Aucune catégorie disponible.</p>
+                )}
               </div>
             </div>
 

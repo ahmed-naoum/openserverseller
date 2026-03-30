@@ -1,144 +1,124 @@
-import { Link, useLocation, Outlet } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { dashboardApi } from '../../lib/api';
 import toast from 'react-hot-toast';
+import AnnouncementBanner from '../common/AnnouncementBanner';
+import { 
+  Home, 
+  Package, 
+  Tag, 
+  Users, 
+  ShoppingCart, 
+  CreditCard, 
+  DollarSign, 
+  Clock, 
+  MessageSquare, 
+  Zap, 
+  UserCheck, 
+  Shield, 
+  Settings, 
+  Eye,
+  LogOut,
+  ChevronDown,
+  User,
+  ShieldAlert,
+  Bell
+} from 'lucide-react';
 
 const navigation = {
   vendor: [
-    { name: 'Tableau de bord', href: '/dashboard', icon: 'home' },
-    { name: 'Inventaire', href: '/dashboard/inventory', icon: 'package' },
-    { name: 'Mes Marques', href: '/dashboard/brands', icon: 'tag' },
-    { name: 'Prospects', href: '/dashboard/leads', icon: 'users' },
-    { name: 'Commandes', href: '/dashboard/orders', icon: 'shopping-cart' },
-    { name: 'Portefeuille', href: '/dashboard/wallet', icon: 'credit-card' },
-    { name: 'Marché Public', href: '/dashboard/marketplace', icon: 'shopping-cart' },
-    { name: 'Messages', href: '/dashboard/chat', icon: 'chat' },
+    { name: 'Tableau de bord', href: '/dashboard', icon: Home },
+    { name: 'Inventaire', href: '/dashboard/inventory', icon: Package },
+    { name: 'Mes Marques', href: '/dashboard/brands', icon: Tag },
+    { name: 'Prospects', href: '/dashboard/leads', icon: Users },
+    { name: 'Commandes', href: '/dashboard/orders', icon: ShoppingCart },
+    { name: 'Portefeuille', href: '/dashboard/wallet', icon: CreditCard },
+    { name: 'Marché Public', href: '/dashboard/marketplace', icon: ShoppingCart },
+    { name: 'Messages', href: '/dashboard/chat', icon: MessageSquare },
+    { name: 'Paramètres', href: '/dashboard/settings', icon: Settings },
   ],
   grosseller: [
-    { name: 'Vue d\'ensemble', href: '/grosseller', icon: 'home' },
-    { name: 'Mon Profil', href: '/grosseller/profile', icon: 'users' },
-    { name: 'Inventaire Acheté', href: '/grosseller/inventory', icon: 'package' },
-    { name: 'Ajouter un Produit', href: '/grosseller/add-product', icon: 'tag' },
-    { name: 'En Vente', href: '/grosseller/selling', icon: 'shopping-cart' },
-    { name: 'En Attente', href: '/grosseller/pending', icon: 'clock' },
-    { name: 'Approuvés', href: '/grosseller/approved', icon: 'package' },
-    { name: 'Paiements', href: '/grosseller/payouts', icon: 'dollar-sign' },
-    { name: 'Commandes', href: '/grosseller/orders', icon: 'shopping-cart' },
-    { name: 'Analytique', href: '/grosseller/analytics', icon: 'credit-card' },
-    { name: 'Support', href: '/grosseller/support', icon: 'chat' },
-    { name: 'Marché Public', href: '/grosseller/marketplace', icon: 'shopping-cart' },
-    { name: 'Messages', href: '/grosseller/chat', icon: 'chat' },
+    { name: 'Vue d\'ensemble', href: '/grosseller', icon: Home },
+    { name: 'Mon Profil', href: '/grosseller/profile', icon: Users },
+    { name: 'Inventaire Acheté', href: '/grosseller/inventory', icon: Package },
+    { name: 'Ajouter un Produit', href: '/grosseller/add-product', icon: Tag },
+    { name: 'En Vente', href: '/grosseller/selling', icon: ShoppingCart },
+    { name: 'En Attente', href: '/grosseller/pending', icon: Clock },
+    { name: 'Approuvés', href: '/grosseller/approved', icon: Package },
+    { name: 'Paiements', href: '/grosseller/payouts', icon: DollarSign },
+    { name: 'Commandes', href: '/grosseller/orders', icon: ShoppingCart },
+    { name: 'Analytique', href: '/grosseller/analytics', icon: CreditCard },
+    { name: 'Support', href: '/grosseller/support', icon: MessageSquare },
+    { name: 'Marché Public', href: '/grosseller/marketplace', icon: ShoppingCart },
+    { name: 'Messages', href: '/grosseller/chat', icon: MessageSquare },
+    { name: 'Paramètres', href: '/grosseller/settings', icon: Settings },
   ],
   influencer: [
-    { name: 'Accueil', href: '/influencer', icon: 'home' },
-    { name: 'Mon Profil', href: '/influencer/profile', icon: 'users' },
-    { name: 'Mon Inventaire', href: '/influencer/inventory', icon: 'package' },
-    { name: 'Mes Liens', href: '/influencer/links', icon: 'tag' },
-
-    { name: 'Portefeuille', href: '/influencer/wallet', icon: 'dollar-sign' },
-    { name: 'Analytics', href: '/influencer/analytics', icon: 'credit-card' },
-    { name: 'Leads', href: '/influencer/leads', icon: 'users' },
-    { name: 'Notifications', href: '/influencer/notifications', icon: 'chat' },
-    { name: 'Marché Public', href: '/influencer/marketplace', icon: 'shopping-cart' },
-    { name: 'Messages', href: '/influencer/chat', icon: 'chat' },
+    { name: 'Accueil', href: '/influencer', icon: Home },
+    { name: 'Mon Profil', href: '/influencer/profile', icon: Users },
+    { name: 'Mon Inventaire', href: '/influencer/inventory', icon: Package },
+    { name: 'Mes Liens', href: '/influencer/links', icon: Tag },
+    { name: 'Portefeuille', href: '/influencer/wallet', icon: DollarSign },
+    { name: 'Analytics', href: '/influencer/analytics', icon: CreditCard },
+    { name: 'Leads', href: '/influencer/leads', icon: Users },
+    { name: 'Notifications', href: '/influencer/notifications', icon: Bell },
+    { name: 'Marché Public', href: '/influencer/marketplace', icon: ShoppingCart },
+    { name: 'Messages', href: '/influencer/chat', icon: MessageSquare },
+    { name: 'Paramètres', href: '/influencer/settings', icon: Settings },
   ],
   agent: [
-    { name: 'Tableau de bord', href: '/agent', icon: 'home' },
-    { name: '⚡ Réclamer des Leads', href: '/agent/leads', icon: 'users' },
-    { name: '📋 Tous les Prospects', href: '/agent/my-leads', icon: 'users' },
-    { name: 'Commandes', href: '/agent/orders', icon: 'shopping-cart' },
-    { name: 'Marché Public', href: '/agent/marketplace', icon: 'shopping-cart' },
-    { name: 'Messages', href: '/agent/chat', icon: 'chat' },
+    { name: 'Tableau de bord', href: '/agent', icon: Home },
+    { name: 'Réclamer Leads', href: '/agent/leads', icon: Zap },
+    { name: 'Mes Prospects', href: '/agent/my-leads', icon: Users },
+    { name: 'Commandes', href: '/agent/orders', icon: ShoppingCart },
+    { name: 'Marché Public', href: '/agent/marketplace', icon: ShoppingCart },
+    { name: 'Messages', href: '/agent/chat', icon: MessageSquare },
+    { name: 'Paramètres', href: '/agent/settings', icon: Settings },
   ],
   admin: [
-    { name: 'Tableau de bord', href: '/admin', icon: 'home' },
-    { name: 'Utilisateurs', href: '/admin/users', icon: 'users' },
-    { name: 'Clients', href: '/admin/customers', icon: 'users' },
-    { name: 'Marques', href: '/admin/brands', icon: 'tag' },
-    { name: 'Catégories', href: '/admin/categories', icon: 'tag' },
-    { name: 'Produits', href: '/admin/products', icon: 'package' },
-    { name: 'Demandes Affiliation', href: '/admin/affiliate-claims', icon: 'user-check' },
-    { name: 'Gestion Campagnes', href: '/admin/campaigns', icon: 'zap' },
-    { name: 'Commandes', href: '/admin/orders', icon: 'shopping-cart' },
-    { name: 'Finance', href: '/admin/finance', icon: 'dollar-sign' },
-    { name: 'Fulfillment', href: '/admin/fulfillment', icon: 'clock' },
-    { name: 'Marché Public', href: '/admin/marketplace', icon: 'shopping-cart' },
-    { name: 'Messages', href: '/admin/chat', icon: 'chat' },
+    { name: 'Tableau de bord', href: '/admin', icon: Home },
+    { name: 'Utilisateurs', href: '/admin/users', icon: Users },
+    { name: 'Clients', href: '/admin/customers', icon: Users },
+    { name: 'Marques', href: '/admin/brands', icon: Tag },
+    { name: 'Catégories', href: '/admin/categories', icon: Tag },
+    { name: 'Produits', href: '/admin/products', icon: Package },
+    { name: 'Demandes Affiliation', href: '/admin/affiliate-claims', icon: UserCheck },
+    { name: 'Annonces', href: '/admin/announcements', icon: Bell },
+    { name: 'Gestion Campagnes', href: '/admin/campaigns', icon: Zap },
+    { name: 'Commandes', href: '/admin/orders', icon: ShoppingCart },
+    { name: 'Finance', href: '/admin/finance', icon: DollarSign },
+    { name: 'Fulfillment', href: '/admin/fulfillment', icon: Clock },
+    { name: 'Historique Leads', href: '/admin/lead-history', icon: Eye },
+    { name: 'Marché Public', href: '/admin/marketplace', icon: ShoppingCart },
+    { name: 'Messages', href: '/admin/chat', icon: MessageSquare },
+    { name: 'Paramètres', href: '/admin/settings', icon: Settings },
   ],
-};
-
-const icons: Record<string, JSX.Element> = {
-  home: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-    </svg>
-  ),
-  tag: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-    </svg>
-  ),
-  package: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-    </svg>
-  ),
-  users: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-    </svg>
-  ),
-  'shopping-cart': (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-    </svg>
-  ),
-  'credit-card': (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-    </svg>
-  ),
-  'dollar-sign': (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-  clock: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-  chat: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
-    </svg>
-  ),
-  zap: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-    </svg>
-  ),
-  'user-check': (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
+  confirmation: [
+    { name: 'Vérification KYC', href: '/confirmation', icon: Shield },
+    { name: 'Marché Public', href: '/confirmation/marketplace', icon: ShoppingCart },
+    { name: 'Messages', href: '/confirmation/chat', icon: MessageSquare },
+    { name: 'Paramètres', href: '/confirmation/settings', icon: Settings },
+  ],
 };
 
 export default function DashboardLayout() {
   const { user, logout, refreshUser } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const getNavItems = () => {
     if (location.pathname.startsWith('/admin')) return navigation.admin;
     if (location.pathname.startsWith('/agent')) return navigation.agent;
     if (location.pathname.startsWith('/grosseller')) return navigation.grosseller;
     if (location.pathname.startsWith('/influencer')) return navigation.influencer;
+    if (location.pathname.startsWith('/confirmation')) return navigation.confirmation;
     return navigation.vendor;
   };
 
   const navItems = getNavItems();
-  const isVendorDashboard = !location.pathname.startsWith('/admin') && !location.pathname.startsWith('/agent') && !location.pathname.startsWith('/grosseller') && !location.pathname.startsWith('/influencer');
+  const isVendorDashboard = !location.pathname.startsWith('/admin') && !location.pathname.startsWith('/agent') && !location.pathname.startsWith('/grosseller') && !location.pathname.startsWith('/influencer') && !location.pathname.startsWith('/confirmation');
   const currentMode = user?.mode || 'SELLER';
 
   const handleSwitchMode = async () => {
@@ -165,37 +145,37 @@ export default function DashboardLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#F8FAFC] font-['Inter']">
       {/* Sidebar */}
-      <aside className="fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200 z-30">
-        <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
-          <Link to="/" className="flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-              location.pathname.startsWith('/grosseller') ? 'bg-grosseller-500' : location.pathname.startsWith('/influencer') ? 'bg-influencer-500' : 'bg-primary-500'
-            }`}>
-              <span className="text-white font-bold text-lg">O</span>
-            </div>
-            <span className="font-bold text-xl text-gray-900">SILACOD</span>
-          </Link>
+      <aside className="fixed inset-y-0 left-0 w-64 glass-sidebar z-30 transition-all duration-300">
+        <div className="flex items-center gap-3 h-20 px-8 border-b border-slate-200/50">
+          <div className="w-10 h-10 bg-white rounded-xl shadow-lg shadow-slate-200/50 flex items-center justify-center overflow-hidden">
+             <img src="/logo-icon.svg" alt="SILACOD" className="w-6 h-6" />
+          </div>
+          <span className="font-extrabold text-xl tracking-tight text-[#2c2f74]">SILACOD</span>
         </div>
 
-        <nav className="p-4 space-y-1">
+        <nav className="p-6 space-y-1.5 overflow-y-auto max-h-[calc(100vh-160px)] scrollbar-hide">
           {navItems.map((item) => {
             const isActive = location.pathname === item.href;
+            const Icon = item.icon;
             const isGrosseller = location.pathname.startsWith('/grosseller');
             const isInfluencer = location.pathname.startsWith('/influencer');
+            const isConfirmation = location.pathname.startsWith('/confirmation');
             
             return (
               <Link
                 key={item.name}
                 to={item.href}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-[13px] font-black tracking-wide transition-all duration-300 group ${
                   isActive
-                    ? (isGrosseller ? 'bg-grosseller-50 text-grosseller-700' : isInfluencer ? 'bg-influencer-50 text-influencer-700' : 'bg-primary-50 text-primary-700')
-                    : 'text-gray-600 hover:bg-gray-100'
+                    ? (isGrosseller ? 'bg-grosseller-50 text-grosseller-700 shadow-sm' : isInfluencer ? 'bg-influencer-50 text-influencer-700 shadow-sm' : isConfirmation ? 'bg-teal-50 text-teal-700 shadow-sm' : 'bg-primary-50 text-primary-700 shadow-sm border border-primary-100/50')
+                    : 'text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-xl hover:shadow-slate-200/50'
                 }`}
               >
-                {icons[item.icon]}
+                <div className={`p-1.5 rounded-lg transition-colors ${isActive ? 'bg-white shadow-sm' : 'group-hover:bg-slate-50'}`}>
+                  <Icon size={18} strokeWidth={isActive ? 2.5 : 2} />
+                </div>
                 {item.name}
               </Link>
             );
@@ -204,62 +184,139 @@ export default function DashboardLayout() {
 
         {/* Mode Switcher for Vendors */}
         {isVendorDashboard && (
-          <div className="absolute bottom-4 left-4 right-4">
+          <div className="absolute bottom-6 left-6 right-6">
             <button
               onClick={handleSwitchMode}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 hover:bg-gray-100 transition-all group"
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-[1.5rem] bg-white border border-slate-100 shadow-xl shadow-slate-200/50 hover:bg-slate-50 transition-all group group/btn"
             >
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold transition-colors ${
-                currentMode === 'AFFILIATE' ? 'bg-pink-500' : 'bg-primary-500'
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-black transition-all group-hover/btn:scale-110 shadow-lg ${
+                currentMode === 'AFFILIATE' ? 'bg-accent-500 shadow-accent-200' : 'bg-primary-500 shadow-primary-200'
               }`}>
                 {currentMode === 'AFFILIATE' ? 'A' : 'V'}
               </div>
               <div className="text-left flex-1">
-                <p className="text-xs font-bold text-gray-900">
+                <p className="text-[11px] font-black text-slate-900 uppercase tracking-tighter">
                   {currentMode === 'AFFILIATE' ? 'Mode Affilié' : 'Mode Vendeur'}
                 </p>
-                <p className="text-[10px] text-gray-400">Cliquez pour basculer</p>
+                <p className="text-[9px] font-bold text-slate-400">Changer de mode</p>
               </div>
-              <svg className="w-4 h-4 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-              </svg>
+              <Zap size={14} className="text-slate-300 group-hover:text-primary-500 transition-colors" />
             </button>
           </div>
         )}
       </aside>
 
       {/* Main content */}
-      <div className="pl-64">
+      <div className="pl-64 min-h-screen">
         {/* Header */}
-        <header className="sticky top-0 h-16 bg-white border-b border-gray-200 z-20">
-          <div className="flex items-center justify-between h-full px-6">
+        <header className="sticky top-0 h-20 bg-[#F8FAFC]/80 backdrop-blur-xl border-b border-slate-200/50 z-20">
+          <div className="flex items-center justify-between h-full px-8">
             <div className="flex items-center gap-4">
-              <h1 className="text-lg font-semibold text-gray-900">
-                {navItems.find((item) => item.href === location.pathname)?.name || 'Tableau de bord'}
-              </h1>
+               {/* Search or Breadcrumbs can go here */}
+               <div className="h-10 px-4 bg-white rounded-xl border border-slate-100 flex items-center gap-3 shadow-sm">
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                  <span className="text-xs font-black text-slate-600 uppercase tracking-widest leading-none pt-0.5">
+                    {navItems.find((item) => item.href === location.pathname)?.name || 'Tableau de bord'}
+                  </span>
+               </div>
             </div>
 
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <p className="text-sm font-medium text-gray-900">{user?.fullName}</p>
-                <p className={`text-xs font-semibold ${
-                  isVendorDashboard && currentMode === 'AFFILIATE' ? 'text-pink-500' : 'text-gray-500'
-                }`}>{getRoleLabel()}</p>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
+            <div className="flex items-center gap-6">
+              {/* Notifications */}
+              <button className="relative p-2.5 bg-white rounded-xl border border-slate-100 text-slate-400 hover:text-primary-600 transition-all shadow-sm hover:shadow-md active:scale-95">
+                <Bell size={20} />
+                <span className="absolute top-2 right-2 w-2 h-2 bg-accent-500 border-2 border-white rounded-full" />
               </button>
+
+              <div className="relative">
+                <button
+                  onClick={() => setShowProfileMenu(!showProfileMenu)}
+                  className="flex items-center gap-4 hover:bg-white border border-transparent hover:border-slate-100 rounded-2xl p-1.5 pr-4 transition-all duration-300 group"
+                >
+                  <div className="w-11 h-11 bg-gradient-to-tr from-primary-600 to-indigo-400 rounded-xl flex items-center justify-center text-white font-black text-lg shadow-lg shadow-primary-200/50 group-hover:rotate-6 transition-transform">
+                    {user?.fullName?.charAt(0)?.toUpperCase() || 'U'}
+                  </div>
+                  <div className="text-left hidden sm:block">
+                    <p className="text-[13px] font-black text-slate-900 leading-tight tracking-tight">{user?.fullName}</p>
+                    <p className={`text-[10px] font-black uppercase tracking-[0.1em] ${
+                      isVendorDashboard && currentMode === 'AFFILIATE' ? 'text-accent-500' : 'text-primary-500'
+                    }`}>{getRoleLabel()}</p>
+                  </div>
+                  <ChevronDown size={16} className={`text-slate-400 transition-transform duration-500 ${showProfileMenu ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showProfileMenu && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowProfileMenu(false)}></div>
+                    <div className="absolute right-0 mt-4 w-72 bg-white rounded-[2rem] shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300">
+                      <div className="px-6 py-6 border-b border-slate-50 bg-slate-50/50 flex items-center gap-4">
+                        <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center text-primary-600 font-black text-xl border border-slate-100">
+                          {user?.fullName?.charAt(0)?.toUpperCase() || 'U'}
+                        </div>
+                        <div>
+                          <p className="text-sm font-black text-slate-900">{user?.fullName}</p>
+                          <p className="text-xs font-bold text-slate-400">{user?.email}</p>
+                        </div>
+                      </div>
+                      <div className="p-3">
+                        {[
+                          { name: 'Mon Profil', tab: '', icon: User },
+                          { name: 'Sécurité & 2FA', tab: 'security', icon: Shield },
+                          { name: 'Mot de passe', tab: 'password', icon: ShieldAlert },
+                        ].map((item) => (
+                          <button
+                            key={item.name}
+                            onClick={() => {
+                              setShowProfileMenu(false);
+                              const base = location.pathname.startsWith('/admin') ? '/admin'
+                                : location.pathname.startsWith('/agent') ? '/agent'
+                                : location.pathname.startsWith('/grosseller') ? '/grosseller'
+                                : location.pathname.startsWith('/influencer') ? '/influencer'
+                                : location.pathname.startsWith('/confirmation') ? '/confirmation'
+                                : '/dashboard';
+                              navigate(`${base}/settings${item.tab ? `?tab=${item.tab}` : ''}`);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-3 text-[13px] font-bold text-slate-600 hover:bg-slate-50 rounded-2xl transition-all group"
+                          >
+                            <item.icon size={18} className="text-slate-300 group-hover:text-primary-500 transition-colors" />
+                            {item.name}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="border-t border-slate-50 p-3 bg-slate-50/20">
+                        <button
+                          onClick={() => {
+                            setShowProfileMenu(false);
+                            handleLogout();
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-[13px] font-black text-rose-500 hover:bg-rose-50 rounded-2xl transition-all group"
+                        >
+                          <LogOut size={18} className="group-hover:translate-x-1 transition-transform" />
+                          Se déconnecter
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </header>
 
         {/* Page content */}
-        <main className="p-6"><Outlet /></main>
+        <div className="flex-1 overflow-y-auto relative px-8 py-10 min-h-[calc(100vh-80px)]">
+          {/* Background Mesh for content area */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40">
+            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary-400/5 rounded-full blur-[100px]" />
+            <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-accent-400/5 rounded-full blur-[120px]" />
+          </div>
+
+          <div className="relative z-10 max-w-[1600px] mx-auto">
+            <AnnouncementBanner position="TOP" />
+            <Outlet />
+            <AnnouncementBanner position="BOTTOM" />
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, ShieldCheck, Mail, Lock, TrendingUp, ShoppingCart, Store, Globe, Package } from 'lucide-react';
+import { GoogleLogin } from '@react-oauth/google';
 import toast from 'react-hot-toast';
 
 export default function LoginPage() {
@@ -11,7 +12,14 @@ export default function LoginPage() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const { login } = useAuth();
+  const [rememberMe, setRememberMe] = useState(false);
+  
+  // 2FA states
+  const [requires2FA, setRequires2FA] = useState(false);
+  const [twoFactorToken, setTwoFactorToken] = useState('');
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+
+  const { login, login2FA, googleAuth } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -19,7 +27,16 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const user = await login({ email: formData.email, password: formData.password });
+      const res = await login({ email: formData.email, password: formData.password });
+      
+      if (res.requiresTwoFactor) {
+        setRequires2FA(true);
+        setTwoFactorToken(res.twoFactorToken || '');
+        toast.success(res.message || 'Code 2FA requis');
+        return;
+      }
+      
+      const user = res.user!;
       toast.success('Connexion réussie!');
       
       // Redirect based on role
@@ -35,108 +52,291 @@ export default function LoginPage() {
         navigate('/dashboard');
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Erreur de connexion');
+      const status = error.response?.status;
+      const message = error.response?.data?.message || 'Erreur de connexion';
+      
+      if (status === 403) {
+        // Account not activated — redirect to pending page
+        toast.error('Votre compte n\'est pas encore activé.');
+        navigate('/pending-verification');
+      } else {
+        toast.error(message);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handle2FASubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (twoFactorCode.length !== 6) return;
+    
+    setIsLoading(true);
+    try {
+      const user = await login2FA({ twoFactorToken, code: twoFactorCode });
+      toast.success('Connexion réussie!');
+      
+      // Redirect based on role
+      if (user.role === 'SUPER_ADMIN' || user.role === 'FINANCE_ADMIN') {
+        navigate('/admin');
+      } else if (user.role === 'CALL_CENTER_AGENT') {
+        navigate('/agent');
+      } else if (user.role === 'GROSSELLER') {
+        navigate('/grosseller');
+      } else if (user.role === 'UNCONFIRMED') {
+        navigate('/verify');
+      } else {
+        navigate('/dashboard');
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Code 2FA invalide');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleSuccess = async (response: any) => {
+    if (!response.credential) return;
+    
+    setIsLoading(true);
+    try {
+      const res = await googleAuth({ credential: response.credential });
+      
+      if (res.requiresTwoFactor) {
+        setRequires2FA(true);
+        setTwoFactorToken(res.twoFactorToken || '');
+        toast.success(res.message || 'Code 2FA requis');
+        return;
+      }
+      
+      const user = res.user!;
+      toast.success('Connexion avec Google réussie!');
+      
+      // Redirect based on role
+      if (user.role === 'SUPER_ADMIN' || user.role === 'FINANCE_ADMIN') {
+        navigate('/admin');
+      } else if (user.role === 'CALL_CENTER_AGENT') {
+        navigate('/agent');
+      } else if (user.role === 'GROSSELLER') {
+        navigate('/grosseller');
+      } else if (user.role === 'UNCONFIRMED') {
+        navigate('/verify');
+      } else {
+        navigate('/dashboard');
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Erreur lors de la connexion avec Google');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-emerald-50 flex items-center justify-center px-4">
-      <div className="max-w-md w-full">
-        <div className="text-center mb-8">
-          <Link to="/" className="inline-flex items-center gap-2 mb-6">
-            <div className="w-12 h-12 bg-primary-500 rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-2xl">O</span>
-            </div>
-            <span className="font-bold text-2xl text-gray-900">SILACOD</span>
-          </Link>
-          <h1 className="text-2xl font-bold text-gray-900">Connexion</h1>
-          <p className="text-gray-600 mt-2">Accédez à votre espace vendeur</p>
+    <div className="min-h-screen relative flex items-center justify-center bg-[#F8FAFC] p-4 overflow-hidden font-['Inter'] bg-noise">
+      {/* Decorative Background Icons */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-30">
+        <div className="absolute top-[15%] left-[10%] animate-float [animation-delay:0s] text-primary-200">
+           <ShoppingCart size={64} strokeWidth={1} />
         </div>
+        <div className="absolute bottom-[20%] left-[5%] animate-float [animation-delay:2s] text-accent-200">
+           <Package size={80} strokeWidth={1} />
+        </div>
+        <div className="absolute top-[30%] right-[10%] animate-float [animation-delay:4s] text-indigo-200">
+           <TrendingUp size={70} strokeWidth={1} />
+        </div>
+        <div className="absolute bottom-[10%] right-[15%] animate-float [animation-delay:6s] text-emerald-200">
+           <Store size={90} strokeWidth={1} />
+        </div>
+        <div className="absolute top-[10%] right-[30%] animate-float [animation-delay:1s] text-slate-200">
+           <Globe size={40} strokeWidth={1} />
+        </div>
+      </div>
 
-        <div className="card p-8">
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="label">Email</label>
-              <input
-                type="email"
-                className="input"
-                placeholder="votre@email.com"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                required
-              />
+      {/* Dynamic Mesh Background Glows */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-primary-400/10 rounded-full blur-[120px] animate-mesh-light" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[70%] h-[70%] bg-accent-400/10 rounded-full blur-[150px] animate-mesh-light [animation-delay:3s]" />
+      </div>
+
+      <div className="relative z-10 w-full max-w-md space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-1000">
+        {/* Branding */}
+        <div className="text-center space-y-6">
+          <Link to="/" className="inline-flex flex-col items-center gap-4 group">
+            <div className="w-16 h-16 bg-white rounded-2xl shadow-xl shadow-slate-200/50 flex items-center justify-center group-hover:scale-110 transition-transform duration-500 relative overflow-hidden">
+               <div className="absolute inset-0 bg-gradient-to-tr from-primary-500/10 to-transparent animate-pulse" />
+               <img src="/logo-icon.svg" alt="SILACOD" className="w-10 h-10 relative z-10" />
             </div>
-
-            <div>
-              <label className="label">Mot de passe</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  className="input pr-10"
-                  placeholder="••••••••"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  required
-                />
-                <button
-                  type="button"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" className="w-4 h-4 rounded border-gray-300" />
-                <span className="text-sm text-gray-600">Se souvenir de moi</span>
-              </label>
-              <Link to="/forgot-password" className="text-sm text-primary-600 hover:text-primary-700">
-                Mot de passe oublié?
-              </Link>
-            </div>
-
-            <button
-              type="submit"
-              className="btn-primary w-full"
-              disabled={isLoading}
-            >
-              {isLoading ? 'Connexion...' : 'Se connecter'}
-            </button>
-          </form>
-
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-200"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">ou continuer avec</span>
-              </div>
-            </div>
-
-            <button className="btn-secondary w-full mt-4">
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-              </svg>
-              Google
-            </button>
+            <img src="/logo-full.svg" alt="SILACOD" className="h-7" />
+          </Link>
+          <div className="space-y-1">
+            <h1 className="text-4xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-[#2c2f74] to-primary-600">
+              C'est reparti
+            </h1>
+            <p className="text-slate-500 font-semibold tracking-wide uppercase text-[10px]">Propulsez votre business aujourd'hui</p>
           </div>
         </div>
 
-        <p className="text-center mt-6 text-gray-600">
-          Pas encore de compte?{' '}
-          <Link to="/register" className="text-primary-600 hover:text-primary-700 font-medium">
-            Créer un compte
-          </Link>
-        </p>
+        {/* Form Card */}
+        <div className="soft-card rounded-[2.5rem] p-8 sm:p-10 relative overflow-hidden group/card shadow-2xl">
+          {/* Card sparkle effect */}
+          <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-transparent via-primary-400/50 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-700" />
+          
+          <div className="relative z-10">
+            {requires2FA ? (
+              <form onSubmit={handle2FASubmit} className="space-y-6">
+                <div className="text-center space-y-3 animate-in fade-in zoom-in duration-500">
+                  <div className="w-16 h-16 bg-primary-50 rounded-2xl flex items-center justify-center mx-auto text-primary-600 shadow-inner">
+                    <ShieldCheck size={32} />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900">Vérification</h3>
+                  <p className="text-sm text-slate-500 leading-relaxed">
+                    Saisissez le code de validation 2FA.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <input
+                    type="text"
+                    placeholder="000 000"
+                    maxLength={6}
+                    value={twoFactorCode}
+                    onChange={(e) => setTwoFactorCode(e.target.value.replace(/[^0-9]/g, ''))}
+                    className="w-full bg-slate-50/50 border-transparent focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 rounded-2xl py-4 text-center text-3xl font-mono tracking-[0.4em] transition-all outline-none"
+                    required
+                  />
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRequires2FA(false);
+                        setTwoFactorCode('');
+                        setTwoFactorToken('');
+                      }}
+                      className="w-full bg-slate-50 text-slate-600 font-bold py-3.5 rounded-2xl hover:bg-slate-100 transition-all active:scale-[0.98]"
+                    >
+                      Retour
+                    </button>
+                    <button
+                      type="submit"
+                      className="w-full bg-primary-600 text-white font-bold py-3.5 rounded-2xl shadow-lg shadow-primary-600/20 hover:bg-primary-700 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                      disabled={isLoading || twoFactorCode.length !== 6}
+                    >
+                      {isLoading ? '...' : 'Valider'}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            ) : (
+              <>
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  <div className="space-y-2 animate-in fade-in slide-in-from-left-1 duration-500 stagger-1">
+                    <label className="text-[11px] font-black text-slate-400 ml-1 uppercase tracking-[0.2em]">Email Professionnel</label>
+                    <div className="relative group/input">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/input:text-primary-600 transition-colors">
+                        <Mail size={18} />
+                      </div>
+                      <input
+                        type="email"
+                        className="w-full bg-slate-50/80 border-slate-100 focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 rounded-2xl py-4 px-5 pl-12 transition-all outline-none border hover:border-slate-300 shadow-sm"
+                        placeholder="nom@exemple.com"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 animate-in fade-in slide-in-from-left-4 duration-500 stagger-2">
+                    <div className="flex justify-between items-center ml-1">
+                      <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Mot de passe</label>
+                      <Link to="/forgot-password" title="Mot de passe oublié ?" className="text-[11px] font-black text-primary-600 hover:text-primary-700 focus:outline-none tracking-wider">
+                        OUBLIÉ ?
+                      </Link>
+                    </div>
+                    <div className="relative group/input">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/input:text-primary-600 transition-colors">
+                        <Lock size={18} />
+                      </div>
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        className="w-full bg-slate-50/80 border-slate-100 focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 rounded-2xl py-4 px-5 pl-12 pr-12 transition-all outline-none border hover:border-slate-300 shadow-sm"
+                        placeholder="••••••••"
+                        value={formData.password}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        required
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 animate-in fade-in slide-in-from-bottom-2 duration-500 stagger-3">
+                    <label className="flex items-center gap-3 group cursor-pointer" onClick={() => setRememberMe(!rememberMe)}>
+                      <div className="relative flex items-center justify-center">
+                        <div className={`w-5 h-5 rounded-lg border transition-all flex items-center justify-center ${rememberMe ? 'border-primary-500 bg-white' : 'border-slate-200 bg-slate-50'}`}>
+                           <svg 
+                             className={`w-3.5 h-3.5 text-primary-600 transition-all duration-300 ${rememberMe ? 'opacity-100 scale-100' : 'opacity-0 scale-50'}`} 
+                             fill="none" 
+                             viewBox="0 0 24 24" 
+                             stroke="currentColor" 
+                             strokeWidth="4"
+                           >
+                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                           </svg>
+                        </div>
+                      </div>
+                      <span className="text-[13px] font-bold text-slate-500 group-hover:text-slate-900 transition-colors">Rester connecté</span>
+                    </label>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="btn-premium w-full py-4.5 rounded-2xl text-lg font-black hover:translate-y-[-2px] shadow-[0_10px_30px_rgba(44,47,116,0.15)] animate-in fade-in slide-in-from-bottom-2 duration-500 stagger-4"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? 'Connexion en cours...' : 'Se connecter'}
+                  </button>
+                </form>
+
+                <div className="mt-8 flex items-center gap-4 animate-in fade-in duration-1000 stagger-4">
+                  <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-200 to-transparent"></div>
+                  <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">OU</span>
+                  <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-200 to-transparent"></div>
+                </div>
+
+                <div className="mt-6 animate-in fade-in slide-in-from-bottom-2 duration-500 stagger-4">
+                  <div className="transition-transform hover:scale-[1.02] active:scale-[0.98] shadow-sm rounded-full overflow-hidden">
+                    <GoogleLogin 
+                      onSuccess={handleGoogleSuccess} 
+                      onError={() => toast.error('Échec Google')}
+                      useOneTap
+                      theme="outline"
+                      shape="pill"
+                      size="large"
+                      width="100%"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="text-center animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-500 pb-4">
+          <p className="text-sm font-bold text-slate-400">
+            Nouveau sur SILACOD ?{' '}
+            <Link to="/register" className="text-primary-600 hover:text-primary-700 font-black transition-all hover:underline underline-offset-4 decoration-2">
+              Ouvrez votre boutique
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

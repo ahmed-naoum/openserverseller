@@ -41,7 +41,7 @@ export default function AdminProducts() {
     }
   };
 
-  const handleVisibilityChange = async (id: string, visibility: 'REGULAR' | 'AFFILIATE' | 'NONE') => {
+  const handleVisibilityChange = async (id: string, visibility: string[]) => {
     try {
       await productsApi.update(id, { visibility });
       refetch();
@@ -177,6 +177,7 @@ export default function AdminProducts() {
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Catégorie</th>
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Coût</th>
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Prix</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Visibilité</th>
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Statut</th>
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Actions</th>
               </tr>
@@ -227,6 +228,15 @@ export default function AdminProducts() {
                     </div>
                   </td>
                   <td className="py-4 px-4">
+                    <div className="flex gap-1 flex-wrap">
+                      {product.visibility?.map((vis: string) => (
+                        <span key={vis} className={`px-2 py-1 text-xs font-semibold rounded-full shadow-sm border ${vis === 'REGULAR' ? 'bg-blue-50 text-blue-700 border-blue-200' : vis === 'AFFILIATE' ? 'bg-purple-50 text-purple-700 border-purple-200' : vis === 'INFLUENCER' ? 'bg-pink-50 text-pink-700 border-pink-200' : 'bg-gray-50 text-gray-700 border-gray-200'}`}>
+                          {vis}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="py-4 px-4">
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
                       product.status === 'APPROVED' ? 'bg-green-50 text-green-700 border-green-200' : 
                       product.status === 'PENDING' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-red-50 text-red-700 border-red-200'
@@ -264,30 +274,6 @@ export default function AdminProducts() {
                         </>
                       )}
                       
-                      {product.status === 'APPROVED' && product.visibility === 'REGULAR' && (
-                        <>
-                          <button 
-                            onClick={() => handleVisibilityChange(product.id, 'AFFILIATE')}
-                            className="text-[10px] px-2 py-1.5 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200/50 rounded-lg font-bold uppercase tracking-wide transition-colors"
-                            title="Passer en vue Affilié"
-                          >
-                            À Affilier
-                          </button>
-                          <div className="w-px h-6 bg-gray-200 mx-1"></div>
-                        </>
-                      )}
-                      {product.status === 'APPROVED' && product.visibility === 'AFFILIATE' && (
-                        <>
-                          <button 
-                            onClick={() => handleVisibilityChange(product.id, 'REGULAR')}
-                            className="text-[10px] px-2 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200/50 rounded-lg font-bold uppercase tracking-wide transition-colors"
-                            title="Passer en vue Normale"
-                          >
-                            Retirer
-                          </button>
-                          <div className="w-px h-6 bg-gray-200 mx-1"></div>
-                        </>
-                      )}
 
                       <button 
                         onClick={() => handleEdit(product)}

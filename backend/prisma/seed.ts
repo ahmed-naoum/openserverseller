@@ -103,10 +103,10 @@ async function main() {
   const hashedPassword = await bcrypt.hash('password123', 12);
 
   const superAdmin = await prisma.user.upsert({
-    where: { email: 'admin@openseller.ma' },
+    where: { email: 'admin@silacod.ma' },
     update: {},
     create: {
-      email: 'admin@silacod.com',
+      email: 'admin@silacod.ma',
       phone: '+212600000001',
       password: hashedPassword,
       roleId: roleMap['SUPER_ADMIN'],
@@ -125,10 +125,10 @@ async function main() {
   });
 
   const vendor = await prisma.user.upsert({
-    where: { email: 'vendor@openseller.ma' },
+    where: { email: 'vendor@silacod.ma' },
     update: {},
     create: {
-      email: 'vendor@silacod.com',
+      email: 'vendor@silacod.ma',
       phone: '+212600000002',
       password: hashedPassword,
       roleId: roleMap['VENDOR'],
@@ -156,10 +156,10 @@ async function main() {
 
   await Promise.all([
     prisma.user.upsert({
-      where: { email: 'agent@openseller.ma' },
+      where: { email: 'agent@silacod.ma' },
       update: {},
       create: {
-        email: 'agent@silacod.com',
+        email: 'agent@silacod.ma',
         phone: '+212600000003',
         password: hashedPassword,
         roleId: roleMap['CALL_CENTER_AGENT'],
@@ -176,10 +176,10 @@ async function main() {
       },
     }),
     prisma.user.upsert({
-      where: { email: 'confirmation@openseller.ma' },
+      where: { email: 'confirmation@silacod.ma' },
       update: {},
       create: {
-        email: 'confirmation@openseller.ma',
+        email: 'confirmation@silacod.ma',
         phone: '+212600000004',
         password: hashedPassword,
         roleId: roleMap['CONFIRMATION_AGENT'],
@@ -196,10 +196,10 @@ async function main() {
       },
     }),
     prisma.user.upsert({
-      where: { email: 'influencer@openseller.ma' },
+      where: { email: 'influencer@silacod.ma' },
       update: {},
       create: {
-        email: 'influencer@openseller.ma',
+        email: 'influencer@silacod.ma',
         phone: '+212600000005',
         password: hashedPassword,
         roleId: roleMap['INFLUENCER'],
@@ -258,11 +258,11 @@ async function main() {
   
   Demo Accounts (password: password123):
   ─────────────────────────────────────────────────
-  Super Admin : admin@openseller.ma
-  Vendor      : vendor@openseller.ma
-  Agent       : agent@openseller.ma
-  Conf. Agent : confirmation@openseller.ma
-  Influencer  : influencer@openseller.ma
+  Super Admin : admin@silacod.ma
+  Vendor      : vendor@silacod.ma
+  Agent       : agent@silacod.ma
+  Conf. Agent : confirmation@silacod.ma
+  Influencer  : influencer@silacod.ma
   ─────────────────────────────────────────────────
   `);
 }

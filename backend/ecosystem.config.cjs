@@ -1,9 +1,9 @@
 module.exports = {
     apps: [
         {
-            name: 'openseller-api',
+            name: 'silacod-api',
             script: 'dist/index.js',
-            cwd: '/var/www/openseller/backend',
+            cwd: '/var/www/silacod/backend',
             instances: 1,
             autorestart: true,
             watch: false,

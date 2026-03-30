@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { Eye, EyeOff } from 'lucide-react';
+import { GoogleLogin } from '@react-oauth/google';
 import toast from 'react-hot-toast';
 
 interface FormErrors {
@@ -67,7 +69,9 @@ export default function RegisterPage() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
-  const { register } = useAuth();
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const { register, googleAuth } = useAuth();
   const navigate = useNavigate();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -133,7 +137,7 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
-      await register({
+      const user = await register({
         email: formData.email,
         phone: formData.phone || undefined,
         password: formData.password,
@@ -141,7 +145,11 @@ export default function RegisterPage() {
         role: formData.role,
       });
       toast.success('Compte créé avec succès!');
-      navigate('/dashboard');
+      if (!user.user?.isActive) {
+        navigate('/pending-verification');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erreur lors de l\'inscription');
     } finally {
@@ -149,15 +157,42 @@ export default function RegisterPage() {
     }
   };
 
+  const handleGoogleSuccess = async (response: any) => {
+    if (!response.credential) return;
+    
+    setIsLoading(true);
+    try {
+      const user = await googleAuth({ credential: response.credential, role: formData.role });
+      toast.success('Compte Google connecté avec succès!');
+      
+      if (!user.user?.isActive) {
+        navigate('/verify');
+      } else {
+        // Redirect based on role
+        if (user.user?.roleName === 'SUPER_ADMIN' || user.user?.roleName === 'FINANCE_ADMIN') {
+          navigate('/admin');
+        } else if (user.user?.roleName === 'CALL_CENTER_AGENT') {
+          navigate('/agent');
+        } else if (user.user?.roleName === 'GROSSELLER') {
+          navigate('/grosseller');
+        } else {
+          navigate('/dashboard');
+        }
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Erreur lors de l\'inscription avec Google');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-emerald-50 flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-accent-50 flex items-center justify-center px-4 py-12">
       <div className="max-w-lg w-full">
         <div className="text-center mb-8">
           <Link to="/" className="inline-flex items-center gap-2 mb-6">
-            <div className="w-12 h-12 bg-primary-500 rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-2xl">O</span>
-            </div>
-            <span className="font-bold text-2xl text-gray-900">SILACOD</span>
+            <img src="/logo-icon.svg" alt="SILACOD" className="w-10 h-10" />
+            <img src="/logo-full.svg" alt="SILACOD" className="h-7" />
           </Link>
           <h1 className="text-2xl font-bold text-gray-900">Créer votre compte</h1>
           <p className="text-gray-600 mt-2">Rejoignez des centaines de vendeurs</p>
@@ -232,17 +267,26 @@ export default function RegisterPage() {
 
                 <div>
                   <label className="label">Mot de passe</label>
-                  <input
-                    type="password"
-                    name="password"
-                    className={getInputClass('password')}
-                    placeholder="••••••••"
-                    value={formData.password}
-                    onChange={handleChange}
-                    onBlur={handleBlur}
-                    required
-                    minLength={8}
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      name="password"
+                      className={`${getInputClass('password')} pr-10`}
+                      placeholder="••••••••"
+                      value={formData.password}
+                      onChange={handleChange}
+                      onBlur={handleBlur}
+                      required
+                      minLength={8}
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
+                  </div>
                   {touched.password && errors.password && (
                     <p className="text-red-500 text-sm mt-1">{errors.password}</p>
                   )}
@@ -250,16 +294,25 @@ export default function RegisterPage() {
 
                 <div>
                   <label className="label">Confirmer le mot de passe</label>
-                  <input
-                    type="password"
-                    name="confirmPassword"
-                    className={getInputClass('confirmPassword')}
-                    placeholder="••••••••"
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    onBlur={handleBlur}
-                    required
-                  />
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      name="confirmPassword"
+                      className={`${getInputClass('confirmPassword')} pr-10`}
+                      placeholder="••••••••"
+                      value={formData.confirmPassword}
+                      onChange={handleChange}
+                      onBlur={handleBlur}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    >
+                      {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
+                  </div>
                   {touched.confirmPassword && errors.confirmPassword && (
                     <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>
                   )}
@@ -268,6 +321,30 @@ export default function RegisterPage() {
                 <button type="submit" className="btn-primary w-full">
                   Continuer
                 </button>
+
+                <div className="mt-6">
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-gray-200"></div>
+                    </div>
+                    <div className="relative flex justify-center text-sm">
+                      <span className="px-2 bg-white text-gray-500">ou avec</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex justify-center">
+                    <GoogleLogin 
+                      onSuccess={handleGoogleSuccess} 
+                      onError={() => toast.error('La connexion avec Google a échoué')}
+                      useOneTap
+                      theme="outline"
+                      shape="rectangular"
+                      size="large"
+                      text="signup_with"
+                      width="100%"
+                    />
+                  </div>
+                </div>
               </>
             )}
 

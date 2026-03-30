@@ -13,8 +13,8 @@ export default function BrandDesignerPage() {
     name: '',
     slogan: '',
     description: '',
-    primaryColor: '#22c55e',
-    secondaryColor: '#16a34a',
+    primaryColor: '#2c2f74',
+    secondaryColor: '#f26342',
     logoUrl: '',
   });
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -74,7 +74,7 @@ export default function BrandDesignerPage() {
   };
 
   const colorPresets = [
-    { primary: '#22c55e', secondary: '#16a34a', name: 'Vert' },
+    { primary: '#2c2f74', secondary: '#f26342', name: 'SILACOD' },
     { primary: '#3b82f6', secondary: '#2563eb', name: 'Bleu' },
     { primary: '#8b5cf6', secondary: '#7c3aed', name: 'Violet' },
     { primary: '#ef4444', secondary: '#dc2626', name: 'Rouge' },

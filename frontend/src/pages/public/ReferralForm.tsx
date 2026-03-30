@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { publicApi } from '../../lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Package, ShieldCheck, Truck, Clock, CheckCircle2, UserCircle2 } from 'lucide-react';
@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 
 export default function ReferralForm() {
   const { code } = useParams<{ code: string }>();
+  const navigate = useNavigate();
   
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
@@ -51,8 +52,7 @@ export default function ReferralForm() {
         referralCode: code!,
         ...form
       });
-      setIsSuccess(true);
-      toast.success('Votre demande a été enregistrée avec succès !');
+      navigate('/thank-you');
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Une erreur est survenue');
     } finally {

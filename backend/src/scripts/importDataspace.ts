@@ -118,7 +118,7 @@ async function main() {
           ficheTechniqueUrl: item.fiche_technique_url,
           baseCostMad: parseFloat(item.price) || 0,
           retailPriceMad: parseFloat(item.price) * 1.5 || 0, // Mock retail price as 1.5x
-          visibility: 'REGULAR',
+          visibility: ['REGULAR'],
           status: 'APPROVED',
           ownerId: adminId,
           categories: {
@@ -147,7 +147,7 @@ async function main() {
           ficheTechniqueUrl: item.fiche_technique_url,
           baseCostMad: parseFloat(item.price) || 0,
           retailPriceMad: parseFloat(item.price) * 1.5 || 0,
-          visibility: 'REGULAR',
+          visibility: ['REGULAR'],
           status: 'APPROVED',
           ownerId: adminId,
           categories: {

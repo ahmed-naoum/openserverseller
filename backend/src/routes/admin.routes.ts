@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
-import { asyncHandler } from '../middleware/errorHandler.js';
+import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -168,16 +168,105 @@ router.patch(
   authorize('SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, actionType, cloneName, cloneDescription, clonePrice, cloneImageUrls } = req.body;
 
-    if (!['APPROVED', 'REJECTED', 'REVOKED'].includes(status)) {
+    if (!['APPROVED', 'REJECTED', 'REVOKED', 'CLONED'].includes(status)) {
       res.status(400).json({ status: 'error', message: 'Invalid status' });
       return;
     }
 
-    const claim = await prisma.affiliateClaim.update({
-      where: { id: Number(id) },
-      data: { status }
+    const claim = await prisma.$transaction(async (tx) => {
+        const currentClaim = await tx.affiliateClaim.findUnique({
+            where: { id: Number(id) },
+        });
+
+        if (!currentClaim) {
+            throw new AppException(404, 'Claim not found');
+        }
+
+        if (actionType === 'CLONE_PRODUCT') {
+            // Fetch original product
+            const original = await tx.product.findUnique({
+                where: { id: currentClaim.productId },
+                include: { categories: true, images: { orderBy: { sortOrder: 'asc' } } },
+            });
+            if (!original) throw new AppException(404, 'Original product not found');
+
+            // Get user info
+            const targetUser = await tx.user.findUnique({
+                where: { id: currentClaim.userId },
+                include: { profile: true, role: true },
+            });
+            if (!targetUser) throw new AppException(404, 'User not found');
+
+            const cloneSku = `${original.sku}-U${currentClaim.userId}`;
+            
+            // Check if clone SKU already exists, add timestamp if needed
+            const existingSku = await tx.product.findUnique({ where: { sku: cloneSku } });
+            const finalSku = existingSku ? `${cloneSku}-${Date.now()}` : cloneSku;
+
+            const finalCloneName = cloneName || `${original.nameFr} (${targetUser.profile?.fullName || targetUser.email})`;
+
+            // Clone the product
+            const clonedProduct = await tx.product.create({
+                data: {
+                    sku: finalSku,
+                    nameAr: cloneName || original.nameAr,
+                    nameFr: finalCloneName,
+                    nameEn: cloneName || original.nameEn,
+                    description: cloneDescription || original.description,
+                    longDescription: cloneDescription || original.longDescription,
+                    baseCostMad: Number(original.baseCostMad),
+                    retailPriceMad: clonePrice ? Number(clonePrice) : Number(original.retailPriceMad),
+                    affiliatePriceMad: original.affiliatePriceMad ? Number(original.affiliatePriceMad) : null,
+                    influencerPriceMad: original.influencerPriceMad ? Number(original.influencerPriceMad) : null,
+                    isCustomizable: original.isCustomizable,
+                    minProductionDays: original.minProductionDays,
+                    stockQuantity: original.stockQuantity,
+                    visibility: ['NONE'],
+                    status: 'APPROVED',
+                    ownerId: currentClaim.userId,
+                    videoUrls: original.videoUrls,
+                    landingPageUrls: original.landingPageUrls,
+                    commissionMad: Number(original.commissionMad),
+                    categories: {
+                        connect: (original as any).categories.map((c: any) => ({ id: c.id })),
+                    },
+                    ...((Array.isArray(cloneImageUrls) && cloneImageUrls.length > 0) ? {
+                        images: {
+                            create: cloneImageUrls.filter((u: any) => u && typeof u === 'string').map((url: string, idx: number) => ({
+                                imageUrl: url,
+                                isPrimary: idx === 0,
+                                sortOrder: idx,
+                            })),
+                        },
+                    } : ((original as any).images?.length > 0) ? {
+                        images: {
+                            create: (original as any).images.map((img: any, idx: number) => ({
+                                imageUrl: img.imageUrl,
+                                isPrimary: idx === 0,
+                                sortOrder: idx,
+                            })),
+                        },
+                    } : {}),
+                },
+            });
+
+            // Point the existing claim to the cloned product and approve it
+            return tx.affiliateClaim.update({
+                where: { id: Number(id) },
+                data: { 
+                    status: 'APPROVED', 
+                    productId: clonedProduct.id 
+                }
+            });
+        }
+
+        // Standard status update
+        return tx.affiliateClaim.update({
+            where: { id: Number(id) },
+            data: { status }
+        });
     });
 
     res.json({

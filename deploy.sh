@@ -13,19 +13,19 @@ git pull origin main
 
 # Backend
 echo ">>> Building backend..."
-cd /var/www/openseller/backend
+cd /var/www/silacod/backend
 npm install
 npx prisma generate
 npx prisma db push
 npm run build
-pm2 restart openseller-api
+pm2 restart silacod-api
 
 # Frontend
 echo ">>> Building frontend..."
-cd /var/www/openseller/frontend
+cd /var/www/silacod/frontend
 npm install
 npm run build
 
 echo ""
 echo "✅ Deployment complete!"
-echo "   Run 'pm2 logs openseller-api' to check backend logs"
+echo "   Run 'pm2 logs silacod-api' to check backend logs"

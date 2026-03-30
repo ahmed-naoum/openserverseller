@@ -67,7 +67,7 @@ export default function AdminBrands() {
                 <div className="flex items-center gap-4">
                   <div
                     className="w-12 h-12 rounded-lg flex items-center justify-center"
-                    style={{ backgroundColor: brand.primaryColor || '#22c55e' }}
+                    style={{ backgroundColor: brand.primaryColor || '#2c2f74' }}
                   >
                     {brand.logoUrl ? (
                       <img src={brand.logoUrl} alt={brand.name} className="h-8 object-contain" />
@@ -111,7 +111,7 @@ export default function AdminBrands() {
             <div key={brand.id} className="card overflow-hidden">
               <div
                 className="h-20 flex items-center justify-center"
-                style={{ backgroundColor: brand.primaryColor || '#22c55e' }}
+                style={{ backgroundColor: brand.primaryColor || '#2c2f74' }}
               >
                 {brand.logoUrl ? (
                   <img src={brand.logoUrl} alt={brand.name} className="h-12 object-contain" />

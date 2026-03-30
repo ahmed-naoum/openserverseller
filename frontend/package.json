@@ -1,7 +1,7 @@
 {
   "name": "silacod-frontend",
   "version": "1.0.0",
-  "description": "OpenSeller.ma - Moroccan Dropshipping Platform Frontend",
+  "description": "Silacod.ma - Moroccan Dropshipping Platform Frontend",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -20,6 +20,7 @@
     "@radix-ui/react-tabs": "^1.1.1",
     "@radix-ui/react-toast": "^1.2.2",
     "@radix-ui/react-tooltip": "^1.1.4",
+    "@react-oauth/google": "^0.13.4",
     "@tanstack/react-query": "^5.60.0",
     "axios": "^1.7.9",
     "class-variance-authority": "^0.7.1",
@@ -38,6 +39,7 @@
     "socket.io-client": "^4.8.3",
     "tailwind-merge": "^2.5.0",
     "vite-plugin-pwa": "^1.2.0",
+    "xlsx": "^0.18.5",
     "zod": "^3.24.1",
     "zustand": "^5.0.0"
   },

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { marketplaceApi, influencerApi } from '../../lib/api';
 import { 
   Search, 
@@ -7,12 +7,14 @@ import {
   ArrowRight,
   Link as LinkIcon,
   Copy,
-  CheckCircle2
+  CheckCircle2,
+  Eye
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 
 export default function InfluencerMarketplace() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [products, setProducts] = useState<any[]>([]);
@@ -25,6 +27,8 @@ export default function InfluencerMarketplace() {
   const [generatingFor, setGeneratingFor] = useState<number | null>(null);
   const [claimingFor, setClaimingFor] = useState<number | null>(null);
   const [generatedLink, setGeneratedLink] = useState<{ productId: number, url: string } | null>(null);
+
+
 
   // Debounce search
   useEffect(() => {
@@ -49,7 +53,7 @@ export default function InfluencerMarketplace() {
       setIsLoading(true);
       const [productsRes, claimsRes] = await Promise.all([
         marketplaceApi.products({
-          view: 'AFFILIATE',
+          view: 'INFLUENCER',
           search: searchParams.get('search') || '',
           page,
           limit: 12
@@ -105,6 +109,8 @@ export default function InfluencerMarketplace() {
     navigator.clipboard.writeText(url);
     toast.success('Lien copié !');
   };
+
+
 
   return (
     <div className="space-y-6">
@@ -175,6 +181,17 @@ export default function InfluencerMarketplace() {
                        {product.category?.nameFr}
                      </span>
                   </div>
+
+                  {/* Action Icons Toolbar */}
+                  <div className="absolute top-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-1 group-hover:translate-y-0">
+                    <button
+                      onClick={(e) => { e.preventDefault(); navigate(`/influencer/product/${product.id}`); }}
+                      className="w-8 h-8 flex items-center justify-center bg-white/90 backdrop-blur-sm rounded-lg shadow-sm hover:bg-white hover:shadow-md hover:scale-110 transition-all text-gray-600 hover:text-influencer-600"
+                      title="Voir la page produit"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
                 
                 <div className="p-5 flex-1 flex flex-col">
@@ -184,16 +201,18 @@ export default function InfluencerMarketplace() {
                     </h3>
                     <p className="text-xs text-gray-400 font-medium mb-3">SKU: {product.sku}</p>
                     
-                    <div className="inline-block px-2.5 py-1 bg-green-50 text-green-700 rounded-lg text-xs font-bold mb-4">
-                      Commission: Standard
+                    <div className="inline-block px-2.5 py-1 bg-influencer-50 text-influencer-700 rounded-lg text-xs font-bold mb-4">
+                      Commission: {`${Math.round((product.influencerPriceMad || product.retailPriceMad || 0) * 0.15 * 100) / 100} MAD`}
                     </div>
                   </div>
                   
                   <div className="mt-auto border-t border-gray-50 pt-4 space-y-3">
                      <div className="flex justify-between items-end">
                        <div>
-                         <div className="text-[10px] font-bold text-gray-400 uppercase">Prix Public</div>
-                         <div className="text-xl font-black text-gray-900 leading-none">{product.retailPriceMad} <span className="text-xs font-bold">MAD</span></div>
+                         <div className="text-[10px] font-bold text-gray-400 uppercase">Prix Influenceur</div>
+                         <div className="text-xl font-black text-gray-900 leading-none">
+                           {product.influencerPriceMad || product.retailPriceMad} <span className="text-xs font-bold">MAD</span>
+                         </div>
                        </div>
                      </div>
 
