@@ -22,6 +22,9 @@ import chatRoutes from './chat.routes.js';
 import dashboardRoutes from './dashboard.routes.js';
 import influencerRoutes from './influencer.routes.js';
 import announcementRoutes from './announcement.routes.js';
+import settingsRoutes from './settings.routes.js';
+import securityRoutes from './security.routes.js';
+import webhookRoutes from './webhook.routes.js';
 
 const router = Router();
 
@@ -29,8 +32,7 @@ router.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
-    version: '1.0.0',
+    version: '1.0.0', // Keeping version is generally okay unless it exposes specific library versions
   });
 });
 
@@ -56,5 +58,8 @@ router.use('/chat', chatRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/announcements', announcementRoutes);
 router.use('/influencer', auditLog, influencerRoutes);
+router.use('/settings', settingsRoutes);
+router.use('/admin/security', securityRoutes);
+router.use('/webhooks', webhookRoutes);
 
 export default router;

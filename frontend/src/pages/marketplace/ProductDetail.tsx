@@ -2,6 +2,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { productsApi, fulfillmentApi, chatApi, influencerApi } from '../../lib/api';
+import { getVerificationStatus } from '../common/ProfileVerification';
 import toast from 'react-hot-toast';
 import { Package, ChevronLeft, ChevronRight, MessageSquare } from 'lucide-react';
 import ProfitSimulator from '../../components/ProfitSimulator';
@@ -137,7 +138,21 @@ export default function ProductDetail() {
       return;
     }
 
-    // 2. Already Bought/Pending Check
+    // 2. Profile Verification Gate
+    const { percentage } = getVerificationStatus(user);
+    if (percentage < 100) {
+      toast.error('Vous devez compléter votre profil à 100% pour effectuer cette action.');
+      const basePath = user?.role === 'INFLUENCER' ? '/influencer' 
+                     : user?.role === 'VENDOR' ? '/dashboard'
+                     : user?.role === 'GROSSELLER' ? '/grosseller'
+                     : '';
+      if (basePath) {
+         navigate(`${basePath}/verification`);
+      }
+      return;
+    }
+
+    // 3. Already Bought/Pending Check
     if (product.userStatus?.isBought || product.userStatus?.isClaimed) {
       toast.success('Vous possédez déjà ce produit.');
       return;

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { body, validationResult } from 'express-validator';
 import { PrismaClient } from '@prisma/client';
+import axios from 'axios';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 
@@ -408,18 +409,63 @@ router.post(
       throw new AppException(400, 'This order was not created from a lead');
     }
 
+    // Unlink and delete from Coliaty if it was pushed
+    if ((order as any).coliatyPackageCode) {
+      const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
+      const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
+      const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
+
+      if (COLIATY_PUBLIC_KEY && COLIATY_SECRET_KEY && COLIATY_PUBLIC_KEY !== 'your_coliaty_public_key') {
+        try {
+          // Changed to match exact documentation URL if necessary, though base URL might include it.
+          // Following the exact same path format as the creation route /parcel/normal
+          const deleteUrl = `${COLIATY_BASE_URL.replace(/\/$/, '')}/parcel/delete/${(order as any).coliatyPackageCode}`;
+          console.log('[Coliaty] Tentative de suppression du colis via:', deleteUrl);
+          
+          const deleteRes = await axios.delete(deleteUrl, {
+            headers: {
+              Authorization: `Bearer ${COLIATY_PUBLIC_KEY}:${COLIATY_SECRET_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 10000,
+          });
+
+          console.log('[Coliaty] Delete Parcel Success:', deleteRes.data);
+        } catch (error: any) {
+          const status = error.response?.status;
+          console.error('[Coliaty] Delete Parcel Error Response:', error.response?.data || error.message);
+          
+          if (status === 400) {
+            // Coliaty returns 400 when parcel is no longer "NEW_PARCEL"
+            throw new AppException(400, "Annulation refusée: le colis est déjà en cours de traitement par Coliaty et n'est plus 'Nouveau'.");
+          } else if (status === 404) {
+            // Force block deletion if 404 occurs. DO NOT silently proceed.
+            throw new AppException(404, "Coliaty n'a pas trouvé ce colis (404). Il n'a pas été supprimé de Coliaty, l'action est bloquée !");
+          } else {
+            // Any other error, we block the action so the user knows it failed.
+            throw new AppException(status || 500, "Erreur lors de la communication avec Coliaty pour annuler le colis.");
+          }
+        }
+      }
+    }
+
     await prisma.$transaction(async (tx) => {
       // 1. Delete order items
       await tx.orderItem.deleteMany({
         where: { orderId: order.id },
       });
 
-      // 2. Delete the order
+      // 2. Delete the order status history
+      await tx.orderStatusHistory.deleteMany({
+         where: { orderId: order.id }
+      });
+
+      // 3. Delete the order
       await tx.order.delete({
         where: { id: order.id },
       });
 
-      // 3. Revert the lead status
+      // 4. Revert the lead status
       await tx.lead.update({
         where: { id: order.leadId! },
         data: { status: 'ORDERED' },
@@ -430,6 +476,186 @@ router.post(
       status: 'success',
       message: 'Order reverted to lead successfully',
     });
+  })
+);
+
+router.post(
+  '/:id/change-demand',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { request_type, package_phone, package_reciever, package_price, package_note, package_city, package_address } = req.body;
+
+    const order = await prisma.order.findUnique({
+      where: { id: Number(id) }
+    });
+
+    if (!order) throw new AppException(404, 'Order not found');
+    if (!(order as any).coliatyPackageCode) throw new AppException(400, 'This order is not synchronized with Coliaty.');
+    if (order.status !== 'PENDING') throw new AppException(400, 'Seuls les colis en attente peuvent être modifiés.');
+
+    const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
+    const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
+    const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
+
+    if (!COLIATY_PUBLIC_KEY || !COLIATY_SECRET_KEY || COLIATY_PUBLIC_KEY === 'your_coliaty_public_key') {
+      throw new AppException(500, '[Coliaty] Clés API non configurées.');
+    }
+
+    try {
+      const response = await axios.post(`${COLIATY_BASE_URL.replace(/\/$/, '')}/parcel-change-demand/create`, {
+        package_code: (order as any).coliatyPackageCode,
+        request_type,
+        package_phone,
+        package_reciever,
+        package_price,
+        package_note,
+        ...(request_type === 'CHANGE_DESTINATION' ? { package_city, package_address } : {})
+      }, {
+        headers: {
+          Authorization: `Bearer ${COLIATY_PUBLIC_KEY}:${COLIATY_SECRET_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 10000,
+      });
+
+      // Update local BD to stay in sync based on Coliaty's approval
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          customerName: package_reciever || order.customerName,
+          customerPhone: package_phone || order.customerPhone,
+          totalAmountMad: package_price ? Number(package_price) : order.totalAmountMad,
+          ...(request_type === 'CHANGE_DESTINATION' ? {
+             customerCity: package_city,
+             customerAddress: package_address
+          } : {})
+        }
+      });
+
+      res.status(200).json({
+        status: 'success',
+        message: 'Demande de modification acceptée',
+        data: response.data?.data
+      });
+    } catch (error: any) {
+      console.error('[Coliaty] Parcel Change Demand Error:', error.response?.data || error.message);
+      
+      const status = error.response?.status;
+      const data = error.response?.data;
+      
+      if (status === 400 || status === 403 || status === 404 || status === 422) {
+         // Pass through Coliaty's precise error messages. Look for the 'message' or detailed validation 'errors'
+         let exactError = "Erreur de validation de modification.";
+         if (data?.errors) {
+            if (typeof data.errors === 'object' && !Array.isArray(data.errors) && Object.values(data.errors).length > 0) {
+               exactError = String(Object.values(data.errors)[0]);
+            } else if (Array.isArray(data.errors) && data.errors.length > 0) {
+               exactError = String(data.errors[0]);
+            }
+         } else if (data?.message) {
+            exactError = data.message;
+         }
+         
+         throw new AppException(status, `Coliaty: ${exactError}`);
+      }
+
+      // If we reach here, it implies a network error, a 500 server error from Coliaty, or an unexpected status code.
+      throw new AppException(500, `Échec de la communication avec Coliaty (Status: ${status || 'Aucun'}). Détail: ${error.message}`);
+    }
+  })
+);
+
+router.put(
+  '/:id/update-normal',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { 
+      package_reciever, 
+      package_phone, 
+      package_price, 
+      package_addresse, 
+      package_city, 
+      city, // Fallback
+      package_content,
+      package_no_open 
+    } = req.body;
+
+    const finalCity = package_city || city;
+
+    const order = await prisma.order.findUnique({
+      where: { id: Number(id) }
+    });
+
+    if (!order) throw new AppException(404, 'Order not found');
+    if (!(order as any).coliatyPackageCode) throw new AppException(400, 'This order is not synchronized with Coliaty.');
+
+    const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
+    const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
+    const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
+
+    try {
+      const response = await axios.put(`${COLIATY_BASE_URL.replace(/\/$/, '')}/parcel/normal/${(order as any).coliatyPackageCode}`, {
+        package_reciever,
+        package_phone,
+        package_price: Number(package_price),
+        package_addresse,
+        package_city: finalCity,
+        // Guaranteed required fields by Coliaty
+        package_content: package_content || "Marchandise",
+        package_no_open: package_no_open ?? false,
+        package_replacement: false,
+        package_old_tracking: ""
+      }, {
+        headers: {
+          Authorization: `Bearer ${COLIATY_PUBLIC_KEY}:${COLIATY_SECRET_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 10000,
+      });
+
+      // Update local BD
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          customerName: package_reciever || order.customerName,
+          customerPhone: package_phone || order.customerPhone,
+          totalAmountMad: package_price ? Number(package_price) : order.totalAmountMad,
+          customerCity: package_city || order.customerCity,
+          customerAddress: package_addresse || order.customerAddress,
+          packageContent: package_content || order.packageContent,
+          packageNoOpen: package_no_open ?? order.packageNoOpen,
+        }
+      });
+
+      res.status(200).json({
+        status: 'success',
+        message: 'Colis mis à jour avec succès',
+        data: response.data?.data
+      });
+    } catch (error: any) {
+      console.error('[Coliaty] Parcel Normal Update Error:', error.response?.data || error.message);
+      
+      const status = error.response?.status;
+      const data = error.response?.data;
+      
+      if (status === 400 || status === 403 || status === 404 || status === 422) {
+         let exactError = "Erreur de validation Coliaty.";
+         if (data?.errors) {
+            if (typeof data.errors === 'object' && !Array.isArray(data.errors) && Object.values(data.errors).length > 0) {
+               exactError = String(Object.values(data.errors)[0]);
+            } else if (Array.isArray(data.errors) && data.errors.length > 0) {
+               exactError = String(data.errors[0]);
+            }
+         } else if (data?.message) {
+            exactError = data.message;
+         }
+         throw new AppException(status, `Coliaty: ${exactError}`);
+      }
+
+      throw new AppException(500, `Échec de mise à jour Coliaty (Status: ${status || 'Aucun'}). Détail: ${error.message}`);
+    }
   })
 );
 

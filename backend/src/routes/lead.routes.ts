@@ -3,10 +3,121 @@ import { body, query, validationResult } from 'express-validator';
 import { PrismaClient } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
+import axios from 'axios';
+
+// Helper to call Coliaty API
+const callColiatyCreateParcel = async (parcelData: {
+  package_reciever: string;
+  package_phone: string;
+  package_price: number;
+  package_addresse: string;
+  package_city: string;
+  package_content?: string;
+  package_code?: string;
+  package_no_open?: boolean;
+  package_replacement?: boolean;
+}): Promise<{ package_code: string; package_id: number }> => {
+  const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
+  const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
+  const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
+
+  if (!COLIATY_PUBLIC_KEY || !COLIATY_SECRET_KEY || COLIATY_PUBLIC_KEY === 'your_coliaty_public_key') {
+    throw new AppException(400, '[Coliaty] Clés API non configurées.');
+  }
+
+  try {
+    const response = await axios.post(
+      `${COLIATY_BASE_URL}/parcel/normal`,
+      {
+        package_content: parcelData.package_content || "Marchandise", // Required field
+        package_no_open: false,
+        package_replacement: false,
+        package_old_tracking: '',
+        ...parcelData,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${COLIATY_PUBLIC_KEY}:${COLIATY_SECRET_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 10000,
+      }
+    );
+
+    if (response.data?.success) {
+      return {
+        package_code: response.data.data.package_code,
+        package_id: response.data.data.package_id,
+      };
+    }
+    
+    // Server responded with 200 OK but success is false
+    const errorMessage = response.data?.message || JSON.stringify(response.data?.errors) || 'Erreur inconnue (Coliaty)';
+    console.error('[Coliaty] API returned failure:', response.data);
+    throw new AppException(400, `Coliaty API: ${errorMessage}`);
+  } catch (error: any) {
+    if (error instanceof AppException) throw error;
+    
+    console.error('[Coliaty] API error:', error.response?.data || error.message);
+    const apiErrorDetail = error.response?.data?.message 
+      || JSON.stringify(error.response?.data?.errors || error.response?.data) 
+      || error.message;
+    throw new AppException(400, `Coliaty Network/API Error: ${apiErrorDetail}`);
+  }
+};
 
 const router = Router();
 const prisma = new PrismaClient();
 
+// Cache for Coliaty cities to prevent rate limits
+let coliatyCitiesCache: any = null;
+let coliatyCitiesCacheTime = 0;
+const CITIES_CACHE_TTL = 1000 * 60 * 60; // 1 hour
+
+router.get(
+  '/coliaty/cities',
+  authenticate,
+  authorize('CALL_CENTER_AGENT'),
+  asyncHandler(async (req, res) => {
+    if (coliatyCitiesCache && Date.now() - coliatyCitiesCacheTime < CITIES_CACHE_TTL) {
+      return res.json({
+        status: 'success',
+        data: coliatyCitiesCache
+      });
+    }
+
+    const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
+    const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
+    const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
+
+    if (!COLIATY_PUBLIC_KEY || !COLIATY_SECRET_KEY || COLIATY_PUBLIC_KEY === 'your_coliaty_public_key') {
+      throw new AppException(400, 'Clés API Coliaty non configurées.');
+    }
+
+    try {
+      const response = await axios.get(`${COLIATY_BASE_URL}/cities/getCities`, {
+        headers: {
+          Authorization: `Bearer ${COLIATY_PUBLIC_KEY}:${COLIATY_SECRET_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 10000,
+      });
+
+      if (response.data?.success) {
+        coliatyCitiesCache = response.data.data;
+        coliatyCitiesCacheTime = Date.now();
+        return res.json({
+          status: 'success',
+          data: coliatyCitiesCache
+        });
+      }
+      throw new AppException(400, `Erreur lors de la récupération des villes: ${response.data?.message || 'Erreur inconnue'}`);
+    } catch (error: any) {
+      console.error('[Coliaty] Error fetching cities:', error.message);
+      throw new AppException(500, 'Impossible de récupérer la liste des villes depuis Coliaty.');
+    }
+  })
+);
 router.get(
   '/',
   authenticate,
@@ -68,6 +179,9 @@ router.get(
             orderBy: { createdAt: 'desc' },
             take: 3,
           },
+          referralLink: {
+            include: { product: { include: { images: true } } },
+          },
         },
         skip: (Number(page) - 1) * Number(limit),
         take: Number(limit),
@@ -98,6 +212,13 @@ router.get(
             : null,
           recentCalls: l.callLogs.length,
           lastCall: l.callLogs[0]?.createdAt || null,
+          productPrice: l.referralLink?.product?.retailPriceMad || 0,
+          product: l.referralLink?.product ? {
+            id: l.referralLink.product.id,
+            name: l.referralLink.product.nameFr || l.referralLink.product.nameAr,
+            sku: l.referralLink.product.sku,
+            image: l.referralLink.product.images[0]?.imageUrl || null,
+          } : null,
           createdAt: l.createdAt,
         })),
         pagination: {
@@ -194,18 +315,144 @@ router.get(
       where,
       take: 20,
       orderBy: { createdAt: 'desc' },
-      include: { brand: true },
+      include: { 
+        brand: true,
+        referralLink: {
+          include: { product: { include: { images: true } } }
+        }
+      },
     });
 
     res.json({
       status: 'success',
       data: {
-        leads,
+        leads: leads.map(l => ({
+          ...l,
+          productPrice: l.referralLink?.product?.retailPriceMad || 0,
+          product: l.referralLink?.product ? {
+            id: l.referralLink.product.id,
+            name: l.referralLink.product.nameFr || l.referralLink.product.nameAr,
+            sku: l.referralLink.product.sku,
+            image: l.referralLink.product.images[0]?.imageUrl || null,
+          } : null,
+        })),
         hasActiveLead: !!activeLead,
         activeLeadId: activeLead?.id || null,
         assignedInfluencers,
       },
     });
+  })
+);
+
+// GET agent's livraison (orders/parcels with Coliaty tracking) - must be before /:id routes
+router.get(
+  '/livraison',
+  authenticate,
+  authorize('CALL_CENTER_AGENT'),
+  asyncHandler(async (req, res) => {
+    const { page = 1, limit = 50 } = req.query;
+
+    // Get leads assigned to this agent that have been pushed to delivery
+    const agentLeads = await prisma.lead.findMany({
+      where: {
+        assignedAgentId: req.user!.id,
+        status: 'PUSHED_TO_DELIVERY',
+      },
+      include: {
+        order: {
+          include: {
+            items: {
+              include: {
+                product: {
+                  include: { images: { where: { isPrimary: true }, take: 1 } },
+                },
+              },
+            },
+          },
+        },
+      },
+      skip: (Number(page) - 1) * Number(limit),
+      take: Number(limit),
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    const parcels = agentLeads
+      .filter(l => l.order)
+      .map(l => {
+        const o = l.order as any;
+        return {
+          id: o.id,
+          orderNumber: o.orderNumber,
+          customerName: o.customerName,
+          customerPhone: o.customerPhone,
+          customerCity: o.customerCity,
+          customerAddress: o.customerAddress,
+          totalAmountMad: o.totalAmountMad,
+          status: o.status,
+          paymentMethod: o.paymentMethod,
+          coliatyPackageCode: o.coliatyPackageCode || null,
+          coliatyPackageId: o.coliatyPackageId || null,
+          packageContent: o.packageContent || null,
+          packageNoOpen: o.packageNoOpen || false,
+          items: o.items?.map((item: any) => ({
+            id: item.id,
+            productName: item.product?.nameFr || item.product?.nameAr,
+            productImage: item.product?.images?.[0]?.imageUrl,
+            quantity: item.quantity,
+            unitPriceMad: item.unitPriceMad,
+            totalPriceMad: item.totalPriceMad,
+          })) || [],
+          leadId: l.id,
+          leadFullName: l.fullName,
+          createdAt: o.createdAt,
+        };
+      });
+
+    res.json({
+      status: 'success',
+      data: { parcels, total: parcels.length },
+    });
+  })
+);
+
+router.get(
+  '/coliaty/parcel/:code/history',
+  authenticate,
+  authorize('CALL_CENTER_AGENT', 'VENDOR', 'SUPER_ADMIN'),
+  asyncHandler(async (req, res) => {
+    const { code } = req.params;
+    
+    const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
+    const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
+    const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
+
+    if (!COLIATY_PUBLIC_KEY || !COLIATY_SECRET_KEY || COLIATY_PUBLIC_KEY === 'your_coliaty_public_key') {
+      throw new AppException(400, 'Clés API Coliaty non configurées.');
+    }
+
+    try {
+      const response = await axios.get(`${COLIATY_BASE_URL}/parcel/history/${code}`, {
+        headers: {
+          Authorization: `Bearer ${COLIATY_PUBLIC_KEY}:${COLIATY_SECRET_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 10000,
+      });
+
+      if (response.data?.success) {
+        res.json({
+          status: 'success',
+          data: response.data.data
+        });
+      } else {
+        throw new AppException(response.data?.code || 404, response.data?.message || 'Historique introuvable');
+      }
+    } catch (error: any) {
+      console.error('[Coliaty] History API Error:', error.response?.data || error.message);
+      const status = error.response?.status || 500;
+      const message = error.response?.data?.message || 'Erreur lors de la récupération de l\'historique';
+      throw new AppException(status, message);
+    }
   })
 );
 
@@ -772,7 +1019,18 @@ router.post(
   authorize('CALL_CENTER_AGENT'),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { productId, quantity = 1, paymentMethod = 'COD' } = req.body;
+    const { 
+      productId, 
+      quantity = 1, 
+      paymentMethod = 'COD',
+      package_reciever,
+      package_phone,
+      package_city,
+      package_addresse,
+      package_price,
+      package_content,
+      package_no_open
+    } = req.body;
 
     const lead = await prisma.lead.findFirst({
       where: {
@@ -830,7 +1088,10 @@ router.post(
     }
 
     const unitPrice = productToOrder.retailPriceMad;
-    const totalAmountMad = unitPrice * Number(quantity);
+    
+    // Use override price if provided, otherwise calculate
+    const totalAmountMad = package_price !== undefined ? Number(package_price) : unitPrice * Number(quantity);
+    
     const commissionPercentage = parseFloat(process.env.PLATFORM_COMMISSION_PERCENTAGE || '15');
     const platformFeeMad = totalAmountMad * (commissionPercentage / 100);
     const vendorEarningMad = totalAmountMad - platformFeeMad;
@@ -842,22 +1103,54 @@ router.post(
       return `OS - ${dateStr} -${random} `;
     };
 
+    // Override lead data with modal input if provided
+    const receiverName = package_reciever || lead.fullName;
+    const receiverPhone = package_phone || lead.phone;
+    const receiverCity = package_city || lead.city || 'Casablanca';
+    const receiverAddress = package_addresse || lead.address || lead.city || 'Unknown';
+
+    // Create a Coliaty parcel (MANDATORY)
+    let coliatyResult: { package_code: string; package_id: number };
+    try {
+      // Normalize phone for Coliaty: must start with 06 or 07 followed by 8 digits
+      const normalizedPhone = receiverPhone.replace(/^\+212/, '0').replace(/\s/g, '');
+      coliatyResult = await callColiatyCreateParcel({
+        package_reciever: receiverName,
+        package_phone: normalizedPhone,
+        package_price: Number(totalAmountMad),
+        package_addresse: receiverAddress,
+        package_city: receiverCity,
+        package_content: package_content || productToOrder.nameFr || productToOrder.nameAr || 'Produit',
+        package_no_open: package_no_open ?? false,
+      });
+    } catch (coliatyError: any) {
+      console.error('[Coliaty] Error during parcel creation:', coliatyError);
+      if (coliatyError instanceof AppException) throw coliatyError;
+      throw new AppException(500, 'Erreur lors de la communication avec le service Coliaty.');
+    }
+
     const order = await prisma.$transaction(async (tx) => {
-      const newOrder = await tx.order.create({
+      const newOrder = await (tx.order as any).create({
         data: {
           orderNumber: generateOrderNumber(),
           vendorId: lead.vendorId,
           brandId: resolvedBrandId,
           leadId: lead.id,
-          customerName: lead.fullName,
-          customerPhone: lead.phone,
-          customerCity: lead.city || 'Unknown',
-          customerAddress: lead.address || 'Unknown',
+          customerName: receiverName,
+          customerPhone: receiverPhone,
+          customerCity: receiverCity,
+          customerAddress: receiverAddress,
           totalAmountMad,
           vendorEarningMad,
           platformFeeMad,
           paymentMethod,
           status: 'PENDING',
+          packageContent: package_content || productToOrder.nameFr || productToOrder.nameAr || 'Produit',
+          packageNoOpen: package_no_open ?? false,
+          ...(coliatyResult ? {
+            coliatyPackageCode: coliatyResult.package_code,
+            coliatyPackageId: coliatyResult.package_id,
+          } : {}),
           items: {
             create: [
               {
@@ -882,8 +1175,13 @@ router.post(
 
     res.status(201).json({
       status: 'success',
-      message: 'Order created and pushed to delivery',
-      data: { order },
+      message: coliatyResult
+        ? `Order created and pushed to Coliaty (ref: ${coliatyResult.package_code})`
+        : 'Order created and pushed to delivery (Coliaty not configured)',
+      data: {
+        order,
+        coliaty: coliatyResult,
+      },
     });
   })
 );
@@ -947,6 +1245,55 @@ router.get(
     res.json({
       status: 'success',
       data: { products: Array.from(productMap.values()) },
+    });
+  })
+);
+
+router.delete(
+  '/:id',
+  authenticate,
+  authorize('SUPER_ADMIN', 'CALL_CENTER_AGENT', 'VENDOR'),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    const lead = await prisma.lead.findUnique({
+      where: { id: Number(id) },
+    });
+
+    if (!lead) {
+      throw new AppException(404, 'Lead not found');
+    }
+
+    // Role-based restrictions
+    if (req.user!.roleName === 'VENDOR' && lead.vendorId !== req.user!.id) {
+      throw new AppException(403, 'Not authorized to delete this lead');
+    }
+    if (req.user!.roleName === 'CALL_CENTER_AGENT' && lead.assignedAgentId !== req.user!.id) {
+      throw new AppException(403, 'Not authorized to delete this assigned lead');
+    }
+
+    // Must not be an order already
+    const existingOrder = await prisma.order.findUnique({
+      where: { leadId: lead.id }
+    });
+    if (existingOrder) {
+      throw new AppException(400, 'Cannot delete a lead that has already been pushed to delivery. Please cancel the order first.');
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Clean up lead assignments and history to allow delete
+      await tx.leadAssignment.deleteMany({ where: { leadId: lead.id } });
+      await tx.leadStatusHistory.deleteMany({ where: { leadId: lead.id } });
+      await tx.callLog.deleteMany({ where: { leadId: lead.id } });
+      
+      await tx.lead.delete({
+        where: { id: lead.id },
+      });
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Lead deleted completely',
     });
   })
 );

@@ -1,4 +1,7 @@
+import { useState, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
+import MaintenanceGuard from './components/MaintenanceGuard';
+import PageLoader from './components/PageLoader';
 import toast, { Toaster } from 'react-hot-toast';
 
 // Pages
@@ -21,6 +24,7 @@ import AgentLeads from './pages/agent/Leads';
 import AgentMyLeads from './pages/agent/MyLeads';
 import AgentLeadDetail from './pages/agent/LeadDetail';
 import AgentOrders from './pages/agent/Orders';
+import AgentLivraison from './pages/agent/Livraison';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminUsers from './pages/admin/Users';
 import AdminBrands from './pages/admin/Brands';
@@ -34,6 +38,8 @@ import AdminCampaigns from './pages/admin/Campaigns';
 import AdminCustomers from './pages/admin/Customers';
 import AdminAnnouncements from './pages/admin/Announcements';
 import AdminLeadHistory from './pages/admin/LeadHistory';
+import PlatformSettings from './pages/admin/PlatformSettings';
+import SecurityFirewall from './pages/admin/SecurityFirewall';
 import GrossellerDashboard from './pages/grosseller/Dashboard';
 import GrossellerProfile from './pages/grosseller/Profile';
 import GrossellerInventory from './pages/grosseller/Inventory';
@@ -66,6 +72,8 @@ import ThankYouPage from './pages/public/ThankYouPage';
 import PendingVerificationPage from './pages/auth/PendingVerificationPage';
 import SettingsPage from './pages/common/SettingsPage';
 import NotFoundPage from './pages/common/NotFoundPage';
+import ProfileVerification from './pages/common/ProfileVerification';
+import MaintenancePage from './pages/common/MaintenancePage';
 
 // Context
 import { AuthProvider } from './contexts/AuthContext';
@@ -74,22 +82,28 @@ import { AuthProvider } from './contexts/AuthContext';
 import RoleGuard from './components/auth/RoleGuard';
 
 function App() {
+  const [loading, setLoading] = useState(true);
+
   return (
+    <>
+      {loading && <PageLoader onComplete={() => setLoading(false)} />}
     <AuthProvider>
-      <Routes>
-        {/* Public Routes */}
-        <Route path="/" element={<HomePage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/influencer/register" element={<InfluencerRegister />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/marketplace" element={<PublicMarketplace />} />
-        <Route path="/marketplace/:view" element={<PublicMarketplace />} />
-        <Route path="/product/:id" element={<ProductDetail />} />
-        <Route path="/r/:code" element={<ReferralForm />} />
-        <Route path="/thank-you" element={<ThankYouPage />} />
-        <Route path="/pending-verification" element={<PendingVerificationPage />} />
+      <MaintenanceGuard>
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/maintenance" element={<MaintenancePage />} />
+          <Route path="/" element={<HomePage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/influencer/register" element={<InfluencerRegister />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/marketplace" element={<PublicMarketplace />} />
+          <Route path="/marketplace/:view" element={<PublicMarketplace />} />
+          <Route path="/product/:id" element={<ProductDetail />} />
+          <Route path="/r/:code" element={<ReferralForm />} />
+          <Route path="/thank-you" element={<ThankYouPage />} />
+          <Route path="/pending-verification" element={<PendingVerificationPage />} />
 
         {/* Verification Route */}
         <Route path="/verify" element={
@@ -119,6 +133,7 @@ function App() {
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="verification" element={<ProfileVerification />} />
         </Route>
 
         {/* Influencer Dashboard */}
@@ -140,6 +155,7 @@ function App() {
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="verification" element={<ProfileVerification />} />
         </Route>
 
         {/* Confirmation Agent Dashboard */}
@@ -153,6 +169,7 @@ function App() {
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="verification" element={<ProfileVerification />} />
         </Route>
 
         {/* Vendor Dashboard (Seller-Affiliate with mode switching) */}
@@ -172,6 +189,7 @@ function App() {
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="verification" element={<ProfileVerification />} />
         </Route>
 
         {/* Agent Dashboard */}
@@ -185,10 +203,12 @@ function App() {
           <Route path="my-leads" element={<AgentMyLeads />} />
           <Route path="leads/:id" element={<AgentLeadDetail />} />
           <Route path="orders" element={<AgentOrders />} />
+          <Route path="livraison" element={<AgentLivraison />} />
           <Route path="marketplace" element={<PublicMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="verification" element={<ProfileVerification />} />
         </Route>
 
         {/* Admin Dashboard */}
@@ -210,15 +230,19 @@ function App() {
           <Route path="announcements" element={<AdminAnnouncements />} />
           <Route path="campaigns" element={<AdminCampaigns />} />
           <Route path="lead-history" element={<AdminLeadHistory />} />
+          <Route path="platform-settings" element={<PlatformSettings />} />
+          <Route path="security" element={<SecurityFirewall />} />
           <Route path="marketplace" element={<PublicMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="verification" element={<ProfileVerification />} />
         </Route>
 
-        {/* Catch-all 404 Route */}
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
+          {/* Catch-all 404 Route */}
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </MaintenanceGuard>
 
 
       <Toaster
@@ -373,6 +397,7 @@ function App() {
         }}
       </Toaster>
     </AuthProvider>
+    </>
   );
 }
 

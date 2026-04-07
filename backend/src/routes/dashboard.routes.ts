@@ -231,13 +231,13 @@ router.get(
     ] = await Promise.all([
       prisma.userProfile.findUnique({ where: { userId } }),
       prisma.user.findMany({
-        where: { kycStatus: 'PENDING' },
-        include: { profile: true, role: true, kycDocuments: true },
+        where: { kycStatus: { in: ['PENDING', 'UNDER_REVIEW'] } },
+        include: { profile: true, role: true, kycDocuments: true, brands: { include: { bankAccounts: true } } },
         take: 20
       }),
       prisma.user.findMany({
         where: { kycStatus: { in: ['APPROVED', 'REJECTED'] } },
-        include: { profile: true, role: true },
+        include: { profile: true, role: true, kycDocuments: true, brands: { include: { bankAccounts: true } } },
         orderBy: { updatedAt: 'desc' },
         take: 20
       }),

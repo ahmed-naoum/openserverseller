@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import { marketplaceApi, fulfillmentApi, inventoryApi } from '../../lib/api';
+import { getVerificationStatus } from '../common/ProfileVerification';
 import { 
   Search, 
   Package,
@@ -14,6 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 
 export default function GrossellerMarketplace() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get('search') || '');
@@ -73,6 +76,13 @@ export default function GrossellerMarketplace() {
   };
 
   const handleRequestProduct = async (productId: number, productName: string) => {
+    const { percentage } = getVerificationStatus(user);
+    if (percentage < 100) {
+      toast.error('Vous devez compléter votre profil à 100% pour acheter un produit.');
+      navigate('/grosseller/verification');
+      return;
+    }
+
     try {
       setRequestingFor(productId);
       await fulfillmentApi.createRequest({

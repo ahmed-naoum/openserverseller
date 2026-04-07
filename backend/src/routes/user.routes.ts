@@ -418,7 +418,9 @@ router.post(
     });
 
     // In a real application, you would send an email or SMS here
-    console.log(`[DEV ONLY] Password reset link for ${user.email || user.phone}: ${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[DEV ONLY] Password reset link for ${user.email || user.phone}: ${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`);
+    }
 
     res.json({
       status: 'success',

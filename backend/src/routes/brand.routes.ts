@@ -120,7 +120,7 @@ router.get(
 router.post(
   '/',
   authenticate,
-  authorize('VENDOR'),
+  authorize('VENDOR', 'INFLUENCER'),
   [
     body('name').trim().isLength({ min: 2, max: 100 }),
     body('slogan').optional().trim().isLength({ max: 200 }),
@@ -163,7 +163,7 @@ router.post(
         primaryColor: primaryColor || '#22c55e',
         secondaryColor: secondaryColor || '#16a34a',
         logoUrl,
-        designSettings: designSettings || {},
+        designSettings: designSettings ? JSON.stringify(designSettings) : JSON.stringify({}),
         status: 'DRAFT',
       },
       include: {
@@ -208,7 +208,7 @@ router.patch(
         ...(primaryColor && { primaryColor }),
         ...(secondaryColor && { secondaryColor }),
         ...(logoUrl && { logoUrl }),
-        ...(designSettings && { designSettings }),
+        ...(designSettings && { designSettings: JSON.stringify(designSettings) }),
       },
     });
 
@@ -311,7 +311,7 @@ router.post(
 router.post(
   '/:id/bank-account',
   authenticate,
-  authorize('VENDOR'),
+  authorize('VENDOR', 'INFLUENCER'),
   [
     body('bankName').notEmpty(),
     body('ribAccount').matches(/^[0-9]{24}$/),

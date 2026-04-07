@@ -54,12 +54,7 @@ export const authenticate = async (
       });
     }
 
-    if (!user.isActive) {
-      return res.status(403).json({
-        status: 'error',
-        message: 'Your account has been deactivated. Please contact support.',
-      });
-    }
+    // Removed global active check to allow unverified users to access dashboard and verification routes.
 
     req.user = {
       id: user.id,

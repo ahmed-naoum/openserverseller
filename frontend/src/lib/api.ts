@@ -1,6 +1,7 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
 const API_URL = (import.meta.env as any).VITE_API_URL || 'http://localhost:3001/api/v1';
+export const BACKEND_URL = API_URL.replace('/api/v1', '');
 
 export interface User {
   id: number;
@@ -24,6 +25,10 @@ api.interceptors.request.use(
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    const bypassToken = localStorage.getItem('maintenance_bypass');
+    if (bypassToken && config.headers) {
+      config.headers['x-maintenance-bypass'] = bypassToken;
+    }
     return config;
   },
   (error) => {
@@ -34,6 +39,14 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
+    // Handle Maintenance Mode
+    if (error.response?.status === 503 && (error.response.data as any)?.maintenance) {
+      if (window.location.pathname !== '/maintenance') {
+        window.location.href = '/maintenance';
+      }
+      return Promise.reject(error);
+    }
+
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -129,8 +142,28 @@ export const leadsApi = {
   available: (params?: { influencerId?: number }) => api.get('/leads/available', { params }),
   claim: (id: number) => api.post(`/leads/${id}/claim`),
   detail: (id: number) => api.get(`/leads/${id}/detail`),
-  pushToDelivery: (id: number, data: { productId?: number; quantity?: number; paymentMethod?: string }) =>
-    api.post(`/leads/${id}/push-to-delivery`, data),
+  pushToDelivery: (
+    id: number,
+    data: {
+      productId?: number;
+      quantity?: number;
+      paymentMethod?: string;
+      package_reciever?: string;
+      package_phone?: string;
+      package_city?: string;
+      package_addresse?: string;
+      package_price?: number;
+      package_content?: string;
+      package_no_open?: boolean;
+      package_replacement?: boolean;
+      package_old_tracking?: string;
+    }
+  ) => api.post(`/leads/${id}/push-to-delivery`, data),
+  livraison: (params?: { page?: number; limit?: number }) =>
+    api.get('/leads/livraison', { params }),
+  getParcelHistory: (code: string) => api.get(`/leads/coliaty/parcel/${code}/history`),
+  getColiatyCities: () => api.get('/leads/coliaty/cities'),
+  delete: (id: string) => api.delete(`/leads/${id}`),
 };
 
 export const ordersApi = {
@@ -141,6 +174,8 @@ export const ordersApi = {
   updateStatus: (id: string, data: { status: string; notes?: string }) =>
     api.patch(`/orders/${id}/status`, data),
   revertToLead: (id: number) => api.post(`/orders/${id}/revert-to-lead`),
+  changeDemand: (id: number, data: any) => api.post(`/orders/${id}/change-demand`, data),
+  updateNormal: (id: number, data: any) => api.put(`/orders/${id}/update-normal`, data),
 };
 
 export const walletApi = {
@@ -295,4 +330,18 @@ export const announcementApi = {
   toggleAnnouncement: (id: number, isActive: boolean) => api.patch(`/announcements/${id}/toggle`, { isActive }),
   deleteAnnouncement: (id: number) => api.delete(`/announcements/${id}`),
   getMyAnnouncements: () => api.get('/announcements/my-announcements'),
+};
+
+export const securityApi = {
+  overview: () => api.get('/admin/security/overview'),
+  blockIP: (ip: string) => api.post('/admin/security/block-ip', { ip }),
+  unblockIP: (ip: string) => api.delete('/admin/security/block-ip', { data: { ip } }),
+  clearThreat: (ip?: string) => api.delete('/admin/security/clear-threat', { data: { ip } }),
+};
+
+export const settingsApi = {
+  getMaintenanceStatus: () => api.get('/settings/maintenance'),
+  verifyMaintenanceBypass: (password: string) => api.post('/settings/maintenance/verify', { password }),
+  getAdminMaintenanceSettings: () => api.get('/settings/maintenance/admin'),
+  updateMaintenanceSettings: (data: { enabled: boolean; secret: string }) => api.put('/settings/maintenance', data),
 };

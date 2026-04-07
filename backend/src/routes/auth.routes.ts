@@ -407,9 +407,7 @@ router.post(
       throw new AppException(401, 'Invalid credentials');
     }
 
-    if (!user.isActive) {
-      throw new AppException(403, 'Account is not activated. Please complete verification.');
-    }
+    // Allow inactive users to login (they will see the verification banner)
 
     if ((user as any).isTwoFactorEnabled) {
       const twoFactorToken = generateTwoFactorToken(user.uuid);
@@ -786,10 +784,26 @@ router.post(
       throw new AppException(404, 'User not found');
     }
 
-    console.log(`[DEV] Verifying OTP: ${otp} for ${email || phone}`);
+    const targetEmail = email || user.email;
 
-    // In a real application, you would verify the OTP against a stored value
-    // and its expiry. For this example, we're just logging and proceeding.
+    if (targetEmail) {
+      const storedOtp = await prisma.passwordReset.findFirst({
+        where: {
+          email: targetEmail as string,
+          token: otp,
+          expiresAt: { gt: new Date() }
+        }
+      });
+
+      if (!storedOtp) {
+        throw new AppException(400, 'Code de vérification invalide ou expiré');
+      }
+
+      // Valid OTP, delete it so it can't be reused
+      await prisma.passwordReset.delete({ where: { id: storedOtp.id } });
+    } else {
+      console.log(`[DEV] Phone OTP Verified: ${otp} for ${phone}`);
+    }
 
     if (email) {
       await prisma.user.update({
@@ -834,9 +848,52 @@ router.post(
     }
 
     const otp = generateOTP();
-    // In a real application, you would store this OTP and its expiry in the database
-    // and send it via email/SMS.
-    console.log(`[DEV] New OTP for ${email || phone}: ${otp}`);
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins expiry
+    const targetEmail = email || user.email;
+
+    if (targetEmail) {
+      // Clear old OTPs
+      await prisma.passwordReset.deleteMany({
+        where: { email: targetEmail as string }
+      });
+
+      // Save new OTP
+      await prisma.passwordReset.create({
+        data: {
+          email: targetEmail as string,
+          token: otp,
+          expiresAt
+        }
+      });
+
+      const { sendEmail } = await import('../utils/mailer.js');
+      
+      try {
+        await sendEmail({
+          to: targetEmail as string,
+          subject: 'Votre code de vérification SILACOD',
+          text: `Bonjour,\n\nVoici votre code de vérification: ${otp}\nIl expirera dans 15 minutes.`,
+          html: `
+            <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+              <h2 style="color: #4F46E5;">SILACOD - Vérification</h2>
+              <p>Bonjour,</p>
+              <p>Voici votre code de vérification à 6 chiffres :</p>
+              <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; font-size: 24px; font-weight: bold; text-align: center; letter-spacing: 5px; margin: 20px 0;">
+                ${otp}
+              </div>
+              <p>Ce code expirera dans 15 minutes.</p>
+              <p>Si vous n'avez pas demandé ce code, ignorez cet email.</p>
+              <p>Cordialement,<br>L'équipe SILACOD</p>
+            </div>
+          `
+        });
+      } catch (err) {
+        console.error('Failed to send OTP email:', err);
+        throw new AppException(500, 'Erreur lors de l\'envoi de l\'email');
+      }
+    } else {
+      console.log(`[DEV] New OTP for ${phone}: ${otp}`);
+    }
 
     res.json({
       status: 'success',
@@ -1014,19 +1071,20 @@ router.post(
     const userId = req.user!.id;
     const { documents } = req.body;
 
-    if (!documents || !Array.isArray(documents) || documents.length === 0) {
-      throw new AppException(400, 'At least one document is required');
+    if (!documents || !Array.isArray(documents) || documents.length !== 3) {
+      throw new AppException(400, 'Vous devez soumettre exactement 3 documents (Recto, Verso, Liveness)');
     }
 
-    await prisma.$transaction(async (tx) => {
-      for (const doc of documents) {
+    await prisma.$transaction(async (tx) => {      
+      for (let i = 0; i < documents.length; i++) {
+        const doc = documents[i];
         await tx.kycDocument.create({
           data: {
             userId,
-            documentType: doc.type,
+            documentType: doc.type || 'ID',
             documentUrl: doc.url,
             status: 'PENDING',
-          },
+          } as any,
         });
       }
 
@@ -1054,6 +1112,31 @@ router.post(
   })
 );
 
+router.post(
+  '/sign-contract',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const userId = req.user!.id;
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        contractAccepted: true,
+        contractSignedAt: new Date(),
+      },
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Contract signed successfully',
+      data: {
+        contractAccepted: updatedUser.contractAccepted,
+        contractSignedAt: updatedUser.contractSignedAt,
+      },
+    });
+  })
+);
+
 router.get(
   '/me',
   authenticate,
@@ -1065,8 +1148,10 @@ router.get(
         role: true,
         wallet: true,
         brands: {
-          where: { status: 'APPROVED' },
           take: 1,
+          include: {
+            bankAccounts: true,
+          },
         },
       },
     });
@@ -1090,6 +1175,8 @@ router.get(
           language: (user.profile as any)?.language,
           role: user.role.name,
           mode: user.mode,
+          contractAccepted: user.contractAccepted,
+          contractSignedAt: user.contractSignedAt,
           kycStatus: user.kycStatus,
           isActive: user.isActive,
           isInfluencer: user.isInfluencer || user.role.name === 'INFLUENCER',
@@ -1100,6 +1187,7 @@ router.get(
           youtubeUsername: ((user as any).profile)?.youtubeUsername,
           snapchatUsername: ((user as any).profile)?.snapchatUsername,
           referralCode: user.referralCode,
+          brand: user.brands?.[0] || null,
           emailVerified: !!user.emailVerifiedAt,
           phoneVerified: !!user.phoneVerifiedAt,
           wallet: user.wallet ? {
@@ -1107,7 +1195,6 @@ router.get(
             totalEarnedMad: user.wallet.totalEarnedMad,
             totalWithdrawnMad: user.wallet.totalWithdrawnMad,
           } : null,
-          brand: user.brands[0] || null,
         },
       },
     });

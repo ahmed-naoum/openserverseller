@@ -75,7 +75,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { user, tokens } = response.data.data;
     localStorage.setItem('accessToken', tokens.accessToken);
     localStorage.setItem('refreshToken', tokens.refreshToken);
-    setUser(user);
+    // Fetch full user profile (includes emailVerified, brand.bankAccounts) so
+    // the verification progress is correct immediately after login.
+    try {
+      const meRes = await authApi.me();
+      setUser(meRes.data.data.user);
+    } catch {
+      setUser(user);
+    }
     return { user };
   };
 
@@ -102,7 +109,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { user, tokens } = response.data.data;
     localStorage.setItem('accessToken', tokens.accessToken);
     localStorage.setItem('refreshToken', tokens.refreshToken);
-    setUser(user);
+    try {
+      const meRes = await authApi.me();
+      setUser(meRes.data.data.user);
+    } catch {
+      setUser(user);
+    }
     return { user };
   };
 
@@ -110,12 +122,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await authApi.register(data);
     const { user, tokens } = response.data.data;
     
-    // Don't auto-login if account is not active
-    if (user.isActive !== false) {
-      localStorage.setItem('accessToken', tokens.accessToken);
-      localStorage.setItem('refreshToken', tokens.refreshToken);
-      setUser(user);
-    }
+    localStorage.setItem('accessToken', tokens.accessToken);
+    localStorage.setItem('refreshToken', tokens.refreshToken);
+    setUser(user);
     return user;
   };
 
@@ -123,12 +132,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await authApi.registerInfluencer(data);
     const { user, tokens } = response.data.data;
     
-    // Don't auto-login if account is not active
-    if (user.isActive !== false) {
-      localStorage.setItem('accessToken', tokens.accessToken);
-      localStorage.setItem('refreshToken', tokens.refreshToken);
-      setUser(user);
-    }
+    localStorage.setItem('accessToken', tokens.accessToken);
+    localStorage.setItem('refreshToken', tokens.refreshToken);
+    setUser(user);
     return user;
   };
 

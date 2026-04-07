@@ -46,22 +46,16 @@ export default function LoginPage() {
         navigate('/agent');
       } else if (user.role === 'GROSSELLER') {
         navigate('/grosseller');
+      } else if (user.role === 'INFLUENCER') {
+        navigate('/influencer');
       } else if (user.role === 'UNCONFIRMED') {
         navigate('/verify');
       } else {
         navigate('/dashboard');
       }
     } catch (error: any) {
-      const status = error.response?.status;
       const message = error.response?.data?.message || 'Erreur de connexion';
-      
-      if (status === 403) {
-        // Account not activated — redirect to pending page
-        toast.error('Votre compte n\'est pas encore activé.');
-        navigate('/pending-verification');
-      } else {
-        toast.error(message);
-      }
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -83,6 +77,8 @@ export default function LoginPage() {
         navigate('/agent');
       } else if (user.role === 'GROSSELLER') {
         navigate('/grosseller');
+      } else if (user.role === 'INFLUENCER') {
+        navigate('/influencer');
       } else if (user.role === 'UNCONFIRMED') {
         navigate('/verify');
       } else {
@@ -119,6 +115,8 @@ export default function LoginPage() {
         navigate('/agent');
       } else if (user.role === 'GROSSELLER') {
         navigate('/grosseller');
+      } else if (user.role === 'INFLUENCER') {
+        navigate('/influencer');
       } else if (user.role === 'UNCONFIRMED') {
         navigate('/verify');
       } else {
@@ -162,7 +160,7 @@ export default function LoginPage() {
         {/* Branding */}
         <div className="text-center space-y-6">
           <Link to="/" className="inline-flex flex-col items-center gap-4 group">
-            <div className="w-16 h-16 bg-white rounded-2xl shadow-xl shadow-slate-200/50 flex items-center justify-center group-hover:scale-110 transition-transform duration-500 relative overflow-hidden">
+            <div className="w-16 h-16 bg-white rounded-full shadow-xl shadow-slate-200/50 flex items-center justify-center group-hover:scale-110 transition-transform duration-500 relative overflow-hidden">
                <div className="absolute inset-0 bg-gradient-to-tr from-primary-500/10 to-transparent animate-pulse" />
                <img src="/logo-icon.svg" alt="SILACOD" className="w-10 h-10 relative z-10" />
             </div>
@@ -181,11 +179,11 @@ export default function LoginPage() {
           {/* Card sparkle effect */}
           <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-transparent via-primary-400/50 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-700" />
           
-          <div className="relative z-10">
+          <div className="relative z-10 max-w-[400px] mx-auto w-full">
             {requires2FA ? (
               <form onSubmit={handle2FASubmit} className="space-y-6">
                 <div className="text-center space-y-3 animate-in fade-in zoom-in duration-500">
-                  <div className="w-16 h-16 bg-primary-50 rounded-2xl flex items-center justify-center mx-auto text-primary-600 shadow-inner">
+                  <div className="w-16 h-16 bg-primary-50 rounded-full flex items-center justify-center mx-auto text-primary-600 shadow-inner">
                     <ShieldCheck size={32} />
                   </div>
                   <h3 className="text-xl font-bold text-slate-900">Vérification</h3>
@@ -201,7 +199,7 @@ export default function LoginPage() {
                     maxLength={6}
                     value={twoFactorCode}
                     onChange={(e) => setTwoFactorCode(e.target.value.replace(/[^0-9]/g, ''))}
-                    className="w-full bg-slate-50/50 border-transparent focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 rounded-2xl py-4 text-center text-3xl font-mono tracking-[0.4em] transition-all outline-none"
+                    className="w-full bg-slate-50/50 border-transparent focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 rounded-full py-4 text-center text-3xl font-mono tracking-[0.4em] transition-all outline-none"
                     required
                   />
                   
@@ -213,13 +211,13 @@ export default function LoginPage() {
                         setTwoFactorCode('');
                         setTwoFactorToken('');
                       }}
-                      className="w-full bg-slate-50 text-slate-600 font-bold py-3.5 rounded-2xl hover:bg-slate-100 transition-all active:scale-[0.98]"
+                      className="w-full bg-slate-50 text-slate-600 font-bold py-3.5 rounded-full hover:bg-slate-100 transition-all active:scale-[0.98]"
                     >
                       Retour
                     </button>
                     <button
                       type="submit"
-                      className="w-full bg-primary-600 text-white font-bold py-3.5 rounded-2xl shadow-lg shadow-primary-600/20 hover:bg-primary-700 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                      className="w-full bg-primary-600 text-white font-bold py-3.5 rounded-full shadow-lg shadow-primary-600/20 hover:bg-primary-700 transition-all hover:scale-[1.02] active:scale-[0.98]"
                       disabled={isLoading || twoFactorCode.length !== 6}
                     >
                       {isLoading ? '...' : 'Valider'}
@@ -238,7 +236,7 @@ export default function LoginPage() {
                       </div>
                       <input
                         type="email"
-                        className="w-full bg-slate-50/80 border-slate-100 focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 rounded-2xl py-4 px-5 pl-12 transition-all outline-none border hover:border-slate-300 shadow-sm"
+                        className="w-full bg-slate-50/80 border-slate-100 focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 rounded-full py-4 px-5 pl-12 transition-all outline-none border hover:border-slate-300 shadow-sm"
                         placeholder="nom@exemple.com"
                         value={formData.email}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -260,7 +258,7 @@ export default function LoginPage() {
                       </div>
                       <input
                         type={showPassword ? 'text' : 'password'}
-                        className="w-full bg-slate-50/80 border-slate-100 focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 rounded-2xl py-4 px-5 pl-12 pr-12 transition-all outline-none border hover:border-slate-300 shadow-sm"
+                        className="w-full bg-slate-50/80 border-slate-100 focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 rounded-full py-4 px-5 pl-12 pr-12 transition-all outline-none border hover:border-slate-300 shadow-sm"
                         placeholder="••••••••"
                         value={formData.password}
                         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
@@ -297,7 +295,7 @@ export default function LoginPage() {
 
                   <button
                     type="submit"
-                    className="btn-premium w-full py-4.5 rounded-2xl text-lg font-black hover:translate-y-[-2px] shadow-[0_10px_30px_rgba(44,47,116,0.15)] animate-in fade-in slide-in-from-bottom-2 duration-500 stagger-4"
+                    className="btn-premium w-full py-4.5 rounded-full text-lg font-black hover:translate-y-[-2px] shadow-[0_10px_30px_rgba(44,47,116,0.15)] animate-in fade-in slide-in-from-bottom-2 duration-500 stagger-4"
                     disabled={isLoading}
                   >
                     {isLoading ? 'Connexion en cours...' : 'Se connecter'}
@@ -311,7 +309,7 @@ export default function LoginPage() {
                 </div>
 
                 <div className="mt-6 animate-in fade-in slide-in-from-bottom-2 duration-500 stagger-4">
-                  <div className="transition-transform hover:scale-[1.02] active:scale-[0.98] shadow-sm rounded-full overflow-hidden">
+                  <div className="transition-transform hover:scale-[1.02] active:scale-[0.98] flex justify-center w-full">
                     <GoogleLogin 
                       onSuccess={handleGoogleSuccess} 
                       onError={() => toast.error('Échec Google')}

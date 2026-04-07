@@ -14,6 +14,22 @@ export default function AgentLeads() {
   const [selectedInfluencerId, setSelectedInfluencerId] = useState<number | ''>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [claiming, setClaiming] = useState<number | null>(null);
+
+  // Delivery Modal State
+  const [showDeliveryModal, setShowDeliveryModal] = useState(false);
+  const [selectedLeadForDelivery, setSelectedLeadForDelivery] = useState<any>(null);
+  const [coliatyCities, setColiatyCities] = useState<any[]>([]);
+  const [loadingCities, setLoadingCities] = useState(false);
+  const [isPushingDelivery, setIsPushingDelivery] = useState(false);
+  const [deliveryForm, setDeliveryForm] = useState({
+    name: '',
+    phone: '',
+    city: '',
+    address: '',
+    price: 0,
+    package_no_open: false
+  });
+
   const navigate = useNavigate();
 
   const loadData = useCallback(async () => {
@@ -34,6 +50,59 @@ export default function AgentLeads() {
       console.error('Failed to load leads:', error);
     }
   }, [selectedInfluencerId, statusFilter]);
+
+  const loadCities = async () => {
+    if (coliatyCities.length > 0) return;
+    setLoadingCities(true);
+    try {
+      const res = await leadsApi.getColiatyCities();
+      if (res.data?.data) {
+        setColiatyCities(res.data.data);
+      }
+    } catch (err: any) {
+      toast.error('Erreur lors du chargement des villes Coliaty');
+    } finally {
+      setLoadingCities(false);
+    }
+  };
+
+  const handleOpenDeliveryModal = (lead: any) => {
+    setSelectedLeadForDelivery(lead);
+    setDeliveryForm({
+      name: lead.fullName || '',
+      phone: lead.phone || '',
+      city: lead.city || '',
+      address: lead.address || '',
+      price: lead.productPrice || 0,
+      package_no_open: false
+    });
+    setShowDeliveryModal(true);
+    loadCities();
+  };
+
+  const handleConfirmDelivery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLeadForDelivery || !deliveryForm.city) return;
+    
+    setIsPushingDelivery(true);
+    try {
+      await leadsApi.pushToDelivery(selectedLeadForDelivery.id, {
+        package_reciever: deliveryForm.name,
+        package_phone: deliveryForm.phone,
+        package_city: deliveryForm.city,
+        package_addresse: deliveryForm.address,
+        package_price: deliveryForm.price,
+        package_no_open: deliveryForm.package_no_open
+      });
+      toast.success('Lead poussé à la livraison sur Coliaty!');
+      setShowDeliveryModal(false);
+      loadData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Erreur lors de la création de la commande');
+    } finally {
+      setIsPushingDelivery(false);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -62,6 +131,28 @@ export default function AgentLeads() {
       disconnectSocket();
     };
   }, [loadData]);
+
+  const handleCall = async (phone: string, leadId: number) => {
+    window.location.href = `tel:${phone}`;
+    try {
+      if (myLeads.find(l => l.id === leadId)?.status === 'ASSIGNED') {
+         await leadsApi.updateStatus(leadId.toString(), { status: 'CONTACTED' });
+         loadData();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleCancelLead = async (id: number) => {
+    try {
+      await leadsApi.delete(id.toString());
+      toast.success('Lead complètement supprimé.');
+      loadData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Erreur lors de l\'annulation');
+    }
+  };
 
   const handleClaim = async (leadId: number) => {
     if (hasActiveLead) {
@@ -166,10 +257,15 @@ export default function AgentLeads() {
                     {lead.product.image && (
                       <img src={lead.product.image} alt="" className="w-8 h-8 rounded-lg object-cover" />
                     )}
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="text-xs font-semibold text-gray-700 truncate">{lead.product.name}</p>
                       <p className="text-[10px] text-gray-400">SKU: {lead.product.sku}</p>
                     </div>
+                    {lead.productPrice > 0 && (
+                      <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg whitespace-nowrap">
+                        {Number(lead.productPrice).toFixed(2)} MAD
+                      </span>
+                    )}
                   </div>
                 )}
 
@@ -278,6 +374,23 @@ export default function AgentLeads() {
                   </div>
                 </div>
 
+                {lead.product && (
+                  <div className="flex items-center gap-2 mb-3 p-2 bg-gray-50 rounded-lg">
+                    {lead.product.image && (
+                      <img src={lead.product.image} alt="" className="w-8 h-8 rounded-lg object-cover" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-gray-700 truncate">{lead.product.name}</p>
+                      <p className="text-[10px] text-gray-400">SKU: {lead.product.sku}</p>
+                    </div>
+                    {lead.productPrice > 0 && (
+                      <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg whitespace-nowrap">
+                        {Number(lead.productPrice).toFixed(2)} MAD
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex flex-col gap-2">
                   <div className="flex gap-2">
                     <button
@@ -296,20 +409,21 @@ export default function AgentLeads() {
                     </a>
                   </div>
                   {lead.status === 'ORDERED' && (
-                    <button
-                      onClick={async () => {
-                        try {
-                          await leadsApi.pushToDelivery(lead.id, { productId: 0 });
-                          toast.success('Commande créée avec succès !');
-                          loadData();
-                        } catch (err: any) {
-                          toast.error(err.response?.data?.message || 'Erreur lors de la création de la commande');
-                        }
-                      }}
-                       className="w-full py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold hover:bg-emerald-600 transition-all shadow-md flex justify-center items-center gap-2"
-                    >
-                      🚚 Envoyer à la livraison
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleCancelLead(lead.id)}
+                         className="px-3 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-bold hover:bg-red-100 transition-all shadow-sm flex items-center justify-center border border-red-200"
+                         title="Annuler le lead"
+                      >
+                        ❌
+                      </button>
+                      <button
+                        onClick={() => handleOpenDeliveryModal(lead)}
+                         className="flex-1 py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold hover:bg-emerald-600 transition-all shadow-md flex justify-center items-center gap-2"
+                      >
+                        🚚 Envoyer à la livraison
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -321,6 +435,130 @@ export default function AgentLeads() {
           </div>
         )}
       </div>
+
+      {showDeliveryModal && selectedLeadForDelivery && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative overflow-hidden animate-slide-up">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 to-emerald-600"></div>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                📦 Confirmation Coliaty
+              </h3>
+              <button 
+                onClick={() => setShowDeliveryModal(false)}
+                className="text-gray-400 hover:text-gray-600 bg-gray-100 hover:bg-gray-200 p-2 rounded-full transition-all"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <form onSubmit={handleConfirmDelivery} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nom Complet du Destinataire</label>
+                <input
+                  type="text"
+                  required
+                  value={deliveryForm.name}
+                  onChange={(e) => setDeliveryForm({ ...deliveryForm, name: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
+                <input
+                  type="tel"
+                  required
+                  value={deliveryForm.phone}
+                  onChange={(e) => setDeliveryForm({ ...deliveryForm, phone: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  placeholder="Ex: 0612345678"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ville (Sélection Coliaty)</label>
+                {loadingCities ? (
+                  <div className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-gray-500 animate-pulse">
+                    Chargement des villes...
+                  </div>
+                ) : (
+                  <select
+                    required
+                    value={deliveryForm.city}
+                    onChange={(e) => setDeliveryForm({ ...deliveryForm, city: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none max-h-48 overflow-y-auto"
+                  >
+                    <option value="">Sélectionner une ville...</option>
+                    {coliatyCities.map((city) => (
+                      <option key={city.city_id} value={city.city_name}>
+                        {city.city_name} (Hub: {city.hub_name})
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {deliveryForm.city === '' && !loadingCities && selectedLeadForDelivery.city && (
+                  <p className="text-xs text-amber-600 mt-1">Ville du prospect ({selectedLeadForDelivery.city}) non trouvée. Veuillez sélectionner manuellement.</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Adresse Détaillée</label>
+                <textarea
+                  required
+                  rows={2}
+                  value={deliveryForm.address}
+                  onChange={(e) => setDeliveryForm({ ...deliveryForm, address: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Prix à encaisser (MAD)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  required
+                  value={deliveryForm.price || ''}
+                  onChange={(e) => setDeliveryForm({ ...deliveryForm, price: Number(e.target.value) })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={deliveryForm.package_no_open}
+                    onChange={(e) => setDeliveryForm({ ...deliveryForm, package_no_open: e.target.checked })}
+                    className="w-4 h-4 text-emerald-500 rounded border-gray-300 focus:ring-emerald-500"
+                  />
+                  Interdire Ouverture (Ne pas ouvrir avant paiement)
+                </label>
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowDeliveryModal(false)}
+                  className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-all"
+                  disabled={isPushingDelivery}
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPushingDelivery || !deliveryForm.city}
+                  className="flex-1 flex justify-center items-center gap-2 py-3 bg-emerald-500 text-white font-bold rounded-xl hover:bg-emerald-600 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  {isPushingDelivery ? 'Envoi en cours...' : 'Confirmer l\'envoi'} 🚀
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

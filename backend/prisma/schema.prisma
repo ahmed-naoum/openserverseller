@@ -66,6 +66,10 @@ model User {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
+  // Contract Status
+  contractAccepted Boolean   @default(false)
+  contractSignedAt DateTime?
+
   profile        UserProfile?
   kycDocuments   KycDocument[]
   brands         Brand[]
@@ -226,7 +230,8 @@ model Product {
   status          String   @default("APPROVED") // PENDING, APPROVED, REJECTED
   videoUrls       String[] @default([])
   landingPageUrls String[] @default([])
-  commissionMad   Float    @default(0) // Affiliate commission per sale in MAD
+  commissionMad           Float    @default(0) // Affiliate commission per sale in MAD
+  influencerCommissionMad Float    @default(0) // Influencer commission per sale in MAD
 
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -395,10 +400,14 @@ model Order {
   totalAmountMad   Float
   vendorEarningMad Float
   platformFeeMad   Float
-  status           String   @default("PENDING")
-  paymentMethod    String   @default("COD")
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  status              String   @default("PENDING")
+  paymentMethod       String   @default("COD")
+  coliatyPackageCode  String?
+  coliatyPackageId    Int?
+  packageContent      String?
+  packageNoOpen       Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   items                 OrderItem[]
   walletTransactions    WalletTransaction[]
@@ -837,4 +846,20 @@ model AgentInfluencerAssignment {
 
   @@unique([agentId, influencerId])
   @@map("agent_influencer_assignments")
+}
+
+// ==========================================
+// WEBHOOK LOGS
+// ==========================================
+
+model WebhookLog {
+  id        Int      @id @default(autoincrement())
+  provider  String   // e.g., "COLIATY"
+  payload   Json     // Raw request body
+  processed Boolean  @default(false)
+  status    String?  // Processing status or error state
+  errorMsg  String?
+  createdAt DateTime @default(now())
+
+  @@map("webhook_logs")
 }
