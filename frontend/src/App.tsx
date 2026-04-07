@@ -40,6 +40,7 @@ import AdminAnnouncements from './pages/admin/Announcements';
 import AdminLeadHistory from './pages/admin/LeadHistory';
 import PlatformSettings from './pages/admin/PlatformSettings';
 import SecurityFirewall from './pages/admin/SecurityFirewall';
+import WebhookLogs from './pages/admin/WebhookLogs';
 import GrossellerDashboard from './pages/grosseller/Dashboard';
 import GrossellerProfile from './pages/grosseller/Profile';
 import GrossellerInventory from './pages/grosseller/Inventory';
@@ -232,6 +233,7 @@ function App() {
           <Route path="lead-history" element={<AdminLeadHistory />} />
           <Route path="platform-settings" element={<PlatformSettings />} />
           <Route path="security" element={<SecurityFirewall />} />
+          <Route path="webhook-logs" element={<WebhookLogs />} />
           <Route path="marketplace" element={<PublicMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />

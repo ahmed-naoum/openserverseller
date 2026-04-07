@@ -345,3 +345,9 @@ export const settingsApi = {
   getAdminMaintenanceSettings: () => api.get('/settings/maintenance/admin'),
   updateMaintenanceSettings: (data: { enabled: boolean; secret: string }) => api.put('/settings/maintenance', data),
 };
+
+export const webhooksApi = {
+  getLogs: (params?: { page?: number; limit?: number; provider?: string; status?: string }) =>
+    api.get('/webhooks/logs', { params }),
+  clearLogs: () => api.delete('/webhooks/logs'),
+};

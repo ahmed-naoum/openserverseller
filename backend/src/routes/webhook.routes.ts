@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
+import jwt from 'jsonwebtoken';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { authenticate, authorize } from '../middleware/auth.js';
+import webhookEmitter from '../lib/webhookEmitter.js';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -84,6 +87,15 @@ router.post(
               })] : [])
             ]);
             processed = true;
+
+            // 🔔 Broadcast real-time update to all connected SSE clients
+            webhookEmitter.emit('status_update', {
+              orderId: orderMatched.id,
+              packageCode,
+              oldStatus: orderMatched.status,
+              newStatus: internalStatus,
+              vendorId: orderMatched.vendorId,
+            });
           } else {
             errorMessage = `Status '${coliatyStatus}' either unmapped or already set on the Order.`;
           }
@@ -111,6 +123,102 @@ router.post(
 
     // Always respond 200 OK
     res.status(200).json({ success: true, loggedId: webhookLogId });
+  })
+);
+
+// SSE endpoint: agents/admins connect here to get real-time parcel status updates
+// NOTE: EventSource cannot set custom headers, so we accept token via query param
+
+router.get(
+  '/stream',
+  (req, res) => {
+    // Authenticate via query param token (EventSource limitation)
+    const token = req.query.token as string || req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      res.status(401).end();
+      return;
+    }
+
+    try {
+      jwt.verify(token, process.env.JWT_SECRET || 'dev_secret_key_change_in_production_64_chars_long_string_1234567890');
+    } catch {
+      res.status(401).end();
+      return;
+    }
+
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    // Send a heartbeat every 25s to keep the connection alive
+    const heartbeatInterval = setInterval(() => {
+      res.write(': heartbeat\n\n');
+    }, 25000);
+
+    // Send initial connected event
+    res.write(`event: connected\ndata: ${JSON.stringify({ userId: req.user!.id })}\n\n`);
+
+    // Listen for status_update events and forward to this client
+    const onStatusUpdate = (data: any) => {
+      res.write(`event: status_update\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    webhookEmitter.on('status_update', onStatusUpdate);
+
+    // Cleanup when client disconnects
+    req.on('close', () => {
+      clearInterval(heartbeatInterval);
+      webhookEmitter.off('status_update', onStatusUpdate);
+    });
+  }
+);
+
+router.get(
+  '/logs',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req, res) => {
+    const { page = 1, limit = 50, provider, status } = req.query;
+
+    const where: any = {};
+    if (provider) where.provider = String(provider).toUpperCase();
+    if (status) where.status = String(status);
+
+    const [logs, total] = await Promise.all([
+      (prisma as any).webhookLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (Number(page) - 1) * Number(limit),
+        take: Number(limit),
+      }),
+      (prisma as any).webhookLog.count({ where }),
+    ]);
+
+    res.json({
+      status: 'success',
+      data: {
+        logs,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          totalPages: Math.ceil(total / Number(limit)),
+        },
+      },
+    });
+  })
+);
+
+router.delete(
+  '/logs',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req, res) => {
+    await (prisma as any).webhookLog.deleteMany({});
+    res.json({ status: 'success', message: 'Tous les logs ont été supprimés.' });
   })
 );
 

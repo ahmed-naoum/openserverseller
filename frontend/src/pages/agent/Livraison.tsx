@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { leadsApi, ordersApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -109,6 +109,9 @@ export default function AgentLivraison() {
   const [historyParcel, setHistoryParcel] = useState<Parcel | null>(null);
   const [parcelHistory, setParcelHistory] = useState<HistoryEntry[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [liveConnected, setLiveConnected] = useState(false);
+  const [lastLiveUpdate, setLastLiveUpdate] = useState<string | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   const fetchCities = async () => {
     setLoadingCities(true);
@@ -139,7 +142,44 @@ export default function AgentLivraison() {
   useEffect(() => {
     fetchParcels();
     fetchCities();
+
+    // Open SSE stream for real-time status updates from Coliaty webhooks
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      const API_URL = (import.meta.env as any).VITE_API_URL || 'http://localhost:3001/api/v1';
+      const es = new EventSource(`${API_URL}/webhooks/stream?token=${token}`);
+      eventSourceRef.current = es;
+
+      es.addEventListener('connected', () => {
+        setLiveConnected(true);
+      });
+
+      es.addEventListener('status_update', (e) => {
+        const data = JSON.parse(e.data);
+        // Update the matching parcel in-place without a full refresh
+        setParcels(prev =>
+          prev.map(p =>
+            p.id === data.orderId ? { ...p, status: data.newStatus } : p
+          )
+        );
+        setLastLiveUpdate(new Date().toLocaleTimeString('fr-FR'));
+        toast.success(
+          `📦 Colis ${data.packageCode} → ${data.newStatus}`,
+          { duration: 6000, id: `ws-${data.packageCode}` }
+        );
+      });
+
+      es.onerror = () => {
+        setLiveConnected(false);
+        // Auto-reconnect is handled by the browser; don't close manually
+      };
+    }
+
+    return () => {
+      eventSourceRef.current?.close();
+    };
   }, []);
+
 
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code).then(() => {
@@ -271,14 +311,28 @@ export default function AgentLivraison() {
             Suivez vos colis envoyés à la livraison via Coliaty
           </p>
         </div>
-        <button
-          onClick={() => fetchParcels(true)}
-          disabled={refreshing}
-          className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm active:scale-95 disabled:opacity-60"
-        >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-          Actualiser
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Live connection indicator */}
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border ${
+            liveConnected
+              ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+              : 'bg-gray-50 text-gray-400 border-gray-100'
+          }`}>
+            <span className={`w-2 h-2 rounded-full ${liveConnected ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'}`} />
+            {liveConnected ? 'Live' : 'Hors ligne'}
+            {lastLiveUpdate && liveConnected && (
+              <span className="text-emerald-400 font-medium normal-case tracking-normal ml-1">· {lastLiveUpdate}</span>
+            )}
+          </div>
+          <button
+            onClick={() => fetchParcels(true)}
+            disabled={refreshing}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm active:scale-95 disabled:opacity-60"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Actualiser
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}

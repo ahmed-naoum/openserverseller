@@ -39,7 +39,8 @@ import {
   Command,
   PanelLeftClose,
   PanelLeftOpen,
-  Truck
+  Truck,
+  Webhook
 } from 'lucide-react';
 
 const navigation = {
@@ -111,6 +112,7 @@ const navigation = {
     { name: 'Messages', href: '/admin/chat', icon: MessageSquare },
     { name: 'Paramètres Plateforme', href: '/admin/platform-settings', icon: Shield },
     { name: 'Sécurité & Firewall', href: '/admin/security', icon: ShieldAlert },
+    { name: 'Webhooks Coliaty', href: '/admin/webhook-logs', icon: Webhook },
     { name: 'Paramètres', href: '/admin/settings', icon: Settings },
   ],
   confirmation: [
