@@ -40,6 +40,12 @@ router.post(
     }
 
     try {
+      console.log('YouCan Token Exchange Request:', {
+        client_id: process.env.YOUCAN_CLIENT_ID,
+        redirect_uri: `${process.env.FRONTEND_URL}/dashboard/youcan-callback`,
+        grant_type: 'authorization_code'
+      });
+
       // Exchange code for access token via YouCan
       const response = await axios.post(
         process.env.YOUCAN_TOKEN_URL || 'https://seller-area.youcan.shop/oauth/token',
@@ -89,11 +95,17 @@ router.post(
         message: 'Successfully connected to YouCan',
       });
     } catch (error: any) {
-      console.error('YouCan OAuth Error:', error.response?.data || error.message);
+      console.error('YouCan OAuth Error Details:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message
+      });
+
       res.status(500).json({
         success: false,
         message: 'Failed to authenticate with YouCan',
-        error: error.response?.data || error.message,
+        error: error.response?.data?.message || error.response?.data?.error || error.message,
       });
     }
   })

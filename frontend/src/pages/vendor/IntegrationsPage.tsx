@@ -79,7 +79,7 @@ export default function IntegrationsPage() {
             
             {!status.isConnected ? (
               <a 
-                href={`https://seller-area.youcan.shop/admin/oauth/authorize?client_id=2498&redirect_uri=${encodeURIComponent(window.location.origin + '/dashboard/youcan-callback')}&response_type=code&scope[]=read-customers`}
+                href={`https://seller-area.youcan.shop/admin/oauth/authorize?client_id=2498&redirect_uri=${encodeURIComponent(window.location.origin + '/dashboard/youcan-callback')}&response_type=code&scope=read_customers read_orders edit_rest_hooks`}
                 className="inline-flex items-center justify-center px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-xl shadow-indigo-600/20 transition-all hover:scale-105 gap-3"
               >
                 <Link2 size={20} /> Connecter ma boutique
