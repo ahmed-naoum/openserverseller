@@ -69,16 +69,44 @@ const statusConfig: Record<string, { label: string; color: string; bg: string; i
 
 const historyStatusLabels: Record<string, string> = {
   'NEW_PARCEL': 'Nouveau Colis',
-  'DISTRIBUTION': 'En Distribution',
-  'POSTPONED': 'Reporté',
-  'REFUSE': 'Refusé',
-  'DELIVERED': 'Livré',
-  'RETURNED': 'Retourné',
-  'CANCELLED': 'Annulé',
-  'WAITING': 'En Attente',
+  'WAITING_PICKUP': 'En attente de ramassage',
+  'WAITING_PREPARATION': 'En attente de préparation',
+  'ENCORE_PREPARED': 'Encore préparé',
+  'PREPARED': 'Préparé',
   'PICKED_UP': 'Ramassé',
-  'IN_HUB': 'Dans le Hub',
-  'SHIPPING': 'En Expédition',
+  'SENT': 'Expédié',
+  'RECEIVED': 'Reçu à la destination',
+  'PROGRAMMER_AUTO': 'Auto-Programmé',
+  'CANCELED_BY_SELLER': 'Annulé par le vendeur',
+  'CANCELED_BY_SYSTEM': 'Annulé par le système',
+  'DISTRIBUTION': 'En distribution',
+  'IN_PROGRESS': 'En cours',
+  'DELIVERED': 'Livré',
+  'RETOUR_IN_PROGRESS': 'Retour vers hub',
+  'RETOUR_HUB_AVAILABLE': 'Retour disponible votre hub',
+  'RETOUR_WAREHOUSE_RETURNED_IN_PROGRESS': 'Retour au stock en cours',
+  'RETOUR_WAREHOUSE_RETURNED': 'Retourné au stock',
+  'RETOUR_CLIENT_PREPARED_FOR_DELIVERY': 'Retour prêt à livrer',
+  'RETOUR_CLIENT_DELIVERED': 'Retour livré à la clientèle',
+  'DISTINATION_CHANGED': 'Destination changée',
+  'INCORRECT_ADDRESS': 'Adresse incorrecte',
+  'CANCELED': 'Annulé',
+  'REFUSE': 'Refusé',
+  'BV': 'Boite vocal',
+  'UNREACHABLE': 'Injoignable',
+  'CPC': 'Client pas commandé',
+  'POSTPONED': 'Reporté',
+  'OUT_OF_AREA': 'Hors zone',
+  'NOANSWER': 'Non répondu',
+  'EN_VOYAGE': 'Client en voyage',
+  'CLIENT_INTERESE': 'Client intéressé',
+  'INJO': 'Injoignable',
+  'ERR': 'Numéro erroné',
+  'PLTR': 'Rappelez plus tard',
+  'CNI': 'Client pas intéressé',
+  'PROGRAMMER': 'Programmé',
+  'CDM': 'Colis endommagé',
+  'CORRECTED_INFORMATION': 'Informations corrigées'
 };
 
 export default function AgentLivraison() {
@@ -806,27 +834,41 @@ export default function AgentLivraison() {
                             <p className="text-xs text-gray-400 italic">Aucun commentaire</p>
                           )}
                           
-                          {entry.HISTORY_LIVREUR && entry.HISTORY_LIVREUR.name && (
+                          {entry.HISTORY_LIVREUR && !Array.isArray(entry.HISTORY_LIVREUR) && entry.HISTORY_LIVREUR.name && (
                             <div className="mt-3 pt-3 border-t border-gray-200/50 flex items-center justify-between">
-                              <p className="text-[10px] font-bold text-gray-400 flex items-center gap-1.5">
+                              <p className="text-[10px] font-bold text-gray-500 flex items-center gap-1.5 uppercase tracking-wider">
                                 👤 {entry.HISTORY_LIVREUR.name}
                               </p>
                               {entry.HISTORY_LIVREUR.phone && (
                                 <a 
                                   href={`tel:${entry.HISTORY_LIVREUR.phone}`}
-                                  className="text-[10px] font-black text-indigo-600 hover:underline"
+                                  className="text-[10px] font-black text-indigo-600 hover:underline flex items-center gap-1"
                                 >
-                                  📞 {entry.HISTORY_LIVREUR.phone}
+                                  <Phone size={10} /> {entry.HISTORY_LIVREUR.phone}
                                 </a>
                               )}
                             </div>
                           )}
 
-                          {entry.HISTORY_SITUATION && entry.HISTORY_SITUATION !== 'NOT_PAID' && (
-                             <p className="text-[10px] font-bold text-indigo-400 mt-2 uppercase tracking-widest">
-                               Situaton: {entry.HISTORY_SITUATION}
-                             </p>
-                          )}
+                          <div className="mt-3 pt-3 border-t border-gray-200/50 flex flex-wrap items-center gap-4">
+                            {entry.HISTORY_SITUATION && (
+                              <p className="text-[10px] font-black text-indigo-500 flex items-center gap-1.5 uppercase tracking-widest bg-indigo-50 px-2 py-1 rounded-md">
+                                Situation: {entry.HISTORY_SITUATION === 'NOT_PAID' ? 'Non payé' : entry.HISTORY_SITUATION === 'PAID' ? 'Payé' : entry.HISTORY_SITUATION}
+                              </p>
+                            )}
+
+                            {entry.HISTORY_STATUS_DATE && (
+                              <p className="text-[10px] font-bold text-gray-400 flex items-center gap-1.5 uppercase tracking-wider tooltip" title="Date d'effet sur le terrain">
+                                <Clock size={10} /> Date: {format(new Date(parseInt(entry.HISTORY_STATUS_DATE) * 1000), "dd/MM/yyyy HH:mm", { locale: fr })}
+                              </p>
+                            )}
+
+                            {entry.HISTORY_PROOF && typeof entry.HISTORY_PROOF === 'string' && (
+                              <a href={entry.HISTORY_PROOF} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-emerald-500 flex items-center gap-1.5 uppercase tracking-wider bg-emerald-50 px-2 py-1 rounded-md hover:bg-emerald-100 transition-colors">
+                                📸 Preuve disponible
+                              </a>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>

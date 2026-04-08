@@ -38,6 +38,9 @@ import AdminCampaigns from './pages/admin/Campaigns';
 import AdminCustomers from './pages/admin/Customers';
 import AdminAnnouncements from './pages/admin/Announcements';
 import AdminLeadHistory from './pages/admin/LeadHistory';
+import ProductCustomizePage from './pages/vendor/ProductCustomizePage';
+import YouCanCallback from './pages/vendor/YouCanCallback';
+import IntegrationsPage from './pages/vendor/IntegrationsPage';
 import PlatformSettings from './pages/admin/PlatformSettings';
 import SecurityFirewall from './pages/admin/SecurityFirewall';
 import WebhookLogs from './pages/admin/WebhookLogs';
@@ -156,6 +159,7 @@ function App() {
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="integrations" element={<IntegrationsPage />} />
           <Route path="verification" element={<ProfileVerification />} />
         </Route>
 
@@ -190,6 +194,8 @@ function App() {
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="integrations" element={<IntegrationsPage />} />
+          <Route path="youcan-callback" element={<YouCanCallback />} />
           <Route path="verification" element={<ProfileVerification />} />
         </Route>
 

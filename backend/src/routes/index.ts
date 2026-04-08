@@ -25,6 +25,7 @@ import announcementRoutes from './announcement.routes.js';
 import settingsRoutes from './settings.routes.js';
 import securityRoutes from './security.routes.js';
 import webhookRoutes from './webhook.routes.js';
+import youcanRoutes from './youcan.routes.js';
 
 const router = Router();
 
@@ -61,5 +62,6 @@ router.use('/influencer', auditLog, influencerRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/admin/security', securityRoutes);
 router.use('/webhooks', webhookRoutes);
+router.use('/youcan', auditLog, youcanRoutes);
 
 export default router;

@@ -46,6 +46,7 @@ import {
 const navigation = {
   vendor: [
     { name: 'Tableau de bord', href: '/dashboard', icon: Home },
+    { name: 'Intégrations', href: '/dashboard/integrations', icon: Webhook },
     { name: 'Inventaire', href: '/dashboard/inventory', icon: Package },
     { name: 'Mes Marques', href: '/dashboard/brands', icon: Tag },
     { name: 'Prospects', href: '/dashboard/leads', icon: Users },
@@ -73,6 +74,7 @@ const navigation = {
   ],
   influencer: [
     { name: 'Accueil', href: '/influencer', icon: Home },
+    { name: 'Intégrations', href: '/influencer/integrations', icon: Webhook },
     { name: 'Mon Profil', href: '/influencer/profile', icon: Users },
     { name: 'Mon Inventaire', href: '/influencer/inventory', icon: Package },
     { name: 'Mes Liens', href: '/influencer/links', icon: Tag },

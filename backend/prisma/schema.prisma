@@ -70,6 +70,10 @@ model User {
   contractAccepted Boolean   @default(false)
   contractSignedAt DateTime?
 
+  // YouCan Integration
+  youcanAccessToken String?
+  youcanStoreDomain String?
+
   profile        UserProfile?
   kycDocuments   KycDocument[]
   brands         Brand[]

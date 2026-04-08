@@ -13,8 +13,8 @@ router.post(
   '/coliaty',
   asyncHandler(async (req, res) => {
     const payload = req.body;
-    let packageCode = payload.package_code || payload.tracking_code || payload.tracking || payload.code_tracking;
-    let coliatyStatus = payload.status || payload.statut || payload.etat_livraison;
+    let packageCode = payload.package_code || payload.tracking_code || payload.tracking || payload.code_tracking || payload.TRACKING || payload.PACKAGE_CODE;
+    let coliatyStatus = payload.status || payload.statut || payload.etat_livraison || payload.STATUS || payload.STATUT;
     
     // Default assumptions
     let processed = false;
@@ -47,17 +47,46 @@ router.post(
         });
 
         if (orderMatched && coliatyStatus) {
-          // Dynamic status mapping based on Coliaty general terminology
+          // Dynamic status mapping based on Coliaty exhaustive status list
           let normalizedColiatyStatus = String(coliatyStatus).toUpperCase().trim();
           
-          if (normalizedColiatyStatus.includes('LIVRE') || normalizedColiatyStatus.includes('DELIVERED')) {
+          if (normalizedColiatyStatus === 'DELIVERED' || normalizedColiatyStatus.includes('LIVRE')) {
             internalStatus = 'DELIVERED';
-          } else if (normalizedColiatyStatus.includes('RETOUR') || normalizedColiatyStatus.includes('RETURNED') || normalizedColiatyStatus.includes('NON LIVRE')) {
+          } 
+          else if (
+            normalizedColiatyStatus.includes('RETOUR') || 
+            normalizedColiatyStatus.includes('RETURNED') || 
+            normalizedColiatyStatus.includes('NON LIVRE')
+          ) {
             internalStatus = 'RETURNED';
-          } else if (normalizedColiatyStatus.includes('REFUSE') || normalizedColiatyStatus.includes('REJECTED') || normalizedColiatyStatus.includes('ANNULE')) {
+          } 
+          else if (
+            normalizedColiatyStatus.includes('CANCELED') || 
+            normalizedColiatyStatus.includes('REFUSE') || 
+            normalizedColiatyStatus.includes('ANNULE') ||
+            normalizedColiatyStatus.includes('REJECTED') ||
+            ['CPC', 'CNI', 'CDM'].includes(normalizedColiatyStatus)
+          ) {
             internalStatus = 'CANCELLED';
-          } else if (normalizedColiatyStatus.includes('EXPEDIE') || normalizedColiatyStatus.includes('EN COURS') || normalizedColiatyStatus.includes('RAMASSE') || normalizedColiatyStatus.includes('SHIPPED')) {
+          } 
+          else if (
+            [
+              'PICKED_UP', 'WAITING_PICKUP', 'SENT', 'RECEIVED', 'DISTRIBUTION', 
+              'IN_PROGRESS', 'POSTPONED', 'INCORRECT_ADDRESS', 'BV', 'UNREACHABLE', 
+              'INJO', 'NOANSWER', 'EN_VOYAGE', 'CLIENT_INTERESE', 'ERR', 'PLTR', 
+              'OUT_OF_AREA', 'DISTINATION_CHANGED', 'EXPEDIE', 'EN COURS', 'RAMASSE', 'SHIPPED'
+            ].some(s => normalizedColiatyStatus.includes(s))
+          ) {
             internalStatus = 'SHIPPED';
+          } 
+          else if (
+            [
+              'NEW_PARCEL', 'WAITING_PREPARATION', 'ENCORE_PREPARED', 'PREPARED', 
+              'CORRECTED_INFORMATION', 'PROGRAMMER', 'PROGRAMMER_AUTO', 'ATTENTE', 
+              'PENDING', 'WAITING'
+            ].some(s => normalizedColiatyStatus.includes(s))
+          ) {
+            internalStatus = 'PENDING';
           }
 
           if (internalStatus && internalStatus !== orderMatched.status) {
@@ -139,8 +168,9 @@ router.get(
       return;
     }
 
+    let decodedToken: any;
     try {
-      jwt.verify(token, process.env.JWT_SECRET || 'dev_secret_key_change_in_production_64_chars_long_string_1234567890');
+      decodedToken = jwt.verify(token, process.env.JWT_SECRET || 'dev_secret_key_change_in_production_64_chars_long_string_1234567890');
     } catch {
       res.status(401).end();
       return;
@@ -159,7 +189,7 @@ router.get(
     }, 25000);
 
     // Send initial connected event
-    res.write(`event: connected\ndata: ${JSON.stringify({ userId: req.user!.id })}\n\n`);
+    res.write(`event: connected\ndata: ${JSON.stringify({ userId: decodedToken?.id || 'unknown' })}\n\n`);
 
     // Listen for status_update events and forward to this client
     const onStatusUpdate = (data: any) => {
