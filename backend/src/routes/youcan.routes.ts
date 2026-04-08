@@ -40,12 +40,6 @@ router.post(
     }
 
     try {
-      console.log('YouCan Token Exchange Payload:', {
-        client_id: process.env.YOUCAN_CLIENT_ID,
-        client_secret: process.env.YOUCAN_CLIENT_SECRET ? '***' + process.env.YOUCAN_CLIENT_SECRET.slice(-4) : undefined,
-        redirect_uri: `${process.env.FRONTEND_URL}/dashboard/youcan-callback`,
-      });
-
       // Exchange code for access token via YouCan
       const response = await axios.post(
         process.env.YOUCAN_TOKEN_URL || 'https://seller-area.youcan.shop/oauth/token',
@@ -70,11 +64,23 @@ router.post(
         throw new Error('Failed to retrieve access token');
       }
 
-      // Save token to DB
+      // Fetch store info to get the domain
+      const storeResponse = await axios.get(`${process.env.YOUCAN_API_URL || 'https://api.youcan.shop'}/me`, {
+        headers: {
+          Authorization: `Bearer ${data.access_token}`,
+          Accept: 'application/json',
+        },
+      });
+
+      const storeDomain = storeResponse.data?.domain || storeResponse.data?.slug || null;
+
+      // Save token and domain to DB
       await prisma.user.update({
         where: { id: vendorId },
         data: {
           youcanAccessToken: data.access_token,
+          youcanStoreDomain: storeDomain,
+          youcanSyncActive: true,
         },
       });
 
@@ -162,7 +168,9 @@ router.post(
               phone: formattedPhone,
               city: customer.city || 'Non spécifiée',
               address: customer.address?.address1 || null,
-              status: 'NEW', // Keep unassigned
+              status: 'NEW',
+              source: 'YOUCAN',
+              sourceId: customer.id?.toString() || null,
               notes: 'Imported from YouCan API',
             },
           });
@@ -197,6 +205,140 @@ router.post(
         error: error.response?.data || error.message,
       });
     }
+  })
+);
+
+/**
+ * GET /api/v1/youcan/status
+ * Get the current YouCan connection and sync status
+ */
+router.get(
+  '/status',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const vendorId = req.user?.id;
+    if (!vendorId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const vendor = await prisma.user.findUnique({
+      where: { id: vendorId },
+      select: { 
+        youcanAccessToken: true, 
+        youcanSyncActive: true,
+        youcanStoreDomain: true
+      },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        isConnected: !!vendor?.youcanAccessToken,
+        autoSyncActive: vendor?.youcanSyncActive ?? false,
+        storeDomain: vendor?.youcanStoreDomain || null
+      }
+    });
+  })
+);
+
+/**
+ * POST /api/v1/youcan/toggle-sync
+ * Toggle the automatic YouCan synchronization
+ */
+router.post(
+  '/toggle-sync',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const vendorId = req.user?.id;
+    const { active } = req.body;
+
+    if (!vendorId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: vendorId },
+      data: { youcanSyncActive: !!active },
+    });
+
+    res.json({
+      success: true,
+      message: `Synchronisation automatique ${active ? 'activée' : 'désactivée'}`
+    });
+  })
+);
+
+/**
+ * POST /api/v1/youcan/webhook
+ * Public endpoint to receive webhooks from YouCan
+ * Note: In production, verify signature if YouCan provides one.
+ */
+router.post(
+  '/webhook',
+  asyncHandler(async (req, res) => {
+    const payload = req.body;
+    const storeDomain = req.headers['x-youcan-store-domain'] || payload.domain || payload.store_domain;
+
+    if (!storeDomain) {
+      console.warn('YouCan Webhook received without store domain');
+      res.status(400).json({ success: false, message: 'Store domain missing' });
+      return;
+    }
+
+    // Find vendor by store domain
+    const vendor = await prisma.user.findFirst({
+      where: { 
+        youcanStoreDomain: storeDomain as string,
+        youcanSyncActive: true,
+        youcanAccessToken: { not: null }
+      }
+    });
+
+    if (!vendor) {
+      console.warn(`No active vendor found for store: ${storeDomain}`);
+      res.status(200).json({ success: true, message: 'Ignored: No active connection' });
+      return;
+    }
+
+    // Process customer/lead data
+    // Payload might be customer.created or order.created
+    const customer = payload.customer || payload;
+    const phone = customer.phone?.replace(/[^0-9]/g, '');
+
+    if (!phone) {
+      res.status(200).json({ success: true, message: 'Ignored: No phone number' });
+      return;
+    }
+
+    const fullName = [customer.first_name, customer.last_name].filter(Boolean).join(' ') || 'YouCan Webhook Customer';
+
+    const existingLead = await prisma.lead.findFirst({
+      where: {
+        vendorId: vendor.id,
+        phone,
+      },
+    });
+
+    if (!existingLead) {
+      await prisma.lead.create({
+        data: {
+          vendorId: vendor.id,
+          fullName,
+          phone,
+          city: customer.city || 'Non spécifiée',
+          address: (customer.address?.address1 || customer.address) || null,
+          status: 'NEW',
+          source: 'YOUCAN',
+          sourceId: customer.id?.toString() || null,
+          notes: 'Automatically imported via YouCan Webhook',
+        },
+      });
+      console.log(`Lead automatically created for vendor ${vendor.id} from YouCan`);
+    }
+
+    res.json({ success: true });
   })
 );
 

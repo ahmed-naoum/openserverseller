@@ -40,7 +40,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Truck,
-  Webhook
+  Webhook,
+  Globe
 } from 'lucide-react';
 
 const navigation = {
@@ -50,6 +51,7 @@ const navigation = {
     { name: 'Inventaire', href: '/dashboard/inventory', icon: Package },
     { name: 'Mes Marques', href: '/dashboard/brands', icon: Tag },
     { name: 'Prospects', href: '/dashboard/leads', icon: Users },
+    { name: 'Leads YouCan', href: '/dashboard/youcan-leads', icon: Globe },
     { name: 'Commandes', href: '/dashboard/orders', icon: ShoppingCart },
     { name: 'Portefeuille', href: '/dashboard/wallet', icon: CreditCard },
     { name: 'Marché Public', href: '/dashboard/marketplace', icon: ShoppingCart },

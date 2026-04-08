@@ -73,6 +73,7 @@ model User {
   // YouCan Integration
   youcanAccessToken String?
   youcanStoreDomain String?
+  youcanSyncActive  Boolean   @default(true)
 
   profile        UserProfile?
   kycDocuments   KycDocument[]
@@ -331,6 +332,8 @@ model Lead {
   city            String?
   address         String?
   status          String           @default("NEW")
+  source          String           @default("MANUAL") // MANUAL, YOUCAN, etc.
+  sourceId        String? // External ID from YouCan or other systems
   assignedAgentId Int?
   assignedAgent   User?            @relation("AgentLeads", fields: [assignedAgentId], references: [id])
   notes           String?

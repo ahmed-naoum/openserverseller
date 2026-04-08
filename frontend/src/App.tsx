@@ -40,6 +40,7 @@ import AdminAnnouncements from './pages/admin/Announcements';
 import AdminLeadHistory from './pages/admin/LeadHistory';
 import ProductCustomizePage from './pages/vendor/ProductCustomizePage';
 import YouCanCallback from './pages/vendor/YouCanCallback';
+import YouCanLeads from './pages/vendor/YouCanLeads';
 import IntegrationsPage from './pages/vendor/IntegrationsPage';
 import PlatformSettings from './pages/admin/PlatformSettings';
 import SecurityFirewall from './pages/admin/SecurityFirewall';
@@ -153,6 +154,7 @@ function App() {
           <Route path="campaigns" element={<InfluencerCampaigns />} />
           <Route path="analytics" element={<InfluencerAnalytics />} />
           <Route path="leads" element={<InfluencerLeads />} />
+          <Route path="youcan-leads" element={<YouCanLeads />} />
           <Route path="notifications" element={<InfluencerNotifications />} />
           <Route path="inventory" element={<InfluencerInventory />} />
           <Route path="marketplace" element={<InfluencerMarketplace />} />
@@ -187,6 +189,7 @@ function App() {
           <Route path="brands" element={<VendorBrands />} />
           <Route path="products" element={<VendorProducts />} />
           <Route path="leads" element={<VendorLeads />} />
+          <Route path="youcan-leads" element={<YouCanLeads />} />
           <Route path="orders" element={<VendorOrders />} />
           <Route path="wallet" element={<VendorWallet />} />
           <Route path="inventory" element={<VendorInventory />} />
