@@ -40,9 +40,13 @@ router.post(
     }
 
     try {
+      // Dynamically determine redirect_uri to match what the frontend used
+      const origin = req.headers.origin || process.env.FRONTEND_URL || 'https://silacod.com';
+      const redirect_uri = `${origin.replace(/\/$/, '')}/dashboard/youcan-callback`;
+
       console.log('YouCan Token Exchange Request:', {
         client_id: process.env.YOUCAN_CLIENT_ID,
-        redirect_uri: `${process.env.FRONTEND_URL}/dashboard/youcan-callback`,
+        redirect_uri,
         grant_type: 'authorization_code'
       });
 
@@ -53,7 +57,7 @@ router.post(
           client_id: process.env.YOUCAN_CLIENT_ID || '',
           client_secret: process.env.YOUCAN_CLIENT_SECRET || '',
           grant_type: 'authorization_code',
-          redirect_uri: `${process.env.FRONTEND_URL}/dashboard/youcan-callback`,
+          redirect_uri,
           code,
         }),
         {
@@ -67,7 +71,7 @@ router.post(
       const data = response.data;
 
       if (!data.access_token) {
-        throw new Error('Failed to retrieve access token');
+        throw new Error('Failed to retrieve access token: No token in response');
       }
 
       // Fetch store info to get the domain
@@ -95,17 +99,21 @@ router.post(
         message: 'Successfully connected to YouCan',
       });
     } catch (error: any) {
+      const errorData = error.response?.data;
+      const errorMessage = errorData?.message || errorData?.error || error.message;
+
       console.error('YouCan OAuth Error Details:', {
         status: error.response?.status,
         statusText: error.response?.statusText,
-        data: error.response?.data,
-        message: error.message
+        data: errorData,
+        message: error.message,
+        redirect_uri_used: `${(req.headers.origin || process.env.FRONTEND_URL || 'https://silacod.com').replace(/\/$/, '')}/dashboard/youcan-callback`
       });
 
-      res.status(500).json({
+      res.status(error.response?.status || 500).json({
         success: false,
         message: 'Failed to authenticate with YouCan',
-        error: error.response?.data?.message || error.response?.data?.error || error.message,
+        error: errorMessage,
       });
     }
   })
