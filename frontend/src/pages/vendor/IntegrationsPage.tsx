@@ -6,12 +6,22 @@ import toast from 'react-hot-toast';
 
 export default function IntegrationsPage() {
   const { user } = useAuth();
-  const [status, setStatus] = useState<{ isConnected: boolean; autoSyncActive: boolean; storeDomain: string | null }>({
+
+  const [status, setStatus] = useState<{
+    isConnected: boolean;
+    autoSyncActive: boolean;
+    storeDomain: string | null;
+  }>({
     isConnected: !!user?.youcanAccessToken,
     autoSyncActive: true,
-    storeDomain: null
+    storeDomain: null,
   });
+
   const [loading, setLoading] = useState(false);
+
+  // === CONFIG YOUCAN (à mettre dans ton .env) ===
+  const YOUCAN_CLIENT_ID = import.meta.env.VITE_YOUCAN_CLIENT_ID;
+  const REDIRECT_URI = `${window.location.origin}/dashboard/youcan-callback`;
 
   useEffect(() => {
     fetchStatus();
@@ -24,6 +34,23 @@ export default function IntegrationsPage() {
     } catch (err) {
       console.error('Failed to fetch YouCan status');
     }
+  };
+
+  const handleConnect = () => {
+    if (!YOUCAN_CLIENT_ID) {
+      toast.error('Client ID YouCan non configuré');
+      return;
+    }
+
+    const scopes = encodeURIComponent('read_customers read_orders edit_rest_hooks');
+    const authUrl =
+      `https://seller-area.youcan.shop/admin/oauth/authorize` +
+      `?client_id=${YOUCAN_CLIENT_ID}` +
+      `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
+      `&response_type=code` +
+      `&scope=${scopes}`;
+
+    window.location.href = authUrl;
   };
 
   const handleToggleSync = async () => {
@@ -52,7 +79,7 @@ export default function IntegrationsPage() {
           Connectez votre boutique pour synchroniser vos leads automatiquement.
         </p>
       </div>
-      
+
       <div className="space-y-8">
         {/* YouCan Integration Card */}
         <div className="bg-white rounded-3xl shadow-sm overflow-hidden flex flex-col md:flex-row hover:shadow-lg transition-shadow border border-gray-100">
@@ -66,24 +93,28 @@ export default function IntegrationsPage() {
                   </span>
                 )}
               </div>
-              <span className={`px-4 py-1.5 rounded-full text-xs font-black tracking-wide ${
-                status.isConnected ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-gray-100 text-gray-500 border border-gray-200'
-              }`}>
+              <span
+                className={`px-4 py-1.5 rounded-full text-xs font-black tracking-wide ${
+                  status.isConnected
+                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                    : 'bg-gray-100 text-gray-500 border border-gray-200'
+                }`}
+              >
                 {status.isConnected ? 'CONNECTÉ' : 'DÉCONNECTÉ'}
               </span>
             </div>
-            
+
             <p className="text-gray-600 text-base leading-relaxed mb-8">
               Importez vos clients directement depuis votre boutique YouCan. Tous les clients ayant passé commande seront synchronisés en tant que nouveaux Leads sur Silacod.
             </p>
-            
+
             {!status.isConnected ? (
-              <a 
-                href={`https://seller-area.youcan.shop/admin/oauth/authorize?client_id=2498&redirect_uri=${encodeURIComponent(window.location.origin + '/dashboard/youcan-callback')}&response_type=code&scope=read_customers read_orders edit_rest_hooks`}
+              <button
+                onClick={handleConnect}
                 className="inline-flex items-center justify-center px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-xl shadow-indigo-600/20 transition-all hover:scale-105 gap-3"
               >
                 <Link2 size={20} /> Connecter ma boutique
-              </a>
+              </button>
             ) : (
               <div className="space-y-6">
                 {/* Control Panel */}
@@ -93,7 +124,7 @@ export default function IntegrationsPage() {
                       <p className="font-bold text-gray-900">Synchronisation Automatique</p>
                       <p className="text-sm text-gray-500">Capture les leads en temps réel via Webhook</p>
                     </div>
-                    <button 
+                    <button
                       onClick={handleToggleSync}
                       disabled={loading}
                       className={`p-1 rounded-full transition-colors ${status.autoSyncActive ? 'text-indigo-600' : 'text-gray-300'}`}
@@ -101,7 +132,7 @@ export default function IntegrationsPage() {
                       {status.autoSyncActive ? <ToggleRight size={48} /> : <ToggleLeft size={48} />}
                     </button>
                   </div>
-                  
+
                   <div className="pt-4 border-t border-gray-200/60 flex flex-wrap gap-4">
                     <button
                       onClick={async () => {
@@ -128,16 +159,18 @@ export default function IntegrationsPage() {
               </div>
             )}
           </div>
+
           <div className="bg-gradient-to-br from-indigo-50 to-white p-8 md:w-1/3 flex flex-col items-center justify-center text-center">
             <div className="w-24 h-24 mb-6 bg-white rounded-3xl p-5 shadow-lg border border-indigo-100 flex items-center justify-center hover:scale-110 transition-transform">
-              <img 
-                src="https://developer.youcan.shop/logo.svg" 
-                alt="YouCan Logo" 
-                className="w-full" 
-                onError={(e) => { 
-                  e.currentTarget.src = ''; 
-                  e.currentTarget.className = 'w-12 h-12 bg-indigo-100 rounded-full'; 
-                }} 
+              <img
+                src="https://developer.youcan.shop/logo.svg"
+                alt="YouCan Logo"
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  const parent = e.currentTarget.parentElement;
+                  if (parent) parent.innerHTML = `<div class="w-12 h-12 bg-indigo-100 rounded-2xl flex items-center justify-center text-indigo-600 font-bold text-xl">YC</div>`;
+                }}
               />
             </div>
             <p className="font-extrabold text-gray-900 mb-1 text-lg">Store Connect</p>
