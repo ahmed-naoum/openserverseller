@@ -117,7 +117,7 @@ router.get(
         include: {
           categories: true,
           images: { orderBy: { sortOrder: 'asc' } },
-          owner: { include: { profile: true, brands: true } }
+          owner: { include: { profile: true } }
         },
         skip: (Number(page) - 1) * Number(limit),
         take: Number(limit),

@@ -129,7 +129,6 @@ router.get(
         where: {
           userId: req.user.id,
           productId: Number(id),
-          type: 'DELIVERY_FULFILLMENT',
           status: { in: ['OPEN', 'IN_PROGRESS'] }
         }
       }) : Promise.resolve(null),
@@ -141,6 +140,11 @@ router.get(
         }
       }) : Promise.resolve(null)
     ]);
+
+    const brandingInfo = {
+      brandingLabelMockupUrl: (inventory as any)?.brandingLabelMockupUrl || (claim as any)?.brandingLabelMockupUrl || null,
+      brandingLabelPrintUrl: (inventory as any)?.brandingLabelPrintUrl || (claim as any)?.brandingLabelPrintUrl || null,
+    };
 
     if (!product) {
       throw new AppException(404, 'Product not found');
@@ -182,7 +186,8 @@ router.get(
           isPending: !!pendingPurchase || !!pendingClaim,
           isPurchasePending: !!pendingPurchase,
           isClaimPending: !!pendingClaim,
-          pendingRequestId: pendingPurchase?.id || pendingClaim?.id
+          pendingRequestId: pendingPurchase?.id || pendingClaim?.id,
+          ...brandingInfo
         }
       },
     });
@@ -202,6 +207,7 @@ router.post(
     body('retailPriceMad').isFloat({ min: 0 }),
     body('affiliatePriceMad').optional({ nullable: true }).isFloat({ min: 0 }),
     body('influencerPriceMad').optional({ nullable: true }).isFloat({ min: 0 }),
+    body('longDescription').optional().isString(),
   ],
   asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
@@ -210,7 +216,7 @@ router.post(
       throw new AppException(400, 'Validation failed', errors.array());
     }
 
-    const { sku, nameAr, nameFr, nameEn, description, categoryIds, baseCostMad, retailPriceMad, affiliatePriceMad, influencerPriceMad, isCustomizable, minProductionDays, stockQuantity, imageUrl, imageUrls, isActive, visibility, status, videoUrls, landingPageUrls, commissionMad } = req.body;
+    const { sku, nameAr, nameFr, nameEn, description, longDescription, categoryIds, baseCostMad, retailPriceMad, affiliatePriceMad, influencerPriceMad, isCustomizable, minProductionDays, stockQuantity, imageUrl, imageUrls, isActive, visibility, status, videoUrls, landingPageUrls, commissionMad, canvaLink } = req.body;
 
     const existingProduct = await prisma.product.findUnique({
       where: { sku },
@@ -239,6 +245,7 @@ router.post(
         nameFr,
         nameEn,
         description,
+        longDescription,
         categories: { connect: categoryIds.map((id: any) => ({ id: Number(id) })) },
         baseCostMad: baseCostMad ? Number(baseCostMad) : 0,
         retailPriceMad,
@@ -250,10 +257,11 @@ router.post(
         isActive: isActive ?? true,
         visibility: Array.isArray(visibility) ? visibility : typeof visibility === 'string' ? [visibility] : ['REGULAR'],
         status: finalStatus,
-        ownerId: finalOwnerId,
+        owner: finalOwnerId ? { connect: { id: finalOwnerId } } : undefined,
         videoUrls: Array.isArray(videoUrls) ? videoUrls : [],
         landingPageUrls: Array.isArray(landingPageUrls) ? landingPageUrls : [],
         commissionMad: commissionMad ? Number(commissionMad) : 0,
+        canvaLink: canvaLink || null,
         ...(allImageUrls.length > 0 ? {
           images: {
             create: allImageUrls.map((url: string, index: number) => ({
@@ -317,6 +325,7 @@ router.patch(
       landingPageUrlsInput, 
       videoUrls, 
       landingPageUrls, 
+      canvaLink,
       ...rest 
     } = req.body;
 
@@ -354,12 +363,13 @@ router.patch(
     }
 
     // Ensure numeric fields are numbers
-    if (updateData.retailPriceMad) updateData.retailPriceMad = Number(updateData.retailPriceMad);
-    if (updateData.affiliatePriceMad) updateData.affiliatePriceMad = Number(updateData.affiliatePriceMad);
-    if (updateData.influencerPriceMad) updateData.influencerPriceMad = Number(updateData.influencerPriceMad);
-    if (updateData.stockQuantity !== undefined) updateData.stockQuantity = Number(updateData.stockQuantity);
-    if (updateData.minProductionDays !== undefined) updateData.minProductionDays = Number(updateData.minProductionDays);
-    if (updateData.commissionMad !== undefined) updateData.commissionMad = Number(updateData.commissionMad);
+    if (rest.retailPriceMad) updateData.retailPriceMad = Number(rest.retailPriceMad);
+    if (rest.affiliatePriceMad) updateData.affiliatePriceMad = Number(rest.affiliatePriceMad);
+    if (rest.influencerPriceMad) updateData.influencerPriceMad = Number(rest.influencerPriceMad);
+    if (rest.stockQuantity !== undefined) updateData.stockQuantity = Number(rest.stockQuantity);
+    if (rest.minProductionDays !== undefined) updateData.minProductionDays = Number(rest.minProductionDays);
+    if (rest.commissionMad !== undefined) updateData.commissionMad = Number(rest.commissionMad);
+    if (canvaLink !== undefined) updateData.canvaLink = canvaLink;
 
 
     // If imageUrls array is provided, replace all images
@@ -392,6 +402,55 @@ router.patch(
       status: 'success',
       message: 'Product updated successfully',
       data: { product },
+    });
+  })
+);
+
+// Update user-specific branding URLs for a product
+router.patch(
+  '/:id/branding',
+  authenticate,
+  [
+    body('brandingLabelMockupUrl').optional({ checkFalsy: true }),
+    body('brandingLabelPrintUrl').optional({ checkFalsy: true }),
+  ],
+  asyncHandler(async (req: any, res: Response) => {
+    const { id } = req.params;
+    const { brandingLabelMockupUrl, brandingLabelPrintUrl } = req.body;
+
+    const [inventory, claim] = await Promise.all([
+      prisma.productInventory.findFirst({
+        where: { userId: req.user.id, productId: Number(id) }
+      }),
+      prisma.affiliateClaim.findFirst({
+        where: { userId: req.user.id, productId: Number(id) }
+      })
+    ]);
+
+    if (!inventory && !claim) {
+      throw new AppException(404, 'Product not found in your inventory or claims');
+    }
+
+    const updateData: any = {};
+    if (brandingLabelMockupUrl !== undefined) updateData.brandingLabelMockupUrl = brandingLabelMockupUrl;
+    if (brandingLabelPrintUrl !== undefined) updateData.brandingLabelPrintUrl = brandingLabelPrintUrl;
+
+    if (inventory) {
+      await prisma.productInventory.update({
+        where: { id: inventory.id },
+        data: updateData
+      });
+    } else if (claim) {
+      await prisma.affiliateClaim.update({
+        where: { id: claim.id },
+        data: updateData
+      });
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Branding info updated successfully',
+      data: { brandingInfo: updateData }
     });
   })
 );
@@ -486,10 +545,11 @@ router.post(
           stockQuantity: original.stockQuantity,
           visibility: ['NONE'], // Private — only for this user
           status: 'APPROVED',
-          ownerId: Number(userId),
+          owner: { connect: { id: Number(userId) } },
           videoUrls: original.videoUrls,
           landingPageUrls: original.landingPageUrls,
           commissionMad: Number(original.commissionMad),
+          canvaLink: original.canvaLink,
           categories: {
             connect: (original as any).categories.map((c: any) => ({ id: c.id })),
           },

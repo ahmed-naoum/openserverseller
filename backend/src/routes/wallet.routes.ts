@@ -16,7 +16,11 @@ router.get(
         transactions: {
           include: {
             order: {
-              include: { brand: true },
+              include: { 
+                vendor: {
+                  include: { profile: true }
+                } 
+              },
             },
           },
           orderBy: { createdAt: 'desc' },
@@ -69,7 +73,11 @@ router.get(
         where,
         include: {
           order: {
-            include: { brand: true },
+            include: { 
+              vendor: {
+                include: { profile: true }
+              } 
+            },
           },
         },
         skip: (Number(page) - 1) * Number(limit),
@@ -91,7 +99,7 @@ router.get(
           order: t.order
             ? {
                 orderNumber: t.order.orderNumber,
-                brand: t.order.brand?.name,
+                brand: t.order.vendor?.profile?.fullName || t.order.vendor?.youcanStoreDomain || 'N/A',
               }
             : null,
           createdAt: t.createdAt,

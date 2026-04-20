@@ -12,6 +12,7 @@ import LiveTicker from '../components/home/LiveTicker';
 import ProfitSimulator from '../components/home/ProfitSimulator';
 import SuccessStories from '../components/home/SuccessStories';
 import FAQ from '../components/home/FAQ';
+import { SparklesCore } from '../components/ui/sparkles';
 
 /* ─── Animated Counter ─── */
 function Counter({ to, suffix = '', duration = 2000 }: { to: number; suffix?: string; duration?: number }) {
@@ -247,20 +248,37 @@ export default function HomePage() {
 
             {/* Headline */}
             <motion.h1 initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.1 }}
-              className="text-5xl sm:text-6xl lg:text-8xl font-extrabold text-gray-900 tracking-tight mb-8 leading-[1.05]"
+              className="text-5xl sm:text-6xl lg:text-8xl font-extrabold text-gray-900 tracking-tight mb-8 leading-[1.05] relative z-20"
             >
               Votre Marque.<br/>
-              <span className="relative inline-block">
+              <div className="relative inline-block">
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-600 via-primary-500 to-accent-500">
                   Votre Empire.
                 </span>
+                
+                {/* Glow & Sparkles integration based on Pro Max standards */}
+                <div className="absolute -inset-x-20 top-0 h-[2px] w-full bg-gradient-to-r from-transparent via-primary-500 to-transparent blur-sm opacity-50" />
+                <div className="absolute -inset-x-20 top-0 h-px w-full bg-gradient-to-r from-transparent via-primary-500 to-transparent opacity-50" />
+                
+                <div className="absolute inset-0 w-full h-full -z-10">
+                  <SparklesCore
+                    id="heroSparkles"
+                    background="transparent"
+                    minSize={0.4}
+                    maxSize={1.2}
+                    particleDensity={800}
+                    className="w-full h-full"
+                    particleColor="#6366f1"
+                  />
+                </div>
+
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: '100%' }}
                   transition={{ duration: 0.8, delay: 0.8 }}
                   className="absolute -bottom-2 left-0 h-2 bg-accent-200/60 rounded-full -z-10"
                 />
-              </span><br/>
+              </div><br/>
               Zéro Stock.
             </motion.h1>
 
@@ -279,7 +297,7 @@ export default function HomePage() {
                 className="group relative w-full sm:w-auto overflow-hidden rounded-2xl bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 transition-all shadow-2xl shadow-primary-500/30 hover:shadow-primary-500/50 hover:-translate-y-1"
               >
                 <div className="h-16 px-10 flex items-center justify-center gap-3 text-white font-bold text-lg">
-                  <RocketIcon /> Lancer ma Marque — Gratuitement
+                  <RocketIcon /> Vendeurs & Affiliés
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </div>
               </Link>

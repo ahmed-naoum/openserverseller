@@ -68,12 +68,14 @@ export default function AnnouncementBanner({ position = 'TOP' }: { position?: 'T
               <p className="text-sm opacity-90">{announcement.content}</p>
             </div>
 
-            <button
-              onClick={() => handleDismiss(announcement.id)}
-              className="absolute top-3 right-3 p-1.5 rounded-lg hover:bg-black/5 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            {announcement.severity !== 'IMPORTANT' && (
+              <button
+                onClick={() => handleDismiss(announcement.id)}
+                className="absolute top-3 right-3 p-1.5 rounded-lg hover:bg-black/5 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </motion.div>
         ))}
       </AnimatePresence>

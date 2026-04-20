@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../contexts/AuthContext';
-import { ordersApi, leadsApi, walletApi, brandsApi, dashboardApi } from '../../lib/api';
+import { ordersApi, leadsApi, walletApi, dashboardApi } from '../../lib/api';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import StatsCard from '../../components/dashboard/StatsCard';
@@ -56,15 +56,10 @@ export default function VendorDashboard() {
     queryFn: () => leadsApi.list({ limit: 5 }),
   });
 
-  const { data: brandsData } = useQuery({
-    queryKey: ['brands'],
-    queryFn: () => brandsApi.list(),
-  });
 
   const wallet = walletData?.data?.data;
   const orders = ordersData?.data?.data?.orders || [];
   const leads = leadsData?.data?.data?.leads || [];
-  const brands = brandsData?.data?.data?.brands || [];
 
   return (
     <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -135,13 +130,6 @@ export default function VendorDashboard() {
           icon={Phone}
           color="indigo"
           subtitle="Total leads collectés"
-        />
-        <StatsCard
-          title="Marques"
-          value={brands.length}
-          icon={Tag}
-          color="primary"
-          subtitle="Actives sur SILACOD"
         />
       </div>
 
@@ -244,15 +232,6 @@ export default function VendorDashboard() {
            <div className="bento-card border-none bg-gradient-to-br from-primary-600 to-indigo-700 p-8 text-white">
               <h3 className="font-black uppercase tracking-widest text-xs opacity-70 mb-6">Actions Rapides</h3>
               <div className="space-y-4">
-                <Link to="/dashboard/brands" className="flex items-center gap-4 p-4 rounded-2xl bg-white/10 hover:bg-white/20 transition-all group">
-                   <div className="p-2.5 bg-white/20 rounded-xl group-hover:scale-110 transition-transform">
-                      <Palette size={20} />
-                   </div>
-                   <div className="text-left">
-                     <p className="text-sm font-black tracking-tight">Créer Marque</p>
-                     <p className="text-[10px] font-bold opacity-60">Design identité</p>
-                   </div>
-                </Link>
                 <Link to="/dashboard/leads" className="flex items-center gap-4 p-4 rounded-2xl bg-white/10 hover:bg-white/20 transition-all group">
                    <div className="p-2.5 bg-white/20 rounded-xl group-hover:scale-110 transition-transform">
                       <Upload size={20} />

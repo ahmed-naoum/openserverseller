@@ -3,7 +3,8 @@ import { body, validationResult } from 'express-validator';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, authorize } from '../middleware/auth.js';
+import { checkAndActivateUser } from '../utils/verification.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { v4 as uuidv4 } from 'uuid';
 import speakeasy from 'speakeasy';
@@ -172,6 +173,8 @@ router.post(
         phone: normalizedPhone,
         password: hashedPassword,
         roleId: userRole.id,
+        isInfluencer: role === 'INFLUENCER',
+        referralCode: role === 'INFLUENCER' ? Math.random().toString(36).substring(2, 10).toUpperCase() : null,
         kycStatus: 'PENDING',
         isActive: false,
         registrationIp,
@@ -194,6 +197,25 @@ router.post(
         role: true,
       },
     })) as any;
+
+    // Auto-assign global agents if this is an influencer
+    if (role === 'INFLUENCER') {
+      const globalAgents = await prisma.user.findMany({
+        where: {
+          role: { name: 'CALL_CENTER_AGENT' },
+          autoAssignInfluencers: true
+        }
+      });
+
+      if (globalAgents.length > 0) {
+        await prisma.agentInfluencerAssignment.createMany({
+          data: globalAgents.map(agent => ({
+            agentId: agent.id,
+            influencerId: user.id
+          }))
+        });
+      }
+    }
 
     const otp = generateOTP();
     // In a real application, you would store otpExpiry and otp
@@ -337,6 +359,23 @@ router.post(
         role: true,
       },
     })) as any;
+
+    // Auto-assign global agents
+    const globalAgents = await prisma.user.findMany({
+      where: {
+        role: { name: 'CALL_CENTER_AGENT' },
+        autoAssignInfluencers: true
+      }
+    });
+
+    if (globalAgents.length > 0) {
+      await prisma.agentInfluencerAssignment.createMany({
+        data: globalAgents.map(agent => ({
+          agentId: agent.id,
+          influencerId: user.id
+        }))
+      });
+    }
 
     const { accessToken, refreshToken } = generateTokens(user.uuid);
 
@@ -681,6 +720,81 @@ router.post(
           refreshToken,
         },
         requiresVerification: true,
+      },
+    });
+  })
+);
+
+router.post(
+  '/impersonate',
+  authenticate,
+  authorize('SUPER_ADMIN', 'HELPER'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const currentUser = req.user!;
+    
+    // Safety: Super admins can impersonate anyone.
+    // Others (like Helpers) must have the canImpersonate flag.
+    if (currentUser.roleName !== 'SUPER_ADMIN' && currentUser.roleName !== 'FINANCE_ADMIN' && !currentUser.canImpersonate) {
+        throw new AppException(403, "Vous n'avez pas la permission d'accéder au mode assistance.");
+    }
+
+    const { targetUserId } = req.body;
+
+    if (!targetUserId) {
+      throw new AppException(400, 'Target User ID is required');
+    }
+
+    // If Helper, verify target user is assigned to them
+    if (currentUser.roleName === 'HELPER') {
+        const assignment = await (prisma as any).helperUserAssignment.findUnique({
+            where: {
+                helperId_targetUserId: {
+                    helperId: currentUser.id,
+                    targetUserId: Number(targetUserId)
+                }
+            }
+        });
+
+        if (!assignment) {
+            throw new AppException(403, "Vous n'êtes pas assigné à cet utilisateur.");
+        }
+    }
+
+    const targetUser = await prisma.user.findUnique({
+      where: { id: Number(targetUserId) },
+      include: { role: true, profile: true },
+    });
+
+    if (!targetUser) {
+      throw new AppException(404, 'User not found');
+    }
+
+    // Prevent helpers from impersonating Super Admins
+    if (req.user!.roleName === 'HELPER' && targetUser.role.name === 'SUPER_ADMIN') {
+      throw new AppException(403, 'Permission denied. Cannot impersonate a Super Admin.');
+    }
+
+    // Generate tokens for the target user
+    const { accessToken, refreshToken } = generateTokens(targetUser.uuid);
+
+    res.json({
+      status: 'success',
+      message: `Impersonating ${targetUser.profile?.fullName || targetUser.email}`,
+      data: {
+        user: {
+          id: targetUser.id,
+          uuid: targetUser.uuid,
+          email: targetUser.email,
+          phone: targetUser.phone,
+          fullName: targetUser.profile?.fullName,
+          role: targetUser.role.name,
+          kycStatus: targetUser.kycStatus,
+          isActive: targetUser.isActive,
+        },
+        tokens: {
+          accessToken,
+          refreshToken,
+        },
       },
     });
   })
@@ -1126,6 +1240,8 @@ router.post(
       },
     });
 
+    await checkAndActivateUser(userId);
+
     res.json({
       status: 'success',
       message: 'Contract signed successfully',
@@ -1147,12 +1263,7 @@ router.get(
         profile: true,
         role: true,
         wallet: true,
-        brands: {
-          take: 1,
-          include: {
-            bankAccounts: true,
-          },
-        },
+        bankAccounts: true,
       },
     });
 
@@ -1180,6 +1291,7 @@ router.get(
           kycStatus: user.kycStatus,
           isActive: user.isActive,
           isInfluencer: user.isInfluencer || user.role.name === 'INFLUENCER',
+          canImpersonate: user.canImpersonate,
           instagramUsername: ((user as any).profile)?.instagramUsername,
           tiktokUsername: ((user as any).profile)?.tiktokUsername,
           facebookUsername: ((user as any).profile)?.facebookUsername,
@@ -1187,7 +1299,7 @@ router.get(
           youtubeUsername: ((user as any).profile)?.youtubeUsername,
           snapchatUsername: ((user as any).profile)?.snapchatUsername,
           referralCode: user.referralCode,
-          brand: user.brands?.[0] || null,
+          bankAccounts: user.bankAccounts || [],
           emailVerified: !!user.emailVerifiedAt,
           phoneVerified: !!user.phoneVerifiedAt,
           wallet: user.wallet ? {
@@ -1249,6 +1361,74 @@ router.post(
     res.json({
       status: 'success',
       message: 'Logged out successfully',
+    });
+  })
+);
+
+router.post(
+  '/bank-accounts',
+  authenticate,
+  [
+    body('bankName').notEmpty().trim(),
+    body('ribAccount').isLength({ min: 24, max: 24 }).withMessage('RIB must be 24 digits'),
+  ],
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new AppException(400, 'Validation failed');
+    }
+
+    const { bankName, ribAccount, iceNumber } = req.body;
+    const userId = req.user!.id;
+
+    const bankAccount = await prisma.userBankAccount.create({
+      data: {
+        userId,
+        bankName,
+        ribAccount,
+        iceNumber,
+        isDefault: true, // Default to true for the first one for now
+      },
+    });
+
+    res.status(201).json({
+      status: 'success',
+      data: { bankAccount },
+    });
+  })
+);
+
+router.get(
+  '/me',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      include: {
+        profile: true,
+        role: true,
+        bankAccounts: true,
+      },
+    });
+
+    if (!user) throw new AppException(404, 'User not found');
+
+    res.json({
+      status: 'success',
+      data: {
+        user: {
+          id: user.id,
+          uuid: user.uuid,
+          email: user.email,
+          phone: user.phone,
+          fullName: user.profile?.fullName,
+          role: user.role.name,
+          kycStatus: user.kycStatus,
+          isActive: user.isActive,
+          mode: user.mode,
+          bankAccounts: user.bankAccounts,
+        },
+      },
     });
   })
 );

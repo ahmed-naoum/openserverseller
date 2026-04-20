@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { authApi, api, uploadApi, brandsApi } from '../../lib/api';
+import { authApi, api, uploadApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import {
   Mail, Shield, Building2, CreditCard, CheckCircle2, Clock, Lock,
@@ -9,7 +9,7 @@ import {
   Camera, CameraOff, RefreshCw, Smartphone, Book, Car, User
 } from 'lucide-react';
 
-type StepStatus = 'COMPLETED' | 'IN_PROGRESS' | 'PENDING' | 'LOCKED';
+type StepStatus = 'COMPLETED' | 'IN_PROGRESS' | 'PENDING' | 'LOCKED' | 'REJECTED';
 
 // ─── Helper: compute verification progress ─────────────────────────────
 export function getVerificationStatus(user: any) {
@@ -20,17 +20,17 @@ export function getVerificationStatus(user: any) {
   const identityDone = kycStatus === 'APPROVED';
   const identityInProgress = kycStatus === 'UNDER_REVIEW';
 
-  // Bank is considered done if at least one bank account exists
-  // /auth/me returns brand (singular) with bankAccounts included
-  const brandObj = user?.brand || user?.brands?.[0] || null;
-  const bankDone = (brandObj?.bankAccounts?.length ?? 0) > 0;
+  // Bank is considered done if at least one approved or pending bank account exists
+  const hasBankAccounts = (user?.bankAccounts?.length ?? 0) > 0;
+  const allBanksRejected = hasBankAccounts && user.bankAccounts.every((ba: any) => ba.status === 'REJECTED');
+  const bankDone = hasBankAccounts && !allBanksRejected;
 
   const steps = {
     email: emailVerified ? 'COMPLETED' as StepStatus : 'PENDING' as StepStatus,
     identity: identityDone ? 'COMPLETED' as StepStatus
       : identityInProgress ? 'IN_PROGRESS' as StepStatus
       : (emailVerified ? 'PENDING' as StepStatus : 'LOCKED' as StepStatus),
-    bank: (identityDone || identityInProgress) ? (bankDone ? 'COMPLETED' as StepStatus : 'PENDING' as StepStatus) : 'LOCKED' as StepStatus,
+    bank: (identityDone || identityInProgress) ? (allBanksRejected ? 'REJECTED' as StepStatus : (bankDone ? 'COMPLETED' as StepStatus : 'PENDING' as StepStatus)) : 'LOCKED' as StepStatus,
     contract: contractAccepted ? 'COMPLETED' as StepStatus : (bankDone && (identityDone || identityInProgress) ? 'PENDING' as StepStatus : 'LOCKED' as StepStatus),
   };
 
@@ -521,29 +521,8 @@ function BankPaymentForm({ onComplete }: { onComplete: () => void }) {
     setLoading(true);
     try {
       if (!user) throw new Error('Utilisateur non connecté.');
-      let brandId = (user as any)?.brand?.id;
 
-      // If influencer and no brand, create one automatically
-      const userRole = typeof user.role === 'string' ? user.role : (user.role as any)?.name;
-      if (!brandId && userRole === 'INFLUENCER') {
-        try {
-          const brandRes = await brandsApi.create({
-            name: `Paiements ${user.fullName || user.email}`,
-            description: 'Profil de paiement automatique'
-          });
-          brandId = brandRes.data.data.brand.id;
-        } catch (brandErr: any) {
-          throw new Error('Impossible de créer le profil de paiement.');
-        }
-      }
-
-      if (!brandId) {
-        toast.error('Veuillez d\'abord créer votre entreprise');
-        setLoading(false);
-        return;
-      }
-
-      await brandsApi.addBankAccount(brandId, formData);
+      await authApi.addBankAccount(formData);
       toast.success('Compte bancaire ajouté avec succès !');
       onComplete();
     } catch (err: any) {
@@ -726,7 +705,7 @@ function ContractSigningForm({ onComplete }: { onComplete: () => void }) {
 }
 
 // ─── Main ProfileVerification Page ──────────────────────────────────
-export default function ProfileVerification() {
+export default function ProfileVerification({ hideHeader = false }: { hideHeader?: boolean }) {
   const { user, refreshUser } = useAuth();
   const [expandedStep, setExpandedStep] = useState<number | null>(null);
   const { steps, percentage, completed, total } = getVerificationStatus(user);
@@ -780,6 +759,7 @@ export default function ProfileVerification() {
       COMPLETED: { icon: CheckCircle2, label: 'Terminé', bg: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
       IN_PROGRESS: { icon: Loader2, label: 'En cours de vérification', bg: 'bg-blue-50 text-blue-600 border-blue-100' },
       PENDING: { icon: Clock, label: 'En attente', bg: 'bg-amber-50 text-amber-600 border-amber-100' },
+      REJECTED: { icon: AlertTriangle, label: 'Rejeté', bg: 'bg-rose-50 text-rose-600 border-rose-100' },
       LOCKED: { icon: Lock, label: 'Verrouillé', bg: 'bg-slate-50 text-slate-400 border-slate-100' },
     };
     const c = configs[status];
@@ -797,6 +777,7 @@ export default function ProfileVerification() {
       case 'COMPLETED': return 'border-emerald-200 bg-white hover:border-emerald-300';
       case 'IN_PROGRESS': return 'border-blue-200 bg-white ring-2 ring-blue-500/10 hover:border-blue-300';
       case 'PENDING': return 'border-amber-200 bg-white ring-2 ring-amber-500/10 hover:border-amber-300';
+      case 'REJECTED': return 'border-rose-200 bg-white ring-2 ring-rose-500/10 hover:border-rose-300';
       case 'LOCKED': return 'border-slate-100 bg-slate-50/50 opacity-60';
     }
   };
@@ -805,24 +786,26 @@ export default function ProfileVerification() {
     <div className="max-w-4xl mx-auto py-4 sm:py-8 font-['Inter']">
 
       {/* ── Header ── */}
-      <div className="text-center mb-8 sm:mb-10 space-y-4">
-        <div className="inline-flex items-center justify-center p-4 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-xl shadow-purple-500/20 mb-2 transform hover:scale-105 transition-transform">
-          <Sparkles size={32} className="text-white" />
-        </div>
-        <h1 className="text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-tight">
-          🚀 Prêt à débloquer votre potentiel ?
-        </h1>
-        <p className="text-sm sm:text-lg text-slate-500 font-medium max-w-2xl mx-auto leading-relaxed">
-          Complétez ces étapes de vérification pour accéder à toutes les fonctionnalités de la plateforme
-        </p>
-
-        {percentage < 100 && (
-          <div className="inline-flex items-center gap-2 px-4 py-2.5 bg-rose-50 text-rose-600 font-bold rounded-xl text-sm border border-rose-100/50 shadow-sm">
-            <AlertTriangle size={16} />
-            Vous ne pourrez pas effectuer d'actions importantes tant que votre profil n'est pas vérifié
+      {!hideHeader && (
+        <div className="text-center mb-8 sm:mb-10 space-y-4">
+          <div className="inline-flex items-center justify-center p-4 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-xl shadow-purple-500/20 mb-2 transform hover:scale-105 transition-transform">
+            <Sparkles size={32} className="text-white" />
           </div>
-        )}
-      </div>
+          <h1 className="text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-tight">
+            🚀 Prêt à débloquer votre potentiel ?
+          </h1>
+          <p className="text-sm sm:text-lg text-slate-500 font-medium max-w-2xl mx-auto leading-relaxed">
+            Complétez ces étapes de vérification pour accéder à toutes les fonctionnalités de la plateforme
+          </p>
+
+          {percentage < 100 && (
+            <div className="inline-flex items-center gap-2 px-4 py-2.5 bg-rose-50 text-rose-600 font-bold rounded-xl text-sm border border-rose-100/50 shadow-sm">
+              <AlertTriangle size={16} />
+              Vous ne pourrez pas effectuer d'actions importantes tant que votre profil n'est pas vérifié
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Progress Card ── */}
       <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-xl shadow-slate-200/40 border border-slate-100 mb-6 sm:mb-8 relative overflow-hidden">
@@ -872,7 +855,7 @@ export default function ProfileVerification() {
           const status = steps[step.key];
           const Icon = step.icon;
           const isExpanded = expandedStep === step.id;
-          const canExpand = status === 'PENDING';
+          const canExpand = status === 'PENDING' || status === 'REJECTED';
 
           return (
             <div
@@ -917,8 +900,8 @@ export default function ProfileVerification() {
                     {isExpanded ? (
                       <ChevronUp size={20} className="text-slate-400" />
                     ) : (
-                      <div className="flex items-center gap-2 text-primary-600">
-                        <span className="text-xs font-bold">Terminé</span>
+                      <div className={`flex items-center gap-2 ${status === 'REJECTED' ? 'text-rose-600' : 'text-primary-600'}`}>
+                        <span className="text-xs font-bold">{status === 'REJECTED' ? 'Réessayer' : 'Compléter'}</span>
                         <ArrowRight size={16} />
                       </div>
                     )}

@@ -1,10 +1,31 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { productsApi, fulfillmentApi, chatApi, influencerApi } from '../../lib/api';
+import { productsApi, fulfillmentApi, chatApi, influencerApi, uploadApi, ordersApi, supportApi, BACKEND_URL } from '../../lib/api';
 import { getVerificationStatus } from '../common/ProfileVerification';
 import toast from 'react-hot-toast';
-import { Package, ChevronLeft, ChevronRight, MessageSquare } from 'lucide-react';
+import { 
+  Package, 
+  ChevronLeft, 
+  ChevronRight, 
+  MessageSquare, 
+  ExternalLink, 
+  Edit3, 
+  Upload, 
+  FileText, 
+  Layout, 
+  ChevronDown, 
+  Play, 
+  Check, 
+  ShoppingCart,
+  Plus,
+  Video,
+  Info,
+  Beaker,
+  Gift,
+  Eye
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import ProfitSimulator from '../../components/ProfitSimulator';
 
 function DetailImageCarousel({ images, alt }: { images: { imageUrl: string }[]; alt: string }) {
@@ -27,69 +48,74 @@ function DetailImageCarousel({ images, alt }: { images: { imageUrl: string }[]; 
 
   if (count === 0) {
     return (
-      <svg className="w-24 h-24 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-      </svg>
+      <div className="w-full h-full min-h-[400px] bg-slate-50 rounded-3xl flex items-center justify-center border-2 border-dashed border-slate-200">
+        <Package className="w-12 h-12 text-slate-300" />
+      </div>
     );
-  }
-
-  if (count === 1) {
-    return <img src={images[0].imageUrl} alt={alt} className="w-full h-full object-cover" />;
   }
 
   return (
     <div
-      className="relative w-full h-full flex flex-col bento-card p-2 border-none shadow-sm bg-white"
+      className="relative flex gap-4 h-full min-h-[500px]"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Main image area */}
-      <div className="relative flex-1 min-h-0 overflow-hidden rounded-[2rem] bg-slate-50">
-        {images.map((img, i) => (
-          <img
-            key={i}
-            src={img.imageUrl}
-            alt={`${alt} ${i + 1}`}
-            className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ease-in-out"
-            style={{ opacity: i === current ? 1 : 0 }}
-          />
-        ))}
-
-        {/* Arrows */}
-        <button
-          onClick={() => setCurrent(prev => (prev - 1 + count) % count)}
-          className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 backdrop-blur-md shadow-xl flex items-center justify-center text-slate-700 hover:bg-white hover:text-primary-600 hover:scale-110 transition-all opacity-0 group-hover:opacity-100 z-10 border border-white/20"
-          style={{ opacity: hovered ? 1 : 0, transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)' }}
-        >
-          <ChevronLeft size={20} strokeWidth={3} />
-        </button>
-        <button
-          onClick={() => setCurrent(prev => (prev + 1) % count)}
-          className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 backdrop-blur-md shadow-xl flex items-center justify-center text-slate-700 hover:bg-white hover:text-primary-600 hover:scale-110 transition-all z-10 border border-white/20"
-          style={{ opacity: hovered ? 1 : 0, transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)' }}
-        >
-          <ChevronRight size={20} strokeWidth={3} />
-        </button>
-
-        {/* Counter badge */}
-        <span className="absolute top-4 right-4 bg-slate-900/60 backdrop-blur-md text-white text-[10px] font-black tracking-widest px-3 py-1.5 rounded-xl z-10 shadow-sm border border-white/10 uppercase">
-          {current + 1} / {count}
-        </span>
-      </div>
-
-      {/* Thumbnail strip */}
-      <div className="flex gap-2 p-2 mt-2 justify-center overflow-x-auto scrollbar-hide">
+      {/* Vertical Thumbnails on the Left */}
+      <div className="flex flex-col gap-2 w-20 overflow-y-auto scrollbar-hide">
         {images.map((img, i) => (
           <button
             key={i}
             onClick={() => setCurrent(i)}
-            className={`w-14 h-14 rounded-xl overflow-hidden border-2 transition-all duration-300 flex-shrink-0 relative ${
-              i === current ? 'border-primary-500 shadow-lg shadow-primary-500/20 scale-105' : 'border-transparent opacity-50 hover:opacity-100 hover:scale-95 bg-slate-100'
+            className={`w-20 h-20 rounded-2xl overflow-hidden border-2 transition-all duration-300 flex-shrink-0 relative ${
+              i === current ? 'border-[#21c55d] shadow-lg shadow-green-500/20' : 'border-transparent opacity-50 hover:opacity-100 bg-white'
             }`}
           >
-            <img src={img.imageUrl} alt={`Thumb ${i + 1}`} className="w-full h-full object-cover absolute inset-0" />
+            <img src={img.imageUrl} alt={`Thumb ${i + 1}`} className="w-full h-full object-cover" />
           </button>
         ))}
+      </div>
+
+      {/* Main image area */}
+      <div className="flex-1 relative overflow-hidden rounded-[2.5rem] bg-white shadow-xl border border-slate-100 group">
+        <AnimatePresence mode="wait">
+          <motion.img
+            key={current}
+            src={images[current]?.imageUrl}
+            alt={`${alt} ${current + 1}`}
+            initial={{ opacity: 0, scale: 1.1 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.4 }}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        </AnimatePresence>
+
+        {/* Available Badge */}
+        <div className="absolute top-6 right-6 px-4 py-2 bg-white/90 backdrop-blur-md rounded-2xl shadow-lg border border-white/20 z-10">
+          <span className="text-[10px] font-black text-[#21c55d] uppercase tracking-widest flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-[#21c55d] animate-pulse" />
+            Available
+          </span>
+        </div>
+
+        {/* Arrows */}
+        <button
+          onClick={() => setCurrent(prev => (prev - 1 + count) % count)}
+          className="absolute left-6 top-1/2 -translate-y-1/2 w-12 h-12 rounded-2xl bg-white/90 backdrop-blur-md shadow-2xl flex items-center justify-center text-slate-700 hover:bg-white hover:text-[#21c55d] transition-all opacity-0 group-hover:opacity-100 z-10 border border-white/20"
+        >
+          <ChevronLeft size={24} strokeWidth={2.5} />
+        </button>
+        <button
+          onClick={() => setCurrent(prev => (prev + 1) % count)}
+          className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 rounded-2xl bg-white/90 backdrop-blur-md shadow-2xl flex items-center justify-center text-slate-700 hover:bg-white hover:text-[#21c55d] transition-all opacity-0 group-hover:opacity-100 z-10 border border-white/20"
+        >
+          <ChevronRight size={24} strokeWidth={2.5} />
+        </button>
+
+        {/* Counter badge */}
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/60 backdrop-blur-md text-white text-[10px] font-black tracking-widest px-4 py-2 rounded-2xl z-10 shadow-sm border border-white/10 uppercase">
+          {current + 1} / {count}
+        </div>
       </div>
     </div>
   );
@@ -103,6 +129,22 @@ export default function ProductDetail() {
   const [product, setProduct] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [tempPdfUrl, setTempPdfUrl] = useState<string | null>(null);
+  const [showWholesaleBadge, setShowWholesaleBadge] = useState(false);
+  const [isBrandingModalOpen, setIsBrandingModalOpen] = useState(false);
+  const [brandingData, setBrandingData] = useState({
+    brandName: '',
+    quantity: 20,
+    landingPageUrl: '',
+    description: ''
+  });
+
+  useEffect(() => {
+    if (id) {
+      const savedBadge = localStorage.getItem(`wholesale_badge_${id}`);
+      if (savedBadge === 'true') setShowWholesaleBadge(true);
+    }
+  }, [id]);
 
   useEffect(() => {
     if (id) {
@@ -123,7 +165,7 @@ export default function ProductDetail() {
         userStatus: userStatusData
       });
     } catch (error) {
-      toast.error('Erreur lors du chargement du produit');
+      toast.error('Error loading product');
       navigate('/marketplace');
     } finally {
       setIsLoading(false);
@@ -133,7 +175,7 @@ export default function ProductDetail() {
   const handleAction = async () => {
     // 1. Login Gate
     if (!isAuthenticated) {
-      toast.error('Vous devez être connecté pour continuer.');
+      toast.error('You must be logged in to continue.');
       navigate('/login');
       return;
     }
@@ -141,7 +183,7 @@ export default function ProductDetail() {
     // 2. Profile Verification Gate
     const { percentage } = getVerificationStatus(user);
     if (percentage < 100) {
-      toast.error('Vous devez compléter votre profil à 100% pour effectuer cette action.');
+      toast.error('You must complete your profile to 100% to perform this action.');
       const basePath = user?.role === 'INFLUENCER' ? '/influencer' 
                      : user?.role === 'VENDOR' ? '/dashboard'
                      : user?.role === 'GROSSELLER' ? '/grosseller'
@@ -154,64 +196,170 @@ export default function ProductDetail() {
 
     // 3. Already Bought/Pending Check
     if (product.userStatus?.isBought || product.userStatus?.isClaimed) {
-      toast.success('Vous possédez déjà ce produit.');
+      toast.success('You already own this product.');
       return;
     }
 
     if (product.userStatus?.isPending) {
-      toast.error('Vous avez déjà une demande en cours pour ce produit.');
+      toast.error('You already have a pending request for this product.');
       return;
     }
 
-    // 3. Permission Check (Role Verification)
     if (user?.role === 'SUPER_ADMIN' || user?.role === 'CALL_CENTER_AGENT' || user?.role === 'UNCONFIRMED') {
-      toast.error('Accès refusé: Votre rôle permet uniquement la consultation.');
+      toast.error('Access Denied: Your role only allows viewing.');
       return;
     }
 
-    // Determine the action type based on user mode and product visibility
-    let type = 'DELIVERY_FULFILLMENT'; // Default: Purchase
-    
-    if (user?.role === 'INFLUENCER' && product.visibility?.includes('INFLUENCER')) {
-      type = 'PRODUCT_CLAIM';
-    } else if (user?.mode === 'AFFILIATE' && product.visibility?.includes('AFFILIATE')) {
-      type = 'PRODUCT_CLAIM';
-    } else if (user?.mode === 'SELLER' && product.visibility?.includes('REGULAR')) {
-      type = 'DELIVERY_FULFILLMENT';
+    // Determine if we should skip the modal (ONLY regular Affiliates skip it now)
+    const isAffiliateFlow = (user?.mode === 'AFFILIATE' && product.visibility?.includes('AFFILIATE'));
+
+    if (isAffiliateFlow) {
+      // Execute directly with default/empty branding info
+      submitBrandingRequest({
+        brandName: 'N/A',
+        quantity: 1,
+        landingPageUrl: '',
+        description: 'Auto-claim by Affiliate/Influencer'
+      });
     } else {
-      if (product.visibility?.includes('AFFILIATE') && !product.visibility?.includes('REGULAR')) {
-        toast.error('Vous devez passer en mode Affilié pour réclamer ce produit.');
-        return;
-      }
-      if (product.visibility?.includes('INFLUENCER') && !product.visibility?.includes('REGULAR')) {
-        toast.error('Ce produit est réservé exclusivement aux influenceurs.');
-        return;
-      }
-      toast.error("Ce produit n'est pas disponible pour votre rôle actuel.");
-      return;
+      // Open Branding Modal for Vendors
+      setIsBrandingModalOpen(true);
     }
+  };
+
+  const submitBrandingRequest = async (overrideData?: any) => {
+    // If overrideData is an event (has preventDefault), ignore it and use brandingData
+    const dataToUse = (overrideData && !overrideData.preventDefault) ? overrideData : brandingData;
+    
+    // Determine the action type - forced to PRODUCT_CLAIM for all user types now
+    let type = 'PRODUCT_CLAIM';
 
     try {
       setIsSubmitting(true);
       
-      if (type === 'PRODUCT_CLAIM') {
-        await influencerApi.claimProduct(Number(id));
-      } else {
-        await fulfillmentApi.createRequest({
-          type,
-          subject: `Demande de livraison pour ${product.nameFr}`,
-          description: `L'utilisateur souhaite acheter le produit.`,
-          productId: Number(id)
-        });
-      }
+      const payloadParams = {
+        productId: Number(id),
+        brandingLabelPrintUrl: tempPdfUrl,
+        brandName: dataToUse.brandName,
+        requestedQty: Number(dataToUse.quantity),
+        requestedLandingPageUrl: dataToUse.landingPageUrl,
+        description: dataToUse.description || `L'utilisateur souhaite obtenir le produit.`
+      };
+
+      // 1. Create the Affiliate Claim
+      const claimRes = await influencerApi.claimProduct({
+        productId: payloadParams.productId,
+        brandingLabelPrintUrl: payloadParams.brandingLabelPrintUrl || undefined,
+        brandName: payloadParams.brandName,
+        requestedQty: payloadParams.requestedQty,
+        requestedLandingPageUrl: payloadParams.requestedLandingPageUrl
+      });
+      const affiliateClaimId = claimRes.data.id;
+
+      // 2. Create the Support Request
+      const supportPayload = {
+        subject: `[Achat Gros/Claim] ${product.nameFr}`,
+        type: 'PRODUCT_CLAIM',
+        description: payloadParams.description,
+        productId: payloadParams.productId,
+      };
+      const supportRes = await supportApi.create(supportPayload);
+      const supportRequestId = supportRes.data.data.id;
+
+      // 3. Auto-Open the Conversation
+      const convRes = await chatApi.autoOpenConversation({
+        affiliateClaimId: Number(affiliateClaimId),
+        supportRequestId: Number(supportRequestId),
+        productId: payloadParams.productId,
+        brandName: payloadParams.brandName,
+        requestedQty: payloadParams.requestedQty,
+        brandingLabelPrintUrl: payloadParams.brandingLabelPrintUrl || undefined
+      });
+      const convId = convRes.data.data.conversationId;
+
+      toast.success('Demande envoyée avec succès. Ouverture du chat...');
       
-      toast.success(type === 'PRODUCT_CLAIM' ? 'Produit réclamé avec succès. En attente d\'approbation.' : 'Demande d\'achat envoyée. En attente de traitement.');
+      // Set wholesale badge
+      setShowWholesaleBadge(true);
+      localStorage.setItem(`wholesale_badge_${id}`, 'true');
+      
+      setIsBrandingModalOpen(false);
       // Refresh product data to show pending status
-      fetchProduct(id!);
+      await fetchProduct(id!);
+
+      // Redirect directly to the generated chat
+      const basePath = user?.role === 'INFLUENCER' ? '/influencer' : '/dashboard';
+      navigate(`${basePath}/chat?convId=${convId}`);
+
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Erreur lors de la demande.');
+      toast.error(error.response?.data?.message || 'Error occurred during request.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleBrandingUpload = async (step: 2 | 3, file: File) => {
+    try {
+      setIsSubmitting(true);
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const uploadRes = await uploadApi.image(formData);
+      const fileUrl = uploadRes.data.data.url;
+      
+      if (step === 3) {
+        setTempPdfUrl(fileUrl);
+      }
+
+      const updateData = step === 2 
+        ? { brandingLabelMockupUrl: fileUrl }
+        : { brandingLabelPrintUrl: fileUrl };
+        
+      // Only persist to DB if user already owns the product
+      if (isBought || isClaimed) {
+        await productsApi.updateBranding(id!, updateData);
+      }
+      
+      setProduct((prev: any) => ({
+        ...prev,
+        userStatus: {
+          ...prev.userStatus,
+          ...updateData
+        }
+      }));
+      
+      toast.success(step === 2 ? 'Mockup label uploaded!' : 'Print PDF uploaded!');
+    } catch (error: any) {
+      toast.error('Failed to upload branding file');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleWholesaleOrder = async () => {
+    setShowWholesaleBadge(false);
+    localStorage.removeItem(`wholesale_badge_${id}`);
+    try {
+      const res = await chatApi.createConversation({ 
+        type: 'SUPPORT', 
+        title: `Wholesale Order — ${product.nameFr}`,
+        metadata: { productId: product.id }
+      });
+      const conv = res.data?.data?.conversation;
+      const alreadyExists = res.data?.data?.alreadyExists;
+      
+      if (conv?.id) {
+        // Only send the inquiry message if it's a NEW conversation
+        if (!alreadyExists) {
+          await chatApi.sendMessage(conv.id.toString(), { 
+            content: `📦 Wholesale Order Inquiry:\nProduct: ${product.nameFr}\nSKU: ${product.sku}\n\nI would like to place a wholesale order for this product.` 
+          });
+        }
+        const basePath = user?.role === 'INFLUENCER' ? '/influencer' : '/dashboard';
+        navigate(`${basePath}/chat?convId=${conv.id}`);
+      }
+    } catch (error: any) {
+      toast.error('Failed to initiate wholesale order');
     }
   };
 
@@ -242,248 +390,440 @@ export default function ProductDetail() {
   };
 
   const displayPrice = getDisplayPrice();
-
   const isInfluencerClaimable = user?.role === 'INFLUENCER' && product.visibility?.includes('INFLUENCER');
   const isAffiliateClaimable = user?.mode === 'AFFILIATE' && product.visibility?.includes('AFFILIATE');
   const isVendorPurchasable = user?.mode === 'SELLER' && product.visibility?.includes('REGULAR');
-  const actionText = (isInfluencerClaimable || isAffiliateClaimable) ? 'Réclamer le produit' : 'Acheter le produit';
-
-  // Public login gate: if not authenticated, show limited info
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-[calc(100vh-80px)] bg-[#F9FAFB] pt-8 pb-12 animate-in fade-in slide-in-from-bottom-2 duration-1000 ease-out">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          
-          <Link to="/marketplace" className="inline-flex items-center gap-2 px-4 py-2 bg-white rounded-xl shadow-sm border border-slate-100 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-primary-600 hover:bg-primary-50 transition-all mb-8 hover:-translate-x-1">
-            <ChevronLeft size={16} /> Catalogue Public
-          </Link>
-
-          <div className="flex flex-col lg:flex-row gap-8">
-             <div className="w-full lg:w-1/2 min-h-[400px]">
-               <DetailImageCarousel images={product.images || []} alt={product.nameFr} />
-             </div>
-             
-             <div className="w-full lg:w-1/2 flex flex-col justify-center relative bento-card border-none bg-white p-10 shadow-xl">
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-xl border border-slate-100 text-[9px] font-black uppercase tracking-widest text-slate-500 shadow-sm w-fit mb-4">
-                  {product.category?.nameFr || 'Sans Catégorie'}
-                </div>
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-3xl font-black text-slate-900 tracking-tight leading-none">{product.nameFr}</h2>
-                  <h2 className="text-3xl font-black text-slate-900 font-arabic leading-none" dir="rtl">{product.nameAr}</h2>
-                </div>
-                
-                {/* Blurred preview */}
-                <div className="mt-8 relative flex-1 flex flex-col">
-                  <div className="blur-sm select-none pointer-events-none flex-1">
-                    <p className="text-slate-500 leading-relaxed font-medium">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore...</p>
-                    <div className="mt-8 border-t border-slate-100 pt-8">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valeur Marché</span>
-                        <span className="text-3xl font-black text-slate-900 tracking-tight">*** MAD</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Login overlay */}
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/60 backdrop-blur-md rounded-3xl border border-white/50 shadow-2xl">
-                    <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-[1.5rem] flex items-center justify-center mb-6 shadow-lg shadow-primary-500/30">
-                       <Package className="w-8 h-8 text-white" />
-                    </div>
-                    <p className="text-slate-800 font-black text-xl mb-2 text-center tracking-tight">Accès Réservé</p>
-                    <p className="text-sm font-medium text-slate-500 text-center mb-8 px-8">Connectez-vous à votre espace personnel pour découvrir les prix grossistes et les commissions.</p>
-                    <Link 
-                      to="/login"
-                      className="btn-premium px-8 py-4 text-xs font-black tracking-widest uppercase bg-[#2c2f74] text-white rounded-full shadow-xl shadow-indigo-500/20"
-                    >
-                      Se connecter / S'inscrire
-                    </Link>
-                  </div>
-                </div>
-             </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const actionText = (isInfluencerClaimable || isAffiliateClaimable) ? 'Add to My Product' : 'Buy Product';
 
   return (
-    <div className="min-h-[calc(100vh-80px)] bg-[#F9FAFB] pt-8 pb-12 animate-in fade-in slide-in-from-bottom-2 duration-1000 ease-out">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        
-        <Link to="/dashboard/marketplace" className="inline-flex items-center gap-2 px-4 py-2 bg-white rounded-xl shadow-sm border border-slate-100 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-primary-600 hover:bg-primary-50 transition-all mb-8 hover:-translate-x-1">
-          <ChevronLeft size={16} /> Retour au Catalogue
-        </Link>
+    <div className="min-h-screen bg-[#FDFDFD] font-['Inter'] pb-20">
+      {/* Header Bar */}
+      <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-slate-100 px-6 py-4 shadow-sm mb-8">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+          <button 
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-all border border-slate-100 rounded-xl hover:bg-slate-50 shadow-sm"
+          >
+            <ChevronLeft size={16} /> Back to Catalog
+          </button>
 
-        <div className="flex flex-col lg:flex-row gap-8">
-           <div className="w-full lg:w-1/2 min-h-[400px]">
-             <DetailImageCarousel images={product.images || []} alt={product.nameFr} />
-           </div>
-           
-           <div className="w-full lg:w-1/2 flex flex-col gap-6">
-              {/* Info Bento */}
-              <div className="bento-card border-none bg-white p-8 shadow-md">
-                <div className="flex flex-col gap-1 mb-6">
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-xl border border-slate-100 text-[9px] font-black uppercase tracking-widest text-slate-500 shadow-sm w-fit mb-2">
-                    {product.category?.nameFr || 'Sans Catégorie'}
-                  </div>
-                  <div className="flex items-start justify-between">
-                    <h2 className="text-3xl font-black text-slate-900 tracking-tight leading-none">{product.nameFr}</h2>
-                    <h2 className="text-3xl font-black text-slate-900 font-arabic leading-none" dir="rtl">{product.nameAr}</h2>
-                  </div>
-                  <div className="flex items-center gap-2 mt-2 opacity-60">
-                    <Package size={14} className="text-slate-400" />
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">SKU: {product.sku}</span>
-                  </div>
-                </div>
+          <div className="flex items-center gap-3">
+             <div className="relative">
+               <button
+                 onClick={handleWholesaleOrder}
+                 disabled={!isBought && !isClaimed && !isCurrentlyPending && !showWholesaleBadge}
+                 className="px-6 py-3 bg-slate-900 text-white text-[11px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-slate-900/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+               >
+                 <ShoppingCart size={14} /> Wholesale Order
+               </button>
+               {showWholesaleBadge && (
+                 <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white animate-bounce">
+                   1
+                 </span>
+               )}
+             </div>
 
-                <div className="flex items-center gap-2 flex-wrap mb-4">
-                  {product.visibility?.map((vis: string) => (
-                    <span key={vis} className={`px-3 py-1 text-[9px] rounded-lg font-black uppercase tracking-widest shadow-sm ${vis === 'AFFILIATE' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : vis === 'INFLUENCER' ? 'bg-pink-50 text-pink-600 border border-pink-100' : 'bg-slate-50 text-slate-600 border border-slate-100'}`}>
-                      {vis}
-                    </span>
-                  ))}
-                  {isBought && <span className="px-3 py-1 text-[9px] rounded-lg font-black uppercase tracking-widest bg-emerald-50 text-emerald-600 border border-emerald-100 shadow-sm">En stock (Acheté)</span>}
-                  {isClaimed && <span className="px-3 py-1 text-[9px] rounded-lg font-black uppercase tracking-widest bg-purple-50 text-purple-600 border border-purple-100 shadow-sm">Partenariat Actif</span>}
-                  {isCurrentlyPending && <span className="px-3 py-1 text-[9px] rounded-lg font-black uppercase tracking-widest bg-amber-50 text-amber-600 border border-amber-100 shadow-sm animate-pulse">Examen en cours</span>}
-                </div>
-                
-                <p className="text-sm font-medium leading-relaxed text-slate-500 bg-slate-50 p-6 rounded-[1.5rem] border border-slate-100">
-                  {product.description || 'Aucune description détaillée n\'est disponible pour ce produit pour le moment.'}
-                </p>
-                
-                {(product.videoUrls?.length > 0 || product.landingPageUrls?.length > 0) && (
-                  <div className="mt-8 border-t border-slate-50 pt-8">
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                      <MessageSquare size={14} /> Ressources Marketing
-                    </h3>
-                    <div className="flex flex-wrap gap-3">
-                      {product.videoUrls?.map((url: string, idx: number) => (
-                        <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-500 hover:text-white transition-all text-xs font-black uppercase tracking-widest shadow-sm border border-red-100 hover:scale-105">
-                          Vidéo {idx + 1}
-                        </a>
-                      ))}
-                      {product.landingPageUrls?.map((url: string, idx: number) => (
-                        <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-500 hover:text-white transition-all text-xs font-black uppercase tracking-widest shadow-sm border border-indigo-100 hover:scale-105">
-                          Landing Page {idx + 1}
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Pricing Bento */}
-              <div className="bento-card border-none bg-white p-8 shadow-md">
-                 <div className="flex flex-col md:flex-row gap-6 items-center w-full">
-                   
-                   {/* Market Value / Affiliate Price Block */}
-                   <div className="flex-1 bg-slate-50 p-6 rounded-[2rem] border border-slate-100 w-full">
-                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
-                       {user?.role === 'INFLUENCER' && product.visibility?.includes('INFLUENCER')
-                         ? 'Coût B2B (Influencer)'
-                         : user?.mode === 'AFFILIATE' && product.visibility?.includes('AFFILIATE')
-                           ? 'Coût B2B (Affilié)'
-                           : 'Valeur Marché'}
-                     </span>
-                     <span className="text-3xl font-black text-slate-900 tracking-tight leading-none block">
-                       {displayPrice} <span className="text-sm text-slate-400 uppercase font-black tracking-widest">MAD</span>
-                     </span>
-                   </div>
-
-                   {/* Commision / Reward Block */}
-                   {(product.visibility?.includes('AFFILIATE') || product.visibility?.includes('INFLUENCER')) && (
-                     <>
-                       <div className="hidden md:block w-px h-16 bg-slate-100"></div>
-                       {product.visibility?.includes('AFFILIATE') && (!isAuthenticated || user?.mode === 'AFFILIATE' || user?.role === 'SUPER_ADMIN') && (
-                         <div className="flex-1 bg-gradient-to-br from-indigo-50 to-purple-50 p-6 rounded-[2rem] border border-indigo-100/50 w-full shadow-inner">
-                           <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-1.5 mb-2">
-                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                             </svg>
-                             Impact (Com.)
-                           </span>
-                           <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 tracking-tight leading-none block">
-                             {product.commissionMad > 0 ? product.commissionMad : Math.round(((product.affiliatePriceMad || product.retailPriceMad) || 0) * 0.1 * 100) / 100} <span className="text-sm text-indigo-400 uppercase font-black tracking-widest">MAD</span>
-                           </span>
-                         </div>
-                       )}
-                     </>
-                   )}
-                 </div>
-
-                 {/* Action Buttons */}
-                 <div className="mt-8">
-                   {(isBought || isClaimed) ? (
-                     <div className="flex flex-col sm:flex-row gap-4">
-                       <Link 
-                         to="../inventory"
-                         className="flex-1 flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-black uppercase tracking-widest text-[10px] py-4 px-6 rounded-2xl shadow-xl shadow-emerald-500/20 transition-all hover:-translate-y-1"
-                       >
-                         <Package className="w-4 h-4" />
-                         {isClaimed ? 'Gérer ce partenariat' : 'Voir dans mon inventaire'}
-                       </Link>
-                       <button
-                         onClick={async () => {
-                           try {
-                             const res = await chatApi.createConversation({ type: 'SUPPORT', title: `Branding — ${product.nameFr}` });
-                             const convId = res.data?.data?.conversation?.id;
-                             if (convId) {
-                               await chatApi.sendMessage(convId.toString(), { content: `💬 Demande de branding:\n📦 ${product.nameFr}\n🔖 SKU: ${product.sku}\n\nJ'aimerais des informations sur la marque en marque blanche.` });
-                               const basePath = user?.role === 'INFLUENCER' ? '/influencer' : user?.role === 'VENDOR' ? '/dashboard' : '';
-                               navigate(`${basePath}/chat`);
-                             }
-                           } catch (error: any) { toast.error('Erreur chat'); }
-                         }}
-                         className="flex-shrink-0 flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-black uppercase tracking-widest text-[10px] py-4 px-6 rounded-2xl shadow-xl shadow-amber-500/20 transition-all hover:-translate-y-1"
-                       >
-                         <MessageSquare className="w-4 h-4" /> Branding
-                       </button>
-                     </div>
-                   ) : isCurrentlyPending ? (
-                     <button disabled className="w-full btn-premium bg-amber-500 text-white font-black uppercase tracking-widest text-[10px] py-4 px-6 rounded-2xl opacity-70 cursor-not-allowed">
-                       Examen en cours
-                     </button>
-                   ) : (
-                     <button 
-                       onClick={handleAction}
-                       disabled={isSubmitting}
-                       className="w-full btn-premium bg-[#2c2f74] hover:bg-[#1a1c4b] text-white font-black uppercase tracking-widest text-xs py-5 px-6 rounded-[1.5rem] shadow-2xl shadow-indigo-900/20 transition-all disabled:opacity-50 hover:-translate-y-1 transform"
-                     >
-                       {isSubmitting ? 'Traitement...' : actionText}
-                     </button>
-                    )}
-                   
-                    {(user?.role === 'CALL_CENTER_AGENT' || user?.role === 'UNCONFIRMED' || 
-                      (!isVendorPurchasable && !isInfluencerClaimable && !isAffiliateClaimable)) && !isBought && !isCurrentlyPending && (
-                       <p className="text-[10px] font-black uppercase tracking-widest text-center text-red-500 mt-4 flex items-center justify-center gap-1.5 opacity-80 bg-red-50 py-3 rounded-xl">
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                        {product.visibility?.includes('AFFILIATE') && user?.mode !== 'AFFILIATE' && !product.visibility?.includes('REGULAR')
-                           ? 'Basculez en Profil Affilié pour intégrer' 
-                           : product.visibility?.includes('INFLUENCER') && user?.role !== 'INFLUENCER' && !product.visibility?.includes('REGULAR')
-                             ? 'Catalogue Influenceurs Exclusive'
-                             : 'Action non autorisée sur ce profil'}
-                       </p>
-                    )}
-                 </div>
-              </div>
-           </div>
-        </div>
-
-        {/* Profit Simulator — only for AFFILIATE or INFLUENCER products when authenticated AND the user is actually an Affiliate or Influencer */}
-        {isAuthenticated && (user?.mode === 'AFFILIATE' || user?.role === 'INFLUENCER') && (product.visibility?.includes('AFFILIATE') || product.visibility?.includes('INFLUENCER')) && (
-          <div className="mt-6">
-            <ProfitSimulator
-              retailPrice={displayPrice}
-              productName={product.nameFr}
-              commissionMad={
-                user?.role === 'INFLUENCER' && product.visibility?.includes('INFLUENCER')
-                  ? (Math.round((displayPrice || 0) * 0.15 * 100) / 100)
-                  : (product.commissionMad > 0 ? product.commissionMad : Math.round((displayPrice || 0) * 0.1 * 100) / 100)
-              }
-            />
+             {isBought || isClaimed ? (
+               <div className="px-6 py-3 bg-[#21c55d]/10 text-[#21c55d] text-[11px] font-black uppercase tracking-widest rounded-xl border border-[#21c55d]/20 flex items-center gap-2">
+                 <Check size={14} strokeWidth={3} /> Product Active
+               </div>
+             ) : isCurrentlyPending ? (
+               <div className="px-6 py-3 bg-amber-500/10 text-amber-600 text-[11px] font-black uppercase tracking-widest rounded-xl border border-amber-500/20 flex items-center gap-2">
+                 <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse mr-2" /> Pending Approval
+               </div>
+             ) : (
+               <button
+                 onClick={handleAction}
+                 disabled={isSubmitting || (!isAffiliateClaimable && !tempPdfUrl && !isBought && !isClaimed)}
+                 className="px-8 py-3 bg-[#21c55d] text-white text-[11px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-green-500/20 hover:bg-[#19a34a] hover:scale-105 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50"
+               >
+                 <Plus size={14} strokeWidth={3} /> {isSubmitting ? 'Processing...' : actionText}
+               </button>
+             )}
           </div>
+
+          <div className="hidden lg:flex items-center gap-4 text-right">
+             <div className="flex flex-col">
+               <h2 className="text-xl font-black text-slate-900 tracking-tight leading-none uppercase">{product.nameEn || product.nameFr}</h2>
+               <h2 className="text-lg font-black text-slate-900 font-arabic leading-none mt-1" dir="rtl">{product.nameAr}</h2>
+             </div>
+             {product.videoUrls?.[0] && (
+               <a href={product.videoUrls[0]} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-xl border border-rose-100 bg-rose-50 text-rose-500 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all">
+                 <Video size={18} />
+               </a>
+             )}
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          
+          {/* Left Column: Image Card */}
+          <div className="lg:col-span-7 space-y-6">
+            <div className="bg-white rounded-[3rem] p-8 shadow-xl shadow-slate-200/50 border border-slate-50 relative group">
+               <DetailImageCarousel images={product.images || []} alt={product.nameFr} />
+               
+               <div className="mt-10 flex flex-wrap items-end justify-between gap-6 border-t border-slate-50 pt-8">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase tracking-[0.15em] rounded-lg border border-emerald-100">
+                        {product.category?.nameFr || 'General'}
+                      </span>
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <Package size={12} /> SKU: {product.sku}
+                      </span>
+                    </div>
+                    <h1 className="text-4xl font-black text-slate-900 leading-[0.9] tracking-tight">{product.nameFr}</h1>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Price per unit</span>
+                    <span className="text-5xl font-black text-[#21c55d] tracking-tighter leading-none">
+                      {displayPrice} <span className="text-sm text-slate-400 font-black uppercase tracking-widest ml-1">MAD</span>
+                    </span>
+                  </div>
+               </div>
+            </div>
+
+            {/* Profit Simulator Section */}
+            {isAuthenticated && (user?.mode === 'AFFILIATE' || user?.role === 'INFLUENCER') && (product.visibility?.includes('AFFILIATE') || product.visibility?.includes('INFLUENCER')) && (
+              <div className="bg-white rounded-[3rem] p-8 shadow-xl shadow-slate-200/50 border border-slate-50 overflow-hidden relative">
+                <ProfitSimulator
+                  retailPrice={displayPrice}
+                  productName={product.nameFr}
+                  commissionMad={
+                    user?.role === 'INFLUENCER' && product.visibility?.includes('INFLUENCER')
+                      ? (Math.round((displayPrice || 0) * 0.15 * 100) / 100)
+                      : (product.commissionMad > 0 ? product.commissionMad : Math.round((displayPrice || 0) * 0.1 * 100) / 100)
+                  }
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Right Column: Steps & Accordions */}
+          <div className="lg:col-span-5 space-y-4">
+                     {/* Branding Section */}
+            {(!isAffiliateClaimable && (isVendorPurchasable || isInfluencerClaimable || isBought || isClaimed)) && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+                    <Edit3 size={14} className="text-[#21c55d]" /> Personalization Workflow
+                  </h3>
+                </div>
+
+                {/* Step 1: Canva */}
+                <BrandingCard 
+                  number={1}
+                  titleEn="Customize label in Canva"
+                  titleAr="صمم ملصق المنتج الخاص بك عبر Canva"
+                  desc="Customize the product label with your own brand"
+                  isActive={true}
+                  isDone={!!product.userStatus?.brandingLabelMockupUrl}
+                  actionLabel="Open Link"
+                  variant="purple"
+                  onAction={() => product.canvaLink ? window.open(product.canvaLink, '_blank') : toast.error('Canva link not available')}
+                />
+
+                {/* Step 2: Print PDF */}
+                <BrandingCard 
+                  number={2}
+                  titleEn="Upload PDF label for printing"
+                  titleAr="قم برفع ملف PDF الخاص بالملصق للطباعة"
+                  desc="Submit final High-Resolution PDF for production"
+                  isActive={true}
+                  isDone={!!(product.userStatus?.brandingLabelPrintUrl || tempPdfUrl)}
+                  actionLabel={(product.userStatus?.brandingLabelPrintUrl || tempPdfUrl) ? 'Update' : 'Upload'}
+                  variant="green"
+                  hasUpload
+                  accept="application/pdf"
+                  onUpload={(file: File) => handleBrandingUpload(3, file)}
+                />
+
+                {/* Step 3: Landing Page */}
+                <BrandingCard 
+                  number={3}
+                  titleEn="Customize landing page on canva"
+                  titleAr="تخصيص صفحة الهبوط الخاصة بك عبر Canva"
+                  desc="Edit and launch your custom landing page"
+                  isActive={isBought || isClaimed || user?.role === 'SUPER_ADMIN'}
+                  isDone={false}
+                  actionLabel="Open Link"
+                  variant="bonus"
+                  isBonus
+                  onAction={() => product.landingPageUrls?.[0] ? window.open(product.landingPageUrls[0], '_blank') : toast.error('No landing page available')}
+                />
+              </div>
+            )}
+
+            {/* Accordions */}
+            <div className="pt-6 space-y-4">
+               <AccordionItem 
+                 titleEn="Product Description" 
+                 titleAr="وصف المنتج"
+                 icon={<Info size={16} />} 
+                 content={product.description || 'No description available.'} 
+               />
+               
+               <AccordionItem 
+                 titleEn="Details & Ingredients" 
+                 titleAr="المكونات"
+                 icon={<Beaker size={16} />} 
+                 content={product.longDescription || 'Details about ingredients and technical specs will be listed here.'} 
+               />
+
+               <AccordionItem 
+                 titleEn="Marketing Resources" 
+                 titleAr="مصادر التسويق"
+                 icon={<MessageSquare size={16} />} 
+                 content={
+                   <div className="flex flex-col gap-3">
+                      <p className="text-[11px] text-slate-500">Access videos and high-quality banners for your campaigns.</p>
+                      {(product.userStatus?.brandingLabelPrintUrl || product.userStatus?.brandingLabelMockupUrl) && (
+                        <div className="flex items-center gap-2">
+                          {(() => {
+                            const pdfUrl = product.userStatus.brandingLabelPrintUrl || product.userStatus.brandingLabelMockupUrl;
+                            return (
+                              <a 
+                                href={pdfUrl.startsWith('http') ? pdfUrl : `${BACKEND_URL}${pdfUrl}`} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-rose-600 hover:text-white transition-all border border-rose-100"
+                              >
+                                <Eye size={14} />
+                                Voir Label PDF
+                              </a>
+                            );
+                          })()}
+                        </div>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        {product.videoUrls?.map((url: string, i: number) => (
+                          <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 bg-rose-50 text-rose-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all">
+                             <Video size={14} /> Video {i+1}
+                          </a>
+                        ))}
+                        {product.landingPageUrls?.map((url: string, i: number) => (
+                          <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 hover:text-white transition-all">
+                             <ExternalLink size={14} /> Page {i+1}
+                          </a>
+                        ))}
+                      </div>
+                   </div>
+                 } 
+               />
+            </div>
+
+          </div>
+        </div>
+       <BrandingInfoModal 
+         isOpen={isBrandingModalOpen}
+         onClose={() => setIsBrandingModalOpen(false)}
+         data={brandingData}
+         setData={setBrandingData}
+         onSubmit={submitBrandingRequest}
+         isSubmitting={isSubmitting}
+       />
+      </div>
+    </div>
+   );
+ }
+
+function BrandingCard({ 
+  number, 
+  titleEn, 
+  titleAr, 
+  desc, 
+  isActive, 
+  isDone, 
+  actionLabel, 
+  onAction, 
+  hasUpload, 
+  onUpload, 
+  accept, 
+  isBonus, 
+  variant 
+}: any) {
+  const getVariantStyles = () => {
+    switch (variant) {
+      case 'purple': return 'bg-[#f4f3ff] text-[#a5a1ff] border-[#f4f3ff]';
+      case 'blue': return 'bg-[#f0f7ff] text-[#8ab9ff] border-[#f0f7ff]';
+      case 'green': return 'bg-[#f0fff4] text-[#86efac] border-[#f0fff4]';
+      case 'bonus': return 'bg-[#f0fff4] text-[#86efac] border-[#f0fff4]';
+      default: return 'bg-slate-50 text-slate-400 border-slate-50';
+    }
+  };
+
+  return (
+    <div className={`flex items-center justify-between p-6 rounded-[1.5rem] border transition-all duration-300 relative bg-white ${
+      !isActive ? 'opacity-40 grayscale pointer-events-none' : 'shadow-sm hover:shadow-md'
+    } ${isBonus ? 'border-[#86efac] ring-1 ring-[#86efac]/10' : 'border-slate-50'}`}>
+      
+      {isBonus && (
+        <div className="absolute -top-3 left-8 px-2.5 py-1 bg-[#21c55d] text-white text-[8px] font-black uppercase tracking-widest rounded-lg shadow-lg shadow-green-500/20 z-10">
+          Bonus
+        </div>
+      )}
+
+      <div className="flex gap-4 items-center">
+        <div className={`w-12 h-12 rounded-2xl border-2 flex items-center justify-center transition-all shrink-0 ${
+          isDone && !isBonus ? 'bg-[#21c55d] border-[#21c55d] text-white' : getVariantStyles()
+        }`}>
+          {isBonus ? <Gift size={20} /> : isDone ? <Check size={20} strokeWidth={3} /> : <span className="text-sm font-black">{number}</span>}
+        </div>
+        <div className="flex flex-col">
+          <h4 className="text-[13px] font-black text-slate-900 leading-tight font-arabic" dir="rtl">{titleAr}</h4>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{titleEn}</p>
+        </div>
+      </div>
+
+      <div className="flex flex-col items-end gap-2 ml-4">
+        {hasUpload ? (
+          <label className="cursor-pointer text-[10px] font-black text-slate-400 hover:text-slate-900 transition-all uppercase tracking-widest flex items-center gap-1">
+            {actionLabel}
+            <input 
+              type="file" 
+              className="hidden" 
+              accept={accept} 
+              onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])} 
+            />
+          </label>
+        ) : (
+          <button 
+            onClick={onAction}
+            className="text-[10px] font-black text-slate-400 hover:text-slate-900 transition-all uppercase tracking-widest flex items-center gap-1 group"
+          >
+            {actionLabel} <ExternalLink size={12} className="opacity-40 group-hover:opacity-100 transition-opacity" />
+          </button>
         )}
       </div>
+    </div>
+  );
+}
+
+function BrandingInfoModal({ isOpen, onClose, data, setData, onSubmit, isSubmitting }: any) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="bg-white w-full max-w-lg rounded-[2.5rem] p-10 shadow-2xl relative overflow-hidden"
+      >
+        <div className="absolute top-0 right-0 w-32 h-32 bg-primary-500/5 rounded-full -mr-16 -mt-16" />
+        
+        <div className="relative">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 bg-primary-50 rounded-xl flex items-center justify-center text-primary-600">
+              <Edit3 size={20} />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-slate-900 leading-none uppercase tracking-tight">Finalize Your Brand</h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Information pour la production</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Brand Name / Nom de Marque</label>
+              <input 
+                type="text" 
+                value={data.brandName}
+                onChange={(e) => setData({ ...data, brandName: e.target.value })}
+                placeholder="Ex: My Silk Brand"
+                className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Quantity / Quantité (Min 20)</label>
+              <input 
+                type="number" 
+                min="20"
+                value={data.quantity}
+                onChange={(e) => setData({ ...data, quantity: Number(e.target.value) })}
+                className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Landing Page URL (Optionnel)</label>
+              <input 
+                type="url" 
+                value={data.landingPageUrl}
+                onChange={(e) => setData({ ...data, landingPageUrl: e.target.value })}
+                placeholder="https://..."
+                className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Description / Spécifications</label>
+              <textarea 
+                value={data.description}
+                onChange={(e) => setData({ ...data, description: e.target.value })}
+                placeholder="Any special instructions for the support team..."
+                className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all min-h-[100px] resize-none"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 mt-8">
+            <button 
+              onClick={onClose}
+              className="flex-1 py-4 text-[11px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-all"
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={() => onSubmit()}
+              disabled={isSubmitting || !data.brandName || data.quantity < 20}
+              className="flex-[2] py-4 bg-primary-600 text-white text-[11px] font-black uppercase tracking-widest rounded-2xl shadow-lg shadow-primary-500/20 hover:bg-primary-700 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:grayscale"
+            >
+              {isSubmitting ? 'Submitting...' : 'Confirm & Request'}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function AccordionItem({ titleEn, titleAr, icon, content }: any) {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div className="bg-white rounded-[1.5rem] border border-slate-50 overflow-hidden transition-all hover:bg-slate-50/20">
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between p-6 group"
+      >
+        <div className="text-slate-300 transition-colors group-hover:text-slate-900">
+          <ChevronDown size={20} className={`transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
+        </div>
+
+        <div className="flex items-center gap-4 text-right" dir="rtl">
+           <h3 className="text-sm font-black text-slate-800 font-arabic">
+            {titleAr}
+          </h3>
+        </div>
+      </button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+          >
+            <div className="px-6 pb-6 text-[13px] text-slate-500 leading-relaxed font-arabic text-right border-t border-slate-50/50 pt-4 mx-6" dir="rtl">
+               {content}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

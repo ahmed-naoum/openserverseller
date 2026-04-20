@@ -12,17 +12,27 @@ const prisma = new PrismaClient();
 router.get(
   '/',
   authenticate,
-  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN', 'HELPER'),
   asyncHandler(async (req, res) => {
+    // If Helper, check impersonation permission
+    if (req.user!.roleName === 'HELPER' && !req.user!.canImpersonate) {
+        throw new AppException(403, "Vous n'avez pas la permission de consulter la liste des utilisateurs.");
+    }
     const { page = 1, limit = 20, role, status, search } = req.query;
 
     const where: any = {};
 
-    if (role) {
-      const roleRecord = await prisma.role.findUnique({
-        where: { name: role as string },
+    // If Helper, only show assigned users
+    if (req.user!.roleName === 'HELPER') {
+      const assignments = await (prisma as any).helperUserAssignment.findMany({
+        where: { helperId: req.user!.id }
       });
-      if (roleRecord) where.roleId = roleRecord.id;
+      const assignedUserIds = assignments.map((a: any) => a.targetUserId);
+      where.id = { in: assignedUserIds };
+    }
+
+    if (role) {
+      where.role = { name: role as string };
     }
 
     if (status === 'active') where.isActive = true;
@@ -65,6 +75,8 @@ router.get(
           isActive: u.isActive,
           kycStatus: u.kycStatus,
           walletBalance: u.wallet?.balanceMad || 0,
+          canImpersonate: u.canImpersonate,
+          autoAssignInfluencers: u.autoAssignInfluencers,
           createdAt: u.createdAt,
         })), pagination: {
           page: Number(page),
@@ -82,7 +94,7 @@ router.post(
   authenticate,
   authorize('SUPER_ADMIN'),
   [
-    body('email').optional().isEmail(),
+    body('email').optional().isEmail().normalizeEmail(),
     body('phone').optional().isString(),
     body('password').notEmpty().isLength({ min: 6 }),
     body('fullName').notEmpty().isString(),
@@ -135,6 +147,25 @@ router.post(
       },
     });
 
+    // Auto-assign global agents if this is an influencer
+    if (role === 'INFLUENCER') {
+      const globalAgents = await prisma.user.findMany({
+        where: {
+          role: { name: 'CALL_CENTER_AGENT' },
+          autoAssignInfluencers: true
+        }
+      });
+
+      if (globalAgents.length > 0) {
+        await prisma.agentInfluencerAssignment.createMany({
+          data: globalAgents.map(agent => ({
+            agentId: agent.id,
+            influencerId: user.id
+          }))
+        });
+      }
+    }
+
     res.status(201).json({
       status: 'success',
       message: 'User created successfully',
@@ -157,7 +188,7 @@ router.patch(
   authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
   asyncHandler(async (req, res) => {
     const { uuid } = req.params;
-    const { fullName, email, phone, role } = req.body;
+    const { fullName, email, phone, role, canImpersonate } = req.body;
 
     const user = await prisma.user.findUnique({
       where: { uuid },
@@ -181,6 +212,7 @@ router.patch(
         email: email || user.email,
         phone: phone || user.phone,
         roleId,
+        canImpersonate: typeof canImpersonate === 'boolean' ? canImpersonate : user.canImpersonate,
         profile: {
           update: {
             fullName: fullName || undefined,
@@ -203,6 +235,8 @@ router.patch(
           phone: updatedUser.phone,
           fullName: updatedUser.profile?.fullName,
           role: updatedUser.role.name,
+          canImpersonate: updatedUser.canImpersonate,
+          autoAssignInfluencers: updatedUser.autoAssignInfluencers,
         }
       },
     });
@@ -229,11 +263,7 @@ router.get(
         role: true,
         wallet: true,
         kycDocuments: true,
-        brands: {
-          include: {
-            bankAccounts: true,
-          },
-        },
+        bankAccounts: true,
       },
     });
 
@@ -262,7 +292,8 @@ router.get(
           lastLoginAt: user.lastLoginAt,
           wallet: user.wallet,
           kycDocuments: user.kycDocuments,
-          brands: user.brands,
+          bankAccounts: user.bankAccounts,
+          autoAssignInfluencers: user.autoAssignInfluencers,
           createdAt: user.createdAt,
         },
       },
@@ -280,14 +311,33 @@ router.patch(
       throw new AppException(403, 'Access denied');
     }
 
-    const { fullName, city, address, language, avatarUrl, metadata } = req.body;
+    const { 
+      fullName, city, address, language, avatarUrl, metadata, 
+      ribAccount, bankName, payoutMethod, iceNumber,
+      instagramUsername, tiktokUsername, facebookUsername, 
+      xUsername, youtubeUsername, snapchatUsername 
+    } = req.body;
 
     const user = await prisma.user.findUnique({
       where: { uuid },
+      include: { profile: true }
     });
 
     if (!user) {
       throw new AppException(404, 'User not found');
+    }
+
+    // Merge payoutMethod into metadata if provided
+    let updatedMetadata = metadata || user.profile?.metadata || {};
+    if (payoutMethod) {
+      if (typeof updatedMetadata === 'string') {
+        try {
+          updatedMetadata = JSON.parse(updatedMetadata);
+        } catch (e) {
+          updatedMetadata = {};
+        }
+      }
+      updatedMetadata = { ...(updatedMetadata as any), payoutMethod };
     }
 
     await prisma.userProfile.upsert({
@@ -299,7 +349,13 @@ router.patch(
         address,
         language: language || 'fr',
         avatarUrl,
-        metadata,
+        metadata: updatedMetadata,
+        instagramUsername,
+        tiktokUsername,
+        facebookUsername,
+        xUsername,
+        youtubeUsername,
+        snapchatUsername
       },
       update: {
         fullName,
@@ -307,9 +363,61 @@ router.patch(
         address,
         language,
         avatarUrl,
-        metadata,
+        metadata: updatedMetadata,
+        instagramUsername,
+        tiktokUsername,
+        facebookUsername,
+        xUsername,
+        youtubeUsername,
+        snapchatUsername
       },
     });
+
+    // Handle bank account updates
+    if (ribAccount || bankName || iceNumber) {
+      const isAdmin = ['SUPER_ADMIN', 'FINANCE_ADMIN'].includes(req.user!.roleName);
+      
+      const existingBank = await prisma.userBankAccount.findFirst({
+        where: { userId: user.id, isDefault: true }
+      });
+
+      if (existingBank) {
+        // Security Lock: Prevent non-admins from changing APPROVED details
+        if (existingBank.status === 'APPROVED' && !isAdmin) {
+          const isAttemptingChange = 
+            (ribAccount && ribAccount !== existingBank.ribAccount) ||
+            (bankName && bankName !== existingBank.bankName) ||
+            (iceNumber !== undefined && iceNumber !== existingBank.iceNumber);
+          
+          if (isAttemptingChange) {
+            throw new AppException(403, "Vos coordonnées bancaires ont déjà été approuvées. Veuillez contacter un administrateur pour toute modification.");
+          }
+        }
+
+        await prisma.userBankAccount.update({
+          where: { id: existingBank.id },
+          data: {
+            ribAccount: ribAccount || existingBank.ribAccount,
+            bankName: bankName || existingBank.bankName,
+            iceNumber: iceNumber !== undefined ? iceNumber : existingBank.iceNumber,
+            // Only reset status if RIB changed and user is NOT admin
+            status: (ribAccount && ribAccount !== existingBank.ribAccount && !isAdmin) ? 'PENDING' : existingBank.status
+          }
+        });
+      } else {
+        await prisma.userBankAccount.create({
+          data: {
+            userId: user.id,
+            ribAccount: ribAccount || '',
+            bankName: bankName || '',
+            iceNumber: iceNumber || '',
+            isDefault: true,
+            status: 'PENDING'
+          }
+        });
+      }
+    }
+
 
     const updatedUser = await prisma.user.findUnique({
       where: { uuid },

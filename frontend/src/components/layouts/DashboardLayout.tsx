@@ -18,6 +18,7 @@ import {
   Zap, 
   UserCheck, 
   Shield, 
+  ShieldCheck,
   Settings, 
   Eye,
   LogOut,
@@ -41,18 +42,33 @@ import {
   PanelLeftOpen,
   Truck,
   Webhook,
-  Globe
+  Globe,
+  Plus
 } from 'lucide-react';
 
 const navigation = {
   vendor: [
+    
     { name: 'Tableau de bord', href: '/dashboard', icon: Home },
     { name: 'Intégrations', href: '/dashboard/integrations', icon: Webhook },
     { name: 'Inventaire', href: '/dashboard/inventory', icon: Package },
-    { name: 'Mes Marques', href: '/dashboard/brands', icon: Tag },
-    { name: 'Prospects', href: '/dashboard/leads', icon: Users },
+    { 
+      name: 'Gestion Vendeur', 
+      icon: Users,
+      children: [
+        { name: 'Mes Commandes', href: '/dashboard/leads?mode=SELLER', icon: ShoppingCart },
+        { name: 'Nouveau Leads', href: '/dashboard/orders?mode=SELLER', icon: Plus },
+      ]
+    },
+    { 
+      name: 'Gestion Affilié', 
+      icon: Users,
+      children: [
+        { name: 'Mes Commandes', href: '/dashboard/leads?mode=AFFILIATE', icon: ShoppingCart },
+        { name: 'Nouveau Leads', href: '/dashboard/orders?mode=AFFILIATE', icon: Plus },
+      ]
+    },
     { name: 'Leads YouCan', href: '/dashboard/youcan-leads', icon: Globe },
-    { name: 'Commandes', href: '/dashboard/orders', icon: ShoppingCart },
     { name: 'Portefeuille', href: '/dashboard/wallet', icon: CreditCard },
     { name: 'Marché Public', href: '/dashboard/marketplace', icon: ShoppingCart },
     { name: 'Messages', href: '/dashboard/chat', icon: MessageSquare },
@@ -76,7 +92,6 @@ const navigation = {
   ],
   influencer: [
     { name: 'Accueil', href: '/influencer', icon: Home },
-    { name: 'Intégrations', href: '/influencer/integrations', icon: Webhook },
     { name: 'Mon Profil', href: '/influencer/profile', icon: Users },
     { name: 'Mon Inventaire', href: '/influencer/inventory', icon: Package },
     { name: 'Mes Liens', href: '/influencer/links', icon: Tag },
@@ -86,6 +101,7 @@ const navigation = {
     { name: 'Notifications', href: '/influencer/notifications', icon: Bell },
     { name: 'Marché Public', href: '/influencer/marketplace', icon: ShoppingCart },
     { name: 'Messages', href: '/influencer/chat', icon: MessageSquare },
+    { name: 'Support', href: '/influencer/support', icon: HelpCircle },
     { name: 'Paramètres', href: '/influencer/settings', icon: Settings },
   ],
   agent: [
@@ -100,9 +116,9 @@ const navigation = {
   ],
   admin: [
     { name: 'Tableau de bord', href: '/admin', icon: Home },
+    { name: 'Vérifications', href: '/admin/verifications', icon: ShieldCheck },
     { name: 'Utilisateurs', href: '/admin/users', icon: Users },
     { name: 'Clients', href: '/admin/customers', icon: Users },
-    { name: 'Marques', href: '/admin/brands', icon: Tag },
     { name: 'Catégories', href: '/admin/categories', icon: Tag },
     { name: 'Produits', href: '/admin/products', icon: Package },
     { name: 'Demandes Affiliation', href: '/admin/affiliate-claims', icon: UserCheck },
@@ -110,7 +126,7 @@ const navigation = {
     { name: 'Gestion Campagnes', href: '/admin/campaigns', icon: Zap },
     { name: 'Commandes', href: '/admin/orders', icon: ShoppingCart },
     { name: 'Finance', href: '/admin/finance', icon: DollarSign },
-    { name: 'Fulfillment', href: '/admin/fulfillment', icon: Clock },
+    { name: 'Support & Tickets', href: '/admin/support', icon: MessageSquare },
     { name: 'Historique Leads', href: '/admin/lead-history', icon: Eye },
     { name: 'Marché Public', href: '/admin/marketplace', icon: ShoppingCart },
     { name: 'Messages', href: '/admin/chat', icon: MessageSquare },
@@ -119,16 +135,29 @@ const navigation = {
     { name: 'Webhooks Coliaty', href: '/admin/webhook-logs', icon: Webhook },
     { name: 'Paramètres', href: '/admin/settings', icon: Settings },
   ],
+  system_support: [
+    { name: 'Tableau de bord', href: '/admin', icon: Home },
+    { name: 'Support & Tickets', href: '/admin/support', icon: MessageSquare },
+    { name: 'Messages', href: '/admin/chat', icon: MessageSquare },
+    { name: 'Paramètres', href: '/admin/settings', icon: Settings },
+  ],
   confirmation: [
-    { name: 'Vérification KYC', href: '/confirmation', icon: Shield },
+    { name: 'Centre de Vérification', href: '/confirmation', icon: Shield },
     { name: 'Marché Public', href: '/confirmation/marketplace', icon: ShoppingCart },
     { name: 'Messages', href: '/confirmation/chat', icon: MessageSquare },
     { name: 'Paramètres', href: '/confirmation/settings', icon: Settings },
   ],
+  helper: [
+    { name: 'Tableau de bord', href: '/helper', icon: Home },
+    { name: 'Utilisateurs', href: '/helper/users', icon: Users },
+    { name: 'Tous les Leads', href: '/helper/leads', icon: Users },
+    { name: 'Colis', href: '/helper/colis', icon: Package },
+    { name: 'Paramètres', href: '/helper/settings', icon: Settings },
+  ],
 };
 
 export default function DashboardLayout() {
-  const { user, logout, refreshUser } = useAuth();
+  const { user, logout, refreshUser, revertImpersonation } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -139,20 +168,52 @@ export default function DashboardLayout() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  // Auto-expand if child is active
+  useEffect(() => {
+    const activeParent = navItems.find(item => 
+      item.children?.some(child => location.pathname === child.href)
+    );
+    if (activeParent && !expandedGroups.includes(activeParent.name)) {
+      setExpandedGroups(prev => [...prev, activeParent.name]);
+    }
+  }, [location.pathname]);
+
+  const toggleGroup = (name: string) => {
+    setExpandedGroups(prev => 
+      prev.includes(name) ? prev.filter(g => g !== name) : [...prev, name]
+    );
+  };
+
   const getNavItems = () => {
-    if (location.pathname.startsWith('/admin')) return navigation.admin;
+    if (location.pathname.startsWith('/admin')) {
+      if (user?.role === 'SYSTEM_SUPPORT') return navigation.system_support;
+      return navigation.admin;
+    }
     if (location.pathname.startsWith('/agent')) return navigation.agent;
     if (location.pathname.startsWith('/grosseller')) return navigation.grosseller;
     if (location.pathname.startsWith('/influencer')) return navigation.influencer;
     if (location.pathname.startsWith('/confirmation')) return navigation.confirmation;
+    if (location.pathname.startsWith('/helper')) return navigation.helper;
     return navigation.vendor;
   };
 
-  const navItems = getNavItems();
-  const isVendorDashboard = !location.pathname.startsWith('/admin') && !location.pathname.startsWith('/agent') && !location.pathname.startsWith('/grosseller') && !location.pathname.startsWith('/influencer') && !location.pathname.startsWith('/confirmation');
+  const isVendorDashboard = !location.pathname.startsWith('/admin') && !location.pathname.startsWith('/agent') && !location.pathname.startsWith('/grosseller') && !location.pathname.startsWith('/influencer') && !location.pathname.startsWith('/confirmation') && !location.pathname.startsWith('/helper');
   const currentMode = user?.mode || 'SELLER';
+
+  const navItems = getNavItems().filter(item => {
+    if (user?.role === 'HELPER' && item.href === '/helper/users') {
+      return user?.canImpersonate;
+    }
+    // Filter by mode for vendor dashboard
+    if (isVendorDashboard) {
+      if (item.name === 'Gestion Vendeur') return currentMode === 'SELLER';
+      if (item.name === 'Gestion Affilié') return currentMode === 'AFFILIATE';
+    }
+    return true;
+  });
 
   // Get current page name for breadcrumb
   const currentPage = navItems.find((item) => item.href === location.pathname);
@@ -162,6 +223,7 @@ export default function DashboardLayout() {
     if (location.pathname.startsWith('/grosseller')) return { label: 'Grossiste', color: 'text-emerald-600 bg-emerald-50' };
     if (location.pathname.startsWith('/influencer')) return { label: 'Influenceur', color: 'text-purple-600 bg-purple-50' };
     if (location.pathname.startsWith('/confirmation')) return { label: 'Confirmation', color: 'text-teal-600 bg-teal-50' };
+    if (location.pathname.startsWith('/helper')) return { label: 'Helper', color: 'text-orange-600 bg-orange-50' };
     return { label: currentMode === 'AFFILIATE' ? 'Affilié' : 'Vendeur', color: 'text-primary-600 bg-primary-50' };
   };
   const section = getCurrentSection();
@@ -225,6 +287,14 @@ export default function DashboardLayout() {
       const newMode = currentMode === 'SELLER' ? 'AFFILIATE' : 'SELLER';
       await dashboardApi.switchMode(newMode);
       await refreshUser();
+      
+      // Update URL if it contains a mode parameter
+      const params = new URLSearchParams(location.search);
+      if (params.has('mode')) {
+        params.set('mode', newMode);
+        navigate(`${location.pathname}?${params.toString()}`);
+      }
+      
       toast.success(newMode === 'SELLER' ? 'Mode Vendeur activé' : 'Mode Affilié activé');
     } catch {
       toast.error('Erreur lors du changement de mode');
@@ -249,8 +319,24 @@ export default function DashboardLayout() {
     setSearchQuery('');
   };
 
+  const isImpersonating = !!localStorage.getItem('originalToken');
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] font-['Inter']">
+      {/* Impersonation Banner */}
+      {isImpersonating && (
+        <div className="bg-red-500 text-white text-center py-2 px-4 shadow-md sticky top-0 z-[100] flex items-center justify-center gap-4">
+          <span className="font-bold text-sm">
+            ⚠️ Mode Assistance: Vous êtes connecté en tant que {user?.fullName || user?.email || 'un utilisateur'}.
+          </span>
+          <button
+            onClick={revertImpersonation}
+            className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded-md text-sm font-semibold transition-colors"
+          >
+            Retourner à mon compte Helper
+          </button>
+        </div>
+      )}
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div 
@@ -266,16 +352,16 @@ export default function DashboardLayout() {
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         {/* Sidebar Header */}
-        <div className={`flex items-center h-20 border-b border-slate-200/50 transition-all duration-300 ${
+        <div className={`flex items-center h-20 transition-all duration-300 relative z-20 ${
           sidebarCollapsed ? 'lg:justify-center lg:px-0 px-8 justify-between' : 'px-8 justify-between'
         }`}>
           <div className={`flex items-center gap-3 transition-all duration-300 ${
             sidebarCollapsed ? 'lg:gap-0' : ''
           }`}>
-            <div className="w-10 h-10 bg-white rounded-xl shadow-lg shadow-slate-200/50 flex items-center justify-center overflow-hidden flex-shrink-0">
+            <div className="w-10 h-10 bg-white rounded-2xl shadow-xl shadow-slate-200/50 flex items-center justify-center overflow-hidden flex-shrink-0 border border-slate-100">
                <img src="/logo-icon.svg" alt="SILACOD" className="w-6 h-6" />
             </div>
-            <span className={`font-extrabold text-xl tracking-tight text-[#2c2f74] transition-all duration-300 whitespace-nowrap ${
+            <span className={`font-black text-xl tracking-tighter text-slate-900 transition-all duration-300 whitespace-nowrap ${
               sidebarCollapsed ? 'lg:hidden' : ''
             }`}>SILACOD</span>
           </div>
@@ -288,43 +374,115 @@ export default function DashboardLayout() {
           </button>
         </div>
 
+        {/* Separator with Gradient */}
+        <div className="px-6 mb-4">
+          <div className="h-px bg-gradient-to-r from-transparent via-slate-200/50 to-transparent" />
+        </div>
+
+        {/* Grain Overlay for Sidebar */}
+        <div className="bg-noise absolute inset-0 mix-blend-overlay opacity-[0.15] pointer-events-none z-10" />
+
         {/* Nav Items */}
         <nav className={`space-y-1.5 overflow-y-auto max-h-[calc(100vh-160px)] scrollbar-hide transition-all duration-300 ${
           sidebarCollapsed ? 'lg:p-3 p-6' : 'p-6'
         }`}>
           {navItems.map((item) => {
-            const isActive = location.pathname === item.href;
-            const Icon = item.icon;
+            // Render either as a Link (if no children) or a Button (if it has children)
+            const it = item as any;
+            const hasChildren = it.children && it.children.length > 0;
+            const isExpanded = expandedGroups.includes(it.name);
+            const isActive = (it.href && location.pathname === it.href) || (it.children && it.children.some((c: any) => location.pathname === c.href));
+            const Icon = it.icon;
+            
             const isGrosseller = location.pathname.startsWith('/grosseller');
             const isInfluencer = location.pathname.startsWith('/influencer');
-            const isConfirmation = location.pathname.startsWith('/confirmation');
-            
-            return (
-              <Link
-                key={item.name}
-                to={item.href}
-                title={sidebarCollapsed ? item.name : undefined}
-                className={`flex items-center gap-3 rounded-2xl text-[13px] font-black tracking-wide transition-all duration-300 group relative ${
-                  sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3 px-4 py-3' : 'px-4 py-3'
-                } ${
-                  isActive
-                    ? (isGrosseller ? 'bg-grosseller-50 text-grosseller-700 shadow-sm' : isInfluencer ? 'bg-influencer-50 text-influencer-700 shadow-sm' : isConfirmation ? 'bg-teal-50 text-teal-700 shadow-sm' : 'bg-primary-50 text-primary-700 shadow-sm border border-primary-100/50')
-                    : 'text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-xl hover:shadow-slate-200/50'
-                }`}
-              >
-                <div className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${isActive ? 'bg-white shadow-sm' : 'group-hover:bg-slate-50'}`}>
-                  <Icon size={18} strokeWidth={isActive ? 2.5 : 2} />
+
+            const navClass = `w-full flex items-center gap-3 rounded-2xl text-[13px] font-black tracking-wide transition-all duration-500 group relative z-20 ${
+              sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3 px-4 py-3' : 'px-4 py-3'
+            } ${
+              isActive
+                ? (isGrosseller ? 'bg-grosseller-50 text-grosseller-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.6)]' : isInfluencer ? 'bg-influencer-50 text-influencer-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.6)]' : 'bg-primary-50 text-primary-900 border border-primary-100/50 shadow-[0_8px_20px_rgba(0,0,0,0.04)]')
+                : 'text-slate-500 hover:bg-white/60 hover:text-slate-900 hover:shadow-xl hover:shadow-slate-200/40'
+            }`;
+
+            const commonContent = (
+              <>
+                <div className={`p-1.5 rounded-xl transition-all duration-500 flex-shrink-0 ${isActive ? 'bg-white shadow-sm scale-110' : 'group-hover:bg-white group-hover:scale-105 group-hover:shadow-md group-hover:shadow-slate-200/50'}`}>
+                  <Icon size={18} strokeWidth={isActive ? 2.5 : 2} className={isActive ? 'text-inherit' : 'text-slate-400 group-hover:text-slate-900'} />
                 </div>
-                <span className={`transition-all duration-300 whitespace-nowrap ${
-                  sidebarCollapsed ? 'lg:hidden' : ''
-                }`}>{item.name}</span>
-                {/* Tooltip on collapsed hover */}
+                <div className="flex-1 flex items-center justify-between min-w-0">
+                  <span className={`transition-all duration-300 whitespace-nowrap overflow-hidden text-ellipsis ${
+                    sidebarCollapsed ? 'lg:hidden' : ''
+                  }`}>{item.name}</span>
+                  
+                  {hasChildren && !sidebarCollapsed && (
+                    <ChevronDown size={14} className={`transition-transform duration-500 flex-shrink-0 ${isExpanded ? 'rotate-180 text-slate-900' : 'text-slate-400 group-hover:text-slate-900'}`} />
+                  )}
+                </div>
+                
                 {sidebarCollapsed && (
-                  <span className="hidden lg:block absolute left-full ml-3 px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 whitespace-nowrap z-[100] shadow-xl">
+                  <span className="hidden lg:block absolute left-full ml-3 px-4 py-2 bg-slate-900 text-white text-[10px] uppercase font-black tracking-widest rounded-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-300 translate-x-[-10px] group-hover:translate-x-0 whitespace-nowrap z-[100] shadow-2xl">
                     {item.name}
                   </span>
                 )}
-              </Link>
+              </>
+            );
+
+            return (
+              <div key={item.name} className="space-y-1">
+                {hasChildren ? (
+                  <button
+                    onClick={() => toggleGroup(item.name)}
+                    type="button"
+                    className={navClass}
+                    title={sidebarCollapsed ? item.name : undefined}
+                  >
+                    {commonContent}
+                  </button>
+                ) : (
+                  <Link
+                    to={item.href || '#'}
+                    className={navClass}
+                    title={sidebarCollapsed ? item.name : undefined}
+                  >
+                    {commonContent}
+                  </Link>
+                )}
+
+                {/* Professional Sub-navigation with Connection Line */}
+                {hasChildren && isExpanded && !sidebarCollapsed && (
+                  <div className="relative ml-6 pl-4 space-y-1 mt-1 animate-in slide-in-from-top-2 fade-in duration-300">
+                    {/* Connection Line */}
+                    <div className="absolute left-0 top-0 bottom-4 w-px bg-gradient-to-b from-primary-200 via-primary-100 to-transparent" />
+                    
+                    {it.children.map((child: any) => {
+                      const isChildActive = location.pathname === child.href;
+                      const ChildIcon = child.icon;
+                      return (
+                        <Link
+                          key={child.name}
+                          to={child.href}
+                          className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-[12px] font-bold transition-all relative group/item ${
+                            isChildActive 
+                              ? 'text-primary-600 bg-primary-50/30' 
+                              : 'text-slate-400 hover:text-slate-900 hover:bg-slate-50/50'
+                          }`}
+                        >
+                          {/* Indicator dot */}
+                          <div className={`absolute left-[-16.5px] w-1 h-1 rounded-full transition-all ${
+                            isChildActive ? 'bg-primary-500 scale-125' : 'bg-slate-200 group-hover/item:bg-slate-400'
+                          }`} />
+                          
+                          <div className={`p-1 rounded-lg transition-colors ${isChildActive ? 'bg-white shadow-sm' : 'group-hover:bg-white'}`}>
+                            <ChildIcon size={13} className={isChildActive ? 'text-primary-600' : 'text-slate-400 group-hover/item:text-slate-600'} />
+                          </div>
+                          <span className="tracking-tight">{child.name}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>
@@ -340,34 +498,34 @@ export default function DashboardLayout() {
           {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
 
-        {/* Mode Switcher for Vendors */}
+        {/* Mode Switcher for Vendors: Bento Element */}
         {isVendorDashboard && (
-          <div className={`absolute bottom-6 transition-all duration-300 ${
+          <div className={`absolute bottom-6 transition-all duration-300 z-20 ${
             sidebarCollapsed ? 'lg:left-3 lg:right-3 left-6 right-6' : 'left-6 right-6'
           }`}>
             <button
               onClick={handleSwitchMode}
               title={sidebarCollapsed ? (currentMode === 'AFFILIATE' ? 'Mode Affilié' : 'Mode Vendeur') : undefined}
-              className={`w-full flex items-center gap-3 rounded-[1.5rem] bg-white border border-slate-100 shadow-xl shadow-slate-200/50 hover:bg-slate-50 transition-all group group/btn ${
-                sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3 px-4 py-3' : 'px-4 py-3'
-              }`}
+              className={`w-full flex items-center gap-3 rounded-[2rem] glass-panel border border-white/50 shadow-2xl shadow-slate-200/50 hover:bg-white hover:scale-[1.02] transition-all group group/btn p-3`}
             >
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-black transition-all group-hover/btn:scale-110 shadow-lg flex-shrink-0 ${
-                currentMode === 'AFFILIATE' ? 'bg-accent-500 shadow-accent-200' : 'bg-primary-500 shadow-primary-200'
+              <div className={`w-10 h-10 rounded-[1.25rem] flex items-center justify-center text-white text-sm font-black transition-all group-hover/btn:rotate-12 shadow-lg flex-shrink-0 ${
+                currentMode === 'AFFILIATE' ? 'bg-gradient-to-tr from-accent-500 to-orange-400 shadow-accent-200' : 'bg-gradient-to-tr from-primary-600 to-influencer-500 shadow-primary-200'
               }`}>
                 {currentMode === 'AFFILIATE' ? 'A' : 'V'}
               </div>
               <div className={`text-left flex-1 transition-all duration-300 ${
                 sidebarCollapsed ? 'lg:hidden' : ''
               }`}>
-                <p className="text-[11px] font-black text-slate-900 uppercase tracking-tighter">
-                  {currentMode === 'AFFILIATE' ? 'Mode Affilié' : 'Mode Vendeur'}
+                <p className="text-[10px] font-black text-slate-900 uppercase tracking-tight leading-none">
+                  {currentMode === 'AFFILIATE' ? 'Affilié' : 'Vendeur'}
                 </p>
-                <p className="text-[9px] font-bold text-slate-400">Changer de mode</p>
+                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter mt-1">PRO SWITCH</p>
               </div>
-              <Zap size={14} className={`text-slate-300 group-hover:text-primary-500 transition-colors ${
+              <div className={`p-1.5 bg-slate-50 rounded-xl group-hover:bg-primary-50 transition-colors ${
                 sidebarCollapsed ? 'lg:hidden' : ''
-              }`} />
+              }`}>
+                <Zap size={12} className="text-slate-400 group-hover:text-primary-500 transition-colors" />
+              </div>
             </button>
           </div>
         )}
@@ -402,7 +560,7 @@ export default function DashboardLayout() {
                       return (
                         <button
                           key={item.href}
-                          onClick={() => handleSearchNav(item.href)}
+                          onClick={() => item.href && handleSearchNav(item.href)}
                           className="w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-slate-50 transition-colors group"
                         >
                           <div className="p-2 rounded-xl bg-slate-100 group-hover:bg-primary-50 group-hover:text-primary-600 text-slate-400 transition-colors">
@@ -425,12 +583,28 @@ export default function DashboardLayout() {
                 ) : (
                   <div className="px-5 py-6">
                     <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">Navigation rapide</p>
-                    {navItems.slice(0, 5).map((item) => {
+                    {(() => {
+                      switch (user?.role) {
+                        case 'VENDOR':
+                          return navigation.vendor;
+                        case 'GROSSELLER':
+                          return navigation.grosseller;
+                        case 'SUPER_ADMIN':
+                        case 'FINANCE_ADMIN':
+                          return navigation.admin;
+                        case 'SYSTEM_SUPPORT':
+                          return navigation.system_support;
+                        case 'CALL_CENTER_AGENT':
+                          return navigation.agent;
+                        default:
+                          return navItems;
+                      }
+                    })().slice(0, 5).map((item) => {
                       const Icon = item.icon;
                       return (
                         <button
                           key={item.href}
-                          onClick={() => handleSearchNav(item.href)}
+                          onClick={() => item.href && handleSearchNav(item.href)}
                           className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-slate-50 rounded-xl transition-colors group"
                         >
                           <Icon size={16} className="text-slate-400 group-hover:text-primary-500 transition-colors" />
@@ -594,6 +768,7 @@ export default function DashboardLayout() {
                                 : location.pathname.startsWith('/grosseller') ? '/grosseller'
                                 : location.pathname.startsWith('/influencer') ? '/influencer'
                                 : location.pathname.startsWith('/confirmation') ? '/confirmation'
+                                : location.pathname.startsWith('/helper') ? '/helper'
                                 : '/dashboard';
                               navigate(`${base}/settings${item.tab ? `?tab=${item.tab}` : ''}`);
                             }}

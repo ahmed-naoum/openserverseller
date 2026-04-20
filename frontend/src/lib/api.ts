@@ -104,17 +104,12 @@ export const authApi = {
   setup2FA: () => api.post('/auth/2fa/setup'),
   verify2FA: (data: { code: string; secret?: string }) =>
     api.post('/auth/2fa/verify', data),
+  impersonate: (data: { targetUserId: number }) =>
+    api.post('/auth/impersonate', data),
+  addBankAccount: (data: { bankName: string; ribAccount: string; iceNumber?: string }) =>
+    api.post('/auth/bank-accounts', data),
 };
 
-export const brandsApi = {
-  list: (params?: { status?: string; page?: number; limit?: number }) =>
-    api.get('/brands', { params }),
-  get: (slug: string) => api.get(`/brands/${slug}`),
-  create: (data: any) => api.post('/brands', data),
-  update: (id: string, data: any) => api.patch(`/brands/${id}`, data),
-  submit: (id: string) => api.post(`/brands/${id}/submit`),
-  addBankAccount: (id: string, data: any) => api.post(`/brands/${id}/bank-account`, data),
-};
 
 export const productsApi = {
   list: (params?: { category?: string; search?: string; page?: number; limit?: number; status?: string; myProducts?: string }) =>
@@ -127,17 +122,22 @@ export const productsApi = {
   delete: (id: string) => api.delete(`/products/${id}`),
   cloneForUser: (id: string, data: { userId: number; newSku?: string; newName?: string }) =>
     api.post(`/products/${id}/clone`, data),
+  updateBranding: (id: string, data: { brandingLabelMockupUrl?: string; brandingLabelPrintUrl?: string }) =>
+    api.patch(`/products/${id}/branding`, data),
 };
 
 export const leadsApi = {
-  list: (params?: { status?: string; page?: number; limit?: number; search?: string; viewMode?: string }) =>
+  list: (params?: { status?: string; page?: number; limit?: number; search?: string; viewMode?: string; mode?: string }) =>
     api.get('/leads', { params }),
   create: (data: any) => api.post('/leads', data),
-  import: (data: { brandId: string; leads: any[] }) => api.post('/leads/import', data),
-  importWithProduct: (data: { productId: number; leads: any[] }) => api.post('/leads/import', data),
-  getMyProducts: () => api.get('/leads/my-products'),
+  import: (data: { leads: any[]; sourceMode?: string }) => api.post('/leads/import', data),
+  importWithProduct: (data: { productId: number; leads: any[]; sourceMode?: string }) => api.post('/leads/import', data),
+  getMyProducts: (params?: { mode?: string }) => api.get('/leads/my-products', { params }),
+  update: (id: string, data: any) => api.patch(`/leads/${id}`, data),
   updateStatus: (id: string, data: { status: string; notes?: string }) =>
     api.patch(`/leads/${id}/status`, data),
+  bulkUpdateStatus: (data: { ids: number[]; status: string }) =>
+    api.patch('/leads/bulk-status', data),
   assign: (id: string, data: { agentId: string }) => api.post(`/leads/${id}/assign`, data),
   available: (params?: { influencerId?: number }) => api.get('/leads/available', { params }),
   claim: (id: number) => api.post(`/leads/${id}/claim`),
@@ -163,6 +163,8 @@ export const leadsApi = {
     api.get('/leads/livraison', { params }),
   getParcelHistory: (code: string) => api.get(`/leads/coliaty/parcel/${code}/history`),
   getColiatyCities: () => api.get('/leads/coliaty/cities'),
+  updatePaymentSituation: (id: string, data: { paymentSituation: string }) =>
+    api.patch(`/leads/${id}/payment-situation`, data),
   delete: (id: string) => api.delete(`/leads/${id}`),
 };
 
@@ -171,8 +173,16 @@ export const ordersApi = {
     api.get('/orders', { params }),
   get: (id: string) => api.get(`/orders/${id}`),
   create: (data: any) => api.post('/orders', data),
-  updateStatus: (id: string, data: { status: string; notes?: string }) =>
-    api.patch(`/orders/${id}/status`, data),
+  updateStatus: (id: string, data: { 
+    status: string; 
+    notes?: string;
+    actionType?: string;
+    cloneName?: string;
+    cloneDescription?: string;
+    clonePrice?: number;
+    cloneQuantity?: number;
+    cloneImageUrls?: string[];
+  }) => api.patch(`/orders/${id}/status`, data),
   revertToLead: (id: number) => api.post(`/orders/${id}/revert-to-lead`),
   changeDemand: (id: number, data: any) => api.post(`/orders/${id}/change-demand`, data),
   updateNormal: (id: number, data: any) => api.put(`/orders/${id}/update-normal`, data),
@@ -225,6 +235,12 @@ export const uploadApi = {
 
 export const adminApi = {
   dashboard: () => api.get('/admin/dashboard'),
+  getVerifications: (filter?: string) => api.get('/admin/verifications', { params: { filter: filter || 'all' } }),
+  verifyEmail: (uuid: string) => api.patch(`/admin/users/${uuid}/verify-email`),
+  verifyKyc: (uuid: string, status: 'APPROVED' | 'REJECTED') =>
+    api.patch(`/admin/users/${uuid}/verify-kyc`, { status }),
+  verifyBank: (id: number, status: 'APPROVED' | 'REJECTED') =>
+    api.patch(`/admin/bank-accounts/${id}/status`, { status }),
   users: (params?: { role?: string; status?: string; page?: number; limit?: number; search?: string }) =>
     api.get('/users', { params }),
   createUser: (data: any) => api.post('/users', data),
@@ -234,14 +250,18 @@ export const adminApi = {
   updateKycStatus: (uuid: string, status: string) => api.patch(`/users/${uuid}/kyc-status`, { status }),
   reset2FA: (uuid: string) => api.post(`/users/${uuid}/reset-2fa`),
   sendPasswordResetLink: (uuid: string) => api.post(`/users/${uuid}/send-password-reset`),
-  approveBrand: (id: string) => api.post(`/brands/${id}/approve`),
-  rejectBrand: (id: string) => api.post(`/brands/${id}/reject`),
   approvePayout: (id: string, data?: { receiptUrl?: string }) =>
     api.patch(`/payouts/${id}/approve`, data),
   rejectPayout: (id: string) => api.patch(`/payouts/${id}/reject`),
   getAffiliateClaims: (params?: { status?: string }) => api.get('/admin/affiliate-claims', { params }),
-  updateAffiliateClaim: (id: number, data: { status: string; actionType?: string; cloneName?: string; cloneDescription?: string; clonePrice?: number; cloneImageUrls?: string[] }) => 
+  updateAffiliateClaim: (id: number, data: { status: string; actionType?: string; cloneName?: string; cloneDescription?: string; clonePrice?: number; cloneImageUrls?: string[] }) =>
     api.patch(`/admin/affiliate-claims/${id}`, data),
+  getSupportRequests: (params?: { status?: string; type?: string }) =>
+    api.get('/admin/support-requests', { params }),
+  updateSupportRequestStatus: (id: number, status: string) =>
+    api.patch(`/admin/support-requests/${id}`, { status }),
+  getConversations: (params?: { status?: string; type?: string; claimedByUserId?: number; orderNumber?: string }) =>
+    api.get('/admin/conversations', { params }),
   // Campaigns
   getCampaigns: () => api.get('/admin/campaigns'),
   createCampaign: (data: any) => api.post('/admin/campaigns', data),
@@ -253,16 +273,32 @@ export const adminApi = {
   getInfluencers: () => api.get('/admin/influencers'),
   getAgentInfluencerAssignments: (agentId?: number) =>
     api.get('/admin/agent-influencer-assignments', { params: agentId ? { agentId } : {} }),
-  setAgentInfluencerAssignments: (agentId: number, influencerIds: number[]) =>
-    api.post('/admin/agent-influencer-assignments', { agentId, influencerIds }),
+  setAgentInfluencerAssignments: (agentId: number, influencerIds: number[], autoAssign?: boolean) =>
+    api.post('/admin/agent-influencer-assignments', { agentId, influencerIds, autoAssign }),
   removeAgentInfluencerAssignment: (agentId: number, influencerId: number) =>
     api.delete(`/admin/agent-influencer-assignments/${agentId}/${influencerId}`),
+  // Helper-User Assignments
+  getHelperUserAssignments: (helperId?: number) =>
+    api.get('/admin/helper-user-assignments', { params: helperId ? { helperId } : {} }),
+  setHelperUserAssignments: (helperId: number, targetUserIds: number[]) =>
+    api.post('/admin/helper-user-assignments', { helperId, targetUserIds }),
 };
 
 export const chatApi = {
-  conversations: (params?: { status?: string }) => api.get('/chat/conversations', { params }),
+  conversations: (params?: { status?: string; orderNumber?: string }) => api.get('/chat/conversations', { params }),
+  getQueue: () => api.get('/chat/conversations/queue'),
   getConversation: (id: string) => api.get(`/chat/conversations/${id}`),
   createConversation: (data: { participantId?: string; type?: string; title?: string }) => api.post('/chat/conversations', data),
+  autoOpenConversation: (params: { 
+    orderId?: number; 
+    supportRequestId?: number; 
+    affiliateClaimId?: number;
+    productId: number; 
+    brandName?: string; 
+    requestedQty?: number; 
+    brandingLabelPrintUrl?: string;
+  }) => api.post('/chat/conversations/auto-open', params),
+  claimConversation: (id: string) => api.post(`/chat/conversations/${id}/claim`),
   messages: (conversationId: string, params?: { page?: number; limit?: number }) => api.get(`/chat/conversations/${conversationId}/messages`, { params }),
   sendMessage: (conversationId: string, data: { content: string; messageType?: string; attachmentUrl?: string }) => api.post(`/chat/conversations/${conversationId}/messages`, data),
   markAsRead: (conversationId: string) => api.patch(`/chat/conversations/${conversationId}/read`),
@@ -307,11 +343,18 @@ export const influencerApi = {
   getCommissions: () => api.get('/influencer/commissions'),
   getProfile: () => api.get('/influencer/profile'),
   getClaims: () => api.get('/influencer/claims'),
-  claimProduct: (productId: number) => api.post('/influencer/claims', { productId }),
+  pushLeadToCallCenter: (id: number) => api.post(`/influencer/leads/${id}/push-callcenter`),
+  pushLeadsToCallCenterBulk: (leadIds: number[]) => api.post('/influencer/leads/push-callcenter/bulk', { leadIds }),
+  deleteLead: (id: number) => api.delete(`/influencer/leads/${id}`),
+  claimProduct: (data: { 
+    productId: number; 
+    brandingLabelPrintUrl?: string; 
+    brandName?: string; 
+    requestedQty?: number; 
+    requestedLandingPageUrl?: string; 
+  }) => api.post('/influencer/claims', data),
   getCustomers: (params?: { page?: number; limit?: number; search?: string }) =>
     api.get('/influencer/customers', { params }),
-  deleteLead: (id: number) => api.delete(`/influencer/leads/${id}`),
-  pushLeadToCallCenter: (id: number) => api.post(`/influencer/leads/${id}/push-callcenter`),
   getCampaigns: () => api.get('/influencer/campaigns'),
   createCampaign: (data: any) => api.post('/influencer/campaigns', data),
   updateCampaign: (id: number, data: any) => api.patch(`/influencer/campaigns/${id}`, data),
@@ -351,3 +394,9 @@ export const webhooksApi = {
     api.get('/webhooks/logs', { params }),
   clearLogs: () => api.delete('/webhooks/logs'),
 };
+
+export const supportApi = {
+  list: (params?: { status?: string; search?: string }) => api.get('/support', { params }),
+  create: (data: { subject: string; type: string; description: string; productId?: number }) => api.post('/support', data),
+};
+

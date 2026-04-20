@@ -8,11 +8,12 @@ export default function ProfileProgressBanner() {
   const location = useLocation();
   const { percentage } = getVerificationStatus(user);
 
-  // Don't show if 100% complete, on verification page, admin, confirmation, or call center agent
+  // Don't show if 100% complete, on verification page, admin, helper, confirmation, or call center agent
   if (
     percentage === 100 ||
     location.pathname.includes('/verification') ||
     location.pathname.startsWith('/admin') ||
+    location.pathname.startsWith('/helper') ||
     location.pathname.startsWith('/confirmation') ||
     location.pathname.startsWith('/agent')
   ) {

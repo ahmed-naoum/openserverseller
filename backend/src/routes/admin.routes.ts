@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
+import { checkAndActivateUser } from '../utils/verification.js';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -15,8 +16,7 @@ router.get(
       totalUsers,
       totalVendors,
       totalAgents,
-      totalBrands,
-      pendingBrands,
+      pendingVerifications,
       totalProducts,
       totalOrders,
       pendingOrders,
@@ -29,8 +29,7 @@ router.get(
       prisma.user.count(),
       prisma.user.count({ where: { role: { name: 'VENDOR' } } }),
       prisma.user.count({ where: { role: { name: 'CALL_CENTER_AGENT' } } }),
-      prisma.brand.count(),
-      prisma.brand.count({ where: { status: 'PENDING_APPROVAL' } }),
+      prisma.user.count({ where: { kycStatus: { in: ['PENDING', 'UNDER_REVIEW'] } } }),
       prisma.product.count({ where: { isActive: true } }),
       prisma.order.count(),
       prisma.order.count({ where: { status: 'PENDING' } }),
@@ -72,7 +71,7 @@ router.get(
       data: {
         stats: {
           users: { total: totalUsers, vendors: totalVendors, agents: totalAgents },
-          brands: { total: totalBrands, pending: pendingBrands },
+          verifications: { pending: pendingVerifications },
           products: totalProducts,
           orders: { total: totalOrders, pending: pendingOrders },
           revenue: { total: totalRevenue._sum.totalAmountMad || 0 },
@@ -141,22 +140,39 @@ router.get(
 router.get(
   '/affiliate-claims',
   authenticate,
-  authorize('SUPER_ADMIN'),
+  authorize('SUPER_ADMIN', 'SYSTEM_SUPPORT'),
   asyncHandler(async (req: Request, res: Response) => {
     const { status = 'PENDING' } = req.query;
 
     const claims = await prisma.affiliateClaim.findMany({
       where: status !== 'ALL' ? { status: status as string } : {},
       include: {
-        user: { include: { profile: true } },
-        product: { include: { images: { where: { isPrimary: true }, take: 1 } } }
+        user: { include: { profile: true, role: true } },
+        product: { include: { images: { where: { isPrimary: true }, take: 1 }, categories: true } }
       },
       orderBy: { claimedAt: 'desc' }
     });
 
+    // Find conversations linked to these claims
+    const conversations = await prisma.conversation.findMany({
+        where: { type: 'SUPPORT' },
+        select: { id: true, metadata: true }
+    });
+
+    const claimsWithConv = claims.map(claim => {
+        const conv = conversations.find(c => {
+            const meta = (c.metadata as any) || {};
+            return meta.affiliateClaimId === claim.id;
+        });
+        return {
+            ...claim,
+            conversationId: conv?.id || null
+        };
+    });
+
     res.json({
       status: 'success',
-      data: claims
+      data: claimsWithConv
     });
   })
 );
@@ -165,10 +181,10 @@ router.get(
 router.patch(
   '/affiliate-claims/:id',
   authenticate,
-  authorize('SUPER_ADMIN'),
+  authorize('SUPER_ADMIN', 'SYSTEM_SUPPORT'),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { status, actionType, cloneName, cloneDescription, clonePrice, cloneImageUrls } = req.body;
+    const { status, actionType, cloneName, cloneDescription, clonePrice, cloneImageUrls, cloneQuantity } = req.body;
 
     if (!['APPROVED', 'REJECTED', 'REVOKED', 'CLONED'].includes(status)) {
       res.status(400).json({ status: 'error', message: 'Invalid status' });
@@ -222,7 +238,7 @@ router.patch(
                     influencerPriceMad: original.influencerPriceMad ? Number(original.influencerPriceMad) : null,
                     isCustomizable: original.isCustomizable,
                     minProductionDays: original.minProductionDays,
-                    stockQuantity: original.stockQuantity,
+                    stockQuantity: cloneQuantity ? Number(cloneQuantity) : original.stockQuantity,
                     visibility: ['NONE'],
                     status: 'APPROVED',
                     ownerId: currentClaim.userId,
@@ -466,13 +482,92 @@ router.get(
   })
 );
 
+// List Helper-User assignments
+router.get(
+  '/helper-user-assignments',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { helperId } = req.query;
+
+    const where: any = {};
+    if (helperId) where.helperId = Number(helperId);
+
+    const assignments = await (prisma as any).helperUserAssignment.findMany({
+      where,
+      include: {
+        helper: { include: { profile: true, role: true } },
+        targetUser: { include: { profile: true, role: true } },
+      },
+      orderBy: { assignedAt: 'desc' },
+    });
+
+    res.json({
+      status: 'success',
+      data: assignments.map((a: any) => ({
+        id: a.id,
+        helperId: a.helperId,
+        helperName: a.helper.profile?.fullName || a.helper.email || `Helper #${a.helperId}`,
+        targetUserId: a.targetUserId,
+        targetUserName: a.targetUser.profile?.fullName || a.targetUser.email || `User #${a.targetUserId}`,
+        assignedAt: a.assignedAt,
+      })),
+    });
+  })
+);
+
+// Set assignments for a helper (replaces all existing)
+router.post(
+  '/helper-user-assignments',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { helperId, targetUserIds } = req.body;
+
+    if (!helperId || !Array.isArray(targetUserIds)) {
+      res.status(400).json({ status: 'error', message: 'helperId and targetUserIds[] are required' });
+      return;
+    }
+
+    // Verify helper exists and has HELPER role
+    const helper = await prisma.user.findFirst({
+      where: { id: Number(helperId), role: { name: 'HELPER' } },
+    });
+    if (!helper) {
+      res.status(404).json({ status: 'error', message: 'Helper not found' });
+      return;
+    }
+
+    // Transaction: delete old assignments, create new ones
+    await (prisma as any).$transaction(async (tx: any) => {
+      await tx.helperUserAssignment.deleteMany({
+        where: { helperId: Number(helperId) },
+      });
+
+      if (targetUserIds.length > 0) {
+        await tx.helperUserAssignment.createMany({
+          data: targetUserIds.map((tid: number) => ({
+            helperId: Number(helperId),
+            targetUserId: Number(tid),
+          })),
+        });
+      }
+    });
+
+    res.json({
+      status: 'success',
+      message: `Assigned ${targetUserIds.length} user(s) to helper`,
+    });
+  })
+);
+
 // Set assignments for an agent (replaces all existing)
 router.post(
   '/agent-influencer-assignments',
   authenticate,
   authorize('SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { agentId, influencerIds } = req.body;
+    const { agentId, influencerIds, autoAssign } = req.body;
 
     if (!agentId || !Array.isArray(influencerIds)) {
       res.status(400).json({ status: 'error', message: 'agentId and influencerIds[] are required' });
@@ -488,15 +583,34 @@ router.post(
       return;
     }
 
-    // Transaction: delete old assignments, create new ones
+    let finalInfluencerIds = [...influencerIds];
+
+    // If autoAssign is requested, we fetch all influencers to assign them all
+    if (autoAssign) {
+      const allInfluencers = await prisma.user.findMany({
+        where: {
+          role: { name: 'INFLUENCER' },
+        },
+        select: { id: true }
+      });
+      finalInfluencerIds = allInfluencers.map(inf => inf.id);
+    }
+
+    // Transaction: update autoAssign status, delete old assignments, create new ones
     await prisma.$transaction(async (tx) => {
+      // Update autoAssignInfluencers flag on user
+      await tx.user.update({
+        where: { id: Number(agentId) },
+        data: { autoAssignInfluencers: !!autoAssign }
+      });
+
       await tx.agentInfluencerAssignment.deleteMany({
         where: { agentId: Number(agentId) },
       });
 
-      if (influencerIds.length > 0) {
+      if (finalInfluencerIds.length > 0) {
         await tx.agentInfluencerAssignment.createMany({
-          data: influencerIds.map((infId: number) => ({
+          data: finalInfluencerIds.map((infId: number) => ({
             agentId: Number(agentId),
             influencerId: Number(infId),
           })),
@@ -506,7 +620,9 @@ router.post(
 
     res.json({
       status: 'success',
-      message: `Assigned ${influencerIds.length} influencer(s) to agent`,
+      message: autoAssign 
+        ? `Agent marked for auto-assignment and linked to all ${finalInfluencerIds.length} influencers`
+        : `Assigned ${finalInfluencerIds.length} influencer(s) to agent`,
     });
   })
 );
@@ -529,6 +645,146 @@ router.delete(
     res.json({
       status: 'success',
       message: 'Assignment removed',
+    });
+  })
+);
+
+// --- Verification Management ---
+
+// List all verifications
+router.get(
+  '/verifications',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { filter = 'all' } = req.query;
+
+    const where: any = {
+      role: { name: { notIn: ['SUPER_ADMIN', 'FINANCE_ADMIN'] } },
+    };
+
+    if (filter === 'pending') {
+      where.OR = [
+        { kycStatus: { in: ['PENDING', 'UNDER_REVIEW', 'REJECTED'] } },
+        { emailVerifiedAt: null },
+        { bankAccounts: { some: { status: { in: ['PENDING', 'REJECTED'] } } } },
+      ];
+    }
+
+    const usersWithVerifications = await prisma.user.findMany({
+      where,
+      include: {
+        profile: true,
+        role: true,
+        kycDocuments: true,
+        bankAccounts: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({
+      status: 'success',
+      data: usersWithVerifications,
+    });
+  })
+);
+
+// Verify email manually
+router.patch(
+  '/users/:uuid/verify-email',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { uuid } = req.params;
+    
+    const user = await prisma.user.update({
+      where: { uuid },
+      data: { emailVerifiedAt: new Date() },
+    });
+
+    await checkAndActivateUser(user.id);
+
+    res.json({
+      status: 'success',
+      message: 'E-mail vérifié avec succès',
+      data: user,
+    });
+  })
+);
+
+// Update KYC status
+router.patch(
+  '/users/:uuid/verify-kyc',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { uuid } = req.params;
+    const { status } = req.body;
+
+    if (!['APPROVED', 'REJECTED'].includes(status)) {
+        throw new AppException(400, 'Statut invalide');
+    }
+
+    const user = await prisma.user.update({
+      where: { uuid },
+      data: { 
+        kycStatus: status,
+        kycDocuments: {
+            updateMany: {
+                where: { status: 'PENDING' },
+                data: { status }
+            }
+        }
+      },
+      include: { kycDocuments: true }
+    });
+
+    await checkAndActivateUser(user.id);
+
+    res.json({
+      status: 'success',
+      message: `KYC ${status === 'APPROVED' ? 'approuvé' : 'rejeté'} avec succès`,
+      data: user,
+    });
+  })
+);
+
+// Update bank account status
+router.patch(
+  '/bank-accounts/:id/status',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!['APPROVED', 'REJECTED'].includes(status)) {
+        throw new AppException(400, 'Statut invalide');
+    }
+
+    const bankAccount = await prisma.userBankAccount.update({
+      where: { id: Number(id) },
+      data: { status },
+      include: { user: true }
+    });
+
+    if (status === 'REJECTED') {
+      await prisma.notification.create({
+        data: {
+          userId: bankAccount.userId,
+          title: "Compte Bancaire Rejeté",
+          body: `Votre compte bancaire (${bankAccount.bankName}) a été rejeté. Veuillez ajouter un nouveau RIB (RIB: ${bankAccount.ribAccount}).`,
+          type: "ERROR"
+        }
+      });
+    }
+
+    await checkAndActivateUser(bankAccount.userId);
+
+    res.json({
+      status: 'success',
+      message: `Compte bancaire ${status === 'APPROVED' ? 'approuvé' : 'rejeté'} avec succès`,
+      data: bankAccount,
     });
   })
 );
@@ -562,6 +818,106 @@ router.get(
         isInfluencer: u.isInfluencer,
         isActive: u.isActive,
       })),
+    });
+  })
+);
+
+// --- Support Management ---
+
+// List all support requests
+router.get(
+  '/support-requests',
+  authenticate,
+  authorize('SUPER_ADMIN', 'SYSTEM_SUPPORT'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { status, type } = req.query;
+
+    const where: any = {};
+    if (status) where.status = status;
+    if (type) where.type = type;
+
+    const requests = await prisma.supportRequest.findMany({
+      where,
+      include: {
+        user: { include: { profile: true, role: true } },
+        product: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({
+      status: 'success',
+      data: requests
+    });
+  })
+);
+
+// Update support request status
+router.patch(
+  '/support-requests/:id',
+  authenticate,
+  authorize('SUPER_ADMIN', 'SYSTEM_SUPPORT'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const request = await prisma.supportRequest.update({
+      where: { id: Number(id) },
+      data: { status }
+    });
+
+    res.json({
+      status: 'success',
+      data: request
+    });
+  })
+);
+// Get all conversations globally for spectate mode
+router.get(
+  '/conversations',
+  authenticate,
+  authorize('SUPER_ADMIN', 'SYSTEM_SUPPORT', 'FINANCE_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { status, type, claimedByUserId, orderNumber } = req.query;
+
+    const where: any = {};
+    if (status) {
+      where.status = status;
+    } else {
+      where.status = { in: ['ACTIVE', 'PENDING_CLAIM'] };
+    }
+    if (type) where.type = type;
+    if (claimedByUserId) where.claimedByUserId = Number(claimedByUserId);
+    if (orderNumber) {
+      where.metadata = {
+        path: ['orderNumber'],
+        equals: orderNumber
+      };
+    }
+
+    const conversations = await prisma.conversation.findMany({
+      where,
+      include: {
+        participants: {
+          include: {
+            user: { include: { profile: true, role: true } }
+          }
+        },
+        claimedBy: { include: { profile: true } },
+        messages: {
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        }
+      },
+      orderBy: { updatedAt: 'desc' }
+    });
+
+    res.json({
+      status: 'success',
+      data: { conversations: conversations.map(c => ({
+        ...c,
+        lastMessage: c.messages[0] || null
+      })) }
     });
   })
 );

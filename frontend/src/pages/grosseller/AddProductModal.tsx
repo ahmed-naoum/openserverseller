@@ -20,7 +20,8 @@ import {
   CheckCircle2,
   AlertCircle,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Link as LinkIcon
 } from 'lucide-react';
 
 interface UploadedImage {
@@ -73,6 +74,8 @@ export default function AddProductModal({ isOpen, onClose, onSuccess, isAdmin = 
       videoUrlsInput: editProduct?.videoUrls?.join('\n') || '',
       landingPageUrlsInput: editProduct?.landingPageUrls?.join('\n') || '',
       commissionMad: editProduct?.commissionMad?.toString() || '',
+      canvaLink: editProduct?.canvaLink || '',
+      longDescription: editProduct?.longDescription || '',
     };
   }, [editProduct]);
 
@@ -234,6 +237,8 @@ export default function AddProductModal({ isOpen, onClose, onSuccess, isAdmin = 
         imageUrls,
         videoUrls: formData.videoUrlsInput.split('\n').map((u: string) => u.trim()).filter(Boolean),
         landingPageUrls: formData.landingPageUrlsInput.split('\n').map((u: string) => u.trim()).filter(Boolean),
+        canvaLink: formData.canvaLink || null,
+        longDescription: formData.longDescription || null,
       };
 
       if (isEditMode) {
@@ -448,16 +453,45 @@ export default function AddProductModal({ isOpen, onClose, onSuccess, isAdmin = 
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="label">Description Détaillée</label>
+                      <label className="label">Description Courte</label>
                       <textarea
                         required
-                        rows={3}
-                        placeholder="Avantages, ingrédients, mode d'utilisation..."
+                        rows={2}
+                        placeholder="Résumé rapide du produit..."
                         className="input resize-none"
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                       ></textarea>
                     </div>
+
+                    <div className="space-y-1.5 text-right">
+                      <label className="label">المكونات / Détails & Ingrédients</label>
+                      <textarea
+                        rows={4}
+                        dir="rtl"
+                        placeholder="تفاصيل المكونات والمواصفات التقنية..."
+                        className="input resize-none font-arabic"
+                        value={formData.longDescription}
+                        onChange={(e) => setFormData({ ...formData, longDescription: e.target.value })}
+                      ></textarea>
+                    </div>
+                    {isAdmin && (
+                      <div className="space-y-1.5 p-4 rounded-xl border border-blue-100 bg-blue-50/20">
+                        <label className="label text-blue-700 font-bold flex items-center gap-2">
+                          <LinkIcon size={16} /> Modèle Canva (Template URL)
+                        </label>
+                        <input
+                          type="url"
+                          placeholder="https://www.canva.com/design/..."
+                          className="input border-blue-200 focus:ring-blue-500/20"
+                          value={formData.canvaLink}
+                          onChange={(e) => setFormData({ ...formData, canvaLink: e.target.value })}
+                        />
+                        <p className="text-[10px] text-blue-600 mt-1 italic">
+                          Ce lien sera affiché aux utilisateurs ayant acquis le produit pour designer leur logo.
+                        </p>
+                      </div>
+                    )}
                   </motion.div>
                 )}
 

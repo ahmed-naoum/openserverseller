@@ -18,11 +18,15 @@ import {
   Mail,
   Smartphone,
   ChevronRight,
-  Filter
+  Filter,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; onClose: () => void; agent: any }) {
+  const queryClient = useQueryClient();
   const [selectedInfluencers, setSelectedInfluencers] = useState<number[]>([]);
+  const [autoAssign, setAutoAssign] = useState(agent?.autoAssignInfluencers || false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [influencers, setInfluencers] = useState<any[]>([]);
@@ -38,6 +42,8 @@ function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; o
       setInfluencers(infRes.data?.data || []);
       const currentIds = (assignRes.data?.data || []).map((a: any) => a.influencerId);
       setSelectedInfluencers(currentIds);
+      // Sync autoAssign state from agent data
+      setAutoAssign(agent.autoAssignInfluencers || false);
     }).catch(() => {
       toast.error('Erreur lors du chargement');
     }).finally(() => setLoading(false));
@@ -46,8 +52,14 @@ function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; o
   const handleSave = async () => {
     setSaving(true);
     try {
-      await adminApi.setAgentInfluencerAssignments(agent.id, selectedInfluencers);
-      toast.success(`${selectedInfluencers.length} influenceur(s) assigné(s) à ${agent.fullName || 'cet agent'}`);
+      await adminApi.setAgentInfluencerAssignments(agent.id, selectedInfluencers, autoAssign);
+      toast.success(
+        autoAssign 
+          ? `Auto-assignation activée pour ${agent.fullName || 'cet agent'}`
+          : `${selectedInfluencers.length} influenceur(s) assigné(s) à ${agent.fullName || 'cet agent'}`
+      );
+      // Invalidate users query to refresh the list with new autoAssign status
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
       onClose();
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Erreur lors de la sauvegarde');
@@ -60,6 +72,14 @@ function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; o
     setSelectedInfluencers(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
+  };
+
+  const toggleAll = () => {
+    if (selectedInfluencers.length === influencers.length) {
+      setSelectedInfluencers([]);
+    } else {
+      setSelectedInfluencers(influencers.map(inf => inf.id));
+    }
   };
 
   if (!isOpen || !agent) return null;
@@ -83,6 +103,43 @@ function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; o
         </div>
 
         <div className="p-8 overflow-y-auto flex-1 bg-white/50">
+          {/* Auto-assign toggle */}
+          <div className={`mb-6 p-4 rounded-3xl border-2 transition-all duration-300 ${
+            autoAssign 
+              ? 'border-indigo-500 bg-indigo-50/50 shadow-lg shadow-indigo-100' 
+              : 'border-slate-100 bg-slate-50/50'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-colors ${
+                  autoAssign ? 'bg-indigo-600 text-white' : 'bg-white text-slate-400 border border-slate-100'
+                }`}>
+                  <ShieldAlert size={20} />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-slate-800 tracking-tight">Auto-assignation globale</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Tous les influenceurs (présents & futurs)</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAutoAssign(!autoAssign)}
+                className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${
+                  autoAssign ? 'bg-indigo-600' : 'bg-slate-200'
+                }`}
+              >
+                <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-300 transform ${
+                  autoAssign ? 'translate-x-6' : 'translate-x-0'
+                }`} />
+              </button>
+            </div>
+            {autoAssign && (
+              <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mt-3 animate-pulse">
+                ✨ Mode Agent Global Activé
+              </p>
+            )}
+          </div>
+
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
               <div className="w-12 h-12 border-4 border-primary-100 border-t-primary-600 rounded-full animate-spin" />
@@ -95,10 +152,17 @@ function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; o
           ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between mb-4">
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                   {selectedInfluencers.length} d'entre eux sélectionnés
                 </p>
                 <div className="h-px flex-1 mx-4 bg-slate-100" />
+                <button
+                  type="button"
+                  onClick={toggleAll}
+                  className="text-[10px] font-black text-primary-600 uppercase tracking-widest hover:text-primary-800 transition-colors"
+                >
+                  {selectedInfluencers.length === influencers.length ? 'Tout désélectionner' : 'Tout sélectionner'}
+                </button>
               </div>
               {influencers.map((inf: any) => (
                 <label
@@ -155,6 +219,142 @@ function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; o
   );
 }
 
+function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; onClose: () => void; helper: any }) {
+  const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!isOpen || !helper) return;
+    setLoading(true);
+
+    Promise.all([
+      adminApi.users({ limit: 1000 }), 
+      adminApi.getHelperUserAssignments(helper.id),
+    ]).then(([usersRes, assignRes]) => {
+      const list = (usersRes.data?.data?.users || []).filter(
+        (u: any) => u.id !== helper.id && u.role !== 'SUPER_ADMIN'
+      );
+      setAllUsers(list);
+      const currentIds = (assignRes.data?.data || []).map((a: any) => a.targetUserId);
+      setSelectedUsers(currentIds);
+    }).catch(() => {
+      toast.error('Erreur lors du chargement');
+    }).finally(() => setLoading(false));
+  }, [isOpen, helper]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await adminApi.setHelperUserAssignments(helper.id, selectedUsers);
+      toast.success(`${selectedUsers.length} utilisateur(s) assigné(s) à ${helper.fullName || 'ce helper'}`);
+      onClose();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Erreur lors de la sauvegarde');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleUser = (id: number) => {
+    setSelectedUsers(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  if (!isOpen || !helper) return null;
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xl flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
+      <div className="bg-white rounded-[2rem] w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col shadow-2xl border border-white/20 scale-in-center transition-transform duration-500">
+        <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-gradient-to-br from-primary-50/50 to-indigo-50/30">
+          <div>
+            <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+              <Users size={24} className="text-primary-600" />
+              Assigner Utilisateurs
+            </h2>
+            <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">
+              Helper: <span className="text-primary-600">{helper.fullName || helper.email}</span>
+            </p>
+          </div>
+          <button onClick={onClose} className="p-2.5 text-slate-400 hover:text-slate-600 rounded-2xl hover:bg-white transition-all">
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="p-8 overflow-y-auto flex-1 bg-white/50">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-4">
+              <div className="w-12 h-12 border-4 border-primary-100 border-t-primary-600 rounded-full animate-spin" />
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Récupération des données...</p>
+            </div>
+          ) : allUsers.length === 0 ? (
+            <div className="text-center py-12 opacity-50">
+              <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Aucun utilisateur trouvé</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between mb-4">
+                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  {selectedUsers.length} sélectionnés
+                </p>
+              </div>
+              {allUsers.map((u) => (
+                 <label
+                  key={u.id}
+                  className={`flex items-center gap-4 p-4 rounded-2xl border transition-all duration-300 group cursor-pointer ${
+                    selectedUsers.includes(u.id)
+                      ? 'border-primary-500 bg-primary-50 text-primary-900'
+                      : 'border-slate-100 bg-white hover:border-primary-200'
+                  }`}
+                >
+                  <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
+                    selectedUsers.includes(u.id)
+                      ? 'bg-primary-600 border-primary-600 text-white'
+                      : 'border-slate-200 group-hover:border-primary-300'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      className="hidden"
+                      checked={selectedUsers.includes(u.id)}
+                      onChange={() => toggleUser(u.id)}
+                    />
+                    {selectedUsers.includes(u.id) && <CheckCircle2 size={14} className="stroke-[3px]" />}
+                  </div>
+                  <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center font-black text-slate-400 group-hover:bg-primary-100 group-hover:text-primary-600 transition-colors">
+                    {u.fullName?.charAt(0) || u.email?.charAt(0) || '?'}
+                  </div>
+                   <div className="min-w-0 flex-1">
+                    <p className="text-sm font-black tracking-tight underline">{u.fullName}</p>
+                    <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">{u.role} - {u.email}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="p-8 border-t border-slate-50 flex gap-4 bg-white">
+          <button
+            onClick={onClose}
+            className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all"
+          >
+            Fermer
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || loading}
+             className="flex-[2] btn-primary rounded-2xl shadow-xl shadow-primary-200/50"
+          >
+            {saving ? 'Sauvegarde...' : `Confirmer (${selectedUsers.length})`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AddUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [formData, setFormData] = useState({
     fullName: '',
@@ -163,6 +363,7 @@ function AddUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
     password: '',
     role: 'VENDOR',
   });
+  const [showPassword, setShowPassword] = useState(false);
   const queryClient = useQueryClient();
 
   const createMutation = useMutation({
@@ -243,17 +444,24 @@ function AddUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
 
             <div className="col-span-2">
               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Mot de Passe</label>
-              <div className="relative">
+              <div className="relative group">
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   required
                   minLength={6}
                   placeholder="••••••••"
-                  className="input pl-11"
+                  className="input pl-11 pr-12 group-focus-within:border-primary-400 transition-all"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 />
                 <ShieldAlert size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-primary-600 transition-colors"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
             </div>
 
@@ -266,9 +474,12 @@ function AddUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
                 onChange={(e) => setFormData({ ...formData, role: e.target.value })}
               >
                 <option value="VENDOR">Vendeur</option>
-                <option value="GROSELLER">Grossiste</option>
+                <option value="INFLUENCER">Influenceur</option>
+                <option value="GROSSELLER">Grossiste</option>
+                <option value="HELPER">Helper</option>
                 <option value="CALL_CENTER_AGENT">Agent Call Center</option>
                 <option value="CONFIRMATION_AGENT">Agent de Confirmation</option>
+                <option value="SYSTEM_SUPPORT">Agent de Support</option>
                 <option value="FINANCE_ADMIN">Admin Finance</option>
                 <option value="SUPER_ADMIN">Super Admin</option>
               </select>
@@ -303,6 +514,7 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
     email: user?.email || '',
     phone: user?.phone || '',
     role: user?.role || 'VENDOR',
+    canImpersonate: user?.canImpersonate || false,
   });
   const queryClient = useQueryClient();
 
@@ -375,13 +587,38 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
                 onChange={(e) => setFormData({ ...formData, role: e.target.value })}
               >
                 <option value="VENDOR">Vendeur</option>
-                <option value="GROSELLER">Grossiste</option>
+                <option value="INFLUENCER">Influenceur</option>
+                <option value="GROSSELLER">Grossiste</option>
+                <option value="HELPER">Helper</option>
                 <option value="CALL_CENTER_AGENT">Agent Call Center</option>
                 <option value="CONFIRMATION_AGENT">Agent de Confirmation</option>
+                <option value="SYSTEM_SUPPORT">Agent de Support</option>
                 <option value="FINANCE_ADMIN">Admin Finance</option>
                 <option value="SUPER_ADMIN">Super Admin</option>
               </select>
             </div>
+
+            {formData.role === 'HELPER' && (
+              <div className="p-4 bg-orange-50 border border-orange-100 rounded-2xl flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-orange-900">Accès Mode Assistance</p>
+                  <p className="text-[10px] text-orange-700 font-medium">Permet de se connecter aux autres comptes.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, canImpersonate: !formData.canImpersonate })}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                    formData.canImpersonate ? 'bg-orange-600' : 'bg-slate-200'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      formData.canImpersonate ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            )}
           </div>
           
           <div className="pt-4 flex gap-4">
@@ -412,11 +649,12 @@ export default function AdminUsers() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [assigningAgent, setAssigningAgent] = useState<any>(null);
+  const [assigningHelper, setAssigningHelper] = useState<any>(null);
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: ['users', { role: roleFilter, search }],
-    queryFn: () => adminApi.users({ role: roleFilter || undefined }),
+    queryFn: () => adminApi.users({ role: roleFilter || undefined, search: search || undefined }),
   });
 
   const users = data?.data?.data?.users || [];
@@ -488,7 +726,7 @@ export default function AdminUsers() {
             </div>
             <button
                onClick={() => setIsAddModalOpen(true)}
-               className="bg-white text-primary-900 group h-full px-8 rounded-3xl font-black text-sm uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-black/20 flex items-center gap-3"
+               className="bg-white text-primary-900 group py-4 px-8 rounded-3xl font-black text-sm uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-black/20 flex items-center justify-center gap-3 whitespace-nowrap"
             >
               <UserPlus size={20} className="group-hover:rotate-12 transition-transform" />
               Ajouter Agent
@@ -527,18 +765,18 @@ export default function AdminUsers() {
                 <Filter size={14} />
                 Filtrer par rôle
               </h3>
-              <div className="flex flex-col gap-2">
-                {['', 'VENDOR', 'CALL_CENTER_AGENT', 'CONFIRMATION_AGENT', 'INFLUENCER', 'FINANCE_ADMIN', 'SUPER_ADMIN'].map((role) => (
+              <div className="flex flex-wrap gap-2">
+                {['', 'VENDOR', 'CALL_CENTER_AGENT', 'CONFIRMATION_AGENT', 'INFLUENCER', 'HELPER', 'SYSTEM_SUPPORT', 'FINANCE_ADMIN', 'SUPER_ADMIN'].map((role) => (
                   <button
                     key={role}
                     onClick={() => setRoleFilter(role)}
-                    className={`px-5 py-4 rounded-2xl text-left text-xs font-black uppercase tracking-widest transition-all ${
+                    className={`px-3 py-2.5 rounded-[1rem] text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap flex-grow text-center ${
                       roleFilter === role 
-                        ? 'bg-primary-600 text-white shadow-lg shadow-primary-200 translate-x-2' 
-                        : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+                        ? 'bg-primary-600 text-white shadow-lg shadow-primary-200/50 scale-105 z-10' 
+                        : 'bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600'
                     }`}
                   >
-                    {role || 'Tous les accès'}
+                    {role ? role.replace(/_/g, ' ') : 'TOUS LES ACCÈS'}
                   </button>
                 ))}
               </div>
@@ -588,7 +826,14 @@ export default function AdminUsers() {
                               <span className="text-slate-400 group-hover:text-primary-600 font-black text-lg uppercase">{user.fullName?.charAt(0) || '?'}</span>
                             </div>
                             <div className="min-w-0">
-                               <p className="font-black text-slate-900 text-base tracking-tight group-hover:text-primary-600 transition-colors uppercase">{user.fullName || 'N/A'}</p>
+                               <div className="flex items-center gap-2">
+                                 <p className="font-black text-slate-900 text-base tracking-tight group-hover:text-primary-600 transition-colors uppercase">{user.fullName || 'N/A'}</p>
+                                 {user.autoAssignInfluencers && (
+                                   <span className="px-2 py-0.5 bg-indigo-100 text-indigo-600 text-[8px] font-black uppercase tracking-widest rounded-full border border-indigo-200 animate-pulse">
+                                     ✨ Global
+                                   </span>
+                                 )}
+                               </div>
                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mt-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <ChevronRight size={10} /> UUID: {user.uuid.split('-')[0]}
                                </p>
@@ -649,6 +894,16 @@ export default function AdminUsers() {
                                 onClick={() => setAssigningAgent(user)}
                                 className="w-10 h-10 rounded-xl bg-white border border-slate-100 text-slate-400 hover:text-primary-600 hover:border-primary-100 hover:bg-primary-50 transition-all flex items-center justify-center"
                                 title="Assigner Influenceurs"
+                              >
+                                <Users size={18} />
+                              </button>
+                            )}
+
+                            {user.role === 'HELPER' && (
+                              <button
+                                onClick={() => setAssigningHelper(user)}
+                                className="w-10 h-10 rounded-xl bg-orange-600 border border-orange-500 text-white hover:bg-orange-700 shadow-lg shadow-orange-200 transition-all flex items-center justify-center"
+                                title="Assigner Utilisateurs"
                               >
                                 <Users size={18} />
                               </button>
@@ -722,6 +977,14 @@ export default function AdminUsers() {
           isOpen={!!assigningAgent}
           onClose={() => setAssigningAgent(null)}
           agent={assigningAgent}
+        />
+      )}
+
+      {assigningHelper && (
+        <AssignHelperUsersModal
+          isOpen={!!assigningHelper}
+          onClose={() => setAssigningHelper(null)}
+          helper={assigningHelper}
         />
       )}
     </div>

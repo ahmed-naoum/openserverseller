@@ -80,23 +80,33 @@ router.post(
   authorize('VENDOR', 'INFLUENCER'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { productId } = req.body;
+    const { productId, brandingLabelPrintUrl, brandName, requestedQty, requestedLandingPageUrl } = req.body;
 
     const product = await prisma.product.findUnique({
       where: { id: productId }
     });
 
-    if (!product || !(product.visibility.includes('AFFILIATE') || product.visibility.includes('INFLUENCER'))) {
-      throw new AppException(404, 'Product not found or not available for influencers');
+    if (!product || !(product.visibility.includes('AFFILIATE') || product.visibility.includes('INFLUENCER') || product.visibility.includes('REGULAR'))) {
+      throw new AppException(404, 'Product not found or not available for your role');
     }
 
     const claim = await prisma.affiliateClaim.upsert({
       where: { userId_productId: { userId, productId } },
-      update: { status: 'PENDING' },
+      update: {
+        status: 'PENDING',
+        brandingLabelPrintUrl,
+        brandName,
+        requestedQty: requestedQty ? Number(requestedQty) : undefined,
+        requestedLandingPageUrl
+      },
       create: {
         userId,
         productId,
-        status: 'PENDING'
+        status: 'PENDING',
+        brandingLabelPrintUrl,
+        brandName,
+        requestedQty: requestedQty ? Number(requestedQty) : null,
+        requestedLandingPageUrl
       }
     });
 
@@ -372,6 +382,103 @@ router.post(
       status: 'success',
       message: 'Lead pushed to call center',
       data: { lead: updatedLead }
+    });
+  })
+);
+
+router.post(
+  '/leads/push-callcenter/bulk',
+  authenticate,
+  authorize('VENDOR', 'INFLUENCER'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { leadIds } = req.body;
+    const userId = req.user!.id;
+
+    if (!Array.isArray(leadIds) || leadIds.length === 0) {
+      throw new AppException(400, 'Please provide an array of lead IDs');
+    }
+
+    const influencerLinks = await prisma.referralLink.findMany({
+      where: { influencerId: userId },
+      select: { id: true }
+    });
+    const linkIds = influencerLinks.map(l => l.id);
+
+    // Verify all leads belong to this influencer and are in eligible status
+    const leads = await prisma.lead.findMany({
+      where: { 
+        id: { in: leadIds }, 
+        referralLinkId: { in: linkIds },
+        status: { in: ['NEW', 'LEAD'] }
+      },
+      include: {
+        referralLink: { include: { product: { include: { images: { where: { isPrimary: true }, take: 1 } } } } }
+      }
+    });
+
+    if (leads.length === 0) {
+      throw new AppException(404, 'No eligible leads found for pushing');
+    }
+
+    const updatedLeads = await prisma.$transaction(async (tx: any) => {
+      // Create status history for each lead
+      await tx.leadStatusHistory.createMany({
+        data: leads.map(l => ({
+          leadId: l.id,
+          oldStatus: l.status,
+          newStatus: 'AVAILABLE',
+          changedBy: userId
+        }))
+      });
+
+      // Update leads status to AVAILABLE
+      await tx.lead.updateMany({
+        where: { id: { in: leads.map(l => l.id) } },
+        data: { status: 'AVAILABLE' }
+      });
+
+      return tx.lead.findMany({
+        where: { id: { in: leads.map(l => l.id) } }
+      });
+    });
+
+    const influencerProfile = await prisma.userProfile.findUnique({
+      where: { userId }
+    });
+
+    const assignments = await prisma.agentInfluencerAssignment.findMany({
+      where: { influencerId: userId },
+      select: { agentId: true }
+    });
+
+    // Notify agents for each pushed lead
+    leads.forEach(lead => {
+      const leadData = {
+        id: lead.id,
+        fullName: lead.fullName,
+        phone: lead.phone,
+        city: lead.city,
+        address: lead.address,
+        product: lead.referralLink?.product ? {
+          name: (lead.referralLink.product as any).nameFr || (lead.referralLink.product as any).nameAr,
+          image: (lead.referralLink.product as any).images?.[0]?.url
+        } : null,
+        influencer: {
+          id: userId,
+          fullName: influencerProfile?.fullName || req.user!.email
+        },
+        createdAt: lead.createdAt
+      };
+
+      assignments.forEach(a => {
+        io.to(`user:${a.agentId}`).emit('new-available-lead', leadData);
+      });
+    });
+
+    res.json({
+      status: 'success',
+      message: `${leads.length} leads pushed to call center`,
+      data: { count: leads.length }
     });
   })
 );

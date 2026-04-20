@@ -60,18 +60,69 @@ app.use(`${API_PREFIX}`, routes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-io.on('connection', (socket) => {
-  console.log(`Client connected: ${socket.id}`);
+const setupChatSocket = () => {
+  const jwt = require('jsonwebtoken');
+  const { PrismaClient } = require('@prisma/client');
+  const prismaSocket = new PrismaClient();
 
-  socket.on('join-room', (room: string) => {
-    socket.join(room);
-    console.log(`Socket ${socket.id} joined room ${room}`);
+  io.use(async (socket: any, next: any) => {
+    const token = socket.handshake.auth?.token;
+    if (!token) return next(); // allow unauthenticated (will just not join user room)
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+      const user = await prismaSocket.user.findUnique({
+        where: { uuid: decoded.userId },
+        include: { role: true },
+      });
+      if (user && user.isActive) {
+        socket.userUuid = user.uuid;
+        socket.userRole = user.role.name;
+      }
+      next();
+    } catch {
+      next(); // still allow, just not in personal room
+    }
   });
 
-  socket.on('disconnect', () => {
-    console.log(`Client disconnected: ${socket.id}`);
+  io.on('connection', (socket: any) => {
+    if (socket.userUuid) {
+      socket.join(`user:${socket.userUuid}`);
+      socket.join(`role:${socket.userRole}`);
+    }
+
+    socket.on('join-conversation', (conversationId: string) => {
+      socket.join(`conversation:${conversationId}`);
+    });
+
+    socket.on('leave-conversation', (conversationId: string) => {
+      socket.leave(`conversation:${conversationId}`);
+    });
+
+    socket.on('typing:start', (data: { conversationId: string }) => {
+      socket.to(`conversation:${data.conversationId}`).emit('typing', {
+        userId: socket.userUuid,
+        isTyping: true,
+      });
+    });
+
+    socket.on('typing:stop', (data: { conversationId: string }) => {
+      socket.to(`conversation:${data.conversationId}`).emit('typing', {
+        userId: socket.userUuid,
+        isTyping: false,
+      });
+    });
+
+    socket.on('join-room', (room: string) => {
+      socket.join(room);
+    });
+
+    socket.on('disconnect', () => {
+      console.log(`Client disconnected: ${socket.id}`);
+    });
   });
-});
+};
+
+setupChatSocket();
 
 export { io };
 

@@ -233,18 +233,11 @@ export default function InfluencerMarketplace() {
                         if (!claim) {
                           return (
                             <button 
-                              onClick={() => handleClaimProduct(product.id)}
-                              disabled={claimingFor === product.id}
-                              className="w-full flex items-center justify-center gap-2 py-2.5 bg-influencer-600 text-white rounded-xl text-sm font-bold hover:bg-influencer-700 transition-colors disabled:opacity-50"
+                              onClick={() => navigate(`/influencer/product/${product.id}`)}
+                              className="w-full flex items-center justify-center gap-2 py-2.5 bg-influencer-600 text-white rounded-xl text-sm font-bold hover:bg-influencer-700 transition-colors shadow-lg shadow-influencer-500/10 active:scale-95"
                             >
-                              {claimingFor === product.id ? (
-                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                              ) : (
-                                <>
-                                  <Package className="w-4 h-4" />
-                                  Réclamer le produit
-                                </>
-                              )}
+                              <Eye className="w-4 h-4" />
+                              Voir Détails
                             </button>
                           );
                         }

@@ -17,7 +17,6 @@ import VendorProducts from './pages/vendor/Products';
 import VendorLeads from './pages/vendor/Leads';
 import VendorOrders from './pages/vendor/Orders';
 import VendorWallet from './pages/vendor/Wallet';
-import VendorBrands from './pages/vendor/Brands';
 import VendorInventory from './pages/vendor/Inventory';
 import AgentDashboard from './pages/agent/Dashboard';
 import AgentLeads from './pages/agent/Leads';
@@ -27,7 +26,6 @@ import AgentOrders from './pages/agent/Orders';
 import AgentLivraison from './pages/agent/Livraison';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminUsers from './pages/admin/Users';
-import AdminBrands from './pages/admin/Brands';
 import AdminProducts from './pages/admin/Products';
 import AdminCategories from './pages/admin/AdminCategories';
 import AdminOrders from './pages/admin/Orders';
@@ -38,6 +36,8 @@ import AdminCampaigns from './pages/admin/Campaigns';
 import AdminCustomers from './pages/admin/Customers';
 import AdminAnnouncements from './pages/admin/Announcements';
 import AdminLeadHistory from './pages/admin/LeadHistory';
+import AdminVerifications from './pages/admin/AdminVerifications';
+import AdminSupport from './pages/admin/Support';
 import ProductCustomizePage from './pages/vendor/ProductCustomizePage';
 import YouCanCallback from './pages/vendor/YouCanCallback';
 import YouCanLeads from './pages/vendor/YouCanLeads';
@@ -68,6 +68,10 @@ import InfluencerNotifications from './pages/influencer/Notifications';
 import InfluencerMarketplace from './pages/influencer/Marketplace';
 import InfluencerInventory from './pages/influencer/Inventory';
 import ConfirmationDashboard from './pages/confirmation/Dashboard';
+import HelperDashboard from './pages/helper/Dashboard';
+import HelperLeads from './pages/helper/Leads';
+import HelperColis from './pages/helper/Colis';
+import HelperUsers from './pages/helper/Users';
 import Chat from './pages/common/Chat';
 import AccountVerification from './pages/verify/AccountVerification';
 import PublicMarketplace from './pages/marketplace/PublicMarketplace';
@@ -79,9 +83,11 @@ import SettingsPage from './pages/common/SettingsPage';
 import NotFoundPage from './pages/common/NotFoundPage';
 import ProfileVerification from './pages/common/ProfileVerification';
 import MaintenancePage from './pages/common/MaintenancePage';
+import SupportTickets from './pages/common/SupportTickets';
 
 // Context
 import { AuthProvider } from './contexts/AuthContext';
+import { SocketProvider } from './contexts/SocketContext';
 
 // Guards
 import RoleGuard from './components/auth/RoleGuard';
@@ -93,7 +99,8 @@ function App() {
     <>
       {loading && <PageLoader onComplete={() => setLoading(false)} />}
     <AuthProvider>
-      <MaintenanceGuard>
+      <SocketProvider>
+        <MaintenanceGuard>
         <Routes>
           {/* Public Routes */}
           <Route path="/maintenance" element={<MaintenancePage />} />
@@ -133,7 +140,7 @@ function App() {
           <Route path="payouts" element={<GrossellerPayouts />} />
           <Route path="orders" element={<GrossellerOrders />} />
           <Route path="analytics" element={<GrossellerAnalytics />} />
-          <Route path="support" element={<GrossellerSupport />} />
+          <Route path="support" element={<SupportTickets />} />
           <Route path="marketplace" element={<GrossellerMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
@@ -154,12 +161,12 @@ function App() {
           <Route path="campaigns" element={<InfluencerCampaigns />} />
           <Route path="analytics" element={<InfluencerAnalytics />} />
           <Route path="leads" element={<InfluencerLeads />} />
-          <Route path="youcan-leads" element={<YouCanLeads />} />
           <Route path="notifications" element={<InfluencerNotifications />} />
           <Route path="inventory" element={<InfluencerInventory />} />
           <Route path="marketplace" element={<InfluencerMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
+          <Route path="support" element={<SupportTickets />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="integrations" element={<IntegrationsPage />} />
           <Route path="verification" element={<ProfileVerification />} />
@@ -186,7 +193,6 @@ function App() {
           </RoleGuard>
         }>
           <Route index element={<VendorDashboard />} />
-          <Route path="brands" element={<VendorBrands />} />
           <Route path="products" element={<VendorProducts />} />
           <Route path="leads" element={<VendorLeads />} />
           <Route path="youcan-leads" element={<YouCanLeads />} />
@@ -221,25 +227,35 @@ function App() {
           <Route path="verification" element={<ProfileVerification />} />
         </Route>
 
+        {/* Helper Routes */}
+        <Route path="/helper" element={<RoleGuard allowedRoles={['SUPER_ADMIN', 'HELPER']}><DashboardLayout /></RoleGuard>}>
+          <Route index element={<HelperDashboard />} />
+          <Route path="users" element={<HelperUsers />} />
+          <Route path="leads" element={<HelperLeads />} />
+          <Route path="colis" element={<HelperColis />} />
+          <Route path="settings" element={<SettingsPage />} />
+          <Route path="verification" element={<ProfileVerification />} />
+        </Route>
+
         {/* Admin Dashboard */}
         <Route path="/admin" element={
-          <RoleGuard allowedRoles={['SUPER_ADMIN', 'FINANCE_ADMIN']}>
+          <RoleGuard allowedRoles={['SUPER_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_SUPPORT']}>
             <DashboardLayout />
           </RoleGuard>
         }>
           <Route index element={<AdminDashboard />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="customers" element={<AdminCustomers />} />
-          <Route path="brands" element={<AdminBrands />} />
           <Route path="categories" element={<AdminCategories />} />
           <Route path="products" element={<AdminProducts />} />
           <Route path="orders" element={<AdminOrders />} />
           <Route path="finance" element={<AdminFinance />} />
-          <Route path="fulfillment" element={<AdminFulfillment />} />
+          <Route path="support" element={<AdminSupport />} />
           <Route path="affiliate-claims" element={<AdminAffiliateClaims />} />
           <Route path="announcements" element={<AdminAnnouncements />} />
           <Route path="campaigns" element={<AdminCampaigns />} />
           <Route path="lead-history" element={<AdminLeadHistory />} />
+          <Route path="verifications" element={<AdminVerifications />} />
           <Route path="platform-settings" element={<PlatformSettings />} />
           <Route path="security" element={<SecurityFirewall />} />
           <Route path="webhook-logs" element={<WebhookLogs />} />
@@ -254,6 +270,7 @@ function App() {
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </MaintenanceGuard>
+      </SocketProvider>
 
 
       <Toaster

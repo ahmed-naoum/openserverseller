@@ -5,14 +5,21 @@ import { api, authApi } from '../../lib/api';
 import { 
   Eye, EyeOff, User, Lock, Bell, Settings as SettingsIcon, 
   MapPin, Phone, Mail, Camera, ShieldCheck, CheckCircle2, 
-  MonitorSmartphone, CreditCard, ChevronRight
+  MonitorSmartphone, CreditCard, ChevronRight, AlertCircle,
+  Shield
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import ProfileVerification from './ProfileVerification';
 
 export default function SettingsPage() {
   const { user, refreshUser } = useAuth();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('profile');
+  const defaultBank = user?.bankAccounts?.find((ba: any) => ba.isDefault) || user?.bankAccounts?.[0];
+  const isBankApproved = defaultBank?.status === 'APPROVED';
+  const isAdmin = ['SUPER_ADMIN', 'FINANCE_ADMIN'].includes(user?.role || '');
+  const canEditPayment = isAdmin;
+
   const [profileForm, setProfileForm] = useState({
     fullName: user?.fullName || '',
     email: user?.email || '',
@@ -20,6 +27,10 @@ export default function SettingsPage() {
     city: user?.city || '',
     address: user?.address || '',
     language: user?.language || 'fr',
+    ribAccount: defaultBank?.ribAccount || '',
+    bankName: defaultBank?.bankName || '',
+    iceNumber: defaultBank?.iceNumber || '',
+    payoutMethod: user?.metadata?.payoutMethod || 'bank_transfer',
   });
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
@@ -109,6 +120,7 @@ export default function SettingsPage() {
   const tabs = [
     { id: 'profile', label: 'Profil', icon: User, desc: 'Informations personnelles' },
     { id: 'security', label: 'Sécurité', icon: ShieldCheck, desc: 'Mots de passe et 2FA' },
+    { id: 'kyc', label: 'Vérification KYC', icon: Shield, desc: 'Validation du compte' },
     { id: 'notifications', label: 'Notifications', icon: Bell, desc: 'Préférences d\'emails' },
     { id: 'preferences', label: 'Préférences', icon: SettingsIcon, desc: 'Langue et région' },
   ];
@@ -262,6 +274,89 @@ export default function SettingsPage() {
                       value={profileForm.address}
                       onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
                     />
+                  </div>
+
+                  {/* Payment Information Section */}
+                  <div className="pt-8 mt-4 border-t border-gray-100">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-green-50 rounded-xl">
+                          <CreditCard className="text-green-600" size={22} />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-gray-900">Préférences de Paiement</h3>
+                          <p className="text-sm text-gray-500">Configurez comment vous recevez vos commissions.</p>
+                        </div>
+                      </div>
+                      {user?.bankAccounts?.some((ba: any) => ba.status === 'APPROVED') && (
+                        <div className="flex items-center gap-2 px-4 py-1.5 bg-green-50 border border-green-100 rounded-full">
+                          <CheckCircle2 size={16} className="text-green-600" />
+                          <span className="text-sm font-bold text-green-700">Terminé</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-8">
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-2">
+                          <MonitorSmartphone size={16} className="text-gray-400" /> Nom de la banque
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex: CIH, BMCE, Attijari..."
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all duration-200 text-gray-900 font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                          value={profileForm.bankName}
+                          onChange={(e) => setProfileForm({ ...profileForm, bankName: e.target.value })}
+                          disabled={!canEditPayment}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-2">
+                          <Lock size={16} className="text-gray-400" /> Numéro de RIB (24 chiffres)
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={24}
+                          placeholder="Ex: 123... (24 chiffres)"
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all duration-200 text-gray-900 font-mono font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                          value={profileForm.ribAccount}
+                          onChange={(e) => setProfileForm({ ...profileForm, ribAccount: e.target.value.replace(/\D/g, '').slice(0, 24) })}
+                          disabled={!canEditPayment}
+                        />
+                        {profileForm.ribAccount && profileForm.ribAccount.length !== 24 && (
+                          <p className="text-xs text-amber-600 font-medium animate-pulse">Le RIB doit contenir exactement 24 chiffres.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {(profileForm.iceNumber || user?.role === 'VENDOR') && (
+                      <div className="mt-8 space-y-2">
+                        <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-2">
+                          <ShieldCheck size={16} className="text-gray-400" /> Numéro ICE (Optionnel)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Votre numéro ICE"
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all duration-200 text-gray-900 font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                          value={profileForm.iceNumber}
+                          onChange={(e) => setProfileForm({ ...profileForm, iceNumber: e.target.value })}
+                          disabled={!canEditPayment}
+                        />
+                      </div>
+                    )}
+
+                    {!canEditPayment && (
+                      <div className="mt-6 p-4 bg-amber-50 rounded-2xl border border-amber-100 flex items-start gap-3">
+                        <AlertCircle className="text-amber-600 mt-0.5" size={18} />
+                        <div className="space-y-1">
+                          <p className="text-sm font-bold text-amber-900">Coordonnées bancaires verrouillées</p>
+                          <p className="text-xs text-amber-700 leading-relaxed">
+                            Vos informations de paiement ont été approuvées et ne peuvent plus être modifiées. 
+                            Veuillez contacter le support si vous avez besoin de mettre à jour vos coordonnées.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex justify-end pt-6 border-t border-gray-100">
@@ -485,6 +580,23 @@ export default function SettingsPage() {
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
+            )}
+            
+            {/* KYC Tab */}
+            {activeTab === 'kyc' && (
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="p-8 border-b border-gray-100 bg-gray-50/50">
+                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+                    <Shield className="text-primary-500" size={28} />
+                    Vérification du profil (KYC)
+                  </h2>
+                  <p className="text-gray-500 mt-1">Complétez les étapes ci-dessous pour valider votre compte.</p>
+                </div>
+                
+                <div className="p-4 sm:p-8">
+                  <ProfileVerification hideHeader={true} />
                 </div>
               </div>
             )}

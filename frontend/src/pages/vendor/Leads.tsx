@@ -1,25 +1,20 @@
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
-import { leadsApi, brandsApi, publicApi } from '../../lib/api';
+import { Link, useSearchParams } from 'react-router-dom';
+import { leadsApi, publicApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { Search, Filter, Phone, Mail, MapPin, Building2, UploadCloud, Plus, ChevronRight, User } from 'lucide-react';
 
 export default function VendorLeads() {
+  const [searchParams] = useSearchParams();
+  const currentMode = searchParams.get('mode') || 'SELLER';
+  
   const [showImportModal, setShowImportModal] = useState(false);
-  const [selectedBrand, setSelectedBrand] = useState('');
   const [csvData, setCsvData] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
-  const [newLead, setNewLead] = useState({
-    brandId: '',
-  });
 
-  const { data: brandsData } = useQuery({
-    queryKey: ['brands'],
-    queryFn: () => brandsApi.list(),
-  });
 
   const { data: citiesData } = useQuery({
     queryKey: ['cities'],
@@ -27,16 +22,17 @@ export default function VendorLeads() {
   });
 
   const { data: leadsData, isLoading } = useQuery({
-    queryKey: ['leads', { brandId: selectedBrand }],
-    queryFn: () => leadsApi.list(),
+    queryKey: ['leads', { mode: currentMode }],
+    queryFn: () => leadsApi.list({ 
+       mode: currentMode 
+    }),
   });
 
-  const brands = brandsData?.data?.data?.brands || [];
   const cities = citiesData?.data?.data?.cities || [];
-  const leads = leadsData?.data?.data?.leads || [];
+  const leads = (leadsData?.data?.data?.leads || []).filter((l: any) => l.status !== 'NEW');
 
   const importMutation = useMutation({
-    mutationFn: (data: { brandId: string; leads: any[] }) => leadsApi.import(data),
+    mutationFn: (data: { leads: any[] }) => leadsApi.import(data),
     onSuccess: () => {
       toast.success('Leads importés avec succès!');
       setShowImportModal(false);
@@ -88,15 +84,17 @@ export default function VendorLeads() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight leading-none">Base de Leads</h1>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight leading-none">
+            Mes Commandes <span className="text-emerald-600">({currentMode === 'AFFILIATE' ? 'Affilié' : 'Vendeur'})</span>
+          </h1>
           <p className="text-slate-500 mt-2 font-medium flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            {leads.length} Leads disponibles pour conversion
+            {leads.length} Leads en cours de traitement
           </p>
         </div>
         <div className="flex gap-3">
           <Link 
-            to="/dashboard/orders" 
+            to={`/dashboard/orders?mode=${currentMode}`}
             className="btn-premium px-6 py-3 bg-[#2c2f74] text-white flex items-center gap-2 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-indigo-500/20 hover:-translate-y-0.5 transition-all"
           >
             <Plus size={16} /> Ajouter un Lead via Commandes
@@ -115,16 +113,6 @@ export default function VendorLeads() {
         <div className="flex items-center gap-3 text-sm font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-4 py-2 rounded-xl">
           <Filter size={14} /> Filtres
         </div>
-        <select
-          className="bg-white border text-sm font-medium border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all text-slate-700 w-full sm:w-auto shadow-sm"
-          value={selectedBrand}
-          onChange={(e) => setSelectedBrand(e.target.value)}
-        >
-          <option value="">Toutes les marques (Global)</option>
-          {brands.map((brand: any) => (
-            <option key={brand.id} value={brand.id}>{brand.name}</option>
-          ))}
-        </select>
       </div>
 
       {/* Leads Main Area */}
@@ -154,7 +142,6 @@ export default function VendorLeads() {
                 <tr>
                   <th className="text-left py-4 px-6 text-[10px] uppercase font-black tracking-widest text-slate-400">Origine & Contact</th>
                   <th className="text-left py-4 px-6 text-[10px] uppercase font-black tracking-widest text-slate-400">Coordonnées</th>
-                  <th className="text-left py-4 px-6 text-[10px] uppercase font-black tracking-widest text-slate-400">Marque Partenaire</th>
                   <th className="text-left py-4 px-6 text-[10px] uppercase font-black tracking-widest text-slate-400">Statut CRM</th>
                   <th className="text-left py-4 px-6 text-[10px] uppercase font-black tracking-widest text-slate-400">Agent Délégué</th>
                 </tr>
@@ -182,15 +169,6 @@ export default function VendorLeads() {
                           <MapPin size={12} /> {lead.city || 'Non renseigné'}
                         </div>
                       </div>
-                    </td>
-                    <td className="py-4 px-6">
-                      {lead.brand ? (
-                        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold border border-indigo-100">
-                          <Building2 size={12} /> {lead.brand.name}
-                        </div>
-                      ) : (
-                        <span className="text-slate-300 italic text-sm">-</span>
-                      )}
                     </td>
                     <td className="py-4 px-6">
                       <span className={`px-3 py-1.5 rounded-lg text-[10px] uppercase font-black tracking-widest shadow-sm badge-${statusColors[lead.status] || 'gray'}`}>
@@ -223,19 +201,6 @@ export default function VendorLeads() {
               <h2 className="text-xl font-bold text-gray-900">Importer des prospects</h2>
             </div>
             <div className="p-6 space-y-4">
-              <div>
-                <label className="label">Marque *</label>
-                <select
-                  className="input"
-                  value={newLead.brandId}
-                  onChange={(e) => setNewLead({ ...newLead, brandId: e.target.value })}
-                >
-                  <option value="">Sélectionner une marque</option>
-                  {brands.map((brand: any) => (
-                    <option key={brand.id} value={brand.id}>{brand.name}</option>
-                  ))}
-                </select>
-              </div>
 
               <div>
                 <label className="label">Fichier CSV</label>
@@ -271,11 +236,7 @@ export default function VendorLeads() {
                 </button>
                 <button
                   onClick={() => {
-                    if (!newLead.brandId) {
-                      toast.error('Veuillez sélectionner une marque');
-                      return;
-                    }
-                    importMutation.mutate({ brandId: newLead.brandId, leads: csvData });
+                    importMutation.mutate({ leads: csvData });
                   }}
                   className="btn-primary flex-1"
                   disabled={csvData.length === 0 || importMutation.isPending}

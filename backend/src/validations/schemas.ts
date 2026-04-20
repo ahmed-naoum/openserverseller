@@ -62,11 +62,9 @@ export const leadSchema = z.object({
   whatsapp: phoneSchema.optional(),
   city: z.string().max(100).optional(),
   address: z.string().max(500).optional(),
-  brandId: z.number().int().positive().optional(),
 });
 
 export const orderSchema = z.object({
-  brandId: z.number().int().positive('Brand required'),
   customerName: z.string().min(2).max(100),
   customerPhone: phoneSchema,
   customerCity: z.string().min(2).max(100),
@@ -78,18 +76,7 @@ export const orderSchema = z.object({
   })).min(1, 'At least one item required'),
 });
 
-export const brandSchema = z.object({
-  name: z.string().min(2).max(100),
-  slug: z.string().min(2).max(100).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with dashes'),
-  logoUrl: z.string().url().optional(),
-  primaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
-  secondaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
-  slogan: z.string().max(200).optional(),
-  description: z.string().max(2000).optional(),
-  bankName: z.string().max(100).optional(),
-  ribAccount: z.string().regex(/^[0-9]{24}$/).optional(),
-  iceNumber: z.string().regex(/^[0-9]{15}$/).optional(),
-});
+// Brand schemas removed
 
 export const payoutRequestSchema = z.object({
   amountMad: z.number().positive('Amount must be positive'),
@@ -127,7 +114,7 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type ProductInput = z.infer<typeof productSchema>;
 export type LeadInput = z.infer<typeof leadSchema>;
 export type OrderInput = z.infer<typeof orderSchema>;
-export type BrandInput = z.infer<typeof brandSchema>;
+// BrandInput removed
 export type PayoutRequestInput = z.infer<typeof payoutRequestSchema>;
 export type UserProfileInput = z.infer<typeof userProfileSchema>;
 export type KycDocumentInput = z.infer<typeof kycDocumentSchema>;

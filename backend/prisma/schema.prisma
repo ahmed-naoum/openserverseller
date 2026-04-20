@@ -57,6 +57,9 @@ model User {
   twoFactorSecret    String?
   isTwoFactorEnabled Boolean @default(false)
   googleId           String? @unique
+  canImpersonate     Boolean @default(false)
+  mustChangePassword Boolean @default(false)
+  autoAssignInfluencers Boolean @default(false)
 
   // Tracking
   registrationIp String?
@@ -77,7 +80,6 @@ model User {
 
   profile        UserProfile?
   kycDocuments   KycDocument[]
-  brands         Brand[]
   leadImports    LeadImportBatch[]
   leads          Lead[]
   assignedLeads  Lead[]            @relation("AgentLeads")
@@ -92,6 +94,7 @@ model User {
   supportRequests SupportRequest[]
 
   conversations ConversationParticipant[]
+  claimedConversations Conversation[] @relation("ClaimedConversations")
   messages      Message[]
   activityLogs  ActivityLog[]
 
@@ -108,12 +111,32 @@ model User {
   agentAssignments      AgentInfluencerAssignment[] @relation("AgentAssignments")
   influencerAssignments AgentInfluencerAssignment[] @relation("InfluencerAssignments")
 
+  // Helper-User assignment relations
+  helperAssignments      HelperUserAssignment[] @relation("HelperAssignments")
+  targetUserAssignments  HelperUserAssignment[] @relation("TargetUserAssignments")
+
   orderStatusHistories OrderStatusHistory[]
   productionJobs       ProductionJob[]
   favorites            Favorite[]
   targetedAnnouncements Announcement[]     @relation("TargetedAnnouncements")
+  bankAccounts         UserBankAccount[]
 
   @@map("users")
+}
+
+model UserBankAccount {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bankName     String
+  ribAccount   String
+  iceNumber    String?
+  status       String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("user_bank_accounts")
 }
 
 model UserProfile {
@@ -150,42 +173,7 @@ model KycDocument {
   @@map("kyc_documents")
 }
 
-model Brand {
-  id             Int       @id @default(autoincrement())
-  vendorId       Int
-  vendor         User      @relation(fields: [vendorId], references: [id])
-  name           String
-  slug           String    @unique
-  logoUrl        String?
-  primaryColor   String?
-  secondaryColor String?
-  slogan         String?
-  description    String?
-  designSettings String?
-  isApproved     Boolean   @default(false)
-  approvedAt     DateTime?
-  status         String    @default("DRAFT")
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
 
-  bankAccounts BrandBankAccount[]
-  leads        Lead[]
-  orders       Order[]
-
-  @@map("brands")
-}
-
-model BrandBankAccount {
-  id         Int     @id @default(autoincrement())
-  brandId    Int
-  brand      Brand   @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  bankName   String
-  ribAccount String
-  iceNumber  String?
-  isPrimary  Boolean @default(false)
-
-  @@map("brand_bank_accounts")
-}
 
 model Category {
   id       Int        @id @default(autoincrement())
@@ -246,7 +234,6 @@ model Product {
   orderItems           OrderItem[]
   inventories          ProductInventory[]
   warehouseInventories Inventory[]
-  brandCustomizations  BrandProductCustomization[]
   claims               AffiliateClaim[]
   referralLinks        ReferralLink[]
   supportRequests      SupportRequest[]
@@ -322,8 +309,6 @@ model Lead {
   id              Int              @id @default(autoincrement())
   vendorId        Int
   vendor          User             @relation(fields: [vendorId], references: [id])
-  brandId         Int?
-  brand           Brand?           @relation(fields: [brandId], references: [id])
   importBatchId   Int?
   importBatch     LeadImportBatch? @relation(fields: [importBatchId], references: [id])
   fullName        String
@@ -332,8 +317,10 @@ model Lead {
   city            String?
   address         String?
   status          String           @default("NEW")
+  paymentSituation String          @default("NOT_PAID") // NOT_PAID, PAID, FACTURED
   source          String           @default("MANUAL") // MANUAL, YOUCAN, etc.
   sourceId        String? // External ID from YouCan or other systems
+  sourceMode      String           @default("VENDOR") // VENDOR, AFFILIATE
   assignedAgentId Int?
   assignedAgent   User?            @relation("AgentLeads", fields: [assignedAgentId], references: [id])
   notes           String?
@@ -396,8 +383,6 @@ model Order {
   orderNumber      String   @unique
   vendorId         Int
   vendor           User     @relation(fields: [vendorId], references: [id])
-  brandId          Int
-  brand            Brand    @relation(fields: [brandId], references: [id])
   leadId           Int?     @unique
   lead             Lead?    @relation(fields: [leadId], references: [id])
   customerName     String
@@ -436,8 +421,6 @@ model OrderItem {
   quantity        Int
   unitPriceMad    Float
   totalPriceMad   Float
-  customizationId Int?
-  customization   BrandProductCustomization? @relation(fields: [customizationId], references: [id])
 
   @@map("order_items")
 }
@@ -456,20 +439,7 @@ model OrderStatusHistory {
   @@map("order_status_history")
 }
 
-model BrandProductCustomization {
-  id             Int         @id @default(autoincrement())
-  brandId        Int
-  productId      Int
-  product        Product     @relation(fields: [productId], references: [id])
-  name           String
-  options        Json?
-  customPriceMad Float?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-  orderItems     OrderItem[]
 
-  @@map("brand_product_customizations")
-}
 
 model Warehouse {
   id        Int               @id @default(autoincrement())
@@ -699,6 +669,9 @@ model ProductInventory {
   product    Product  @relation(fields: [productId], references: [id])
   quantity   Int      @default(0)
   acquiredAt DateTime @default(now())
+  brandingLabelMockupUrl String?
+  brandingLabelPrintUrl  String?
+
   updatedAt  DateTime @updatedAt
 
   @@map("product_inventory")
@@ -712,6 +685,12 @@ model AffiliateClaim {
   product   Product  @relation(fields: [productId], references: [id])
   status    String   @default("PENDING") // PENDING, APPROVED, REJECTED, REVOKED
   claimedAt DateTime @default(now())
+  brandingLabelMockupUrl String?
+  brandingLabelPrintUrl  String?
+  brandName              String?
+  requestedQty           Int?
+  requestedLandingPageUrl String?
+
   updatedAt DateTime @updatedAt
 
   @@unique([userId, productId])
@@ -728,8 +707,15 @@ model SupportRequest {
   status      String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
   productId   Int?
   product     Product? @relation(fields: [productId], references: [id])
+  brandingLabelMockupUrl String?
+  brandingLabelPrintUrl  String?
+  brandName              String?
+  requestedQty           Int?
+  requestedLandingPageUrl String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  conversations Conversation[]
 
   @@map("support_requests")
 }
@@ -742,9 +728,16 @@ model Conversation {
   id        Int      @id @default(autoincrement())
   type      String   @default("DIRECT") // DIRECT, GROUP, SUPPORT
   title     String? // Optional for groups/support
-  status    String   @default("ACTIVE") // ACTIVE, ARCHIVED, CLOSED
+  status    String   @default("ACTIVE") // ACTIVE, ARCHIVED, CLOSED, PENDING_CLAIM
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  claimedByUserId Int?
+  claimedBy       User?           @relation("ClaimedConversations", fields: [claimedByUserId], references: [id])
+  claimedAt       DateTime?
+  metadata        Json?
+  supportRequestId Int?
+  supportRequest  SupportRequest? @relation(fields: [supportRequestId], references: [id])
 
   participants ConversationParticipant[]
   messages     Message[]
@@ -853,6 +846,22 @@ model AgentInfluencerAssignment {
 
   @@unique([agentId, influencerId])
   @@map("agent_influencer_assignments")
+}
+
+// ==========================================
+// HELPER-USER ASSIGNMENT
+// ==========================================
+
+model HelperUserAssignment {
+  id           Int      @id @default(autoincrement())
+  helperId     Int
+  helper       User     @relation("HelperAssignments", fields: [helperId], references: [id], onDelete: Cascade)
+  targetUserId Int
+  targetUser   User     @relation("TargetUserAssignments", fields: [targetUserId], references: [id], onDelete: Cascade)
+  assignedAt   DateTime @default(now())
+
+  @@unique([helperId, targetUserId])
+  @@map("helper_user_assignments")
 }
 
 // ==========================================

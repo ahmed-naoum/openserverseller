@@ -94,7 +94,7 @@ export const getAnalytics = async (req: Request, res: Response) => {
     leadsByStatus,
     topProducts,
     topCities,
-    revenueByBrand,
+    revenueByProduct,
   ] = await Promise.all([
     prisma.order.groupBy({
       by: ['status'],
@@ -120,11 +120,12 @@ export const getAnalytics = async (req: Request, res: Response) => {
       orderBy: { _count: { city: 'desc' } },
       take: 10,
     }),
-    prisma.order.groupBy({
-      by: ['brandId'],
-      where,
-      _sum: { vendorEarningMad: true },
-      orderBy: { _sum: { vendorEarningMad: 'desc' } },
+    prisma.orderItem.groupBy({
+      by: ['productId'],
+      where: { order: where },
+      _sum: { vendorEarningMad: true } as any,
+      orderBy: { _sum: { vendorEarningMad: 'desc' } as any },
+      take: 5,
     }),
   ]);
 
@@ -135,7 +136,7 @@ export const getAnalytics = async (req: Request, res: Response) => {
       leadsByStatus,
       topProducts,
       topCities,
-      revenueByBrand,
+      revenueByProduct,
     },
   });
 };

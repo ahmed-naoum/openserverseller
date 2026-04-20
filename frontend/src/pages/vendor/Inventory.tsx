@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { inventoryApi, fulfillmentApi } from '../../lib/api';
+import { inventoryApi, influencerApi } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { Package, Clock, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -13,28 +13,20 @@ export default function VendorInventory() {
     queryFn: () => isAffiliate ? inventoryApi.claimed() : inventoryApi.purchased(),
   });
 
-  const { data: pendingData, isLoading: isLoadingPending } = useQuery({
-    queryKey: ['pending-fulfillment', user?.id],
-    queryFn: () => fulfillmentApi.listRequests({ status: 'OPEN', userId: user?.id } as any),
+  const { data: claimsData, isLoading: isLoadingClaims } = useQuery({
+    queryKey: ['vendor-claims', user?.id],
+    queryFn: () => influencerApi.getClaims(),
   });
 
   const inventory = inventoryData?.data?.data?.[isAffiliate ? 'claims' : 'inventory'] || [];
   
-  // Deduplicate pending requests by productId to avoid UI clutter
-  const rawPending = pendingData?.data?.data?.requests?.filter((r: any) => 
-    (isAffiliate && r.type === 'PRODUCT_CLAIM') || (!isAffiliate && r.type === 'DELIVERY_FULFILLMENT')
-  ) || [];
+  // Get all claims for this user (both pending and approved/rejected)
+  const userClaims = Array.isArray(claimsData?.data) ? claimsData.data : (claimsData?.data?.data || []);
+  
+  const pendingRequests = userClaims.filter((c: any) => c.status === 'PENDING');
+  const approvedClaims = userClaims.filter((c: any) => c.status === 'APPROVED');
 
-  const pendingRequests = rawPending.reduce((acc: any[], current: any) => {
-    const x = acc.find(item => item.productId === current.productId);
-    if (!x) {
-      return acc.concat([current]);
-    } else {
-      return acc;
-    }
-  }, []);
-
-  const isLoading = isLoadingInventory || isLoadingPending;
+  const isLoading = isLoadingInventory || isLoadingClaims;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -59,7 +51,7 @@ export default function VendorInventory() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mb-4"></div>
           <p className="text-gray-500 font-medium">Chargement de votre inventaire...</p>
         </div>
-      ) : (inventory.length === 0 && pendingRequests.length === 0) ? (
+      ) : (inventory.length === 0 && userClaims.length === 0) ? (
         <div className="flex flex-col items-center justify-center py-24 bg-white rounded-[2rem] border border-dashed border-gray-300 shadow-sm px-6 text-center">
           <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-6">
             <Package className="w-10 h-10 text-gray-300" />
@@ -79,30 +71,64 @@ export default function VendorInventory() {
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
-          {/* Pending Requests */}
-          {pendingRequests.map((request: any) => (
-            <div key={`pending-${request.id}`} className="group bg-white rounded-xl border border-amber-100 shadow-sm overflow-hidden flex flex-col opacity-90 relative">
+          {/* All Claims (Pending & Approved/Rejected) */}
+          {userClaims.map((claim: any) => (
+            <div key={`claim-${claim.id}`} className="group bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden flex flex-col relative transition-all hover:shadow-md">
               <div className="absolute top-2 right-2 z-10">
-                <span className="flex items-center gap-1 px-2 py-1 bg-amber-100/80 backdrop-blur-sm text-amber-700 rounded-lg text-[10px] font-bold shadow-sm">
-                  <Clock className="w-2.5 h-2.5" />
-                  EN ATTENTE
+                <span className={`flex items-center gap-1 px-2 py-1 backdrop-blur-sm rounded-lg text-[10px] font-bold shadow-sm ${
+                  claim.status === 'PENDING' ? 'bg-amber-100/80 text-amber-700' :
+                  claim.status === 'APPROVED' ? 'bg-green-100/80 text-green-700' :
+                  'bg-red-100/80 text-red-700'
+                }`}>
+                  {claim.status === 'PENDING' && <Clock className="w-2.5 h-2.5" />}
+                  {claim.status === 'PENDING' ? 'EN ATTENTE' : claim.status === 'APPROVED' ? 'APPROUVÉ' : 'REFUSÉ'}
                 </span>
               </div>
               
-              <div className="aspect-square bg-gray-50 flex items-center justify-center overflow-hidden">
-                {request.product?.images?.[0] ? (
-                  <img src={request.product.images[0].imageUrl} alt="" className="w-full h-full object-cover grayscale-[0.5]" />
+              <div className="aspect-square bg-gray-50 flex items-center justify-center overflow-hidden relative">
+                {claim.product?.images?.[0] ? (
+                  <img src={claim.product.images[0].imageUrl} alt="" className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${claim.status === 'PENDING' ? 'grayscale-[0.5]' : ''}`} />
+                ) : claim.product?.primaryImage ? (
+                  <img src={claim.product.primaryImage} alt="" className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${claim.status === 'PENDING' ? 'grayscale-[0.5]' : ''}`} />
                 ) : (
                   <Package className="w-10 h-10 text-gray-200" />
                 )}
+                <div className="absolute bottom-2 left-2">
+                  <span className="px-2 py-1 bg-primary-500 text-white rounded-lg text-[8px] font-bold shadow-md uppercase tracking-wide">
+                    Demande
+                  </span>
+                </div>
               </div>
               
-              <div className="p-3">
-                <h3 className="text-sm font-bold text-gray-900 line-clamp-1">{request.product?.nameFr || request.subject}</h3>
-                <p className="text-[10px] text-gray-400 mt-0.5 line-clamp-1">{request.subject}</p>
-                <div className="mt-2 pt-2 border-t border-gray-50 flex justify-between items-center text-[9px] text-gray-400">
-                  <span>{new Date(request.createdAt).toLocaleDateString()}</span>
+              <div className="p-3 flex flex-col flex-1">
+                <h3 className="text-sm font-bold text-gray-900 line-clamp-1">{claim.product?.nameFr}</h3>
+                
+                {claim.brandName && claim.brandName !== 'N/A' && (
+                   <p className="text-[10px] uppercase font-bold text-gray-500 mt-1 line-clamp-1">Marque: <span className="text-gray-900">{claim.brandName}</span></p>
+                )}
+                
+                <div className="mt-auto flex items-center justify-between pt-3 border-t border-gray-50">
+                  <div>
+                    <p className="text-[8px] uppercase font-bold text-gray-400 tracking-wider">Demandé le</p>
+                    <p className="text-[10px] font-semibold text-gray-700">
+                      {new Date(claim.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  {claim.requestedQty !== null && (
+                    <div className="text-right">
+                       <p className="text-[8px] uppercase font-bold text-gray-400 tracking-wider">Qté</p>
+                       <p className="text-[10px] font-bold text-primary-600">{claim.requestedQty}</p>
+                    </div>
+                  )}
                 </div>
+                
+                <Link 
+                  to={`../product/${claim.productId}`}
+                  className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 bg-gray-50 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-100 transition-colors"
+                >
+                  Détails Produit
+                  <ExternalLink className="w-3 h-3" />
+                </Link>
               </div>
             </div>
           ))}

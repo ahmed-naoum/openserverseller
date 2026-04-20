@@ -34,6 +34,7 @@ function getDefaultPath(role: string): string {
   switch (role) {
     case 'SUPER_ADMIN':
     case 'FINANCE_ADMIN':
+    case 'SYSTEM_SUPPORT':
       return '/admin';
     case 'CALL_CENTER_AGENT':
       return '/agent';
@@ -47,6 +48,8 @@ function getDefaultPath(role: string): string {
       return '/influencer';
     case 'CONFIRMATION_AGENT':
       return '/confirmation';
+    case 'HELPER':
+      return '/helper';
     case 'UNCONFIRMED':
       return '/verify';
     default:

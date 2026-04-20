@@ -49,6 +49,11 @@ async function main() {
       update: {},
       create: { name: 'CONFIRMATION_AGENT', guardName: 'web' },
     }),
+    prisma.role.upsert({
+      where: { name: 'SYSTEM_SUPPORT' },
+      update: {},
+      create: { name: 'SYSTEM_SUPPORT', guardName: 'web' },
+    }),
   ]);
 
   const roleMap = Object.fromEntries(roles.map((r) => [r.name, r.id]));
@@ -217,39 +222,43 @@ async function main() {
           },
         },
       },
-    })
-  ]);
-
-  console.log(`✅ Created 5 demo users`);
-
-  // Seed Demo Brand
-  console.log('🏷️ Creating demo brand...');
-  const brand = await prisma.brand.upsert({
-    where: { slug: 'beautycare-ma' },
-    update: {},
-    create: {
-      vendorId: vendor.id,
-      name: 'BeautyCare Ma',
-      slug: 'beautycare-ma',
-      slogan: 'Votre beauté, notre priorité',
-      description: 'Marque marocaine de cosmétiques naturels',
-      primaryColor: '#22c55e',
-      secondaryColor: '#16a34a',
-      logoUrl: 'https://via.placeholder.com/200x200/22c55e/ffffff?text=BC',
-      status: 'APPROVED',
-      isApproved: true,
-      approvedAt: new Date(),
-      bankAccounts: {
-        create: {
-          bankName: 'CIH Bank',
-          ribAccount: '011780000012345678901234',
-          iceNumber: '001234567',
-          isPrimary: true,
+    }),
+    prisma.user.upsert({
+      where: { email: 'support@silacod.ma' },
+      update: {},
+      create: {
+        email: 'support@silacod.ma',
+        phone: '+212600000006',
+        password: hashedPassword,
+        roleId: roleMap['SYSTEM_SUPPORT'],
+        isActive: true,
+        kycStatus: 'APPROVED',
+        emailVerifiedAt: new Date(),
+        profile: {
+          create: {
+            fullName: 'Support Team',
+            city: 'Casablanca',
+            language: 'fr',
+          },
         },
       },
+    }),
+  ]);
+
+  console.log(`✅ Created 6 demo users`);
+
+  // Seed Demo Bank Account for Vendor
+  console.log('🏷️ Creating demo bank account...');
+  await prisma.userBankAccount.create({
+    data: {
+      userId: vendor.id,
+      bankName: 'CIH Bank',
+      ribAccount: '011780000012345678901234',
+      iceNumber: '001234567',
+      isDefault: true,
     },
   });
-  console.log(`✅ Created demo brand: ${brand.name}`);
+  console.log(`✅ Created demo bank account for vendor`);
 
   console.log(`
   ═════════════════════════════════════════════════
@@ -259,6 +268,7 @@ async function main() {
   Demo Accounts (password: password123):
   ─────────────────────────────────────────────────
   Super Admin : admin@silacod.ma
+  Support     : support@silacod.ma
   Vendor      : vendor@silacod.ma
   Agent       : agent@silacod.ma
   Conf. Agent : confirmation@silacod.ma

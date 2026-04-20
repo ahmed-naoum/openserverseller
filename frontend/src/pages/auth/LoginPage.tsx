@@ -40,7 +40,7 @@ export default function LoginPage() {
       toast.success('Connexion réussie!');
       
       // Redirect based on role
-      if (user.role === 'SUPER_ADMIN' || user.role === 'FINANCE_ADMIN') {
+      if (user.role === 'SUPER_ADMIN' || user.role === 'FINANCE_ADMIN' || user.role === 'SYSTEM_SUPPORT') {
         navigate('/admin');
       } else if (user.role === 'CALL_CENTER_AGENT') {
         navigate('/agent');
@@ -71,7 +71,7 @@ export default function LoginPage() {
       toast.success('Connexion réussie!');
       
       // Redirect based on role
-      if (user.role === 'SUPER_ADMIN' || user.role === 'FINANCE_ADMIN') {
+      if (user.role === 'SUPER_ADMIN' || user.role === 'FINANCE_ADMIN' || user.role === 'SYSTEM_SUPPORT') {
         navigate('/admin');
       } else if (user.role === 'CALL_CENTER_AGENT') {
         navigate('/agent');
@@ -109,7 +109,7 @@ export default function LoginPage() {
       toast.success('Connexion avec Google réussie!');
       
       // Redirect based on role
-      if (user.role === 'SUPER_ADMIN' || user.role === 'FINANCE_ADMIN') {
+      if (user.role === 'SUPER_ADMIN' || user.role === 'FINANCE_ADMIN' || user.role === 'SYSTEM_SUPPORT') {
         navigate('/admin');
       } else if (user.role === 'CALL_CENTER_AGENT') {
         navigate('/agent');

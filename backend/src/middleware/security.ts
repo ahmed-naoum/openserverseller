@@ -93,7 +93,7 @@ export const auditLog = async (
 };
 
 function extractModelType(path: string): string | null {
-  const models = ['users', 'products', 'orders', 'leads', 'brands', 'categories', 'wallets'];
+  const models = ['users', 'products', 'orders', 'leads', 'categories', 'wallets'];
   for (const model of models) {
     if (path.includes(model)) {
       return model;

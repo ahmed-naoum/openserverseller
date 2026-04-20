@@ -43,26 +43,7 @@ router.get(
                     }
                 },
                 orderBy: { createdAt: 'desc' }
-            }) : Promise.resolve([]),
-            prisma.supportRequest.findMany({
-                where: {
-                    userId: req.user!.id,
-                    status: { in: ['OPEN', 'IN_PROGRESS'] },
-                    productId: { not: null }
-                },
-                include: {
-                    product: {
-                        include: {
-                            categories: true,
-                            images: {
-                                where: { isPrimary: true },
-                                take: 1
-                            }
-                        }
-                    }
-                },
-                orderBy: { createdAt: 'desc' }
-            })
+            }) : Promise.resolve([])
         ]);
 
         // Map purchased inventory
@@ -89,24 +70,8 @@ router.get(
             }
         }));
 
-        // Map requested items (pending approvals from marketplace)
-        const requestedItems = myRequests
-            .filter((req: any) => req.product)
-            .map((req: any) => ({
-                id: `req-${req.id}`,
-                quantity: 0,
-                acquiredAt: req.createdAt,
-                isOwned: false,
-                isPendingRequest: true,
-                status: 'PENDING',
-                product: {
-                    ...req.product,
-                    primaryImage: req.product.images?.[0]?.imageUrl
-                }
-            }));
-
         // Combine and sort
-        const rawCombined = [...purchasedItems, ...ownedItems, ...requestedItems];
+        const rawCombined = [...purchasedItems, ...ownedItems];
 
         // Deduplicate by product ID
         // Priority: 1. Purchased (>0 quantity usually), 2. Pending Request, 3. Owned (0 quantity base)

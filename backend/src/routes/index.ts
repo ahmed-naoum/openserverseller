@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { auditLog } from '../middleware/security.js';
 import authRoutes from './auth.routes.js';
 import userRoutes from './user.routes.js';
-import brandRoutes from './brand.routes.js';
 import productRoutes from './product.routes.js';
 import categoryRoutes from './category.routes.js';
 import leadRoutes from './lead.routes.js';
@@ -26,6 +25,7 @@ import settingsRoutes from './settings.routes.js';
 import securityRoutes from './security.routes.js';
 import webhookRoutes from './webhook.routes.js';
 import youcanRoutes from './youcan.routes.js';
+import supportRoutes from './support.routes.js';
 
 const router = Router();
 
@@ -39,7 +39,6 @@ router.get('/health', (req, res) => {
 
 router.use('/auth', authRoutes);
 router.use('/users', auditLog, userRoutes);
-router.use('/brands', auditLog, brandRoutes);
 router.use('/products', auditLog, productRoutes);
 router.use('/categories', categoryRoutes);
 router.use('/leads', auditLog, leadRoutes);
@@ -63,5 +62,6 @@ router.use('/settings', settingsRoutes);
 router.use('/admin/security', securityRoutes);
 router.use('/webhooks', webhookRoutes);
 router.use('/youcan', auditLog, youcanRoutes);
+router.use('/support', auditLog, supportRoutes);
 
 export default router;

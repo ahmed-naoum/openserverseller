@@ -36,7 +36,7 @@ router.get(
       prisma.wallet.findUnique({ where: { userId } }),
       prisma.order.findMany({
         where: { vendorId: userId },
-        include: { lead: true, brand: true, items: { include: { product: true } } },
+        include: { lead: true, items: { include: { product: true } } },
         orderBy: { createdAt: 'desc' },
         take: 10
       }),
@@ -90,7 +90,6 @@ router.get(
 
     const [
       profile,
-      brands,
       products,
       pendingProducts,
       approvedProducts,
@@ -104,7 +103,6 @@ router.get(
       lowStockProducts
     ] = await Promise.all([
       prisma.userProfile.findUnique({ where: { userId } }),
-      prisma.brand.findMany({ where: { vendorId: userId } }),
       prisma.product.findMany({
         where: { ownerId: userId },
         include: { categories: true, images: { where: { isPrimary: true }, take: 1 } },
@@ -125,7 +123,7 @@ router.get(
       }),
       prisma.order.findMany({
         where: { vendorId: userId },
-        include: { lead: true, brand: true, items: { include: { product: true } } },
+        include: { lead: true, items: { include: { product: true } } },
         orderBy: { createdAt: 'desc' },
         take: 10
       }),
@@ -158,7 +156,6 @@ router.get(
 
     res.json({
       profile,
-      brands,
       products,
       pendingProducts,
       approvedProducts,
@@ -192,13 +189,13 @@ router.get(
       prisma.userProfile.findUnique({ where: { userId } }),
       prisma.lead.findMany({
         where: { assignedAgentId: userId },
-        include: { vendor: { include: { profile: true } }, brand: true },
+        include: { vendor: { include: { profile: true } } },
         orderBy: { createdAt: 'desc' }
       }),
       prisma.lead.findMany({
         orderBy: { createdAt: 'desc' },
         take: 50,
-        include: { vendor: { include: { profile: true } }, brand: true }
+        include: { vendor: { include: { profile: true } } }
       }),
       prisma.notification.findMany({
         where: { userId },
@@ -232,12 +229,12 @@ router.get(
       prisma.userProfile.findUnique({ where: { userId } }),
       prisma.user.findMany({
         where: { kycStatus: { in: ['PENDING', 'UNDER_REVIEW'] } },
-        include: { profile: true, role: true, kycDocuments: true, brands: { include: { bankAccounts: true } } },
+        include: { profile: true, role: true, kycDocuments: true, bankAccounts: true },
         take: 20
       }),
       prisma.user.findMany({
         where: { kycStatus: { in: ['APPROVED', 'REJECTED'] } },
-        include: { profile: true, role: true, kycDocuments: true, brands: { include: { bankAccounts: true } } },
+        include: { profile: true, role: true, kycDocuments: true, bankAccounts: true },
         orderBy: { updatedAt: 'desc' },
         take: 20
       }),
@@ -330,12 +327,12 @@ router.get(
       prisma.order.count(),
       prisma.order.aggregate({ _sum: { totalAmountMad: true } }),
       prisma.order.findMany({
-        include: { lead: true, brand: true },
+        include: { lead: true },
         orderBy: { createdAt: 'desc' },
         take: 20
       }),
       prisma.lead.findMany({
-        include: { vendor: { include: { profile: true } }, brand: true },
+        include: { vendor: { include: { profile: true } } },
         orderBy: { createdAt: 'desc' },
         take: 20
       }),

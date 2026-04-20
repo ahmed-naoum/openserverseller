@@ -4,13 +4,37 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --p: 237 45% 31%;
+  /* primary #2c2f74 */
+  --pf: 237 45% 25%;
+  /* primary-focus */
+  --pc: 0 0% 100%;
+  /* primary-content */
+
+  --a: 11 88% 60%;
+  /* accent #f26342 */
+  --af: 11 88% 50%;
+  --ac: 0 0% 100%;
+
+  --b1: 220 33% 98%;
+  /* base-100 (bg) */
+  --b2: 220 33% 96%;
+  --b3: 220 33% 94%;
+  --bc: 220 33% 10%;
+  /* base-content */
+
+  --glass-opacity: 0.7;
+  --glass-border: rgba(255, 255, 255, 0.4);
+}
+
 @layer base {
   * {
-    @apply border-gray-200;
+    @apply border-gray-200/60;
   }
 
   body {
-    @apply bg-white text-gray-900 antialiased;
+    @apply bg-[#F8FAFC] text-slate-900 antialiased selection:bg-primary-500/10 selection:text-primary-600;
   }
 
   html {
@@ -136,8 +160,15 @@
   }
 
   @keyframes float {
-    0%, 100% { transform: translateY(0) rotate(0deg); }
-    50% { transform: translateY(-20px) rotate(5deg); }
+
+    0%,
+    100% {
+      transform: translateY(0) rotate(0deg);
+    }
+
+    50% {
+      transform: translateY(-20px) rotate(5deg);
+    }
   }
 
   .animate-float {
@@ -145,52 +176,113 @@
   }
 
   @keyframes mesh-light {
-    0% { transform: translate(0, 0) rotate(0deg) scale(1); }
-    33% { transform: translate(5%, -5%) rotate(5deg) scale(1.1); }
-    66% { transform: translate(-5%, 5%) rotate(-5deg) scale(0.9); }
-    100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+    0% {
+      transform: translate(0, 0) rotate(0deg) scale(1);
+    }
+
+    33% {
+      transform: translate(5%, -5%) rotate(5deg) scale(1.1);
+    }
+
+    66% {
+      transform: translate(-5%, 5%) rotate(-5deg) scale(0.9);
+    }
+
+    100% {
+      transform: translate(0, 0) rotate(0deg) scale(1);
+    }
   }
 
   .animate-mesh-light {
     animation: mesh-light 30s ease-in-out infinite;
   }
 
-  .stagger-1 { animation-delay: 150ms; }
-  .stagger-2 { animation-delay: 300ms; }
-  .stagger-3 { animation-delay: 450ms; }
-  .stagger-4 { animation-delay: 600ms; }
+  .stagger-1 {
+    animation-delay: 150ms;
+  }
+
+  .stagger-2 {
+    animation-delay: 300ms;
+  }
+
+  .stagger-3 {
+    animation-delay: 450ms;
+  }
+
+  .stagger-4 {
+    animation-delay: 600ms;
+  }
 
   /* Dashboard Premium Tokens */
   .glass-sidebar {
-    @apply bg-white/70 backdrop-blur-2xl border-r border-slate-200/50 shadow-[4px_0_24px_rgba(0,0,0,0.02)];
+    @apply bg-white/70 backdrop-blur-3xl border-r border-white/40 shadow-[4px_0_32px_rgba(0,0,0,0.03)];
+  }
+
+  .glass-panel {
+    @apply bg-white/60 backdrop-blur-2xl border border-white/50 shadow-[0_8px_32px_rgba(0,0,0,0.04)];
+  }
+
+  .glass-card {
+    @apply bg-white/40 backdrop-blur-xl border border-white/40 shadow-sm hover:shadow-md transition-all duration-300;
   }
 
   .bento-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 1.5rem;
   }
 
   .bento-card {
-    @apply soft-card rounded-[2rem] p-6 hover:shadow-[0_15px_35px_rgba(0,0,0,0.04)] hover:translate-y-[-2px] transition-all duration-500 ease-out;
+    @apply glass-panel rounded-[2.5rem] p-8 hover:shadow-[0_20px_40px_rgba(0,0,0,0.06)] hover:translate-y-[-4px] transition-all duration-500 ease-out relative overflow-hidden;
   }
 
   .stat-badge {
-    @apply px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider;
+    @apply px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-white/50 backdrop-blur-sm border border-white/20;
   }
 }
 
 @keyframes noise {
-  0%, 100% { transform: translate(0, 0); }
-  10% { transform: translate(-0.5%, -0.5%); }
-  20% { transform: translate(-1%, 0.5%); }
-  30% { transform: translate(0.5%, -1%); }
-  40% { transform: translate(-0.5%, 1.5%); }
-  50% { transform: translate(-1%, 0.5%); }
-  60% { transform: translate(1.5%, 0.5%); }
-  70% { transform: translate(1%, 0.5%); }
-  80% { transform: translate(-1.5%, 0.5%); }
-  90% { transform: translate(0.5%, 1%); }
+
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+
+  10% {
+    transform: translate(-0.5%, -0.5%);
+  }
+
+  20% {
+    transform: translate(-1%, 0.5%);
+  }
+
+  30% {
+    transform: translate(0.5%, -1%);
+  }
+
+  40% {
+    transform: translate(-0.5%, 1.5%);
+  }
+
+  50% {
+    transform: translate(-1%, 0.5%);
+  }
+
+  60% {
+    transform: translate(1.5%, 0.5%);
+  }
+
+  70% {
+    transform: translate(1%, 0.5%);
+  }
+
+  80% {
+    transform: translate(-1.5%, 0.5%);
+  }
+
+  90% {
+    transform: translate(0.5%, 1%);
+  }
 }
 
 .bg-noise {

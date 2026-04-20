@@ -7,17 +7,6 @@ import { authenticate } from '../middleware/auth.js';
 const router = Router();
 const prisma = new PrismaClient();
 
-// Add type declarations to use req.user
-declare module 'express-serve-static-core' {
-  interface Request {
-    user?: {
-      id: number;
-      uuid: string;
-      roleId: number;
-    };
-  }
-}
-
 /**
  * POST /api/v1/youcan/token
  * Exchange OAuth code for an access token

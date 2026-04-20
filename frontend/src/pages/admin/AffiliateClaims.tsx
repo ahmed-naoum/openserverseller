@@ -14,8 +14,11 @@ import {
   Trash2,
   Upload,
   AlertCircle,
-  Star
+  Star,
+  Image as ImageIcon,
+  MessageSquare
 } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -30,6 +33,7 @@ interface UploadedImage {
 }
 
 export default function AdminAffiliateClaims() {
+  const navigate = useNavigate();
   const [claims, setClaims] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('PENDING');
@@ -41,6 +45,7 @@ export default function AdminAffiliateClaims() {
   const [cloneName, setCloneName] = useState('');
   const [cloneDescription, setCloneDescription] = useState('');
   const [clonePrice, setClonePrice] = useState(0);
+  const [cloneQuantity, setCloneQuantity] = useState(1);
   const [images, setImages] = useState<UploadedImage[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -90,6 +95,7 @@ export default function AdminAffiliateClaims() {
     setCloneName(claim.product?.nameFr || '');
     setCloneDescription(claim.product?.description || '');
     setClonePrice(claim.product?.retailPriceMad || 0);
+    setCloneQuantity(claim.requestedQty || 1);
     if (claim.product?.images?.length > 0) {
       setImages(claim.product.images.map((img: any) => ({
         url: img.imageUrl,
@@ -113,6 +119,7 @@ export default function AdminAffiliateClaims() {
       cloneName,
       cloneDescription,
       clonePrice,
+      cloneQuantity,
       cloneImageUrls: imageUrls,
     });
   };
@@ -211,8 +218,8 @@ export default function AdminAffiliateClaims() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Demandes d'Affiliation</h1>
-          <p className="text-sm text-gray-500 mt-1">Approuvez ou refusez les demandes des influenceurs pour promouvoir des produits.</p>
+          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Demandes d'Affiliation & Stock</h1>
+          <p className="text-sm text-gray-500 mt-1">Approuvez ou refusez les demandes des partenaires pour promouvoir ou stocker des produits.</p>
         </div>
       </div>
 
@@ -249,9 +256,10 @@ export default function AdminAffiliateClaims() {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-gray-50/50 border-b border-gray-100">
-                <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Influenceur</th>
+                <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Utilisateur</th>
                 <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Produit</th>
-                <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Date</th>
+                <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Détails Demande</th>
+                <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Branding</th>
                 <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Statut</th>
                 <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">Actions</th>
               </tr>
@@ -261,11 +269,22 @@ export default function AdminAffiliateClaims() {
                 {isLoading ? (
                   [...Array(5)].map((_, i) => (
                     <tr key={i} className="animate-pulse">
-                      <td colSpan={5} className="px-6 py-4"><div className="h-12 bg-gray-50 rounded-xl" /></td>
+                      <td colSpan={6} className="px-6 py-4"><div className="h-12 bg-gray-50 rounded-xl" /></td>
                     </tr>
                   ))
                 ) : filteredClaims.length > 0 ? (
-                  filteredClaims.map((claim) => (
+                  filteredClaims.map((claim) => {
+                    const userRole = claim.user?.role?.name;
+                    const userMode = claim.user?.mode;
+                    const getRoleBadge = () => {
+                      if (userRole === 'INFLUENCER') return { label: 'Influenceur', color: 'bg-pink-100 text-pink-700 border-pink-200' };
+                      if (userMode === 'AFFILIATE') return { label: 'Affilié', color: 'bg-purple-100 text-purple-700 border-purple-200' };
+                      if (userRole === 'VENDOR') return { label: 'Vendeur', color: 'bg-blue-100 text-blue-700 border-blue-200' };
+                      return { label: userRole || 'Utilisateur', color: 'bg-gray-100 text-gray-600 border-gray-200' };
+                    };
+                    const badge = getRoleBadge();
+
+                    return (
                     <motion.tr
                       layout
                       initial={{ opacity: 0 }}
@@ -274,48 +293,133 @@ export default function AdminAffiliateClaims() {
                       key={claim.id}
                       className="hover:bg-gray-50/50 transition-colors"
                     >
+                      {/* User Column */}
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 font-bold overflow-hidden border border-blue-100">
+                          <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 font-bold overflow-hidden border border-blue-100 flex-shrink-0">
                             {claim.user?.profile?.avatarUrl ? (
                               <img src={claim.user.profile.avatarUrl} alt="" className="w-full h-full object-cover" />
                             ) : (
                               <UserIcon className="w-5 h-5" />
                             )}
                           </div>
-                          <div>
-                            <div className="text-sm font-bold text-gray-900">{claim.user?.profile?.fullName || 'Utilisateur'}</div>
-                            <div className="text-xs text-gray-500">{claim.user?.phone || claim.user?.email}</div>
+                          <div className="min-w-0">
+                            <div className="text-sm font-bold text-gray-900 truncate">{claim.user?.profile?.fullName || 'Utilisateur'}</div>
+                            <div className="text-xs text-gray-500 truncate">{claim.user?.phone || claim.user?.email}</div>
+                            <span className={`mt-1 inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider border ${badge.color}`}>
+                              {badge.label}
+                            </span>
                           </div>
                         </div>
                       </td>
+
+                      {/* Product Column */}
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 overflow-hidden border border-gray-200">
+                          <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 overflow-hidden border border-gray-200 flex-shrink-0">
                             {claim.product?.images?.[0]?.imageUrl ? (
                               <img src={claim.product.images[0].imageUrl} alt="" className="w-full h-full object-cover" />
                             ) : (
                               <Package className="w-5 h-5" />
                             )}
                           </div>
-                          <div>
+                          <div className="min-w-0">
                             <div className="text-sm font-bold text-gray-900 line-clamp-1">{claim.product?.nameFr}</div>
-                            <div className="text-xs text-gray-500">{claim.product?.retailPriceMad} MAD</div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] font-semibold text-gray-400">SKU: {claim.product?.sku}</span>
+                              <span className="text-gray-200">·</span>
+                              <span className="text-[10px] font-bold text-gray-900">{claim.product?.retailPriceMad} MAD</span>
+                            </div>
+                            {claim.product?.categories?.[0] && (
+                              <span className="mt-0.5 inline-flex text-[9px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                {claim.product.categories[0].nameFr}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </td>
+
+                      {/* Détails Demande Column (Date + Brand + Qty) */}
                       <td className="px-6 py-4">
-                        <div className="flex flex-col">
+                        <div className="space-y-1.5">
                           <div className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
-                            <Calendar className="w-3.5 h-3.5" />
+                            <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
                             {format(new Date(claim.claimedAt), 'dd MMM yyyy', { locale: fr })}
+                            <span className="text-gray-300 ml-1">
+                              <Clock className="w-3 h-3 inline" /> {format(new Date(claim.claimedAt), 'HH:mm')}
+                            </span>
                           </div>
-                          <div className="flex items-center gap-1.5 text-[10px] text-gray-400 mt-1">
-                            <Clock className="w-3 h-3" />
-                            {format(new Date(claim.claimedAt), 'HH:mm')}
-                          </div>
+                          {claim.brandName && (
+                            <div className="text-[10px] font-semibold text-gray-700 bg-gray-50 px-2 py-1 rounded-md inline-flex items-center gap-1">
+                              🏷️ {claim.brandName}
+                            </div>
+                          )}
+                          {claim.requestedQty && (
+                            <div className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-1 rounded-md inline-flex items-center gap-1 ml-1">
+                              📦 Qté: {claim.requestedQty}
+                            </div>
+                          )}
+                          {claim.requestedLandingPageUrl && (
+                            <div className="mt-1">
+                              <a 
+                                href={claim.requestedLandingPageUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 inline-flex items-center gap-1 underline underline-offset-2"
+                              >
+                                <LinkIcon className="w-3 h-3" /> Landing Page
+                              </a>
+                            </div>
+                          )}
                         </div>
                       </td>
+
+                      {/* Branding Column */}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          {claim.brandingLabelMockupUrl ? (
+                            <a 
+                              href={claim.brandingLabelMockupUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                              title="Maquette Logo"
+                            >
+                              <ImageIcon size={16} />
+                            </a>
+                          ) : (
+                            <span className="w-8 h-8 rounded-lg bg-gray-50 border border-dashed border-gray-200" />
+                          )}
+                          {claim.brandingLabelPrintUrl ? (
+                            <a 
+                              href={claim.brandingLabelPrintUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="p-1.5 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"
+                              title="PDF Impression"
+                            >
+                              <ExternalLink size={16} />
+                            </a>
+                          ) : (
+                            <span className="w-8 h-8 rounded-lg bg-gray-50 border border-dashed border-gray-200" />
+                          )}
+                          {claim.conversationId ? (
+                            <Link
+                              to={`/admin/chat?convId=${claim.conversationId}`}
+                              className="p-1.5 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
+                              title="Ouvrir le chat"
+                            >
+                              <MessageSquare size={16} />
+                            </Link>
+                          ) : (
+                            <span className="w-8 h-8 rounded-lg bg-gray-50 border border-dashed border-gray-100 flex items-center justify-center">
+                              <MessageSquare size={14} className="text-gray-200" />
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Statut Column */}
                       <td className="px-6 py-4">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                           claim.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
@@ -328,6 +432,8 @@ export default function AdminAffiliateClaims() {
                            claim.status === 'REJECTED' ? 'Refusé' : claim.status}
                         </span>
                       </td>
+
+                      {/* Actions Column */}
                       <td className="px-6 py-4 text-right">
                         {claim.status !== 'APPROVED' && claim.status !== 'REVOKED' && claim.status !== 'RESOLVED' && (
                           <div className="flex items-center justify-end gap-2">
@@ -345,12 +451,14 @@ export default function AdminAffiliateClaims() {
                             >
                               <CheckCircle2 className="w-5 h-5" />
                             </button>
-                            <button
-                              onClick={() => openCloneModal(claim)}
-                              className="text-[10px] bg-amber-600 text-white hover:bg-amber-700 font-bold py-1.5 px-3 rounded-lg transition-colors shadow-sm whitespace-nowrap"
-                            >
-                              🔀 Cloner & Approuver
-                            </button>
+                            {claim.user?.mode !== 'AFFILIATE' && (
+                              <button
+                                onClick={() => openCloneModal(claim)}
+                                className="text-[10px] bg-amber-600 text-white hover:bg-amber-700 font-bold py-1.5 px-3 rounded-lg transition-colors shadow-sm whitespace-nowrap"
+                              >
+                                🔀 Cloner & Approuver
+                              </button>
+                            )}
                           </div>
                         )}
                         {claim.status === 'APPROVED' && (
@@ -363,15 +471,16 @@ export default function AdminAffiliateClaims() {
                         )}
                       </td>
                     </motion.tr>
-                  ))
+                    );
+                  })
                 ) : (
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                    <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
                       <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
                         <Filter className="w-6 h-6 text-gray-300" />
                       </div>
                       <p className="font-bold">Aucune demande trouvée</p>
-                      <p className="text-xs">Les demandes des influenceurs s'afficheront ici.</p>
+                      <p className="text-xs">Les demandes d'affiliation des partenaires s'afficheront ici.</p>
                     </td>
                   </tr>
                 )}
@@ -389,7 +498,7 @@ export default function AdminAffiliateClaims() {
               <div>
                 <h2 className="text-xl font-bold">Personnaliser le Produit Clôné</h2>
                 <p className="text-sm text-gray-500 mt-1">
-                  Pour l'influenceur: {selectedClaimForClone.user?.profile?.fullName || selectedClaimForClone.user?.email}
+                  Pour l'utilisateur: {selectedClaimForClone.user?.profile?.fullName || selectedClaimForClone.user?.email}
                 </p>
               </div>
               <button 
@@ -428,6 +537,19 @@ export default function AdminAffiliateClaims() {
                     step="0.01"
                     value={clonePrice}
                     onChange={(e) => setClonePrice(Number(e.target.value))}
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Quantité (Stock)
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={cloneQuantity}
+                    onChange={(e) => setCloneQuantity(Number(e.target.value))}
                     className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
                   />
                 </div>

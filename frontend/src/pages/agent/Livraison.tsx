@@ -68,7 +68,7 @@ const statusConfig: Record<string, { label: string; color: string; bg: string; i
 };
 
 const historyStatusLabels: Record<string, string> = {
-  'NEW_PARCEL': 'Nouveau Colis',
+  'NEW_PARCEL': 'Nouveau',
   'WAITING_PICKUP': 'En attente de ramassage',
   'WAITING_PREPARATION': 'En attente de préparation',
   'ENCORE_PREPARED': 'Encore préparé',

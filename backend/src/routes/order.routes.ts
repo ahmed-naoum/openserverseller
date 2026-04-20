@@ -19,7 +19,7 @@ router.get(
   '/',
   authenticate,
   asyncHandler(async (req, res) => {
-    const { page = 1, limit = 20, status, brandId, startDate, endDate } = req.query;
+    const { page = 1, limit = 20, status, startDate, endDate } = req.query;
 
     const where: any = {};
 
@@ -28,7 +28,6 @@ router.get(
     }
 
     if (status) where.status = status;
-    if (brandId) where.brandId = Number(brandId as string);
 
     if (startDate || endDate) {
       where.createdAt = {};
@@ -40,11 +39,10 @@ router.get(
       prisma.order.findMany({
         where,
         include: {
-          brand: true,
           items: {
             include: {
               product: {
-                include: { images: { where: { isPrimary: true }, take: 1 } },
+                include: { images: true },
               },
             },
           },
@@ -71,11 +69,12 @@ router.get(
           platformFeeMad: o.platformFeeMad,
           status: o.status,
           paymentMethod: o.paymentMethod,
-          brand: { id: o.brand.id, name: o.brand.name },
           items: o.items.map((item) => ({
             id: item.id,
             productName: item.product.nameFr,
+            productDescription: item.product.description,
             productImage: item.product.images[0]?.imageUrl,
+            productImages: item.product.images.map(img => img.imageUrl),
             quantity: item.quantity,
             unitPriceMad: item.unitPriceMad,
             totalPriceMad: item.totalPriceMad,
@@ -107,19 +106,7 @@ router.get(
     const order = await prisma.order.findFirst({
       where,
       include: {
-        brand: { include: { bankAccounts: true } },
         vendor: { include: { profile: true } },
-        items: {
-          include: {
-            product: {
-              include: {
-                images: { orderBy: { sortOrder: 'asc' } },
-                categories: true,
-              },
-            },
-            customization: true,
-          },
-        },
         statusHistory: {
           include: { changedByUser: { include: { profile: true } } },
           orderBy: { createdAt: 'desc' },
@@ -153,7 +140,6 @@ router.post(
   authenticate,
   authorize('VENDOR', 'CALL_CENTER_AGENT'),
   [
-    body('brandId').notEmpty(),
     body('customerName').notEmpty().trim(),
     body('customerPhone').matches(/^(\+212|0)[0-9]{9}$/),
     body('customerCity').notEmpty(),
@@ -167,7 +153,6 @@ router.post(
     }
 
     const {
-      brandId,
       leadId,
       customerName,
       customerPhone,
@@ -186,18 +171,6 @@ router.post(
       if (lead) vendorId = lead.vendorId;
     }
 
-    const brand = await prisma.brand.findFirst({
-      where: {
-        id: Number(brandId),
-        vendorId,
-        status: 'APPROVED',
-      },
-    });
-
-    if (!brand) {
-      throw new AppException(404, 'Brand not found or not approved');
-    }
-
     let totalAmountMad = 0;
     const orderItems = [];
 
@@ -212,21 +185,11 @@ router.post(
 
       let unitPrice = product.retailPriceMad;
 
-      if (item.customizationId) {
-        const customization = await prisma.brandProductCustomization.findUnique({
-          where: { id: Number(item.customizationId) },
-        });
-        if (customization && customization.customPriceMad) {
-          unitPrice = customization.customPriceMad;
-        }
-      }
-
       const totalPrice = Number(unitPrice) * item.quantity;
       totalAmountMad += totalPrice;
 
       orderItems.push({
         productId: product.id,
-        customizationId: item.customizationId ? Number(item.customizationId) : null,
         quantity: item.quantity,
         unitPriceMad: unitPrice,
         totalPriceMad: totalPrice,
@@ -244,7 +207,6 @@ router.post(
         data: {
           orderNumber: generateOrderNumber(),
           vendorId,
-          brandId: brand.id,
           leadId: leadId ? Number(leadId) : null,
           customerName,
           customerPhone: customerPhone.replace(/^0/, '+212'),
@@ -304,9 +266,10 @@ router.post(
 router.patch(
   '/:id/status',
   authenticate,
+  authorize('VENDOR', 'CALL_CENTER_AGENT', 'SUPER_ADMIN', 'HELPER'),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { status, notes } = req.body;
+    const { status, notes, actionType, cloneName, cloneDescription, clonePrice, cloneQuantity, cloneImageUrls } = req.body;
 
     const validStatuses = [
       'PENDING',
@@ -324,12 +287,15 @@ router.patch(
       throw new AppException(400, 'Invalid status');
     }
 
-    const where: any = { id: BigInt(id) };
+    const where: any = { id: Number(id) };
     if (req.user!.roleName === 'VENDOR') {
       where.vendorId = req.user!.id;
     }
 
-    const order = await prisma.order.findFirst({ where });
+    const order = await prisma.order.findFirst({ 
+      where,
+      include: { items: { include: { product: { include: { categories: true, images: true } } } } }
+    });
 
     if (!order) {
       throw new AppException(404, 'Order not found');
@@ -342,9 +308,90 @@ router.patch(
           oldStatus: order.status,
           newStatus: status,
           changedBy: req.user!.id,
-          notes,
+          notes: actionType === 'CLONE_PRODUCT' ? `Produit cloné et commande confirmée. ${notes || ''}` : notes,
         },
       });
+
+      if (actionType === 'CLONE_PRODUCT' && order.items.length > 0) {
+        const original = order.items[0].product;
+        const vendorId = order.vendorId;
+
+        const cloneSku = `${original.sku}-ORD${order.id}-U${vendorId}`;
+        const existingSku = await tx.product.findUnique({ where: { sku: cloneSku } });
+        const finalSku = existingSku ? `${cloneSku}-${Date.now()}` : cloneSku;
+
+        const clonedProduct = await tx.product.create({
+          data: {
+            sku: finalSku,
+            nameAr: cloneName || original.nameAr,
+            nameFr: cloneName || original.nameFr,
+            nameEn: cloneName || original.nameEn,
+            description: cloneDescription || original.description,
+            longDescription: cloneDescription || original.longDescription,
+            baseCostMad: Number(original.baseCostMad),
+            retailPriceMad: clonePrice ? Number(clonePrice) : Number(original.retailPriceMad),
+            affiliatePriceMad: original.affiliatePriceMad ? Number(original.affiliatePriceMad) : null,
+            influencerPriceMad: original.influencerPriceMad ? Number(original.influencerPriceMad) : null,
+            isCustomizable: original.isCustomizable,
+            minProductionDays: original.minProductionDays,
+            stockQuantity: original.stockQuantity,
+            visibility: ['NONE'],
+            status: 'APPROVED',
+            ownerId: vendorId,
+            videoUrls: original.videoUrls,
+            landingPageUrls: original.landingPageUrls,
+            commissionMad: Number(original.commissionMad),
+            categories: {
+              connect: original.categories.map((c: any) => ({ id: c.id })),
+            },
+            ...((Array.isArray(cloneImageUrls) && cloneImageUrls.length > 0) ? {
+              images: {
+                create: cloneImageUrls.filter((u: any) => u && typeof u === 'string').map((url: string, idx: number) => ({
+                  imageUrl: url,
+                  isPrimary: idx === 0,
+                  sortOrder: idx,
+                })),
+              },
+            } : (original.images?.length > 0) ? {
+              images: {
+                create: original.images.map((img: any, idx: number) => ({
+                  imageUrl: img.imageUrl,
+                  isPrimary: img.isPrimary,
+                  sortOrder: img.sortOrder,
+                })),
+              },
+            } : {}),
+          },
+        });
+
+        // Update order item to point to the cloned product and update qty/price
+        await tx.orderItem.update({
+          where: { id: order.items[0].id },
+          data: { 
+            productId: clonedProduct.id,
+            quantity: cloneQuantity ? Number(cloneQuantity) : order.items[0].quantity,
+            unitPriceMad: clonePrice ? Number(clonePrice) : order.items[0].unitPriceMad,
+            totalPriceMad: (cloneQuantity || order.items[0].quantity) * (clonePrice || order.items[0].unitPriceMad)
+          }
+        });
+
+        // Recalculate order totals
+        const allItems = await tx.orderItem.findMany({ where: { orderId: order.id } });
+        const newTotalAmount = allItems.reduce((sum, item) => sum + Number(item.totalPriceMad), 0);
+        
+        const commissionPercentage = parseFloat(process.env.PLATFORM_COMMISSION_PERCENTAGE || '15');
+        const newPlatformFee = (newTotalAmount * commissionPercentage) / 100;
+        const newVendorEarning = newTotalAmount - newPlatformFee;
+
+        await tx.order.update({
+          where: { id: order.id },
+          data: {
+            totalAmountMad: newTotalAmount,
+            platformFeeMad: newPlatformFee,
+            vendorEarningMad: newVendorEarning,
+          }
+        });
+      }
 
       const updated = await tx.order.update({
         where: { id: order.id },

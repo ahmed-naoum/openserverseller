@@ -26,13 +26,33 @@ export default function InfluencerNotifications() {
   const loadNotifications = async () => {
     try {
       const res = await api.get('/notifications');
-      setNotifications(res.data.data || res.data || []);
+      const data = res.data.data?.notifications || res.data.notifications || res.data.data || res.data;
+      setNotifications(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to load notifications:', error);
-      // Set sample notifications for demonstration
       setNotifications([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const markAsRead = async (id: number) => {
+    try {
+      await api.patch(`/notifications/${id}/read`);
+      setNotifications(prev => 
+        prev.map(n => n.id === id ? { ...n, isRead: true } : n)
+      );
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+    }
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      await api.post('/notifications/read-all');
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    } catch (error) {
+      console.error('Failed to mark all as read:', error);
     }
   };
 
@@ -74,7 +94,10 @@ export default function InfluencerNotifications() {
           </p>
         </div>
         {unreadCount > 0 && (
-          <button className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-influencer-600 hover:bg-influencer-50 rounded-xl transition-all">
+          <button 
+            onClick={markAllAsRead}
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-influencer-600 hover:bg-influencer-50 rounded-xl transition-all"
+          >
             <Check className="w-3.5 h-3.5" />
             Tout marquer comme lu
           </button>
@@ -109,7 +132,8 @@ export default function InfluencerNotifications() {
             return (
               <div
                 key={notif.id}
-                className={`card p-4 flex items-start gap-4 transition-all hover:shadow-md ${
+                onClick={() => !notif.isRead && markAsRead(notif.id)}
+                className={`card p-4 flex items-start gap-4 transition-all hover:shadow-md cursor-pointer ${
                   !notif.isRead ? 'border-l-4 border-l-influencer-500 bg-influencer-50/30' : ''
                 }`}
               >

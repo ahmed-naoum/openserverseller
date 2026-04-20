@@ -29,6 +29,7 @@ export default function AgentLeads() {
     price: 0,
     package_no_open: false
   });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const navigate = useNavigate();
 
@@ -77,12 +78,46 @@ export default function AgentLeads() {
       package_no_open: false
     });
     setShowDeliveryModal(true);
+    setFormErrors({});
     loadCities();
+  };
+
+  const validateDeliveryForm = () => {
+    const errors: Record<string, string> = {};
+    
+    if (!deliveryForm.name || deliveryForm.name.trim().length < 3) {
+      errors.name = "Le nom doit contenir au moins 3 caractères.";
+    }
+    
+    const phoneDigits = deliveryForm.phone.replace(/\D/g, '');
+    if (!phoneDigits.startsWith('0') || phoneDigits.length !== 10) {
+      errors.phone = "Le téléphone doit être au format 0612345678 (10 chiffres).";
+    }
+
+    if (!deliveryForm.city) {
+      errors.city = "La ville est obligatoire.";
+    }
+
+    if (!deliveryForm.address || deliveryForm.address.trim().length < 10) {
+      errors.address = "L'adresse doit être détaillée (min. 10 caractères).";
+    }
+
+    if (deliveryForm.price <= 0) {
+      errors.price = "Le prix doit être supérieur à 0.";
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const handleConfirmDelivery = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedLeadForDelivery || !deliveryForm.city) return;
+    if (!selectedLeadForDelivery) return;
+    
+    if (!validateDeliveryForm()) {
+      toast.error('Veuillez corriger les erreurs dans le formulaire.');
+      return;
+    }
     
     setIsPushingDelivery(true);
     try {
@@ -98,7 +133,9 @@ export default function AgentLeads() {
       setShowDeliveryModal(false);
       loadData();
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Erreur lors de la création de la commande');
+      console.error('[Coliaty Push Error]', err.response?.data);
+      const errorMessage = err.response?.data?.message || 'Erreur lors de la création de la commande';
+      toast.error(errorMessage);
     } finally {
       setIsPushingDelivery(false);
     }
@@ -460,8 +497,11 @@ export default function AgentLeads() {
                   required
                   value={deliveryForm.name}
                   onChange={(e) => setDeliveryForm({ ...deliveryForm, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none ${
+                    formErrors.name ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                  }`}
                 />
+                {formErrors.name && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.name}</p>}
               </div>
 
               <div>
@@ -471,9 +511,12 @@ export default function AgentLeads() {
                   required
                   value={deliveryForm.phone}
                   onChange={(e) => setDeliveryForm({ ...deliveryForm, phone: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                   className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none ${
+                    formErrors.phone ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                  }`}
                   placeholder="Ex: 0612345678"
                 />
+                {formErrors.phone && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.phone}</p>}
               </div>
 
               <div>
@@ -487,7 +530,9 @@ export default function AgentLeads() {
                     required
                     value={deliveryForm.city}
                     onChange={(e) => setDeliveryForm({ ...deliveryForm, city: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none max-h-48 overflow-y-auto"
+                    className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none max-h-48 overflow-y-auto ${
+                      formErrors.city ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                    }`}
                   >
                     <option value="">Sélectionner une ville...</option>
                     {coliatyCities.map((city) => (
@@ -497,6 +542,7 @@ export default function AgentLeads() {
                     ))}
                   </select>
                 )}
+                {formErrors.city && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.city}</p>}
                 {deliveryForm.city === '' && !loadingCities && selectedLeadForDelivery.city && (
                   <p className="text-xs text-amber-600 mt-1">Ville du prospect ({selectedLeadForDelivery.city}) non trouvée. Veuillez sélectionner manuellement.</p>
                 )}
@@ -509,8 +555,11 @@ export default function AgentLeads() {
                   rows={2}
                   value={deliveryForm.address}
                   onChange={(e) => setDeliveryForm({ ...deliveryForm, address: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
+                   className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none resize-none ${
+                    formErrors.address ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                  }`}
                 />
+                {formErrors.address && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.address}</p>}
               </div>
 
               <div>
@@ -522,8 +571,11 @@ export default function AgentLeads() {
                   required
                   value={deliveryForm.price || ''}
                   onChange={(e) => setDeliveryForm({ ...deliveryForm, price: Number(e.target.value) })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none ${
+                    formErrors.price ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                  }`}
                 />
+                {formErrors.price && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.price}</p>}
               </div>
 
               <div className="flex gap-4">

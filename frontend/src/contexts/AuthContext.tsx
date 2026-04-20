@@ -19,6 +19,7 @@ export interface AuthUser {
   youtubeUsername?: string;
   snapchatUsername?: string;
   referralCode?: string;
+  canImpersonate?: boolean;
   [key: string]: any;
 }
 
@@ -33,6 +34,8 @@ interface AuthContextType {
   registerInfluencer: (data: { email?: string; phone?: string; password: string; fullName: string; instagramUsername?: string; tiktokUsername?: string; facebookUsername?: string; xUsername?: string; youtubeUsername?: string; snapchatUsername?: string; }) => Promise<AuthUser>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  impersonate: (userId: number) => Promise<void>;
+  revertImpersonation: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -146,7 +149,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('originalToken');
+    localStorage.removeItem('originalRefreshToken');
     setUser(null);
+  };
+
+  const impersonate = async (userId: number) => {
+    const response = await authApi.impersonate({ targetUserId: userId });
+    const { user, tokens } = response.data.data;
+    
+    // Save current session before overriding
+    const currentAccess = localStorage.getItem('accessToken');
+    const currentRefresh = localStorage.getItem('refreshToken');
+    if (currentAccess && !localStorage.getItem('originalToken')) {
+      localStorage.setItem('originalToken', currentAccess);
+      if (currentRefresh) localStorage.setItem('originalRefreshToken', currentRefresh);
+    }
+    
+    localStorage.setItem('accessToken', tokens.accessToken);
+    localStorage.setItem('refreshToken', tokens.refreshToken);
+    setUser(user);
+
+    // Redirect to the appropriate dashboard based on role
+    const dashboardRoutes: Record<string, string> = {
+      'SUPER_ADMIN': '/admin',
+      'FINANCE_ADMIN': '/admin',
+      'SYSTEM_SUPPORT': '/admin',
+      'VENDOR': '/dashboard',
+      'INFLUENCER': '/influencer',
+      'CALL_CENTER_AGENT': '/agent',
+      'CONFIRMATION_AGENT': '/confirmation',
+      'HELPER': '/helper',
+      'GROSSELLER': '/grosseller'
+    };
+
+    const targetRoute = dashboardRoutes[user.role] || '/';
+    
+    // Reload to flush any cached state and initialize as the new user
+    window.location.href = targetRoute;
+  };
+
+  const revertImpersonation = async () => {
+    const originalToken = localStorage.getItem('originalToken');
+    const originalRefreshToken = localStorage.getItem('originalRefreshToken');
+    
+    if (originalToken) {
+      localStorage.setItem('accessToken', originalToken);
+      if (originalRefreshToken) localStorage.setItem('refreshToken', originalRefreshToken);
+      
+      localStorage.removeItem('originalToken');
+      localStorage.removeItem('originalRefreshToken');
+      // Reload to switch back fully
+      window.location.href = '/helper/users';
+    }
   };
 
   return (
@@ -162,6 +217,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         registerInfluencer,
         logout,
         refreshUser,
+        impersonate,
+        revertImpersonation,
       }}
     >
       {children}

@@ -15,15 +15,34 @@ router.post(
         body('type').notEmpty().isIn(['DELIVERY_FULFILLMENT', 'PRODUCT_CLAIM', 'GENERAL_SUPPORT']),
         body('subject').notEmpty().trim(),
         body('description').notEmpty().trim(),
-        body('productId').optional().isInt()
+        body('productId').optional({ checkFalsy: true }).isInt(),
+        body('brandingLabelPrintUrl').optional({ checkFalsy: true }).isString(),
+        body('brandingLabelMockupUrl').optional({ checkFalsy: true }).isString(),
+        body('brandName').optional({ checkFalsy: true }).isString(),
+        body('requestedQty').optional({ checkFalsy: true }).isInt({ min: 1 }),
+        body('requestedLandingPageUrl').optional({ checkFalsy: true }).isURL(),
     ],
     asyncHandler(async (req: any, res: any) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-            throw new AppException(400, 'Validation failed');
+            return res.status(400).json({ 
+                status: 'fail', 
+                message: 'Validation failed', 
+                errors: errors.array() 
+            });
         }
 
-        const { type, subject, description, productId } = req.body;
+        const { 
+            type, 
+            subject, 
+            description, 
+            productId, 
+            brandingLabelPrintUrl, 
+            brandingLabelMockupUrl,
+            brandName,
+            requestedQty,
+            requestedLandingPageUrl
+        } = req.body;
 
         // Duplicate Check: Prevent multiple OPEN/IN_PROGRESS requests for the same product
         if (productId) {
@@ -47,6 +66,11 @@ router.post(
                 subject,
                 description: description,
                 productId: productId ? Number(productId) : null,
+                brandingLabelPrintUrl,
+                brandingLabelMockupUrl,
+                brandName,
+                requestedQty: requestedQty ? Number(requestedQty) : null,
+                requestedLandingPageUrl,
                 status: 'OPEN',
             },
         });
@@ -122,7 +146,7 @@ router.get(
                 where,
                 include: {
                     user: {
-                        select: { id: true, email: true, profile: true }
+                        select: { id: true, email: true, profile: true, role: true, mode: true }
                     },
                     product: {
                         include: {

@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import { adminApi } from '../../lib/api';
 import StatsCard from '../../components/dashboard/StatsCard';
 import { 
@@ -14,10 +16,17 @@ import {
 } from 'lucide-react';
 
 export default function AdminDashboard() {
+  const { user } = useAuth();
+
   const { data, isLoading } = useQuery({
     queryKey: ['admin-dashboard'],
     queryFn: () => adminApi.dashboard(),
+    enabled: user?.role !== 'SYSTEM_SUPPORT',
   });
+
+  if (user?.role === 'SYSTEM_SUPPORT') {
+    return <Navigate to="/admin/support" replace />;
+  }
 
   const dashboardData = data?.data?.data;
   const stats = dashboardData?.stats;
@@ -72,13 +81,6 @@ export default function AdminDashboard() {
           value={`${Number(stats?.revenue?.total || 0).toLocaleString()} MAD`}
           icon={DollarSign}
           color="emerald"
-        />
-        <StatsCard
-          title="Marques"
-          value={stats?.brands?.total || 0}
-          subtitle={`${stats?.brands?.pending || 0} nouvelles demandes`}
-          icon={Tag}
-          color="indigo"
         />
       </div>
 

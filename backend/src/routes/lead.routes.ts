@@ -59,10 +59,13 @@ const callColiatyCreateParcel = async (parcelData: {
     if (error instanceof AppException) throw error;
     
     console.error('[Coliaty] API error:', error.response?.data || error.message);
-    const apiErrorDetail = error.response?.data?.message 
-      || JSON.stringify(error.response?.data?.errors || error.response?.data) 
-      || error.message;
-    throw new AppException(400, `Coliaty Network/API Error: ${apiErrorDetail}`);
+    
+    // Extract detailed validation errors if present
+    const detail = error.response?.data?.errors 
+      ? JSON.stringify(error.response.data.errors) 
+      : (error.response?.data?.message || error.message);
+      
+    throw new AppException(400, `Coliaty Network/API Error: ${detail}`);
   }
 };
 
@@ -77,7 +80,7 @@ const CITIES_CACHE_TTL = 1000 * 60 * 60; // 1 hour
 router.get(
   '/coliaty/cities',
   authenticate,
-  authorize('CALL_CENTER_AGENT'),
+  authorize('CALL_CENTER_AGENT', 'HELPER'),
   asyncHandler(async (req, res) => {
     if (coliatyCitiesCache && Date.now() - coliatyCitiesCacheTime < CITIES_CACHE_TTL) {
       return res.json({
@@ -122,9 +125,18 @@ router.get(
   '/',
   authenticate,
   asyncHandler(async (req, res) => {
-    const { page = 1, limit = 50, status, brandId, agentId, search, viewMode } = req.query;
+    const { page = 1, limit = 50, status, agentId, search, viewMode, excludeProcessed, mode } = req.query;
 
     const where: any = {};
+
+    if (mode) {
+      where.sourceMode = mode as string;
+    }
+
+    if (excludeProcessed === 'true') {
+      where.order = null;
+      where.status = { notIn: ['PUSHED_TO_DELIVERY', 'ORDERED'] };
+    }
 
     if (req.user!.roleName === 'VENDOR') {
       where.vendorId = req.user!.id;
@@ -146,12 +158,11 @@ router.get(
       } else {
         where.status = statusStr;
       }
-    } else if (viewMode !== 'ALL') {
+    } else if (viewMode !== 'ALL' && excludeProcessed !== 'true') {
       // By default, hide leads that have already been converted to orders
       where.status = { not: 'PUSHED_TO_DELIVERY' };
     }
 
-    if (brandId) where.brandId = Number(brandId as string);
     if (agentId) where.assignedAgentId = Number(agentId as string);
 
     if (search) {
@@ -166,7 +177,6 @@ router.get(
       prisma.lead.findMany({
         where,
         include: {
-          brand: true,
           assignedAgent: {
             include: { profile: true },
           },
@@ -182,6 +192,7 @@ router.get(
           referralLink: {
             include: { product: { include: { images: true } } },
           },
+          order: true,
         },
         skip: (Number(page) - 1) * Number(limit),
         take: Number(limit),
@@ -202,7 +213,6 @@ router.get(
           address: l.address,
           status: l.status,
           notes: l.notes,
-          brand: l.brand ? { id: l.brand.id, name: l.brand.name } : null,
           assignedAgent: l.assignedAgent
             ? {
               id: l.assignedAgent.id,
@@ -219,6 +229,7 @@ router.get(
             sku: l.referralLink.product.sku,
             image: l.referralLink.product.images[0]?.imageUrl || null,
           } : null,
+          coliatyPackageCode: l.order?.coliatyPackageCode || null,
           createdAt: l.createdAt,
         })),
         pagination: {
@@ -316,7 +327,6 @@ router.get(
       take: 20,
       orderBy: { createdAt: 'desc' },
       include: { 
-        brand: true,
         referralLink: {
           include: { product: { include: { images: true } } }
         }
@@ -348,16 +358,20 @@ router.get(
 router.get(
   '/livraison',
   authenticate,
-  authorize('CALL_CENTER_AGENT'),
+  authorize('CALL_CENTER_AGENT', 'HELPER'),
   asyncHandler(async (req, res) => {
     const { page = 1, limit = 50 } = req.query;
 
-    // Get leads assigned to this agent that have been pushed to delivery
+    const where: any = {
+      status: 'PUSHED_TO_DELIVERY',
+    };
+    if (req.user!.roleName === 'CALL_CENTER_AGENT') {
+      where.assignedAgentId = req.user!.id;
+    }
+
+    // Get leads for delivery tracking
     const agentLeads = await prisma.lead.findMany({
-      where: {
-        assignedAgentId: req.user!.id,
-        status: 'PUSHED_TO_DELIVERY',
-      },
+      where,
       include: {
         order: {
           include: {
@@ -404,6 +418,7 @@ router.get(
           })) || [],
           leadId: l.id,
           leadFullName: l.fullName,
+          paymentSituation: l.paymentSituation,
           createdAt: o.createdAt,
         };
       });
@@ -418,7 +433,7 @@ router.get(
 router.get(
   '/coliaty/parcel/:code/history',
   authenticate,
-  authorize('CALL_CENTER_AGENT', 'VENDOR', 'SUPER_ADMIN'),
+  authorize('CALL_CENTER_AGENT', 'VENDOR', 'SUPER_ADMIN', 'HELPER'),
   asyncHandler(async (req, res) => {
     const { code } = req.params;
     
@@ -509,7 +524,6 @@ router.get(
     const lead = await prisma.lead.findUnique({
       where: { id: Number(id) },
       include: {
-        brand: true,
         vendor: { include: { profile: true } },
         assignedAgent: { include: { profile: true } },
         callLogs: { orderBy: { createdAt: 'desc' } },
@@ -567,46 +581,35 @@ router.post(
   authenticate,
   authorize('VENDOR'),
   asyncHandler(async (req, res) => {
-    const { brandId, productId, leads } = req.body;
+    const { productId, leads, sourceMode } = req.body;
 
     if (!leads || !Array.isArray(leads) || leads.length === 0) {
       throw new AppException(400, 'Leads array is required');
     }
 
-    // Resolve brand - either from brandId or find/create a default one for the vendor
-    let resolvedBrandId: number;
-
-    if (brandId) {
-      const brand = await prisma.brand.findFirst({
-        where: {
-          id: Number(brandId),
-          vendorId: req.user!.id,
-        },
-      });
-
-      if (!brand) {
-        throw new AppException(404, 'Brand not found');
-      }
-      resolvedBrandId = brand.id;
-    } else {
-      // For product-based imports, find the vendor's first brand or create one
-      let brand = await prisma.brand.findFirst({
-        where: { vendorId: req.user!.id },
-      });
-
-      if (!brand) {
-        brand = await prisma.brand.create({
-          data: {
-            vendorId: req.user!.id,
-            name: 'Ma Marque',
-            slug: `brand-${req.user!.id}-${Date.now()}`,
-            status: 'APPROVED',
-            isApproved: true,
-            approvedAt: new Date(),
-          },
+    // If productId is provided, find or create a referral link to connect leads to the product
+    let resolvedReferralLinkId: number | null = null;
+    if (productId) {
+      const product = await prisma.product.findUnique({ where: { id: Number(productId) } });
+      if (product) {
+        // Find existing referral link for this vendor + product
+        let refLink = await prisma.referralLink.findFirst({
+          where: { influencerId: req.user!.id, productId: product.id },
         });
+        if (!refLink) {
+          // Create one for the vendor so leads are linked to the product
+          const code = `V${req.user!.id}-P${product.id}-${Date.now().toString(36)}`;
+          refLink = await prisma.referralLink.create({
+            data: {
+              influencerId: req.user!.id,
+              productId: product.id,
+              code,
+              isActive: true,
+            },
+          });
+        }
+        resolvedReferralLinkId = refLink.id;
       }
-      resolvedBrandId = brand.id;
     }
 
     const batch = await prisma.leadImportBatch.create({
@@ -622,7 +625,33 @@ router.post(
     let duplicateRows = 0;
     const errors: string[] = [];
 
-    const phoneRegex = /^(\+212|0)[0-9]{9}$/;
+    // Normalize and validate Moroccan phone numbers
+    // Accepts: 0612345678, 612345678, +212612345678, 00212612345678, with optional spaces/dashes
+    const normalizePhone = (raw: string): string | null => {
+      // Remove all spaces, dashes, dots, parentheses
+      let cleaned = String(raw).replace(/[\s\-\.\(\)]/g, '');
+      
+      // Handle various prefixes
+      if (cleaned.startsWith('00212')) {
+        cleaned = '+212' + cleaned.slice(5);
+      } else if (cleaned.startsWith('+212')) {
+        // already good
+      } else if (cleaned.startsWith('0') && cleaned.length === 10) {
+        cleaned = '+212' + cleaned.slice(1);
+      } else if (/^[6-7]\d{8}$/.test(cleaned)) {
+        // 9-digit number without prefix (Excel stripped the leading 0)
+        cleaned = '+212' + cleaned;
+      } else if (/^\d{9}$/.test(cleaned)) {
+        // Any 9-digit number, assume Moroccan
+        cleaned = '+212' + cleaned;
+      }
+      
+      // Final validation: must be +212 followed by 9 digits
+      if (/^\+212\d{9}$/.test(cleaned)) {
+        return cleaned;
+      }
+      return null;
+    };
 
     for (const lead of leads) {
       try {
@@ -631,13 +660,14 @@ router.post(
           continue;
         }
 
-        const normalizedPhone = lead.phone.replace(/^0/, '+212');
+        const normalizedPhone = normalizePhone(lead.phone);
 
-        if (!phoneRegex.test(normalizedPhone)) {
-          errors.push(`Invalid phone format: ${lead.phone} `);
+        if (!normalizedPhone) {
+          errors.push(`Invalid phone format: "${lead.phone}" (cleaned to nothing valid)`);
           continue;
         }
 
+        /* 
         const existingLead = await prisma.lead.findFirst({
           where: {
             vendorId: req.user!.id,
@@ -649,18 +679,20 @@ router.post(
           duplicateRows++;
           continue;
         }
+        */
 
         await prisma.lead.create({
           data: {
             vendorId: req.user!.id,
-            brandId: resolvedBrandId,
             importBatchId: batch.id,
+            referralLinkId: resolvedReferralLinkId,
             fullName: lead.fullName,
             phone: normalizedPhone,
             whatsapp: lead.whatsapp || normalizedPhone,
             city: lead.city,
             address: lead.address,
             status: 'NEW',
+            sourceMode: sourceMode || 'VENDOR',
           },
         });
 
@@ -678,6 +710,12 @@ router.post(
         status: 'COMPLETED',
       },
     });
+
+    // Log import results for debugging
+    if (errors.length > 0) {
+      console.log(`[Lead Import] ${validRows} valid, ${duplicateRows} duplicates, ${errors.length} errors:`);
+      errors.slice(0, 5).forEach(e => console.log(`  - ${e}`));
+    }
 
     res.status(201).json({
       status: 'success',
@@ -698,7 +736,7 @@ router.post(
 router.post(
   '/',
   authenticate,
-  authorize('VENDOR'),
+  authorize('VENDOR', 'HELPER'),
   [
     body('fullName').notEmpty().trim(),
     body('phone').matches(/^(\+212|0)[0-9]{9}$/),
@@ -709,53 +747,43 @@ router.post(
       throw new AppException(400, 'Validation failed');
     }
 
-    const { fullName, phone, whatsapp, city, address, brandId, productId, notes } = req.body;
+    const { fullName, phone, whatsapp, city, address, productId, notes, vendorId: bodyVendorId, sourceMode } = req.body;
 
-    // Resolve brand
-    let resolvedBrandId: number;
+    // HELPER must supply a vendorId in the request body
+    const effectiveVendorId = req.user!.roleName === 'HELPER' ? Number(bodyVendorId) : req.user!.id;
+    if (req.user!.roleName === 'HELPER' && !bodyVendorId) {
+      throw new AppException(400, 'HELPER must provide a vendorId');
+    }
 
-    if (brandId) {
-      const brand = await prisma.brand.findFirst({
-        where: { id: Number(brandId), vendorId: req.user!.id },
-      });
-      if (!brand) throw new AppException(404, 'Brand not found');
-      resolvedBrandId = brand.id;
-    } else {
-      let brand = await prisma.brand.findFirst({
-        where: { vendorId: req.user!.id },
-      });
-      if (!brand) {
-        brand = await prisma.brand.create({
-          data: {
-            vendorId: req.user!.id,
-            name: 'Ma Marque',
-            slug: `brand-${req.user!.id}-${Date.now()}`,
-            status: 'APPROVED',
-            isApproved: true,
-            approvedAt: new Date(),
-          },
+    // If productId is provided, find or create a referral link to connect the lead to the product
+    let resolvedReferralLinkId: number | null = null;
+    if (productId) {
+      const product = await prisma.product.findUnique({ where: { id: Number(productId) } });
+      if (product) {
+        let refLink = await prisma.referralLink.findFirst({
+          where: { influencerId: effectiveVendorId, productId: product.id },
         });
+        if (!refLink) {
+          const code = `V${effectiveVendorId}-P${product.id}-${Date.now().toString(36)}`;
+          refLink = await prisma.referralLink.create({
+            data: {
+              influencerId: effectiveVendorId,
+              productId: product.id,
+              code,
+              isActive: true,
+            },
+          });
+        }
+        resolvedReferralLinkId = refLink.id;
       }
-      resolvedBrandId = brand.id;
     }
 
     const normalizedPhone = phone.replace(/^0/, '+212');
 
-    const existingLead = await prisma.lead.findFirst({
-      where: {
-        vendorId: req.user!.id,
-        phone: normalizedPhone,
-      },
-    });
-
-    if (existingLead) {
-      throw new AppException(409, 'Lead with this phone number already exists');
-    }
-
     const lead = await prisma.lead.create({
       data: {
-        vendorId: req.user!.id,
-        brandId: resolvedBrandId,
+        vendorId: effectiveVendorId,
+        referralLinkId: resolvedReferralLinkId,
         fullName,
         phone: normalizedPhone,
         whatsapp: whatsapp || normalizedPhone,
@@ -763,9 +791,7 @@ router.post(
         address,
         status: 'NEW',
         notes,
-      },
-      include: {
-        brand: true,
+        sourceMode: sourceMode || 'SELLER',
       },
     });
 
@@ -773,6 +799,135 @@ router.post(
       status: 'success',
       message: 'Lead created successfully',
       data: { lead },
+    });
+  })
+);
+
+// PATCH /bulk-status - Bulk update lead statuses (VENDOR, SUPER_ADMIN, HELPER)
+router.patch(
+  '/bulk-status',
+  authenticate,
+  authorize('VENDOR', 'SUPER_ADMIN', 'HELPER'),
+  asyncHandler(async (req, res) => {
+    const { ids, status } = req.body;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      throw new AppException(400, 'IDs array is required');
+    }
+
+    const validStatuses = [
+      'NEW',
+      'AVAILABLE',
+      'ASSIGNED',
+      'CONTACTED',
+      'INTERESTED',
+      'NOT_INTERESTED',
+      'CALLBACK_REQUESTED',
+      'ORDERED',
+      'PUSHED_TO_DELIVERY',
+      'UNREACHABLE',
+      'INVALID',
+    ];
+
+    if (!validStatuses.includes(status)) {
+      throw new AppException(400, 'Invalid status');
+    }
+
+    const where: any = { id: { in: ids.map(Number) } };
+    if (req.user!.roleName === 'VENDOR') {
+      where.vendorId = req.user!.id;
+    }
+
+    const leads = await prisma.lead.findMany({ where });
+    if (leads.length === 0) {
+      throw new AppException(404, 'No leads found to update');
+    }
+
+    const updatedLeads = await prisma.$transaction(async (tx) => {
+      // Create status history for each lead
+      await tx.leadStatusHistory.createMany({
+        data: leads.map(lead => ({
+          leadId: lead.id,
+          oldStatus: lead.status,
+          newStatus: status,
+          changedBy: req.user!.id,
+        })),
+      });
+
+      // Update leads
+      return tx.lead.updateMany({
+        where: { id: { in: leads.map(l => l.id) } },
+        data: { status },
+      });
+    });
+
+    res.json({
+      status: 'success',
+      message: `${updatedLeads.count} leads updated successfully`,
+      data: { count: updatedLeads.count },
+    });
+  })
+);
+
+// PATCH /:id - Edit basic lead fields (HELPER, VENDOR, SUPER_ADMIN)
+router.patch(
+  '/:id',
+  authenticate,
+  authorize('SUPER_ADMIN', 'VENDOR', 'HELPER'),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { fullName, phone, whatsapp, city, address, notes } = req.body;
+
+    const where: any = { id: Number(id) };
+    if (req.user!.roleName === 'VENDOR') where.vendorId = req.user!.id;
+
+    const lead = await prisma.lead.findFirst({ where });
+    if (!lead) throw new AppException(404, 'Lead not found');
+
+    const normalizedPhone = phone ? phone.replace(/^0/, '+212') : undefined;
+
+    const updated = await prisma.lead.update({
+      where: { id: lead.id },
+      data: {
+        fullName: fullName || lead.fullName,
+        phone: normalizedPhone || lead.phone,
+        whatsapp: whatsapp || lead.whatsapp,
+        city: city !== undefined ? city : lead.city,
+        address: address !== undefined ? address : lead.address,
+        notes: notes !== undefined ? notes : lead.notes,
+      },
+    });
+
+    res.json({ status: 'success', message: 'Lead updated', data: { lead: updated } });
+  })
+);
+
+// PATCH /:id/payment-situation - Change billing situation (HELPER, SUPER_ADMIN)
+router.patch(
+  '/:id/payment-situation',
+  authenticate,
+  authorize('HELPER', 'SUPER_ADMIN'),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { paymentSituation } = req.body;
+
+    const valid = ['NOT_PAID', 'PAID', 'FACTURED'];
+    if (!valid.includes(paymentSituation)) {
+      throw new AppException(400, `Invalid paymentSituation. Must be one of: ${valid.join(', ')}`);
+    }
+
+    const lead = await prisma.lead.findUnique({ where: { id: Number(id) } });
+    if (!lead) throw new AppException(404, 'Lead not found');
+
+    const updated = await (prisma.lead as any).update({
+      where: { id: lead.id },
+      data: { paymentSituation },
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Payment situation updated',
+      data: { lead: updated },
     });
   })
 );
@@ -808,6 +963,7 @@ router.patch(
     } else if (req.user!.roleName === 'CALL_CENTER_AGENT') {
       where.assignedAgentId = req.user!.id;
     }
+    // HELPER and SUPER_ADMIN have no additional filter — they can change any lead's status
 
     const lead = await prisma.lead.findFirst({ where });
 
@@ -841,6 +997,7 @@ router.patch(
     });
   })
 );
+
 
 router.post(
   '/:id/assign',
@@ -920,13 +1077,12 @@ router.post(
   authenticate,
   authorize('SUPER_ADMIN'),
   asyncHandler(async (req, res) => {
-    const { brandId, limit = 50 } = req.body;
+    const { limit = 50 } = req.body;
 
     const unassignedLeads = await prisma.lead.findMany({
       where: {
         status: 'NEW',
         assignedAgentId: null,
-        ...(brandId && { brandId: Number(brandId) }),
       },
       take: Number(limit),
     });
@@ -1038,9 +1194,6 @@ router.post(
         assignedAgentId: req.user!.id,
         status: 'ORDERED',
       },
-      include: {
-        brand: true,
-      },
     });
 
     if (!lead) {
@@ -1064,14 +1217,7 @@ router.post(
       });
     }
 
-    let resolvedBrandId = lead.brandId;
-    if (!resolvedBrandId) {
-      const fallbackBrand = await prisma.brand.findFirst();
-      if (!fallbackBrand) {
-        throw new AppException(400, 'System has no brands at all to associate with order');
-      }
-      resolvedBrandId = fallbackBrand.id;
-    }
+    // Brand logic removed
 
     let productToOrder = null;
     if (productId && Number(productId) !== 0) {
@@ -1084,7 +1230,7 @@ router.post(
     }
 
     if (!productToOrder) {
-      throw new AppException(400, 'No active product found for this brand to create an order');
+      throw new AppException(400, 'No active product found for this vendor to create an order');
     }
 
     const unitPrice = productToOrder.retailPriceMad;
@@ -1112,8 +1258,12 @@ router.post(
     // Create a Coliaty parcel (MANDATORY)
     let coliatyResult: { package_code: string; package_id: number };
     try {
-      // Normalize phone for Coliaty: must start with 06 or 07 followed by 8 digits
-      const normalizedPhone = receiverPhone.replace(/^\+212/, '0').replace(/\s/g, '');
+      // Normalize phone for Coliaty: must start with 05, 06 or 07 followed by 8 digits (10 total)
+      let normalizedPhone = receiverPhone.replace(/\s+/g, '').replace(/[^0-9+]/g, '');
+      if (normalizedPhone.startsWith('+212')) normalizedPhone = '0' + normalizedPhone.slice(4);
+      else if (normalizedPhone.startsWith('212')) normalizedPhone = '0' + normalizedPhone.slice(3);
+      else if (!normalizedPhone.startsWith('0')) normalizedPhone = '0' + normalizedPhone;
+      
       coliatyResult = await callColiatyCreateParcel({
         package_reciever: receiverName,
         package_phone: normalizedPhone,
@@ -1134,7 +1284,6 @@ router.post(
         data: {
           orderNumber: generateOrderNumber(),
           vendorId: lead.vendorId,
-          brandId: resolvedBrandId,
           leadId: lead.id,
           customerName: receiverName,
           customerPhone: receiverPhone,
@@ -1192,32 +1341,40 @@ router.get(
   authenticate,
   asyncHandler(async (req, res) => {
     const userId = req.user!.id;
+    const { mode } = req.query;
 
-    // Products from inventory (bought)
-    const inventoryProducts = await prisma.productInventory.findMany({
-      where: { userId },
-      include: {
-        product: {
-          include: { images: { where: { isPrimary: true }, take: 1 } },
-        },
-      },
-    });
+    let inventoryProducts: any[] = [];
+    let claimedProducts: any[] = [];
 
-    // Products from affiliate claims (claimed & approved)
-    const claimedProducts = await prisma.affiliateClaim.findMany({
-      where: { userId, status: 'APPROVED' },
-      include: {
-        product: {
-          include: { images: { where: { isPrimary: true }, take: 1 } },
+    if (!mode || mode === 'SELLER') {
+      // Products from inventory (bought)
+      inventoryProducts = await prisma.productInventory.findMany({
+        where: { userId },
+        include: {
+          product: {
+            include: { images: { where: { isPrimary: true }, take: 1 } },
+          },
         },
-      },
-    });
+      });
+    }
+
+    if (!mode || mode === 'AFFILIATE') {
+      // Products from affiliate claims (claimed & approved)
+      claimedProducts = await prisma.affiliateClaim.findMany({
+        where: { userId, status: 'APPROVED' },
+        include: {
+          product: {
+            include: { images: { where: { isPrimary: true }, take: 1 } },
+          },
+        },
+      });
+    }
 
     // Merge and deduplicate
     const productMap = new Map<number, any>();
 
     for (const inv of inventoryProducts) {
-      if (!productMap.has(inv.productId)) {
+      if (inv.product && !productMap.has(inv.productId)) {
         productMap.set(inv.productId, {
           id: inv.product.id,
           sku: inv.product.sku,
@@ -1230,7 +1387,7 @@ router.get(
     }
 
     for (const claim of claimedProducts) {
-      if (!productMap.has(claim.productId)) {
+      if (claim.product && !productMap.has(claim.productId)) {
         productMap.set(claim.productId, {
           id: claim.product.id,
           sku: claim.product.sku,

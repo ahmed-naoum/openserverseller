@@ -3,23 +3,6 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-declare global {
-  namespace Express {
-    interface Request {
-      user?: {
-        id: number;
-        uuid: string;
-        email: string | null;
-        phone: string | null;
-        roleId: number;
-        roleName: string;
-        mode: string;
-        isInfluencer: boolean;
-      };
-    }
-  }
-}
-
 export const authenticate = async (
   req: Request,
   res: Response,
@@ -65,6 +48,7 @@ export const authenticate = async (
       roleName: user.role.name,
       mode: user.mode,
       isInfluencer: user.isInfluencer,
+      canImpersonate: user.canImpersonate,
     };
 
     await prisma.user.update({
@@ -136,6 +120,7 @@ export const optionalAuth = async (
         roleName: user.role.name,
         mode: user.mode,
         isInfluencer: user.isInfluencer,
+        canImpersonate: user.canImpersonate,
       };
     }
 
