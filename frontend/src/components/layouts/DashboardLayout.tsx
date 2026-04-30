@@ -476,10 +476,10 @@ export default function DashboardLayout() {
             sidebarCollapsed ? 'lg:gap-0' : ''
           }`}>
             <div className="w-10 h-10 bg-white rounded-2xl shadow-xl shadow-slate-200/50 flex items-center justify-center overflow-hidden flex-shrink-0 border border-slate-100">
-               <img src="/new logo/logo filess-25.png" alt="SILACOD" className="w-7 h-7 object-contain" />
+               <img src="/new logo/logo filess-25.svg" alt="SILACOD" className="w-7 h-7 object-contain" />
             </div>
             <img 
-              src="/new logo/logo filess-24.png" 
+              src="/new logo/logo filess-24.svg" 
               alt="SILACOD" 
               className={`h-7 transition-all duration-300 ${
                 sidebarCollapsed ? 'lg:hidden' : ''

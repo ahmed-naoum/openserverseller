@@ -123,7 +123,7 @@ export default function PageLoader({ onComplete }: Props) {
             animation: 'loaderIconPulse 2s ease-in-out infinite',
           }}>
             <img
-              src="/new logo/logo filess-25.png"
+              src="/new logo/logo filess-25.svg"
               alt="SILACOD"
               style={{ width: 62, height: 62, objectFit: 'contain' }}
             />
@@ -133,7 +133,7 @@ export default function PageLoader({ onComplete }: Props) {
         {/* Wordmark */}
         <div style={{ textAlign: 'center' }}>
           <img
-            src="/new logo/logo filess-24.png"
+            src="/new logo/logo filess-24.svg"
             alt="SILACOD"
             style={{
               height: 42,
