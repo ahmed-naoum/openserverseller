@@ -126,11 +126,11 @@ export default function AdminAffiliateClaims() {
 
   const handleFileUpload = async (files: FileList | File[]) => {
     const validFiles = Array.from(files).filter(f => 
-      ['image/jpeg', 'image/png', 'image/jpg'].includes(f.type)
+      ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'].includes(f.type)
     );
 
     if (validFiles.length === 0) {
-      toast.error('Seuls les formats PNG, JPG et JPEG sont acceptés');
+      toast.error('Seuls les formats PNG, JPG, JPEG et WEBP sont acceptés');
       return;
     }
 
@@ -586,7 +586,7 @@ export default function AdminAffiliateClaims() {
                     ref={fileInputRef}
                     type="file"
                     multiple
-                    accept=".png,.jpg,.jpeg"
+                    accept=".png,.jpg,.jpeg,.webp"
                     className="hidden"
                     onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
                   />
@@ -600,7 +600,7 @@ export default function AdminAffiliateClaims() {
                       <p className="text-sm font-semibold text-gray-700">
                         Glisser-déposer ou <span className="text-blue-600">parcourir</span>
                       </p>
-                      <p className="text-[11px] text-gray-400 mt-1">PNG, JPG, JPEG — converties automatiquement en WebP</p>
+                      <p className="text-[11px] text-gray-400 mt-1">PNG, JPG, JPEG, WEBP — converties automatiquement en WebP</p>
                     </div>
                   </div>
                 </div>

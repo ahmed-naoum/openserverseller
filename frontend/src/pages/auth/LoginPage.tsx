@@ -18,8 +18,13 @@ export default function LoginPage() {
   const [requires2FA, setRequires2FA] = useState(false);
   const [twoFactorToken, setTwoFactorToken] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
+  // Force Password Change states
+  const [requiresPasswordChange, setRequiresPasswordChange] = useState(false);
+  const [tempToken, setTempToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
-  const { login, login2FA, googleAuth } = useAuth();
+  const { login, login2FA, googleAuth, forcePasswordChange } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -33,6 +38,13 @@ export default function LoginPage() {
         setRequires2FA(true);
         setTwoFactorToken(res.twoFactorToken || '');
         toast.success(res.message || 'Code 2FA requis');
+        return;
+      }
+
+      if (res.requiresPasswordChange) {
+        setRequiresPasswordChange(true);
+        setTempToken(res.tempToken || '');
+        toast.success(res.message || 'Changement de mot de passe requis');
         return;
       }
       
@@ -86,6 +98,39 @@ export default function LoginPage() {
       }
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Code 2FA invalide');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleForcePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmNewPassword) {
+      toast.error('Les mots de passe ne correspondent pas');
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      const user = await forcePasswordChange({ tempToken, newPassword });
+      toast.success('Mot de passe mis à jour et connexion réussie!');
+      
+      // Redirect based on role
+      if (user.role === 'SUPER_ADMIN' || user.role === 'FINANCE_ADMIN' || user.role === 'SYSTEM_SUPPORT') {
+        navigate('/admin');
+      } else if (user.role === 'CALL_CENTER_AGENT') {
+        navigate('/agent');
+      } else if (user.role === 'GROSSELLER') {
+        navigate('/grosseller');
+      } else if (user.role === 'INFLUENCER') {
+        navigate('/influencer');
+      } else if (user.role === 'UNCONFIRMED') {
+        navigate('/verify');
+      } else {
+        navigate('/dashboard');
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Erreur lors du changement de mot de passe');
     } finally {
       setIsLoading(false);
     }
@@ -162,9 +207,9 @@ export default function LoginPage() {
           <Link to="/" className="inline-flex flex-col items-center gap-4 group">
             <div className="w-16 h-16 bg-white rounded-full shadow-xl shadow-slate-200/50 flex items-center justify-center group-hover:scale-110 transition-transform duration-500 relative overflow-hidden">
                <div className="absolute inset-0 bg-gradient-to-tr from-primary-500/10 to-transparent animate-pulse" />
-               <img src="/logo-icon.svg" alt="SILACOD" className="w-10 h-10 relative z-10" />
+               <img src="/new logo/logo filess-25.png" alt="SILACOD" className="w-10 h-10 relative z-10 object-contain" />
             </div>
-            <img src="/logo-full.svg" alt="SILACOD" className="h-7" />
+            <img src="/new logo/logo filess-24.png" alt="SILACOD" className="h-7 object-contain" />
           </Link>
           <div className="space-y-1">
             <h1 className="text-4xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-[#2c2f74] to-primary-600">
@@ -180,7 +225,80 @@ export default function LoginPage() {
           <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-transparent via-primary-400/50 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-700" />
           
           <div className="relative z-10 max-w-[400px] mx-auto w-full">
-            {requires2FA ? (
+            {requiresPasswordChange ? (
+              <form onSubmit={handleForcePasswordSubmit} className="space-y-6">
+                <div className="text-center space-y-3 animate-in fade-in zoom-in duration-500">
+                  <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto text-rose-600 shadow-inner">
+                    <Lock size={32} />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900">Nouveau Mot de Passe</h3>
+                  <p className="text-sm text-slate-500 leading-relaxed">
+                    Vous utilisez un mot de passe temporaire. Veuillez le changer pour continuer.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="relative group/input">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/input:text-primary-600 transition-colors">
+                      <Lock size={18} />
+                    </div>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      className="w-full bg-slate-50/80 border-slate-100 focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 rounded-full py-4 px-5 pl-12 pr-12 transition-all outline-none border hover:border-slate-300 shadow-sm"
+                      placeholder="Nouveau mot de passe"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      required
+                      minLength={6}
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                  
+                  <div className="relative group/input">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/input:text-primary-600 transition-colors">
+                      <Lock size={18} />
+                    </div>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      className="w-full bg-slate-50/80 border-slate-100 focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 rounded-full py-4 px-5 pl-12 pr-12 transition-all outline-none border hover:border-slate-300 shadow-sm"
+                      placeholder="Confirmer le mot de passe"
+                      value={confirmNewPassword}
+                      onChange={(e) => setConfirmNewPassword(e.target.value)}
+                      required
+                      minLength={6}
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3 mt-6">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRequiresPasswordChange(false);
+                        setNewPassword('');
+                        setConfirmNewPassword('');
+                        setTempToken('');
+                      }}
+                      className="w-full bg-slate-50 text-slate-600 font-bold py-3.5 rounded-full hover:bg-slate-100 transition-all active:scale-[0.98]"
+                    >
+                      Retour
+                    </button>
+                    <button
+                      type="submit"
+                      className="w-full bg-rose-600 text-white font-bold py-3.5 rounded-full shadow-lg shadow-rose-600/20 hover:bg-rose-700 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                      disabled={isLoading || newPassword.length < 6}
+                    >
+                      {isLoading ? '...' : 'Valider'}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            ) : requires2FA ? (
               <form onSubmit={handle2FASubmit} className="space-y-6">
                 <div className="text-center space-y-3 animate-in fade-in zoom-in duration-500">
                   <div className="w-16 h-16 bg-primary-50 rounded-full flex items-center justify-center mx-auto text-primary-600 shadow-inner">

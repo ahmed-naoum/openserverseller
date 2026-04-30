@@ -21,12 +21,16 @@ export const startLeadsReassignmentCron = () => {
       const thresholdDate = new Date(Date.now() - EXPIRATION_LIMIT_MS);
 
       const statusesToDrop = [
+        'NO_REPLY',
+        'WRONG_ORDER',
+        'CANCEL_REASON_PRICE',
+        'CANCEL_ORDER',
+        'INVALID',
         'CONTACTED',
         'INTERESTED',
         'CALLBACK_REQUESTED',
         'NOT_INTERESTED',
-        'UNREACHABLE',
-        'INVALID'
+        'UNREACHABLE'
       ];
 
       // Find all leads assigned to ANY agent that have these statuses

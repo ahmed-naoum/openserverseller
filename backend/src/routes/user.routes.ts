@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { v4 as uuidv4 } from 'uuid';
-import crypto from 'crypto';
+import { decrypt } from '../utils/crypto.js';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -77,6 +77,12 @@ router.get(
           walletBalance: u.wallet?.balanceMad || 0,
           canImpersonate: u.canImpersonate,
           autoAssignInfluencers: u.autoAssignInfluencers,
+          autoAssignHelperUsers: u.autoAssignHelperUsers,
+          canManageProducts: u.canManageProducts,
+          canManageLeads: u.canManageLeads,
+          canManageOrders: u.canManageOrders,
+          canManageInfluencerLinks: u.canManageInfluencerLinks,
+          canManageTickets: u.canManageTickets,
           createdAt: u.createdAt,
         })), pagination: {
           page: Number(page),
@@ -166,6 +172,24 @@ router.post(
       }
     }
 
+    // Auto-assign new user to helpers with autoAssignHelperUsers enabled
+    const globalHelpers = await prisma.user.findMany({
+      where: {
+        role: { name: 'HELPER' },
+        autoAssignHelperUsers: true
+      }
+    });
+
+    if (globalHelpers.length > 0 && !['SUPER_ADMIN', 'FINANCE_ADMIN'].includes(role)) {
+      await (prisma as any).helperUserAssignment.createMany({
+        data: globalHelpers.map((helper: any) => ({
+          helperId: helper.id,
+          targetUserId: user.id
+        })),
+        skipDuplicates: true,
+      });
+    }
+
     res.status(201).json({
       status: 'success',
       message: 'User created successfully',
@@ -188,7 +212,7 @@ router.patch(
   authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
   asyncHandler(async (req, res) => {
     const { uuid } = req.params;
-    const { fullName, email, phone, role, canImpersonate } = req.body;
+    const { fullName, email, phone, role, canImpersonate, canManageProducts, canManageLeads, canManageOrders, canManageInfluencerLinks, canManageTickets } = req.body;
 
     const user = await prisma.user.findUnique({
       where: { uuid },
@@ -211,8 +235,13 @@ router.patch(
       data: {
         email: email || user.email,
         phone: phone || user.phone,
-        roleId,
+        role: { connect: { id: roleId } },
         canImpersonate: typeof canImpersonate === 'boolean' ? canImpersonate : user.canImpersonate,
+        canManageProducts: typeof canManageProducts === 'boolean' ? canManageProducts : user.canManageProducts,
+        canManageLeads: typeof canManageLeads === 'boolean' ? canManageLeads : user.canManageLeads,
+        canManageOrders: typeof canManageOrders === 'boolean' ? canManageOrders : user.canManageOrders,
+        canManageInfluencerLinks: typeof canManageInfluencerLinks === 'boolean' ? canManageInfluencerLinks : user.canManageInfluencerLinks,
+        canManageTickets: typeof canManageTickets === 'boolean' ? canManageTickets : user.canManageTickets,
         profile: {
           update: {
             fullName: fullName || undefined,
@@ -292,7 +321,10 @@ router.get(
           lastLoginAt: user.lastLoginAt,
           wallet: user.wallet,
           kycDocuments: user.kycDocuments,
-          bankAccounts: user.bankAccounts,
+          bankAccounts: user.bankAccounts.map((account: any) => ({
+            ...account,
+            ribAccount: decrypt(account.ribAccount)
+          })),
           autoAssignInfluencers: user.autoAssignInfluencers,
           createdAt: user.createdAt,
         },
@@ -510,29 +542,33 @@ router.post(
       where: { uuid },
     });
 
-    if (!user || (!user.email && !user.phone)) {
-      throw new AppException(404, 'User not found or lacks contact info');
+    if (!user) {
+      throw new AppException(404, 'User not found');
     }
 
-    const resetToken = uuidv4();
-    const expiresAt = new Date(Date.now() + 3600000); // 1 hour
+    // Generate a random 8-character password
+    const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let tempPassword = '';
+    for (let i = 0; i < 8; i++) {
+      const randomIndex = Math.floor(Math.random() * charset.length);
+      tempPassword += charset[randomIndex];
+    }
 
-    await prisma.passwordReset.create({
+    const bcrypt = await import('bcryptjs');
+    const hashedPassword = await bcrypt.default.hash(tempPassword, 10);
+
+    await prisma.user.update({
+      where: { uuid },
       data: {
-        email: user.email || user.phone || 'unknown',
-        token: resetToken,
-        expiresAt,
+        password: hashedPassword,
+        requiresPasswordChange: true,
       },
     });
 
-    // In a real application, you would send an email or SMS here
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`[DEV ONLY] Password reset link for ${user.email || user.phone}: ${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`);
-    }
-
     res.json({
       status: 'success',
-      message: 'Password reset link logic initiated (check console in Dev Mode).',
+      message: 'Mot de passe temporaire généré avec succès.',
+      data: { tempPassword },
     });
   })
 );

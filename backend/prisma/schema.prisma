@@ -59,7 +59,14 @@ model User {
   googleId           String? @unique
   canImpersonate     Boolean @default(false)
   mustChangePassword Boolean @default(false)
+  requiresPasswordChange Boolean @default(false)
   autoAssignInfluencers Boolean @default(false)
+  autoAssignHelperUsers Boolean @default(false)
+  canManageProducts     Boolean @default(false)
+  canManageLeads        Boolean @default(false)
+  canManageOrders       Boolean @default(false)
+  canManageInfluencerLinks Boolean @default(false)
+  canManageTickets       Boolean @default(false)
 
   // Tracking
   registrationIp String?
@@ -120,6 +127,7 @@ model User {
   favorites            Favorite[]
   targetedAnnouncements Announcement[]     @relation("TargetedAnnouncements")
   bankAccounts         UserBankAccount[]
+  invoices             Invoice[]
 
   @@map("users")
 }
@@ -323,13 +331,17 @@ model Lead {
   sourceMode      String           @default("VENDOR") // VENDOR, AFFILIATE
   assignedAgentId Int?
   assignedAgent   User?            @relation("AgentLeads", fields: [assignedAgentId], references: [id])
+  productVariant  String?
   notes           String?
+  callbackAt      DateTime?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
   order          Order?
   referralLinkId Int?
   referralLink   ReferralLink?       @relation(fields: [referralLinkId], references: [id])
+  invoiceId      Int?
+  invoice        Invoice?            @relation(fields: [invoiceId], references: [id])
   statusHistory  LeadStatusHistory[]
   callLogs       CallLog[]
   assignments    LeadAssignment[]
@@ -398,6 +410,7 @@ model Order {
   coliatyPackageId    Int?
   packageContent      String?
   packageNoOpen       Boolean  @default(false)
+  productVariant      String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -793,11 +806,46 @@ model ReferralLink {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  commissions InfluencerCommission[]
-  leads       Lead[]
+  commissions   InfluencerCommission[]
+  leads         Lead[]
+  landingPage   ReferralLinkLandingPage?
+  clicksHistory ReferralLinkClick[]
 
   @@unique([influencerId, productId])
   @@map("referral_links")
+}
+
+model ReferralLinkClick {
+  id             Int          @id @default(autoincrement())
+  referralLinkId Int
+  referralLink   ReferralLink @relation(fields: [referralLinkId], references: [id], onDelete: Cascade)
+  ipAddress      String
+  userAgent      String?
+  createdAt      DateTime     @default(now())
+
+  @@index([referralLinkId])
+  @@map("referral_link_clicks")
+}
+
+// ==========================================
+// REFERRAL LINK LANDING PAGE
+// ==========================================
+
+model ReferralLinkLandingPage {
+  id             Int          @id @default(autoincrement())
+  referralLinkId Int          @unique
+  referralLink   ReferralLink @relation(fields: [referralLinkId], references: [id], onDelete: Cascade)
+  
+  themeColor     String       @default("#f97316") // Default to brand orange
+  title          String?
+  description    String?
+  buttonText     String       @default("Commander Maintenant")
+  customStructure Json?       // For flexible sitebuilder blocks (features, faqs, etc.)
+  
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@map("referral_link_landing_pages")
 }
 
 model InfluencerCampaign {
@@ -878,4 +926,18 @@ model WebhookLog {
   createdAt DateTime @default(now())
 
   @@map("webhook_logs")
+}
+
+model Invoice {
+  id             Int      @id @default(autoincrement())
+  invoiceNumber  String   @unique
+  userId         Int
+  user           User     @relation(fields: [userId], references: [id])
+  totalAmountMad Float
+  status         String   @default("PAID")
+  createdAt      DateTime @default(now())
+
+  leads          Lead[]
+
+  @@map("invoices")
 }

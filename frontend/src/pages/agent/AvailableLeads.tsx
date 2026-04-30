@@ -267,7 +267,7 @@ export default function AgentLeads() {
                     <button
                       onClick={async () => {
                         try {
-                          await leadsApi.pushToDelivery(lead.id, { productId: 0 });
+                          await leadsApi.pushToDelivery(lead.id, { productId: lead.product?.id || 0 });
                           toast.success('Commande créée avec succès !');
                           loadData();
                         } catch (err: any) {

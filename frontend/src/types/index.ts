@@ -25,6 +25,12 @@ export interface User {
     name: string;
     slug: string;
   };
+  canImpersonate?: boolean;
+  canManageProducts?: boolean;
+  canManageLeads?: boolean;
+  canManageOrders?: boolean;
+  canManageInfluencerLinks?: boolean;
+  canManageTickets?: boolean;
 }
 
 export type UserRole =

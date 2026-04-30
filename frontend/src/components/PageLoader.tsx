@@ -123,9 +123,9 @@ export default function PageLoader({ onComplete }: Props) {
             animation: 'loaderIconPulse 2s ease-in-out infinite',
           }}>
             <img
-              src="/logo-icon.svg"
+              src="/new logo/logo filess-25.png"
               alt="SILACOD"
-              style={{ width: 52, height: 52, filter: 'drop-shadow(0 0 12px rgba(99,102,241,0.3))' }}
+              style={{ width: 62, height: 62, objectFit: 'contain' }}
             />
           </div>
         </div>
@@ -133,13 +133,12 @@ export default function PageLoader({ onComplete }: Props) {
         {/* Wordmark */}
         <div style={{ textAlign: 'center' }}>
           <img
-            src="/logo-full.svg"
+            src="/new logo/logo filess-24.png"
             alt="SILACOD"
             style={{
-              height: 32,
-              filter: 'drop-shadow(0 0 8px rgba(99,102,241,0.15))',
+              height: 42,
+              objectFit: 'contain',
               animation: 'shimmer 2s ease-in-out infinite',
-              transform: 'translateX(8px)', // Correction d'alignement optique pour équilibrer le "SIL" (fin) et "COD" (large)
             }}
           />
         </div>

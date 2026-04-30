@@ -3,13 +3,35 @@ import { useQuery } from '@tanstack/react-query';
 import { adminApi } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import toast from 'react-hot-toast';
-import { Users as UsersIcon, LogIn, Search, Loader2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Users as UsersIcon, LogIn, Search, Loader2, ShieldAlert } from 'lucide-react';
 
 export default function HelperUsers() {
+  const { user, impersonate } = useAuth();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const { impersonate } = useAuth();
   const [impersonatingId, setImpersonatingId] = useState<number | null>(null);
+
+  // Permission Guard
+  if (user?.role === 'HELPER' && !user?.canImpersonate) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center px-4">
+        <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center mb-6 animate-bounce">
+          <ShieldAlert size={40} />
+        </div>
+        <h2 className="text-2xl font-black text-slate-800 mb-2">Accès Non Autorisé</h2>
+        <p className="text-slate-500 max-w-md mb-8">
+          Vous n'avez pas la permission de gérer les utilisateurs. Veuillez contacter un administrateur pour obtenir l'accès.
+        </p>
+        <Link 
+          to="/helper" 
+          className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
+        >
+          Retour au Tableau de Bord
+        </Link>
+      </div>
+    );
+  }
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['helper-users', page, search],

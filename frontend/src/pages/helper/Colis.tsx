@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+// Rebuild trigger
+import { Link } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import { leadsApi, ordersApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -16,7 +19,9 @@ import {
   Copy,
   CheckCircle2,
   Clock,
-  Box
+  Plus,
+  FileText,
+  ShieldAlert
 } from 'lucide-react';
 
 interface Parcel {
@@ -33,16 +38,20 @@ interface Parcel {
   coliatyPackageId: number | null;
   packageContent: string | null;
   packageNoOpen: boolean;
+  productVariant: string | null;
   items: Array<{
     id: number;
     productName: string;
     productImage: string | null;
+    productSku: string | null;
     quantity: number;
     unitPriceMad: number;
     totalPriceMad: number;
   }>;
   leadId: number;
   leadFullName: string;
+  vendorName: string | null;
+  vendorEmail: string | null;
   paymentSituation: string;
   createdAt: string;
 }
@@ -63,9 +72,11 @@ const statusConfig: Record<string, { label: string; color: string; bg: string; i
   PENDING: { label: 'En attente', color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200', icon: Clock },
   CONFIRMED: { label: 'Confirmé', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200', icon: CheckCircle2 },
   SHIPPED: { label: 'Expédié', color: 'text-indigo-600', bg: 'bg-indigo-50 border-indigo-200', icon: Truck },
+  PUSHED_TO_DELIVERY: { label: 'Expédié', color: 'text-indigo-600', bg: 'bg-indigo-50 border-indigo-200', icon: Truck },
   DELIVERED: { label: 'Livré', color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-200', icon: CheckCircle2 },
   CANCELLED: { label: 'Annulé', color: 'text-red-600', bg: 'bg-red-50 border-red-200', icon: Clock },
-  RETURNED: { label: 'Retourné', color: 'text-orange-600', bg: 'bg-orange-50 border-orange-200', icon: Box },
+  RETURNED: { label: 'Retourné', color: 'text-orange-600', bg: 'bg-orange-50 border-orange-200', icon: Package },
+  REFUNDED: { label: 'Remboursé', color: 'text-gray-600', bg: 'bg-gray-50 border-gray-200', icon: RefreshCw },
 };
 
 const paymentConfig: Record<string, { label: string; color: string; bg: string }> = {
@@ -117,8 +128,30 @@ const historyStatusLabels: Record<string, string> = {
 };
 
 export default function HelperColis() {
+  const { user } = useAuth();
   const [parcels, setParcels] = useState<Parcel[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Permission Guard
+  if (user?.role === 'HELPER' && !user?.canManageOrders) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center px-4">
+        <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center mb-6 animate-bounce">
+          <ShieldAlert size={40} />
+        </div>
+        <h2 className="text-2xl font-black text-slate-800 mb-2">Accès Non Autorisé</h2>
+        <p className="text-slate-500 max-w-md mb-8">
+          Vous n'avez pas la permission de gérer les expéditions. Veuillez contacter un administrateur pour obtenir l'accès.
+        </p>
+        <Link 
+          to="/helper" 
+          className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
+        >
+          Retour au Tableau de Bord
+        </Link>
+      </div>
+    );
+  }
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -131,6 +164,7 @@ export default function HelperColis() {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [liveConnected, setLiveConnected] = useState(false);
   const [lastLiveUpdate, setLastLiveUpdate] = useState<string | null>(null);
+  const [downloadingCode, setDownloadingCode] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
 // removed fetchCities
@@ -189,6 +223,40 @@ export default function HelperColis() {
     };
   }, []);
 
+
+  const handleDownloadLabel = async (code: string) => {
+    setDownloadingCode(code);
+    try {
+      const res = await ordersApi.getParcelLabel(code);
+      const base64 = res.data?.data?.pdf;
+      if (!base64) throw new Error('PDF data missing');
+
+      // Convert base64 to blob
+      const byteCharacters = atob(base64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/pdf' });
+
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ticket-${code}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      toast.success('Étiquette téléchargée !');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Erreur lors du téléchargement de l\'étiquette');
+    } finally {
+      setDownloadingCode(null);
+    }
+  };
 
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code).then(() => {
@@ -393,6 +461,11 @@ export default function HelperColis() {
                             🚫 Ne pas ouvrir
                           </span>
                         )}
+                        {(parcel.vendorName || parcel.vendorEmail) && (
+                          <span className="flex items-center gap-1.5 text-purple-700 bg-purple-50 px-2 py-1 rounded-md text-[11px] font-bold border border-purple-100">
+                            👤 Référent: {parcel.vendorName || '—'}{parcel.vendorEmail ? ` · ${parcel.vendorEmail}` : ''}
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -449,10 +522,10 @@ export default function HelperColis() {
                               transition-all cursor-pointer outline-none disabled:opacity-50
                             `}
                           >
-                            {Object.entries(statusConfig).map(([val, cfg]) => (
-                              <option key={val} value={val}>{cfg.label}</option>
-                            ))}
-                            <option value="REFUNDED">Remboursé</option>
+                            {Object.entries(statusConfig).map(([val, cfg]) => {
+                              if (val === 'PUSHED_TO_DELIVERY') return null; // Keep it clean, use SHIPPED
+                              return <option key={val} value={val}>{cfg.label}</option>;
+                            })}
                           </select>
                           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-300 pointer-events-none group-hover:text-indigo-400" />
                         </div>
@@ -475,9 +548,10 @@ export default function HelperColis() {
                               transition-all cursor-pointer outline-none disabled:opacity-50
                             `}
                           >
-                            {Object.entries(paymentConfig).map(([val, cfg]) => (
-                              <option key={val} value={val}>{cfg.label}</option>
-                            ))}
+                            {Object.entries(paymentConfig).map(([val, cfg]) => {
+                              if (val === 'FACTURED' && parcel.paymentSituation !== 'FACTURED') return null;
+                              return <option key={val} value={val}>{cfg.label}</option>;
+                            })}
                           </select>
                           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-300 pointer-events-none group-hover:text-blue-400" />
                         </div>
@@ -502,14 +576,25 @@ export default function HelperColis() {
                       {/* Actions removed for helper mode */}
                       
                         {parcel.coliatyPackageCode && (
-                          <button
-                            onClick={() => handleOpenHistory(parcel)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-colors border border-indigo-100"
-                            title="Voir l'historique du colis"
-                          >
-                            <Clock className="w-3.5 h-3.5" />
-                            Historique
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleOpenHistory(parcel)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-colors border border-indigo-100"
+                              title="Voir l'historique du colis"
+                            >
+                              <Clock className="w-3.5 h-3.5" />
+                              Suivi
+                            </button>
+                            <button
+                              onClick={() => handleDownloadLabel(parcel.coliatyPackageCode!)}
+                              disabled={downloadingCode === parcel.coliatyPackageCode}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-colors border border-emerald-100 disabled:opacity-50"
+                              title="Télécharger l'étiquette PDF"
+                            >
+                              <FileText className={`w-3.5 h-3.5 ${downloadingCode === parcel.coliatyPackageCode ? 'animate-pulse' : ''}`} />
+                              Ticket
+                            </button>
+                          </div>
                         )}
                         
                         <button
@@ -527,7 +612,7 @@ export default function HelperColis() {
                 {isExpanded && (
                   <div className="border-t border-gray-100 bg-gray-50/50 p-5 space-y-3">
                     <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2">
-                      <Box className="w-4 h-4 text-gray-400" />
+                      <Package className="w-4 h-4 text-gray-400" />
                       Produits commandés
                     </h4>
                     {parcel.items.map(item => (
@@ -544,7 +629,19 @@ export default function HelperColis() {
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold text-gray-900 truncate text-sm">{item.productName || 'Produit'}</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-bold text-gray-900 truncate text-sm">{item.productName || 'Produit'}</p>
+                            {item.productSku && (
+                              <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-[9px] font-bold rounded border border-gray-200">
+                                {item.productSku}
+                              </span>
+                            )}
+                            {parcel.productVariant && (
+                              <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase rounded-md border border-indigo-100">
+                                {parcel.productVariant}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-gray-500 mt-0.5">
                             Qty: <strong className="text-gray-700">{item.quantity}</strong>
                             {' · '}

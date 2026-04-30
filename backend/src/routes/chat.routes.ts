@@ -32,17 +32,25 @@ router.get(
         }
         const role = req.user!.roleName;
 
-        if (role === 'SUPER_ADMIN') {
-            // Super admins see ALL conversations
-        } else if (role === 'SYSTEM_SUPPORT') {
-            // Support sees their own OR any SUPPORT conversation
-            whereClause.OR = [
-                { participants: { some: { userId: req.user!.id } } },
-                { type: 'SUPPORT' }
-            ];
-        } else {
-            // Normal users see only their own
+        if (role === 'SYSTEM_SUPPORT') {
+            // Support agents only see conversations they are a participant of (claimed ones)
+            // They should NOT see unclaimed ones in their main message list
             whereClause.participants = { some: { userId: req.user!.id } };
+            if (!status) {
+                whereClause.status = 'ACTIVE';
+            }
+        } else if (role === 'SUPER_ADMIN' || role === 'FINANCE_ADMIN') {
+            // Super admins see conversations they are part of by default
+            if (!status && !orderNumber) {
+                whereClause.participants = { some: { userId: req.user!.id } };
+                whereClause.status = 'ACTIVE';
+            }
+        } else {
+            // Normal users see only their own, both active and pending
+            whereClause.participants = { some: { userId: req.user!.id } };
+            if (!status) {
+                whereClause.status = { in: ['ACTIVE', 'PENDING_CLAIM'] };
+            }
         }
 
         const conversations = await prisma.conversation.findMany({
@@ -63,19 +71,47 @@ router.get(
             orderBy: { updatedAt: 'desc' },
         });
 
+        // Calculate unread counts for each conversation
+        const conversationsWithUnread = await Promise.all(conversations.map(async (c) => {
+            const myParticipant = c.participants.find(p => p.userId === req.user!.id);
+            
+            // If user is not a participant (e.g. support queue), unread count is 0
+            if (!myParticipant) {
+                return { ...c, unreadCount: 0 };
+            }
+
+            const unreadCount = await prisma.message.count({
+                where: {
+                    conversationId: c.id,
+                    senderId: { not: req.user!.id },
+                    createdAt: {
+                        gt: myParticipant.lastReadAt || new Date(0)
+                    }
+                }
+            });
+
+            return { ...c, unreadCount };
+        }));
+
+        const totalUnreadCount = conversationsWithUnread.reduce((sum, c) => sum + c.unreadCount, 0);
+
         res.json({
             status: 'success',
             data: {
-                conversations: conversations.map((c) => ({
+                totalUnreadCount,
+                conversations: conversationsWithUnread.map((c) => ({
                     id: c.id,
                     type: c.type,
                     title: c.title,
                     status: c.status,
                     updatedAt: c.updatedAt,
+                    unreadCount: c.unreadCount,
                     lastMessage: c.messages[0] || null,
                     participants: c.participants.map((p) => ({
                         userId: p.userId,
                         fullName: p.user.profile?.fullName,
+                        email: p.user.email,
+                        phone: p.user.phone,
                         role: p.user.role.name,
                     })),
                     metadata: c.metadata,
@@ -135,7 +171,12 @@ router.get(
         let authWhereClause: any = { id: Number(id) };
         const role = req.user!.roleName;
 
-        if (role !== 'SUPER_ADMIN' && role !== 'SYSTEM_SUPPORT') {
+        if (role === 'SYSTEM_SUPPORT') {
+            // SYSTEM_SUPPORT can only read messages in conversations they are a participant of
+            authWhereClause.participants = {
+                some: { userId: req.user!.id }
+            };
+        } else if (role !== 'SUPER_ADMIN') {
             authWhereClause.participants = {
                 some: { userId: req.user!.id }
             };
@@ -311,7 +352,10 @@ router.post(
             productId, 
             brandName, 
             requestedQty, 
-            brandingLabelPrintUrl 
+            brandingLabelPrintUrl,
+            subject,
+            type: requestType,
+            description
         } = req.body;
 
         let order = null;
@@ -325,6 +369,18 @@ router.post(
         if (supportRequestId) {
             supportRequest = await prisma.supportRequest.findUnique({
                 where: { id: Number(supportRequestId) }
+            });
+        } else if (subject && description) {
+            // Create support request inline to avoid double-ticket issue
+            supportRequest = await prisma.supportRequest.create({
+                data: {
+                    userId: req.user!.id,
+                    subject,
+                    type: requestType || 'PRODUCT_CLAIM',
+                    description,
+                    productId: productId ? Number(productId) : undefined,
+                    status: 'OPEN',
+                }
             });
         }
 
@@ -353,7 +409,7 @@ router.post(
                 title: title,
                 metadata: {
                     orderId: orderId ? Number(orderId) : undefined,
-                    supportRequestId: supportRequestId ? Number(supportRequestId) : undefined,
+                    supportRequestId: supportRequest?.id || undefined,
                     affiliateClaimId: affiliateClaimId ? Number(affiliateClaimId) : undefined,
                     productId,
                     brandName,
@@ -362,7 +418,10 @@ router.post(
                     orderNumber: order?.orderNumber,
                     productName: product.nameFr,
                     productSku: product.sku,
-                    retailPriceMad: product.retailPriceMad
+                    retailPriceMad: product.retailPriceMad,
+                    subject: subject || undefined,
+                    category: requestType || undefined,
+                    description: description || undefined,
                 },
                 supportRequestId: supportRequest?.id,
                 participants: {
@@ -443,24 +502,35 @@ router.post(
         }
 
         // Add user to conversation and update status
-        const [updatedConversation, participant] = await prisma.$transaction([
-            prisma.conversation.update({
+        const [updatedConversation, participant] = await prisma.$transaction(async (tx: any) => {
+            const updated = await tx.conversation.update({
                 where: { id: conversation.id },
                 data: {
                     status: 'ACTIVE',
                     claimedByUserId: req.user!.id,
                     claimedAt: new Date()
                 }
-            }),
-            prisma.conversationParticipant.create({
+            });
+
+            const p = await tx.conversationParticipant.create({
                 data: {
                     conversationId: conversation.id,
                     userId: req.user!.id,
                     role: 'ADMIN'
                 },
                 include: { user: { include: { profile: true, role: true } } }
-            })
-        ]);
+            });
+
+            // IF linked to a SupportRequest, update its status too
+            if (conversation.supportRequestId) {
+                await tx.supportRequest.update({
+                    where: { id: conversation.supportRequestId },
+                    data: { status: 'IN_PROGRESS' }
+                });
+            }
+
+            return [updated, p];
+        });
 
         // Broadcast claim events
         io.to(`support-queue`).emit('conversation-claimed', {
@@ -533,7 +603,8 @@ router.post(
         }
 
         const isParticipant = conversation.participants.some(p => p.userId === req.user!.id);
-        const isAdminBypass = (req.user!.roleName === 'SYSTEM_SUPPORT' || req.user!.roleName === 'SUPER_ADMIN') && conversation.type === 'SUPPORT';
+        // Only SUPER_ADMIN can bypass participant check for support conversations
+        const isAdminBypass = req.user!.roleName === 'SUPER_ADMIN' && conversation.type === 'SUPPORT';
 
         if (!isParticipant && !isAdminBypass) {
             throw new AppException(403, 'Not authorized to send messages in this conversation');

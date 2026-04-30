@@ -113,8 +113,10 @@ export default function ProfitSimulator({ retailPrice, productName, commissionMa
             <Calculator size={16} />
           </div>
           <div className="text-left">
-            <div className="text-sm font-bold text-gray-900">Simulateur de Profit</div>
-            <div className="text-xs text-gray-500 font-medium">Estimez vos gains pour {productName}</div>
+            <div className="text-sm font-black text-gray-900 uppercase tracking-tight">Simulateur de Profit</div>
+            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">
+              {productName ? `Estimez vos gains pour ${productName}` : 'Calculez votre rentabilité prévisionnelle'}
+            </div>
           </div>
         </div>
         <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />

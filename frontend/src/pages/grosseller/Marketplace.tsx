@@ -162,7 +162,7 @@ export default function GrossellerMarketplace() {
                   key={product.id}
                   className="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl hover:shadow-grosseller-500/5 hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col"
                 >
-                  <div className="block aspect-[4/3] relative overflow-hidden bg-gray-50">
+                  <div className="block aspect-[4/5] relative overflow-hidden bg-gray-50">
                     {product.images?.[0]?.imageUrl ? (
                       <img 
                         src={product.images[0].imageUrl} 

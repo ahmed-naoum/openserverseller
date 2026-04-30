@@ -11,6 +11,7 @@ import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
 import { OAuth2Client } from 'google-auth-library';
 import rateLimit from 'express-rate-limit';
+import { encrypt, decrypt } from '../utils/crypto.js';
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID || 'UNCONFIGURED_CLIENT_ID');
 
@@ -217,6 +218,24 @@ router.post(
       }
     }
 
+    // Auto-assign new user to helpers with autoAssignHelperUsers enabled
+    const globalHelpers = await prisma.user.findMany({
+      where: {
+        role: { name: 'HELPER' },
+        autoAssignHelperUsers: true
+      }
+    });
+
+    if (globalHelpers.length > 0 && !['SUPER_ADMIN', 'FINANCE_ADMIN'].includes(user.role.name)) {
+      await (prisma as any).helperUserAssignment.createMany({
+        data: globalHelpers.map((helper: any) => ({
+          helperId: helper.id,
+          targetUserId: user.id
+        })),
+        skipDuplicates: true,
+      });
+    }
+
     const otp = generateOTP();
     // In a real application, you would store otpExpiry and otp
     // const otpExpiry = new Date(Date.now() + parseInt(process.env.OTP_EXPIRY_MINUTES || '5', 10) * 60 * 1000);
@@ -377,6 +396,24 @@ router.post(
       });
     }
 
+    // Auto-assign new user to helpers with autoAssignHelperUsers enabled
+    const globalHelpers = await prisma.user.findMany({
+      where: {
+        role: { name: 'HELPER' },
+        autoAssignHelperUsers: true
+      }
+    });
+
+    if (globalHelpers.length > 0) {
+      await (prisma as any).helperUserAssignment.createMany({
+        data: globalHelpers.map((helper: any) => ({
+          helperId: helper.id,
+          targetUserId: user.id
+        })),
+        skipDuplicates: true,
+      });
+    }
+
     const { accessToken, refreshToken } = generateTokens(user.uuid);
 
     const userProfile = user.profile;
@@ -444,6 +481,22 @@ router.post(
 
     if (!isPasswordValid) {
       throw new AppException(401, 'Invalid credentials');
+    }
+
+    if ((user as any).requiresPasswordChange) {
+      const tempToken = jwt.sign(
+        { userId: user.uuid, type: 'force_password_change' },
+        process.env.JWT_SECRET as string,
+        { expiresIn: '15m' }
+      );
+      return res.json({
+        status: 'success',
+        message: 'Password change required',
+        data: {
+          requiresPasswordChange: true,
+          tempToken,
+        },
+      });
     }
 
     // Allow inactive users to login (they will see the verification banner)
@@ -564,7 +617,15 @@ router.post(
           isActive: user.isActive,
           mode: user.mode,
           isInfluencer: user.isInfluencer || user.role.name === 'INFLUENCER',
+          instagramUsername: ((user as any).profile)?.instagramUsername,
+          tiktokUsername: ((user as any).profile)?.tiktokUsername,
+          facebookUsername: ((user as any).profile)?.facebookUsername,
+          xUsername: ((user as any).profile)?.xUsername,
+          youtubeUsername: ((user as any).profile)?.youtubeUsername,
+          snapchatUsername: ((user as any).profile)?.snapchatUsername,
+          referralCode: user.referralCode,
           avatarUrl: user.profile?.avatarUrl,
+          instagramFollowers: (user.profile as any)?.instagramFollowers,
         },
         tokens: {
           accessToken,
@@ -574,6 +635,85 @@ router.post(
     });
   })
 );
+
+router.post(
+  '/force-password-change',
+  [
+    body('tempToken').notEmpty(),
+    body('newPassword').notEmpty().isLength({ min: 6 }),
+  ],
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new AppException(400, 'Validation failed');
+    }
+
+    const { tempToken, newPassword } = req.body;
+
+    let payload: any;
+    try {
+      payload = jwt.verify(tempToken, process.env.JWT_SECRET as string);
+      if (payload.type !== 'force_password_change') throw new Error('Invalid token type');
+    } catch (e) {
+      throw new AppException(401, 'Invalid or expired token');
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { uuid: payload.userId },
+      include: { profile: true, role: true },
+    });
+
+    if (!user || !(user as any).requiresPasswordChange) {
+      throw new AppException(400, 'Password change is not required for this user');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { 
+        password: hashedPassword,
+        requiresPasswordChange: false,
+        lastLoginAt: new Date()
+      } as any,
+    });
+
+    const { accessToken, refreshToken } = generateTokens(user.uuid);
+
+    res.json({
+      status: 'success',
+      message: 'Password updated and logged in successfully',
+      data: {
+        user: {
+          id: user.id,
+          uuid: user.uuid,
+          email: user.email,
+          phone: user.phone,
+          fullName: user.profile?.fullName,
+          role: user.role.name,
+          kycStatus: user.kycStatus,
+          isActive: user.isActive,
+          mode: user.mode,
+          isInfluencer: user.isInfluencer || user.role.name === 'INFLUENCER',
+          instagramUsername: ((user as any).profile)?.instagramUsername,
+          tiktokUsername: ((user as any).profile)?.tiktokUsername,
+          facebookUsername: ((user as any).profile)?.facebookUsername,
+          xUsername: ((user as any).profile)?.xUsername,
+          youtubeUsername: ((user as any).profile)?.youtubeUsername,
+          snapchatUsername: ((user as any).profile)?.snapchatUsername,
+          referralCode: user.referralCode,
+          avatarUrl: user.profile?.avatarUrl,
+          instagramFollowers: (user.profile as any)?.instagramFollowers,
+        },
+        tokens: {
+          accessToken,
+          refreshToken,
+        },
+      },
+    });
+  })
+);
+
 
 router.post(
   '/google',
@@ -701,6 +841,24 @@ router.post(
       } as any,
       include: { profile: true, role: true },
     });
+
+    // Auto-assign new user to helpers with autoAssignHelperUsers enabled
+    const globalHelpers = await prisma.user.findMany({
+      where: {
+        role: { name: 'HELPER' },
+        autoAssignHelperUsers: true
+      }
+    });
+
+    if (globalHelpers.length > 0 && !['SUPER_ADMIN', 'FINANCE_ADMIN'].includes(user.role.name)) {
+      await (prisma as any).helperUserAssignment.createMany({
+        data: globalHelpers.map((helper: any) => ({
+          helperId: helper.id,
+          targetUserId: user.id
+        })),
+        skipDuplicates: true,
+      });
+    }
 
     const { accessToken, refreshToken } = generateTokens(user.uuid);
     
@@ -930,6 +1088,7 @@ router.post(
         data: { phoneVerifiedAt: new Date() },
       });
     }
+
 
     res.json({
       status: 'success',
@@ -1271,6 +1430,13 @@ router.get(
       throw new AppException(404, 'User not found');
     }
 
+    if (user.bankAccounts) {
+      user.bankAccounts = user.bankAccounts.map((account: any) => ({
+        ...account,
+        ribAccount: decrypt(account.ribAccount)
+      }));
+    }
+
     res.json({
       status: 'success',
       data: {
@@ -1292,6 +1458,11 @@ router.get(
           isActive: user.isActive,
           isInfluencer: user.isInfluencer || user.role.name === 'INFLUENCER',
           canImpersonate: user.canImpersonate,
+          canManageProducts: user.canManageProducts,
+          canManageLeads: user.canManageLeads,
+          canManageOrders: user.canManageOrders,
+          canManageInfluencerLinks: user.canManageInfluencerLinks,
+          canManageTickets: user.canManageTickets,
           instagramUsername: ((user as any).profile)?.instagramUsername,
           tiktokUsername: ((user as any).profile)?.tiktokUsername,
           facebookUsername: ((user as any).profile)?.facebookUsername,
@@ -1385,9 +1556,9 @@ router.post(
       data: {
         userId,
         bankName,
-        ribAccount,
+        ribAccount: encrypt(ribAccount),
         iceNumber,
-        isDefault: true, // Default to true for the first one for now
+        isDefault: (await prisma.userBankAccount.count({ where: { userId } })) === 0,
       },
     });
 
@@ -1398,39 +1569,62 @@ router.post(
   })
 );
 
-router.get(
-  '/me',
+// Set bank account as default
+router.patch(
+  '/bank-accounts/:id/default',
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user!.id },
-      include: {
-        profile: true,
-        role: true,
-        bankAccounts: true,
-      },
+    const { id } = req.params;
+    const userId = req.user!.id;
+
+    // Reset all others
+    await prisma.userBankAccount.updateMany({
+      where: { userId },
+      data: { isDefault: false },
     });
 
-    if (!user) throw new AppException(404, 'User not found');
+    // Set this one
+    const updated = await prisma.userBankAccount.update({
+      where: { id: parseInt(id), userId },
+      data: { isDefault: true },
+    });
 
     res.json({
       status: 'success',
-      data: {
-        user: {
-          id: user.id,
-          uuid: user.uuid,
-          email: user.email,
-          phone: user.phone,
-          fullName: user.profile?.fullName,
-          role: user.role.name,
-          kycStatus: user.kycStatus,
-          isActive: user.isActive,
-          mode: user.mode,
-          bankAccounts: user.bankAccounts,
-        },
-      },
+      data: updated,
     });
   })
 );
+
+// Delete bank account
+router.delete(
+  '/bank-accounts/:id',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const userId = req.user!.id;
+
+    const bankAccount = await prisma.userBankAccount.findFirst({
+      where: { id: parseInt(id), userId },
+    });
+
+    if (!bankAccount) {
+      throw new AppException(404, 'Bank account not found');
+    }
+
+    // Only allow deleting if not APPROVED or if admin
+    // For now let's allow it but maybe warn
+    await prisma.userBankAccount.delete({
+      where: { id: parseInt(id) },
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Bank account deleted',
+    });
+  })
+);
+
+
 
 export default router;

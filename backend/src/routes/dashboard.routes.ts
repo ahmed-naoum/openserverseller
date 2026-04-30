@@ -266,7 +266,8 @@ router.get(
       referralLinks,
       commissions,
       campaigns,
-      notifications
+      notifications,
+      wallet
     ] = await Promise.all([
       prisma.userProfile.findUnique({ where: { userId } }),
       prisma.referralLink.findMany({
@@ -287,7 +288,8 @@ router.get(
         where: { userId },
         orderBy: { createdAt: 'desc' },
         take: 10
-      })
+      }),
+      prisma.wallet.findUnique({ where: { userId } })
     ]);
 
     const totalEarnings = await prisma.influencerCommission.aggregate({
@@ -301,7 +303,8 @@ router.get(
       commissions,
       campaigns,
       totalEarnings: totalEarnings._sum.amount || 0,
-      notifications
+      notifications,
+      wallet
     });
   })
 );

@@ -47,47 +47,60 @@ router.post(
         });
 
         if (orderMatched && coliatyStatus) {
-          // Dynamic status mapping based on Coliaty exhaustive status list
+          // Exact status mapping from Coliaty API
+          const COLIATY_TO_INTERNAL: Record<string, string> = {
+            // → PENDING (parcel not yet in transit)
+            'NEW_PARCEL': 'PENDING',
+            'WAITING_PICKUP': 'PENDING',
+            'WAITING_PREPARATION': 'PENDING',
+            'ENCORE_PREPARED': 'PENDING',
+            'PREPARED': 'PENDING',
+            'CORRECTED_INFORMATION': 'PENDING',
+            'PROGRAMMER': 'PENDING',
+            'PROGRAMMER_AUTO': 'PENDING',
+
+            // → SHIPPED (parcel is in transit / being handled by courier)
+            'PICKED_UP': 'SHIPPED',
+            'SENT': 'SHIPPED',
+            'RECEIVED': 'SHIPPED',
+            'DISTRIBUTION': 'SHIPPED',
+            'IN_PROGRESS': 'SHIPPED',
+            'POSTPONED': 'SHIPPED',
+            'INCORRECT_ADDRESS': 'SHIPPED',
+            'DISTINATION_CHANGED': 'SHIPPED',
+            'BV': 'SHIPPED',
+            'UNREACHABLE': 'SHIPPED',
+            'INJO': 'SHIPPED',
+            'NOANSWER': 'SHIPPED',
+            'EN_VOYAGE': 'SHIPPED',
+            'CLIENT_INTERESE': 'SHIPPED',
+            'ERR': 'SHIPPED',
+            'PLTR': 'SHIPPED',
+            'OUT_OF_AREA': 'SHIPPED',
+
+            // → DELIVERED
+            'DELIVERED': 'DELIVERED',
+
+            // → RETURNED
+            'RETOUR_IN_PROGRESS': 'RETURNED',
+            'RETOUR_HUB_AVAILABLE': 'RETURNED',
+            'RETOUR_WAREHOUSE_RETURNED_IN_PROGRESS': 'RETURNED',
+            'RETOUR_WAREHOUSE_RETURNED': 'RETURNED',
+            'RETOUR_CLIENT_PREPARED_FOR_DELIVERY': 'RETURNED',
+            'RETOUR_CLIENT_DELIVERED': 'RETURNED',
+
+            // → CANCELLED
+            'CANCELED': 'CANCELLED',
+            'CANCELED_BY_SELLER': 'CANCELLED',
+            'CANCELED_BY_SYSTEM': 'CANCELLED',
+            'REFUSE': 'CANCELLED',
+            'CPC': 'CANCELLED',
+            'CNI': 'CANCELLED',
+            'CDM': 'CANCELLED',
+          };
+
           let normalizedColiatyStatus = String(coliatyStatus).toUpperCase().trim();
-          
-          if (normalizedColiatyStatus === 'DELIVERED' || normalizedColiatyStatus.includes('LIVRE')) {
-            internalStatus = 'DELIVERED';
-          } 
-          else if (
-            normalizedColiatyStatus.includes('RETOUR') || 
-            normalizedColiatyStatus.includes('RETURNED') || 
-            normalizedColiatyStatus.includes('NON LIVRE')
-          ) {
-            internalStatus = 'RETURNED';
-          } 
-          else if (
-            normalizedColiatyStatus.includes('CANCELED') || 
-            normalizedColiatyStatus.includes('REFUSE') || 
-            normalizedColiatyStatus.includes('ANNULE') ||
-            normalizedColiatyStatus.includes('REJECTED') ||
-            ['CPC', 'CNI', 'CDM'].includes(normalizedColiatyStatus)
-          ) {
-            internalStatus = 'CANCELLED';
-          } 
-          else if (
-            [
-              'PICKED_UP', 'WAITING_PICKUP', 'SENT', 'RECEIVED', 'DISTRIBUTION', 
-              'IN_PROGRESS', 'POSTPONED', 'INCORRECT_ADDRESS', 'BV', 'UNREACHABLE', 
-              'INJO', 'NOANSWER', 'EN_VOYAGE', 'CLIENT_INTERESE', 'ERR', 'PLTR', 
-              'OUT_OF_AREA', 'DISTINATION_CHANGED', 'EXPEDIE', 'EN COURS', 'RAMASSE', 'SHIPPED'
-            ].some(s => normalizedColiatyStatus.includes(s))
-          ) {
-            internalStatus = 'SHIPPED';
-          } 
-          else if (
-            [
-              'NEW_PARCEL', 'WAITING_PREPARATION', 'ENCORE_PREPARED', 'PREPARED', 
-              'CORRECTED_INFORMATION', 'PROGRAMMER', 'PROGRAMMER_AUTO', 'ATTENTE', 
-              'PENDING', 'WAITING'
-            ].some(s => normalizedColiatyStatus.includes(s))
-          ) {
-            internalStatus = 'PENDING';
-          }
+          internalStatus = COLIATY_TO_INTERNAL[normalizedColiatyStatus] || '';
 
           if (internalStatus && internalStatus !== orderMatched.status) {
             // Update order and create history record
@@ -106,6 +119,11 @@ router.post(
                   notes: `Automated status update via Coliaty Webhook (${normalizedColiatyStatus})`
                 }
               }),
+              // Keep linked Lead status in sync
+              ...(orderMatched.leadId ? [prisma.lead.update({
+                where: { id: orderMatched.leadId },
+                data: { status: internalStatus }
+              })] : []),
               // Safe update of log
               ...( (prisma as any).webhookLog && webhookLogId ? [(prisma as any).webhookLog.update({
                 where: { id: webhookLogId },

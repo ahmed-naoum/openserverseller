@@ -26,7 +26,7 @@ import {
   Eye
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import ProfitSimulator from '../../components/ProfitSimulator';
+
 
 function DetailImageCarousel({ images, alt }: { images: { imageUrl: string }[]; alt: string }) {
   const [current, setCurrent] = useState(0);
@@ -56,7 +56,7 @@ function DetailImageCarousel({ images, alt }: { images: { imageUrl: string }[]; 
 
   return (
     <div
-      className="relative flex gap-4 h-full min-h-[500px]"
+      className="relative flex gap-4 h-full"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -76,7 +76,7 @@ function DetailImageCarousel({ images, alt }: { images: { imageUrl: string }[]; 
       </div>
 
       {/* Main image area */}
-      <div className="flex-1 relative overflow-hidden rounded-[2.5rem] bg-white shadow-xl border border-slate-100 group">
+      <div className="flex-1 relative aspect-[4/5] overflow-hidden rounded-[2.5rem] bg-white shadow-xl border border-slate-100 group">
         <AnimatePresence mode="wait">
           <motion.img
             key={current}
@@ -256,24 +256,16 @@ export default function ProductDetail() {
       });
       const affiliateClaimId = claimRes.data.id;
 
-      // 2. Create the Support Request
-      const supportPayload = {
-        subject: `[Achat Gros/Claim] ${product.nameFr}`,
-        type: 'PRODUCT_CLAIM',
-        description: payloadParams.description,
-        productId: payloadParams.productId,
-      };
-      const supportRes = await supportApi.create(supportPayload);
-      const supportRequestId = supportRes.data.data.id;
-
-      // 3. Auto-Open the Conversation
+      // 2. Auto-Open the Conversation (this also creates the SupportRequest)
       const convRes = await chatApi.autoOpenConversation({
         affiliateClaimId: Number(affiliateClaimId),
-        supportRequestId: Number(supportRequestId),
         productId: payloadParams.productId,
         brandName: payloadParams.brandName,
         requestedQty: payloadParams.requestedQty,
-        brandingLabelPrintUrl: payloadParams.brandingLabelPrintUrl || undefined
+        brandingLabelPrintUrl: payloadParams.brandingLabelPrintUrl || undefined,
+        subject: `[Achat Gros/Claim] ${product.nameFr}`,
+        type: 'PRODUCT_CLAIM',
+        description: payloadParams.description,
       });
       const convId = convRes.data.data.conversationId;
 
@@ -486,20 +478,7 @@ export default function ProductDetail() {
                </div>
             </div>
 
-            {/* Profit Simulator Section */}
-            {isAuthenticated && (user?.mode === 'AFFILIATE' || user?.role === 'INFLUENCER') && (product.visibility?.includes('AFFILIATE') || product.visibility?.includes('INFLUENCER')) && (
-              <div className="bg-white rounded-[3rem] p-8 shadow-xl shadow-slate-200/50 border border-slate-50 overflow-hidden relative">
-                <ProfitSimulator
-                  retailPrice={displayPrice}
-                  productName={product.nameFr}
-                  commissionMad={
-                    user?.role === 'INFLUENCER' && product.visibility?.includes('INFLUENCER')
-                      ? (Math.round((displayPrice || 0) * 0.15 * 100) / 100)
-                      : (product.commissionMad > 0 ? product.commissionMad : Math.round((displayPrice || 0) * 0.1 * 100) / 100)
-                  }
-                />
-              </div>
-            )}
+
           </div>
 
           {/* Right Column: Steps & Accordions */}
@@ -624,6 +603,7 @@ export default function ProductDetail() {
          setData={setBrandingData}
          onSubmit={submitBrandingRequest}
          isSubmitting={isSubmitting}
+         showLandingPage={user?.role !== 'INFLUENCER'}
        />
       </div>
     </div>
@@ -702,7 +682,7 @@ function BrandingCard({
   );
 }
 
-function BrandingInfoModal({ isOpen, onClose, data, setData, onSubmit, isSubmitting }: any) {
+function BrandingInfoModal({ isOpen, onClose, data, setData, onSubmit, isSubmitting, showLandingPage = true }: any) {
   if (!isOpen) return null;
 
   return (
@@ -748,16 +728,18 @@ function BrandingInfoModal({ isOpen, onClose, data, setData, onSubmit, isSubmitt
               />
             </div>
 
-            <div>
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Landing Page URL (Optionnel)</label>
-              <input 
-                type="url" 
-                value={data.landingPageUrl}
-                onChange={(e) => setData({ ...data, landingPageUrl: e.target.value })}
-                placeholder="https://..."
-                className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all"
-              />
-            </div>
+            {showLandingPage && (
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Landing Page URL (Optionnel)</label>
+                <input 
+                  type="url" 
+                  value={data.landingPageUrl}
+                  onChange={(e) => setData({ ...data, landingPageUrl: e.target.value })}
+                  placeholder="https://..."
+                  className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all"
+                />
+              </div>
+            )}
 
             <div>
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Description / Spécifications</label>

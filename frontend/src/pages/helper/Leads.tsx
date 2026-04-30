@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../lib/api';
 import toast from 'react-hot-toast';
 import {
   Users, Plus, Search, Edit2, X, Save, ChevronLeft, ChevronRight,
-  DollarSign, CheckCircle, AlertCircle, FileText, RefreshCw
+  DollarSign, CheckCircle, AlertCircle, FileText, RefreshCw, ChevronDown, ShieldAlert
 } from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -23,7 +25,7 @@ interface Lead {
   createdAt: string;
 }
 
-interface Vendor { id: number; fullName?: string; email?: string; }
+interface Vendor { id: number; fullName?: string; email?: string; role?: string }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const LEAD_STATUSES = [
@@ -57,10 +59,33 @@ const emptyForm = () => ({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function HelperLeads() {
+  const { user } = useAuth();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Permission Guard
+  if (user?.role === 'HELPER' && !user?.canManageLeads) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center px-4">
+        <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center mb-6 animate-bounce">
+          <ShieldAlert size={40} />
+        </div>
+        <h2 className="text-2xl font-black text-slate-800 mb-2">Accès Non Autorisé</h2>
+        <p className="text-slate-500 max-w-md mb-8">
+          Vous n'avez pas la permission de gérer les leads. Veuillez contacter un administrateur pour obtenir l'accès.
+        </p>
+        <Link 
+          to="/helper" 
+          className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
+        >
+          Retour au Tableau de Bord
+        </Link>
+      </div>
+    );
+  }
   const [search, setSearch] = useState('');
+  const [vendorFilter, setVendorFilter] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -82,6 +107,7 @@ export default function HelperLeads() {
         excludeProcessed: 'true'
       });
       if (search) params.set('search', search);
+      if (vendorFilter) params.set('vendorId', vendorFilter);
       const res = await api.get(`/leads?${params}`);
       setLeads(res.data.data.leads);
       setTotalPages(res.data.data.pagination.totalPages);
@@ -91,12 +117,11 @@ export default function HelperLeads() {
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, vendorFilter]);
 
-  // Fetch vendors (for create form)
   const fetchVendors = useCallback(async () => {
     try {
-      const res = await api.get('/users?role=VENDOR&limit=200');
+      const res = await api.get('/users?limit=200');
       setVendors(res.data.data.users || []);
     } catch { /* silent */ }
   }, []);
@@ -196,15 +221,35 @@ export default function HelperLeads() {
       </div>
 
       {/* Search */}
-      <div className="relative mb-6">
-        <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input
-          type="text"
-          placeholder="Rechercher par nom, téléphone, ville ou adresse..."
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          className="w-full pl-11 pr-4 py-3 bg-white border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-300 shadow-sm transition-all"
-        />
+      <div className="flex gap-3 mb-6">
+        <div className="relative flex-[2]">
+          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Rechercher par nom, téléphone, ville ou adresse..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="w-full pl-11 pr-4 py-3 bg-white border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-300 shadow-sm transition-all"
+          />
+        </div>
+        <div className="relative flex-1">
+          <Users size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+          <select
+            value={vendorFilter}
+            onChange={(e) => { setVendorFilter(e.target.value); setPage(1); }}
+            className="w-full pl-11 pr-10 py-3 bg-white border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-300 shadow-sm appearance-none transition-all"
+          >
+            <option value="">Tous les Comptes Assignés</option>
+            {vendors.map(v => (
+              <option key={v.id} value={v.id}>
+                {v.fullName || v.email} {v.role ? `(${v.role})` : ''}
+              </option>
+            ))}
+          </select>
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+            <ChevronDown size={16} />
+          </div>
+        </div>
       </div>
 
       {/* Table */}
@@ -220,6 +265,7 @@ export default function HelperLeads() {
                 <tr className="border-b border-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-widest bg-gray-50/30">
                   <th className="px-6 py-4 text-left whitespace-nowrap">Infos Client & Notes</th>
                   <th className="px-4 py-4 text-left whitespace-nowrap">Contact & Livraison</th>
+                  <th className="px-4 py-4 text-left whitespace-nowrap">Option</th>
                   <th className="px-4 py-4 text-left whitespace-nowrap">Source / Vendeur</th>
                   <th className="px-4 py-4 text-right whitespace-nowrap">Actions</th>
                 </tr>
@@ -271,6 +317,16 @@ export default function HelperLeads() {
                             <span className="text-xs font-mono font-bold text-indigo-700">{lead.coliatyPackageCode}</span>
                           </div>
                         )}
+                      </div>
+                    </td>
+
+                    {/* Option */}
+                    <td className="px-4 py-4 align-top">
+                      <div className="flex flex-col">
+                        <span className="text-[9px] font-black tracking-widest text-gray-400 uppercase mb-1">Pack</span>
+                        <span className="text-[13px] font-bold text-influencer-600 bg-influencer-50/50 px-2.5 py-1 rounded-xl border border-influencer-100 w-fit">
+                           {lead.productVariant || '-'}
+                        </span>
                       </div>
                     </td>
 

@@ -77,6 +77,7 @@ export const auditLog = async (
             method: req.method,
             path: req.path,
             query: req.query,
+            body: sensitiveDataMasking(req.body),
             statusCode: res.statusCode,
             duration,
             ip: req.ip,
@@ -93,7 +94,11 @@ export const auditLog = async (
 };
 
 function extractModelType(path: string): string | null {
-  const models = ['users', 'products', 'orders', 'leads', 'categories', 'wallets'];
+  const models = [
+    'users', 'products', 'orders', 'leads', 'categories', 
+    'wallets', 'backups', 'invoices', 'payouts', 'support',
+    'announcements', 'settings', 'campaigns'
+  ];
   for (const model of models) {
     if (path.includes(model)) {
       return model;

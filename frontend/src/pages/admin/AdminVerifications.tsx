@@ -270,7 +270,7 @@ export default function AdminVerifications() {
                           <MapPin size={14} />
                           <span className="text-[10px] font-black uppercase tracking-widest">Ville</span>
                         </div>
-                        <p className="text-sm font-bold text-slate-800">{user.profile?.city || '—'}</p>
+                        <p className="text-sm font-bold text-slate-800">{user.profile?.city || user.detectedCity || '—'}</p>
                       </div>
                     </div>
 

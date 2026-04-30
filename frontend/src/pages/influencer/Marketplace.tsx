@@ -174,7 +174,7 @@ export default function InfluencerMarketplace() {
                 key={product.id}
                 className="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl hover:shadow-influencer-500/5 hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col"
               >
-                <div className="block aspect-[4/3] relative overflow-hidden bg-gray-50">
+                <div className="block aspect-[4/5] relative overflow-hidden bg-gray-50">
                   {product.images?.[0]?.imageUrl ? (
                     <img 
                       src={product.images[0].imageUrl} 
@@ -211,9 +211,7 @@ export default function InfluencerMarketplace() {
                     </h3>
                     <p className="text-xs text-gray-400 font-medium mb-3">SKU: {product.sku}</p>
                     
-                    <div className="inline-block px-2.5 py-1 bg-influencer-50 text-influencer-700 rounded-lg text-xs font-bold mb-4">
-                      Commission: {`${Math.round((product.influencerPriceMad || product.retailPriceMad || 0) * 0.15 * 100) / 100} MAD`}
-                    </div>
+
                   </div>
                   
                   <div className="mt-auto border-t border-gray-50 pt-4 space-y-3">

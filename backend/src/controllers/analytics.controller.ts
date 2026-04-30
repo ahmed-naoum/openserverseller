@@ -11,7 +11,7 @@ export const getStats = async (req: Request, res: Response) => {
   const [totalLeads, newLeads, convertedLeads, totalOrders, pendingOrders, revenue] = await Promise.all([
     prisma.lead.count({ where: { vendorId } }),
     prisma.lead.count({ where: { vendorId, status: 'NEW' } }),
-    prisma.lead.count({ where: { vendorId, status: 'ORDERED' } }),
+    prisma.lead.count({ where: { vendorId, status: { in: ['ORDERED', 'CONFIRMED'] } } }),
     prisma.order.count({ where: { vendorId } }),
     prisma.order.count({ where: { vendorId, status: 'PENDING' } }),
     prisma.order.aggregate({
@@ -57,7 +57,7 @@ export const getAgentStats = async (req: Request, res: Response) => {
     prisma.lead.count({ where: { assignedAgentId: agentId } }),
     prisma.lead.count({ where: { assignedAgentId: agentId, status: 'CONTACTED' } }),
     prisma.lead.count({ where: { assignedAgentId: agentId, status: 'INTERESTED' } }),
-    prisma.lead.count({ where: { assignedAgentId: agentId, status: 'ORDERED' } }),
+    prisma.lead.count({ where: { assignedAgentId: agentId, status: { in: ['ORDERED', 'CONFIRMED'] } } }),
     prisma.callLog.count({ where: { agentId } }),
   ]);
 

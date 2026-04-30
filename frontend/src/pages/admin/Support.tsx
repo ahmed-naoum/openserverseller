@@ -32,6 +32,17 @@ export default function AdminSupportQueue() {
     fetchQueue();
   }, []);
 
+  // Join the support-queue room to receive real-time ticket events
+  useEffect(() => {
+    if (!socket) return;
+
+    socket.emit('join-room', 'support-queue');
+
+    return () => {
+      socket.emit('leave-room', 'support-queue');
+    };
+  }, [socket]);
+
   const fetchQueue = async () => {
     try {
       setIsLoading(true);
@@ -185,24 +196,32 @@ export default function AdminSupportQueue() {
                          </div>
                        </div>
 
-                       <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
-                          <p className="text-xs font-bold text-slate-900 line-clamp-1">{meta.productName || 'Produit inconnu'}</p>
-                          <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                             <span>SKU: {meta.productSku || 'N/A'}</span>
-                             <span>Cmd: #{meta.orderNumber || 'N/A'}</span>
-                          </div>
-                       </div>
+                        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
+                           <div className="flex items-center gap-2 mb-1">
+                              <span className="px-2 py-0.5 bg-white border border-slate-200 rounded text-[9px] font-black text-slate-500 uppercase tracking-tighter">
+                                {meta.category || 'SUPPORT'}
+                              </span>
+                              <p className="text-xs font-bold text-slate-900 line-clamp-1">{meta.subject || 'Aucun sujet'}</p>
+                           </div>
+                           <p className="text-[10px] text-slate-500 line-clamp-2 italic leading-relaxed">
+                             "{meta.description || 'Pas de description'}"
+                           </p>
+                        </div>
 
-                       <div className="grid grid-cols-2 gap-2 text-center">
-                          <div className="p-2 border border-slate-100 rounded-xl">
-                             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Marque</p>
-                             <p className="text-[11px] font-black text-slate-900 truncate">{meta.brandName || 'N/A'}</p>
+                        {(meta.productName || meta.brandName) && (
+                          <div className="grid grid-cols-2 gap-2 text-center">
+                             <div className="p-2 border border-slate-100 rounded-xl bg-white shadow-sm">
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Marque / Produit</p>
+                                <p className="text-[11px] font-black text-slate-900 truncate">{meta.productName || meta.brandName || 'N/A'}</p>
+                             </div>
+                             <div className="p-2 border border-slate-100 rounded-xl bg-white shadow-sm">
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Détails</p>
+                                <p className="text-[11px] font-black text-slate-900 truncate">
+                                  {meta.productSku ? `SKU: ${meta.productSku}` : (meta.requestedQty ? `${meta.requestedQty} pcs` : 'N/A')}
+                                </p>
+                             </div>
                           </div>
-                          <div className="p-2 border border-slate-100 rounded-xl">
-                             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Quantité</p>
-                             <p className="text-[11px] font-black text-slate-900">{meta.requestedQty || 0} pcs</p>
-                          </div>
-                       </div>
+                        )}
                     </div>
                   </div>
 

@@ -69,6 +69,30 @@ const callColiatyCreateParcel = async (parcelData: {
   }
 };
 
+const getPackPrice = (lead: any) => {
+  if (lead.productVariant && lead.referralLink?.landingPage?.customStructure) {
+    try {
+      let structure = lead.referralLink.landingPage.customStructure;
+      if (typeof structure === 'string') {
+        structure = JSON.parse(structure);
+      }
+      const blocks = Array.isArray(structure) ? structure : (structure.blocks || []);
+      const checkoutBlock = blocks.find((b: any) => b.type === 'express_checkout');
+      if (checkoutBlock?.content?.options) {
+        const variant = lead.productVariant?.toLowerCase().trim();
+        const option = checkoutBlock.content.options.find((o: any) => 
+          o.name?.toLowerCase().trim() === variant || 
+          o.id?.toLowerCase().trim() === variant
+        );
+        if (option && option.price) {
+          return Number(option.price);
+        }
+      }
+    } catch (e) {}
+  }
+  return lead.referralLink?.product?.retailPriceMad || 0;
+};
+
 const router = Router();
 const prisma = new PrismaClient();
 
@@ -98,10 +122,12 @@ router.get(
     }
 
     try {
-      const response = await axios.get(`${COLIATY_BASE_URL}/cities/getCities`, {
+      // Use POST + X-HTTP-Method-Override to bypass Cloudflare WAF (only POST is allowed through)
+      const response = await axios.post(`${COLIATY_BASE_URL}/cities/getCities`, {}, {
         headers: {
           Authorization: `Bearer ${COLIATY_PUBLIC_KEY}:${COLIATY_SECRET_KEY}`,
           'Content-Type': 'application/json',
+          'X-HTTP-Method-Override': 'GET',
         },
         timeout: 10000,
       });
@@ -117,7 +143,11 @@ router.get(
       throw new AppException(400, `Erreur lors de la récupération des villes: ${response.data?.message || 'Erreur inconnue'}`);
     } catch (error: any) {
       console.error('[Coliaty] Error fetching cities:', error.message);
-      throw new AppException(500, 'Impossible de récupérer la liste des villes depuis Coliaty.');
+      console.error('[Coliaty] Status:', error.response?.status);
+      console.error('[Coliaty] Response data:', JSON.stringify(error.response?.data));
+      console.error('[Coliaty] Request URL:', error.config?.url);
+      const detail = error.response?.data?.message || error.message;
+      throw new AppException(error.response?.status || 500, `Coliaty cities error: ${detail}`);
     }
   })
 );
@@ -135,7 +165,7 @@ router.get(
 
     if (excludeProcessed === 'true') {
       where.order = null;
-      where.status = { notIn: ['PUSHED_TO_DELIVERY', 'ORDERED'] };
+      where.status = { notIn: ['PUSHED_TO_DELIVERY', 'ORDERED', 'CONFIRMED'] };
     }
 
     if (req.user!.roleName === 'VENDOR') {
@@ -148,6 +178,29 @@ router.get(
         ];
       } else {
         where.assignedAgentId = req.user!.id;
+      }
+    } else if (req.user!.roleName === 'HELPER') {
+      if (!req.user!.canManageLeads) {
+        throw new AppException(403, 'Permission denied: Vous n\'avez pas le droit de gérer les leads');
+      }
+      
+      const queryVendorId = req.query.vendorId ? Number(req.query.vendorId) : null;
+      
+      // Only show leads from assigned users
+      const assignments = await (prisma as any).helperUserAssignment.findMany({
+        where: { helperId: req.user!.id },
+      });
+      const assignedUserIds = assignments.map((a: any) => a.targetUserId);
+      
+      if (queryVendorId) {
+        if (assignedUserIds.includes(queryVendorId)) {
+          where.vendorId = queryVendorId;
+        } else {
+          // If trying to access a non-assigned vendor, return nothing
+          where.vendorId = { in: [] };
+        }
+      } else {
+        where.vendorId = { in: assignedUserIds };
       }
     }
 
@@ -190,7 +243,7 @@ router.get(
             take: 3,
           },
           referralLink: {
-            include: { product: { include: { images: true } } },
+            include: { product: { include: { images: true } }, landingPage: true },
           },
           order: true,
         },
@@ -212,6 +265,8 @@ router.get(
           city: l.city,
           address: l.address,
           status: l.status,
+          callbackAt: l.callbackAt,
+          productVariant: l.productVariant,
           notes: l.notes,
           assignedAgent: l.assignedAgent
             ? {
@@ -222,11 +277,12 @@ router.get(
             : null,
           recentCalls: l.callLogs.length,
           lastCall: l.callLogs[0]?.createdAt || null,
-          productPrice: l.referralLink?.product?.retailPriceMad || 0,
+          productPrice: getPackPrice(l),
           product: l.referralLink?.product ? {
             id: l.referralLink.product.id,
             name: l.referralLink.product.nameFr || l.referralLink.product.nameAr,
             sku: l.referralLink.product.sku,
+            price: l.referralLink.product.retailPriceMad,
             image: l.referralLink.product.images[0]?.imageUrl || null,
           } : null,
           coliatyPackageCode: l.order?.coliatyPackageCode || null,
@@ -328,7 +384,7 @@ router.get(
       orderBy: { createdAt: 'desc' },
       include: { 
         referralLink: {
-          include: { product: { include: { images: true } } }
+          include: { product: { include: { images: true } }, landingPage: true }
         }
       },
     });
@@ -338,7 +394,7 @@ router.get(
       data: {
         leads: leads.map(l => ({
           ...l,
-          productPrice: l.referralLink?.product?.retailPriceMad || 0,
+          productPrice: getPackPrice(l),
           product: l.referralLink?.product ? {
             id: l.referralLink.product.id,
             name: l.referralLink.product.nameFr || l.referralLink.product.nameAr,
@@ -363,16 +419,27 @@ router.get(
     const { page = 1, limit = 50 } = req.query;
 
     const where: any = {
-      status: 'PUSHED_TO_DELIVERY',
+      order: { isNot: null }, // Leads that have been converted to orders
     };
     if (req.user!.roleName === 'CALL_CENTER_AGENT') {
       where.assignedAgentId = req.user!.id;
+    } else if (req.user!.roleName === 'HELPER') {
+      if (!req.user!.canManageOrders) {
+        throw new AppException(403, 'Permission denied: Vous n\'avez pas le droit de gérer les colis');
+      }
+      // Only show deliveries from assigned users
+      const assignments = await (prisma as any).helperUserAssignment.findMany({
+        where: { helperId: req.user!.id },
+      });
+      const assignedUserIds = assignments.map((a: any) => a.targetUserId);
+      where.vendorId = { in: assignedUserIds };
     }
 
     // Get leads for delivery tracking
     const agentLeads = await prisma.lead.findMany({
       where,
       include: {
+        vendor: { include: { profile: true } },
         order: {
           include: {
             items: {
@@ -408,9 +475,11 @@ router.get(
           coliatyPackageId: o.coliatyPackageId || null,
           packageContent: o.packageContent || null,
           packageNoOpen: o.packageNoOpen || false,
+          productVariant: o.productVariant || null,
           items: o.items?.map((item: any) => ({
             id: item.id,
             productName: item.product?.nameFr || item.product?.nameAr,
+            productSku: item.product?.sku,
             productImage: item.product?.images?.[0]?.imageUrl,
             quantity: item.quantity,
             unitPriceMad: item.unitPriceMad,
@@ -419,6 +488,8 @@ router.get(
           leadId: l.id,
           leadFullName: l.fullName,
           paymentSituation: l.paymentSituation,
+          vendorName: l.vendor?.profile?.fullName || l.vendor?.email || null,
+          vendorEmail: l.vendor?.email || null,
           createdAt: o.createdAt,
         };
       });
@@ -538,7 +609,8 @@ router.get(
         referralLink: {
           include: {
             influencer: { include: { profile: true } },
-            product: { include: { images: true } }
+            product: { include: { images: true } },
+            landingPage: true
           }
         },
       },
@@ -937,19 +1009,23 @@ router.patch(
   authenticate,
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { status, notes } = req.body;
+    const { status, notes, callbackAt } = req.body;
 
     const validStatuses = [
       'NEW',
       'ASSIGNED',
+      'CALL_LATER',
+      'NO_REPLY',
+      'CONFIRMED',
+      'WRONG_ORDER',
+      'CANCEL_REASON_PRICE',
+      'CANCEL_ORDER',
+      'INVALID',
       'CONTACTED',
       'INTERESTED',
-      'NOT_INTERESTED',
-      'CALLBACK_REQUESTED',
       'ORDERED',
       'PUSHED_TO_DELIVERY',
       'UNREACHABLE',
-      'INVALID',
     ];
 
     if (!validStatuses.includes(status)) {
@@ -985,7 +1061,8 @@ router.patch(
         where: { id: lead.id },
         data: {
           status,
-          notes: notes || lead.notes,
+          notes: notes !== undefined ? notes : lead.notes,
+          callbackAt: callbackAt !== undefined ? callbackAt : lead.callbackAt,
         },
       });
     });
@@ -1185,19 +1262,27 @@ router.post(
       package_addresse,
       package_price,
       package_content,
-      package_no_open
+      package_no_open,
+      productVariant
     } = req.body;
 
     const lead = await prisma.lead.findFirst({
       where: {
         id: Number(id),
         assignedAgentId: req.user!.id,
-        status: 'ORDERED',
+        status: { in: ['ORDERED', 'CONFIRMED'] },
       },
+      include: {
+        referralLink: {
+          include: {
+            landingPage: true
+          }
+        }
+      }
     });
 
     if (!lead) {
-      throw new AppException(404, 'Lead not found, not assigned to you, or not in ORDERED status');
+      throw new AppException(404, 'Lead not found, not assigned to you, or not in ORDERED/CONFIRMED status');
     }
 
     // Check if an order already exists for this lead (e.g. out of sync status or double click)
@@ -1222,7 +1307,15 @@ router.post(
     let productToOrder = null;
     if (productId && Number(productId) !== 0) {
       productToOrder = await prisma.product.findUnique({ where: { id: Number(productId) } });
-    } else {
+    }
+    
+    // If no explicit productId, use the product from the lead's referral link
+    if (!productToOrder && lead.referralLink?.productId) {
+      productToOrder = await prisma.product.findUnique({ where: { id: lead.referralLink.productId } });
+    }
+    
+    // Last resort fallback: find any active product for this vendor
+    if (!productToOrder) {
       productToOrder = await prisma.product.findFirst({
         where: { ownerId: lead.vendorId, isActive: true },
         orderBy: { createdAt: 'desc' },
@@ -1233,7 +1326,32 @@ router.post(
       throw new AppException(400, 'No active product found for this vendor to create an order');
     }
 
-    const unitPrice = productToOrder.retailPriceMad;
+    // --- STOCK VALIDATION ---
+    if (productToOrder.stockQuantity < Number(quantity || 1)) {
+      throw new AppException(400, `Stock insuffisant pour ce produit. (Disponible: ${productToOrder.stockQuantity}, Demandé: ${quantity || 1})`);
+    }
+
+    let unitPrice = productToOrder.retailPriceMad;
+
+    // Check for pack pricing if lead has a productVariant
+    if (lead.productVariant && lead.referralLink?.landingPage?.customStructure) {
+      try {
+        const structure = typeof lead.referralLink.landingPage.customStructure === 'string'
+          ? JSON.parse(lead.referralLink.landingPage.customStructure)
+          : lead.referralLink.landingPage.customStructure;
+        const blocks = structure.blocks || [];
+        const checkoutBlock = blocks.find((b: any) => b.type === 'express_checkout');
+        if (checkoutBlock) {
+          const options = checkoutBlock.content?.options || [];
+          const selected = options.find((o: any) => o.name === lead.productVariant);
+          if (selected && selected.price) {
+            unitPrice = selected.price;
+          }
+        }
+      } catch (e) {
+        console.error('Error parsing pack pricing:', e);
+      }
+    }
     
     // Use override price if provided, otherwise calculate
     const totalAmountMad = package_price !== undefined ? Number(package_price) : unitPrice * Number(quantity);
@@ -1264,13 +1382,30 @@ router.post(
       else if (normalizedPhone.startsWith('212')) normalizedPhone = '0' + normalizedPhone.slice(3);
       else if (!normalizedPhone.startsWith('0')) normalizedPhone = '0' + normalizedPhone;
       
+      // Coliaty requires package_content between 5 and 100 characters
+      let baseContent = package_content || productToOrder.nameFr || productToOrder.nameAr || 'Marchandise';
+      const finalVariant = productVariant || lead.productVariant;
+      
+      // Append SKU and Pack if available for better visibility in Coliaty
+      let contentValue = baseContent;
+      const details = [];
+      if (productToOrder.sku) details.push(`SKU:${productToOrder.sku}`);
+      if (finalVariant) details.push(`PK:${finalVariant}`);
+      
+      if (details.length > 0) {
+        contentValue = `${baseContent} (${details.join(' ')})`;
+      }
+
+      if (contentValue.length < 5) contentValue = contentValue.padEnd(5, ' ');
+      if (contentValue.length > 100) contentValue = contentValue.substring(0, 100);
+
       coliatyResult = await callColiatyCreateParcel({
         package_reciever: receiverName,
         package_phone: normalizedPhone,
         package_price: Number(totalAmountMad),
         package_addresse: receiverAddress,
         package_city: receiverCity,
-        package_content: package_content || productToOrder.nameFr || productToOrder.nameAr || 'Produit',
+        package_content: contentValue,
         package_no_open: package_no_open ?? false,
       });
     } catch (coliatyError: any) {
@@ -1296,6 +1431,7 @@ router.post(
           status: 'PENDING',
           packageContent: package_content || productToOrder.nameFr || productToOrder.nameAr || 'Produit',
           packageNoOpen: package_no_open ?? false,
+          productVariant: productVariant || lead.productVariant,
           ...(coliatyResult ? {
             coliatyPackageCode: coliatyResult.package_code,
             coliatyPackageId: coliatyResult.package_id,
@@ -1317,6 +1453,12 @@ router.post(
       await tx.lead.update({
         where: { id: lead.id },
         data: { status: 'PUSHED_TO_DELIVERY' }
+      });
+
+      // --- STOCK DECREMENT ---
+      await tx.product.update({
+        where: { id: productToOrder!.id },
+        data: { stockQuantity: { decrement: Number(quantity || 1) } }
       });
 
       return newOrder;

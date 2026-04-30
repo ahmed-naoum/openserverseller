@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import 'dotenv/config'; // v1.0.1
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -16,6 +16,7 @@ import { maintenanceMiddleware } from './middleware/maintenance.js';
 import { startLeadsReassignmentCron } from './jobs/leadReassignment.js';
 
 const app = express();
+app.set('trust proxy', true);
 const server = createServer(app);
 const io = new SocketServer(server, {
   cors: {
@@ -116,6 +117,10 @@ const setupChatSocket = () => {
       socket.join(room);
     });
 
+    socket.on('leave-room', (room: string) => {
+      socket.leave(room);
+    });
+
     socket.on('disconnect', () => {
       console.log(`Client disconnected: ${socket.id}`);
     });
@@ -126,8 +131,25 @@ setupChatSocket();
 
 export { io };
 
+import { BackupService } from './services/backup.service.js';
+
 // Start background jobs
 startLeadsReassignmentCron();
+
+// Start 1-minute automated backup scheduler
+const runBackup = async () => {
+  try {
+    await BackupService.createBackup();
+  } catch (error) {
+    console.error('Automated backup failed:', error);
+  }
+};
+
+// Run immediately on start
+runBackup();
+
+// Then run every 60 seconds
+setInterval(runBackup, 60 * 1000);
 
 server.listen(PORT, () => {
   console.log(`

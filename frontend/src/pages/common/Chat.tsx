@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { chatApi, adminApi, BACKEND_URL } from '../../lib/api';
+import { chatApi, adminApi, uploadApi, BACKEND_URL } from '../../lib/api';
 import {
   Send, Search, Plus, MessageSquare, CheckCheck,
-  ChevronLeft, Headphones, MoreVertical, Smile, Paperclip, Clock
+  ChevronLeft, Headphones, MoreVertical, Smile, Paperclip, Clock,
+  FileText, Download, Image as ImageIcon
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSocket } from '../../contexts/SocketContext';
@@ -49,7 +50,10 @@ function getInitials(name?: string) {
 function getConvTitle(conv: any, myId?: number) {
   if (conv.title) return conv.title;
   const other = conv.participants?.find((p: any) => p.userId !== myId);
-  return other?.fullName || 'Unknown';
+  if (other?.fullName) return other.fullName;
+  if (conv.metadata?.subject) return conv.metadata.subject;
+  if (conv.type === 'SUPPORT' && conv.id) return `Ticket #${conv.id}`;
+  return 'Unknown';
 }
 
 function getConvAvatar(conv: any, myId?: number) {
@@ -88,17 +92,12 @@ export default function Chat() {
   const [showMobileList, setShowMobileList] = useState(!searchParams.get('convId'));
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch conversations
   const { data: convData, isLoading: isLoadingConvs } = useQuery({
     queryKey: ['conversations'],
-    queryFn: () => {
-      const isAdmin = ['SUPER_ADMIN', 'SYSTEM_SUPPORT', 'FINANCE_ADMIN'].includes(user?.role || '');
-      if (isAdmin) {
-        return adminApi.getConversations();
-      }
-      return chatApi.conversations();
-    },
+    queryFn: () => chatApi.conversations(),
     refetchInterval: false, // Turn off polling since we have sockets
   });
 
@@ -191,10 +190,12 @@ export default function Chat() {
         
         const newConvs = oldData.data.data.conversations.map((conv: any) => {
           if (conv.id === data.conversationId) {
+            const isViewing = selectedConvId === String(data.conversationId);
             return {
               ...conv,
               lastMessage: data.message,
-              updatedAt: new Date().toISOString()
+              updatedAt: new Date().toISOString(),
+              unreadCount: isViewing ? 0 : (conv.unreadCount || 0) + 1
             };
           }
           return conv;
@@ -225,12 +226,59 @@ export default function Chat() {
       }));
     };
 
+    const handleNewTicket = (data: { conversation: any }) => {
+      // ONLY add to sidebar if I am the creator/participant
+      const isParticipant = data.conversation.participants?.some((p: any) => p.userId === user?.id);
+      if (!isParticipant) return;
+
+      queryClient.setQueryData(['conversations'], (oldData: any) => {
+        if (!oldData?.data?.data?.conversations) return oldData;
+        if (oldData.data.data.conversations.some((c: any) => c.id === data.conversation.id)) return oldData;
+        
+        const newTicket = {
+          ...data.conversation,
+          unreadCount: 1,
+          updatedAt: new Date().toISOString()
+        };
+        const newConvs = [newTicket, ...oldData.data.data.conversations];
+        return {
+          ...oldData,
+          data: { ...oldData.data, data: { ...oldData.data.data, conversations: newConvs } }
+        };
+      });
+    };
+
+    const handleClaimed = (data: { conversationId: number, participant: any }) => {
+      queryClient.setQueryData(['conversations'], (oldData: any) => {
+        if (!oldData?.data?.data?.conversations) return oldData;
+        
+        // If I claimed it, keep it. If someone else claimed it, remove it (it will be ACTIVE now and not meet the OR criteria for others)
+        const isMe = data.participant.userId === user?.id;
+        
+        const newConvs = oldData.data.data.conversations.filter((c: any) => {
+          if (c.id === data.conversationId) {
+            return isMe; // Keep only if it's me
+          }
+          return true;
+        });
+
+        return {
+          ...oldData,
+          data: { ...oldData.data, data: { ...oldData.data.data, conversations: newConvs } }
+        };
+      });
+    };
+
     socket.on('new-message', handleNewMessage);
     socket.on('typing', handleTypingEvent);
+    socket.on('new-support-ticket', handleNewTicket);
+    socket.on('conversation-claimed', handleClaimed);
     
     return () => {
       socket.off('new-message', handleNewMessage);
       socket.off('typing', handleTypingEvent);
+      socket.off('new-support-ticket', handleNewTicket);
+      socket.off('conversation-claimed', handleClaimed);
     };
   }, [socket, selectedConvId, queryClient, user?.id]);
 
@@ -244,6 +292,18 @@ export default function Chat() {
       socket.emit('leave-conversation', selectedConvId);
     };
   }, [socket, selectedConvId]);
+
+  // Join support queue room for agents
+  useEffect(() => {
+    const isAgent = ['SUPER_ADMIN', 'SYSTEM_SUPPORT'].includes(user?.roleName || '');
+    if (!socket || !isAgent) return;
+
+    socket.emit('join-room', 'support-queue');
+
+    return () => {
+      socket.emit('leave-room', 'support-queue');
+    };
+  }, [socket, user?.roleName]);
 
   // Real-time socket message handler logic above...
 
@@ -261,8 +321,29 @@ export default function Chat() {
   useEffect(() => {
     if (selectedConvId) {
       chatApi.markAsRead(selectedConvId).catch(() => {});
+      
+      // Update local unread count
+      queryClient.setQueryData(['conversations'], (oldData: any) => {
+        if (!oldData?.data?.data?.conversations) return oldData;
+        
+        let readCount = 0;
+        const newConvs = oldData.data.data.conversations.map((conv: any) => {
+          if (conv.id.toString() === selectedConvId) {
+            readCount = conv.unreadCount || 0;
+            return { ...conv, unreadCount: 0 };
+          }
+          return conv;
+        });
+
+        // Notify DashboardLayout to update its totalUnread state
+        if (readCount > 0) {
+          window.dispatchEvent(new CustomEvent('chat:read', { detail: { count: readCount } }));
+        }
+
+        return { ...oldData, data: { ...oldData.data, data: { ...oldData.data.data, conversations: newConvs } } };
+      });
     }
-  }, [selectedConvId]);
+  }, [selectedConvId, queryClient]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -288,7 +369,8 @@ export default function Chat() {
   };
 
   const sendMessageMutation = useMutation({
-    mutationFn: (data: { content: string }) => chatApi.sendMessage(selectedConvId!, data),
+    mutationFn: (data: { content: string; messageType?: string; attachmentUrl?: string }) => 
+      chatApi.sendMessage(selectedConvId!, data),
     onSuccess: () => {
       setNewMessage('');
       queryClient.invalidateQueries({ queryKey: ['messages', selectedConvId] });
@@ -320,6 +402,46 @@ export default function Chat() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend(e);
+    }
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedConvId) return;
+
+    // Validation
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'application/pdf'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Seuls les fichiers PNG, JPG, JPEG, WEBP et PDF sont autorisés');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Le fichier est trop volumineux (max 10 Mo)');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const toastId = toast.loading('Téléchargement du fichier...');
+
+    try {
+      const res = await uploadApi.image(formData);
+      const url = res.data.data.url;
+      const type = file.type.startsWith('image/') ? 'IMAGE' : 'FILE';
+      
+      sendMessageMutation.mutate({
+        content: `📁 Fichier envoyé: ${file.name}`,
+        messageType: type,
+        attachmentUrl: url
+      });
+      toast.success('Fichier envoyé avec succès', { id: toastId });
+    } catch (err) {
+      console.error('Upload failed:', err);
+      toast.error('Échec du téléchargement', { id: toastId });
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -425,11 +547,18 @@ export default function Chat() {
                             {title}
                           </span>
                         </div>
-                        {conv.lastMessage && (
-                          <span className="text-[10px] text-slate-400 whitespace-nowrap flex-shrink-0">
-                            {formatTime(conv.lastMessage.createdAt)}
-                          </span>
-                        )}
+                        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                          {conv.lastMessage && (
+                            <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                              {formatTime(conv.lastMessage.createdAt)}
+                            </span>
+                          )}
+                          {conv.unreadCount > 0 && (
+                            <span className="bg-violet-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-violet-200">
+                              {conv.unreadCount}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       {conv.lastMessage && (
                         <p className="text-xs text-slate-400 truncate">
@@ -509,15 +638,38 @@ export default function Chat() {
             {(user?.role === 'SYSTEM_SUPPORT' || user?.role === 'SUPER_ADMIN') && selectedConv?.metadata && (
               <div className="bg-slate-50 border-b border-slate-200 p-4 shrink-0">
                 <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center shadow-sm">
-                  <div className="flex items-center gap-3">
-                     <div className="w-12 h-12 bg-violet-50 text-violet-600 rounded-xl flex items-center justify-center font-black">
-                       🛒
-                     </div>
-                     <div>
-                       <p className="text-xs font-black text-slate-900">{selectedConv.metadata.productName || 'Produit'}</p>
-                       <p className="text-[10px] font-bold text-slate-400">SKU: {selectedConv.metadata.productSku} • Cmd: #{selectedConv.metadata.orderNumber}</p>
-                     </div>
-                  </div>
+                   <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
+                    <div className="flex items-center gap-3">
+                       <div className="w-12 h-12 bg-violet-50 text-violet-600 rounded-xl flex items-center justify-center font-black">
+                         🛒
+                       </div>
+                       <div>
+                         <p className="text-xs font-black text-slate-900">{selectedConv.metadata.productName || 'Produit'}</p>
+                         <p className="text-[10px] font-bold text-slate-400">SKU: {selectedConv.metadata.productSku} • Cmd: #{selectedConv.metadata.orderNumber}</p>
+                       </div>
+                    </div>
+
+                    {/* User Info Section */}
+                    {(() => {
+                      const customer = selectedConv?.participants?.find((p: any) => 
+                        !['SUPER_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_SUPPORT'].includes(p.role)
+                      );
+                      if (!customer) return null;
+                      return (
+                        <div className="flex items-center gap-3 border-l border-slate-100 pl-6">
+                           <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center font-black">
+                             👤
+                           </div>
+                           <div>
+                             <p className="text-xs font-black text-slate-900">{customer.fullName || 'Utilisateur'}</p>
+                             <p className="text-[10px] font-bold text-slate-400">
+                               {customer.email} {customer.phone && `• ${customer.phone}`}
+                             </p>
+                           </div>
+                        </div>
+                      );
+                    })()}
+                   </div>
                   <div className="flex flex-wrap gap-2 md:gap-6 text-sm">
                      <div className="flex flex-col">
                        <span className="text-[10px] uppercase font-bold text-slate-400">Marque</span>
@@ -610,7 +762,36 @@ export default function Chat() {
                                   : 'bg-white text-slate-800 border border-slate-100 shadow-sm rounded-bl-md'
                               }`}
                             >
-                              <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                              {msg.messageType === 'IMAGE' ? (
+                                <div className="mt-1">
+                                  <img 
+                                    src={msg.attachmentUrl.startsWith('http') ? msg.attachmentUrl : `${BACKEND_URL}${msg.attachmentUrl}`} 
+                                    alt="Attachment" 
+                                    className="max-w-full rounded-xl shadow-sm border border-slate-100 cursor-pointer hover:opacity-90 transition-opacity"
+                                    onClick={() => window.open(msg.attachmentUrl.startsWith('http') ? msg.attachmentUrl : `${BACKEND_URL}${msg.attachmentUrl}`, '_blank')}
+                                  />
+                                </div>
+                              ) : msg.messageType === 'FILE' ? (
+                                <a 
+                                  href={msg.attachmentUrl.startsWith('http') ? msg.attachmentUrl : `${BACKEND_URL}${msg.attachmentUrl}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={`flex items-center gap-3 px-4 py-3 rounded-xl mt-1 border transition-all ${
+                                    isMe ? 'bg-white/10 border-white/20 text-white hover:bg-white/20' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isMe ? 'bg-white/20' : 'bg-white shadow-sm'}`}>
+                                    <FileText size={16} />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold truncate">Document PDF</p>
+                                    <p className="text-[10px] opacity-60">Cliquez pour voir/télécharger</p>
+                                  </div>
+                                  <Download size={14} className="opacity-40" />
+                                </a>
+                              ) : (
+                                <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                              )}
                             </div>
 
                             <div className={`flex items-center gap-1 px-1 ${isMe ? 'justify-end' : ''}`}>
@@ -633,10 +814,20 @@ export default function Chat() {
                 <div className="flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2 focus-within:ring-2 focus-within:ring-violet-500/20 focus-within:border-violet-400 transition-all">
                   <button
                     type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={sendMessageMutation.isPending}
                     className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors mb-0.5"
                   >
                     <Paperclip size={16} />
                   </button>
+
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    accept=".png,.jpeg,.jpg,.webp,.pdf"
+                    className="hidden"
+                  />
 
                   <textarea
                     ref={textareaRef}
@@ -650,13 +841,6 @@ export default function Chat() {
                     className="flex-1 bg-transparent resize-none focus:outline-none text-sm text-slate-800 placeholder-slate-400 py-1.5 max-h-28 leading-relaxed"
                     rows={1}
                   />
-
-                  <button
-                    type="button"
-                    className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors mb-0.5"
-                  >
-                    <Smile size={16} />
-                  </button>
 
                   <button
                     type="submit"

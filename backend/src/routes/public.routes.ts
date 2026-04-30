@@ -197,7 +197,7 @@ router.post(
   '/leads',
   orderRateLimiter,
   asyncHandler(async (req: Request, res: Response) => {
-    const { referralCode, fullName, phone, city, address } = req.body;
+    const { referralCode, fullName, phone, city, address, productVariant } = req.body;
 
     if (!referralCode || !fullName || !phone) {
       throw new AppException(400, 'referralCode, fullName, and phone are required');
@@ -249,15 +249,15 @@ router.post(
         phone,
         city,
         address,
-        notes: `Generated from influencer link: ${referralCode} for product: ${link.product.sku}`
+        productVariant,
+        notes: null
       }
     });
 
-    // We can increment clicks or conversions. The influencer UI mocks leads from clicks * 0.3.
-    // So incrementing clicks when the form is viewed/submitted works for now.
+    // Increment conversions (Ventes) when the lead is successfully created
     await prisma.referralLink.update({
       where: { id: link.id },
-      data: { clicks: { increment: 1 } }
+      data: { conversions: { increment: 1 } }
     });
 
     res.status(201).json({

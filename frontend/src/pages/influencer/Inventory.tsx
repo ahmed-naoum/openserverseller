@@ -206,7 +206,7 @@ export default function InfluencerInventory() {
                       {claim.product.influencerPriceMad || claim.product.retailPriceMad} <span className="text-[10px]">MAD</span>
                     </div>
                     <div className="text-[10px] font-bold text-influencer-500">
-                      Comm: {`${Math.round((claim.product.influencerPriceMad || claim.product.retailPriceMad || 0) * 0.15 * 100) / 100} MAD`}
+                      Qte: {claim.product.stockQuantity || 0}
                     </div>
                   </div>
                   

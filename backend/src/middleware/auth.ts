@@ -49,6 +49,10 @@ export const authenticate = async (
       mode: user.mode,
       isInfluencer: user.isInfluencer,
       canImpersonate: user.canImpersonate,
+      canManageProducts: user.canManageProducts,
+      canManageLeads: user.canManageLeads,
+      canManageOrders: user.canManageOrders,
+      canManageInfluencerLinks: user.canManageInfluencerLinks,
     };
 
     await prisma.user.update({
@@ -121,6 +125,10 @@ export const optionalAuth = async (
         mode: user.mode,
         isInfluencer: user.isInfluencer,
         canImpersonate: user.canImpersonate,
+        canManageProducts: user.canManageProducts,
+        canManageLeads: user.canManageLeads,
+        canManageOrders: user.canManageOrders,
+        canManageInfluencerLinks: user.canManageInfluencerLinks,
       };
     }
 

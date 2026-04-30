@@ -20,6 +20,12 @@ export interface AuthUser {
   snapchatUsername?: string;
   referralCode?: string;
   canImpersonate?: boolean;
+  canManageProducts?: boolean;
+  canManageLeads?: boolean;
+  canManageOrders?: boolean;
+  canManageInfluencerLinks?: boolean;
+  canManageTickets?: boolean;
+  avatarUrl?: string;
   [key: string]: any;
 }
 
@@ -27,9 +33,10 @@ interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (data: { email?: string; phone?: string; password: string }) => Promise<{ user?: AuthUser; requiresTwoFactor?: boolean; twoFactorToken?: string; message?: string }>;
+  login: (data: { email?: string; phone?: string; password: string }) => Promise<{ user?: AuthUser; requiresTwoFactor?: boolean; twoFactorToken?: string; requiresPasswordChange?: boolean; tempToken?: string; message?: string }>;
   login2FA: (data: { twoFactorToken: string; code: string }) => Promise<AuthUser>;
-  googleAuth: (data: { credential: string; role?: string }) => Promise<{ user?: AuthUser; requiresTwoFactor?: boolean; twoFactorToken?: string; message?: string }>;
+  forcePasswordChange: (data: { tempToken: string; newPassword: string }) => Promise<AuthUser>;
+  googleAuth: (data: { credential: string; role?: string }) => Promise<{ user?: AuthUser; requiresTwoFactor?: boolean; twoFactorToken?: string; requiresPasswordChange?: boolean; tempToken?: string; message?: string }>;
   register: (data: { email?: string; phone?: string; password: string; fullName: string; role?: string }) => Promise<AuthUser>;
   registerInfluencer: (data: { email?: string; phone?: string; password: string; fullName: string; instagramUsername?: string; tiktokUsername?: string; facebookUsername?: string; xUsername?: string; youtubeUsername?: string; snapchatUsername?: string; }) => Promise<AuthUser>;
   logout: () => Promise<void>;
@@ -75,6 +82,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
     }
 
+    if (response.data.data?.requiresPasswordChange) {
+      return {
+        requiresPasswordChange: true,
+        tempToken: response.data.data.tempToken,
+        message: response.data.message
+      };
+    }
+
     const { user, tokens } = response.data.data;
     localStorage.setItem('accessToken', tokens.accessToken);
     localStorage.setItem('refreshToken', tokens.refreshToken);
@@ -98,6 +113,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user;
   };
 
+  const forcePasswordChange = async (data: { tempToken: string; newPassword: string }) => {
+    const response = await authApi.forcePasswordChange(data);
+    const { user, tokens } = response.data.data;
+    localStorage.setItem('accessToken', tokens.accessToken);
+    localStorage.setItem('refreshToken', tokens.refreshToken);
+    setUser(user);
+    return user;
+  };
+
   const googleAuth = async (data: { credential: string; role?: string }) => {
     const response = await authApi.googleAuth(data);
     
@@ -105,6 +129,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { 
         requiresTwoFactor: true, 
         twoFactorToken: response.data.data.twoFactorToken,
+        message: response.data.message
+      };
+    }
+
+    if (response.data.data?.requiresPasswordChange) {
+      return {
+        requiresPasswordChange: true,
+        tempToken: response.data.data.tempToken,
         message: response.data.message
       };
     }
@@ -212,6 +244,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         login,
         login2FA,
+        forcePasswordChange,
         googleAuth,
         register,
         registerInfluencer,

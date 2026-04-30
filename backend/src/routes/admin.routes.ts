@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { checkAndActivateUser } from '../utils/verification.js';
+import { decrypt } from '../utils/crypto.js';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -105,7 +106,7 @@ router.get(
     const { page = 1, limit = 50, userId, action } = req.query;
 
     const where: any = {};
-    if (userId) where.userId = BigInt(userId as string);
+    if (userId) where.userId = Number(userId as string);
     if (action) where.action = { contains: action as string, mode: 'insensitive' };
 
     const [logs, total] = await Promise.all([
@@ -269,20 +270,71 @@ router.patch(
             });
 
             // Point the existing claim to the cloned product and approve it
-            return tx.affiliateClaim.update({
+            const updatedClaim = await tx.affiliateClaim.update({
                 where: { id: Number(id) },
                 data: { 
                     status: 'APPROVED', 
                     productId: clonedProduct.id 
                 }
             });
+
+            // Also resolve linked support requests for original product
+            await tx.supportRequest.updateMany({
+                where: {
+                    userId: currentClaim.userId,
+                    productId: currentClaim.productId,
+                    status: { in: ['OPEN', 'IN_PROGRESS'] }
+                },
+                data: { status: 'RESOLVED' }
+            });
+
+            // Close linked conversations
+            await tx.conversation.updateMany({
+                where: {
+                    type: 'SUPPORT',
+                    supportRequest: {
+                        userId: currentClaim.userId,
+                        productId: currentClaim.productId,
+                    },
+                    status: { not: 'CLOSED' }
+                },
+                data: { status: 'CLOSED' }
+            });
+
+            return updatedClaim;
         }
 
         // Standard status update
-        return tx.affiliateClaim.update({
+        const updatedClaim = await tx.affiliateClaim.update({
             where: { id: Number(id) },
             data: { status }
         });
+
+        // If approving or rejecting, also resolve the support request
+        if (status === 'APPROVED' || status === 'REJECTED') {
+            await tx.supportRequest.updateMany({
+                where: {
+                    userId: currentClaim.userId,
+                    productId: currentClaim.productId,
+                    status: { in: ['OPEN', 'IN_PROGRESS'] }
+                },
+                data: { status: status === 'APPROVED' ? 'RESOLVED' : 'CLOSED' }
+            });
+
+            await tx.conversation.updateMany({
+                where: {
+                    type: 'SUPPORT',
+                    supportRequest: {
+                        userId: currentClaim.userId,
+                        productId: currentClaim.productId,
+                    },
+                    status: { not: 'CLOSED' }
+                },
+                data: { status: 'CLOSED' }
+            });
+        }
+
+        return updatedClaim;
     });
 
     res.json({
@@ -522,7 +574,7 @@ router.post(
   authenticate,
   authorize('SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { helperId, targetUserIds } = req.body;
+    const { helperId, targetUserIds, autoAssign } = req.body;
 
     if (!helperId || !Array.isArray(targetUserIds)) {
       res.status(400).json({ status: 'error', message: 'helperId and targetUserIds[] are required' });
@@ -538,15 +590,35 @@ router.post(
       return;
     }
 
-    // Transaction: delete old assignments, create new ones
+    let finalTargetUserIds = [...targetUserIds];
+
+    // If autoAssign is requested, assign all non-admin users
+    if (autoAssign) {
+      const allUsers = await prisma.user.findMany({
+        where: {
+          role: { name: { notIn: ['SUPER_ADMIN', 'FINANCE_ADMIN'] } },
+          id: { not: Number(helperId) },
+        },
+        select: { id: true }
+      });
+      finalTargetUserIds = allUsers.map(u => u.id);
+    }
+
+    // Transaction: update autoAssign flag, delete old assignments, create new ones
     await (prisma as any).$transaction(async (tx: any) => {
+      // Update autoAssignHelperUsers flag on user
+      await tx.user.update({
+        where: { id: Number(helperId) },
+        data: { autoAssignHelperUsers: !!autoAssign }
+      });
+
       await tx.helperUserAssignment.deleteMany({
         where: { helperId: Number(helperId) },
       });
 
-      if (targetUserIds.length > 0) {
+      if (finalTargetUserIds.length > 0) {
         await tx.helperUserAssignment.createMany({
-          data: targetUserIds.map((tid: number) => ({
+          data: finalTargetUserIds.map((tid: number) => ({
             helperId: Number(helperId),
             targetUserId: Number(tid),
           })),
@@ -556,7 +628,9 @@ router.post(
 
     res.json({
       status: 'success',
-      message: `Assigned ${targetUserIds.length} user(s) to helper`,
+      message: autoAssign
+        ? `Helper marked for auto-assignment and linked to all ${finalTargetUserIds.length} users`
+        : `Assigned ${finalTargetUserIds.length} user(s) to helper`,
     });
   })
 );
@@ -665,9 +739,8 @@ router.get(
 
     if (filter === 'pending') {
       where.OR = [
-        { kycStatus: { in: ['PENDING', 'UNDER_REVIEW', 'REJECTED'] } },
-        { emailVerifiedAt: null },
-        { bankAccounts: { some: { status: { in: ['PENDING', 'REJECTED'] } } } },
+        { kycStatus: { in: ['PENDING', 'UNDER_REVIEW'] } },
+        { bankAccounts: { some: { status: 'PENDING' } } },
       ];
     }
 
@@ -682,9 +755,18 @@ router.get(
       orderBy: { createdAt: 'desc' },
     });
 
+    // Decrypt RIB for admin view
+    const decryptedUsers = usersWithVerifications.map(user => ({
+      ...user,
+      bankAccounts: user.bankAccounts.map(ba => ({
+        ...ba,
+        ribAccount: decrypt(ba.ribAccount),
+      })),
+    }));
+
     res.json({
       status: 'success',
-      data: usersWithVerifications,
+      data: decryptedUsers,
     });
   })
 );
@@ -918,6 +1000,339 @@ router.get(
         ...c,
         lastMessage: c.messages[0] || null
       })) }
+    });
+  })
+);
+
+// --- Payment Monitoring ---
+
+// Get all users (Sellers/Influencers) with PAID leads
+router.get(
+  '/payment-monitoring',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    // 1. Get Influencers with PAID leads (via ReferralLinks)
+    const influencersWithPaidLeads = await prisma.user.findMany({
+      where: {
+        OR: [
+          { role: { name: 'INFLUENCER' } },
+          { isInfluencer: true }
+        ],
+        referralLinks: {
+          some: {
+            leads: {
+              some: { paymentSituation: 'PAID' }
+            }
+          }
+        }
+      },
+      include: {
+        profile: true,
+        role: true,
+        referralLinks: {
+          include: {
+            leads: {
+              where: { paymentSituation: 'PAID' },
+              include: { order: true }
+            }
+          }
+        }
+      }
+    });
+
+    // 2. Get Sellers with PAID leads (direct leads)
+    const sellersWithPaidLeads = await prisma.user.findMany({
+      where: {
+        role: { name: 'VENDOR' },
+        leads: {
+          some: { paymentSituation: 'PAID' }
+        }
+      },
+      include: {
+        profile: true,
+        role: true,
+        leads: {
+          where: { paymentSituation: 'PAID' },
+          include: { order: true }
+        }
+      }
+    });
+
+    // Combine and format
+    const influencers = influencersWithPaidLeads.map(user => {
+      const paidLeads = user.referralLinks.flatMap(link => (link as any).leads);
+      const grossAmount = paidLeads.reduce((sum, lead) => sum + (Number(lead.order?.totalAmountMad) || 0), 0);
+      const deliveryCost = 57 * paidLeads.length;
+      const profit = grossAmount - deliveryCost;
+      const platformFee = profit > 0 ? profit * 0.13 : 0;
+      const totalPaidAmount = grossAmount - deliveryCost - platformFee;
+      
+      return {
+        id: user.id,
+        fullName: user.profile?.fullName || user.email,
+        email: user.email,
+        role: 'INFLUENCER',
+        paidCount: paidLeads.length,
+        totalPaidAmount
+      };
+    });
+
+    const sellers = sellersWithPaidLeads.map(user => {
+      const grossAmount = user.leads.reduce((sum, lead) => sum + (Number(lead.order?.totalAmountMad) || 0), 0);
+      const deliveryCost = 57 * user.leads.length;
+      const profit = grossAmount - deliveryCost;
+      const platformFee = profit > 0 ? profit * 0.13 : 0;
+      const totalPaidAmount = grossAmount - deliveryCost - platformFee;
+      
+      return {
+        id: user.id,
+        fullName: user.profile?.fullName || user.email,
+        email: user.email,
+        role: 'SELLER',
+        paidCount: user.leads.length,
+        totalPaidAmount
+      };
+    });
+
+    res.json({
+      status: 'success',
+      data: [...influencers, ...sellers]
+    });
+  })
+);
+
+// Get specific user's PAID leads
+router.get(
+  '/payment-monitoring/user/:id',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = Number(req.params.id);
+
+    // Fetch both direct leads and referral leads
+    const leads = await prisma.lead.findMany({
+      where: {
+        paymentSituation: 'PAID',
+        OR: [
+          { vendorId: userId },
+          { referralLink: { influencerId: userId } }
+        ]
+      },
+      include: {
+        order: {
+          include: {
+            items: {
+              include: { product: true }
+            }
+          }
+        },
+        referralLink: {
+          include: { product: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({
+      status: 'success',
+      data: leads
+    });
+  })
+);
+
+// Bulk update lead payment situation
+router.patch(
+  '/payment-monitoring/bulk-update',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { leadIds, situation } = req.body;
+
+    if (!Array.isArray(leadIds) || !['PAID', 'NOT_PAID', 'FACTURED'].includes(situation)) {
+      res.status(400).json({ status: 'error', message: 'Invalid request' });
+      return;
+    }
+
+    if (situation === 'FACTURED') {
+      const leads = await prisma.lead.findMany({
+        where: { id: { in: leadIds.map(id => Number(id)) } },
+        include: {
+          order: true,
+          referralLink: true
+        }
+      });
+
+      if (leads.length > 0) {
+        // Assume all leads belong to the same user as they are selected from a user's page
+        let userId = leads[0].referralLink?.influencerId || leads[0].vendorId;
+        
+        let totalAmount = 0;
+        for (const lead of leads) {
+           totalAmount += Number(lead.order?.totalAmountMad) || 0;
+        }
+
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
+        const invoiceNumber = `INV-${dateStr}-${randomStr}`;
+
+        const deliveryCost = 57 * leads.length;
+        const profitAfterDelivery = totalAmount - deliveryCost;
+        const platformFee = profitAfterDelivery > 0 ? profitAfterDelivery * 0.13 : 0;
+        const totalCosts = deliveryCost + platformFee;
+        const netAmount = totalAmount - totalCosts;
+
+        const invoice = await prisma.invoice.create({
+          data: {
+            invoiceNumber,
+            userId,
+            totalAmountMad: netAmount,
+            status: 'PAID'
+          }
+        });
+
+        // --- WALLET INTEGRATION ---
+        let wallet = await prisma.wallet.findUnique({ where: { userId } });
+        if (!wallet) {
+          wallet = await prisma.wallet.create({ data: { userId } });
+        }
+
+        const updatedWallet = await prisma.wallet.update({
+          where: { id: wallet.id },
+          data: {
+            balanceMad: { increment: netAmount },
+            totalEarnedMad: { increment: totalAmount }
+          }
+        });
+
+        await prisma.walletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            type: 'INVOICE_PAYMENT',
+            amountMad: netAmount,
+            balanceAfterMad: updatedWallet.balanceMad,
+            description: `Paiement facture ${invoiceNumber} (Frais déduits)`,
+          }
+        });
+        // --------------------------
+
+        await prisma.lead.updateMany({
+          where: { id: { in: leadIds.map(id => Number(id)) } },
+          data: { paymentSituation: situation, invoiceId: invoice.id }
+        });
+
+        res.json({
+          status: 'success',
+          message: `${leadIds.length} leads mis à jour avec succès et facture ${invoiceNumber} générée`,
+          data: { invoiceId: invoice.id }
+        });
+        return;
+      }
+    }
+
+    await prisma.lead.updateMany({
+      where: { id: { in: leadIds.map(id => Number(id)) } },
+      data: { paymentSituation: situation, invoiceId: null }
+    });
+
+    res.json({
+      status: 'success',
+      message: `${leadIds.length} leads mis à jour avec succès`
+    });
+  })
+);
+
+// Invoices
+router.get(
+  '/invoices',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { page = 1, limit = 20, search } = req.query;
+    
+    const where: any = {};
+    if (search) {
+      where.OR = [
+        { invoiceNumber: { contains: search as string, mode: 'insensitive' } },
+        { user: { email: { contains: search as string, mode: 'insensitive' } } },
+        { user: { profile: { fullName: { contains: search as string, mode: 'insensitive' } } } }
+      ];
+    }
+
+    const [invoices, total] = await Promise.all([
+      prisma.invoice.findMany({
+        where,
+        include: {
+          user: {
+            include: { profile: true }
+          },
+          _count: {
+            select: { leads: true }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (Number(page) - 1) * Number(limit),
+        take: Number(limit)
+      }),
+      prisma.invoice.count({ where })
+    ]);
+
+    res.json({
+      status: 'success',
+      data: {
+        invoices: invoices.map(inv => ({
+          ...inv,
+          userFullName: inv.user.profile?.fullName || inv.user.email,
+          leadsCount: inv._count.leads
+        })),
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          totalPages: Math.ceil(total / Number(limit)),
+        }
+      }
+    });
+  })
+);
+
+router.get(
+  '/invoices/:id',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const invoiceId = Number(req.params.id);
+
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        user: {
+          include: { profile: true }
+        },
+        leads: {
+          include: {
+            order: {
+              include: { items: { include: { product: true } } }
+            },
+            referralLink: {
+              include: { product: true }
+            }
+          }
+        }
+      }
+    });
+
+    if (!invoice) {
+      res.status(404).json({ status: 'error', message: 'Invoice not found' });
+      return;
+    }
+
+    res.json({
+      status: 'success',
+      data: {
+        ...invoice,
+        userFullName: invoice.user.profile?.fullName || invoice.user.email,
+      }
     });
   })
 );

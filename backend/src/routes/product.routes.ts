@@ -7,6 +7,42 @@ import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 const router = Router();
 const prisma = new PrismaClient();
 
+const checkProductPermission = asyncHandler(async (req: Request, _res: Response, next: any) => {
+  const user = req.user;
+  if (!user) throw new AppException(401, 'Authentication required');
+  
+  if (user.roleName === 'SUPER_ADMIN') return next();
+  
+  if (user.roleName === 'HELPER' && user.canManageProducts) {
+    // If it's a specific product operation (id present in params)
+    const { id } = req.params;
+    if (id && !isNaN(Number(id))) {
+      const product = await prisma.product.findUnique({
+        where: { id: Number(id) },
+        select: { ownerId: true }
+      });
+      
+      if (!product) throw new AppException(404, 'Product not found');
+      
+      // Check if this vendor is assigned to the helper
+      const assignment = await prisma.helperUserAssignment.findUnique({
+        where: {
+          helperId_targetUserId: {
+            helperId: user.id,
+            targetUserId: product.ownerId || 0
+          }
+        }
+      });
+      
+      if (assignment || product.ownerId === user.id) return next();
+      throw new AppException(403, 'You are not authorized to manage this product');
+    }
+    return next(); // For non-specific operations (like list)
+  }
+  
+  throw new AppException(403, 'Permission denied');
+});
+
 router.get(
   '/',
   optionalAuth,
@@ -19,7 +55,7 @@ router.get(
     const userRole = req.user?.roleName;
     if (visibility && visibility !== 'ALL') {
       where.visibility = { has: visibility };
-    } else if (!req.user || (userRole !== 'SUPER_ADMIN' && userRole !== 'ADMIN' && userRole !== 'INFLUENCER')) {
+    } else if (!req.user || (userRole !== 'SUPER_ADMIN' && userRole !== 'ADMIN' && userRole !== 'INFLUENCER' && userRole !== 'HELPER')) {
       // Public/regular users see REGULAR products
       where.visibility = { has: 'REGULAR' };
     }
@@ -29,8 +65,21 @@ router.get(
       if (status && status !== 'ALL') {
         where.status = status;
       }
-    } else if (req.user?.roleName === 'SUPER_ADMIN' && status) {
-      if (status !== 'ALL') {
+    } else if (req.user?.roleName === 'SUPER_ADMIN') {
+      if (status && status !== 'ALL') {
+        where.status = status;
+      }
+    } else if (req.user?.roleName === 'HELPER') {
+      // Helper sees products from their assigned vendors + their own
+      const assignments = await prisma.helperUserAssignment.findMany({
+        where: { helperId: req.user.id },
+        select: { targetUserId: true }
+      });
+      const assignedIds = assignments.map(a => a.targetUserId);
+      assignedIds.push(req.user.id);
+      
+      where.ownerId = { in: assignedIds };
+      if (status && status !== 'ALL') {
         where.status = status;
       }
     } else {
@@ -46,9 +95,9 @@ router.get(
 
     if (search) {
       where.OR = [
-        { nameAr: { contains: search as string } },
-        { nameFr: { contains: search as string } },
-        { sku: { contains: search as string } },
+        { nameAr: { contains: search as string, mode: 'insensitive' } },
+        { nameFr: { contains: search as string, mode: 'insensitive' } },
+        { sku: { contains: search as string, mode: 'insensitive' } },
       ];
     }
 
@@ -57,6 +106,7 @@ router.get(
         where,
         include: {
           categories: true,
+          owner: { select: { id: true, profile: { select: { fullName: true } } } },
           images: {
             where: { isPrimary: true },
             take: 1,
@@ -87,6 +137,7 @@ router.get(
           visibility: p.visibility,
           status: p.status,
           ownerId: p.ownerId,
+          ownerName: (p as any).owner?.profile?.fullName || 'SILACOD',
           categories: (p as any).categories, // Bypass strict types if necessary since include was used
           primaryImage: (p as any).images?.[0]?.imageUrl,
         })),
@@ -123,7 +174,7 @@ router.get(
         where: { userId: req.user.id, productId: Number(id) }
       }) : Promise.resolve(null),
       req.user ? prisma.affiliateClaim.findFirst({
-        where: { userId: req.user.id, productId: Number(id), status: 'ACTIVE' }
+        where: { userId: req.user.id, productId: Number(id), status: 'APPROVED' }
       }) : Promise.resolve(null),
       req.user ? prisma.supportRequest.findFirst({
         where: {
@@ -197,7 +248,7 @@ router.get(
 router.post(
   '/',
   authenticate,
-  authorize('SUPER_ADMIN', 'GROSSELLER'),
+  authorize('SUPER_ADMIN', 'GROSSELLER', 'HELPER'),
   [
     body('sku').notEmpty().trim(),
     body('nameAr').notEmpty().trim(),
@@ -229,9 +280,12 @@ router.post(
     const isGrosseller = req.user!.roleName === 'GROSSELLER';
     const finalStatus = isGrosseller ? 'PENDING' : (status ?? 'APPROVED');
 
-    const finalOwnerId = (req.user!.roleName === 'SUPER_ADMIN' || req.user!.roleName === 'ADMIN') && req.body.ownerId
-      ? Number(req.body.ownerId)
-      : Number(req.user!.id);
+    const isAdmin = req.user!.roleName === 'SUPER_ADMIN' || req.user!.roleName === 'ADMIN';
+    const finalOwnerId = (isAdmin && req.body.ownerId) ? Number(req.body.ownerId) : Number(req.user!.id);
+
+    if (req.user!.roleName === 'HELPER' && !req.user!.canManageProducts) {
+      throw new AppException(403, 'Permission denied');
+    }
 
     // Support both imageUrls (array) and legacy imageUrl (single string)
     const allImageUrls: string[] = Array.isArray(imageUrls) && imageUrls.length > 0
@@ -286,7 +340,7 @@ router.post(
 router.patch(
   '/:id/status',
   authenticate,
-  authorize('SUPER_ADMIN'),
+  checkProductPermission,
   [body('status').isIn(['APPROVED', 'REJECTED'])],
   asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
@@ -313,7 +367,7 @@ router.patch(
 router.patch(
   '/:id',
   authenticate,
-  authorize('SUPER_ADMIN'),
+  checkProductPermission,
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { 
@@ -458,7 +512,7 @@ router.patch(
 router.delete(
   '/:id',
   authenticate,
-  authorize('SUPER_ADMIN'),
+  checkProductPermission,
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
@@ -477,7 +531,7 @@ router.delete(
 router.post(
   '/:id/clone',
   authenticate,
-  authorize('SUPER_ADMIN'),
+  checkProductPermission,
   [
     body('userId').isInt({ min: 1 }),
     body('newSku').optional().isString(),

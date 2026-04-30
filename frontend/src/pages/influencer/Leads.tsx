@@ -6,9 +6,10 @@ import toast from 'react-hot-toast';
 import {
   Users, MousePointerClick, UserCheck, ShoppingCart,
   Filter, Download, Search, Calendar,
-  MapPin, Phone, Package, Clock, Trash2, Headphones,
-  ChevronDown, ChevronUp, Truck, CheckCircle2, Box, AlertCircle
+  MapPin, Phone, Package, Clock, Trash2, Headphones, RefreshCw,
+  ChevronDown, ChevronUp, Truck, CheckCircle2, Box, AlertCircle, X, BarChart3, Activity, PieChart as PieIcon, Zap, TrendingUp
 } from 'lucide-react';
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 const ALL_STATUS_BADGES: Record<string, { label: string; color: string; icon: React.ComponentType<any> }> = {
   // Order-level statuses
@@ -17,10 +18,18 @@ const ALL_STATUS_BADGES: Record<string, { label: string; color: string; icon: Re
   ASSIGNED: { label: 'Au Call Center', color: 'bg-cyan-100 text-cyan-800', icon: Headphones },
   PENDING: { label: 'En attente', color: 'bg-amber-100 text-amber-800', icon: Clock },
   CONFIRMED: { label: 'Confirmé', color: 'bg-blue-100 text-blue-800', icon: CheckCircle2 },
+  PUSHED_TO_DELIVERY: { label: 'Expédié', color: 'bg-violet-100 text-violet-800', icon: Truck },
   SHIPPED: { label: 'Expédié', color: 'bg-violet-100 text-violet-800', icon: Truck },
   DELIVERED: { label: 'Livré', color: 'bg-emerald-100 text-emerald-800', icon: CheckCircle2 },
   CANCELLED: { label: 'Annulé', color: 'bg-red-100 text-red-800', icon: AlertCircle },
   RETURNED: { label: 'Retourné', color: 'bg-orange-100 text-orange-800', icon: Box },
+  REFUNDED: { label: 'Remboursé', color: 'bg-gray-100 text-gray-800', icon: RefreshCw },
+};
+
+const PAYMENT_SITUATION_BADGES: Record<string, { label: string; color: string }> = {
+  PAID: { label: 'Payé', color: 'bg-green-100 text-green-700' },
+  NOT_PAID: { label: 'Non Payé', color: 'bg-red-100 text-red-700' },
+  FACTURED: { label: 'Facturé', color: 'bg-blue-100 text-blue-700' },
 };
 
 export default function InfluencerLeads() {
@@ -32,6 +41,20 @@ export default function InfluencerLeads() {
   const [showStats, setShowStats] = useState(true);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [isPushingBulk, setIsPushingBulk] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    variant: 'primary' | 'danger';
+    isLoading?: boolean;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    variant: 'primary',
+  });
 
   useEffect(() => {
     loadData();
@@ -54,10 +77,18 @@ export default function InfluencerLeads() {
       setLoading(false);
     }
   };
-
-  const totalReferrals = links.reduce((sum, l) => sum + l.clicks, 0);
-  const registered = links.reduce((sum, l) => sum + Math.floor(l.clicks * 0.3), 0);
+ 
+  const totalClicks = links.reduce((sum, l) => sum + l.clicks, 0);
   const converted = links.reduce((sum, l) => sum + l.conversions, 0);
+
+  const totalLeads = commissions.length;
+  const confirmedLeads = commissions.filter(c => 
+    ['CONFIRMED', 'SHIPPED', 'DELIVERED', 'PUSHED_TO_DELIVERY', 'ORDERED'].includes(c.order?.status || '')
+  ).length;
+  const deliveredLeads = commissions.filter(c => c.order?.status === 'DELIVERED').length;
+
+  const confirmationRate = totalLeads > 0 ? (confirmedLeads / totalLeads) * 100 : 0;
+  const deliveryRate = confirmedLeads > 0 ? (deliveredLeads / confirmedLeads) * 100 : 0;
 
   // Build status counts for filter chips
   const statusCounts: Record<string, number> = {};
@@ -94,6 +125,46 @@ export default function InfluencerLeads() {
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
+  // Data for Status Distribution Chart
+  const statusDistData = Object.entries(statusCounts).map(([status, count]) => ({
+    name: ALL_STATUS_BADGES[status]?.label || status,
+    value: count,
+    color: ALL_STATUS_BADGES[status]?.color.includes('emerald') ? '#10b981' :
+           ALL_STATUS_BADGES[status]?.color.includes('blue') ? '#3b82f6' :
+           ALL_STATUS_BADGES[status]?.color.includes('amber') ? '#f59e0b' :
+           ALL_STATUS_BADGES[status]?.color.includes('violet') ? '#8b5cf6' :
+           ALL_STATUS_BADGES[status]?.color.includes('indigo') ? '#6366f1' :
+           ALL_STATUS_BADGES[status]?.color.includes('cyan') ? '#06b6d4' : '#94a3b8'
+  })).sort((a, b) => b.value - a.value);
+
+  // Data for Volume Trend (by Day)
+  const volumeTrendData = commissions.reduce((acc: any[], comm) => {
+    const date = format(new Date(comm.createdAt), 'dd MMM');
+    const existing = acc.find(item => item.date === date);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      acc.push({ date, count: 1 });
+    }
+    return acc;
+  }, []).slice(-10);
+
+  // Data for City Distribution
+  const cityCounts: Record<string, number> = {};
+  commissions.forEach(c => {
+    const city = c.order?.customerCity || 'Inconnue';
+    cityCounts[city] = (cityCounts[city] || 0) + 1;
+  });
+
+  const cityDistData = Object.entries(cityCounts)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5)
+    .map((item, i) => ({
+      ...item,
+      color: ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'][i]
+    }));
+
   const pushableLeads = sortedCommissions.filter(c => (c.order?.status || 'PENDING') === 'LEAD');
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -111,23 +182,55 @@ export default function InfluencerLeads() {
     );
   };
 
-  const handleBulkPush = async (idsToPush?: number[]) => {
+  const handleBulkPush = (idsToPush?: number[]) => {
     const ids = idsToPush || selectedIds;
     if (ids.length === 0) return;
     
-    if (!confirm(`Envoyer ${ids.length} leads au Call Center ?`)) return;
+    setConfirmModal({
+      isOpen: true,
+      title: 'Confirmation d\'envoi',
+      message: `Envoyer ${ids.length} leads au Call Center ?`,
+      variant: 'primary',
+      onConfirm: async () => {
+        try {
+          setIsPushingBulk(true);
+          await influencerApi.pushLeadsToCallCenterBulk(ids);
+          toast.success(`${ids.length} leads envoyés au Call Center!`);
+          setSelectedIds([]);
+          loadData();
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        } catch (err: any) {
+          toast.error(err?.response?.data?.message || 'Erreur lors de l\'envoi groupé');
+        } finally {
+          setIsPushingBulk(false);
+        }
+      }
+    });
+  };
 
-    try {
-      setIsPushingBulk(true);
-      await influencerApi.pushLeadsToCallCenterBulk(ids);
-      toast.success(`${ids.length} leads envoyés au Call Center!`);
-      setSelectedIds([]);
-      loadData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Erreur lors de l\'envoi groupé');
-    } finally {
-      setIsPushingBulk(false);
-    }
+  const handleBulkDelete = () => {
+    if (selectedIds.length === 0) return;
+    
+    setConfirmModal({
+      isOpen: true,
+      title: 'Confirmation de suppression',
+      message: `Êtes-vous sûr de vouloir supprimer ${selectedIds.length} leads ? Cette action est irréversible.`,
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          setIsPushingBulk(true); // Reusing this loading state or could add a new one
+          await influencerApi.deleteLeadsBulk(selectedIds);
+          toast.success(`${selectedIds.length} leads supprimés!`);
+          setSelectedIds([]);
+          loadData();
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        } catch (err: any) {
+          toast.error(err?.response?.data?.message || 'Erreur lors de la suppression');
+        } finally {
+          setIsPushingBulk(false);
+        }
+      }
+    });
   };
 
   if (loading) {
@@ -148,6 +251,14 @@ export default function InfluencerLeads() {
         </div>
         <div className="flex gap-2">
           <button
+            onClick={loadData}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-4 py-2 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:text-influencer-600 hover:border-influencer-100 hover:bg-influencer-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            Actualiser
+          </button>
+          <button
             onClick={() => setShowStats(!showStats)}
             className="flex items-center gap-1.5 px-4 py-2 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50 transition-all"
           >
@@ -161,28 +272,97 @@ export default function InfluencerLeads() {
         </div>
       </div>
 
-      {/* Collapsible Stats */}
+      {/* Collapsible Stats & Analytics */}
       {showStats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-fadeIn">
-          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-5 text-white text-center shadow-lg shadow-blue-200/50">
-            <MousePointerClick className="w-7 h-7 mx-auto mb-2 opacity-80" />
-            <h3 className="text-2xl font-black">{totalReferrals.toLocaleString()}</h3>
-            <p className="text-[11px] font-medium opacity-80 mt-1">Clics Totaux</p>
+        <div className="space-y-6 animate-fadeIn">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm text-center">
+              <MousePointerClick className="w-5 h-5 mx-auto mb-2 text-blue-500" />
+              <h3 className="text-xl font-black text-gray-900">{totalClicks.toLocaleString()}</h3>
+              <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">Page Views</p>
+            </div>
+            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm text-center">
+              <Zap className="w-5 h-5 mx-auto mb-2 text-green-500" />
+              <h3 className="text-xl font-black text-gray-900">{converted.toLocaleString()}</h3>
+              <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">Ventes</p>
+            </div>
+            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm text-center">
+              <TrendingUp className="w-5 h-5 mx-auto mb-2 text-purple-500" />
+              <h3 className="text-xl font-black text-gray-900">{totalClicks > 0 ? ((converted / totalClicks) * 100).toFixed(1) : 0}%</h3>
+              <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">Conv. Rate</p>
+            </div>
+            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm text-center border-b-4 border-b-amber-400">
+              <CheckCircle2 className="w-5 h-5 mx-auto mb-2 text-amber-600" />
+              <h3 className="text-xl font-black text-amber-600">{confirmationRate.toFixed(1)}%</h3>
+              <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">Confirmation</p>
+            </div>
+            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm text-center border-b-4 border-b-emerald-400">
+              <Truck className="w-5 h-5 mx-auto mb-2 text-emerald-600" />
+              <h3 className="text-xl font-black text-emerald-600">{deliveryRate.toFixed(1)}%</h3>
+              <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">Livraison</p>
+            </div>
           </div>
-          <div className="bg-gradient-to-br from-influencer-500 to-purple-600 rounded-2xl p-5 text-white text-center shadow-lg shadow-purple-200/50">
-            <UserCheck className="w-7 h-7 mx-auto mb-2 opacity-80" />
-            <h3 className="text-2xl font-black">{registered.toLocaleString()}</h3>
-            <p className="text-[11px] font-medium opacity-80 mt-1">Inscrits (Est.)</p>
-          </div>
-          <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl p-5 text-white text-center shadow-lg shadow-green-200/50">
-            <ShoppingCart className="w-7 h-7 mx-auto mb-2 opacity-80" />
-            <h3 className="text-2xl font-black">{converted.toLocaleString()}</h3>
-            <p className="text-[11px] font-medium opacity-80 mt-1">Ventes Confirmées</p>
-          </div>
-          <div className="bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl p-5 text-white text-center shadow-lg shadow-orange-200/50">
-            <Package className="w-7 h-7 mx-auto mb-2 opacity-80" />
-            <h3 className="text-2xl font-black">{commissions.length}</h3>
-            <p className="text-[11px] font-medium opacity-80 mt-1">Total Leads</p>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-influencer-500" />
+                  Flux des Leads (10 derniers jours)
+                </h3>
+              </div>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={volumeTrendData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700, fill: '#94a3b8'}} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700, fill: '#94a3b8'}} />
+                    <RechartsTooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
+                    <Bar dataKey="count" fill="#8b5cf6" radius={[6, 6, 0, 0]} barSize={30} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col">
+               <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-2 mb-6">
+                  <MapPin className="w-4 h-4 text-orange-500" />
+                  Top Villes Performance
+                </h3>
+                <div className="flex-1 min-h-[200px] relative">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={cityDistData}
+                        innerRadius={50}
+                        outerRadius={70}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {cityDistData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span className="text-xl font-black text-gray-900">{cityDistData.length}</span>
+                    <span className="text-[8px] font-bold text-gray-400 uppercase">Villes Top</span>
+                  </div>
+                </div>
+                <div className="mt-4 space-y-1">
+                  {cityDistData.map((item, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full" style={{backgroundColor: item.color}} />
+                        <span className="text-[10px] font-bold text-gray-500 truncate max-w-[100px]">{item.name}</span>
+                      </div>
+                      <span className="text-[10px] font-black text-gray-900">{Math.round((item.value / totalLeads) * 100)}%</span>
+                    </div>
+                  ))}
+                </div>
+            </div>
           </div>
         </div>
       )}
@@ -256,6 +436,16 @@ export default function InfluencerLeads() {
                 Pousser la sélection ({selectedIds.length})
               </button>
             )}
+            {selectedIds.length > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                disabled={isPushingBulk}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold hover:bg-red-200 transition-all"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Supprimer ({selectedIds.length})
+              </button>
+            )}
             {pushableLeads.length > 0 && (
               <button
                 onClick={() => handleBulkPush(pushableLeads.map(l => Number(String(l.id).replace('lead-', ''))))}
@@ -284,10 +474,11 @@ export default function InfluencerLeads() {
                   </th>
                   <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Client</th>
                   <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Produit</th>
+                  <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Pack/Option</th>
                   <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Montant</th>
                   <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Date</th>
-                  <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Commission</th>
+                  <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Situation</th>
                   <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
@@ -297,6 +488,24 @@ export default function InfluencerLeads() {
                   const badge = ALL_STATUS_BADGES[status] || { label: status, color: 'bg-gray-100 text-gray-800', icon: Package };
                   const StatusIcon = badge.icon;
                   const productImage = commission.referralLink?.product?.images?.[0]?.imageUrl;
+
+                  let packPriceMad: number | null = null;
+                  const productVariant = commission.order?.productVariant || (commission as any).order?.productVariant;
+                  if (productVariant && commission.referralLink?.landingPage?.customStructure) {
+                    try {
+                      const structure = commission.referralLink.landingPage.customStructure;
+                      const blocks = Array.isArray(structure) ? structure : (structure.blocks || []);
+                      const checkoutBlock = blocks.find((b: any) => b.type === 'express_checkout');
+                      if (checkoutBlock?.content?.options) {
+                        const option = checkoutBlock.content.options.find((o: any) => o.name === productVariant);
+                        if (option && option.price) {
+                          packPriceMad = Number(option.price);
+                        }
+                      }
+                    } catch (e) {
+                      // fallback
+                    }
+                  }
 
                   return (
                     <tr key={commission.id} className={`hover:bg-gray-50/50 transition-colors group ${selectedIds.includes(Number(String(commission.id).replace('lead-', ''))) ? 'bg-influencer-50/30' : ''}`}>
@@ -342,14 +551,26 @@ export default function InfluencerLeads() {
                         </div>
                       </td>
 
+                      {/* Option */}
+                      <td className="px-5 py-4">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter mb-0.5">Sélection</span>
+                          <span className="text-xs font-black text-influencer-600 truncate max-w-[100px]">
+                            {commission.order?.productVariant || (commission as any).order?.productVariant || '-'}
+                          </span>
+                        </div>
+                      </td>
+
                       {/* Montant */}
                       <td className="px-5 py-4">
                         <span className="text-sm font-bold text-gray-900">
                           {Number(commission.order?.totalAmountMad) > 0
                             ? `${Number(commission.order!.totalAmountMad).toFixed(2)} MAD`
-                            : commission.referralLink?.product?.retailPriceMad
-                              ? `${Number(commission.referralLink.product.retailPriceMad).toFixed(2)} MAD`
-                              : '-'}
+                            : packPriceMad !== null
+                              ? `${packPriceMad.toFixed(2)} MAD`
+                              : commission.referralLink?.product?.retailPriceMad
+                                ? `${Number(commission.referralLink.product.retailPriceMad).toFixed(2)} MAD`
+                                : '-'}
                         </span>
                       </td>
 
@@ -375,9 +596,17 @@ export default function InfluencerLeads() {
                         </div>
                       </td>
 
-                      {/* Commission */}
+                      {/* Situation */}
                       <td className="px-5 py-4">
-                        <span className="text-sm font-black text-green-600">+{commission.amount.toFixed(2)} MAD</span>
+                        {(() => {
+                          const sit = commission.order?.lead?.paymentSituation || 'NOT_PAID';
+                          const badge = PAYMENT_SITUATION_BADGES[sit] || PAYMENT_SITUATION_BADGES.NOT_PAID;
+                          return (
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest ${badge.color}`}>
+                              {badge.label}
+                            </span>
+                          );
+                        })()}
                       </td>
 
                       {/* Actions */}
@@ -401,16 +630,24 @@ export default function InfluencerLeads() {
                                 <Headphones className="w-4 h-4" />
                               </button>
                               <button
-                                onClick={async () => {
-                                  if (!confirm('Supprimer ce lead ?')) return;
+                                onClick={() => {
                                   const realId = String(commission.id).replace('lead-', '');
-                                  try {
-                                    await influencerApi.deleteLead(Number(realId));
-                                    toast.success('Lead supprimé');
-                                    loadData();
-                                  } catch (err: any) {
-                                    toast.error(err?.response?.data?.message || 'Erreur');
-                                  }
+                                  setConfirmModal({
+                                    isOpen: true,
+                                    title: 'Supprimer ce lead ?',
+                                    message: 'Cette action est irréversible. Voulez-vous vraiment continuer ?',
+                                    variant: 'danger',
+                                    onConfirm: async () => {
+                                      try {
+                                        await influencerApi.deleteLead(Number(realId));
+                                        toast.success('Lead supprimé');
+                                        loadData();
+                                        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                                      } catch (err: any) {
+                                        toast.error(err?.response?.data?.message || 'Erreur');
+                                      }
+                                    }
+                                  });
                                 }}
                                 className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-all" title="Supprimer"
                               >
@@ -420,25 +657,6 @@ export default function InfluencerLeads() {
                           )}
                           {commission.order?.status === 'ASSIGNED' && (
                             <span className="text-[10px] text-cyan-600 font-bold bg-cyan-50 px-2 py-1 rounded-lg">Au Call Center</span>
-                          )}
-                          {commission.order?.status === 'CONFIRMED' && (
-                            <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded-lg">Confirmé</span>
-                          )}
-                          {commission.order?.status === 'SHIPPED' && (
-                            <span className="text-[10px] text-violet-600 font-bold bg-violet-50 px-2 py-1 rounded-lg flex items-center gap-1">
-                              <Truck className="w-3 h-3" /> En livraison
-                            </span>
-                          )}
-                          {commission.order?.status === 'DELIVERED' && (
-                            <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-1 rounded-lg flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3" /> Livré ✓
-                            </span>
-                          )}
-                          {commission.order?.status === 'CANCELLED' && (
-                            <span className="text-[10px] text-red-600 font-bold bg-red-50 px-2 py-1 rounded-lg">Annulé</span>
-                          )}
-                          {commission.order?.status === 'RETURNED' && (
-                            <span className="text-[10px] text-orange-600 font-bold bg-orange-50 px-2 py-1 rounded-lg">Retourné</span>
                           )}
                         </div>
                       </td>
@@ -460,6 +678,45 @@ export default function InfluencerLeads() {
           </div>
         )}
       </div>
+
+      {/* Confirmation Modal */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2rem] w-full max-w-sm overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className={`w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center ${confirmModal.variant === 'danger' ? 'bg-red-50 text-red-500' : 'bg-influencer-50 text-influencer-600'}`}>
+                {confirmModal.variant === 'danger' ? <AlertCircle size={32} /> : <Headphones size={32} />}
+              </div>
+              <h2 className="text-xl font-black text-slate-800 tracking-tight mb-2">
+                {confirmModal.title}
+              </h2>
+              <p className="text-sm text-slate-500 font-medium leading-relaxed">
+                {confirmModal.message}
+              </p>
+            </div>
+            
+            <div className="p-6 bg-slate-50/50 flex gap-3">
+              <button
+                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                className="flex-1 px-6 py-3 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 bg-white border border-slate-100 rounded-2xl transition-all shadow-sm"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={confirmModal.onConfirm}
+                disabled={isPushingBulk}
+                className={`flex-1 px-6 py-3 text-xs font-black uppercase tracking-widest text-white rounded-2xl shadow-lg transition-all ${
+                  confirmModal.variant === 'danger' 
+                    ? 'bg-red-500 hover:bg-red-600 shadow-red-200' 
+                    : 'bg-influencer-600 hover:bg-influencer-700 shadow-influencer-200'
+                }`}
+              >
+                {isPushingBulk ? 'En cours...' : 'Confirmer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

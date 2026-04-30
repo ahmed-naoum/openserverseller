@@ -26,6 +26,9 @@ import securityRoutes from './security.routes.js';
 import webhookRoutes from './webhook.routes.js';
 import youcanRoutes from './youcan.routes.js';
 import supportRoutes from './support.routes.js';
+import invoiceRoutes from './invoice.routes.js';
+import backupRoutes from './admin/backup.routes.js';
+
 
 const router = Router();
 
@@ -33,7 +36,7 @@ router.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    version: '1.0.0', // Keeping version is generally okay unless it exposes specific library versions
+    version: '1.0.0',
   });
 });
 
@@ -42,13 +45,20 @@ router.use('/users', auditLog, userRoutes);
 router.use('/products', auditLog, productRoutes);
 router.use('/categories', categoryRoutes);
 router.use('/leads', auditLog, leadRoutes);
+router.use('/invoices', auditLog, invoiceRoutes);
 router.use('/orders', auditLog, orderRoutes);
 router.use('/wallet', auditLog, walletRoutes);
 router.use('/payouts', auditLog, payoutRoutes);
 router.use('/couriers', courierRoutes);
 router.use('/warehouse', warehouseRoutes);
 router.use('/notifications', notificationRoutes);
+
+// Register specific admin sub-routes BEFORE the general /admin route
+router.use('/admin/backups', backupRoutes);
+router.use('/admin/security', securityRoutes);
+
 router.use('/admin', auditLog, adminRoutes);
+
 router.use('/public', publicRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/upload', uploadRoutes);
@@ -59,7 +69,6 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/announcements', announcementRoutes);
 router.use('/influencer', auditLog, influencerRoutes);
 router.use('/settings', settingsRoutes);
-router.use('/admin/security', securityRoutes);
 router.use('/webhooks', webhookRoutes);
 router.use('/youcan', auditLog, youcanRoutes);
 router.use('/support', auditLog, supportRoutes);

@@ -12,19 +12,20 @@ export default function AgentDashboard() {
   const stats = {
     total: leads.length,
     new: leads.filter((l: any) => l.status === 'NEW').length,
-    contacted: leads.filter((l: any) => l.status === 'CONTACTED').length,
-    interested: leads.filter((l: any) => l.status === 'INTERESTED').length,
-    ordered: leads.filter((l: any) => l.status === 'ORDERED').length,
+    callback: leads.filter((l: any) => l.status === 'CALL_LATER').length,
+    noReply: leads.filter((l: any) => l.status === 'NO_REPLY').length,
+    confirmed: leads.filter((l: any) => l.status === 'CONFIRMED').length,
   };
 
   const statusColors: Record<string, string> = {
     NEW: 'primary',
     ASSIGNED: 'purple',
-    CONTACTED: 'warning',
-    INTERESTED: 'success',
-    NOT_INTERESTED: 'danger',
-    ORDERED: 'success',
-    UNREACHABLE: 'gray',
+    CALL_LATER: 'warning',
+    NO_REPLY: 'gray',
+    CONFIRMED: 'success',
+    WRONG_ORDER: 'warning',
+    CANCEL_REASON_PRICE: 'gray',
+    CANCEL_ORDER: 'danger',
     INVALID: 'danger',
   };
 
@@ -47,16 +48,16 @@ export default function AgentDashboard() {
           <div className="text-sm text-gray-500">Nouveaux</div>
         </div>
         <div className="card p-4">
-          <div className="text-2xl font-bold text-yellow-600">{stats.contacted}</div>
-          <div className="text-sm text-gray-500">Contactés</div>
+          <div className="text-2xl font-bold text-yellow-600">{stats.callback}</div>
+          <div className="text-sm text-gray-500">Rappels</div>
         </div>
         <div className="card p-4">
-          <div className="text-2xl font-bold text-green-600">{stats.interested}</div>
-          <div className="text-sm text-gray-500">Intéressés</div>
+          <div className="text-2xl font-bold text-gray-600">{stats.noReply}</div>
+          <div className="text-sm text-gray-500">Pas de réponse</div>
         </div>
         <div className="card p-4">
-          <div className="text-2xl font-bold text-emerald-600">{stats.ordered}</div>
-          <div className="text-sm text-gray-500">Commandés</div>
+          <div className="text-2xl font-bold text-emerald-600">{stats.confirmed}</div>
+          <div className="text-sm text-gray-500">Confirmés</div>
         </div>
       </div>
 

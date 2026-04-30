@@ -19,6 +19,8 @@ import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { ProCard } from '../../components/common/ProCard';
+import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const CATEGORIES = ['General', 'Payment', 'Delivery', 'Product Issue', 'Bug', 'Account'];
 
@@ -29,6 +31,9 @@ export default function SupportTickets() {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isClaiming, setIsClaiming] = useState<number | null>(null);
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
   const [newTicket, setNewTicket] = useState({
     subject: '',
@@ -43,9 +48,10 @@ export default function SupportTickets() {
   const fetchTickets = async () => {
     try {
       setIsLoading(true);
-      const res = await supportApi.list({ 
-        status: getMappedStatus(statusFilter)
-      });
+      const isAgent = ['SUPER_ADMIN', 'SYSTEM_SUPPORT'].includes(user?.role || '');
+      const res = isAgent 
+        ? await adminApi.getSupportRequests({ status: getMappedStatus(statusFilter) })
+        : await supportApi.list({ status: getMappedStatus(statusFilter) });
       setTickets(res.data.data);
     } catch (error) {
       toast.error('Erreur lors du chargement des tickets');
@@ -82,7 +88,7 @@ export default function SupportTickets() {
   const getMappedStatus = (uiStatus: string) => {
     switch (uiStatus) {
       case 'PENDING': return 'OPEN';
-      case 'WAITING': return 'IN_PROGRESS';
+      case 'CLAIMED': return 'IN_PROGRESS';
       case 'CLOSED': return 'CLOSED';
       default: return undefined;
     }
@@ -91,7 +97,7 @@ export default function SupportTickets() {
   const getDisplayStatus = (backendStatus: string) => {
     switch (backendStatus) {
       case 'OPEN': return 'PENDING';
-      case 'IN_PROGRESS': return 'WAITING';
+      case 'IN_PROGRESS': return 'CLAIMED';
       case 'RESOLVED': return 'CLOSED';
       case 'CLOSED': return 'CLOSED';
       default: return backendStatus;
@@ -120,7 +126,7 @@ export default function SupportTickets() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {['ALL', 'PENDING', 'WAITING', 'CLOSED'].map((status) => (
+              {['ALL', 'PENDING', 'CLAIMED', 'CLOSED'].map((status) => (
                 <button
                   key={status}
                   onClick={() => setStatusFilter(status)}
@@ -148,6 +154,13 @@ export default function SupportTickets() {
               />
             </div>
 
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="w-full sm:w-auto px-8 py-4 bg-slate-900 text-white rounded-[1.5rem] text-sm font-black uppercase tracking-widest hover:bg-primary-600 hover:shadow-2xl hover:shadow-primary-500/25 hover:-translate-y-1 transition-all active:scale-95 flex items-center justify-center gap-3 shrink-0"
+            >
+              <Plus size={18} strokeWidth={3} />
+              Nouveau Ticket
+            </button>
           </div>
         </div>
 
@@ -177,6 +190,7 @@ export default function SupportTickets() {
                         <span className="text-slate-300 font-black text-[10px] uppercase tracking-tighter">ID: #{ticket.id}</span>
                         <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-[0.5rem] ${
                           ticket.status === 'OPEN' ? 'text-amber-600 bg-amber-50' :
+                          ticket.status === 'IN_PROGRESS' ? 'text-violet-600 bg-violet-50' :
                           ticket.status === 'CLOSED' || ticket.status === 'RESOLVED' ? 'text-slate-500 bg-slate-50' :
                           'text-primary-600 bg-primary-50'
                         }`}>
@@ -254,6 +268,41 @@ export default function SupportTickets() {
                           {ticket.user?.profile?.fullName || 'Utilisateur'}
                         </span>
                       </div>
+                      
+                      {ticket.conversationId ? (
+                        <button
+                          onClick={() => {
+                            const isAgent = ['SUPER_ADMIN', 'SYSTEM_SUPPORT'].includes(user?.role || '');
+                            const prefix = isAgent ? '/admin' : (user?.role === 'VENDOR' ? '/dashboard' : `/${user?.role?.toLowerCase()}`);
+                            navigate(`${prefix}/chat?convId=${ticket.conversationId}`);
+                          }}
+                          className="px-4 py-1.5 bg-violet-50 text-violet-600 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-violet-600 hover:text-white transition-all border border-violet-100 flex items-center gap-2"
+                        >
+                          <MessageSquare size={12} />
+                          Ouvrir Chat
+                        </button>
+                      ) : (
+                        ['SUPER_ADMIN', 'SYSTEM_SUPPORT'].includes(user?.role || '') && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                setIsClaiming(ticket.id);
+                                // Need an endpoint to claim by supportRequestId or just use existing claim if we find conversation
+                                // Since we now create conversations for every ticket, conversationId should be present.
+                                // If not, we might need to fetch it.
+                                toast.error('Chat non disponible pour ce ticket ancien');
+                              } finally {
+                                setIsClaiming(null);
+                              }
+                            }}
+                            className="px-4 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-violet-600 transition-all flex items-center gap-2"
+                          >
+                            <Headphones size={12} />
+                            Claim & Chat
+                          </button>
+                        )
+                      )}
+
                       <span className="text-[9px] font-bold text-slate-300">
                         {format(new Date(ticket.createdAt), 'dd MMMM', { locale: fr })}
                       </span>

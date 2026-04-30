@@ -38,7 +38,7 @@ export default function AgentMyLeads() {
         if (activeTab === 'PUSHED') {
           status = 'PUSHED_TO_DELIVERY';
         } else if (activeTab === 'MY_LEADS') {
-          status = 'ASSIGNED,CONTACTED,INTERESTED,ORDERED';
+          status = 'ASSIGNED,CALL_LATER,NO_REPLY,CONFIRMED,WRONG_ORDER,CANCEL_REASON_PRICE,CANCEL_ORDER';
         }
         
         response = await leadsApi.list({ 
@@ -79,9 +79,9 @@ export default function AgentMyLeads() {
     }
   };
 
-  const handlePushToDelivery = async (leadId: number) => {
+  const handlePushToDelivery = async (lead: any) => {
     try {
-      await leadsApi.pushToDelivery(leadId, { productId: 0 });
+      await leadsApi.pushToDelivery(lead.id, { productId: lead.product?.id || 0 });
       toast.success('Commande créée avec succès !');
       loadData(pagination.page);
     } catch (err: any) {
@@ -195,17 +195,27 @@ export default function AgentMyLeads() {
                       </a>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                        lead.status === 'ASSIGNED' ? 'bg-amber-100 text-amber-700' :
-                        lead.status === 'CONTACTED' ? 'bg-blue-100 text-blue-700' :
-                        lead.status === 'INTERESTED' ? 'bg-purple-100 text-purple-700' :
-                        lead.status === 'ORDERED' ? 'bg-emerald-100 text-emerald-700' :
-                        lead.status === 'PUSHED_TO_DELIVERY' ? 'bg-indigo-100 text-indigo-700' :
-                        lead.status === 'NEW' || lead.status === 'AVAILABLE' ? 'bg-green-100 text-green-700' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
-                        {lead.status === 'PUSHED_TO_DELIVERY' ? 'EN LIVRAISON' : lead.status}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider w-fit ${
+                          lead.status === 'ASSIGNED' ? 'bg-amber-100 text-amber-700' :
+                          lead.status === 'CALL_LATER' ? 'bg-blue-100 text-blue-700' :
+                          lead.status === 'NO_REPLY' ? 'bg-gray-100 text-gray-700' :
+                          lead.status === 'CONFIRMED' ? 'bg-green-100 text-green-700' :
+                          lead.status === 'WRONG_ORDER' ? 'bg-amber-100 text-amber-700' :
+                          lead.status === 'CANCEL_REASON_PRICE' ? 'bg-gray-100 text-gray-700' :
+                          lead.status === 'CANCEL_ORDER' ? 'bg-red-100 text-red-700' :
+                          lead.status === 'PUSHED_TO_DELIVERY' ? 'bg-indigo-100 text-indigo-700' :
+                          lead.status === 'NEW' || lead.status === 'AVAILABLE' ? 'bg-green-100 text-green-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {lead.status === 'PUSHED_TO_DELIVERY' ? 'EN LIVRAISON' : lead.status}
+                        </span>
+                        {lead.callbackAt && lead.status === 'CALL_LATER' && (
+                          <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center gap-1 w-fit">
+                            ⏰ {format(new Date(lead.callbackAt), 'dd/MM HH:mm')}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-[11px] text-gray-400">
                       {format(new Date(lead.createdAt), 'dd MMMM yyyy HH:mm')}
@@ -220,9 +230,9 @@ export default function AgentMyLeads() {
                             >
                                 👁️ Détails
                             </button>
-                            {lead.status === 'ORDERED' && (
+                            {['ORDERED', 'CONFIRMED'].includes(lead.status) && (
                               <button
-                                onClick={() => handlePushToDelivery(lead.id)}
+                                onClick={() => handlePushToDelivery(lead)}
                                 className="p-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-all flex items-center gap-1.5 text-[10px] font-bold"
                               >
                                   🚚 Envoyer

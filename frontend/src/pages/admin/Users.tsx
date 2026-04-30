@@ -20,7 +20,12 @@ import {
   ChevronRight,
   Filter,
   Eye,
-  EyeOff
+  EyeOff,
+  Package,
+  Shield,
+  Box,
+  Tag,
+  FileText
 } from 'lucide-react';
 
 function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; onClose: () => void; agent: any }) {
@@ -220,7 +225,9 @@ function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; o
 }
 
 function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; onClose: () => void; helper: any }) {
+  const queryClient = useQueryClient();
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
+  const [autoAssign, setAutoAssign] = useState(helper?.autoAssignHelperUsers || false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [allUsers, setAllUsers] = useState<any[]>([]);
@@ -239,6 +246,7 @@ function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; 
       setAllUsers(list);
       const currentIds = (assignRes.data?.data || []).map((a: any) => a.targetUserId);
       setSelectedUsers(currentIds);
+      setAutoAssign(helper.autoAssignHelperUsers || false);
     }).catch(() => {
       toast.error('Erreur lors du chargement');
     }).finally(() => setLoading(false));
@@ -247,8 +255,14 @@ function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await adminApi.setHelperUserAssignments(helper.id, selectedUsers);
-      toast.success(`${selectedUsers.length} utilisateur(s) assigné(s) à ${helper.fullName || 'ce helper'}`);
+      await adminApi.setHelperUserAssignments(helper.id, selectedUsers, autoAssign);
+      toast.success(
+        autoAssign 
+          ? `Auto-assignation activée pour ${helper.fullName || 'ce helper'}`
+          : `${selectedUsers.length} utilisateur(s) assigné(s) à ${helper.fullName || 'ce helper'}`
+      );
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
       onClose();
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Erreur lors de la sauvegarde');
@@ -261,6 +275,14 @@ function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; 
     setSelectedUsers(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
+  };
+
+  const toggleAll = () => {
+    if (selectedUsers.length === allUsers.length) {
+      setSelectedUsers([]);
+    } else {
+      setSelectedUsers(allUsers.map(u => u.id));
+    }
   };
 
   if (!isOpen || !helper) return null;
@@ -284,6 +306,43 @@ function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; 
         </div>
 
         <div className="p-8 overflow-y-auto flex-1 bg-white/50">
+          {/* Auto-assign toggle */}
+          <div className={`mb-6 p-4 rounded-3xl border-2 transition-all duration-300 ${
+            autoAssign 
+              ? 'border-indigo-500 bg-indigo-50/50 shadow-lg shadow-indigo-100' 
+              : 'border-slate-100 bg-slate-50/50'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-colors ${
+                  autoAssign ? 'bg-indigo-600 text-white' : 'bg-white text-slate-400 border border-slate-100'
+                }`}>
+                  <ShieldAlert size={20} />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-slate-800 tracking-tight">Auto-assignation globale</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Tous les utilisateurs (présents & futurs)</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAutoAssign(!autoAssign)}
+                className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${
+                  autoAssign ? 'bg-indigo-600' : 'bg-slate-200'
+                }`}
+              >
+                <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-300 transform ${
+                  autoAssign ? 'translate-x-6' : 'translate-x-0'
+                }`} />
+              </button>
+            </div>
+            {autoAssign && (
+              <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mt-3 animate-pulse">
+                ✨ Mode Helper Global Activé
+              </p>
+            )}
+          </div>
+
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
               <div className="w-12 h-12 border-4 border-primary-100 border-t-primary-600 rounded-full animate-spin" />
@@ -296,12 +355,20 @@ function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; 
           ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between mb-4">
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  {selectedUsers.length} sélectionnés
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  {selectedUsers.length} d'entre eux sélectionnés
                 </p>
+                <div className="h-px flex-1 mx-4 bg-slate-100" />
+                <button
+                  type="button"
+                  onClick={toggleAll}
+                  className="text-[10px] font-black text-primary-600 uppercase tracking-widest hover:text-primary-800 transition-colors"
+                >
+                  {selectedUsers.length === allUsers.length ? 'Tout désélectionner' : 'Tout sélectionner'}
+                </button>
               </div>
               {allUsers.map((u) => (
-                 <label
+                <label
                   key={u.id}
                   className={`flex items-center gap-4 p-4 rounded-2xl border transition-all duration-300 group cursor-pointer ${
                     selectedUsers.includes(u.id)
@@ -325,7 +392,7 @@ function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; 
                   <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center font-black text-slate-400 group-hover:bg-primary-100 group-hover:text-primary-600 transition-colors">
                     {u.fullName?.charAt(0) || u.email?.charAt(0) || '?'}
                   </div>
-                   <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-black tracking-tight underline">{u.fullName}</p>
                     <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">{u.role} - {u.email}</p>
                   </div>
@@ -345,7 +412,7 @@ function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; 
           <button
             onClick={handleSave}
             disabled={saving || loading}
-             className="flex-[2] btn-primary rounded-2xl shadow-xl shadow-primary-200/50"
+            className="flex-[2] btn-primary rounded-2xl shadow-xl shadow-primary-200/50"
           >
             {saving ? 'Sauvegarde...' : `Confirmer (${selectedUsers.length})`}
           </button>
@@ -354,6 +421,7 @@ function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; 
     </div>
   );
 }
+
 
 function AddUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [formData, setFormData] = useState({
@@ -383,8 +451,8 @@ function AddUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xl flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
-      <div className="bg-white rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl border border-white/20">
-        <div className="p-10 border-b border-slate-50 flex justify-between items-center bg-gradient-to-br from-primary-50/50 to-indigo-50/30">
+      <div className="bg-white rounded-[2.5rem] w-full max-w-lg max-h-[90vh] overflow-hidden shadow-2xl border border-white/20 flex flex-col">
+        <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-gradient-to-br from-primary-50/50 to-indigo-50/30 shrink-0">
           <div>
             <h2 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-3">
               <UserPlus size={28} className="text-primary-600" />
@@ -397,7 +465,8 @@ function AddUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
           </button>
         </div>
         
-        <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate(formData); }} className="p-10 space-y-6">
+        <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate(formData); }} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar">
           <div className="grid grid-cols-2 gap-6">
             <div className="col-span-2">
               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Nom Complet</label>
@@ -485,21 +554,22 @@ function AddUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
               </select>
             </div>
           </div>
+        </div>
           
-          <div className="pt-4 flex gap-4">
+          <div className="p-8 pt-4 border-t border-slate-50 flex gap-4 shrink-0 bg-slate-50/50">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all"
+              className="flex-1 px-6 py-3.5 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 bg-white border border-slate-100 rounded-2xl transition-all shadow-sm"
             >
               Annuler
             </button>
             <button
               type="submit"
               disabled={createMutation.isPending}
-              className="flex-[2] btn-primary rounded-2xl shadow-xl shadow-primary-200/50"
+              className="flex-[2] px-6 py-3.5 text-xs font-black uppercase tracking-widest text-white bg-indigo-600 hover:bg-indigo-700 rounded-2xl shadow-lg shadow-indigo-200/50 transition-all disabled:opacity-50"
             >
-              {createMutation.isPending ? 'Lancement...' : 'Créer Compte'}
+              {createMutation.isPending ? 'Sync...' : 'Créer Compte'}
             </button>
           </div>
         </form>
@@ -515,6 +585,11 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
     phone: user?.phone || '',
     role: user?.role || 'VENDOR',
     canImpersonate: user?.canImpersonate || false,
+    canManageProducts: user?.canManageProducts || false,
+    canManageLeads: user?.canManageLeads || false,
+    canManageOrders: user?.canManageOrders || false,
+    canManageInfluencerLinks: user?.canManageInfluencerLinks || false,
+    canManageTickets: user?.canManageTickets || false,
   });
   const queryClient = useQueryClient();
 
@@ -534,8 +609,8 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xl flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
-      <div className="bg-white rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl border border-white/20">
-        <div className="p-10 border-b border-slate-50 flex justify-between items-center bg-gradient-to-br from-indigo-50/50 to-purple-50/30">
+      <div className="bg-white rounded-[2.5rem] w-full max-w-lg max-h-[90vh] overflow-hidden shadow-2xl border border-white/20 flex flex-col">
+        <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-gradient-to-br from-indigo-50/50 to-purple-50/30 shrink-0">
           <div>
             <h2 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-3">
               <Edit2 size={24} className="text-indigo-600" />
@@ -548,9 +623,9 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
           </button>
         </div>
         
-        <form onSubmit={(e) => { e.preventDefault(); updateMutation.mutate(formData); }} className="p-10 space-y-6">
-          <div className="space-y-6">
-            <div>
+        <form onSubmit={(e) => { e.preventDefault(); updateMutation.mutate(formData); }} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar">
+            <div className="space-y-6">
               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Identification Nom</label>
               <input
                 type="text"
@@ -599,40 +674,138 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
             </div>
 
             {formData.role === 'HELPER' && (
-              <div className="p-4 bg-orange-50 border border-orange-100 rounded-2xl flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-bold text-orange-900">Accès Mode Assistance</p>
-                  <p className="text-[10px] text-orange-700 font-medium">Permet de se connecter aux autres comptes.</p>
+              <>
+                <div className="flex items-center justify-between p-2.5 bg-orange-50 rounded-xl border border-orange-100">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-white rounded-lg text-orange-600 shadow-sm">
+                      <Package size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Produits</h4>
+                      <p className="text-[8px] font-bold text-orange-400 uppercase tracking-tighter">Accès catalogue</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, canManageProducts: !formData.canManageProducts })}
+                    className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageProducts ? 'bg-orange-500' : 'bg-slate-200'}`}
+                  >
+                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageProducts ? 'left-5.5' : 'left-0.5'}`} />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 bg-blue-50 rounded-xl border border-blue-100">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-white rounded-lg text-blue-600 shadow-sm">
+                      <Users size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Leads</h4>
+                      <p className="text-[8px] font-bold text-blue-400 uppercase tracking-tighter">Accès tous les leads</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, canManageLeads: !formData.canManageLeads })}
+                    className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageLeads ? 'bg-blue-500' : 'bg-slate-200'}`}
+                  >
+                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageLeads ? 'left-5.5' : 'left-0.5'}`} />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 bg-green-50 rounded-xl border border-green-100">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-white rounded-lg text-green-600 shadow-sm">
+                      <Box size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Colis</h4>
+                      <p className="text-[8px] font-bold text-green-400 uppercase tracking-tighter">Accès expéditions</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, canManageOrders: !formData.canManageOrders })}
+                    className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageOrders ? 'bg-green-500' : 'bg-slate-200'}`}
+                  >
+                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageOrders ? 'left-5.5' : 'left-0.5'}`} />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 bg-purple-50 rounded-xl border border-purple-100">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-white rounded-lg text-purple-600 shadow-sm">
+                      <Tag size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Liens de Parrainage</h4>
+                      <p className="text-[8px] font-bold text-purple-400 uppercase tracking-tighter">Gérer les liens influenceurs</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, canManageInfluencerLinks: !formData.canManageInfluencerLinks })}
+                    className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageInfluencerLinks ? 'bg-purple-500' : 'bg-slate-200'}`}
+                  >
+                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageInfluencerLinks ? 'left-5.5' : 'left-0.5'}`} />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 bg-teal-50 rounded-xl border border-teal-100">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-white rounded-lg text-teal-600 shadow-sm">
+                      <FileText size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Tickets</h4>
+                      <p className="text-[8px] font-bold text-teal-400 uppercase tracking-tighter">Étiquettes Coliaty</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, canManageTickets: !formData.canManageTickets })}
+                    className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageTickets ? 'bg-teal-500' : 'bg-slate-200'}`}
+                  >
+                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageTickets ? 'left-5.5' : 'left-0.5'}`} />
+                  </button>
+                </div>
+              </>
+            )}
+
+            {(formData.role === 'HELPER' || formData.role === 'SUPER_ADMIN') && (
+              <div className="flex items-center justify-between p-2.5 bg-rose-50 rounded-xl border border-rose-100">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-white rounded-lg text-rose-600 shadow-sm">
+                    <Shield size={16} />
+                  </div>
+                  <div>
+                    <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Assistance</h4>
+                    <p className="text-[8px] font-bold text-rose-400 uppercase tracking-tighter">Impersonation</p>
+                  </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, canImpersonate: !formData.canImpersonate })}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                    formData.canImpersonate ? 'bg-orange-600' : 'bg-slate-200'
-                  }`}
+                  className={`w-10 h-5 rounded-full transition-all relative ${formData.canImpersonate ? 'bg-rose-500' : 'bg-slate-200'}`}
                 >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      formData.canImpersonate ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
+                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canImpersonate ? 'left-5.5' : 'left-0.5'}`} />
                 </button>
               </div>
             )}
           </div>
           
-          <div className="pt-4 flex gap-4">
+          <div className="p-8 pt-4 border-t border-slate-50 flex gap-4 shrink-0 bg-slate-50/50">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all"
+              className="flex-1 px-6 py-3.5 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 bg-white border border-slate-100 rounded-2xl transition-all shadow-sm"
             >
               Fermer
             </button>
             <button
               type="submit"
               disabled={updateMutation.isPending}
-              className="flex-[2] btn-primary rounded-2xl shadow-xl shadow-indigo-200/50 bg-indigo-600 hover:bg-indigo-700"
+              className="flex-[2] px-6 py-3.5 text-xs font-black uppercase tracking-widest text-white bg-indigo-600 hover:bg-indigo-700 rounded-2xl shadow-lg shadow-indigo-200/50 transition-all disabled:opacity-50"
             >
               {updateMutation.isPending ? 'Sync...' : 'Sauvegarder'}
             </button>
@@ -650,6 +823,8 @@ export default function AdminUsers() {
   const [editingUser, setEditingUser] = useState<any>(null);
   const [assigningAgent, setAssigningAgent] = useState<any>(null);
   const [assigningHelper, setAssigningHelper] = useState<any>(null);
+  const [tempUserForReset, setTempUserForReset] = useState<any>(null);
+  const [generatedPasswordData, setGeneratedPasswordData] = useState<{password: string, user: any} | null>(null);
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -689,10 +864,16 @@ export default function AdminUsers() {
   const sendPwResetMutation = useMutation({
     mutationFn: (uuid: string) => adminApi.sendPasswordResetLink(uuid),
     onSuccess: (res) => {
-      toast.success(res.data?.message || 'Lien de réinitialisation envoyé!');
+      if (res.data?.data?.tempPassword && tempUserForReset) {
+        setGeneratedPasswordData({ password: res.data.data.tempPassword, user: tempUserForReset });
+        setTempUserForReset(null);
+      } else {
+        toast.success(res.data?.message || 'Mot de passe généré !');
+      }
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.message || 'Erreur lors de l\'envoi du lien');
+      setTempUserForReset(null);
+      toast.error(err.response?.data?.message || 'Erreur lors de la génération');
     }
   });
 
@@ -937,12 +1118,13 @@ export default function AdminUsers() {
                               </button>
                               <button
                                 onClick={() => {
-                                  if (window.confirm('Envoyer un lien de réinitialisation de mot de passe ?')) {
+                                  if (window.confirm('Générer un nouveau mot de passe temporaire pour cet utilisateur ?')) {
+                                    setTempUserForReset(user);
                                     sendPwResetMutation.mutate(user.uuid);
                                   }
                                 }}
                                 className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-100 transition-all flex items-center justify-center"
-                                title="Envoyer Reset Password"
+                                title="Générer mot de passe temporaire"
                               >
                                 <KeyIcon size={18} />
                               </button>
@@ -986,6 +1168,51 @@ export default function AdminUsers() {
           onClose={() => setAssigningHelper(null)}
           helper={assigningHelper}
         />
+      )}
+
+      {generatedPasswordData && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xl flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2rem] w-full max-w-sm overflow-hidden shadow-2xl border border-white/20 flex flex-col scale-in-center transition-transform duration-500">
+            <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-gradient-to-br from-indigo-50/50 to-purple-50/30">
+              <div>
+                <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                  <KeyIcon size={24} className="text-indigo-600" />
+                  Mot de passe généré
+                </h2>
+                <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">{generatedPasswordData.user.fullName || generatedPasswordData.user.email}</p>
+              </div>
+            </div>
+            
+            <div className="p-8 space-y-6 text-center">
+              <p className="text-sm font-bold text-slate-600">
+                Veuillez communiquer ce mot de passe temporaire à l'utilisateur. Il sera forcé de le modifier lors de sa prochaine connexion.
+              </p>
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 relative group">
+                <p className="text-3xl font-mono font-black text-indigo-600 tracking-wider">
+                  {generatedPasswordData.password}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-8 pt-0 flex gap-4">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(generatedPasswordData.password);
+                  toast.success('Mot de passe copié !');
+                }}
+                className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-white bg-indigo-600 hover:bg-indigo-700 rounded-2xl shadow-lg shadow-indigo-200/50 transition-all"
+              >
+                Copier
+              </button>
+              <button
+                onClick={() => setGeneratedPasswordData(null)}
+                className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

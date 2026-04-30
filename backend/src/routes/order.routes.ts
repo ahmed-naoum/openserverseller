@@ -93,6 +93,117 @@ router.get(
 );
 
 router.get(
+  '/parcel/:code/label',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const { code } = req.params;
+
+    const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
+    const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
+    const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
+
+    if (!COLIATY_PUBLIC_KEY || !COLIATY_SECRET_KEY || COLIATY_PUBLIC_KEY === 'your_coliaty_public_key') {
+      throw new AppException(500, '[Coliaty] Clés API non configurées.');
+    }
+
+    try {
+      const response = await axios.get(`${COLIATY_BASE_URL.replace(/\/$/, '')}/parcel/generate-label/${code}`, {
+        headers: {
+          Authorization: `Bearer ${COLIATY_PUBLIC_KEY}:${COLIATY_SECRET_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 15000,
+      });
+
+      res.status(200).json({
+        status: 'success',
+        data: response.data?.data
+      });
+    } catch (error: any) {
+      console.error('[Coliaty] Label Generation Error:', error.response?.data || error.message);
+      const status = error.response?.status || 500;
+      const data = error.response?.data;
+      throw new AppException(status, data?.message || 'Erreur lors de la génération de l\'étiquette');
+    }
+  })
+);
+
+router.get(
+  '/products-with-parcels',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    // We want products that have orders in PENDING status (En attente) and have a coliatyPackageCode
+    const where: any = {
+      status: 'PENDING',
+      coliatyPackageCode: { not: null }
+    };
+
+    if (req.user!.roleName === 'HELPER') {
+      const assignments = await (prisma as any).helperUserAssignment.findMany({
+        where: { helperId: req.user!.id }
+      });
+      const assignedIds = assignments.map((a: any) => a.targetUserId);
+      where.vendorId = { in: assignedIds };
+    } else if (req.user!.roleName === 'VENDOR') {
+      where.vendorId = req.user!.id;
+    } else if (req.user!.roleName !== 'SUPER_ADMIN') {
+      // Other roles shouldn't see this unless they are admins
+      throw new AppException(403, 'Access denied');
+    }
+
+    const orders = await prisma.order.findMany({
+      where,
+      include: {
+        items: {
+          include: {
+            product: {
+              include: { images: { where: { isPrimary: true }, take: 1 } }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    // Group by product
+    const productGroups: Record<number, any> = {};
+
+    orders.forEach(order => {
+      order.items.forEach(item => {
+        const product = item.product;
+        if (!productGroups[product.id]) {
+          productGroups[product.id] = {
+            id: product.id,
+            name: product.nameFr,
+            image: product.images[0]?.imageUrl,
+            pendingParcels: []
+          };
+        }
+        
+        // Add order to this product's pending parcels if not already added
+        if (!productGroups[product.id].pendingParcels.find((p: any) => p.id === order.id)) {
+            productGroups[product.id].pendingParcels.push({
+              id: order.id,
+              orderNumber: order.orderNumber,
+              customerName: order.customerName,
+              customerPhone: order.customerPhone,
+              customerCity: order.customerCity,
+              coliatyPackageCode: order.coliatyPackageCode,
+              totalAmountMad: order.totalAmountMad,
+              createdAt: order.createdAt
+            });
+        }
+      });
+    });
+
+    res.json({
+      status: 'success',
+      data: Object.values(productGroups)
+    });
+  })
+);
+
+router.get(
   '/:id',
   authenticate,
   asyncHandler(async (req, res) => {
@@ -398,33 +509,15 @@ router.patch(
         data: { status },
       });
 
-      if (status === 'DELIVERED' && order.paymentMethod === 'COD') {
-        const wallet = await tx.wallet.upsert({
-          where: { userId: order.vendorId },
-          create: {
-            userId: order.vendorId,
-            balanceMad: order.vendorEarningMad,
-            totalEarnedMad: order.vendorEarningMad,
-          },
-          update: {
-            balanceMad: { increment: order.vendorEarningMad },
-            totalEarnedMad: { increment: order.vendorEarningMad },
-          },
+      // Keep the linked Lead status in sync with the Order status
+      if (order.leadId) {
+        await tx.lead.update({
+          where: { id: order.leadId },
+          data: { status },
         });
-
-        await tx.walletTransaction.create({
-          data: {
-            walletId: wallet.id,
-            orderId: order.id,
-            type: 'CREDIT',
-            amountMad: order.vendorEarningMad,
-            balanceAfterMad: wallet.balanceMad,
-            description: `Order ${order.orderNumber} delivered - COD collected`,
-          },
-        });
-
-        // Handled by orderId in walletTransaction.create
       }
+
+
 
       return updated;
     });
@@ -517,6 +610,14 @@ router.post(
         where: { id: order.leadId! },
         data: { status: 'ORDERED' },
       });
+
+      // 5. Restore stock
+      for (const item of order.items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stockQuantity: { increment: item.quantity } }
+        });
+      }
     });
 
     res.json({
@@ -650,7 +751,19 @@ router.put(
         package_addresse,
         package_city: finalCity,
         // Guaranteed required fields by Coliaty
-        package_content: package_content || "Marchandise",
+        package_content: (() => {
+          let baseContent = package_content || order.packageContent || "Marchandise";
+          // Try to find the product SKU and Variant if possible
+          // In update-normal, we don't have productVariant in body necessarily, but we can check order
+          const variant = (order as any).productVariant || "";
+          // We'd need to fetch items to get SKU, but for now let's just use what's in the body or order
+          // If the user manually provided package_content, we use it.
+          // If not, we try to append details if they aren't already there.
+          if (!package_content && variant && !baseContent.includes(`PK:${variant}`)) {
+             baseContent = `${baseContent} (PK:${variant})`.substring(0, 100);
+          }
+          return baseContent;
+        })(),
         package_no_open: package_no_open ?? false,
         package_replacement: false,
         package_old_tracking: ""
@@ -705,5 +818,7 @@ router.put(
     }
   })
 );
+
+
 
 export default router;

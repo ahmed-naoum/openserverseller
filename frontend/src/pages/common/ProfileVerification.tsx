@@ -20,18 +20,24 @@ export function getVerificationStatus(user: any) {
   const identityDone = kycStatus === 'APPROVED';
   const identityInProgress = kycStatus === 'UNDER_REVIEW';
 
-  // Bank is considered done if at least one approved or pending bank account exists
   const hasBankAccounts = (user?.bankAccounts?.length ?? 0) > 0;
   const allBanksRejected = hasBankAccounts && user.bankAccounts.every((ba: any) => ba.status === 'REJECTED');
-  const bankDone = hasBankAccounts && !allBanksRejected;
+  const anyBankApproved = user?.bankAccounts?.some((ba: any) => ba.status === 'APPROVED');
+  const anyBankPending = user?.bankAccounts?.some((ba: any) => ba.status === 'PENDING');
+  const bankDone = anyBankApproved; // For final completion
+  const bankUnlockingContract = anyBankApproved || anyBankPending; // To allow signing while pending
 
   const steps = {
     email: emailVerified ? 'COMPLETED' as StepStatus : 'PENDING' as StepStatus,
     identity: identityDone ? 'COMPLETED' as StepStatus
       : identityInProgress ? 'IN_PROGRESS' as StepStatus
-      : (emailVerified ? 'PENDING' as StepStatus : 'LOCKED' as StepStatus),
-    bank: (identityDone || identityInProgress) ? (allBanksRejected ? 'REJECTED' as StepStatus : (bankDone ? 'COMPLETED' as StepStatus : 'PENDING' as StepStatus)) : 'LOCKED' as StepStatus,
-    contract: contractAccepted ? 'COMPLETED' as StepStatus : (bankDone && (identityDone || identityInProgress) ? 'PENDING' as StepStatus : 'LOCKED' as StepStatus),
+      : (kycStatus === 'REJECTED' ? 'REJECTED' as StepStatus : (emailVerified ? 'PENDING' as StepStatus : 'LOCKED' as StepStatus)),
+    bank: (identityDone || identityInProgress) 
+      ? (anyBankApproved ? 'COMPLETED' as StepStatus 
+        : (anyBankPending ? 'IN_PROGRESS' as StepStatus 
+          : (allBanksRejected ? 'REJECTED' as StepStatus : 'PENDING' as StepStatus))) 
+      : 'LOCKED' as StepStatus,
+    contract: contractAccepted ? 'COMPLETED' as StepStatus : (bankUnlockingContract && (identityDone || identityInProgress) ? 'PENDING' as StepStatus : 'LOCKED' as StepStatus),
   };
 
   const completed = Object.values(steps).filter(s => s === 'COMPLETED').length;
@@ -59,17 +65,12 @@ function EmailVerificationForm({ onComplete }: { onComplete: () => void }) {
   const handleSendOtp = async () => {
     setLoading(true);
     try {
-      await authApi.forgotPassword({ email: user?.email || undefined });
-      // Using resend-otp would be ideal, but let's use what exists
-      await api.post('/auth/resend-otp', { email: user?.email });
+      await authApi.resendOtp({ email: user?.email || undefined });
       setOtpSent(true);
       setResendCooldown(60);
       toast.success('Code de vérification envoyé !');
-    } catch {
-      // Still show as sent for UX (backend logs OTP in dev)
-      setOtpSent(true);
-      setResendCooldown(60);
-      toast.success('Code de vérification envoyé !');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Erreur lors de l\'envoi');
     } finally {
       setLoading(false);
     }
@@ -152,6 +153,7 @@ function EmailVerificationForm({ onComplete }: { onComplete: () => void }) {
 
 // ─── Identity Verification Form (KYC Document Upload + Liveness) ───
 function IdentityVerificationForm({ onComplete }: { onComplete: () => void }) {
+  const { user } = useAuth();
   const [documentType, setDocumentType] = useState('CIN');
   const [documentFiles, setDocumentFiles] = useState<File[]>([]);
   const [cameraFile, setCameraFile] = useState<File | null>(null);
@@ -172,7 +174,7 @@ function IdentityVerificationForm({ onComplete }: { onComplete: () => void }) {
     3: ''
   };
 
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'application/pdf'];
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
@@ -180,7 +182,7 @@ function IdentityVerificationForm({ onComplete }: { onComplete: () => void }) {
 
     const validFiles = newFiles.filter(file => allowedTypes.includes(file.type));
     if (validFiles.length < newFiles.length) {
-      toast.error('Seuls les formats JPG, PNG et PDF sont autorisés.');
+      toast.error('Seuls les formats JPG, PNG, WEBP et PDF sont autorisés.');
     }
 
     const availableSlots = 2 - documentFiles.length;
@@ -316,6 +318,15 @@ function IdentityVerificationForm({ onComplete }: { onComplete: () => void }) {
 
   return (
     <div className="space-y-6">
+      {user?.kycStatus === 'REJECTED' && (
+        <div className="bg-rose-50 border border-rose-100 rounded-xl p-4 text-sm text-rose-700 flex items-start gap-3">
+          <AlertTriangle className="flex-shrink-0 mt-0.5" size={18} />
+          <div>
+            <p className="font-bold">Votre vérification d'identité a été rejetée</p>
+            <p className="text-xs mt-1 opacity-80 text-rose-600 font-medium">Veuillez soumettre des documents valides et clairs pour réessayer.</p>
+          </div>
+        </div>
+      )}
       <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 text-sm text-slate-600">
         <p className="font-semibold text-slate-700 mb-1">📋 Instructions</p>
         <ul className="list-disc list-inside space-y-1 text-xs">
@@ -532,10 +543,62 @@ function BankPaymentForm({ onComplete }: { onComplete: () => void }) {
     }
   };
 
+  const anyBankRejected = user?.bankAccounts?.some((ba: any) => ba.status === 'REJECTED');
+
+  const getBankStatusBadge = (status: string) => {
+    switch (status) {
+      case 'APPROVED': return { icon: CheckCircle2, label: 'Approuvé', color: 'text-emerald-600 bg-emerald-50 border-emerald-100' };
+      case 'REJECTED': return { icon: AlertTriangle, label: 'Rejeté', color: 'text-rose-600 bg-rose-50 border-rose-100' };
+      default: return { icon: Clock, label: 'En attente', color: 'text-amber-600 bg-amber-50 border-amber-100' };
+    }
+  };
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Existing Accounts List */}
+      {user?.bankAccounts && user.bankAccounts.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+            <Landmark size={16} className="text-primary-500" />
+            Vos méthodes de paiement
+          </h4>
+          <div className="grid grid-cols-1 gap-3">
+            {user.bankAccounts.map((ba: any) => {
+              const badge = getBankStatusBadge(ba.status);
+              const BadgeIcon = badge.icon;
+              return (
+                <div key={ba.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transform hover:scale-[1.01] transition-all">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-slate-700">{ba.bankName}</span>
+                      <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full border text-[9px] font-black uppercase tracking-tighter ${badge.color}`}>
+                        <BadgeIcon size={10} />
+                        {badge.label}
+                      </div>
+                    </div>
+                    <p className="text-xs font-mono text-slate-500 tracking-wider">
+                      {ba.ribAccount.replace(/(.{4})/g, '$1 ').trim()}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {anyBankRejected && !user?.bankAccounts?.some((ba: any) => ba.status === 'APPROVED' || ba.status === 'PENDING') && (
+        <div className="bg-rose-50 border border-rose-100 rounded-xl p-4 text-sm text-rose-700 flex items-start gap-3">
+          <AlertTriangle className="flex-shrink-0 mt-0.5" size={18} />
+          <div>
+            <p className="font-bold">Coordonnées bancaires rejetées</p>
+            <p className="text-xs mt-1 opacity-80 text-rose-600 font-medium">Veuillez vérifier vos informations (RIB à 24 chiffres) et soumettre à nouveau.</p>
+          </div>
+        </div>
+      )}
+
       <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-sm text-amber-700">
-        <p className="font-semibold">🏦 Ajoutez vos coordonnées bancaires</p>
+        <p className="font-semibold">🏦 Ajoutez une nouvelle méthode de paiement</p>
         <p className="text-xs mt-1 text-amber-500">Requis pour recevoir vos paiements et retraits</p>
       </div>
 
@@ -855,7 +918,10 @@ export default function ProfileVerification({ hideHeader = false }: { hideHeader
           const status = steps[step.key];
           const Icon = step.icon;
           const isExpanded = expandedStep === step.id;
-          const canExpand = status === 'PENDING' || status === 'REJECTED';
+          
+          // Bank step is always expandable to allow adding more methods
+          // Identity and Email are expandable if pending/rejected
+          const canExpand = step.key === 'bank' || status === 'PENDING' || status === 'REJECTED';
 
           return (
             <div
@@ -909,8 +975,8 @@ export default function ProfileVerification({ hideHeader = false }: { hideHeader
                 )}
               </button>
 
-              {/* IN_PROGRESS notice */}
-              {status === 'IN_PROGRESS' && (
+              {/* IN_PROGRESS notice (Hidden for bank to show the form/list) */}
+              {status === 'IN_PROGRESS' && step.key !== 'bank' && (
                 <div className="px-5 sm:px-6 pb-5 sm:pb-6">
                   <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm text-blue-700 flex items-start gap-3">
                     <Loader2 size={18} className="animate-spin flex-shrink-0 mt-0.5" />

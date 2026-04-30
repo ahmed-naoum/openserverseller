@@ -146,9 +146,10 @@ router.get(
 router.get(
   '/links',
   authenticate,
-  authorize('VENDOR', 'INFLUENCER'),
+  authorize('VENDOR', 'INFLUENCER', 'HELPER', 'SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
+    const { start, end } = req.query;
 
     const links = await prisma.referralLink.findMany({
       where: { influencerId: userId },
@@ -157,6 +158,46 @@ router.get(
       },
       orderBy: { createdAt: 'desc' }
     });
+
+    if (start && end) {
+      const startDate = new Date(start as string);
+      const endDate = new Date(end as string);
+      endDate.setHours(23, 59, 59, 999);
+
+      const formattedLinks = await Promise.all(links.map(async (link) => {
+        const [clicksCount, leadsCount, earningsSum] = await Promise.all([
+          (prisma as any).referralLinkClick.groupBy({
+            by: ['ipAddress'],
+            where: {
+              referralLinkId: link.id,
+              createdAt: { gte: startDate, lte: endDate }
+            }
+          }).then((res: any) => res.length),
+          prisma.lead.count({
+            where: {
+              referralLinkId: link.id,
+              createdAt: { gte: startDate, lte: endDate }
+            }
+          }),
+          prisma.influencerCommission.aggregate({
+            where: {
+              referralLinkId: link.id,
+              createdAt: { gte: startDate, lte: endDate }
+            },
+            _sum: { amount: true }
+          })
+        ]);
+
+        return {
+          ...link,
+          clicks: clicksCount,
+          conversions: leadsCount,
+          earnings: earningsSum._sum.amount || 0
+        };
+      }));
+
+      return res.json(formattedLinks);
+    }
 
     res.json(links);
   })
@@ -178,10 +219,34 @@ router.get(
       throw new AppException(404, 'Referral link not found');
     }
 
-    await prisma.referralLink.update({
-      where: { id: link.id },
-      data: { clicks: { increment: 1 } }
+    // Increment clicks with IP deduplication
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const userAgent = req.headers['user-agent'];
+
+    // Check if this IP + UserAgent has already clicked this link
+    const existingClick = await (prisma as any).referralLinkClick.findFirst({
+      where: {
+        referralLinkId: link.id,
+        ipAddress: ip,
+        userAgent: typeof userAgent === 'string' ? userAgent : null
+      }
     });
+
+    await (prisma as any).referralLinkClick.create({
+      data: {
+        referralLinkId: link.id,
+        ipAddress: ip,
+        userAgent: typeof userAgent === 'string' ? userAgent : null
+      }
+    });
+
+    // Only increment the counter if it's a new IP
+    if (!existingClick) {
+      await (prisma as any).referralLink.update({
+        where: { id: link.id },
+        data: { clicks: { increment: 1 } }
+      });
+    }
 
     res.json(link);
   })
@@ -192,33 +257,66 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { code } = req.params;
 
-    const link = await prisma.referralLink.findUnique({
+    const link = await (prisma as any).referralLink.findUnique({
       where: { code: code as string },
       include: {
         product: { include: { images: { orderBy: { sortOrder: 'asc' } }, categories: true } },
-        influencer: { include: { profile: true } }
+        influencer: { include: { profile: true } },
+        landingPage: true
       }
-    }) as any;
+    });
 
     if (!link || !link.isActive || !link.product.isActive) {
       throw new AppException(404, 'Referral link or product not found or inactive');
     }
 
+    // Increment clicks (Unique - per IP)
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const userAgent = req.headers['user-agent'];
+
+    const existingClick = await (prisma as any).referralLinkClick.findFirst({
+      where: {
+        referralLinkId: link.id,
+        ipAddress: ip,
+        userAgent: typeof userAgent === 'string' ? userAgent : null
+      }
+    });
+
+    await (prisma as any).referralLinkClick.create({
+      data: {
+        referralLinkId: link.id,
+        ipAddress: ip,
+        userAgent: typeof userAgent === 'string' ? userAgent : null
+      }
+    });
+
+    // Only increment the click counter if it's a new IP
+    if (!existingClick) {
+      await (prisma as any).referralLink.update({
+        where: { id: link.id },
+        data: { clicks: { increment: 1 } }
+      });
+    }
+
     // We only return public-safe data
     res.json({
-      code: link.code,
-      product: {
-        id: link.product.id,
-        nameAr: link.product.nameAr,
-        nameFr: link.product.nameFr,
-        nameEn: link.product.nameEn,
-        description: link.product.description,
-        retailPriceMad: link.product.retailPriceMad,
-        images: link.product.images,
-        category: link.product.category
-      },
-      influencerName: link.influencer.profile?.fullName,
-      influencerAvatar: link.influencer.profile?.avatarUrl
+      status: 'success',
+      data: {
+        code: link.code,
+        product: {
+          id: link.product.id,
+          nameAr: link.product.nameAr,
+          nameFr: link.product.nameFr,
+          nameEn: link.product.nameEn,
+          description: link.product.description,
+          retailPriceMad: link.product.retailPriceMad,
+          images: link.product.images,
+          category: link.product.category
+        },
+        influencerName: link.influencer.profile?.fullName,
+        influencerAvatar: link.influencer.profile?.avatarUrl,
+        landingPage: link.landingPage
+      }
     });
   })
 );
@@ -280,6 +378,101 @@ router.get(
   })
 );
 
+router.get(
+  '/analytics/daily',
+  authenticate,
+  authorize('VENDOR', 'INFLUENCER'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const { start, end, days, referralLinkId } = req.query;
+
+    let dateLimitStart: Date;
+    let dateLimitEnd = new Date();
+
+    if (start && end) {
+      dateLimitStart = new Date(start as string);
+      dateLimitEnd = new Date(end as string);
+      dateLimitEnd.setHours(23, 59, 59, 999);
+    } else {
+      const numDays = parseInt(days as string) || 30;
+      dateLimitStart = new Date();
+      dateLimitStart.setDate(dateLimitStart.getDate() - (numDays - 1));
+      dateLimitStart.setHours(0, 0, 0, 0);
+    }
+
+    const whereBase: any = { influencerId: userId };
+    if (referralLinkId) {
+      whereBase.id = parseInt(referralLinkId as string);
+    }
+
+    const [clicks, leads, commissions] = await Promise.all([
+      (prisma as any).referralLinkClick.findMany({
+        where: {
+          referralLink: whereBase,
+          createdAt: { gte: dateLimitStart, lte: dateLimitEnd }
+        },
+        select: { createdAt: true, ipAddress: true, userAgent: true }
+      }),
+      prisma.lead.findMany({
+        where: {
+          referralLink: whereBase,
+          createdAt: { gte: dateLimitStart, lte: dateLimitEnd }
+        },
+        select: { createdAt: true }
+      }),
+      prisma.influencerCommission.findMany({
+        where: {
+          referralLink: whereBase,
+          createdAt: { gte: dateLimitStart, lte: dateLimitEnd }
+        },
+        select: { createdAt: true }
+      })
+    ]);
+
+    const clicksByDate: Record<string, Set<string>> = {};
+    clicks.forEach((c: any) => {
+      const date = c.createdAt.toISOString().split('T')[0];
+      if (!clicksByDate[date]) clicksByDate[date] = new Set();
+      clicksByDate[date].add(`${c.ipAddress}-${c.userAgent || 'unknown'}`);
+    });
+
+    const uniqueClicksByDate: Record<string, number> = {};
+    Object.keys(clicksByDate).forEach(date => {
+      uniqueClicksByDate[date] = clicksByDate[date].size;
+    });
+
+    const salesByDate: Record<string, number> = {};
+    // Combine leads and commissions for "Ventes" history
+    // Leads are the primary source for referral form conversions
+    leads.forEach(l => {
+      const date = l.createdAt.toISOString().split('T')[0];
+      salesByDate[date] = (salesByDate[date] || 0) + 1;
+    });
+    // Commissions might come from track-conversion or external sales
+    commissions.forEach(c => {
+      const date = c.createdAt.toISOString().split('T')[0];
+      salesByDate[date] = (salesByDate[date] || 0) + 1;
+    });
+
+    const dailyStats = [];
+    const curr = new Date(dateLimitStart);
+    while (curr <= dateLimitEnd) {
+      const dateStr = curr.toISOString().split('T')[0];
+      const views = uniqueClicksByDate[dateStr] || 0;
+      const sales = salesByDate[dateStr] || 0;
+      dailyStats.push({
+        date: dateStr,
+        views,
+        sales,
+        convRate: views > 0 ? Number(((sales / views) * 100).toFixed(1)) : 0
+      });
+      curr.setDate(curr.getDate() + 1);
+    }
+
+    res.json(dailyStats);
+  })
+);
+
 // Delete a lead (influencer can only delete their own leads)
 router.delete(
   '/leads/:id',
@@ -305,6 +498,52 @@ router.delete(
 
     await prisma.lead.delete({ where: { id: leadId } });
     res.json({ status: 'success', message: 'Lead deleted' });
+  })
+);
+
+router.post(
+  '/leads/delete/bulk',
+  authenticate,
+  authorize('VENDOR', 'INFLUENCER'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { leadIds } = req.body;
+    const userId = req.user!.id;
+
+    if (!Array.isArray(leadIds) || leadIds.length === 0) {
+      throw new AppException(400, 'Please provide an array of lead IDs');
+    }
+
+    const influencerLinks = await prisma.referralLink.findMany({
+      where: { influencerId: userId },
+      select: { id: true }
+    });
+    const linkIds = influencerLinks.map(l => l.id);
+
+    // Verify all leads belong to this influencer and are in eligible status (LEAD or NEW)
+    // We only allow deleting leads that haven't been pushed or are still "NEW"
+    const leads = await prisma.lead.findMany({
+      where: { 
+        id: { in: leadIds }, 
+        referralLinkId: { in: linkIds },
+        status: { in: ['NEW', 'LEAD'] }
+      }
+    });
+
+    if (leads.length === 0) {
+      throw new AppException(404, 'No eligible leads found for deletion');
+    }
+
+    const deletedIds = leads.map(l => l.id);
+
+    await prisma.lead.deleteMany({
+      where: { id: { in: deletedIds } }
+    });
+
+    res.json({
+      status: 'success',
+      message: `${deletedIds.length} leads deleted`,
+      data: { count: deletedIds.length }
+    });
   })
 );
 
@@ -334,18 +573,37 @@ router.post(
       throw new AppException(404, 'Lead not found or not yours');
     }
 
-    if (lead.status === 'AVAILABLE' || lead.status === 'ASSIGNED' || lead.assignedAgentId) {
-      throw new AppException(400, 'Lead is already in the call center queue');
+    let wallet = await prisma.wallet.findUnique({ where: { userId } });
+    if (!wallet) {
+      wallet = await prisma.wallet.create({ data: { userId } });
     }
 
     const updatedLead = await prisma.$transaction(async (tx: any) => {
       await tx.leadStatusHistory.create({
         data: { leadId: lead.id, oldStatus: lead.status, newStatus: 'AVAILABLE', changedBy: userId }
       });
-      return tx.lead.update({
+      const updated = await tx.lead.update({
         where: { id: lead.id },
         data: { status: 'AVAILABLE' }
       });
+
+      const newBalance = wallet.balanceMad - 2;
+      await tx.wallet.update({
+        where: { id: wallet.id },
+        data: { balanceMad: newBalance }
+      });
+
+      await tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: 'CALL_CENTER_FEE',
+          amountMad: -2,
+          balanceAfterMad: newBalance,
+          description: `Frais d'envoi d'un lead au Call Center (Lead #${lead.id})`,
+        }
+      });
+
+      return updated;
     });
 
     const influencerProfile = await prisma.userProfile.findUnique({
@@ -420,6 +678,12 @@ router.post(
       throw new AppException(404, 'No eligible leads found for pushing');
     }
 
+    const totalCost = leads.length * 2;
+    let wallet = await prisma.wallet.findUnique({ where: { userId } });
+    if (!wallet) {
+      wallet = await prisma.wallet.create({ data: { userId } });
+    }
+
     const updatedLeads = await prisma.$transaction(async (tx: any) => {
       // Create status history for each lead
       await tx.leadStatusHistory.createMany({
@@ -435,6 +699,22 @@ router.post(
       await tx.lead.updateMany({
         where: { id: { in: leads.map(l => l.id) } },
         data: { status: 'AVAILABLE' }
+      });
+
+      const newBalance = wallet.balanceMad - totalCost;
+      await tx.wallet.update({
+        where: { id: wallet.id },
+        data: { balanceMad: newBalance }
+      });
+
+      await tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: 'CALL_CENTER_FEE',
+          amountMad: -totalCost,
+          balanceAfterMad: newBalance,
+          description: `Frais d'envoi de ${leads.length} leads au Call Center`,
+        }
       });
 
       return tx.lead.findMany({
@@ -528,8 +808,12 @@ router.get(
         } : { isNot: null }
       },
       include: {
-        order: true,
-        referralLink: { include: { product: { include: { images: { where: { isPrimary: true }, take: 1 } } } } }
+        order: {
+          include: {
+            lead: true
+          }
+        },
+        referralLink: { include: { product: { include: { images: { where: { isPrimary: true }, take: 1 } } }, landingPage: true } }
       },
       orderBy: { createdAt: 'desc' },
       skip,
@@ -556,7 +840,7 @@ router.get(
         } : {})
       },
       include: {
-        referralLink: { include: { product: { include: { images: { where: { isPrimary: true }, take: 1 } } } } }
+        referralLink: { include: { product: { include: { images: { where: { isPrimary: true }, take: 1 } } }, landingPage: true } }
       },
       orderBy: { createdAt: 'desc' },
       take: 50 // Limit leads for now
@@ -578,7 +862,11 @@ router.get(
         customerCity: lead.city,
         customerAddress: lead.address,
         status: lead.status === 'NEW' ? 'LEAD' : lead.status,
-        totalAmountMad: 0
+        productVariant: lead.productVariant,
+        totalAmountMad: 0,
+        lead: {
+          paymentSituation: lead.paymentSituation
+        }
       }
     }));
 
@@ -611,6 +899,255 @@ router.get(
         }
       }
     });
+  })
+);
+
+router.get(
+  '/links/:id/landing-page',
+  authenticate,
+  authorize('VENDOR', 'INFLUENCER', 'HELPER', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const linkId = parseInt(req.params.id);
+
+    const link = await (prisma as any).referralLink.findUnique({
+      where: { id: linkId }
+    });
+
+    if (!link) {
+      throw new AppException(404, 'Referral link not found');
+    }
+
+    const isAdmin = req.user!.roleName === 'SUPER_ADMIN';
+    const isOwner = link.influencerId === userId;
+    let isAuthorizedHelper = false;
+
+    if (req.user!.roleName === 'HELPER' && req.user!.canManageInfluencerLinks) {
+      const assignment = await (prisma as any).helperUserAssignment.findFirst({
+        where: { helperId: userId, targetUserId: link.influencerId }
+      });
+      if (assignment) isAuthorizedHelper = true;
+    }
+
+    if (!isAdmin && !isOwner && !isAuthorizedHelper) {
+      throw new AppException(403, 'You do not have permission to perform this action');
+    }
+
+    const landingPage = await (prisma as any).referralLinkLandingPage.findUnique({
+      where: { referralLinkId: linkId },
+      include: {
+        referralLink: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                nameFr: true,
+                retailPriceMad: true,
+                images: { where: { isPrimary: true }, take: 1 }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    res.json({ 
+      status: 'success',
+      data: landingPage || { 
+        themeColor: '#f97316', 
+        title: '', 
+        description: '', 
+        buttonText: 'Commander Maintenant',
+        // If landingPage is missing, we still try to get the product info via the link
+        referralLink: link ? await (prisma as any).referralLink.findUnique({
+          where: { id: linkId },
+          include: { product: { select: { id: true, nameFr: true, retailPriceMad: true } } }
+        }) : null
+      }
+    });
+  })
+);
+
+router.put(
+  '/links/:id/landing-page',
+  authenticate,
+  authorize('VENDOR', 'INFLUENCER', 'HELPER', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const linkId = parseInt(req.params.id);
+    const { themeColor, title, description, buttonText, customStructure } = req.body;
+
+    const link = await (prisma as any).referralLink.findUnique({
+      where: { id: linkId }
+    });
+
+    if (!link) {
+      throw new AppException(404, 'Referral link not found');
+    }
+
+    const isAdmin = req.user!.roleName === 'SUPER_ADMIN';
+    const isOwner = link.influencerId === userId;
+    let isAuthorizedHelper = false;
+
+    if (req.user!.roleName === 'HELPER' && req.user!.canManageInfluencerLinks) {
+      const assignment = await (prisma as any).helperUserAssignment.findFirst({
+        where: { helperId: userId, targetUserId: link.influencerId }
+      });
+      if (assignment) isAuthorizedHelper = true;
+    }
+
+    if (!isAdmin && !isOwner && !isAuthorizedHelper) {
+      throw new AppException(403, 'You do not have permission to perform this action');
+    }
+
+    const landingPage = await (prisma as any).referralLinkLandingPage.upsert({
+      where: { referralLinkId: linkId },
+      update: { themeColor, title, description, buttonText, customStructure },
+      create: { referralLinkId: linkId, themeColor, title, description, buttonText, customStructure }
+    });
+
+    res.json(landingPage);
+  })
+);
+
+router.patch(
+  '/links/:id/code',
+  authenticate,
+  authorize('VENDOR', 'INFLUENCER', 'HELPER', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const linkId = parseInt(req.params.id);
+
+    // Initial check: if Link exists
+    const link = await (prisma as any).referralLink.findUnique({
+      where: { id: linkId }
+    });
+
+    if (!link) {
+      throw new AppException(404, 'Referral link not found');
+    }
+
+    // Permission Check
+    const isAdmin = req.user!.roleName === 'SUPER_ADMIN';
+    const isOwner = link.influencerId === userId;
+    let isAuthorizedHelper = false;
+
+    if (req.user!.roleName === 'HELPER' && req.user!.canManageInfluencerLinks) {
+      const assignment = await (prisma as any).helperUserAssignment.findFirst({
+        where: { helperId: userId, targetUserId: link.influencerId }
+      });
+      if (assignment) isAuthorizedHelper = true;
+    }
+
+    if (!isAdmin && !isOwner && !isAuthorizedHelper) {
+      throw new AppException(403, 'You do not have permission to perform this action');
+    }
+
+    const newCode = uuidv4().slice(0, 8).toUpperCase();
+
+    const updatedLink = await (prisma as any).referralLink.update({
+      where: { id: linkId },
+      data: { code: newCode },
+      include: {
+        product: { include: { images: { where: { isPrimary: true }, take: 1 } } }
+      }
+    });
+
+    res.json(updatedLink);
+  })
+);
+
+router.patch(
+  '/links/:id/status',
+  authenticate,
+  authorize('VENDOR', 'INFLUENCER', 'HELPER', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const linkId = parseInt(req.params.id);
+    const { isActive } = req.body;
+
+    // Initial check: if Link exists
+    const link = await (prisma as any).referralLink.findUnique({
+      where: { id: linkId }
+    });
+
+    if (!link) {
+      throw new AppException(404, 'Referral link not found');
+    }
+
+    // Permission Check
+    const isAdmin = req.user!.roleName === 'SUPER_ADMIN';
+    const isOwner = link.influencerId === userId;
+    let isAuthorizedHelper = false;
+
+    if (req.user!.roleName === 'HELPER' && req.user!.canManageInfluencerLinks) {
+      const assignment = await (prisma as any).helperUserAssignment.findFirst({
+        where: { helperId: userId, targetUserId: link.influencerId }
+      });
+      if (assignment) isAuthorizedHelper = true;
+    }
+
+    if (!isAdmin && !isOwner && !isAuthorizedHelper) {
+      throw new AppException(403, 'You do not have permission to perform this action');
+    }
+
+    const updatedLink = await (prisma as any).referralLink.update({
+      where: { id: linkId },
+      data: { isActive },
+      include: {
+        product: { include: { images: { where: { isPrimary: true }, take: 1 } } }
+      }
+    });
+
+    res.json(updatedLink);
+  })
+);
+
+router.get(
+  '/helper/links',
+  authenticate,
+  authorize('HELPER', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const helperId = req.user!.id;
+
+    // Get all assigned influencer user IDs for this helper
+    const assignments = await (prisma as any).helperUserAssignment.findMany({
+      where: { helperId },
+      select: { targetUserId: true }
+    });
+
+    const influencerIds = assignments.map((a: any) => a.targetUserId);
+
+    if (influencerIds.length === 0) {
+      return res.json([]);
+    }
+
+    const links = await (prisma as any).referralLink.findMany({
+      where: { influencerId: { in: influencerIds } },
+      include: {
+        product: {
+          include: { images: { where: { isPrimary: true }, take: 1 } }
+        },
+        influencer: {
+          select: { 
+            id: true, 
+            email: true,
+            profile: { select: { fullName: true } }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const formattedLinks = links.map((link: any) => ({
+      ...link,
+      influencer: {
+        ...link.influencer,
+        fullName: link.influencer?.profile?.fullName
+      }
+    }));
+
+    res.json(formattedLinks);
   })
 );
 

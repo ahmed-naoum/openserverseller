@@ -1,17 +1,42 @@
-// Product CRUD page - Admin
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { productsApi, publicApi, adminApi } from '../../lib/api';
 import AddProductModal from '../grosseller/AddProductModal';
 import toast from 'react-hot-toast';
-import { Trash2, Pencil, Package, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Trash2, Pencil, Package, ChevronLeft, ChevronRight, ShieldAlert } from 'lucide-react';
 
 export default function AdminProducts() {
+  const { user } = useAuth();
+
+  // Permission Guard for Helpers
+  if (user?.role === 'HELPER' && !user?.canManageProducts) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center px-4">
+        <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center mb-6 animate-bounce">
+          <ShieldAlert size={40} />
+        </div>
+        <h2 className="text-2xl font-black text-slate-800 mb-2">Accès Non Autorisé</h2>
+        <p className="text-slate-500 max-w-md mb-8">
+          Vous n'avez pas la permission de gérer les produits. Veuillez contacter un administrateur pour obtenir l'accès.
+        </p>
+        <Link 
+          to="/helper" 
+          className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
+        >
+          Retour au Tableau de Bord
+        </Link>
+      </div>
+    );
+  }
+
   const [selectedCategory, setSelectedCategory] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const limit = 10;
 
@@ -26,8 +51,14 @@ export default function AdminProducts() {
   });
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['products', { category: selectedCategory, status: statusFilter, page }],
-    queryFn: () => productsApi.list({ category: selectedCategory || undefined, status: statusFilter, page, limit }),
+    queryKey: ['products', { category: selectedCategory, status: statusFilter, page, search }],
+    queryFn: () => productsApi.list({ 
+      category: selectedCategory || undefined, 
+      status: statusFilter, 
+      page, 
+      limit,
+      search: search || undefined
+    }),
   });
 
   const pagination = data?.data?.data?.pagination;
@@ -102,6 +133,28 @@ export default function AdminProducts() {
         </button>
       </div>
 
+      {/* Filters Section */}
+      <div className="flex flex-col xl:flex-row gap-4">
+        {/* Search Bar */}
+        <div className="flex-1 relative group">
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <svg className="w-5 h-5 text-gray-400 group-focus-within:text-primary-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <input
+            type="text"
+            placeholder="Rechercher un produit (Nom, SKU...)"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm font-medium focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all shadow-sm"
+          />
+        </div>
+      </div>
+
       {/* Filters Container */}
       <div className="bg-white p-2 rounded-2xl shadow-sm border border-gray-100 flex flex-col xl:flex-row gap-2 justify-between items-start xl:items-center">
         {/* Status Pills */}
@@ -173,6 +226,9 @@ export default function AdminProducts() {
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Produit</th>
+                {(user?.role === 'SUPER_ADMIN' || user?.role === 'HELPER') && (
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Vendeur</th>
+                )}
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">SKU</th>
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Catégorie</th>
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Coût</th>
@@ -201,6 +257,14 @@ export default function AdminProducts() {
                       </div>
                     </div>
                   </td>
+                  {(user?.role === 'SUPER_ADMIN' || user?.role === 'HELPER') && (
+                    <td className="py-4 px-4">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Propriétaire</span>
+                        <span className="text-xs font-bold text-slate-700 truncate max-w-[120px]">{product.ownerName}</span>
+                      </div>
+                    </td>
+                  )}
                   <td className="py-4 px-4">
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono font-medium bg-gray-100 text-gray-600 border border-gray-200/60">
                       {product.sku}

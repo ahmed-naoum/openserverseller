@@ -27,7 +27,8 @@ export default function AgentLeads() {
     city: '',
     address: '',
     price: 0,
-    package_no_open: false
+    package_no_open: false,
+    productVariant: ''
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
@@ -46,7 +47,9 @@ export default function AgentLeads() {
       setAssignedInfluencers(availData?.assignedInfluencers || []);
 
       const myData = myRes.data?.data || myRes.data;
-      setMyLeads(myData?.leads || []);
+      const allMyLeads = myData?.leads || [];
+      const allowedAgentStatuses = ['ASSIGNED', 'CALL_LATER', 'NO_REPLY', 'CONFIRMED', 'WRONG_ORDER', 'CANCEL_REASON_PRICE', 'CANCEL_ORDER', 'INVALID', 'CONTACTED'];
+      setMyLeads(allMyLeads.filter((l: any) => allowedAgentStatuses.includes(l.status)));
     } catch (error) {
       console.error('Failed to load leads:', error);
     }
@@ -75,7 +78,8 @@ export default function AgentLeads() {
       city: lead.city || '',
       address: lead.address || '',
       price: lead.productPrice || 0,
-      package_no_open: false
+      package_no_open: false,
+      productVariant: lead.productVariant || ''
     });
     setShowDeliveryModal(true);
     setFormErrors({});
@@ -122,12 +126,14 @@ export default function AgentLeads() {
     setIsPushingDelivery(true);
     try {
       await leadsApi.pushToDelivery(selectedLeadForDelivery.id, {
+        productId: selectedLeadForDelivery.product?.id || 0,
         package_reciever: deliveryForm.name,
         package_phone: deliveryForm.phone,
         package_city: deliveryForm.city,
         package_addresse: deliveryForm.address,
         package_price: deliveryForm.price,
-        package_no_open: deliveryForm.package_no_open
+        package_no_open: deliveryForm.package_no_open,
+        productVariant: deliveryForm.productVariant
       });
       toast.success('Lead poussé à la livraison sur Coliaty!');
       setShowDeliveryModal(false);
@@ -297,6 +303,11 @@ export default function AgentLeads() {
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-semibold text-gray-700 truncate">{lead.product.name}</p>
                       <p className="text-[10px] text-gray-400">SKU: {lead.product.sku}</p>
+                      {lead.productVariant && (
+                        <p className="text-[10px] font-bold text-amber-600 truncate mt-0.5 px-1.5 py-0.5 bg-amber-50 border border-amber-100 rounded w-fit">
+                          📦 {lead.productVariant}
+                        </p>
+                      )}
                     </div>
                     {lead.productPrice > 0 && (
                       <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg whitespace-nowrap">
@@ -356,12 +367,12 @@ export default function AgentLeads() {
             >
               <option value="">Tous les statuts</option>
               <option value="ASSIGNED">Assigné</option>
-              <option value="CONTACTED">Contacté</option>
-              <option value="INTERESTED">Intéressé</option>
-              <option value="ORDERED">Commandé</option>
-              <option value="CALLBACK_REQUESTED">Rappel demandé</option>
-              <option value="NOT_INTERESTED">Pas intéressé</option>
-              <option value="UNREACHABLE">Injoignable</option>
+              <option value="CALL_LATER">Rappel</option>
+              <option value="NO_REPLY">Pas de réponse</option>
+              <option value="CONFIRMED">Confirmé</option>
+              <option value="WRONG_ORDER">Mauvaise commande</option>
+              <option value="CANCEL_REASON_PRICE">Annulé - Prix</option>
+              <option value="CANCEL_ORDER">Annulé</option>
               <option value="INVALID">Invalide</option>
             </select>
           </div>
@@ -381,17 +392,25 @@ export default function AgentLeads() {
                       <p className="text-sm text-gray-500">{lead.city || 'Ville inconnue'}</p>
                     </div>
                   </div>
-                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                    lead.status === 'ASSIGNED' ? 'bg-amber-100 text-amber-800' :
-                    lead.status === 'CONTACTED' ? 'bg-blue-100 text-blue-800' :
-                    lead.status === 'INTERESTED' ? 'bg-green-100 text-green-800' :
-                    lead.status === 'ORDERED' ? 'bg-emerald-100 text-emerald-800' :
-                    lead.status === 'NOT_INTERESTED' ? 'bg-red-100 text-red-800' :
-                    lead.status === 'UNREACHABLE' ? 'bg-gray-100 text-gray-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    {lead.status}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                      lead.status === 'ASSIGNED' ? 'bg-amber-100 text-amber-800' :
+                      lead.status === 'CALL_LATER' ? 'bg-blue-100 text-blue-800' :
+                      lead.status === 'NO_REPLY' ? 'bg-gray-100 text-gray-800' :
+                      lead.status === 'CONFIRMED' ? 'bg-green-100 text-green-800' :
+                      lead.status === 'WRONG_ORDER' ? 'bg-amber-100 text-amber-800' :
+                      lead.status === 'CANCEL_REASON_PRICE' ? 'bg-gray-100 text-gray-800' :
+                      lead.status === 'CANCEL_ORDER' ? 'bg-red-100 text-red-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {lead.status}
+                    </span>
+                    {lead.callbackAt && lead.status === 'CALL_LATER' && (
+                      <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center gap-1">
+                        ⏰ {format(new Date(lead.callbackAt), 'dd/MM HH:mm')}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-1.5 mb-4">
@@ -419,6 +438,11 @@ export default function AgentLeads() {
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-semibold text-gray-700 truncate">{lead.product.name}</p>
                       <p className="text-[10px] text-gray-400">SKU: {lead.product.sku}</p>
+                      {lead.productVariant && (
+                        <p className="text-[10px] font-bold text-amber-600 truncate mt-0.5 px-1.5 py-0.5 bg-amber-50 border border-amber-100 rounded w-fit">
+                          📦 {lead.productVariant}
+                        </p>
+                      )}
                     </div>
                     {lead.productPrice > 0 && (
                       <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg whitespace-nowrap">
@@ -445,15 +469,8 @@ export default function AgentLeads() {
                       📞 Appeler
                     </a>
                   </div>
-                  {lead.status === 'ORDERED' && (
+                  {['ORDERED', 'CONFIRMED'].includes(lead.status) && (
                     <div className="flex gap-2">
-                      <button
-                        onClick={() => handleCancelLead(lead.id)}
-                         className="px-3 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-bold hover:bg-red-100 transition-all shadow-sm flex items-center justify-center border border-red-200"
-                         title="Annuler le lead"
-                      >
-                        ❌
-                      </button>
                       <button
                         onClick={() => handleOpenDeliveryModal(lead)}
                          className="flex-1 py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold hover:bg-emerald-600 transition-all shadow-md flex justify-center items-center gap-2"
@@ -576,6 +593,17 @@ export default function AgentLeads() {
                   }`}
                 />
                 {formErrors.price && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.price}</p>}
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pack / Option (Variante)</label>
+                <input
+                  type="text"
+                  value={deliveryForm.productVariant}
+                  onChange={(e) => setDeliveryForm({ ...deliveryForm, productVariant: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  placeholder="Ex: Pack 2 + 1 Gratuit"
+                />
               </div>
 
               <div className="flex gap-4">

@@ -16,7 +16,6 @@ import VendorDashboard from './pages/vendor/Dashboard';
 import VendorProducts from './pages/vendor/Products';
 import VendorLeads from './pages/vendor/Leads';
 import VendorOrders from './pages/vendor/Orders';
-import VendorWallet from './pages/vendor/Wallet';
 import VendorInventory from './pages/vendor/Inventory';
 import AgentDashboard from './pages/agent/Dashboard';
 import AgentLeads from './pages/agent/Leads';
@@ -38,6 +37,12 @@ import AdminAnnouncements from './pages/admin/Announcements';
 import AdminLeadHistory from './pages/admin/LeadHistory';
 import AdminVerifications from './pages/admin/AdminVerifications';
 import AdminSupport from './pages/admin/Support';
+import AdminLeads from './pages/admin/Leads';
+import AdminPaymentMonitoring from './pages/admin/PaymentMonitoring';
+import AdminInvoices from './pages/admin/Invoices';
+import ActivityLogs from './pages/admin/ActivityLogs';
+import BackupManager from './pages/admin/BackupManager';
+
 import ProductCustomizePage from './pages/vendor/ProductCustomizePage';
 import YouCanCallback from './pages/vendor/YouCanCallback';
 import YouCanLeads from './pages/vendor/YouCanLeads';
@@ -55,11 +60,11 @@ import GrossellerPending from './pages/grosseller/Pending';
 import GrossellerApproved from './pages/grosseller/Approved';
 import GrossellerPayouts from './pages/grosseller/Payouts';
 import GrossellerOrders from './pages/grosseller/Orders';
+import UserInvoices from './pages/common/UserInvoices';
 import GrossellerAnalytics from './pages/grosseller/Analytics';
 import GrossellerSupport from './pages/grosseller/Support';
 import InfluencerDashboard from './pages/influencer/Dashboard';
 import InfluencerProfile from './pages/influencer/Profile';
-import InfluencerWallet from './pages/influencer/Wallet';
 import InfluencerLinks from './pages/influencer/Links';
 import InfluencerCampaigns from './pages/influencer/Campaigns';
 import InfluencerAnalytics from './pages/influencer/Analytics';
@@ -71,7 +76,10 @@ import ConfirmationDashboard from './pages/confirmation/Dashboard';
 import HelperDashboard from './pages/helper/Dashboard';
 import HelperLeads from './pages/helper/Leads';
 import HelperColis from './pages/helper/Colis';
+import HelperTickets from './pages/helper/Tickets';
 import HelperUsers from './pages/helper/Users';
+import HelperLinks from './pages/helper/Links';
+import SiteBuilder from './pages/helper/SiteBuilder';
 import Chat from './pages/common/Chat';
 import AccountVerification from './pages/verify/AccountVerification';
 import PublicMarketplace from './pages/marketplace/PublicMarketplace';
@@ -84,6 +92,7 @@ import NotFoundPage from './pages/common/NotFoundPage';
 import ProfileVerification from './pages/common/ProfileVerification';
 import MaintenancePage from './pages/common/MaintenancePage';
 import SupportTickets from './pages/common/SupportTickets';
+import UserWallet from './pages/common/UserWallet';
 
 // Context
 import { AuthProvider } from './contexts/AuthContext';
@@ -137,10 +146,11 @@ function App() {
           <Route path="selling" element={<GrossellerSelling />} />
           <Route path="pending" element={<GrossellerPending />} />
           <Route path="approved" element={<GrossellerApproved />} />
-          <Route path="payouts" element={<GrossellerPayouts />} />
+          <Route path="wallet" element={<UserWallet />} />
           <Route path="orders" element={<GrossellerOrders />} />
           <Route path="analytics" element={<GrossellerAnalytics />} />
           <Route path="support" element={<SupportTickets />} />
+          <Route path="invoices" element={<UserInvoices />} />
           <Route path="marketplace" element={<GrossellerMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
@@ -156,7 +166,7 @@ function App() {
         }>
           <Route index element={<InfluencerDashboard />} />
           <Route path="profile" element={<InfluencerProfile />} />
-          <Route path="wallet" element={<InfluencerWallet />} />
+          <Route path="wallet" element={<UserWallet />} />
           <Route path="links" element={<InfluencerLinks />} />
           <Route path="campaigns" element={<InfluencerCampaigns />} />
           <Route path="analytics" element={<InfluencerAnalytics />} />
@@ -166,9 +176,10 @@ function App() {
           <Route path="marketplace" element={<InfluencerMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
-          <Route path="support" element={<SupportTickets />} />
+          <Route path="invoices" element={<UserInvoices />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="integrations" element={<IntegrationsPage />} />
+          <Route path="support" element={<SupportTickets />} />
           <Route path="verification" element={<ProfileVerification />} />
         </Route>
 
@@ -197,7 +208,7 @@ function App() {
           <Route path="leads" element={<VendorLeads />} />
           <Route path="youcan-leads" element={<YouCanLeads />} />
           <Route path="orders" element={<VendorOrders />} />
-          <Route path="wallet" element={<VendorWallet />} />
+          <Route path="wallet" element={<UserWallet />} />
           <Route path="inventory" element={<VendorInventory />} />
           <Route path="marketplace" element={<PublicMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
@@ -205,6 +216,8 @@ function App() {
           <Route path="settings" element={<SettingsPage />} />
           <Route path="integrations" element={<IntegrationsPage />} />
           <Route path="youcan-callback" element={<YouCanCallback />} />
+          <Route path="invoices" element={<UserInvoices />} />
+          <Route path="support" element={<SupportTickets />} />
           <Route path="verification" element={<ProfileVerification />} />
         </Route>
 
@@ -223,16 +236,26 @@ function App() {
           <Route path="marketplace" element={<PublicMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
+          <Route path="support" element={<SupportTickets />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="verification" element={<ProfileVerification />} />
         </Route>
+
+        <Route path="/helper/links/:id/builder" element={
+          <RoleGuard allowedRoles={['SUPER_ADMIN', 'HELPER']}>
+            <SiteBuilder />
+          </RoleGuard>
+        } />
 
         {/* Helper Routes */}
         <Route path="/helper" element={<RoleGuard allowedRoles={['SUPER_ADMIN', 'HELPER']}><DashboardLayout /></RoleGuard>}>
           <Route index element={<HelperDashboard />} />
           <Route path="users" element={<HelperUsers />} />
           <Route path="leads" element={<HelperLeads />} />
+          <Route path="links" element={<HelperLinks />} />
           <Route path="colis" element={<HelperColis />} />
+          <Route path="tickets" element={<HelperTickets />} />
+          <Route path="products" element={<AdminProducts />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="verification" element={<ProfileVerification />} />
         </Route>
@@ -244,6 +267,7 @@ function App() {
           </RoleGuard>
         }>
           <Route index element={<AdminDashboard />} />
+          <Route path="leads" element={<AdminLeads />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="customers" element={<AdminCustomers />} />
           <Route path="categories" element={<AdminCategories />} />
@@ -251,6 +275,7 @@ function App() {
           <Route path="orders" element={<AdminOrders />} />
           <Route path="finance" element={<AdminFinance />} />
           <Route path="support" element={<AdminSupport />} />
+          <Route path="invoices" element={<AdminInvoices />} />
           <Route path="affiliate-claims" element={<AdminAffiliateClaims />} />
           <Route path="announcements" element={<AdminAnnouncements />} />
           <Route path="campaigns" element={<AdminCampaigns />} />
@@ -259,10 +284,14 @@ function App() {
           <Route path="platform-settings" element={<PlatformSettings />} />
           <Route path="security" element={<SecurityFirewall />} />
           <Route path="webhook-logs" element={<WebhookLogs />} />
+          <Route path="payment-monitoring" element={<AdminPaymentMonitoring />} />
           <Route path="marketplace" element={<PublicMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
+          <Route path="activity-logs" element={<ActivityLogs />} />
+          <Route path="backups" element={<BackupManager />} />
           <Route path="settings" element={<SettingsPage />} />
+
           <Route path="verification" element={<ProfileVerification />} />
         </Route>
 

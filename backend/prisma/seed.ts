@@ -54,6 +54,11 @@ async function main() {
       update: {},
       create: { name: 'SYSTEM_SUPPORT', guardName: 'web' },
     }),
+    prisma.role.upsert({
+      where: { name: 'HELPER' },
+      update: {},
+      create: { name: 'HELPER', guardName: 'web' },
+    }),
   ]);
 
   const roleMap = Object.fromEntries(roles.map((r) => [r.name, r.id]));
@@ -243,9 +248,30 @@ async function main() {
         },
       },
     }),
+    prisma.user.upsert({
+      where: { email: 'helper@silacod.ma' },
+      update: {},
+      create: {
+        email: 'helper@silacod.ma',
+        phone: '+212600000007',
+        password: hashedPassword,
+        roleId: roleMap['HELPER'],
+        isActive: true,
+        kycStatus: 'APPROVED',
+        canImpersonate: true,
+        emailVerifiedAt: new Date(),
+        profile: {
+          create: {
+            fullName: 'Helper User',
+            city: 'Casablanca',
+            language: 'fr',
+          },
+        },
+      },
+    }),
   ]);
 
-  console.log(`✅ Created 6 demo users`);
+  console.log(`✅ Created 7 demo users`);
 
   // Seed Demo Bank Account for Vendor
   console.log('🏷️ Creating demo bank account...');
@@ -269,6 +295,7 @@ async function main() {
   ─────────────────────────────────────────────────
   Super Admin : admin@silacod.ma
   Support     : support@silacod.ma
+  Helper      : helper@silacod.ma
   Vendor      : vendor@silacod.ma
   Agent       : agent@silacod.ma
   Conf. Agent : confirmation@silacod.ma

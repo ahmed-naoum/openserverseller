@@ -166,8 +166,8 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20">
             <Link to="/" className="flex items-center gap-3 group">
-              <motion.img whileHover={{ rotateY: 15, scale: 1.05 }} src="/logo-icon.svg" alt="SILACOD" className="w-11 h-11 origin-center" />
-              <img src="/logo-full.svg" alt="SILACOD" className="h-5 hidden sm:block" />
+              <motion.img whileHover={{ rotateY: 15, scale: 1.05 }} src="/new logo/logo filess-25.png" alt="SILACOD" className="w-11 h-11 origin-center object-contain" />
+              <img src="/new logo/logo filess-24.png" alt="SILACOD" className="h-9 hidden sm:block object-contain" />
             </Link>
 
             <div className="hidden lg:flex items-center gap-8 text-sm font-semibold text-gray-600">
@@ -724,8 +724,8 @@ export default function HomePage() {
             {/* Brand */}
             <div className="md:col-span-1">
               <div className="flex items-center gap-3 mb-6">
-                <img src="/logo-icon.svg" alt="SILACOD" className="w-10 h-10" />
-                <img src="/logo-full.svg" alt="SILACOD" className="h-5 brightness-200 " />
+                <img src="/new logo/logo filess-25.png" alt="SILACOD" className="w-10 h-10 object-contain" />
+                <img src="/new logo/logo filess-24.png" alt="SILACOD" className="h-9 brightness-200 object-contain" />
               </div>
               <p className="text-gray-400 text-sm leading-relaxed mb-6">
                 La première plateforme de Dropshipping White-Label au Maroc. Vendeurs, Influenceurs et Affiliés réunis en une seule infrastructure.

@@ -197,13 +197,13 @@ export default function VendorWallet() {
                 <input
                   type="number"
                   className="input"
-                  placeholder="500"
+                  placeholder="10"
                   value={payoutForm.amountMad}
                   onChange={(e) => setPayoutForm({ ...payoutForm, amountMad: e.target.value })}
-                  min={500}
+                  min={10}
                   required
                 />
-                <p className="text-xs text-gray-500 mt-1">Minimum: 500 MAD</p>
+                <p className="text-xs text-gray-500 mt-1">Minimum: 10 MAD</p>
               </div>
               <div>
                 <label className="label">Banque *</label>

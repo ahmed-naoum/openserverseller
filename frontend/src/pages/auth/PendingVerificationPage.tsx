@@ -6,9 +6,9 @@ export default function PendingVerificationPage() {
     <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-accent-50 flex items-center justify-center px-4">
       <div className="max-w-md w-full text-center">
         <div className="mb-8">
-          <Link to="/" className="inline-flex items-center gap-2 mb-6">
-            <img src="/logo-icon.svg" alt="SILACOD" className="w-10 h-10" />
-            <img src="/logo-full.svg" alt="SILACOD" className="h-7" />
+          <Link to="/" className="inline-flex items-center gap-4 mb-6">
+            <img src="/new logo/logo filess-25.png" alt="SILACOD" className="w-10 h-10 object-contain" />
+            <img src="/new logo/logo filess-24.png" alt="SILACOD" className="h-7 object-contain" />
           </Link>
         </div>
 

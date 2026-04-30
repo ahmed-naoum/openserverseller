@@ -228,9 +228,9 @@ export default function InfluencerRegister() {
           <Link to="/" className="inline-flex flex-col items-center gap-4 group">
             <div className="w-16 h-16 bg-white rounded-full shadow-xl shadow-slate-200/50 flex items-center justify-center group-hover:scale-110 transition-transform duration-500 relative overflow-hidden">
                <div className="absolute inset-0 bg-gradient-to-tr from-primary-500/10 to-transparent animate-pulse" />
-               <img src="/logo-icon.svg" alt="SILACOD" className="w-10 h-10 relative z-10" />
+               <img src="/new logo/logo filess-25.png" alt="SILACOD" className="w-10 h-10 relative z-10 object-contain" />
             </div>
-            <img src="/logo-full.svg" alt="SILACOD" className="h-7" />
+            <img src="/new logo/logo filess-24.png" alt="SILACOD" className="h-7 object-contain" />
           </Link>
           <div className="space-y-1">
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-primary-600 to-accent-500">

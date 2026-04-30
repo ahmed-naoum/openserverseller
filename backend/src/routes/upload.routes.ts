@@ -34,7 +34,7 @@ const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
@@ -47,11 +47,11 @@ const productImageUpload = multer({
   storage: productImageStorage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Seuls les formats PNG, JPG et JPEG sont acceptés'));
+      cb(new Error('Seuls les formats PNG, JPG, JPEG et WEBP sont acceptés'));
     }
   },
 });
@@ -195,6 +195,83 @@ router.post(
     res.json({
       status: 'success',
       data: { files },
+    });
+  })
+);
+
+// ─── Avatar Upload (Crop + WebP) ──────────────────────────────────────
+const avatarsUploadDir = path.join(process.cwd(), 'uploads', 'avatars');
+if (!fs.existsSync(avatarsUploadDir)) {
+  fs.mkdirSync(avatarsUploadDir, { recursive: true });
+}
+
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Seuls les formats PNG, JPG et WEBP sont acceptés'));
+    }
+  },
+});
+
+router.post(
+  '/avatar',
+  authenticate,
+  avatarUpload.single('avatar'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) {
+      throw new AppException(400, 'Aucune image envoyée');
+    }
+
+    const webpFilename = `avatar-${req.user!.id}-${Date.now()}.webp`;
+    const outputPath = path.join(avatarsUploadDir, webpFilename);
+
+    // Resize to 400x400 square and convert to WebP
+    await sharp(req.file.buffer)
+      .resize(400, 400, { fit: 'cover', position: 'center' })
+      .webp({ quality: 85 })
+      .toFile(outputPath);
+
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const avatarUrl = `${baseUrl}/uploads/avatars/${webpFilename}`;
+
+    // Update user profile
+    await prisma.userProfile.upsert({
+      where: { userId: req.user!.id },
+      create: {
+        userId: req.user!.id,
+        avatarUrl,
+      },
+      update: {
+        avatarUrl,
+      },
+    });
+
+    // Delete old avatar file if it exists
+    try {
+      const oldProfile = await prisma.userProfile.findUnique({ where: { userId: req.user!.id } });
+      if (oldProfile?.avatarUrl && oldProfile.avatarUrl !== avatarUrl) {
+        const oldFilename = oldProfile.avatarUrl.split('/').pop();
+        if (oldFilename && oldFilename.startsWith('avatar-')) {
+          const oldPath = path.join(avatarsUploadDir, oldFilename);
+          if (fs.existsSync(oldPath)) {
+            fs.unlinkSync(oldPath);
+          }
+        }
+      }
+    } catch (e) {
+      // Ignore cleanup errors
+    }
+
+    res.json({
+      status: 'success',
+      data: {
+        avatarUrl,
+      },
     });
   })
 );
