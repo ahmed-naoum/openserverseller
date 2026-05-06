@@ -393,15 +393,15 @@ export default function AgentLeads() {
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1">
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                      lead.status === 'ASSIGNED' ? 'bg-amber-100 text-amber-800' :
-                      lead.status === 'CALL_LATER' ? 'bg-blue-100 text-blue-800' :
-                      lead.status === 'NO_REPLY' ? 'bg-gray-100 text-gray-800' :
-                      lead.status === 'CONFIRMED' ? 'bg-green-100 text-green-800' :
-                      lead.status === 'WRONG_ORDER' ? 'bg-amber-100 text-amber-800' :
-                      lead.status === 'CANCEL_REASON_PRICE' ? 'bg-gray-100 text-gray-800' :
-                      lead.status === 'CANCEL_ORDER' ? 'bg-red-100 text-red-800' :
-                      'bg-gray-100 text-gray-800'
+                    <span className={`badge badge-${
+                      lead.status === 'ASSIGNED' ? 'purple' :
+                      lead.status === 'CALL_LATER' ? 'orange' :
+                      lead.status === 'NO_REPLY' ? 'rose' :
+                      lead.status === 'CONFIRMED' ? 'primary' :
+                      lead.status === 'WRONG_ORDER' ? 'amber' :
+                      lead.status === 'CANCEL_REASON_PRICE' ? 'rose' :
+                      lead.status === 'CANCEL_ORDER' ? 'rose' :
+                      'gray'
                     }`}>
                       {lead.status}
                     </span>
@@ -469,7 +469,7 @@ export default function AgentLeads() {
                       📞 Appeler
                     </a>
                   </div>
-                  {['ORDERED', 'CONFIRMED'].includes(lead.status) && (
+                  {['ORDERED', 'CONFIRMED'].includes(lead.status) && !lead.order?.coliatyPackageCode && (
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleOpenDeliveryModal(lead)}

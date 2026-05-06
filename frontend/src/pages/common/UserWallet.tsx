@@ -100,6 +100,8 @@ export default function UserWallet() {
         return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-yellow-50 text-yellow-700 border border-yellow-100"><Clock size={12}/> En attente</span>;
       case 'COMPLETED':
         return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-green-50 text-green-700 border border-green-100"><CheckCircle2 size={12}/> Complété</span>;
+      case 'RECEIVED':
+        return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-violet-50 text-violet-700 border border-violet-100"><CheckCircle2 size={12}/> Réçu</span>;
       case 'REJECTED':
         return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-red-50 text-red-700 border border-red-100"><XCircle size={12}/> Rejeté</span>;
       default:

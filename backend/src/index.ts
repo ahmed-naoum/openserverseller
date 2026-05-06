@@ -6,6 +6,7 @@ import compression from 'compression';
 import morgan from 'morgan';
 import { createServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
+import path from 'path';
 
 import routes from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -50,7 +51,7 @@ app.use(ipFilter);
 app.use(sanitizeInput);
 app.use(validateRequestSize(5 * 1024 * 1024));
 
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 setupPassport();
 

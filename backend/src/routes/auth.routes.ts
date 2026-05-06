@@ -543,6 +543,7 @@ router.post(
           snapchatUsername: ((user as any).profile)?.snapchatUsername,
           referralCode: user.referralCode,
           avatarUrl: user.profile?.avatarUrl,
+          isTwoFactorEnabled: (user as any).isTwoFactorEnabled,
           instagramFollowers: (user.profile as any)?.instagramFollowers,
         },
         tokens: {
@@ -625,6 +626,7 @@ router.post(
           snapchatUsername: ((user as any).profile)?.snapchatUsername,
           referralCode: user.referralCode,
           avatarUrl: user.profile?.avatarUrl,
+          isTwoFactorEnabled: (user as any).isTwoFactorEnabled,
           instagramFollowers: (user.profile as any)?.instagramFollowers,
         },
         tokens: {
@@ -1028,6 +1030,25 @@ router.post(
     res.json({
       status: 'success',
       message: 'Two-factor authentication has been enabled successfully.',
+    });
+  })
+);
+
+router.post(
+  '/2fa/disable',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    await prisma.user.update({
+      where: { id: req.user!.id },
+      data: {
+        isTwoFactorEnabled: false,
+        twoFactorSecret: null,
+      } as any,
+    });
+
+    res.json({
+      status: 'success',
+      message: 'L\'authentification à deux facteurs a été désactivée.',
     });
   })
 );
@@ -1463,6 +1484,7 @@ router.get(
           canManageOrders: user.canManageOrders,
           canManageInfluencerLinks: user.canManageInfluencerLinks,
           canManageTickets: user.canManageTickets,
+          isTwoFactorEnabled: (user as any).isTwoFactorEnabled,
           instagramUsername: ((user as any).profile)?.instagramUsername,
           tiktokUsername: ((user as any).profile)?.tiktokUsername,
           facebookUsername: ((user as any).profile)?.facebookUsername,

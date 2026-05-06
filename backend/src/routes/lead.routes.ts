@@ -157,27 +157,29 @@ router.get(
   asyncHandler(async (req, res) => {
     const { page = 1, limit = 50, status, agentId, search, viewMode, excludeProcessed, mode } = req.query;
 
-    const where: any = {};
+    const conditions: any[] = [];
 
     if (mode) {
-      where.sourceMode = mode as string;
+      conditions.push({ sourceMode: mode as string });
     }
 
     if (excludeProcessed === 'true') {
-      where.order = null;
-      where.status = { notIn: ['PUSHED_TO_DELIVERY', 'ORDERED', 'CONFIRMED'] };
+      conditions.push({ order: null });
+      conditions.push({ status: { notIn: ['PUSHED_TO_DELIVERY', 'ORDERED', 'CONFIRMED'] } });
     }
 
     if (req.user!.roleName === 'VENDOR') {
-      where.vendorId = req.user!.id;
+      conditions.push({ vendorId: req.user!.id });
     } else if (req.user!.roleName === 'CALL_CENTER_AGENT') {
       if (viewMode === 'ALL') {
-        where.OR = [
-          { assignedAgentId: req.user!.id },
-          { status: { in: ['AVAILABLE'] } },
-        ];
+        conditions.push({
+          OR: [
+            { assignedAgentId: req.user!.id },
+            { status: { in: ['AVAILABLE'] } },
+          ]
+        });
       } else {
-        where.assignedAgentId = req.user!.id;
+        conditions.push({ assignedAgentId: req.user!.id });
       }
     } else if (req.user!.roleName === 'HELPER') {
       if (!req.user!.canManageLeads) {
@@ -185,8 +187,6 @@ router.get(
       }
       
       const queryVendorId = req.query.vendorId ? Number(req.query.vendorId) : null;
-      
-      // Only show leads from assigned users
       const assignments = await (prisma as any).helperUserAssignment.findMany({
         where: { helperId: req.user!.id },
       });
@@ -194,42 +194,57 @@ router.get(
       
       if (queryVendorId) {
         if (assignedUserIds.includes(queryVendorId)) {
-          where.vendorId = queryVendorId;
+          conditions.push({ vendorId: queryVendorId });
         } else {
-          // If trying to access a non-assigned vendor, return nothing
-          where.vendorId = { in: [] };
+          conditions.push({ vendorId: { in: [] } });
         }
       } else {
-        where.vendorId = { in: assignedUserIds };
+        conditions.push({ vendorId: { in: assignedUserIds } });
       }
+    }
+    
+    // Hide leads that already have a Coliaty code (stored in the associated Order) for Agents and Helpers
+    if (req.user!.roleName === 'CALL_CENTER_AGENT' || req.user!.roleName === 'HELPER') {
+      conditions.push({
+        OR: [
+          { order: null },
+          { order: { coliatyPackageCode: null } }
+        ]
+      });
     }
 
     if (status) {
       const statusStr = status as string;
       if (statusStr.includes(',')) {
-        where.status = { in: statusStr.split(',').map(s => s.trim()) };
+        conditions.push({ status: { in: statusStr.split(',').map(s => s.trim()) } });
       } else {
-        where.status = statusStr;
+        conditions.push({ status: statusStr });
       }
     } else if (viewMode !== 'ALL' && excludeProcessed !== 'true') {
-      // By default, hide leads that have already been converted to orders
-      where.status = { not: 'PUSHED_TO_DELIVERY' };
+      conditions.push({ status: { not: 'PUSHED_TO_DELIVERY' } });
     }
 
-    if (agentId) where.assignedAgentId = Number(agentId as string);
+    if (agentId) conditions.push({ assignedAgentId: Number(agentId as string) });
 
     if (search) {
-      where.OR = [
-        { fullName: { contains: search as string, mode: 'insensitive' } },
-        { phone: { contains: search as string } },
-        { city: { contains: search as string, mode: 'insensitive' } },
-      ];
+      conditions.push({
+        OR: [
+          { fullName: { contains: search as string, mode: 'insensitive' } },
+          { phone: { contains: search as string } },
+          { city: { contains: search as string, mode: 'insensitive' } },
+        ]
+      });
     }
+
+    const where = conditions.length > 0 ? { AND: conditions } : {};
 
     const [leads, total] = await Promise.all([
       prisma.lead.findMany({
         where,
         include: {
+          vendor: {
+            include: { profile: true },
+          },
           assignedAgent: {
             include: { profile: true },
           },
@@ -346,6 +361,7 @@ router.get(
     const where: any = {
       status: { in: ['AVAILABLE'] },
       assignedAgentId: null,
+      order: null, // Exclude leads already pushed to delivery (have tracking number)
     };
 
     // If a specific influencer is requested, filter by them
@@ -550,7 +566,7 @@ router.post(
     const { id } = req.params;
 
     const lead = await prisma.lead.findFirst({
-      where: { id: Number(id), status: { in: ['AVAILABLE'] }, assignedAgentId: null },
+      where: { id: Number(id), status: { in: ['AVAILABLE'] }, assignedAgentId: null, order: null },
     });
 
     if (!lead) {
@@ -915,6 +931,30 @@ router.patch(
       throw new AppException(404, 'No leads found to update');
     }
 
+    // NEW: Validation for duplicate phone numbers when pushing to Call Center
+    if (status === 'AVAILABLE') {
+      const phones = leads.map(l => l.phone);
+      const uniquePhones = new Set(phones);
+      if (uniquePhones.size !== phones.length) {
+        throw new AppException(400, 'Impossible d\'envoyer des doublons au Call Center (numéros identiques dans la sélection)');
+      }
+
+      // Optional: Check if any of these phones are already in AVAILABLE/ASSIGNED status for this vendor
+      const existingActive = await prisma.lead.findFirst({
+        where: {
+          vendorId: req.user!.id,
+          phone: { in: phones },
+          status: { in: ['AVAILABLE', 'ASSIGNED'] },
+          id: { notIn: leads.map(l => l.id) },
+          order: null
+        }
+      });
+
+      if (existingActive) {
+        throw new AppException(400, `Le numéro ${existingActive.phone} est déjà actif au Call Center`);
+      }
+    }
+
     const updatedLeads = await prisma.$transaction(async (tx) => {
       // Create status history for each lead
       await tx.leadStatusHistory.createMany({
@@ -1023,6 +1063,8 @@ router.patch(
       'INVALID',
       'CONTACTED',
       'INTERESTED',
+      'NOT_INTERESTED',
+      'CALLBACK_REQUESTED',
       'ORDERED',
       'PUSHED_TO_DELIVERY',
       'UNREACHABLE',
@@ -1079,7 +1121,7 @@ router.patch(
 router.post(
   '/:id/assign',
   authenticate,
-  authorize('SUPER_ADMIN', 'CALL_CENTER_AGENT'),
+  authorize('SUPER_ADMIN', 'CALL_CENTER_AGENT', 'HELPER'),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { agentId } = req.body;
@@ -1249,7 +1291,7 @@ router.post(
 router.post(
   '/:id/push-to-delivery',
   authenticate,
-  authorize('CALL_CENTER_AGENT'),
+  authorize('CALL_CENTER_AGENT', 'HELPER'),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { 
@@ -1266,12 +1308,25 @@ router.post(
       productVariant
     } = req.body;
 
+    const where: any = {
+      id: Number(id),
+      status: { in: ['ORDERED', 'CONFIRMED'] },
+    };
+
+    if (req.user!.roleName === 'CALL_CENTER_AGENT') {
+      where.assignedAgentId = req.user!.id;
+    } else if (req.user!.roleName === 'HELPER') {
+      if (!req.user!.canManageLeads) {
+        throw new AppException(403, 'Permission denied: Vous n\'avez pas le droit de gérer les leads');
+      }
+      const assignments = await (prisma as any).helperUserAssignment.findMany({
+        where: { helperId: req.user!.id },
+      });
+      where.vendorId = { in: assignments.map((a: any) => a.targetUserId) };
+    }
+
     const lead = await prisma.lead.findFirst({
-      where: {
-        id: Number(id),
-        assignedAgentId: req.user!.id,
-        status: { in: ['ORDERED', 'CONFIRMED'] },
-      },
+      where,
       include: {
         referralLink: {
           include: {
@@ -1473,6 +1528,101 @@ router.post(
         order,
         coliaty: coliatyResult,
       },
+    });
+  })
+);
+
+// Scan Return (Helper)
+router.post(
+  '/scan-return',
+  authenticate,
+  authorize('SUPER_ADMIN', 'HELPER'),
+  asyncHandler(async (req, res) => {
+    const { code } = req.body;
+    if (!code) {
+      throw new AppException(400, 'Code is required');
+    }
+
+    const order = await prisma.order.findFirst({
+      where: {
+        OR: [
+          { coliatyPackageCode: code },
+          { orderNumber: code }
+        ]
+      },
+      include: { lead: { include: { referralLink: true } } }
+    });
+
+    if (!order || !order.lead) {
+      throw new AppException(404, 'Order or Lead not found for this code');
+    }
+
+    if (order.status === 'RETURNED' && order.lead.paymentSituation === 'FACTURED') {
+      throw new AppException(400, 'Ce colis a déjà été retourné et facturé.');
+    }
+
+    // Process Return
+    await prisma.$transaction(async (tx) => {
+      // 1. Update Order Status
+      await tx.order.update({
+        where: { id: order.id },
+        data: { status: 'RETURNED' }
+      });
+
+      // 2. Update Lead Status
+      await tx.lead.update({
+        where: { id: order.leadId! },
+        data: { status: 'RETURNED', paymentSituation: 'FACTURED' }
+      });
+
+      const userId = order.lead!.referralLink?.influencerId || order.vendorId;
+
+      // 3. Generate Frais de retour Invoice (-3 MAD)
+      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const invoiceNumber = `RET-${dateStr}-${randomStr}`;
+
+      const invoice = await tx.invoice.create({
+        data: {
+          invoiceNumber,
+          userId,
+          totalAmountMad: -3,
+          status: 'PAID',
+        }
+      });
+
+      // Link Invoice to Lead
+      await tx.lead.update({
+        where: { id: order.leadId! },
+        data: { invoiceId: invoice.id }
+      });
+
+      // 4. Wallet Deduction
+      let wallet = await tx.wallet.findUnique({ where: { userId } });
+      if (!wallet) {
+        wallet = await tx.wallet.create({ data: { userId } });
+      }
+
+      const updatedWallet = await tx.wallet.update({
+        where: { id: wallet.id },
+        data: { balanceMad: { decrement: 3 } }
+      });
+
+      await tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: 'RETURN_FEE',
+          amountMad: -3,
+          balanceAfterMad: updatedWallet.balanceMad,
+          description: `Frais de retour - Colis ${code}`,
+          orderId: order.id
+        }
+      });
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Retour traité avec succès (-3 MAD déduits).'
     });
   })
 );

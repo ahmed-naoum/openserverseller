@@ -111,6 +111,7 @@ export const authApi = {
   setup2FA: () => api.post('/auth/2fa/setup'),
   verify2FA: (data: { code: string; secret?: string }) =>
     api.post('/auth/2fa/verify', data),
+  disable2FA: () => api.post('/auth/2fa/disable'),
   impersonate: (data: { targetUserId: number }) =>
     api.post('/auth/impersonate', data),
   addBankAccount: (data: { bankName: string; ribAccount: string; iceNumber?: string }) =>
@@ -214,6 +215,8 @@ export const payoutsApi = {
     api.get('/payouts', { params }),
   create: (data: { amountMad: number; bankName: string; ribAccount: string; iceNumber?: string }) =>
     api.post('/payouts', data),
+  getHistory: (id: number) => api.get(`/payouts/${id}/history`),
+  updateStatus: (id: number, status: string) => api.patch(`/payouts/${id}/status`, { status }),
 };
 
 export const categoriesApi = {
@@ -269,6 +272,7 @@ export const adminApi = {
     api.patch(`/payouts/${id}/approve`, data),
   rejectPayout: (id: string) => api.patch(`/payouts/${id}/reject`),
   bulkApprovePayouts: (ids: number[]) => api.post('/payouts/bulk-approve', { ids }),
+  bulkUpdatePayoutStatus: (ids: number[], status: string) => api.patch('/payouts/bulk-status', { ids, status }),
   getAffiliateClaims: (params?: { status?: string }) => api.get('/admin/affiliate-claims', { params }),
   updateAffiliateClaim: (id: number, data: { status: string; actionType?: string; cloneName?: string; cloneDescription?: string; clonePrice?: number; cloneImageUrls?: string[] }) =>
     api.patch(`/admin/affiliate-claims/${id}`, data),
@@ -297,7 +301,7 @@ export const adminApi = {
   getHelperUserAssignments: (helperId?: number) =>
     api.get('/admin/helper-user-assignments', { params: helperId ? { helperId } : {} }),
   setHelperUserAssignments: (helperId: number, targetUserIds: number[], autoAssign?: boolean) =>
-    api.post('/helper-user-assignments', { helperId, targetUserIds, autoAssign }),
+    api.post('/admin/helper-user-assignments', { helperId, targetUserIds, autoAssign }),
   getPaymentMonitoring: () => api.get('/admin/payment-monitoring'),
   getUserPaymentMonitoring: (id: number) => api.get(`/admin/payment-monitoring/user/${id}`),
   bulkUpdatePaymentSituation: (data: { leadIds: number[]; situation: string }) => 
@@ -305,14 +309,21 @@ export const adminApi = {
   getInvoices: (params?: { page?: number; limit?: number; search?: string }) =>
     api.get('/admin/invoices', { params }),
   getInvoice: (id: number) => api.get(`/admin/invoices/${id}`),
+  updateInvoiceStatus: (id: number, status: string) => api.patch(`/admin/invoices/${id}/status`, { status }),
   // Backups
-  listBackups: () => api.get('/admin/backups'),
+  listBackups: (params?: { page?: number; limit?: number; search?: string; startDate?: string; endDate?: string }) => 
+    api.get('/admin/backups', { params }),
   triggerBackup: () => api.post('/admin/backups/manual'),
   downloadBackupUrl: (filename: string) => `${BACKEND_URL}/api/v1/admin/backups/download/${filename}`,
   deleteBackup: (filename: string) => api.delete(`/admin/backups/${filename}`),
+  restoreBackup: (filename: string) => api.post(`/admin/backups/restore/${filename}`),
   // Activity Logs
   getActivityLogs: (params?: { page?: number; limit?: number; userId?: number; action?: string }) => 
     api.get('/admin/audit-logs', { params }),
+  // Call Center Inspector
+  getCallCenterAgents: (params?: { startDate?: string; endDate?: string }) => api.get('/admin/call-center-agents', { params }),
+  getCallCenterAgentLeads: (agentId: number, params?: { status?: string; search?: string; page?: number; limit?: number; startDate?: string; endDate?: string }) =>
+    api.get('/admin/call-center-agents', { params: { agentId, ...params } }),
 };
 
 export const chatApi = {
@@ -406,6 +417,7 @@ export const helperApi = {
   updateLinkStatus: (id: number, isActive: boolean) => api.patch(`/influencer/links/${id}/status`, { isActive }),
   getLandingPage: (id: number) => api.get(`/influencer/links/${id}/landing-page`),
   updateLandingPage: (id: number, data: any) => api.put(`/influencer/links/${id}/landing-page`, data),
+  scanReturn: (code: string) => api.post('/leads/scan-return', { code }),
 };
 
 export const marketplaceApi = {

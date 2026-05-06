@@ -16,7 +16,10 @@ import {
   FileText,
   Clock,
   Package,
-  RefreshCw
+  RefreshCw,
+  TrendingUp,
+  Truck,
+  Activity
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
@@ -29,6 +32,8 @@ export default function PaymentMonitoring() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLeadIds, setSelectedLeadIds] = useState<number[]>([]);
   const [viewingUserLeads, setViewingUserLeads] = useState(false);
+  const [roleFilter, setRoleFilter] = useState('ALL');
+  const [leadSearchTerm, setLeadSearchTerm] = useState('');
 
   // 1. Fetch Users Summary
   const { data: summaryData, isLoading: isLoadingSummary } = useQuery({
@@ -62,9 +67,33 @@ export default function PaymentMonitoring() {
     onError: () => toast.error('Erreur lors de la mise à jour'),
   });
 
-  const filteredUsers = users.filter((u: any) => 
-    u.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.email?.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredUsers = users.filter((u: any) => {
+    const matchesSearch = u.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         u.email?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
+    return matchesSearch && matchesRole;
+  });
+
+  const overallStats = filteredUsers.reduce((acc: any, u: any) => {
+    acc.totalColis += u.paidCount || 0;
+    acc.totalMoney += u.totalPaidAmount || 0;
+    
+    // Admin Profit calculation:
+    // The summary provides the Net Amount (after 57 MAD delivery and 13% platform fee).
+    // Formula to recover the fee: (Net Amount / 0.87) * 0.13
+    const userAdminProfit = (u.totalPaidAmount / 0.87) * 0.13;
+    acc.totalAdminProfit += userAdminProfit;
+    
+    acc.totalDeliveryCost += (u.paidCount || 0) * 57;
+    acc.totalAdminNetProfit = acc.totalAdminProfit + acc.totalDeliveryCost;
+    
+    return acc;
+  }, { totalColis: 0, totalMoney: 0, totalAdminProfit: 0, totalDeliveryCost: 0, totalAdminNetProfit: 0 });
+
+  const filteredUserLeads = userLeads.filter((l: any) => 
+    l.fullName?.toLowerCase().includes(leadSearchTerm.toLowerCase()) ||
+    l.phone?.toLowerCase().includes(leadSearchTerm.toLowerCase()) ||
+    (l.referralLink?.product?.nameFr || l.order?.items?.[0]?.product?.nameFr || l.productVariant || '').toLowerCase().includes(leadSearchTerm.toLowerCase())
   );
 
   const handleSelectLead = (id: number) => {
@@ -74,26 +103,49 @@ export default function PaymentMonitoring() {
   };
 
   const handleSelectAll = () => {
-    if (selectedLeadIds.length === userLeads.length) {
+    if (selectedLeadIds.length === filteredUserLeads.length && filteredUserLeads.length > 0) {
       setSelectedLeadIds([]);
     } else {
-      setSelectedLeadIds(userLeads.map((l: any) => l.id));
+      setSelectedLeadIds(filteredUserLeads.map((l: any) => l.id));
     }
   };
 
   if (viewingUserLeads && selectedUser) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={() => { setViewingUserLeads(false); setSelectedUser(null); setSelectedLeadIds([]); }}
-            className="p-2 hover:bg-white rounded-xl transition-all border border-transparent hover:border-gray-100"
-          >
-            <ArrowLeft className="w-5 h-5 text-gray-600" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-black text-gray-900 tracking-tight">Colis de {selectedUser.fullName}</h1>
-            <p className="text-sm text-gray-500 font-medium">Gestion des leads marqués comme 💳 Payé</p>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => { setViewingUserLeads(false); setSelectedUser(null); setSelectedLeadIds([]); setLeadSearchTerm(''); }}
+              className="p-2 hover:bg-white rounded-xl transition-all border border-transparent hover:border-gray-100"
+            >
+              <ArrowLeft className="w-5 h-5 text-gray-600" />
+            </button>
+            <div>
+              <h1 className="text-2xl font-black text-gray-900 tracking-tight">Colis de {selectedUser.fullName}</h1>
+              <p className="text-sm text-gray-500 font-medium">Gestion des leads marqués comme 💳 Payé</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="relative flex-1 md:w-80">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input 
+                type="text" 
+                placeholder="Rechercher dans les leads..."
+                value={leadSearchTerm}
+                onChange={(e) => setLeadSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-500 transition-all shadow-sm"
+              />
+            </div>
+            <button
+              onClick={() => queryClient.invalidateQueries({ queryKey: ['admin-user-paid-leads', selectedUser?.id] })}
+              disabled={isLoadingUserLeads}
+              className="p-2.5 bg-white border border-gray-100 rounded-2xl text-gray-500 hover:text-violet-600 hover:bg-violet-50 hover:border-violet-100 transition-all shadow-sm disabled:opacity-50 flex-shrink-0"
+              title="Actualiser"
+            >
+              <RefreshCw className={`w-5 h-5 ${isLoadingUserLeads ? 'animate-spin' : ''}`} />
+            </button>
           </div>
         </div>
 
@@ -123,10 +175,10 @@ export default function PaymentMonitoring() {
                 onClick={handleSelectAll}
                 className="p-1 hover:bg-gray-200 rounded transition-all"
               >
-                {selectedLeadIds.length === userLeads.length && userLeads.length > 0 ? <CheckSquare className="w-5 h-5 text-violet-600" /> : <Square className="w-5 h-5 text-gray-400" />}
+                {selectedLeadIds.length === filteredUserLeads.length && filteredUserLeads.length > 0 ? <CheckSquare className="w-5 h-5 text-violet-600" /> : <Square className="w-5 h-5 text-gray-400" />}
               </button>
               <span className="text-sm font-bold text-gray-700">
-                {selectedLeadIds.length > 0 ? `${selectedLeadIds.length} sélectionnés` : `${userLeads.length} leads payés`}
+                {selectedLeadIds.length > 0 ? `${selectedLeadIds.length} sélectionnés` : `${filteredUserLeads.length} leads trouvés`}
               </span>
             </div>
             {selectedLeadIds.length > 0 && (
@@ -168,7 +220,7 @@ export default function PaymentMonitoring() {
                       <td colSpan={6} className="px-6 py-8"><div className="h-10 bg-gray-50 rounded-xl" /></td>
                     </tr>
                   ))
-                ) : userLeads.map((lead: any) => (
+                ) : filteredUserLeads.map((lead: any) => (
                   <tr key={lead.id} className={`group hover:bg-gray-50/80 transition-all ${selectedLeadIds.includes(lead.id) ? 'bg-violet-50/50' : ''}`}>
                     <td className="px-6 py-4">
                       <button onClick={() => handleSelectLead(lead.id)}>
@@ -262,6 +314,81 @@ export default function PaymentMonitoring() {
             <RefreshCw className={`w-5 h-5 ${isLoadingSummary ? 'animate-spin' : ''}`} />
           </button>
         </div>
+      </div>
+  
+      {/* Overall Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 animate-fadeIn">
+        <div className="bg-white rounded-3xl p-4 border border-gray-100 shadow-sm flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center border border-violet-100">
+            <UserIcon size={18} />
+          </div>
+          <div>
+            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Partenaires</p>
+            <p className="text-base font-black text-gray-900 leading-none">{filteredUsers.length}</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-3xl p-4 border border-gray-100 shadow-sm flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-green-50 text-green-600 flex items-center justify-center border border-green-100">
+            <CheckCircle2 size={18} />
+          </div>
+          <div>
+            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Colis Payés</p>
+            <p className="text-base font-black text-gray-900 leading-none">{overallStats.totalColis}</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-3xl p-4 border border-gray-100 shadow-sm flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
+            <Truck size={18} />
+          </div>
+          <div>
+            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Frais de livraison</p>
+            <p className="text-base font-black text-indigo-600 leading-none">+{overallStats.totalDeliveryCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-3xl p-4 border border-gray-100 shadow-sm flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
+            <TrendingUp size={18} />
+          </div>
+          <div>
+            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">COD Fee (13%)</p>
+            <p className="text-base font-black text-blue-600 leading-none">+{overallStats.totalAdminProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-3xl p-4 border border-gray-100 shadow-sm flex items-center gap-3 ring-2 ring-emerald-500/10 shadow-lg shadow-emerald-500/5">
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
+            <Activity size={18} />
+          </div>
+          <div>
+            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Admin Profite</p>
+            <p className="text-base font-black text-emerald-600 leading-none">+{overallStats.totalAdminNetProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-[8px]">MAD</span></p>
+          </div>
+        </div>
+        <div className="bg-white rounded-3xl p-4 border border-gray-100 shadow-sm flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
+            <CreditCard size={18} />
+          </div>
+          <div>
+            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Total Money</p>
+            <p className="text-base font-black text-gray-900 leading-none">{overallStats.totalMoney.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-[8px]">MAD</span></p>
+          </div>
+        </div>
+      </div>
+
+      {/* Filter Bar */}
+      <div className="flex flex-wrap items-center gap-2">
+        {['ALL', 'INFLUENCER', 'VENDOR'].map((role) => (
+          <button
+            key={role}
+            onClick={() => setRoleFilter(role)}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
+              roleFilter === role
+                ? 'bg-violet-600 text-white border-violet-600 shadow-lg shadow-violet-200'
+                : 'bg-white text-gray-600 border-gray-100 hover:bg-gray-50'
+            }`}
+          >
+            {role === 'ALL' ? 'Tous les Rôles' : role}
+          </button>
+        ))}
       </div>
 
       {/* Main Grid */}

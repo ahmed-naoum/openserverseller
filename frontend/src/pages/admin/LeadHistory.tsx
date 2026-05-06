@@ -4,17 +4,45 @@ import { leadsApi } from '../../lib/api';
 import { format } from 'date-fns';
 
 const STATUS_LABELS: Record<string, { label: string; icon: string; color: string }> = {
-  NEW: { label: 'Nouveau', icon: '🆕', color: 'bg-blue-100 text-blue-800' },
-  AVAILABLE: { label: 'Disponible', icon: '🟢', color: 'bg-emerald-100 text-emerald-800' },
-  ASSIGNED: { label: 'Assigné', icon: '👤', color: 'bg-amber-100 text-amber-800' },
-  CONTACTED: { label: 'Contacté', icon: '📞', color: 'bg-blue-100 text-blue-800' },
-  INTERESTED: { label: 'Intéressé', icon: '✅', color: 'bg-green-100 text-green-800' },
-  ORDERED: { label: 'Commandé', icon: '🛒', color: 'bg-emerald-100 text-emerald-800' },
-  CALLBACK_REQUESTED: { label: 'Rappel demandé', icon: '🔁', color: 'bg-orange-100 text-orange-800' },
-  NOT_INTERESTED: { label: 'Pas intéressé', icon: '❌', color: 'bg-red-100 text-red-800' },
-  UNREACHABLE: { label: 'Injoignable', icon: '📵', color: 'bg-gray-100 text-gray-800' },
-  INVALID: { label: 'Invalide', icon: '🚫', color: 'bg-red-100 text-red-800' },
-  PUSHED_TO_DELIVERY: { label: 'En livraison', icon: '🚚', color: 'bg-indigo-100 text-indigo-800' },
+  // Lead Lifecycle
+  NEW: { label: 'Nouveau', icon: '🆕', color: 'bg-blue-50 text-blue-600 border border-blue-100' },
+  AVAILABLE: { label: 'Disponible', icon: '🟢', color: 'bg-emerald-50 text-emerald-600 border border-emerald-100' },
+  ASSIGNED: { label: 'Assigné', icon: '👤', color: 'bg-purple-50 text-purple-600 border border-purple-100' },
+  CONTACTED: { label: 'Contacté', icon: '📞', color: 'bg-blue-50 text-blue-600 border border-blue-100' },
+  INTERESTED: { label: 'Intéressé', icon: '✅', color: 'bg-emerald-50 text-emerald-600 border border-emerald-100' },
+  ORDERED: { label: 'Commandé', icon: '🛒', color: 'bg-emerald-50 text-emerald-600 border border-emerald-100' },
+  CALLBACK_REQUESTED: { label: 'Rappel', icon: '🔁', color: 'bg-orange-50 text-orange-600 border border-orange-100' },
+  NOT_INTERESTED: { label: 'Pas intéressé', icon: '❌', color: 'bg-rose-50 text-rose-600 border border-rose-100' },
+  UNREACHABLE: { label: 'Injoignable', icon: '📵', color: 'bg-slate-50 text-slate-600 border border-slate-100' },
+  INVALID: { label: 'Invalide', icon: '🚫', color: 'bg-rose-50 text-rose-600 border border-rose-100' },
+
+  // Delivery Lifecycle (Coliaty 21)
+  'NEW_PARCEL': { label: 'Nouveau Colis', icon: '📦', color: 'bg-slate-50 text-slate-600 border border-slate-100' },
+  'WAITING_PICKUP': { label: 'Attente Collecte', icon: '⏳', color: 'bg-amber-50 text-amber-600 border border-amber-100' },
+  'WAITING_PREPARATION': { label: 'Attente Préparation', icon: '⏳', color: 'bg-orange-50 text-orange-600 border border-orange-100' },
+  'PREPARED': { label: 'Préparé', icon: '📦', color: 'bg-emerald-50 text-emerald-600 border border-emerald-100' },
+  'ENCORE_PREPARED': { label: 'En préparation', icon: '🔄', color: 'bg-blue-50 text-blue-600 border border-blue-100' },
+  'PICKED_UP': { label: 'Collecté', icon: '🚚', color: 'bg-blue-50 text-blue-600 border border-blue-100' },
+  'SENT': { label: 'Expédié', icon: '✈️', color: 'bg-violet-50 text-violet-600 border border-violet-100' },
+  'RECEIVED': { label: 'Reçu (Dest.)', icon: '📍', color: 'bg-indigo-50 text-indigo-600 border border-indigo-100' },
+  'DISTRIBUTION': { label: 'En livraison', icon: '🛵', color: 'bg-cyan-50 text-cyan-600 border border-cyan-100' },
+  'PROGRAMMER_AUTO': { label: 'Livraison Auto', icon: '🤖', color: 'bg-purple-50 text-purple-600 border border-purple-100' },
+  'POSTPONED': { label: 'Reporté', icon: '📅', color: 'bg-orange-50 text-orange-600 border border-orange-100' },
+  'NOANSWER': { label: 'Pas de réponse', icon: '📵', color: 'bg-rose-50 text-rose-600 border border-rose-100' },
+  'ERR': { label: 'Tél Erroné', icon: '⚠️', color: 'bg-rose-50 text-rose-600 border border-rose-100' },
+  'PROGRAMMER': { label: 'Programmé', icon: '📅', color: 'bg-blue-50 text-blue-600 border border-blue-100' },
+  'INCORRECT_ADDRESS': { label: 'Adresse Erronée', icon: '📍', color: 'bg-rose-50 text-rose-600 border border-rose-100' },
+  'DELIVERED': { label: 'Livré', icon: '🎉', color: 'bg-emerald-50 text-emerald-600 border border-emerald-100' },
+  'RETURNED': { label: 'Retourné', icon: '↩️', color: 'bg-orange-50 text-orange-600 border border-orange-100' },
+  'CANCELED_BY_SELLER': { label: 'Annulé (Vendeur)', icon: '❌', color: 'bg-rose-50 text-rose-600 border border-rose-100' },
+  'CANCELED_BY_SYSTEM': { label: 'Annulé (Système)', icon: '🤖', color: 'bg-rose-50 text-rose-600 border border-rose-100' },
+  'CANCELED': { label: 'Annulé (Livreur)', icon: '❌', color: 'bg-rose-50 text-rose-600 border border-rose-100' },
+  'REFUSE': { label: 'Refusé', icon: '✋', color: 'bg-rose-50 text-rose-600 border border-rose-100' },
+
+  // Compatibility
+  'PENDING': { label: 'En attente', icon: '⏳', color: 'bg-amber-50 text-amber-600 border border-amber-100' },
+  'SHIPPED': { label: 'Expédié', icon: '🚚', color: 'bg-indigo-50 text-indigo-600 border border-indigo-100' },
+  'CANCELLED': { label: 'Annulé', icon: '❌', color: 'bg-rose-50 text-rose-600 border border-rose-100' },
 };
 
 export default function AdminLeadHistory() {

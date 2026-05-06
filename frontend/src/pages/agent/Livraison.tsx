@@ -63,54 +63,64 @@ interface HistoryEntry {
 }
 
 const statusConfig: Record<string, { label: string; color: string; bg: string; icon: React.ComponentType<any> }> = {
-  PENDING: { label: 'En attente', color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200', icon: Clock },
-  CONFIRMED: { label: 'Confirmé', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200', icon: CheckCircle2 },
-  SHIPPED: { label: 'Expédié', color: 'text-indigo-600', bg: 'bg-indigo-50 border-indigo-200', icon: Truck },
-  DELIVERED: { label: 'Livré', color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-200', icon: CheckCircle2 },
-  CANCELLED: { label: 'Annulé', color: 'text-red-600', bg: 'bg-red-50 border-red-200', icon: Clock },
-  RETURNED: { label: 'Retourné', color: 'text-orange-600', bg: 'bg-orange-50 border-orange-200', icon: Box },
+  // Cycle de vie / Stock
+  'NEW_PARCEL': { label: 'Nouveau Colis', color: 'text-slate-600', bg: 'bg-slate-50 border-slate-100', icon: Box },
+  'WAITING_PICKUP': { label: 'Attente Collecte', color: 'text-amber-600', bg: 'bg-amber-50 border-amber-100', icon: Clock },
+  'WAITING_PREPARATION': { label: 'Attente Préparation', color: 'text-orange-600', bg: 'bg-orange-50 border-orange-100', icon: Clock },
+  'PREPARED': { label: 'Préparé', color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-100', icon: CheckCircle2 },
+  'ENCORE_PREPARED': { label: 'En préparation', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-100', icon: RefreshCw },
+  
+  // En transit
+  'PICKED_UP': { label: 'Collecté', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-100', icon: Package },
+  'SENT': { label: 'Expédié', color: 'text-violet-600', bg: 'bg-violet-50 border-violet-100', icon: Truck },
+  'RECEIVED': { label: 'Reçu (Destination)', color: 'text-indigo-600', bg: 'bg-indigo-50 border-indigo-100', icon: MapPin },
+  'DISTRIBUTION': { label: 'En livraison', color: 'text-cyan-600', bg: 'bg-cyan-50 border-cyan-100', icon: Truck },
+  'PROGRAMMER_AUTO': { label: 'Livraison Auto', color: 'text-purple-600', bg: 'bg-purple-50 border-purple-100', icon: Clock },
+  'POSTPONED': { label: 'Reporté', color: 'text-orange-600', bg: 'bg-orange-50 border-orange-100', icon: Clock },
+  'NOANSWER': { label: 'Pas de réponse', color: 'text-rose-600', bg: 'bg-rose-50 border-rose-100', icon: Phone },
+  'ERR': { label: 'Tél Erroné', color: 'text-rose-600', bg: 'bg-rose-50 border-rose-100', icon: Phone },
+  'PROGRAMMER': { label: 'Programmé', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-100', icon: Clock },
+  'INCORRECT_ADDRESS': { label: 'Adresse Erronée', color: 'text-rose-600', bg: 'bg-rose-50 border-rose-100', icon: MapPin },
+
+  // Livraison terminée
+  'DELIVERED': { label: 'Livré', color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-100', icon: CheckCircle2 },
+  'RETURNED': { label: 'Retourné', color: 'text-orange-600', bg: 'bg-orange-50 border-orange-100', icon: Box },
+
+  // Annulations
+  'CANCELED_BY_SELLER': { label: 'Annulé (Vendeur)', color: 'text-red-600', bg: 'bg-red-50 border-red-100', icon: Box },
+  'CANCELED_BY_SYSTEM': { label: 'Annulé (Système)', color: 'text-red-600', bg: 'bg-red-50 border-red-100', icon: Box },
+  'CANCELED': { label: 'Annulé (Livreur)', color: 'text-red-600', bg: 'bg-red-50 border-red-100', icon: Box },
+  'REFUSE': { label: 'Refusé', color: 'text-red-600', bg: 'bg-red-50 border-red-100', icon: Box },
+
+  // Compatibility & Lead Statuses
+  'PENDING': { label: 'En attente', color: 'text-amber-600', bg: 'bg-amber-50 border-amber-100', icon: Clock },
+  'CONFIRMED': { label: 'Confirmé', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-100', icon: CheckCircle2 },
+  'PUSHED_TO_DELIVERY': { label: 'En livraison', color: 'text-indigo-600', bg: 'bg-indigo-50 border-indigo-100', icon: Truck },
+  'CALL_LATER': { label: 'Rappel', color: 'text-orange-600', bg: 'bg-orange-50 border-orange-100', icon: Clock },
 };
 
 const historyStatusLabels: Record<string, string> = {
-  'NEW_PARCEL': 'Nouveau',
+  'NEW_PARCEL': 'Nouveau Colis',
   'WAITING_PICKUP': 'En attente de ramassage',
   'WAITING_PREPARATION': 'En attente de préparation',
-  'ENCORE_PREPARED': 'Encore préparé',
+  'ENCORE_PREPARED': 'En cours de traitement',
   'PREPARED': 'Préparé',
   'PICKED_UP': 'Ramassé',
-  'SENT': 'Expédié',
+  'SENT': 'En route (Destination)',
   'RECEIVED': 'Reçu à la destination',
-  'PROGRAMMER_AUTO': 'Auto-Programmé',
+  'PROGRAMMER_AUTO': 'Programmé (Auto)',
   'CANCELED_BY_SELLER': 'Annulé par le vendeur',
   'CANCELED_BY_SYSTEM': 'Annulé par le système',
-  'DISTRIBUTION': 'En distribution',
-  'IN_PROGRESS': 'En cours',
-  'DELIVERED': 'Livré',
-  'RETOUR_IN_PROGRESS': 'Retour vers hub',
-  'RETOUR_HUB_AVAILABLE': 'Retour disponible votre hub',
-  'RETOUR_WAREHOUSE_RETURNED_IN_PROGRESS': 'Retour au stock en cours',
-  'RETOUR_WAREHOUSE_RETURNED': 'Retourné au stock',
-  'RETOUR_CLIENT_PREPARED_FOR_DELIVERY': 'Retour prêt à livrer',
-  'RETOUR_CLIENT_DELIVERED': 'Retour livré à la clientèle',
-  'DISTINATION_CHANGED': 'Destination changée',
-  'INCORRECT_ADDRESS': 'Adresse incorrecte',
-  'CANCELED': 'Annulé',
-  'REFUSE': 'Refusé',
-  'BV': 'Boite vocal',
-  'UNREACHABLE': 'Injoignable',
-  'CPC': 'Client pas commandé',
-  'POSTPONED': 'Reporté',
-  'OUT_OF_AREA': 'Hors zone',
-  'NOANSWER': 'Non répondu',
-  'EN_VOYAGE': 'Client en voyage',
-  'CLIENT_INTERESE': 'Client intéressé',
-  'INJO': 'Injoignable',
-  'ERR': 'Numéro erroné',
-  'PLTR': 'Rappelez plus tard',
-  'CNI': 'Client pas intéressé',
-  'PROGRAMMER': 'Programmé',
-  'CDM': 'Colis endommagé',
-  'CORRECTED_INFORMATION': 'Informations corrigées'
+  'DISTRIBUTION': 'En cours de distribution',
+  'DELIVERED': 'Livré avec succès',
+  'RETURNED': 'Retourné au hub',
+  'POSTPONED': 'Livraison reportée',
+  'NOANSWER': 'Pas de réponse',
+  'CANCELED': 'Annulé lors de la livraison',
+  'REFUSE': 'Refusé par le client',
+  'ERR': 'Numéro de téléphone erroné',
+  'PROGRAMMER': 'Livraison programmée',
+  'INCORRECT_ADDRESS': 'Adresse erronée'
 };
 
 export default function AgentLivraison() {

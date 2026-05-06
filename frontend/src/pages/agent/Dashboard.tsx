@@ -20,13 +20,13 @@ export default function AgentDashboard() {
   const statusColors: Record<string, string> = {
     NEW: 'primary',
     ASSIGNED: 'purple',
-    CALL_LATER: 'warning',
-    NO_REPLY: 'gray',
+    CALL_LATER: 'orange',
+    NO_REPLY: 'rose',
     CONFIRMED: 'success',
-    WRONG_ORDER: 'warning',
-    CANCEL_REASON_PRICE: 'gray',
-    CANCEL_ORDER: 'danger',
-    INVALID: 'danger',
+    WRONG_ORDER: 'amber',
+    CANCEL_REASON_PRICE: 'rose',
+    CANCEL_ORDER: 'rose',
+    INVALID: 'rose',
   };
 
   return (
@@ -48,11 +48,11 @@ export default function AgentDashboard() {
           <div className="text-sm text-gray-500">Nouveaux</div>
         </div>
         <div className="card p-4">
-          <div className="text-2xl font-bold text-yellow-600">{stats.callback}</div>
+          <div className="text-2xl font-bold text-orange-600">{stats.callback}</div>
           <div className="text-sm text-gray-500">Rappels</div>
         </div>
         <div className="card p-4">
-          <div className="text-2xl font-bold text-gray-600">{stats.noReply}</div>
+          <div className="text-2xl font-bold text-rose-600">{stats.noReply}</div>
           <div className="text-sm text-gray-500">Pas de réponse</div>
         </div>
         <div className="card p-4">
@@ -79,7 +79,7 @@ export default function AgentDashboard() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className={`badge-${statusColors[lead.status]}`}>{lead.status}</span>
+                <span className={`badge badge-${statusColors[lead.status] || 'gray'}`}>{lead.status}</span>
                 <button className="btn-primary btn-sm">Appeler</button>
               </div>
             </div>

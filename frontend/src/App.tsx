@@ -42,6 +42,7 @@ import AdminPaymentMonitoring from './pages/admin/PaymentMonitoring';
 import AdminInvoices from './pages/admin/Invoices';
 import ActivityLogs from './pages/admin/ActivityLogs';
 import BackupManager from './pages/admin/BackupManager';
+import CallCenterInspector from './pages/admin/CallCenterInspector';
 
 import ProductCustomizePage from './pages/vendor/ProductCustomizePage';
 import YouCanCallback from './pages/vendor/YouCanCallback';
@@ -80,6 +81,7 @@ import HelperTickets from './pages/helper/Tickets';
 import HelperUsers from './pages/helper/Users';
 import HelperLinks from './pages/helper/Links';
 import SiteBuilder from './pages/helper/SiteBuilder';
+import HelperScanner from './pages/helper/Scanner';
 import Chat from './pages/common/Chat';
 import AccountVerification from './pages/verify/AccountVerification';
 import PublicMarketplace from './pages/marketplace/PublicMarketplace';
@@ -254,6 +256,7 @@ function App() {
           <Route path="leads" element={<HelperLeads />} />
           <Route path="links" element={<HelperLinks />} />
           <Route path="colis" element={<HelperColis />} />
+          <Route path="scanner" element={<HelperScanner />} />
           <Route path="tickets" element={<HelperTickets />} />
           <Route path="products" element={<AdminProducts />} />
           <Route path="settings" element={<SettingsPage />} />
@@ -290,6 +293,7 @@ function App() {
           <Route path="chat" element={<Chat />} />
           <Route path="activity-logs" element={<ActivityLogs />} />
           <Route path="backups" element={<BackupManager />} />
+          <Route path="call-center-inspector" element={<CallCenterInspector />} />
           <Route path="settings" element={<SettingsPage />} />
 
           <Route path="verification" element={<ProfileVerification />} />

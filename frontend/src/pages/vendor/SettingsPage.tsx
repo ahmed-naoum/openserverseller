@@ -91,6 +91,17 @@ export default function SettingsPage() {
       toast.error(error.response?.data?.message || 'Code de vérification invalide');
     },
   });
+  
+  const disable2FAMutation = useMutation({
+    mutationFn: authApi.disable2FA,
+    onSuccess: () => {
+      toast.success('L\'authentification à deux facteurs a été désactivée');
+      refreshUser();
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Erreur lors de la désactivation');
+    },
+  });
 
   const handleProfileSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -381,12 +392,12 @@ export default function SettingsPage() {
                         <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                           Authentification à deux facteurs (2FA)
                           {user?.isTwoFactorEnabled ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 text-xs font-bold ring-1 ring-inset ring-emerald-600/20">
-                              <CheckCircle2 size={12} /> ACTIVÉ
+                            <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-emerald-500 text-white text-[11px] font-black uppercase tracking-widest shadow-lg shadow-emerald-500/30 animate-pulse-slow">
+                              <CheckCircle2 size={14} /> ACTIVÉ
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-50 text-amber-700 text-xs font-bold ring-1 ring-inset ring-amber-600/20">
-                              DÉSACTIVÉ
+                            <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-red-500 text-white text-[11px] font-black uppercase tracking-widest shadow-lg shadow-red-500/30">
+                              <ShieldCheck size={14} /> DÉSACTIVÉ
                             </span>
                           )}
                         </h3>
@@ -395,25 +406,70 @@ export default function SettingsPage() {
                     </div>
                     
                     {!user?.isTwoFactorEnabled && !twoFactorData && (
-                      <div className="bg-gradient-to-br from-gray-50 to-white border border-gray-200 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-sm">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 bg-primary-100 text-primary-600 rounded-full flex items-center justify-center shrink-0">
-                            <ShieldCheck size={24} />
+                      <div className="bg-gradient-to-br from-red-50 via-white to-white border-2 border-red-100 rounded-3xl p-8 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-xl shadow-red-500/5 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4 opacity-[0.03]">
+                            <ShieldCheck size={120} />
+                        </div>
+                        <div className="flex items-center gap-6 relative z-10">
+                          <div className="w-16 h-16 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center shrink-0 shadow-inner">
+                            <ShieldCheck size={32} />
                           </div>
                           <div>
-                            <p className="font-semibold text-gray-900 text-base">Protéger votre espace</p>
-                            <p className="text-sm text-gray-500 mt-0.5">
-                              Utilisez Google Authenticator pour générer un code unique à chaque connexion.
+                            <p className="font-black text-gray-900 text-xl tracking-tight">Votre compte est vulnérable</p>
+                            <p className="text-sm text-gray-500 mt-1 max-w-md leading-relaxed">
+                              L'authentification à deux facteurs n'est pas configurée. Activez-la maintenant pour protéger vos gains et vos données.
                             </p>
                           </div>
                         </div>
                         <button
                           onClick={() => setup2FAMutation.mutate()}
                           disabled={setup2FAMutation.isPending}
-                          className="px-6 py-2.5 bg-white border-2 border-primary-600 text-primary-600 hover:bg-primary-50 rounded-xl font-bold transition-colors whitespace-nowrap shrink-0"
+                          className="px-8 py-4 bg-red-600 text-white hover:bg-red-700 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all whitespace-nowrap shrink-0 shadow-xl shadow-red-600/20 hover:scale-105 active:scale-95 flex items-center gap-2 relative z-10"
                         >
-                          {setup2FAMutation.isPending ? 'Chargement...' : 'Configurer 2FA'}
+                          {setup2FAMutation.isPending ? 'Chargement...' : (
+                            <>
+                                <Lock size={16} />
+                                Configurer 2FA Maintenant
+                            </>
+                          )}
                         </button>
+                      </div>
+                    )}
+
+                    {user?.isTwoFactorEnabled && (
+                      <div className="bg-gradient-to-br from-emerald-50 via-white to-white border-2 border-emerald-100 rounded-3xl p-8 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-xl shadow-emerald-500/5 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4 opacity-[0.03]">
+                            <CheckCircle2 size={120} />
+                        </div>
+                        <div className="flex items-center gap-6 relative z-10">
+                          <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center shrink-0 shadow-inner">
+                            <CheckCircle2 size={32} />
+                          </div>
+                          <div>
+                            <p className="font-black text-gray-900 text-xl tracking-tight">Sécurité maximale active</p>
+                            <p className="text-sm text-gray-500 mt-1 max-w-md leading-relaxed">
+                              Votre compte est protégé par l'authentification à deux facteurs. Votre espace est entièrement sécurisé.
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-4 relative z-10">
+                            <span className="text-xs font-bold text-emerald-600 uppercase tracking-widest">Protection Active</span>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={true}
+                                    onChange={() => {
+                                        if (confirm('Voulez-vous vraiment désactiver l\'authentification à deux facteurs ? Cela réduira la sécurité de votre compte.')) {
+                                            disable2FAMutation.mutate();
+                                        }
+                                    }}
+                                    className="sr-only peer"
+                                    disabled={disable2FAMutation.isPending}
+                                />
+                                <div className="w-14 h-7 bg-emerald-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all shadow-lg shadow-emerald-500/20"></div>
+                            </label>
+                        </div>
                       </div>
                     )}
 

@@ -388,16 +388,18 @@ router.get(
 
     let dateLimitStart: Date;
     let dateLimitEnd = new Date();
+    const numDays = parseInt(days as string) || 30;
+    const isHourly = numDays === 1 && !start;
 
     if (start && end) {
       dateLimitStart = new Date(start as string);
       dateLimitEnd = new Date(end as string);
       dateLimitEnd.setHours(23, 59, 59, 999);
     } else {
-      const numDays = parseInt(days as string) || 30;
       dateLimitStart = new Date();
       dateLimitStart.setDate(dateLimitStart.getDate() - (numDays - 1));
       dateLimitStart.setHours(0, 0, 0, 0);
+      dateLimitEnd = new Date(); // Real-time: up to now
     }
 
     const whereBase: any = { influencerId: userId };
@@ -429,47 +431,56 @@ router.get(
       })
     ]);
 
+    const getKey = (date: Date) => {
+      if (isHourly) {
+        return date.toISOString().substring(0, 13); // "YYYY-MM-DDTHH"
+      }
+      return date.toISOString().split('T')[0];
+    };
+
     const clicksByDate: Record<string, Set<string>> = {};
     clicks.forEach((c: any) => {
-      const date = c.createdAt.toISOString().split('T')[0];
-      if (!clicksByDate[date]) clicksByDate[date] = new Set();
-      clicksByDate[date].add(`${c.ipAddress}-${c.userAgent || 'unknown'}`);
+      const key = getKey(c.createdAt);
+      if (!clicksByDate[key]) clicksByDate[key] = new Set();
+      clicksByDate[key].add(`${c.ipAddress}-${c.userAgent || 'unknown'}`);
     });
 
     const uniqueClicksByDate: Record<string, number> = {};
-    Object.keys(clicksByDate).forEach(date => {
-      uniqueClicksByDate[date] = clicksByDate[date].size;
+    Object.keys(clicksByDate).forEach(key => {
+      uniqueClicksByDate[key] = clicksByDate[key].size;
     });
 
     const salesByDate: Record<string, number> = {};
-    // Combine leads and commissions for "Ventes" history
-    // Leads are the primary source for referral form conversions
     leads.forEach(l => {
-      const date = l.createdAt.toISOString().split('T')[0];
-      salesByDate[date] = (salesByDate[date] || 0) + 1;
+      const key = getKey(l.createdAt);
+      salesByDate[key] = (salesByDate[key] || 0) + 1;
     });
-    // Commissions might come from track-conversion or external sales
     commissions.forEach(c => {
-      const date = c.createdAt.toISOString().split('T')[0];
-      salesByDate[date] = (salesByDate[date] || 0) + 1;
+      const key = getKey(c.createdAt);
+      salesByDate[key] = (salesByDate[key] || 0) + 1;
     });
 
-    const dailyStats = [];
+    const stats = [];
     const curr = new Date(dateLimitStart);
     while (curr <= dateLimitEnd) {
-      const dateStr = curr.toISOString().split('T')[0];
-      const views = uniqueClicksByDate[dateStr] || 0;
-      const sales = salesByDate[dateStr] || 0;
-      dailyStats.push({
-        date: dateStr,
+      const key = getKey(curr);
+      const views = uniqueClicksByDate[key] || 0;
+      const sales = salesByDate[key] || 0;
+      stats.push({
+        date: curr.toISOString(),
         views,
         sales,
         convRate: views > 0 ? Number(((sales / views) * 100).toFixed(1)) : 0
       });
-      curr.setDate(curr.getDate() + 1);
+      
+      if (isHourly) {
+        curr.setHours(curr.getHours() + 1);
+      } else {
+        curr.setDate(curr.getDate() + 1);
+      }
     }
 
-    res.json(dailyStats);
+    res.json(stats);
   })
 );
 
@@ -563,7 +574,7 @@ router.post(
     const linkIds = influencerLinks.map(l => l.id);
 
     const lead = await prisma.lead.findFirst({
-      where: { id: leadId, referralLinkId: { in: linkIds } },
+      where: { id: leadId, referralLinkId: { in: linkIds }, order: null },
       include: {
         referralLink: { include: { product: { include: { images: { where: { isPrimary: true }, take: 1 } } } } }
       }
@@ -667,7 +678,8 @@ router.post(
       where: { 
         id: { in: leadIds }, 
         referralLinkId: { in: linkIds },
-        status: { in: ['NEW', 'LEAD'] }
+        status: { in: ['NEW', 'LEAD'] },
+        order: null
       },
       include: {
         referralLink: { include: { product: { include: { images: { where: { isPrimary: true }, take: 1 } } } } }
@@ -676,6 +688,28 @@ router.post(
 
     if (leads.length === 0) {
       throw new AppException(404, 'No eligible leads found for pushing');
+    }
+
+    // NEW: Validation for duplicate phone numbers
+    const phones = leads.map(l => l.phone);
+    const uniquePhones = new Set(phones);
+    if (uniquePhones.size !== phones.length) {
+      throw new AppException(400, 'Impossible d\'envoyer des doublons au Call Center (numéros identiques dans la sélection)');
+    }
+
+    // Check if any of these phones are already in AVAILABLE/ASSIGNED status for this influencer
+    const existingActive = await prisma.lead.findFirst({
+      where: {
+        referralLinkId: { in: linkIds },
+        phone: { in: phones },
+        status: { in: ['AVAILABLE', 'ASSIGNED', 'CONTACTED', 'INTERESTED', 'ORDERED'] },
+        id: { notIn: leads.map(l => l.id) },
+        order: null
+      }
+    });
+
+    if (existingActive) {
+      throw new AppException(400, `Le numéro ${existingActive.phone} est déjà en cours de traitement`);
     }
 
     const totalCost = leads.length * 2;
@@ -810,7 +844,18 @@ router.get(
       include: {
         order: {
           include: {
-            lead: true
+            lead: {
+              include: {
+                statusHistory: {
+                  include: { changer: { select: { id: true, profile: { select: { fullName: true } } } } },
+                  orderBy: { createdAt: 'asc' }
+                }
+              }
+            },
+            statusHistory: {
+              include: { changedByUser: { select: { id: true, profile: { select: { fullName: true } } } } },
+              orderBy: { createdAt: 'asc' }
+            }
           }
         },
         referralLink: { include: { product: { include: { images: { where: { isPrimary: true }, take: 1 } } }, landingPage: true } }
@@ -840,6 +885,18 @@ router.get(
         } : {})
       },
       include: {
+        order: {
+          include: {
+            statusHistory: {
+              include: { changedByUser: { select: { id: true, profile: { select: { fullName: true } } } } },
+              orderBy: { createdAt: 'asc' }
+            }
+          }
+        },
+        statusHistory: {
+          include: { changer: { select: { id: true, profile: { select: { fullName: true } } } } },
+          orderBy: { createdAt: 'asc' }
+        },
         referralLink: { include: { product: { include: { images: { where: { isPrimary: true }, take: 1 } } }, landingPage: true } }
       },
       orderBy: { createdAt: 'desc' },
@@ -852,20 +909,25 @@ router.get(
       influencerId: userId,
       referralLinkId: lead.referralLinkId,
       referralLink: lead.referralLink,
-      orderId: null,
+      orderId: (lead as any).order?.id || null,
       amount: 0,
       status: 'PENDING',
       createdAt: lead.createdAt,
       order: {
         customerName: lead.fullName,
         customerPhone: lead.phone,
-        customerCity: lead.city,
+        customerCity: (lead as any).order?.customerCity || lead.city,
         customerAddress: lead.address,
         status: lead.status === 'NEW' ? 'LEAD' : lead.status,
         productVariant: lead.productVariant,
-        totalAmountMad: 0,
+        totalAmountMad: (lead as any).order?.totalAmountMad || 0,
+        coliatyPackageCode: (lead as any).order?.coliatyPackageCode,
+        coliatyPackageId: (lead as any).order?.coliatyPackageId,
         lead: {
-          paymentSituation: lead.paymentSituation
+          paymentSituation: lead.paymentSituation,
+          callbackDate: lead.callbackAt,
+          notes: lead.notes,
+          statusHistory: (lead as any).statusHistory || []
         }
       }
     }));

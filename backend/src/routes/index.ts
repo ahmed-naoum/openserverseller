@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
+import path from 'path';
 import { auditLog } from '../middleware/security.js';
 import authRoutes from './auth.routes.js';
 import userRoutes from './user.routes.js';
@@ -39,6 +40,9 @@ router.get('/health', (req, res) => {
     version: '1.0.0',
   });
 });
+
+// Serve uploads under API prefix as a fallback
+router.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 router.use('/auth', authRoutes);
 router.use('/users', auditLog, userRoutes);

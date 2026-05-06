@@ -904,6 +904,194 @@ router.get(
   })
 );
 
+// --- Call Center Inspector ---
+
+// Get all call center agents with lead status breakdown
+router.get(
+  '/call-center-agents',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { agentId, status, search, page = 1, limit = 20, startDate, endDate } = req.query;
+
+    // Build date range filter
+    const dateFilter: any = {};
+    if (startDate) dateFilter.gte = new Date(startDate as string);
+    if (endDate) {
+      const end = new Date(endDate as string);
+      end.setHours(23, 59, 59, 999);
+      dateFilter.lte = end;
+    }
+    const hasDateFilter = Object.keys(dateFilter).length > 0;
+
+    // If agentId is provided, return detailed leads for that agent
+    if (agentId) {
+      const conditions: any[] = [{ assignedAgentId: Number(agentId) }];
+
+      if (hasDateFilter) {
+        conditions.push({ createdAt: dateFilter });
+      }
+
+      if (status && status !== 'ALL') {
+        conditions.push({ status: status as string });
+      }
+
+      if (search) {
+        conditions.push({
+          OR: [
+            { fullName: { contains: search as string, mode: 'insensitive' } },
+            { phone: { contains: search as string } },
+            { city: { contains: search as string, mode: 'insensitive' } },
+          ]
+        });
+      }
+
+      const where = { AND: conditions };
+
+      const [leads, total] = await Promise.all([
+        prisma.lead.findMany({
+          where,
+          include: {
+            referralLink: {
+              include: { product: { include: { images: true } }, landingPage: true },
+            },
+            order: true,
+            statusHistory: { orderBy: { createdAt: 'desc' }, take: 3 },
+          },
+          skip: (Number(page) - 1) * Number(limit),
+          take: Number(limit),
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.lead.count({ where }),
+      ]);
+
+      // Status counts for this agent
+      const statusCountsWhere: any = { assignedAgentId: Number(agentId) };
+      if (hasDateFilter) statusCountsWhere.createdAt = dateFilter;
+
+      const statusCounts = await prisma.lead.groupBy({
+        by: ['status'],
+        where: statusCountsWhere,
+        _count: true,
+      });
+
+      const statusBreakdown: Record<string, number> = {};
+      statusCounts.forEach((sc: any) => {
+        statusBreakdown[sc.status] = sc._count;
+      });
+
+      return res.json({
+        status: 'success',
+        data: {
+          leads: leads.map((l) => {
+            // Calculate price from variant or product
+            let productPrice = 0;
+            if (l.productVariant && l.referralLink?.landingPage?.customStructure) {
+              try {
+                let structure = l.referralLink.landingPage.customStructure;
+                if (typeof structure === 'string') structure = JSON.parse(structure as string);
+                const blocks = Array.isArray(structure) ? structure : ((structure as any).blocks || []);
+                const checkoutBlock = blocks.find((b: any) => b.type === 'express_checkout');
+                if (checkoutBlock?.content?.options) {
+                  const variant = l.productVariant?.toLowerCase().trim();
+                  const option = checkoutBlock.content.options.find((o: any) =>
+                    o.name?.toLowerCase().trim() === variant || o.id?.toLowerCase().trim() === variant
+                  );
+                  if (option?.price) productPrice = Number(option.price);
+                }
+              } catch (e) {}
+            }
+            if (!productPrice) {
+              productPrice = l.referralLink?.product?.retailPriceMad || 0;
+            }
+
+            return {
+              id: l.id,
+              fullName: l.fullName,
+              phone: l.phone,
+              city: l.city,
+              address: l.address,
+              status: l.status,
+              productVariant: l.productVariant,
+              notes: l.notes,
+              productPrice,
+              product: l.referralLink?.product ? {
+                id: l.referralLink.product.id,
+                name: (l.referralLink.product as any).nameFr || (l.referralLink.product as any).nameAr,
+                sku: l.referralLink.product.sku,
+                price: l.referralLink.product.retailPriceMad,
+                image: l.referralLink.product.images[0]?.imageUrl || null,
+              } : null,
+              coliatyPackageCode: l.order?.coliatyPackageCode || null,
+              createdAt: l.createdAt,
+              updatedAt: l.updatedAt,
+            };
+          }),
+          statusBreakdown,
+          pagination: {
+            page: Number(page),
+            limit: Number(limit),
+            total,
+            totalPages: Math.ceil(total / Number(limit)),
+          },
+        },
+      });
+    }
+
+    // No agentId — return all agents with their status breakdowns
+    const agents = await prisma.user.findMany({
+      where: {
+        role: { name: 'CALL_CENTER_AGENT' },
+      },
+      include: {
+        profile: true,
+        role: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Get lead counts grouped by agent + status
+    const leadCountsWhere: any = {
+      assignedAgentId: { in: agents.map(a => a.id) },
+    };
+    if (hasDateFilter) leadCountsWhere.createdAt = dateFilter;
+
+    const leadCounts = await prisma.lead.groupBy({
+      by: ['assignedAgentId', 'status'],
+      where: leadCountsWhere,
+      _count: true,
+    });
+
+    // Build a map: agentId -> { status: count }
+    const agentStatusMap: Record<number, Record<string, number>> = {};
+    leadCounts.forEach((lc: any) => {
+      if (!lc.assignedAgentId) return;
+      if (!agentStatusMap[lc.assignedAgentId]) agentStatusMap[lc.assignedAgentId] = {};
+      agentStatusMap[lc.assignedAgentId][lc.status] = lc._count;
+    });
+
+    res.json({
+      status: 'success',
+      data: agents.map(agent => {
+        const statusBreakdown = agentStatusMap[agent.id] || {};
+        const totalLeads = Object.values(statusBreakdown).reduce((sum, c) => sum + c, 0);
+
+        return {
+          id: agent.id,
+          uuid: agent.uuid,
+          email: agent.email,
+          phone: agent.phone,
+          fullName: agent.profile?.fullName || agent.email || `Agent #${agent.id}`,
+          isActive: agent.isActive,
+          createdAt: agent.createdAt,
+          totalLeads,
+          statusBreakdown,
+        };
+      }),
+    });
+  })
+);
+
 // --- Support Management ---
 
 // List all support requests
@@ -1333,6 +1521,26 @@ router.get(
         ...invoice,
         userFullName: invoice.user.profile?.fullName || invoice.user.email,
       }
+    });
+  })
+);
+
+router.patch(
+  '/invoices/:id/status',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const invoice = await prisma.invoice.update({
+      where: { id: Number(id) },
+      data: { status }
+    });
+
+    res.json({
+      status: 'success',
+      data: invoice
     });
   })
 );

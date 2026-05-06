@@ -26,7 +26,7 @@ router.get(
         where,
         include: { 
           vendor: { 
-            include: { profile: true } 
+            include: { profile: true, wallet: true } 
           } 
         },
         orderBy: { createdAt: 'desc' },
@@ -35,14 +35,17 @@ router.get(
       }),
       prisma.payoutRequest.count({ where }),
     ]);
-
     res.json({
       status: 'success',
       data: {
-        payouts: payouts.map(p => ({
-          ...p,
-          ribAccount: decrypt(p.ribAccount)
-        })),
+        payouts: payouts.map(p => {
+          const plain = JSON.parse(JSON.stringify(p));
+          return {
+            ...plain,
+            vendor: plain.vendor,
+            ribAccount: decrypt(p.ribAccount)
+          };
+        }),
         pagination: {
           page: Number(page),
           limit: Number(limit),
@@ -127,108 +130,88 @@ router.post(
 );
 
 router.patch(
-  '/:id/approve',
+  '/:id/status',
   authenticate,
   authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { receiptUrl } = req.body;
-
-    const payout = await prisma.payoutRequest.findUnique({
-      where: { id: Number(id) },
-      include: { vendor: { include: { wallet: true } } },
-    });
-
-    if (!payout) {
-      throw new AppException(404, 'Payout request not found');
-    }
-
-    if (payout.status !== 'PENDING') {
-      throw new AppException(400, 'Payout is not in pending status');
+    const { status: targetStatus } = req.body;
+    
+    const payout = await prisma.payoutRequest.findUnique({ where: { id: Number(id) } });
+    if (!payout) throw new AppException(404, 'Payout not found');
+    
+    const currentStatus = payout.status;
+    if (currentStatus === targetStatus) {
+      res.json({ status: 'success', message: 'Status is already set' });
+      return;
     }
 
     const updatedPayout = await prisma.$transaction(async (tx) => {
-      const wallet = await tx.wallet.findUnique({
-        where: { userId: payout.vendorId },
-      });
+      const wallet = await tx.wallet.findUnique({ where: { userId: payout.vendorId } });
+      if (!wallet) throw new AppException(400, 'Wallet not found');
 
-      if (!wallet) {
-        throw new AppException(400, 'Wallet not found');
-      }
-
-      // Balance was already deducted at request time. 
-      // Just increase the totalWithdrawnMad.
-      await tx.wallet.update({
-        where: { userId: payout.vendorId },
-        data: {
-          totalWithdrawnMad: { increment: payout.amountMad },
-        },
-      });
-
-      return tx.payoutRequest.update({
-        where: { id: payout.id },
-        data: {
-          status: 'COMPLETED',
-          processedAt: new Date(),
-          receiptUrl,
-        },
-      });
-    });
-
-    res.json({
-      status: 'success',
-      message: 'Payout approved and processed',
-      data: { payout: updatedPayout },
-    });
-  })
-);
-
-router.patch(
-  '/:id/reject',
-  authenticate,
-  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
-  asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
-
-    const payoutInfo = await prisma.payoutRequest.findUnique({ where: { id: Number(id) } });
-    if (!payoutInfo || payoutInfo.status !== 'PENDING') {
-      throw new AppException(400, 'Invalid or already processed payout request');
-    }
-
-    const payout = await prisma.$transaction(async (tx) => {
-      // Refund the money back to the wallet
-      const wallet = await tx.wallet.findUnique({ where: { userId: payoutInfo.vendorId } });
-      if (wallet) {
+      // --- 1. HANDLE BALANCE REVERSAL/DEDUCTION ---
+      // If we are moving FROM a state where money was refunded (REJECTED) 
+      // TO a state where it should be deducted (PENDING, COMPLETED, RECEIVED)
+      if (currentStatus === 'REJECTED' && ['PENDING', 'COMPLETED', 'RECEIVED'].includes(targetStatus)) {
         const updatedWallet = await tx.wallet.update({
           where: { id: wallet.id },
-          data: { balanceMad: { increment: payoutInfo.amountMad } }
+          data: { balanceMad: { decrement: payout.amountMad } }
         });
-
+        await tx.walletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            type: 'WITHDRAWAL_RE_REQUEST',
+            amountMad: -payout.amountMad,
+            balanceAfterMad: updatedWallet.balanceMad,
+            description: `Re-débit pour changement de statut du retrait #${payout.id} (${currentStatus} -> ${targetStatus})`
+          }
+        });
+      }
+      
+      // If we are moving TO REJECTED from a state where money was deducted (PENDING, COMPLETED, RECEIVED)
+      if (targetStatus === 'REJECTED' && ['PENDING', 'COMPLETED', 'RECEIVED'].includes(currentStatus)) {
+        const updatedWallet = await tx.wallet.update({
+          where: { id: wallet.id },
+          data: { balanceMad: { increment: payout.amountMad } }
+        });
         await tx.walletTransaction.create({
           data: {
             walletId: wallet.id,
             type: 'WITHDRAWAL_REFUND',
-            amountMad: payoutInfo.amountMad,
+            amountMad: payout.amountMad,
             balanceAfterMad: updatedWallet.balanceMad,
-            description: `Remboursement suite au rejet de la demande #${payoutInfo.id}`
+            description: `Remboursement pour changement de statut du retrait #${payout.id} (${currentStatus} -> ${targetStatus})`
           }
         });
       }
 
+      // --- 2. HANDLE TOTAL WITHDRAWN STATISTICS ---
+      // Moving TO a completed state (COMPLETED, RECEIVED) from a non-completed one (PENDING, REJECTED)
+      if (['COMPLETED', 'RECEIVED'].includes(targetStatus) && !['COMPLETED', 'RECEIVED'].includes(currentStatus)) {
+        await tx.wallet.update({
+          where: { userId: payout.vendorId },
+          data: { totalWithdrawnMad: { increment: payout.amountMad } }
+        });
+      }
+      // Moving FROM a completed state to a non-completed one
+      if (['COMPLETED', 'RECEIVED'].includes(currentStatus) && !['COMPLETED', 'RECEIVED'].includes(targetStatus)) {
+        await tx.wallet.update({
+          where: { userId: payout.vendorId },
+          data: { totalWithdrawnMad: { decrement: payout.amountMad } }
+        });
+      }
+
       return tx.payoutRequest.update({
-        where: { id: Number(id) },
+        where: { id: payout.id },
         data: {
-          status: 'REJECTED',
-          processedAt: new Date(),
-        },
+          status: targetStatus,
+          processedAt: ['COMPLETED', 'RECEIVED', 'REJECTED'].includes(targetStatus) ? new Date() : null
+        }
       });
     });
 
-    res.json({
-      status: 'success',
-      message: 'Payout rejected',
-      data: { payout },
-    });
+    res.json({ status: 'success', message: `Status mis à jour vers ${targetStatus}`, data: updatedPayout });
   })
 );
 
@@ -245,7 +228,10 @@ router.post(
 
     const results = await prisma.$transaction(async (tx) => {
       const payouts = await tx.payoutRequest.findMany({
-        where: { id: { in: ids.map(id => Number(id)) }, status: 'PENDING' },
+        where: { 
+          id: { in: ids.map(id => Number(id)) }, 
+          status: { in: ['PENDING', 'RECEIVED'] } 
+        },
       });
 
       const updatedPayouts = [];
@@ -274,6 +260,199 @@ router.post(
       status: 'success',
       message: `${results.length} payouts approved successfully`,
       data: results
+    });
+  })
+);
+
+router.patch(
+  '/bulk-status',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { ids, status: targetStatus } = req.body;
+    
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new AppException(400, 'Invalid payout IDs');
+    }
+
+    const results = await prisma.$transaction(async (tx) => {
+      const payouts = await tx.payoutRequest.findMany({
+        where: { id: { in: ids.map(id => Number(id)) } },
+      });
+
+      const updatedPayouts = [];
+      for (const payout of payouts) {
+        if (payout.status === targetStatus) continue;
+
+        const currentStatus = payout.status;
+        const wallet = await tx.wallet.findUnique({ where: { userId: payout.vendorId } });
+        if (!wallet) continue;
+
+        // --- 1. HANDLE BALANCE REVERSAL/DEDUCTION ---
+        if (currentStatus === 'REJECTED' && ['PENDING', 'COMPLETED', 'RECEIVED'].includes(targetStatus)) {
+          const updatedWallet = await tx.wallet.update({
+            where: { id: wallet.id },
+            data: { balanceMad: { decrement: payout.amountMad } }
+          });
+          await tx.walletTransaction.create({
+            data: {
+              walletId: wallet.id,
+              type: 'WITHDRAWAL_RE_REQUEST',
+              amountMad: -payout.amountMad,
+              balanceAfterMad: updatedWallet.balanceMad,
+              description: `Re-débit pour changement de statut en masse du retrait #${payout.id} (${currentStatus} -> ${targetStatus})`
+            }
+          });
+        }
+        
+        if (targetStatus === 'REJECTED' && ['PENDING', 'COMPLETED', 'RECEIVED'].includes(currentStatus)) {
+          const updatedWallet = await tx.wallet.update({
+            where: { id: wallet.id },
+            data: { balanceMad: { increment: payout.amountMad } }
+          });
+          await tx.walletTransaction.create({
+            data: {
+              walletId: wallet.id,
+              type: 'WITHDRAWAL_REFUND',
+              amountMad: payout.amountMad,
+              balanceAfterMad: updatedWallet.balanceMad,
+              description: `Remboursement pour changement de statut en masse du retrait #${payout.id} (${currentStatus} -> ${targetStatus})`
+            }
+          });
+        }
+
+        // --- 2. HANDLE TOTAL WITHDRAWN STATISTICS ---
+        if (['COMPLETED', 'RECEIVED'].includes(targetStatus) && !['COMPLETED', 'RECEIVED'].includes(currentStatus)) {
+          await tx.wallet.update({
+            where: { userId: payout.vendorId },
+            data: { totalWithdrawnMad: { increment: payout.amountMad } }
+          });
+        }
+        if (['COMPLETED', 'RECEIVED'].includes(currentStatus) && !['COMPLETED', 'RECEIVED'].includes(targetStatus)) {
+          await tx.wallet.update({
+            where: { userId: payout.vendorId },
+            data: { totalWithdrawnMad: { decrement: payout.amountMad } }
+          });
+        }
+
+        const updated = await tx.payoutRequest.update({
+          where: { id: payout.id },
+          data: {
+            status: targetStatus,
+            processedAt: ['COMPLETED', 'RECEIVED', 'REJECTED'].includes(targetStatus) ? new Date() : null
+          }
+        });
+        updatedPayouts.push(updated);
+      }
+      return updatedPayouts;
+    });
+
+    res.json({
+      status: 'success',
+      message: `${results.length} retraits mis à jour vers ${targetStatus}`,
+      data: results
+    });
+  })
+);
+
+router.get(
+  '/:id/history',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    
+    // 1. Get current payout
+    const currentPayout = await prisma.payoutRequest.findUnique({
+      where: { id: Number(id) }
+    });
+    
+    if (!currentPayout) throw new AppException(404, 'Payout not found');
+    
+    // 2. Find previous payout (completed or pending)
+    const previousPayout = await prisma.payoutRequest.findFirst({
+      where: {
+        vendorId: currentPayout.vendorId,
+        createdAt: { lt: currentPayout.createdAt },
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    const startDate = previousPayout ? previousPayout.createdAt : new Date(0);
+    const endDate = new Date(currentPayout.createdAt.getTime() + 5000); // Buffer to include the transaction itself
+    
+    // 3. Fetch History Components
+    const [invoices, payouts, allTransactions] = await Promise.all([
+      // Factures (Earnings from leads)
+      prisma.invoice.findMany({
+        where: {
+          userId: currentPayout.vendorId,
+          createdAt: { gte: startDate, lte: endDate }
+        },
+        orderBy: { createdAt: 'asc' }
+      }),
+      // Other Payouts in this period
+      prisma.payoutRequest.findMany({
+        where: {
+          vendorId: currentPayout.vendorId,
+          createdAt: { gte: startDate, lte: endDate },
+          id: { not: currentPayout.id }
+        },
+        orderBy: { createdAt: 'asc' }
+      }),
+      // Wallet Transactions (To get balance info)
+      prisma.walletTransaction.findMany({
+        where: {
+          wallet: { userId: currentPayout.vendorId },
+          createdAt: { gte: startDate, lte: endDate },
+        },
+        orderBy: { createdAt: 'asc' }
+      })
+    ]);
+    
+    // 4. Merge and Enrich with Balance Info
+    const history = [
+      ...invoices.map(inv => {
+        const matchingTx = allTransactions.find(t => 
+          t.type === 'INVOICE_PAYMENT' && 
+          t.description?.includes(inv.invoiceNumber)
+        );
+        return { 
+          ...inv, 
+          historyType: 'INVOICE', 
+          balanceAfter: matchingTx?.balanceAfterMad 
+        };
+      }),
+      ...[currentPayout, ...payouts].map(p => {
+        const matchingTx = allTransactions.find(t => 
+          (t.type === 'WITHDRAWAL_REQUEST' || t.type === 'WITHDRAWAL_REFUND' || t.type === 'WITHDRAWAL_REJECTED' || t.type === 'WITHDRAWAL_RE_REQUEST') && 
+          t.description?.includes(`#${p.id}`)
+        );
+        return { 
+          ...p, 
+          historyType: 'PAYOUT', 
+          balanceAfter: matchingTx?.balanceAfterMad 
+        };
+      }),
+      ...allTransactions
+        .filter(t => !['INVOICE_PAYMENT', 'WITHDRAWAL_REQUEST', 'WITHDRAWAL_REFUND', 'WITHDRAWAL_REJECTED', 'WITHDRAWAL_RE_REQUEST'].includes(t.type))
+        .map(t => ({ 
+          ...t, 
+          historyType: 'TRANSACTION', 
+          balanceAfter: t.balanceAfterMad 
+        }))
+    ].sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    
+    res.json({
+      status: 'success',
+      data: {
+        period: { 
+          start: startDate, 
+          end: endDate,
+          isFirstPayout: !previousPayout
+        },
+        history
+      }
     });
   })
 );

@@ -49,54 +49,34 @@ router.post(
         if (orderMatched && coliatyStatus) {
           // Exact status mapping from Coliaty API
           const COLIATY_TO_INTERNAL: Record<string, string> = {
-            // → PENDING (parcel not yet in transit)
-            'NEW_PARCEL': 'PENDING',
-            'WAITING_PICKUP': 'PENDING',
-            'WAITING_PREPARATION': 'PENDING',
-            'ENCORE_PREPARED': 'PENDING',
-            'PREPARED': 'PENDING',
-            'CORRECTED_INFORMATION': 'PENDING',
-            'PROGRAMMER': 'PENDING',
-            'PROGRAMMER_AUTO': 'PENDING',
+            // --- Cycle de vie / Stock (PENDING) ---
+            'NEW_PARCEL': 'NEW_PARCEL',
+            'WAITING_PICKUP': 'WAITING_PICKUP',
+            'WAITING_PREPARATION': 'WAITING_PREPARATION',
+            'PREPARED': 'PREPARED',
+            'ENCORE_PREPARED': 'ENCORE_PREPARED',
 
-            // → SHIPPED (parcel is in transit / being handled by courier)
-            'PICKED_UP': 'SHIPPED',
-            'SENT': 'SHIPPED',
-            'RECEIVED': 'SHIPPED',
-            'DISTRIBUTION': 'SHIPPED',
-            'IN_PROGRESS': 'SHIPPED',
-            'POSTPONED': 'SHIPPED',
-            'INCORRECT_ADDRESS': 'SHIPPED',
-            'DISTINATION_CHANGED': 'SHIPPED',
-            'BV': 'SHIPPED',
-            'UNREACHABLE': 'SHIPPED',
-            'INJO': 'SHIPPED',
-            'NOANSWER': 'SHIPPED',
-            'EN_VOYAGE': 'SHIPPED',
-            'CLIENT_INTERESE': 'SHIPPED',
-            'ERR': 'SHIPPED',
-            'PLTR': 'SHIPPED',
-            'OUT_OF_AREA': 'SHIPPED',
+            // --- En transit (SHIPPED) ---
+            'PICKED_UP': 'PICKED_UP',
+            'SENT': 'SENT',
+            'RECEIVED': 'RECEIVED',
+            'DISTRIBUTION': 'DISTRIBUTION',
+            'PROGRAMMER_AUTO': 'PROGRAMMER_AUTO',
+            'POSTPONED': 'POSTPONED',
+            'NOANSWER': 'NOANSWER',
+            'ERR': 'ERR',
+            'PROGRAMMER': 'PROGRAMMER',
+            'INCORRECT_ADDRESS': 'INCORRECT_ADDRESS',
 
-            // → DELIVERED
+            // --- Livraison terminée (DELIVERED / RETURNED) ---
             'DELIVERED': 'DELIVERED',
+            'RETURNED': 'RETURNED',
 
-            // → RETURNED
-            'RETOUR_IN_PROGRESS': 'RETURNED',
-            'RETOUR_HUB_AVAILABLE': 'RETURNED',
-            'RETOUR_WAREHOUSE_RETURNED_IN_PROGRESS': 'RETURNED',
-            'RETOUR_WAREHOUSE_RETURNED': 'RETURNED',
-            'RETOUR_CLIENT_PREPARED_FOR_DELIVERY': 'RETURNED',
-            'RETOUR_CLIENT_DELIVERED': 'RETURNED',
-
-            // → CANCELLED
-            'CANCELED': 'CANCELLED',
-            'CANCELED_BY_SELLER': 'CANCELLED',
-            'CANCELED_BY_SYSTEM': 'CANCELLED',
-            'REFUSE': 'CANCELLED',
-            'CPC': 'CANCELLED',
-            'CNI': 'CANCELLED',
-            'CDM': 'CANCELLED',
+            // --- Annulations (CANCELLED) ---
+            'CANCELED_BY_SELLER': 'CANCELED_BY_SELLER',
+            'CANCELED_BY_SYSTEM': 'CANCELED_BY_SYSTEM',
+            'CANCELED': 'CANCELED',
+            'REFUSE': 'REFUSE',
           };
 
           let normalizedColiatyStatus = String(coliatyStatus).toUpperCase().trim();
@@ -104,35 +84,75 @@ router.post(
 
           if (internalStatus && internalStatus !== orderMatched.status) {
             // Update order and create history record
-            await prisma.$transaction([
-              prisma.order.update({
+            await prisma.$transaction(async (tx) => {
+              // 1. Update order status
+              await tx.order.update({
                 where: { id: orderMatched.id },
                 data: { status: internalStatus }
-              }),
-              prisma.orderStatusHistory.create({
+              });
+
+              // 2. Create Order History
+              await tx.orderStatusHistory.create({
                 data: {
                   orderId: orderMatched.id,
                   oldStatus: orderMatched.status,
                   newStatus: internalStatus,
-                  // Webhooks don't have a user, default to vendor (system) or generic generic ID
                   changedBy: orderMatched.vendorId, 
                   notes: `Automated status update via Coliaty Webhook (${normalizedColiatyStatus})`
                 }
-              }),
-              // Keep linked Lead status in sync
-              ...(orderMatched.leadId ? [prisma.lead.update({
-                where: { id: orderMatched.leadId },
-                data: { status: internalStatus }
-              })] : []),
-              // Safe update of log
-              ...( (prisma as any).webhookLog && webhookLogId ? [(prisma as any).webhookLog.update({
-                where: { id: webhookLogId },
-                data: {
-                  processed: true,
-                  status: `MAPPED_TO_${internalStatus}`
+              });
+
+              // 3. Keep linked Lead status in sync and create Lead History
+              if (orderMatched.leadId) {
+                await tx.lead.update({
+                  where: { id: orderMatched.leadId },
+                  data: { 
+                    status: internalStatus,
+                    // Auto-mark as PAID for Payment Monitoring when delivered
+                    ...(internalStatus === 'DELIVERED' ? { paymentSituation: 'PAID' } : {})
+                  }
+                });
+
+                await tx.leadStatusHistory.create({
+                  data: {
+                    leadId: orderMatched.leadId,
+                    oldStatus: orderMatched.status,
+                    newStatus: internalStatus,
+                    changedBy: orderMatched.vendorId,
+                    notes: `Mise à jour automatique via Livraison (${normalizedColiatyStatus})`
+                  }
+                });
+              }
+
+              // 4. Restore Stock if CANCELLED or RETURNED
+              const cancellationStatuses = ['CANCELED', 'CANCELED_BY_SELLER', 'CANCELED_BY_SYSTEM', 'REFUSE', 'RETURNED', 'CANCELLED'];
+              if (cancellationStatuses.includes(internalStatus)) {
+                const orderWithItems = await tx.order.findUnique({
+                  where: { id: orderMatched.id },
+                  include: { items: true }
+                });
+                
+                if (orderWithItems) {
+                  for (const item of orderWithItems.items) {
+                    await tx.product.update({
+                      where: { id: item.productId },
+                      data: { stockQuantity: { increment: item.quantity } }
+                    });
+                  }
                 }
-              })] : [])
-            ]);
+              }
+
+              // 5. Update Webhook Log
+              if ((prisma as any).webhookLog && webhookLogId) {
+                await (prisma as any).webhookLog.update({
+                  where: { id: webhookLogId },
+                  data: {
+                    processed: true,
+                    status: `MAPPED_TO_${internalStatus}`
+                  }
+                });
+              }
+            });
             processed = true;
 
             // 🔔 Broadcast real-time update to all connected SSE clients

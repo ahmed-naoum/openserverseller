@@ -210,21 +210,48 @@ export default function AdminOrders() {
 
   const stats = [
     { label: 'Commandes Totales', value: orders.length, icon: Package, color: 'blue' },
-    { label: 'En Attente', value: orders.filter((o: any) => o.status === 'PENDING').length, icon: Clock, color: 'amber' },
-    { label: 'Confirmées', value: orders.filter((o: any) => o.status === 'CONFIRMED').length, icon: CheckCircle2, color: 'emerald' },
-    { label: 'Expédiées', value: orders.filter((o: any) => o.status === 'SHIPPED').length, icon: TrendingUp, color: 'indigo' },
+    { label: 'Nouveaux Colis', value: orders.filter((o: any) => o.status === 'NEW_PARCEL').length, icon: Clock, color: 'amber' },
+    { label: 'En Transit', value: orders.filter((o: any) => ['PICKED_UP', 'SENT', 'RECEIVED', 'DISTRIBUTION'].includes(o.status)).length, icon: TrendingUp, color: 'indigo' },
+    { label: 'Livrées', value: orders.filter((o: any) => o.status === 'DELIVERED').length, icon: CheckCircle2, color: 'emerald' },
   ];
 
   const getStatusStyle = (status: string) => {
     switch (status) {
-      case 'PENDING': return 'bg-amber-100 text-amber-700 border-amber-200';
-      case 'CONFIRMED': return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'IN_PRODUCTION': return 'bg-purple-100 text-purple-700 border-purple-200';
-      case 'READY_FOR_SHIPPING': return 'bg-indigo-100 text-indigo-700 border-indigo-200';
-      case 'SHIPPED': return 'bg-cyan-100 text-cyan-700 border-cyan-200';
-      case 'DELIVERED': return 'bg-green-100 text-green-700 border-green-200';
-      case 'CANCELLED': return 'bg-red-100 text-red-700 border-red-200';
-      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+      // Stock & Préparation
+      case 'NEW_PARCEL': return 'bg-slate-50 text-slate-600 border-slate-100';
+      case 'WAITING_PICKUP': return 'bg-amber-50 text-amber-600 border-amber-100';
+      case 'WAITING_PREPARATION': return 'bg-orange-50 text-orange-600 border-orange-100';
+      case 'PREPARED': return 'bg-emerald-50 text-emerald-600 border-emerald-100';
+      case 'ENCORE_PREPARED': return 'bg-blue-50 text-blue-600 border-blue-100';
+      
+      // En transit
+      case 'PICKED_UP': return 'bg-blue-50 text-blue-600 border-blue-100';
+      case 'SENT': return 'bg-violet-50 text-violet-600 border-violet-100';
+      case 'RECEIVED': return 'bg-indigo-50 text-indigo-600 border-indigo-100';
+      case 'DISTRIBUTION': return 'bg-cyan-50 text-cyan-600 border-cyan-100';
+      case 'PROGRAMMER_AUTO': return 'bg-purple-50 text-purple-600 border-purple-100';
+      case 'POSTPONED': return 'bg-orange-50 text-orange-600 border-orange-100';
+      case 'NOANSWER': return 'bg-rose-50 text-rose-600 border-rose-100';
+      case 'ERR': return 'bg-rose-50 text-rose-600 border-rose-100';
+      case 'PROGRAMMER': return 'bg-blue-50 text-blue-600 border-blue-100';
+      case 'INCORRECT_ADDRESS': return 'bg-rose-50 text-rose-600 border-rose-100';
+
+      // Livraison terminée
+      case 'DELIVERED': return 'bg-emerald-50 text-emerald-600 border-emerald-100';
+      case 'RETURNED': return 'bg-orange-50 text-orange-600 border-orange-100';
+
+      // Annulations
+      case 'CANCELED_BY_SELLER': return 'bg-red-50 text-red-600 border-red-100';
+      case 'CANCELED_BY_SYSTEM': return 'bg-red-50 text-red-600 border-red-100';
+      case 'CANCELED': return 'bg-red-50 text-red-600 border-red-100';
+      case 'REFUSE': return 'bg-red-50 text-red-600 border-red-100';
+
+      // Compatibility
+      case 'PENDING': return 'bg-amber-50 text-amber-600 border-amber-100';
+      case 'CONFIRMED': return 'bg-blue-50 text-blue-600 border-blue-100';
+      case 'SHIPPED': return 'bg-indigo-50 text-indigo-600 border-indigo-100';
+      case 'CANCELLED': return 'bg-red-50 text-red-600 border-red-100';
+      default: return 'bg-gray-50 text-gray-600 border-gray-100';
     }
   };
 
@@ -271,7 +298,7 @@ export default function AdminOrders() {
           />
         </div>
         <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-gray-200 overflow-x-auto no-scrollbar">
-          {['ALL', 'PENDING', 'CONFIRMED', 'SHIPPED', 'DELIVERED', 'CANCELLED'].map((status) => (
+          {['ALL', 'NEW_PARCEL', 'PICKED_UP', 'SENT', 'DELIVERED', 'RETURNED', 'CANCELED'].map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
@@ -282,10 +309,11 @@ export default function AdminOrders() {
               }`}
             >
               {status === 'ALL' ? 'Toutes' : 
-               status === 'PENDING' ? 'En attente' : 
-               status === 'CONFIRMED' ? 'Confirmées' : 
-               status === 'SHIPPED' ? 'Expédiées' : 
-               status === 'DELIVERED' ? 'Livrées' : 'Annulées'}
+               status === 'NEW_PARCEL' ? 'Nouveau' : 
+               status === 'PICKED_UP' ? 'Collectés' : 
+               status === 'SENT' ? 'Expédiés' : 
+               status === 'DELIVERED' ? 'Livrées' : 
+               status === 'RETURNED' ? 'Retournés' : 'Annulés'}
             </button>
           ))}
         </div>
@@ -410,7 +438,7 @@ export default function AdminOrders() {
                               </button>
                               
                               <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-100 rounded-xl shadow-xl opacity-0 invisible group-hover/menu:opacity-100 group-hover/menu:visible transition-all z-20 overflow-hidden">
-                                {['PENDING', 'CONFIRMED', 'SHIPPED', 'DELIVERED', 'CANCELLED'].map((s) => (
+                                {['NEW_PARCEL', 'SENT', 'DELIVERED', 'RETURNED', 'CANCELED'].map((s) => (
                                   <button
                                     key={s}
                                     disabled={order.status === s}
@@ -420,7 +448,11 @@ export default function AdminOrders() {
                                     }`}
                                   >
                                     <div className={`w-1.5 h-1.5 rounded-full ${getStatusStyle(s).split(' ')[0]}`} />
-                                    Mettre à {s}
+                                    {s === 'NEW_PARCEL' ? 'Mettre En Nouveau' : 
+                                     s === 'SENT' ? 'Expédier' : 
+                                     s === 'DELIVERED' ? 'Marquer Livrée' : 
+                                     s === 'RETURNED' ? 'Marquer Retourné' :
+                                     'Annuler'}
                                   </button>
                                 ))}
                               </div>

@@ -608,7 +608,7 @@ router.post(
       // 4. Revert the lead status
       await tx.lead.update({
         where: { id: order.leadId! },
-        data: { status: 'ORDERED' },
+        data: { status: 'CONFIRMED' },
       });
 
       // 5. Restore stock

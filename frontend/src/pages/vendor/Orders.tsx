@@ -58,6 +58,15 @@ export default function VendorOrders() {
   // Selection state
   const [selectedLeads, setSelectedLeads] = useState<Set<number>>(new Set());
   const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
+  const [duplicateCheck, setDuplicateCheck] = useState<{
+    isOpen: boolean;
+    ids: number[];
+    groups: Record<string, UnifiedRow[]>;
+  }>({
+    isOpen: false,
+    ids: [],
+    groups: {},
+  });
 
   // Edit state
   const [editingLead, setEditingLead] = useState<UnifiedRow | null>(null);
@@ -157,28 +166,56 @@ export default function VendorOrders() {
   }, [statusFilter, leadsData]);
 
   const statusColors: Record<string, string> = {
-    NEW: 'blue',
-    AVAILABLE: 'yellow',
+    // Lead Statuses
+    NEW: 'primary',
+    AVAILABLE: 'warning',
     ASSIGNED: 'purple',
-    CONTACTED: 'yellow',
-    INTERESTED: 'green',
-    NOT_INTERESTED: 'danger',
+    CONTACTED: 'amber',
+    INTERESTED: 'success',
+    NOT_INTERESTED: 'rose',
     CALLBACK_REQUESTED: 'orange',
+    CALL_LATER: 'orange',
     ORDERED: 'emerald',
     UNREACHABLE: 'gray',
-    INVALID: 'danger',
+    INVALID: 'rose',
+    NO_REPLY: 'rose',
+    WRONG_ORDER: 'rose',
+    CANCEL_REASON_PRICE: 'rose',
+    CANCEL_ORDER: 'rose',
+    PUSHED_TO_DELIVERY: 'indigo',
+
+    // Delivery Statuses (Coliaty 21)
+    'NEW_PARCEL': 'primary',
+    'WAITING_PICKUP': 'warning',
+    'WAITING_PREPARATION': 'warning',
+    'PREPARED': 'success',
+    'ENCORE_PREPARED': 'primary',
+    'PICKED_UP': 'primary',
+    'SENT': 'indigo',
+    'RECEIVED': 'indigo',
+    'DISTRIBUTION': 'cyan',
+    'PROGRAMMER_AUTO': 'purple',
+    'POSTPONED': 'orange',
+    'NOANSWER': 'rose',
+    'ERR': 'rose',
+    'PROGRAMMER': 'primary',
+    'INCORRECT_ADDRESS': 'rose',
+    'DELIVERED': 'success',
+    'RETURNED': 'orange',
+    'CANCELED_BY_SELLER': 'rose',
+    'CANCELED_BY_SYSTEM': 'rose',
+    'CANCELED': 'rose',
+    'REFUSE': 'rose',
+
+    // Compatibility
     PENDING: 'warning',
     CONFIRMED: 'primary',
-    IN_PRODUCTION: 'purple',
-    READY_FOR_SHIPPING: 'indigo',
-    SHIPPED: 'cyan',
-    DELIVERED: 'success',
-    CANCELLED: 'danger',
-    RETURNED: 'orange',
-    REFUNDED: 'gray',
+    SHIPPED: 'indigo',
+    CANCELLED: 'rose',
   };
 
   const statusLabels: Record<string, string> = {
+    // Lead Statuses
     NEW: 'Nouveau',
     AVAILABLE: 'Disponible',
     ASSIGNED: 'Assigné',
@@ -186,18 +223,44 @@ export default function VendorOrders() {
     INTERESTED: 'Intéressé',
     NOT_INTERESTED: 'Pas intéressé',
     CALLBACK_REQUESTED: 'Rappel',
+    CALL_LATER: 'Rappel',
     ORDERED: 'Commandé',
     UNREACHABLE: 'Injoignable',
     INVALID: 'Invalide',
+    NO_REPLY: 'Pas de réponse',
+    WRONG_ORDER: 'Fausse Commande',
+    CANCEL_REASON_PRICE: 'Prix trop cher',
+    CANCEL_ORDER: 'Annulé',
+    PUSHED_TO_DELIVERY: 'En Livraison',
+
+    // Delivery Statuses (Coliaty 21)
+    'NEW_PARCEL': 'Nouveau Colis',
+    'WAITING_PICKUP': 'Attente Collecte',
+    'WAITING_PREPARATION': 'Attente Préparation',
+    'PREPARED': 'Préparé',
+    'ENCORE_PREPARED': 'En préparation',
+    'PICKED_UP': 'Collecté',
+    'SENT': 'Expédié',
+    'RECEIVED': 'Reçu (Dest.)',
+    'DISTRIBUTION': 'En livraison',
+    'PROGRAMMER_AUTO': 'Livraison Auto',
+    'POSTPONED': 'Reporté',
+    'NOANSWER': 'Pas de réponse',
+    'ERR': 'Tél Erroné',
+    'PROGRAMMER': 'Programmé',
+    'INCORRECT_ADDRESS': 'Adresse Erronée',
+    'DELIVERED': 'Livré',
+    'RETURNED': 'Retourné',
+    'CANCELED_BY_SELLER': 'Annulé (Vendeur)',
+    'CANCELED_BY_SYSTEM': 'Annulé (Système)',
+    'CANCELED': 'Annulé (Livreur)',
+    'REFUSE': 'Refusé',
+
+    // Compatibility
     PENDING: 'En attente',
     CONFIRMED: 'Confirmé',
-    IN_PRODUCTION: 'En production',
-    READY_FOR_SHIPPING: 'Prêt à expédier',
     SHIPPED: 'Expédié',
-    DELIVERED: 'Livré',
     CANCELLED: 'Annulé',
-    RETURNED: 'Retourné',
-    REFUNDED: 'Remboursé',
   };
 
   // Count per status for filter tabs
@@ -317,15 +380,51 @@ export default function VendorOrders() {
     });
   };
 
-  const handleBulkSendToCallCenter = async () => {
-    if (selectedLeads.size === 0) return;
+  const handleBulkSendToCallCenter = async (idsToPush?: number[]) => {
+    const ids = idsToPush || Array.from(selectedLeads);
+    if (ids.length === 0) return;
+
+    // Find full lead objects for these ids
+    const allRows = buildUnifiedRows();
+    const leadsToProcess = allRows.filter(r => ids.includes(r.id) && r.type === 'lead');
+
+    // Group by phone
+    const groups: Record<string, UnifiedRow[]> = {};
+    leadsToProcess.forEach(r => {
+      const phone = r.phone || 'no-phone';
+      if (!groups[phone]) groups[phone] = [];
+      groups[phone].push(r);
+    });
+
+    const duplicateGroups = Object.values(groups).filter(g => g.length > 1);
+
+    if (duplicateGroups.length > 0) {
+      // Create a set of IDs to keep: for each group, only keep the first one
+      const idsToKeep = new Set<number>();
+      Object.values(groups).forEach(group => {
+        if (group.length > 0) {
+          idsToKeep.add(group[0].id);
+        }
+      });
+
+      setDuplicateCheck({
+        isOpen: true,
+        ids: Array.from(idsToKeep),
+        groups: groups
+      });
+    } else {
+      proceedWithBulkSend(ids);
+    }
+  };
+
+  const proceedWithBulkSend = async (ids: number[]) => {
     setIsBulkSubmitting(true);
     try {
       await leadsApi.bulkUpdateStatus({
-        ids: Array.from(selectedLeads),
+        ids: ids,
         status: 'AVAILABLE'
       });
-      toast.success(`${selectedLeads.size} leads envoyés au Call Center !`);
+      toast.success(`${ids.length} leads envoyés au Call Center !`);
       setSelectedLeads(new Set());
       queryClient.invalidateQueries({ queryKey: ['vendor-leads'] });
     } catch (err: any) {
@@ -490,7 +589,8 @@ export default function VendorOrders() {
   const tabStatuses = [
     '', // All
     ...(['NEW', 'ASSIGNED', 'CONTACTED', 'INTERESTED', 'ORDERED'].filter(s => statusCounts[s])),
-    ...(['PENDING', 'CONFIRMED', 'IN_PRODUCTION', 'SHIPPED', 'DELIVERED', 'CANCELLED'].filter(s => statusCounts[s])),
+    ...(['NEW_PARCEL', 'PICKED_UP', 'SENT', 'DISTRIBUTION', 'DELIVERED', 'RETURNED', 'CANCELED'].filter(s => statusCounts[s])),
+    ...(['PENDING', 'CONFIRMED', 'SHIPPED', 'CANCELLED'].filter(s => statusCounts[s])),
   ];
 
   return (
@@ -634,7 +734,7 @@ export default function VendorOrders() {
                     <div>
                       <div className="flex items-center gap-3 mb-2 flex-wrap">
                         <span className="font-black text-slate-900 tracking-tight">{row.name}</span>
-                        <span className={`px-2.5 py-1 rounded-lg text-[10px] uppercase font-black tracking-widest badge-${statusColors[row.status] || 'gray'}`}>
+                        <span className={`badge badge-${statusColors[row.status] || 'gray'}`}>
                           {statusLabels[row.status] || row.status}
                         </span>
                       </div>
@@ -746,6 +846,144 @@ export default function VendorOrders() {
               >
                 Annuler
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Duplicate Check Modal */}
+      {duplicateCheck.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[150] p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl border border-white/20 animate-in zoom-in-95 duration-300">
+            <div className="p-8 border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+                    <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center">
+                      <Plus className="w-6 h-6 text-amber-500" />
+                    </div>
+                    Vérification des Doublons
+                  </h2>
+                  <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-2">
+                    {Object.values(duplicateCheck.groups).filter(g => g.length > 1).length} groupes de numéros identiques trouvés
+                  </p>
+                </div>
+                <button
+                  onClick={() => setDuplicateCheck(prev => ({ ...prev, isOpen: false }))}
+                  className="p-3 rounded-2xl bg-gray-50 text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-all"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-8 space-y-8">
+              <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex gap-4">
+                <div className="w-10 h-10 bg-amber-500 text-white rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/20">
+                  <CheckCircle2 size={20} />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-amber-900 uppercase tracking-tight">Optimisation de l'envoi</p>
+                  <p className="text-xs text-amber-700/70 font-medium mt-1 leading-relaxed">
+                    Nous avons détecté des prospects avec le même numéro de téléphone. Veuillez sélectionner uniquement ceux que vous souhaitez envoyer au Call Center.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                {Object.entries(duplicateCheck.groups)
+                  .filter(([_, group]) => group.length > 1)
+                  .map(([phone, group], groupIdx) => (
+                    <div key={phone} className="bg-slate-50/50 border border-slate-100 rounded-[2rem] overflow-hidden shadow-sm transition-all hover:shadow-md">
+                      <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                            <Phone className="w-4 h-4 text-slate-400" />
+                          </div>
+                          <span className="text-sm font-black text-slate-700 tracking-tight">{phone}</span>
+                        </div>
+                        <span className="px-3 py-1 bg-white rounded-full text-[10px] font-black text-slate-400 uppercase tracking-widest border border-slate-100">
+                          {group.length} Doublons
+                        </span>
+                      </div>
+                      <div className="divide-y divide-slate-100">
+                        {group.map((row) => {
+                          const isSelected = duplicateCheck.ids.includes(row.id);
+                          return (
+                            <div 
+                              key={row.id} 
+                              onClick={() => {
+                                setDuplicateCheck(prev => {
+                                  const newIds = prev.ids.includes(row.id) 
+                                    ? prev.ids.filter(id => id !== row.id)
+                                    : [...prev.ids, row.id];
+                                  return { ...prev, ids: newIds };
+                                });
+                              }}
+                              className={`p-6 flex items-center gap-4 cursor-pointer transition-all ${
+                                isSelected ? 'bg-white' : 'opacity-60 grayscale-[0.5]'
+                              }`}
+                            >
+                              <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
+                                isSelected 
+                                  ? 'bg-primary-500 border-primary-500 text-white shadow-lg shadow-primary-500/20' 
+                                  : 'border-slate-200'
+                              }`}>
+                                {isSelected && <CheckCircle2 size={14} />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-black text-slate-900 truncate tracking-tight">{row.name}</p>
+                                <div className="flex items-center gap-3 mt-1.5">
+                                  <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase">
+                                    <MapPin size={10} /> {row.city || '—'}
+                                  </span>
+                                  <span className="w-1 h-1 rounded-full bg-slate-200" />
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase">
+                                    {row.productName || 'Produit inconnu'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            <div className="p-8 bg-slate-50/50 border-t border-gray-100 flex gap-4">
+              <button
+                onClick={() => setDuplicateCheck(prev => ({ ...prev, isOpen: false }))}
+                className="flex-1 px-8 py-4 bg-white text-slate-500 rounded-2xl text-[11px] font-black uppercase tracking-widest border border-slate-200 hover:bg-gray-50 transition-all"
+              >
+                Annuler
+              </button>
+              {(() => {
+                const hasDuplicateSelections = Object.entries(duplicateCheck.groups).some(([phone, group]) => {
+                  const selectedCountInGroup = group.filter(row => duplicateCheck.ids.includes(row.id)).length;
+                  return selectedCountInGroup > 1;
+                });
+
+                return (
+                  <button
+                    onClick={() => {
+                      setDuplicateCheck(prev => ({ ...prev, isOpen: false }));
+                      proceedWithBulkSend(duplicateCheck.ids);
+                    }}
+                    disabled={hasDuplicateSelections || duplicateCheck.ids.length === 0}
+                    className={`flex-[2] px-8 py-4 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all shadow-xl flex items-center justify-center gap-2 ${
+                      hasDuplicateSelections || duplicateCheck.ids.length === 0
+                        ? 'bg-gray-300 cursor-not-allowed shadow-none'
+                        : 'bg-[#2c2f74] hover:scale-105 shadow-indigo-900/20'
+                    }`}
+                  >
+                    <CheckCircle2 size={16} />
+                    {hasDuplicateSelections ? 'Doublons sélectionnés' : `Confirmer l'envoi (${duplicateCheck.ids.length})`}
+                  </button>
+                );
+              })()}
             </div>
           </div>
         </div>

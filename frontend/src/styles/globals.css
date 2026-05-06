@@ -92,43 +92,63 @@
   }
 
   .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border;
   }
 
   .badge-primary {
-    @apply badge bg-primary-100 text-primary-700;
+    @apply bg-blue-50 text-blue-600 border-blue-100;
   }
 
   .badge-success {
-    @apply badge bg-green-100 text-green-700;
+    @apply bg-emerald-50 text-emerald-600 border-emerald-100;
   }
 
   .badge-warning {
-    @apply badge bg-yellow-100 text-yellow-700;
+    @apply bg-amber-50 text-amber-600 border-amber-100;
   }
 
   .badge-danger {
-    @apply badge bg-red-100 text-red-700;
+    @apply bg-rose-50 text-rose-600 border-rose-100;
   }
 
   .badge-gray {
-    @apply badge bg-gray-100 text-gray-700;
+    @apply bg-slate-50 text-slate-600 border-slate-100;
   }
 
   .badge-purple {
-    @apply badge bg-purple-100 text-purple-700;
+    @apply bg-purple-50 text-purple-600 border-purple-100;
   }
 
   .badge-cyan {
-    @apply badge bg-cyan-100 text-cyan-700;
+    @apply bg-cyan-50 text-cyan-600 border-cyan-100;
   }
 
   .badge-orange {
-    @apply badge bg-orange-100 text-orange-700;
+    @apply bg-orange-50 text-orange-600 border-orange-100;
   }
 
   .badge-indigo {
-    @apply badge bg-indigo-100 text-indigo-700;
+    @apply bg-indigo-50 text-indigo-600 border-indigo-100;
+  }
+
+  .badge-violet {
+    @apply bg-violet-50 text-violet-600 border-violet-100;
+  }
+
+  .badge-emerald {
+    @apply bg-emerald-50 text-emerald-600 border-emerald-100;
+  }
+
+  .badge-rose {
+    @apply bg-rose-50 text-rose-600 border-rose-100;
+  }
+
+  .badge-slate {
+    @apply bg-slate-50 text-slate-600 border-slate-100;
+  }
+  
+  .badge-amber {
+    @apply bg-amber-50 text-amber-600 border-amber-100;
   }
 }
 
@@ -191,6 +211,15 @@
     100% {
       transform: translate(0, 0) rotate(0deg) scale(1);
     }
+  }
+
+  @keyframes pulse-slow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+  }
+
+  .animate-pulse-slow {
+    animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
 
   .animate-mesh-light {

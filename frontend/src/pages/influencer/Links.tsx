@@ -86,12 +86,21 @@ export default function InfluencerLinks() {
     }
   };
 
-  // Single effect for date range changes — also fires on mount with default dateRange=30
+  // Single effect for date range changes — also fires on mount with default dateRange=1
   useEffect(() => {
     if (dateRange !== 'custom' || (startDate && endDate)) {
       loadLinks();
       loadDailyStats();
     }
+
+    // Auto-refresh for real-time performance (every 30s)
+    const interval = setInterval(() => {
+       if (dateRange === 1 || dateRange === 7) {
+         loadDailyStats();
+       }
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, [dateRange, startDate, endDate]);
 
   // Refetch chart when a specific link is selected/deselected
@@ -333,6 +342,9 @@ export default function InfluencerLinks() {
                 tick={{fontSize: 9, fontWeight: 700, fill: '#64748b'}}
                 tickFormatter={(str) => {
                   const d = new Date(str);
+                  if (dateRange === 1) {
+                    return d.toLocaleTimeString('fr-FR', { hour: '2-digit' });
+                  }
                   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
                 }}
               />

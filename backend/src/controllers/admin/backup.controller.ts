@@ -5,9 +5,16 @@ import path from 'path';
 import fs from 'fs';
 
 export const listBackups = asyncHandler(async (req: Request, res: Response) => {
-  const backups = await BackupService.listBackups();
-  console.log(`API returning ${backups.length} backups to client`);
-  res.json({ status: 'success', data: backups });
+  const { page, limit, startDate, endDate, search } = req.query;
+  const result = await BackupService.listBackups({
+    page: page ? Number(page) : undefined,
+    limit: limit ? Number(limit) : undefined,
+    startDate: startDate as string,
+    endDate: endDate as string,
+    search: search as string
+  });
+  console.log(`API returning ${result.backups.length} backups (Page ${result.currentPage}/${result.totalPages})`);
+  res.json({ status: 'success', data: result });
 });
 
 export const triggerBackup = asyncHandler(async (req: Request, res: Response) => {
@@ -35,4 +42,11 @@ export const deleteBackup = asyncHandler(async (req: Request, res: Response) => 
   }
 
   res.json({ status: 'success', message: 'Backup deleted' });
+});
+
+export const restoreBackup = asyncHandler(async (req: Request, res: Response) => {
+  const { filename } = req.params;
+  console.log(`Restoration attempt initiated for backup: ${filename}`);
+  await BackupService.restoreBackup(filename);
+  res.json({ status: 'success', message: 'Database restored successfully' });
 });

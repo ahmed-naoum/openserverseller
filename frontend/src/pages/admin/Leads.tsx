@@ -12,17 +12,17 @@ import {
 } from 'lucide-react';
 
 const STATUS_BADGES: Record<string, { label: string; color: string; icon: any }> = {
-  NEW: { label: 'Nouveau', color: 'bg-blue-100 text-blue-800', icon: Clock },
-  AVAILABLE: { label: 'Disponible', color: 'bg-emerald-100 text-emerald-800', icon: CheckCircle2 },
-  ASSIGNED: { label: 'Au Call Center', icon: Headphones, color: 'bg-cyan-100 text-cyan-800' },
-  CONTACTED: { label: 'Contacté', icon: Phone, color: 'bg-blue-100 text-blue-800' },
-  INTERESTED: { label: 'Intéressé', icon: CheckCircle2, color: 'bg-green-100 text-green-800' },
-  ORDERED: { label: 'Commandé', icon: Tag, color: 'bg-emerald-100 text-emerald-800' },
-  CALLBACK_REQUESTED: { label: 'Rappel demandé', icon: Clock, color: 'bg-orange-100 text-orange-800' },
-  NOT_INTERESTED: { label: 'Pas intéressé', icon: AlertCircle, color: 'bg-red-100 text-red-800' },
-  UNREACHABLE: { label: 'Injoignable', icon: AlertCircle, color: 'bg-gray-100 text-gray-800' },
-  INVALID: { label: 'Invalide', icon: AlertCircle, color: 'bg-red-100 text-red-800' },
-  PUSHED_TO_DELIVERY: { label: 'En livraison', icon: Truck, color: 'bg-indigo-100 text-indigo-800' },
+  NEW: { label: 'Nouveau', color: 'bg-slate-50 text-slate-600 border-slate-100', icon: Clock },
+  AVAILABLE: { label: 'Disponible', color: 'bg-emerald-50 text-emerald-600 border-emerald-100', icon: CheckCircle2 },
+  ASSIGNED: { label: 'Au Call Center', icon: Headphones, color: 'bg-cyan-50 text-cyan-600 border-cyan-100' },
+  CONTACTED: { label: 'Contacté', icon: Phone, color: 'bg-amber-50 text-amber-600 border-amber-100' },
+  INTERESTED: { label: 'Intéressé', icon: CheckCircle2, color: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
+  ORDERED: { label: 'Commandé', icon: Tag, color: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+  CALLBACK_REQUESTED: { label: 'Rappel demandé', icon: Clock, color: 'bg-orange-50 text-orange-600 border-orange-100' },
+  NOT_INTERESTED: { label: 'Pas intéressé', icon: AlertCircle, color: 'bg-rose-50 text-rose-600 border-rose-100' },
+  UNREACHABLE: { label: 'Injoignable', icon: AlertCircle, color: 'bg-slate-100 text-slate-400 border-slate-200' },
+  INVALID: { label: 'Invalide', icon: AlertCircle, color: 'bg-rose-50 text-rose-600 border-rose-100' },
+  PUSHED_TO_DELIVERY: { label: 'En livraison', icon: Truck, color: 'bg-indigo-50 text-indigo-600 border-indigo-100' },
 };
 
 export default function AdminLeads() {

@@ -56,7 +56,11 @@ export default function InfluencerDashboard() {
   const totalItems = commissions.length;
   const confirmedItems = commissions.filter(c => {
     const status = c.order?.status || '';
-    return ['CONFIRMED', 'SHIPPED', 'DELIVERED', 'PUSHED_TO_DELIVERY', 'ORDERED'].includes(status);
+    // Count as confirmed if it reached any delivery stage or was officially confirmed
+    return [
+      'CONFIRMED', 'ORDERED', 'NEW_PARCEL', 'WAITING_PICKUP', 'PICKED_UP', 
+      'SENT', 'RECEIVED', 'DISTRIBUTION', 'DELIVERED', 'SHIPPED'
+    ].includes(status);
   }).length;
   
   const deliveredItems = commissions.filter(c => c.order?.status === 'DELIVERED').length;

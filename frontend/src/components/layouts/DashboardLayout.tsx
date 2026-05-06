@@ -47,7 +47,9 @@ import {
   Globe,
   Plus,
   Database,
-  History
+  History,
+  ScanLine,
+  Headphones
 } from 'lucide-react';
 
 const navigation = {
@@ -125,6 +127,7 @@ const navigation = {
     { name: 'Vérifications', href: '/admin/verifications', icon: ShieldCheck },
     { name: 'Utilisateurs', href: '/admin/users', icon: Users },
     { name: 'Clients', href: '/admin/customers', icon: Users },
+    { name: 'Inspect Call Center', href: '/admin/call-center-inspector', icon: Headphones },
     { name: 'Catégories', href: '/admin/categories', icon: Tag },
     { name: 'Produits', href: '/admin/products', icon: Package },
     { name: 'Demandes Affiliation', href: '/admin/affiliate-claims', icon: UserCheck },
@@ -163,7 +166,8 @@ const navigation = {
     { name: 'Tous les Leads', href: '/helper/leads', icon: Users },
     { name: 'Liens de Parrainage', href: '/helper/links', icon: Tag },
     { name: 'Colis', href: '/helper/colis', icon: Package },
-    { name: 'Support & Tickets', href: '/helper/tickets', icon: MessageSquare },
+    { name: 'Scanner Retour', href: '/helper/scanner', icon: ScanLine },
+    { name: 'Packaging Tickets', href: '/helper/tickets', icon: FileText },
     { name: 'Produits', href: '/helper/products', icon: Tag },
     { name: 'Paramètres', href: '/helper/settings', icon: Settings },
   ],

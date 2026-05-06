@@ -11,5 +11,6 @@ router.get('/', backupController.listBackups);
 router.post('/manual', backupController.triggerBackup);
 router.get('/download/:filename', backupController.downloadBackup);
 router.delete('/:filename', backupController.deleteBackup);
+router.post('/restore/:filename', backupController.restoreBackup);
 
 export default router;

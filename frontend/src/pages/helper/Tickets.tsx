@@ -178,7 +178,7 @@ export default function HelperTickets() {
             <div className="p-3 bg-primary-600 rounded-2xl shadow-xl shadow-primary-200">
               <FileText className="text-white w-6 h-6" />
             </div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Gestion des Tickets</h1>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Packaging Tickets</h1>
           </div>
           <p className="text-slate-500 font-medium">Téléchargez les étiquettes Coliaty groupées par produit pour vos colis en attente.</p>
         </div>

@@ -196,17 +196,17 @@ export default function AgentMyLeads() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider w-fit ${
-                          lead.status === 'ASSIGNED' ? 'bg-amber-100 text-amber-700' :
-                          lead.status === 'CALL_LATER' ? 'bg-blue-100 text-blue-700' :
-                          lead.status === 'NO_REPLY' ? 'bg-gray-100 text-gray-700' :
-                          lead.status === 'CONFIRMED' ? 'bg-green-100 text-green-700' :
-                          lead.status === 'WRONG_ORDER' ? 'bg-amber-100 text-amber-700' :
-                          lead.status === 'CANCEL_REASON_PRICE' ? 'bg-gray-100 text-gray-700' :
-                          lead.status === 'CANCEL_ORDER' ? 'bg-red-100 text-red-700' :
-                          lead.status === 'PUSHED_TO_DELIVERY' ? 'bg-indigo-100 text-indigo-700' :
-                          lead.status === 'NEW' || lead.status === 'AVAILABLE' ? 'bg-green-100 text-green-700' :
-                          'bg-gray-100 text-gray-700'
+                        <span className={`badge badge-${
+                          lead.status === 'ASSIGNED' ? 'purple' :
+                          lead.status === 'CALL_LATER' ? 'orange' :
+                          lead.status === 'NO_REPLY' ? 'rose' :
+                          lead.status === 'CONFIRMED' ? 'primary' :
+                          lead.status === 'WRONG_ORDER' ? 'amber' :
+                          lead.status === 'CANCEL_REASON_PRICE' ? 'rose' :
+                          lead.status === 'CANCEL_ORDER' ? 'rose' :
+                          lead.status === 'PUSHED_TO_DELIVERY' ? 'indigo' :
+                          lead.status === 'NEW' || lead.status === 'AVAILABLE' ? 'success' :
+                          'gray'
                         }`}>
                           {lead.status === 'PUSHED_TO_DELIVERY' ? 'EN LIVRAISON' : lead.status}
                         </span>

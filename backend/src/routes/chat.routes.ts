@@ -39,8 +39,13 @@ router.get(
             if (!status) {
                 whereClause.status = 'ACTIVE';
             }
-        } else if (role === 'SUPER_ADMIN' || role === 'FINANCE_ADMIN') {
-            // Super admins see conversations they are part of by default
+        } else if (role === 'SUPER_ADMIN') {
+            // Super admins see ALL conversations
+            if (!status) {
+                whereClause.status = { in: ['ACTIVE', 'PENDING_CLAIM'] };
+            }
+        } else if (role === 'FINANCE_ADMIN') {
+            // Finance admins only see their own conversations
             if (!status && !orderNumber) {
                 whereClause.participants = { some: { userId: req.user!.id } };
                 whereClause.status = 'ACTIVE';
