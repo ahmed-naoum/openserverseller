@@ -69,7 +69,6 @@ router.post(
 
     const files = req.files as Express.Multer.File[];
     const socketId = req.body.socketId;
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
     const results: { url: string; filename: string; size: number }[] = [];
 
     for (let i = 0; i < files.length; i++) {
@@ -83,7 +82,7 @@ router.post(
         .webp({ quality: 82 })
         .toFile(outputPath);
 
-      const fileUrl = `${baseUrl}/uploads/products/${webpFilename}`;
+      const fileUrl = `/uploads/products/${webpFilename}`;
 
       results.push({
         url: fileUrl,
@@ -236,8 +235,7 @@ router.post(
       .webp({ quality: 85 })
       .toFile(outputPath);
 
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const avatarUrl = `${baseUrl}/uploads/avatars/${webpFilename}`;
+    const avatarUrl = `/uploads/avatars/${webpFilename}`;
 
     // Update user profile
     await prisma.userProfile.upsert({

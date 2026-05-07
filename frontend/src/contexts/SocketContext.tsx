@@ -25,10 +25,16 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
+    const SOCKET_URL = API_URL.replace('/api/v1', '');
+    const SOCKET_PATH = `${API_URL.includes('/api/v1') ? '/api/v1' : ''}/socket.io`;
+
     // Connect with auth token
-    const newSocket = io(import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:3001', {
+    const newSocket = io(SOCKET_URL, {
+      path: SOCKET_PATH,
       auth: { token },
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
+      secure: SOCKET_URL.startsWith('https'),
       reconnectionAttempts: 10,
       reconnectionDelay: 2000,
     });

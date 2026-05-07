@@ -19,15 +19,16 @@ import { startLeadsReassignmentCron } from './jobs/leadReassignment.js';
 const app = express();
 app.set('trust proxy', true);
 const server = createServer(app);
+const PORT = parseInt(process.env.PORT || '3001', 10);
+const API_PREFIX = process.env.API_PREFIX || '/api/v1';
+
 const io = new SocketServer(server, {
+  path: `${API_PREFIX}/socket.io`,
   cors: {
     origin: process.env.FRONTEND_URL || 'http://localhost:5173',
     credentials: true,
   },
 });
-
-const PORT = parseInt(process.env.PORT || '3001', 10);
-const API_PREFIX = process.env.API_PREFIX || '/api/v1';
 
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -51,7 +52,12 @@ app.use(ipFilter);
 app.use(sanitizeInput);
 app.use(validateRequestSize(5 * 1024 * 1024));
 
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+app.use('/uploads', (req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  next();
+}, express.static(path.join(process.cwd(), 'uploads')));
 
 setupPassport();
 
