@@ -653,65 +653,18 @@ export default function InfluencerLeads() {
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      )}
-
       {/* Search + Filters Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center gap-4">
-          <div className="flex-1 flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 text-xs bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-influencer-500 transition-all font-medium"
-                placeholder="Date de début"
-              />
-            </div>
-            <div className="relative flex-1">
-              <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 text-xs bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-influencer-500 transition-all font-medium"
-                placeholder="Date de fin"
-              />
-            </div>
-            {(startDate || endDate) && (
-              <button
-                onClick={() => { setStartDate(''); setEndDate(''); }}
-                className="px-4 py-2.5 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-colors"
-              >
-                Réinitialiser
-              </button>
-            )}
-          </div>
-          
-          <div className="relative flex-[1.5]">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Rechercher par nom, téléphone ou ville..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-        </div>
-
-        {/* Status Filter Dropdown */}
-        <div className="flex flex-wrap gap-2">
-          <div className="relative min-w-[280px]">
+      <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-4">
+          {/* Status Filter */}
+          <div className="relative min-w-[220px]">
             <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
               <Filter className="w-4 h-4 text-gray-400" />
             </div>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full pl-10 pr-10 py-2.5 text-xs font-bold text-gray-700 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-influencer-500 transition-all appearance-none cursor-pointer hover:bg-gray-100/50"
+              className="w-full pl-10 pr-10 py-2.5 text-xs font-bold text-gray-700 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-influencer-500 transition-all appearance-none cursor-pointer hover:bg-gray-100/50"
             >
               <option value="ALL">Tous les statuts ({dateFilteredCommissions.length})</option>
               {(() => {
@@ -737,6 +690,49 @@ export default function InfluencerLeads() {
             <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
               <ChevronDown className="w-4 h-4 text-gray-400" />
             </div>
+          </div>
+
+          {/* Date Filters */}
+          <div className="flex flex-col sm:flex-row items-center gap-2">
+            <div className="relative flex-1 sm:w-40">
+              <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 text-xs bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-influencer-500 transition-all font-bold text-gray-600"
+              />
+            </div>
+            <div className="relative flex-1 sm:w-40">
+              <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 text-xs bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-influencer-500 transition-all font-bold text-gray-600"
+              />
+            </div>
+            {(startDate || endDate) && (
+              <button
+                onClick={() => { setStartDate(''); setEndDate(''); }}
+                className="p-2.5 text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                title="Réinitialiser les dates"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          
+          {/* Search Bar */}
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Rechercher par nom, téléphone ou ville..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-11 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-influencer-500 transition-all font-medium placeholder:text-gray-400"
+            />
           </div>
         </div>
       </div>
