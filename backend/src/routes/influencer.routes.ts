@@ -165,14 +165,14 @@ router.get(
       endDate.setHours(23, 59, 59, 999);
 
       const formattedLinks = await Promise.all(links.map(async (link) => {
-        const [clicksCount, leadsCount, earningsSum] = await Promise.all([
-          (prisma as any).referralLinkClick.groupBy({
-            by: ['ipAddress'],
+        const [clicksData, leadsCount, earningsSum] = await Promise.all([
+          (prisma as any).referralLinkClick.findMany({
             where: {
               referralLinkId: link.id,
               createdAt: { gte: startDate, lte: endDate }
-            }
-          }).then((res: any) => res.length),
+            },
+            select: { ipAddress: true, userAgent: true }
+          }),
           prisma.lead.count({
             where: {
               referralLinkId: link.id,
@@ -188,9 +188,15 @@ router.get(
           })
         ]);
 
+        // Calculate unique clicks (IP + User Agent)
+        const uniqueClicksSet = new Set();
+        clicksData.forEach((c: any) => {
+          uniqueClicksSet.add(`${c.ipAddress}-${c.userAgent || 'unknown'}`);
+        });
+
         return {
           ...link,
-          clicks: clicksCount,
+          clicks: uniqueClicksSet.size,
           conversions: leadsCount,
           earnings: earningsSum._sum.amount || 0
         };
@@ -455,10 +461,7 @@ router.get(
       const key = getKey(l.createdAt);
       salesByDate[key] = (salesByDate[key] || 0) + 1;
     });
-    commissions.forEach(c => {
-      const key = getKey(c.createdAt);
-      salesByDate[key] = (salesByDate[key] || 0) + 1;
-    });
+    // Removed duplicate counting from commissions
 
     const stats = [];
     const curr = new Date(dateLimitStart);
@@ -1194,6 +1197,7 @@ router.get(
           select: { 
             id: true, 
             email: true,
+            phone: true,
             profile: { select: { fullName: true } }
           }
         }

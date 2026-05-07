@@ -79,7 +79,7 @@ export default function GrossellerInventory() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Mon Inventaire</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Mes Produits</h1>
           <p className="text-gray-500 text-sm mt-1">Gérez vos produits achetés et suivez vos demandes en cours.</p>
         </div>
 

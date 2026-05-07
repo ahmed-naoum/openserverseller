@@ -71,7 +71,7 @@ export default function InfluencerWallet() {
           <p className="text-sm text-gray-500 mt-1">Gérez vos gains et demandes de retrait.</p>
         </div>
         <button
-          disabled={totalEarnings < 50}
+          disabled={totalEarnings < 200}
           className="flex items-center gap-1.5 px-5 py-2.5 bg-influencer-500 text-white rounded-xl text-sm font-bold hover:bg-influencer-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           onClick={() => toast.error('Le retrait nécessite l\'approbation admin.')}
         >

@@ -19,7 +19,7 @@ interface ReferralLink {
   isActive: boolean;
   createdAt: string;
   product?: { nameFr?: string; images?: { url: string }[] };
-  influencer?: { id: number; fullName?: string; email?: string };
+  influencer?: { id: number; fullName?: string; email?: string; phone?: string };
 }
 
 export default function HelperLinks() {
@@ -97,11 +97,9 @@ export default function HelperLinks() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
         {[
           { label: 'Total Liens', value: links.length, icon: LinkIcon, color: 'orange' },
-          { label: 'Total Clics', value: links.reduce((s, l) => s + l.clicks, 0).toLocaleString(), icon: MousePointerClick, color: 'blue' },
-          { label: 'Conversions', value: links.reduce((s, l) => s + l.conversions, 0), icon: TrendingUp, color: 'emerald' },
           { label: 'Liens Actifs', value: links.filter(l => l.isActive).length, icon: Eye, color: 'purple' },
         ].map(stat => (
           <div key={stat.label} className="card p-4 flex items-center gap-3">
@@ -140,8 +138,6 @@ export default function HelperLinks() {
                   <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Influenceur</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Produit</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Code</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Clics</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Conv.</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Statut</th>
                   <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -157,7 +153,10 @@ export default function HelperLinks() {
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-bold text-gray-900 truncate">{link.influencer?.fullName || 'Inconnu'}</p>
-                          <p className="text-xs text-gray-400 truncate">{link.influencer?.email}</p>
+                          <div className="flex flex-col gap-0.5">
+                            <p className="text-[10px] text-gray-400 truncate leading-none">{link.influencer?.email}</p>
+                            <p className="text-[10px] font-black text-orange-500 truncate leading-none mt-0.5">{link.influencer?.phone || 'Pas de numéro'}</p>
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -178,10 +177,7 @@ export default function HelperLinks() {
                     <td className="px-6 py-4">
                       <code className="text-xs font-mono bg-gray-100 text-gray-700 px-2 py-1 rounded-lg">{link.code}</code>
                     </td>
-                    {/* Clicks */}
-                    <td className="px-6 py-4 text-sm font-bold text-gray-900">{link.clicks.toLocaleString()}</td>
-                    {/* Conversions */}
-                    <td className="px-6 py-4 text-sm font-bold text-gray-900">{link.conversions.toLocaleString()}</td>
+
                     {/* Status */}
                     <td className="px-6 py-4">
                       <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${

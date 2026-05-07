@@ -101,7 +101,7 @@ const navigation = {
   ],
   influencer: [
     { name: 'Accueil', href: '/influencer', icon: Home },
-    { name: 'Mon Inventaire', href: '/influencer/inventory', icon: Package },
+    { name: 'Mes Produits', href: '/influencer/inventory', icon: Package },
     { name: 'Mes Liens', href: '/influencer/links', icon: Tag },
     { name: 'Portefeuille', href: '/influencer/wallet', icon: DollarSign },
     { name: 'Analytics', href: '/influencer/analytics', icon: CreditCard },

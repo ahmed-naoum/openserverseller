@@ -376,7 +376,7 @@ export const dashboardApi = {
   grosseller: () => api.get('/dashboard/grosseller'),
   agent: () => api.get('/dashboard/agent'),
   confirmation: () => api.get('/dashboard/confirmation'),
-  influencer: () => api.get('/dashboard/influencer'),
+  influencer: (params?: any) => api.get('/dashboard/influencer', { params }),
   admin: () => api.get('/dashboard/admin'),
 };
 

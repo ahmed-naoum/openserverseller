@@ -84,8 +84,8 @@ export default function UserWallet() {
       toast.error('Solde insuffisant');
       return;
     }
-    if (Number(withdrawForm.amountMad) < 10) {
-      toast.error('Le montant minimum est de 10 MAD');
+    if (Number(withdrawForm.amountMad) < 200) {
+      toast.error('Le montant minimum est de 200 MAD');
       return;
     }
     withdrawMutation.mutate({
@@ -150,7 +150,7 @@ export default function UserWallet() {
               }
               setIsWithdrawModalOpen(true);
             }}
-            disabled={!wallet || wallet.balanceMad < 10}
+            disabled={!wallet || wallet.balanceMad < 200}
             className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg active:scale-[0.98]"
           >
             <Banknote size={18} /> Demander un retrait
@@ -366,12 +366,12 @@ export default function UserWallet() {
                   <input
                     type="number"
                     required
-                    min="10"
+                    min="200"
                     max={wallet?.balanceMad}
                     value={withdrawForm.amountMad}
                     onChange={e => setWithdrawForm({...withdrawForm, amountMad: e.target.value})}
                     className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all outline-none"
-                    placeholder="Min. 10 MAD"
+                    placeholder="Min. 200 MAD"
                   />
                 </div>
               </div>

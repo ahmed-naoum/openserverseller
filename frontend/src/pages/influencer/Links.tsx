@@ -23,6 +23,7 @@ export default function InfluencerLinks() {
   // Modal states
   const [selectedLink, setSelectedLink] = useState<ReferralLink | null>(null);
   const [showQrModal, setShowQrModal] = useState(false);
+  const [confirmInputValue, setConfirmInputValue] = useState('');
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -32,6 +33,7 @@ export default function InfluencerLinks() {
     confirmText: string;
     variant: 'primary' | 'danger';
     isLoading?: boolean;
+    requiresConfirmationText?: string;
   }>({
     isOpen: false,
     title: '',
@@ -39,7 +41,8 @@ export default function InfluencerLinks() {
     onConfirm: () => {},
     icon: <RefreshCw size={24} />,
     confirmText: 'Régénérer',
-    variant: 'primary'
+    variant: 'primary',
+    requiresConfirmationText: ''
   });
   const [isToggling, setIsToggling] = useState<number | null>(null);
 
@@ -130,13 +133,15 @@ export default function InfluencerLinks() {
   };
 
   const handleRegenerateCode = (link: ReferralLink) => {
+    setConfirmInputValue('');
     setConfirmModal({
       isOpen: true,
       title: '⚠️ Attention : Risque de perte de leads',
-      message: `Si vous régénérez ce code, les anciens partages deviendront obsolètes.`,
+      message: `Si vous régénérez ce code, les anciens partages deviendront obsolètes. Pour confirmer, veuillez taper "REGENERATE CODE" ci-dessous.`,
       icon: <AlertCircle size={32} className="text-red-500 animate-pulse" />,
       confirmText: 'Régénérer',
       variant: 'danger',
+      requiresConfirmationText: 'REGENERATE CODE',
       onConfirm: async () => {
         try {
           const res = await influencerApi.regenerateLink(link.id);
@@ -189,6 +194,24 @@ export default function InfluencerLinks() {
           <p className="text-slate-500 font-medium mt-1">Analysez la rentabilité de vos parrainages en temps réel.</p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={async () => {
+              setLoading(true);
+              try {
+                await Promise.all([loadLinks(), loadDailyStats()]);
+                toast.success('Données actualisées');
+              } catch (err) {
+                toast.error('Échec de l\'actualisation');
+              } finally {
+                setLoading(false);
+              }
+            }}
+            disabled={loading || isStatsLoading}
+            className="flex items-center justify-center p-3.5 bg-white border border-slate-100 text-slate-600 rounded-2xl hover:bg-slate-50 transition-all shadow-sm disabled:opacity-50"
+            title="Actualiser les données"
+          >
+            <RefreshCw className={`w-5 h-5 ${(loading || isStatsLoading) ? 'animate-spin' : ''}`} />
+          </button>
           <a
             href="/influencer/marketplace"
             className="flex items-center gap-2 px-8 py-3.5 bg-slate-900 text-white rounded-2xl text-sm font-black hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
@@ -327,7 +350,10 @@ export default function InfluencerLinks() {
         
         <div className="h-80 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={dailyStats} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+            <ComposedChart 
+              data={dailyStats} 
+              margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+            >
               <defs>
                 <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1}/>
@@ -366,14 +392,28 @@ export default function InfluencerLinks() {
                 contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '15px' }}
                 itemStyle={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase' }}
                 labelStyle={{ marginBottom: '10px', fontSize: '12px', fontWeight: 900, color: '#1e293b' }}
+                cursor={{ stroke: '#f1f5f9', strokeWidth: 2 }}
+                labelFormatter={(label) => {
+                  const d = new Date(label);
+                  if (dateRange === 1) {
+                    return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+                  }
+                  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+                }}
+                formatter={(value, name) => {
+                  if (name === 'Taux Conv.') return [`${value}%`, name];
+                  return [value, name];
+                }}
               />
               <Area 
                 yAxisId="left"
                 type="monotone" 
                 dataKey="views" 
                 stroke="#3b82f6" 
-                strokeWidth={3}
-                fillOpacity={1} 
+                strokeWidth={2}
+                fillOpacity={0} 
+                strokeOpacity={0}
+                activeDot={{ r: 4, strokeWidth: 0, fill: '#3b82f6' }}
                 fill="url(#colorViews)" 
                 name="Visiteurs Uniques"
               />
@@ -383,6 +423,7 @@ export default function InfluencerLinks() {
                 fill="#8b5cf6" 
                 radius={[4, 4, 0, 0]} 
                 barSize={20} 
+                opacity={0}
                 name="Ventes" 
               />
               <Line 
@@ -481,19 +522,28 @@ export default function InfluencerLinks() {
                         </span>
                       </td>
                       <td className="px-8 py-5">
-                        <div className="flex flex-col items-center gap-1">
-                          <div className="flex items-center gap-6">
-                            <div className="text-center">
-                              <p className="text-xs font-black text-slate-900">{link.clicks.toLocaleString()}</p>
-                              <p className="text-[8px] font-bold text-slate-400 uppercase">Visiteurs</p>
+                        <div className="flex items-center justify-center">
+                          <div className="flex items-center gap-8">
+                            <div className="text-center group-hover:transform group-hover:scale-110 transition-all duration-300">
+                              <p className="text-xs font-black text-slate-900 mb-0.5">{link.clicks.toLocaleString()}</p>
+                              <div className="flex items-center justify-center gap-1">
+                                <MousePointerClick size={10} className="text-blue-500" />
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">Visiteurs</p>
+                              </div>
                             </div>
-                            <div className="text-center">
-                              <p className="text-xs font-black text-slate-900">{link.conversions.toLocaleString()}</p>
-                              <p className="text-[8px] font-bold text-slate-400 uppercase">Ventes</p>
+                            <div className="text-center group-hover:transform group-hover:scale-110 transition-all duration-300 delay-75">
+                              <p className="text-xs font-black text-slate-900 mb-0.5">{link.conversions.toLocaleString()}</p>
+                              <div className="flex items-center justify-center gap-1">
+                                <Zap size={10} className="text-purple-500" />
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">Ventes</p>
+                              </div>
                             </div>
-                            <div className="text-center">
-                              <p className="text-xs font-black text-indigo-600">{link.clicks > 0 ? ((link.conversions / link.clicks) * 100).toFixed(1) : '0.0'}%</p>
-                              <p className="text-[8px] font-bold text-slate-400 uppercase">Taux Conv.</p>
+                            <div className="text-center group-hover:transform group-hover:scale-110 transition-all duration-300 delay-150">
+                              <p className="text-xs font-black text-indigo-600 mb-0.5">{link.clicks > 0 ? ((link.conversions / link.clicks) * 100).toFixed(1) : '0.0'}%</p>
+                              <div className="flex items-center justify-center gap-1">
+                                <Target size={10} className="text-indigo-500" />
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">Conversion</p>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -558,9 +608,22 @@ export default function InfluencerLinks() {
               <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-3">
                 {confirmModal.title}
               </h2>
-              <p className="text-sm text-slate-500 font-medium leading-relaxed">
+              <p className="text-sm text-slate-500 font-medium leading-relaxed mb-6">
                 {confirmModal.message}
               </p>
+
+              {confirmModal.requiresConfirmationText && (
+                <div className="animate-in slide-in-from-bottom-2 duration-300">
+                  <input
+                    type="text"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-center text-sm font-black uppercase tracking-widest focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none transition-all placeholder:text-slate-300"
+                    placeholder={`Taper "${confirmModal.requiresConfirmationText}"`}
+                    value={confirmInputValue}
+                    onChange={(e) => setConfirmInputValue(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+              )}
             </div>
             <div className="p-8 bg-slate-50/50 flex gap-4">
               <button
@@ -571,7 +634,8 @@ export default function InfluencerLinks() {
               </button>
               <button
                 onClick={confirmModal.onConfirm}
-                className={`flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-white rounded-2xl shadow-lg transition-all ${
+                disabled={confirmModal.requiresConfirmationText ? confirmInputValue !== confirmModal.requiresConfirmationText : false}
+                className={`flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-white rounded-2xl shadow-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed ${
                   confirmModal.variant === 'danger' ? 'bg-red-500 hover:bg-red-600' : 'bg-slate-900 hover:bg-slate-800'
                 }`}
               >

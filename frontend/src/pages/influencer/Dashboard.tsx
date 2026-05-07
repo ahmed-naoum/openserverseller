@@ -5,7 +5,7 @@ import { dashboardApi, influencerApi } from '../../lib/api';
 import { ReferralLink, InfluencerCommission } from '../../types';
 import {
   DollarSign, TrendingUp, Zap, MousePointerClick, ArrowUpRight, Crown,
-  Plus, ShoppingBag, Wallet, Activity, BarChart3, CheckCircle2, Truck, ExternalLink, Eye
+  Plus, ShoppingBag, Wallet, Activity, BarChart3, CheckCircle2, Truck, ExternalLink, Eye, RefreshCw
 } from 'lucide-react';
 import { ProCard } from '../../components/common/ProCard';
 import {
@@ -24,25 +24,43 @@ export default function InfluencerDashboard() {
   const [referralLinks, setReferralLinks] = useState<ReferralLink[]>([]);
   const [commissions, setCommissions] = useState<InfluencerCommission[]>([]);
   const [wallet, setWallet] = useState<any>(null);
+  const [walletTransactions, setWalletTransactions] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>({ conversions: 0, confirmed: 0, delivered: 0 });
+  const [dateRange, setDateRange] = useState<number | 'custom' | 'all'>(7);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [chartType, setChartType] = useState<'revenue' | 'balance'>('revenue');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadDashboard();
-  }, []);
+    if (dateRange !== 'custom' || (startDate && endDate)) {
+      loadDashboard();
+    }
+  }, [dateRange, startDate, endDate]);
 
   const loadDashboard = async () => {
     try {
       setLoading(true);
+      const params: any = {};
+      if (dateRange === 'custom') {
+        if (startDate) params.start = startDate;
+        if (endDate) params.end = endDate;
+      } else {
+        params.days = dateRange;
+      }
+
       const [dashboardRes, linksRes, customersRes] = await Promise.all([
-        dashboardApi.influencer(),
+        dashboardApi.influencer(params),
         influencerApi.getLinks(),
         influencerApi.getCustomers()
       ]);
       
       setReferralLinks(linksRes.data);
-      const commissionsData = customersRes.data?.data?.commissions || customersRes.data?.commissions || [];
-      setCommissions(commissionsData);
+      // Use commissions from dashboardRes which are correctly filtered by date
+      setCommissions(dashboardRes.data.commissions || []);
       setWallet(dashboardRes.data.wallet);
+      setWalletTransactions(dashboardRes.data.walletTransactions || []);
+      setStats(dashboardRes.data.stats || { conversions: 0, confirmed: 0, delivered: 0 });
     } catch (error) {
       console.error('Failed to load dashboard:', error);
     } finally {
@@ -51,38 +69,80 @@ export default function InfluencerDashboard() {
   };
 
   const todayClicks = referralLinks.reduce((sum, l) => sum + l.clicks, 0);
-  const todayConversions = referralLinks.reduce((sum, l) => sum + l.conversions, 0);
+  const todayConversions = stats.conversions;
   
-  const totalItems = commissions.length;
-  const confirmedItems = commissions.filter(c => {
-    const status = c.order?.status || '';
-    // Count as confirmed if it reached any delivery stage or was officially confirmed
-    return [
-      'CONFIRMED', 'ORDERED', 'NEW_PARCEL', 'WAITING_PICKUP', 'PICKED_UP', 
-      'SENT', 'RECEIVED', 'DISTRIBUTION', 'DELIVERED', 'SHIPPED'
-    ].includes(status);
-  }).length;
-  
-  const deliveredItems = commissions.filter(c => c.order?.status === 'DELIVERED').length;
+  const totalItems = stats.conversions;
+  const confirmedItems = stats.confirmed;
+  const deliveredItems = stats.delivered;
 
   const confirmationRate = totalItems > 0 ? (confirmedItems / totalItems) * 100 : 0;
   const deliveryRate = confirmedItems > 0 ? (deliveredItems / confirmedItems) * 100 : 0;
 
-  const revenueData = commissions.reduce((acc: any[], comm) => {
-    if (comm.amount <= 0) return acc;
-    const date = new Date(comm.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
-    const existing = acc.find(item => item.date === date);
+  // Generate chart day keys based on range
+  const getNumDays = () => {
+    if (dateRange === 'all') {
+      if (commissions.length === 0) return 7;
+      const firstDate = new Date(Math.min(...commissions.map(c => new Date(c.createdAt).getTime())));
+      const diffTime = Math.abs(new Date().getTime() - firstDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return Math.min(diffDays + 1, 30); // Cap at 30 for chart readability even in "All" mode, or show all if you prefer
+    }
+    return dateRange === 'custom' ? 7 : Number(dateRange);
+  };
+
+  const numDays = getNumDays();
+  const chartDays = [...Array(numDays)].map((_, i) => {
+    const d = new Date(dateRange === 'custom' && endDate ? endDate : new Date());
+    d.setDate(d.getDate() - (numDays - 1 - i));
+    return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+  });
+
+  const revenueData = chartDays.map(date => {
+    const amount = walletTransactions.reduce((sum, tx) => {
+      const txDate = new Date(tx.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+      // Only count positive transactions (income) in the revenue chart
+      return (txDate === date && tx.amountMad > 0) ? sum + tx.amountMad : sum;
+    }, 0);
+    return { date, amount: Number(amount.toFixed(2)) };
+  });
+
+  // Process Wallet Balance Data
+  const balanceData = chartDays.map((date, idx) => {
+    // Better logic: find the latest transaction that happened BEFORE or ON this date's end
+    const targetDate = new Date(dateRange === 'custom' && endDate ? endDate : new Date());
+    targetDate.setDate(targetDate.getDate() - (numDays - 1 - idx));
+    targetDate.setHours(23, 59, 59, 999);
+    
+    const latestTxBefore = walletTransactions
+      .filter(tx => new Date(tx.createdAt) <= targetDate)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+
+    const val = latestTxBefore ? latestTxBefore.balanceAfterMad : (wallet?.balanceMad || 0);
+    return { date, balance: Number(val.toFixed(2)) };
+  });
+
+  // Calculate Top Products based on current commissions (respects date range)
+  const topProducts = commissions.reduce((acc: any[], comm) => {
+    const productId = comm.referralLink?.productId;
+    if (!productId) return acc;
+    
+    const existing = acc.find(p => p.productId === productId);
     if (existing) {
-      existing.amount += comm.amount;
+      existing.earnings += comm.amount;
+      existing.sales += 1;
     } else {
-      acc.push({ date, amount: comm.amount });
+      acc.push({
+        productId,
+        name: comm.referralLink?.product?.nameFr || 'Produit sans nom',
+        image: comm.referralLink?.product?.images?.[0]?.url || '',
+        earnings: comm.amount,
+        sales: 1
+      });
     }
     return acc;
-  }, []).slice(-7);
-
-  const topLinks = [...referralLinks]
-    .sort((a, b) => b.earnings - a.earnings)
-    .slice(0, 3);
+  }, [])
+  .sort((a, b) => b.earnings - a.earnings)
+  .slice(0, 3);
 
   if (loading) {
     return (
@@ -136,7 +196,7 @@ export default function InfluencerDashboard() {
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Solde Portefeuille</p>
               <div className="flex items-baseline gap-2">
                 <h3 className="text-5xl font-black text-white">{wallet?.balanceMad?.toLocaleString() || 0}</h3>
-                <span className="text-sm font-bold text-slate-400 uppercase">MAD</span>
+                <span className="text-sm font-bold text-slate-400 uppercase">DH</span>
               </div>
               <Link to="/influencer/wallet" className="flex items-center gap-2 text-xs font-black text-influencer-400 hover:text-white transition-colors group/link">
                 GÉRER MES RETRAITS <ArrowUpRight className="w-3 h-3 group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 transition-transform" />
@@ -153,7 +213,7 @@ export default function InfluencerDashboard() {
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Gagné</p>
               <div className="flex items-baseline gap-2">
                 <h3 className="text-3xl font-black text-green-600">+{wallet?.totalEarnedMad?.toLocaleString() || 0}</h3>
-                <span className="text-sm font-bold text-slate-400 uppercase">MAD</span>
+                <span className="text-sm font-bold text-slate-400 uppercase">DH</span>
               </div>
               <p className="text-[9px] font-bold text-slate-300 italic">Depuis la création du compte</p>
             </div>
@@ -168,7 +228,7 @@ export default function InfluencerDashboard() {
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Retiré</p>
               <div className="flex items-baseline gap-2">
                 <h3 className="text-3xl font-black text-blue-600">-{wallet?.totalWithdrawnMad?.toLocaleString() || 0}</h3>
-                <span className="text-sm font-bold text-slate-400 uppercase">MAD</span>
+                <span className="text-sm font-bold text-slate-400 uppercase">DH</span>
               </div>
               <p className="text-[9px] font-bold text-slate-300 italic">Virements effectués</p>
             </div>
@@ -178,31 +238,111 @@ export default function InfluencerDashboard() {
         {/* Right Column: Analytics Chart */}
         <div className="lg:col-span-8">
           <ProCard variant="glass" className="h-full p-8 bg-white border border-slate-100 shadow-sm">
-            <div className="flex items-center justify-between mb-10">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
               <div className="space-y-1">
                 <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
-                  <Activity className="w-6 h-6 text-influencer-500" /> Performance
+                  {chartType === 'revenue' ? (
+                    <><Activity className="w-6 h-6 text-influencer-500" /> Performance</>
+                  ) : (
+                    <><Wallet className="w-6 h-6 text-blue-500" /> Évolution du Solde</>
+                  )}
                 </h2>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Revenus des 7 derniers jours</p>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                  {chartType === 'revenue' ? `Revenus des ${dateRange === 'custom' ? 'derniers' : dateRange} jours` : `Suivi du portefeuille sur ${dateRange === 'custom' ? 'la période' : dateRange + ' jours'}`}
+                </p>
+              </div>
+
+              <div className="flex flex-col items-end gap-3">
+                <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-100">
+                  <button
+                    onClick={() => loadDashboard()}
+                    className="p-2 text-slate-400 hover:text-slate-600 transition-all"
+                    title="Actualiser"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                  </button>
+                  <div className="w-px h-3 bg-slate-200 mx-1" />
+                  <div className="flex items-center">
+                    {[7, 30, 'all', 'custom'].map((range) => (
+                      <button
+                        key={range}
+                        onClick={() => setDateRange(range as any)}
+                        className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all ${
+                          dateRange === range 
+                            ? 'bg-white text-slate-900 shadow-sm border border-slate-100' 
+                            : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                      >
+                        {range === 'custom' ? 'Custom' : range === 'all' ? 'Tout' : `${range}J`}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="w-px h-3 bg-slate-200 mx-2" />
+                  <div className="flex bg-slate-200/50 p-0.5 rounded-lg">
+                    <button
+                      onClick={() => setChartType('revenue')}
+                      className={`px-3 py-1.5 text-[9px] font-black uppercase rounded-md transition-all ${
+                        chartType === 'revenue' ? 'bg-white text-influencer-600 shadow-sm' : 'text-slate-500'
+                      }`}
+                    >
+                      Ventes
+                    </button>
+                    <button
+                      onClick={() => setChartType('balance')}
+                      className={`px-3 py-1.5 text-[9px] font-black uppercase rounded-md transition-all ${
+                        chartType === 'balance' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'
+                      }`}
+                    >
+                      Solde
+                    </button>
+                  </div>
+                </div>
+
+                {dateRange === 'custom' && (
+                  <div className="flex items-center gap-2 animate-in slide-in-from-top-1 duration-300">
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold text-slate-600 outline-none focus:border-slate-300 transition-all"
+                    />
+                    <span className="text-slate-300 font-bold text-[10px]">→</span>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold text-slate-600 outline-none focus:border-slate-300 transition-all"
+                    />
+                  </div>
+                )}
               </div>
             </div>
             <div className="h-[360px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={revenueData}>
+                <AreaChart data={chartType === 'revenue' ? revenueData : balanceData}>
                   <defs>
-                    <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.1}/>
-                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                    <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={chartType === 'revenue' ? '#8b5cf6' : '#3b82f6'} stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor={chartType === 'revenue' ? '#8b5cf6' : '#3b82f6'} stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700, fill: '#64748b'}} />
-                  <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700, fill: '#64748b'}} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700, fill: '#64748b'}} tickFormatter={(val) => `${val} DH`} />
                   <RechartsTooltip 
                     contentStyle={{borderRadius: '20px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px'}}
-                    itemStyle={{fontWeight: 900, color: '#8b5cf6'}}
+                    itemStyle={{fontWeight: 900, color: chartType === 'revenue' ? '#8b5cf6' : '#3b82f6'}}
+                    formatter={(val: number) => [`${val.toLocaleString()} DH`, chartType === 'revenue' ? 'Revenu' : 'Solde']}
                   />
-                  <Area type="monotone" dataKey="amount" stroke="#8b5cf6" strokeWidth={4} fillOpacity={1} fill="url(#colorAmount)" />
+                  <Area 
+                    type="monotone" 
+                    dataKey={chartType === 'revenue' ? 'amount' : 'balance'} 
+                    stroke={chartType === 'revenue' ? '#8b5cf6' : '#3b82f6'} 
+                    strokeWidth={4} 
+                    fillOpacity={1} 
+                    fill="url(#colorValue)" 
+                    animationDuration={1000}
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -237,17 +377,26 @@ export default function InfluencerDashboard() {
           <BarChart3 className="w-6 h-6 text-influencer-500" /> Meilleurs Produits Performance
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {topLinks.length > 0 ? topLinks.map((link, idx) => (
-            <div key={link.id} className="flex items-center gap-4 p-6 rounded-[2.5rem] bg-slate-50/50 hover:bg-white border border-transparent hover:border-slate-100 transition-all group">
-              <div className="w-14 h-14 rounded-2xl bg-white flex items-center justify-center text-2xl shadow-sm border border-slate-100 group-hover:rotate-6 transition-transform">
-                {idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}
+          {topProducts.length > 0 ? topProducts.map((product, idx) => (
+            <div key={product.productId} className="flex items-center gap-4 p-6 rounded-[2.5rem] bg-slate-50/50 hover:bg-white border border-transparent hover:border-slate-100 transition-all group">
+              <div className="relative">
+                <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-sm border border-slate-100 group-hover:scale-110 transition-transform duration-500">
+                  {product.image ? (
+                    <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-slate-100 flex items-center justify-center text-2xl">📦</div>
+                  )}
+                </div>
+                <div className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-white shadow-md border border-slate-100 flex items-center justify-center text-xs">
+                  {idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}
+                </div>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-black text-slate-900 truncate">{link.product?.nameFr || 'Produit sans nom'}</p>
+                <p className="text-sm font-black text-slate-900 truncate">{product.name}</p>
                 <div className="flex items-center gap-2 mt-1">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{link.conversions} Ventes</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{product.sales} Ventes</p>
                   <div className="w-1 h-1 bg-slate-300 rounded-full" />
-                  <p className="text-sm font-black text-green-600">+{link.earnings.toFixed(2)} MAD</p>
+                  <p className="text-sm font-black text-green-600">+{product.earnings.toFixed(2)} DH</p>
                 </div>
               </div>
             </div>

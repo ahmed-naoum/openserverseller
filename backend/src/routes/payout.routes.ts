@@ -62,7 +62,7 @@ router.post(
   authenticate,
   authorize('SELLER', 'GROSSELLER', 'INFLUENCER'),
   [
-    body('amountMad').isFloat({ min: 10 }),
+    body('amountMad').isFloat({ min: 200 }),
     body('bankName').notEmpty(),
     body('ribAccount').notEmpty(), // Allow spaces since frontend sends with spaces sometimes
     body('iceNumber').optional({ checkFalsy: true }),
@@ -75,7 +75,7 @@ router.post(
 
     const { amountMad, bankName, ribAccount, iceNumber } = req.body;
 
-    const minPayout = parseFloat(process.env.MIN_PAYOUT_AMOUNT_MAD || '10');
+    const minPayout = parseFloat(process.env.MIN_PAYOUT_AMOUNT_MAD || '200');
     if (amountMad < minPayout) {
       throw new AppException(400, `Minimum payout amount is ${minPayout} MAD`);
     }

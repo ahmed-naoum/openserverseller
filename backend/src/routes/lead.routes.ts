@@ -1550,7 +1550,10 @@ router.post(
           { orderNumber: code }
         ]
       },
-      include: { lead: { include: { referralLink: true } } }
+      include: { 
+        lead: { include: { referralLink: true } },
+        items: true
+      }
     });
 
     if (!order || !order.lead) {
@@ -1575,9 +1578,20 @@ router.post(
         data: { status: 'RETURNED', paymentSituation: 'FACTURED' }
       });
 
+      // 3. Increment Stock Back (Only if it wasn't already in a cancelled/returned status)
+      const stockAlreadyRestoredStatuses = ['CANCELED', 'CANCELED_BY_SELLER', 'CANCELED_BY_SYSTEM', 'REFUSE', 'RETURNED', 'CANCELLED'];
+      if (!stockAlreadyRestoredStatuses.includes(order.status)) {
+        for (const item of order.items) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stockQuantity: { increment: item.quantity } }
+          });
+        }
+      }
+
       const userId = order.lead!.referralLink?.influencerId || order.vendorId;
 
-      // 3. Generate Frais de retour Invoice (-3 MAD)
+      // 4. Generate Frais de retour Invoice (-3 MAD)
       const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
       const invoiceNumber = `RET-${dateStr}-${randomStr}`;
@@ -1597,7 +1611,7 @@ router.post(
         data: { invoiceId: invoice.id }
       });
 
-      // 4. Wallet Deduction
+      // 5. Wallet Deduction
       let wallet = await tx.wallet.findUnique({ where: { userId } });
       if (!wallet) {
         wallet = await tx.wallet.create({ data: { userId } });
@@ -1622,7 +1636,7 @@ router.post(
 
     res.json({
       status: 'success',
-      message: 'Retour traité avec succès (-3 MAD déduits).'
+      message: 'Retour traité avec succès: stock récupéré et -3 MAD déduits.'
     });
   })
 );

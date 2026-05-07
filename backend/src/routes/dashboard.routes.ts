@@ -260,6 +260,33 @@ router.get(
   authorize('INFLUENCER'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
+    const { start, end, days } = req.query;
+
+    let dateLimitStart: Date | undefined;
+    let dateLimitEnd = new Date();
+
+    if (start && end) {
+      dateLimitStart = new Date(start as string);
+      dateLimitEnd = new Date(end as string);
+      dateLimitEnd.setHours(23, 59, 59, 999);
+    } else if (days === 'all') {
+      dateLimitStart = undefined; // No lower bound for all time
+    } else {
+      const numDays = parseInt(days as string) || 7;
+      dateLimitStart = new Date();
+      dateLimitStart.setDate(dateLimitStart.getDate() - (numDays - 1));
+      dateLimitStart.setHours(0, 0, 0, 0);
+    }
+
+    const whereBase: any = { 
+      influencerId: userId,
+    };
+
+    if (dateLimitStart || dateLimitEnd) {
+      whereBase.createdAt = {};
+      if (dateLimitStart) whereBase.createdAt.gte = dateLimitStart;
+      if (dateLimitEnd) whereBase.createdAt.lte = dateLimitEnd;
+    }
 
     const [
       profile,
@@ -267,7 +294,8 @@ router.get(
       commissions,
       campaigns,
       notifications,
-      wallet
+      wallet,
+      periodStats
     ] = await Promise.all([
       prisma.userProfile.findUnique({ where: { userId } }),
       prisma.referralLink.findMany({
@@ -276,10 +304,14 @@ router.get(
         orderBy: { createdAt: 'desc' }
       }),
       prisma.influencerCommission.findMany({
-        where: { influencerId: userId },
-        include: { referralLink: true },
-        orderBy: { createdAt: 'desc' },
-        take: 20
+        where: whereBase,
+        include: { 
+          referralLink: {
+            include: { product: true }
+          },
+          order: true
+        },
+        orderBy: { createdAt: 'desc' }
       }),
       prisma.influencerCampaign.findMany({
         orderBy: { createdAt: 'desc' }
@@ -289,8 +321,38 @@ router.get(
         orderBy: { createdAt: 'desc' },
         take: 10
       }),
-      prisma.wallet.findUnique({ where: { userId } })
+      prisma.wallet.findUnique({ 
+        where: { userId },
+        include: { 
+          transactions: {
+            where: { createdAt: { gte: dateLimitStart, lte: dateLimitEnd } },
+            orderBy: { createdAt: 'desc' }
+          }
+        }
+      }),
+      // Aggregate stats for the period
+      prisma.lead.groupBy({
+        by: ['status'],
+        where: {
+          referralLink: {
+            influencerId: userId
+          },
+          createdAt: { gte: dateLimitStart, lte: dateLimitEnd }
+        },
+        _count: true
+      })
     ]);
+
+    // Calculate funnel counts from grouped leads (sync with influencer/Leads.tsx logic)
+    const deliveryStatuses = ['PENDING', 'PUSHED_TO_DELIVERY', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED', 'CONFIRMED_DELIVERY'];
+    
+    const stats = {
+      conversions: periodStats.reduce((sum, s) => sum + s._count, 0),
+      confirmed: periodStats.filter(s => 
+        s.status === 'CONFIRMED' || deliveryStatuses.includes(s.status)
+      ).reduce((sum, s) => sum + s._count, 0),
+      delivered: periodStats.filter(s => s.status === 'DELIVERED').reduce((sum, s) => sum + s._count, 0),
+    };
 
     const totalEarnings = await prisma.influencerCommission.aggregate({
       where: { influencerId: userId, status: 'APPROVED' },
@@ -302,9 +364,11 @@ router.get(
       referralLinks,
       commissions,
       campaigns,
+      stats,
       totalEarnings: totalEarnings._sum.amount || 0,
       notifications,
-      wallet
+      wallet,
+      walletTransactions: wallet?.transactions || []
     });
   })
 );
