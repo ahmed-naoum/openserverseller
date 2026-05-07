@@ -652,9 +652,13 @@ export default function InfluencerLeads() {
                   <p className="text-sm font-medium">Aucune livraison en cours</p>
                 </div>
               )}
-            </div>
-      {/* Search + Filters Bar */}
-      <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm">
+        </div>
+      </div>
+    </div>
+  )}
+
+  {/* Search + Filters Bar */}
+    <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm">
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-4">
           {/* Status Filter */}
           <div className="relative min-w-[220px]">
