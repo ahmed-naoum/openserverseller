@@ -26,7 +26,7 @@ export default function InfluencerDashboard() {
   const [wallet, setWallet] = useState<any>(null);
   const [walletTransactions, setWalletTransactions] = useState<any[]>([]);
   const [stats, setStats] = useState<any>({ conversions: 0, confirmed: 0, delivered: 0 });
-  const [dateRange, setDateRange] = useState<number | 'custom' | 'all'>(7);
+  const [dateRange, setDateRange] = useState<number | 'custom' | 'all'>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [chartType, setChartType] = useState<'revenue' | 'balance'>('revenue');
@@ -248,7 +248,9 @@ export default function InfluencerDashboard() {
                   )}
                 </h2>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                  {chartType === 'revenue' ? `Revenus des ${dateRange === 'custom' ? 'derniers' : dateRange} jours` : `Suivi du portefeuille sur ${dateRange === 'custom' ? 'la période' : dateRange + ' jours'}`}
+                  {chartType === 'revenue' 
+                    ? `Revenus ${dateRange === 'custom' ? 'de la période' : dateRange === 'all' ? 'depuis le début' : dateRange === 1 ? 'd\'aujourd\'hui' : `des ${dateRange} jours`}` 
+                    : `Suivi du portefeuille ${dateRange === 'custom' ? 'sur la période' : dateRange === 'all' ? 'depuis le début' : dateRange === 1 ? 'd\'aujourd\'hui' : `sur ${dateRange} jours`}`}
                 </p>
               </div>
 
@@ -263,7 +265,7 @@ export default function InfluencerDashboard() {
                   </button>
                   <div className="w-px h-3 bg-slate-200 mx-1" />
                   <div className="flex items-center">
-                    {[7, 30, 'all', 'custom'].map((range) => (
+                    {[1, 7, 30, 'all', 'custom'].map((range) => (
                       <button
                         key={range}
                         onClick={() => setDateRange(range as any)}
@@ -273,7 +275,7 @@ export default function InfluencerDashboard() {
                             : 'text-slate-400 hover:text-slate-600'
                         }`}
                       >
-                        {range === 'custom' ? 'Custom' : range === 'all' ? 'Tout' : `${range}J`}
+                        {range === 'custom' ? 'Custom' : range === 'all' ? 'Tout' : range === 1 ? 'Aujourd\'hui' : `${range}J`}
                       </button>
                     ))}
                   </div>
