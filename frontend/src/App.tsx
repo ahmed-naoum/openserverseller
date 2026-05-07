@@ -67,9 +67,7 @@ import InfluencerDashboard from './pages/influencer/Dashboard';
 import InfluencerProfile from './pages/influencer/Profile';
 import InfluencerLinks from './pages/influencer/Links';
 import InfluencerCampaigns from './pages/influencer/Campaigns';
-import InfluencerAnalytics from './pages/influencer/Analytics';
 import InfluencerLeads from './pages/influencer/Leads';
-import InfluencerNotifications from './pages/influencer/Notifications';
 import InfluencerMarketplace from './pages/influencer/Marketplace';
 import InfluencerInventory from './pages/influencer/Inventory';
 import ConfirmationDashboard from './pages/confirmation/Dashboard';
@@ -170,9 +168,7 @@ function App() {
           <Route path="wallet" element={<UserWallet />} />
           <Route path="links" element={<InfluencerLinks />} />
           <Route path="campaigns" element={<InfluencerCampaigns />} />
-          <Route path="analytics" element={<InfluencerAnalytics />} />
           <Route path="leads" element={<InfluencerLeads />} />
-          <Route path="notifications" element={<InfluencerNotifications />} />
           <Route path="inventory" element={<InfluencerInventory />} />
           <Route path="marketplace" element={<InfluencerMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
