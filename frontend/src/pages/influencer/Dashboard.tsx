@@ -26,6 +26,7 @@ export default function InfluencerDashboard() {
   const [wallet, setWallet] = useState<any>(null);
   const [walletTransactions, setWalletTransactions] = useState<any[]>([]);
   const [stats, setStats] = useState<any>({ conversions: 0, confirmed: 0, delivered: 0 });
+  const [leadCountsByLink, setLeadCountsByLink] = useState<any[]>([]);
   const [dateRange, setDateRange] = useState<number | 'custom' | 'all'>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -61,6 +62,7 @@ export default function InfluencerDashboard() {
       setWallet(dashboardRes.data.wallet);
       setWalletTransactions(dashboardRes.data.walletTransactions || []);
       setStats(dashboardRes.data.stats || { conversions: 0, confirmed: 0, delivered: 0 });
+      setLeadCountsByLink(dashboardRes.data.leadCountsByLink || []);
     } catch (error) {
       console.error('Failed to load dashboard:', error);
     } finally {
@@ -121,27 +123,26 @@ export default function InfluencerDashboard() {
     return { date, balance: Number(val.toFixed(2)) };
   });
 
-  // Calculate Top Products based on current commissions (respects date range)
-  const topProducts = commissions.reduce((acc: any[], comm) => {
-    const productId = comm.referralLink?.productId;
-    if (!productId) return acc;
-    
-    const existing = acc.find(p => p.productId === productId);
-    if (existing) {
-      existing.earnings += comm.amount;
-      existing.sales += 1;
-    } else {
-      acc.push({
-        productId,
-        name: comm.referralLink?.product?.nameFr || 'Produit sans nom',
-        image: comm.referralLink?.product?.images?.[0]?.url || '',
-        earnings: comm.amount,
-        sales: 1
-      });
-    }
-    return acc;
-  }, [])
-  .sort((a, b) => b.earnings - a.earnings)
+  // Calculate Top Products based on Lead Counts (Performance)
+  const topProducts = leadCountsByLink.map(lc => {
+    const link = referralLinks.find(l => l.id === lc.referralLinkId);
+    if (!link) return null;
+
+    // Calculate earnings for this link in the period
+    const earnings = commissions
+      .filter(c => c.referralLinkId === lc.referralLinkId)
+      .reduce((sum, c) => sum + c.amount, 0);
+
+    return {
+      productId: link.productId,
+      name: link.product?.nameFr || 'Produit sans nom',
+      image: link.product?.images?.[0]?.url || '',
+      earnings,
+      sales: lc._count // Number of leads in the period
+    };
+  })
+  .filter(Boolean)
+  .sort((a: any, b: any) => b.sales - a.sales) // Sort by sales volume (Performance)
   .slice(0, 3);
 
   if (loading) {

@@ -295,7 +295,8 @@ router.get(
       campaigns,
       notifications,
       wallet,
-      periodStats
+      periodStats,
+      periodLeadCounts
     ] = await Promise.all([
       prisma.userProfile.findUnique({ where: { userId } }),
       prisma.referralLink.findMany({
@@ -340,8 +341,21 @@ router.get(
           createdAt: { gte: dateLimitStart, lte: dateLimitEnd }
         },
         _count: true
+      }),
+      // New: Aggregate lead counts by referral link for the period
+      prisma.lead.groupBy({
+        by: ['referralLinkId'],
+        where: {
+          referralLink: {
+            influencerId: userId
+          },
+          createdAt: { gte: dateLimitStart, lte: dateLimitEnd }
+        },
+        _count: true
       })
     ]);
+
+    const leadCountsByLink = periodLeadCounts || [];
 
     // Calculate funnel counts from grouped leads (sync with influencer/Leads.tsx logic)
     const deliveryStatuses = ['PENDING', 'PUSHED_TO_DELIVERY', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED', 'CONFIRMED_DELIVERY'];
@@ -368,7 +382,8 @@ router.get(
       totalEarnings: totalEarnings._sum.amount || 0,
       notifications,
       wallet,
-      walletTransactions: wallet?.transactions || []
+      walletTransactions: wallet?.transactions || [],
+      leadCountsByLink
     });
   })
 );
