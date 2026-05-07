@@ -124,24 +124,28 @@ export const generateInvoicePDF = (invoiceDetails: any) => {
   doc.setFontSize(10);
   
   finalY += 18;
-  doc.setTextColor(...lightGray);
-  doc.text('Sous-total brut:', pageWidth - 90, finalY);
-  doc.setTextColor(...textColor);
-  doc.text(`${grossAmount.toFixed(2)} MAD`, pageWidth - 14, finalY, { align: 'right' });
 
-  finalY += 8;
-  doc.setTextColor(...lightGray);
-  doc.text(`Frais de livraison (${numLeads}):`, pageWidth - 90, finalY);
-  doc.setTextColor(239, 68, 68); // Red
-  doc.text(`-${deliveryCost.toFixed(2)} MAD`, pageWidth - 14, finalY, { align: 'right' });
+  if (!invoiceDetails.invoiceNumber?.startsWith('RET-')) {
+    doc.setTextColor(...lightGray);
+    doc.text('Sous-total brut:', pageWidth - 90, finalY);
+    doc.setTextColor(...textColor);
+    doc.text(`${grossAmount.toFixed(2)} MAD`, pageWidth - 14, finalY, { align: 'right' });
 
-  finalY += 8;
-  doc.setTextColor(...lightGray);
-  doc.text(`Frais de plateforme (13%):`, pageWidth - 90, finalY);
-  doc.setTextColor(239, 68, 68); // Red
-  doc.text(`-${platformFee.toFixed(2)} MAD`, pageWidth - 14, finalY, { align: 'right' });
+    finalY += 8;
+    doc.setTextColor(...lightGray);
+    doc.text(`Frais de livraison (${numLeads}):`, pageWidth - 90, finalY);
+    doc.setTextColor(239, 68, 68); // Red
+    doc.text(`-${deliveryCost.toFixed(2)} MAD`, pageWidth - 14, finalY, { align: 'right' });
 
-  finalY += 8;
+    finalY += 8;
+    doc.setTextColor(...lightGray);
+    doc.text(`Frais de plateforme (13%):`, pageWidth - 90, finalY);
+    doc.setTextColor(239, 68, 68); // Red
+    doc.text(`-${platformFee.toFixed(2)} MAD`, pageWidth - 14, finalY, { align: 'right' });
+
+    finalY += 8;
+  }
+  
   doc.setDrawColor(229, 231, 235);
   doc.line(pageWidth - 90, finalY, pageWidth - 14, finalY);
   

@@ -156,28 +156,32 @@ export default function UserInvoices() {
                 <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Détails du paiement</h2>
                 
                 <div className="space-y-3 mb-6">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-500 font-medium">Sous-total brut</span>
-                    <span className="font-bold text-gray-900">
-                      {details.leads?.reduce((sum: number, lead: any) => sum + (lead.order?.totalAmountMad || 0), 0).toLocaleString()} MAD
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-500 font-medium">Frais de livraison ({details.leads?.length || 0})</span>
-                    <span className="font-bold text-red-500">
-                      -{ (57 * (details.leads?.length || 0)).toLocaleString() } MAD
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-500 font-medium">Frais de plateforme (13%)</span>
-                    <span className="font-bold text-red-500">
-                      -{ (() => {
-                        const gross = details.leads?.reduce((sum: number, lead: any) => sum + (lead.order?.totalAmountMad || 0), 0) || 0;
-                        const profit = gross - (57 * (details.leads?.length || 0));
-                        return profit > 0 ? (profit * 0.13).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0";
-                      })() } MAD
-                    </span>
-                  </div>
+                  {!details.invoiceNumber?.startsWith('RET-') && (
+                    <>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-500 font-medium">Sous-total brut</span>
+                        <span className="font-bold text-gray-900">
+                          {details.leads?.reduce((sum: number, lead: any) => sum + (lead.order?.totalAmountMad || 0), 0).toLocaleString()} MAD
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-500 font-medium">Frais de livraison ({details.leads?.length || 0})</span>
+                        <span className="font-bold text-red-500">
+                          -{ (57 * (details.leads?.length || 0)).toLocaleString() } MAD
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-500 font-medium">Frais de plateforme (13%)</span>
+                        <span className="font-bold text-red-500">
+                          -{ (() => {
+                            const gross = details.leads?.reduce((sum: number, lead: any) => sum + (lead.order?.totalAmountMad || 0), 0) || 0;
+                            const profit = gross - (57 * (details.leads?.length || 0));
+                            return profit > 0 ? (profit * 0.13).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0";
+                          })() } MAD
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="pt-4 border-t border-gray-100">

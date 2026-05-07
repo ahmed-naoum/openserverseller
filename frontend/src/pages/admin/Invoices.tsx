@@ -175,26 +175,30 @@ export default function AdminInvoices() {
               <div className="pt-6 border-t border-gray-100 space-y-4">
                 <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Détails du paiement</h2>
                 
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500 font-medium">Sous-total brut</span>
-                  <span className="text-sm font-bold text-gray-900">
-                    {(details.leads?.reduce((acc: number, l: any) => acc + (l.order?.totalAmountMad || 0), 0)).toLocaleString()} MAD
-                  </span>
-                </div>
+                {!details.invoiceNumber?.startsWith('RET-') && (
+                  <>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500 font-medium">Sous-total brut</span>
+                      <span className="text-sm font-bold text-gray-900">
+                        {(details.leads?.reduce((acc: number, l: any) => acc + (l.order?.totalAmountMad || 0), 0)).toLocaleString()} MAD
+                      </span>
+                    </div>
 
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500 font-medium">Frais de livraison ({details.leads?.length || 0})</span>
-                  <span className="text-sm font-bold text-red-500">
-                    -{((details.leads?.length || 0) * 57).toLocaleString()} MAD
-                  </span>
-                </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500 font-medium">Frais de livraison ({details.leads?.length || 0})</span>
+                      <span className="text-sm font-bold text-red-500">
+                        -{((details.leads?.length || 0) * 57).toLocaleString()} MAD
+                      </span>
+                    </div>
 
-                <div className="flex justify-between items-center pb-4 border-b border-gray-50">
-                  <span className="text-sm text-gray-500 font-medium">Frais de plateforme (13%)</span>
-                  <span className="text-sm font-bold text-red-500">
-                    -{((details.totalAmountMad / 0.87) * 0.13).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MAD
-                  </span>
-                </div>
+                    <div className="flex justify-between items-center pb-4 border-b border-gray-50">
+                      <span className="text-sm text-gray-500 font-medium">Frais de plateforme (13%)</span>
+                      <span className="text-sm font-bold text-red-500">
+                        -{((details.totalAmountMad / 0.87) * 0.13).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MAD
+                      </span>
+                    </div>
+                  </>
+                )}
 
                 <div className="pt-2">
                   <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Net Facturé</h2>
