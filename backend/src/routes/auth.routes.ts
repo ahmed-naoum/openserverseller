@@ -1607,7 +1607,7 @@ router.patch(
 
     // Set this one
     const updated = await prisma.userBankAccount.update({
-      where: { id: parseInt(id), userId },
+      where: { id: parseInt(String(id)), userId },
       data: { isDefault: true },
     });
 
@@ -1627,7 +1627,7 @@ router.delete(
     const userId = req.user!.id;
 
     const bankAccount = await prisma.userBankAccount.findFirst({
-      where: { id: parseInt(id), userId },
+      where: { id: parseInt(String(id)), userId },
     });
 
     if (!bankAccount) {
@@ -1637,7 +1637,7 @@ router.delete(
     // Only allow deleting if not APPROVED or if admin
     // For now let's allow it but maybe warn
     await prisma.userBankAccount.delete({
-      where: { id: parseInt(id) },
+      where: { id: parseInt(String(id)) },
     });
 
     res.json({

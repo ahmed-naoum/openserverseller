@@ -84,7 +84,7 @@ export default function InfluencerMarketplace() {
 
     try {
       setClaimingFor(productId);
-      await influencerApi.claimProduct(productId);
+      await influencerApi.claimProduct({ productId });
       toast.success('Produit réclamé ! En attente d\'approbation.');
       await fetchData(); // Refresh to show pending status
     } catch (error: any) {

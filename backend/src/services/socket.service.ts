@@ -86,7 +86,6 @@ export const setupSocketHandlers = (io: SocketServer) => {
           data: { status: data.status as any },
           include: {
             vendor: true,
-            brand: true,
           },
         });
 

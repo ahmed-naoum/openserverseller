@@ -39,3 +39,4 @@ coverage/
 # Misc
 .cache/
 tmp/
+backend/backups/

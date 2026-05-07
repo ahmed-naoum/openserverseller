@@ -830,7 +830,7 @@ export default function VendorOrders() {
             
             <div className="flex items-center gap-3">
               <button
-                onClick={handleBulkSendToCallCenter}
+                onClick={() => handleBulkSendToCallCenter()}
                 disabled={isBulkSubmitting}
                 className="px-6 py-3 bg-white text-[#2c2f74] rounded-2xl text-[11px] font-black uppercase tracking-widest hover:scale-105 transition-transform flex items-center gap-2 shadow-lg disabled:opacity-50"
               >

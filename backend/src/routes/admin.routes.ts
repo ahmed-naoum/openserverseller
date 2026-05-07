@@ -185,7 +185,7 @@ router.patch(
   authorize('SUPER_ADMIN', 'SYSTEM_SUPPORT'),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { status, actionType, cloneName, cloneDescription, clonePrice, cloneImageUrls, cloneQuantity } = req.body;
+    const { status, actionType, cloneName, cloneDescription, clonePrice, cloneImageUrls, cloneQuantity, cloneSku: inputCloneSku } = req.body;
 
     if (!['APPROVED', 'REJECTED', 'REVOKED', 'CLONED'].includes(status)) {
       res.status(400).json({ status: 'error', message: 'Invalid status' });
@@ -216,11 +216,11 @@ router.patch(
             });
             if (!targetUser) throw new AppException(404, 'User not found');
 
-            const cloneSku = `${original.sku}-U${currentClaim.userId}`;
+            const baseSku = inputCloneSku || `${original.sku}-U${currentClaim.userId}`;
             
             // Check if clone SKU already exists, add timestamp if needed
-            const existingSku = await tx.product.findUnique({ where: { sku: cloneSku } });
-            const finalSku = existingSku ? `${cloneSku}-${Date.now()}` : cloneSku;
+            const existingSku = await tx.product.findUnique({ where: { sku: baseSku } });
+            const finalSku = existingSku ? `${baseSku}-${Date.now()}` : baseSku;
 
             const finalCloneName = cloneName || `${original.nameFr} (${targetUser.profile?.fullName || targetUser.email})`;
 
@@ -780,7 +780,7 @@ router.patch(
     const { uuid } = req.params;
     
     const user = await prisma.user.update({
-      where: { uuid },
+      where: { uuid: String(uuid) },
       data: { emailVerifiedAt: new Date() },
     });
 
@@ -808,7 +808,7 @@ router.patch(
     }
 
     const user = await prisma.user.update({
-      where: { uuid },
+      where: { uuid: String(uuid) },
       data: { 
         kycStatus: status,
         kycDocuments: {

@@ -44,7 +44,6 @@ import ActivityLogs from './pages/admin/ActivityLogs';
 import BackupManager from './pages/admin/BackupManager';
 import CallCenterInspector from './pages/admin/CallCenterInspector';
 
-import ProductCustomizePage from './pages/vendor/ProductCustomizePage';
 import YouCanCallback from './pages/vendor/YouCanCallback';
 import YouCanLeads from './pages/vendor/YouCanLeads';
 import IntegrationsPage from './pages/vendor/IntegrationsPage';

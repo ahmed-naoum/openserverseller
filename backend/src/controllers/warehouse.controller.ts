@@ -47,12 +47,11 @@ export const getProductionJobs = async (req: Request, res: Response) => {
     prisma.productionJob.findMany({
       where,
       include: {
-        order: {
-          include: {
-            brand: true,
-            items: { include: { product: true } },
+          order: {
+            include: {
+              items: { include: { product: true } },
+            },
           },
-        },
         batch: { include: { warehouse: true } },
         assignedUser: { include: { profile: true } },
       },

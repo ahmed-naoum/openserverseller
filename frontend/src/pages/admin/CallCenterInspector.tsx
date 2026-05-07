@@ -314,7 +314,7 @@ export default function CallCenterInspector() {
         {/* Total */}
         <div className="bg-gradient-to-br from-slate-700 to-slate-900 rounded-2xl p-4 text-white shadow-lg shadow-slate-200/50">
           <Users className="w-5 h-5 mb-1.5 opacity-80" />
-          <h3 className="text-xl font-black">{Object.values(statusBreakdown).reduce((s: any, c: any) => s + c, 0)}</h3>
+          <h3 className="text-xl font-black">{Number(Object.values(statusBreakdown).reduce((s: any, c: any) => s + c, 0))}</h3>
           <p className="text-[9px] font-bold opacity-60 uppercase tracking-wider mt-0.5">Total Leads</p>
         </div>
         {Object.entries(statusBreakdown)

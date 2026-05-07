@@ -17,7 +17,7 @@ router.get(
         const inventoryWhere: any = { userId: req.user!.id };
         const myProductsWhere: any = { ownerId: req.user!.id }; // Products the grosseller created
 
-        const [inventory, myProducts, myRequests] = await Promise.all([
+        const [inventory, myProducts] = await Promise.all([
             prisma.productInventory.findMany({
                 where: inventoryWhere,
                 include: {

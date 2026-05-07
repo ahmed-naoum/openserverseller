@@ -171,6 +171,7 @@ export const leadsApi = {
       package_no_open?: boolean;
       package_replacement?: boolean;
       package_old_tracking?: string;
+      productVariant?: string;
     }
   ) => api.post(`/leads/${id}/push-to-delivery`, data),
   livraison: (params?: { page?: number; limit?: number }) =>
@@ -233,7 +234,7 @@ export const publicApi = {
   featuredProducts: () => api.get('/public/products/featured'),
   stats: () => api.get('/public/stats'),
   getReferralLinkData: (code: string) => api.get(`/influencer/links/${code}/public`),
-  submitReferralLead: (data: { referralCode: string; fullName: string; phone: string; city: string; address: string }) => api.post('/public/leads', data),
+  submitReferralLead: (data: { referralCode: string; fullName: string; phone: string; city: string; address: string; productVariant?: string }) => api.post('/public/leads', data),
 };
 
 export const uploadApi = {
@@ -274,7 +275,7 @@ export const adminApi = {
   bulkApprovePayouts: (ids: number[]) => api.post('/payouts/bulk-approve', { ids }),
   bulkUpdatePayoutStatus: (ids: number[], status: string) => api.patch('/payouts/bulk-status', { ids, status }),
   getAffiliateClaims: (params?: { status?: string }) => api.get('/admin/affiliate-claims', { params }),
-  updateAffiliateClaim: (id: number, data: { status: string; actionType?: string; cloneName?: string; cloneDescription?: string; clonePrice?: number; cloneImageUrls?: string[] }) =>
+  updateAffiliateClaim: (id: number, data: { status: string; actionType?: string; cloneName?: string; cloneDescription?: string; clonePrice?: number; cloneQuantity?: number; cloneImageUrls?: string[] }) =>
     api.patch(`/admin/affiliate-claims/${id}`, data),
   getSupportRequests: (params?: { status?: string; type?: string }) =>
     api.get('/admin/support-requests', { params }),
@@ -330,7 +331,7 @@ export const chatApi = {
   conversations: (params?: { status?: string; orderNumber?: string }) => api.get('/chat/conversations', { params }),
   getQueue: () => api.get('/chat/conversations/queue'),
   getConversation: (id: string) => api.get(`/chat/conversations/${id}`),
-  createConversation: (data: { participantId?: string; type?: string; title?: string }) => api.post('/chat/conversations', data),
+  createConversation: (data: { participantId?: string; type?: string; title?: string; metadata?: any }) => api.post('/chat/conversations', data),
   autoOpenConversation: (params: { 
     orderId?: number; 
     supportRequestId?: number; 

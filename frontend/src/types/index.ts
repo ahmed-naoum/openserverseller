@@ -123,6 +123,7 @@ export interface Lead {
   brand?: { id: string; name: string };
   assignedAgent?: { uuid: string; fullName: string };
   createdAt: string;
+  callbackAt?: string | Date;
 }
 
 export interface Order {
@@ -140,6 +141,9 @@ export interface Order {
   brand: { id: string; name: string };
   items: OrderItem[];
   shipment?: Shipment;
+  coliatyPackageCode?: string;
+  coliatyPackageId?: number;
+  productVariant?: string;
   createdAt: string;
 }
 
@@ -271,15 +275,16 @@ export const PAYOUT_STATUS_LABELS: Record<PayoutStatus, { ar: string; fr: string
 };
 
 export interface ReferralLink {
-  id: string;
-  influencerId: string;
-  productId: string;
+  id: number;
+  influencerId: number;
+  productId: number;
   product?: Product;
   code: string;
   clicks: number;
   conversions: number;
   earnings: number;
   isActive: boolean;
+  landingPage?: any;
   createdAt: string;
 }
 

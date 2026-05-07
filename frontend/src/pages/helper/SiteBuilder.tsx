@@ -355,19 +355,19 @@ export default function SiteBuilder() {
                 {/* Specific Fields per Type */}
                 {activeBlock.type === 'hero' && (
                   <div className="space-y-4">
-                    <Field label="Couleur de Fond" type="color" value={activeBlock.content.bgColor} onChange={(v) => updateBlockContent('bgColor', v)} />
-                    <Field label="Titre principal" type="text" value={activeBlock.content.title} onChange={(v) => updateBlockContent('title', v)} />
-                    <Field label="Couleur du titre" type="color" value={activeBlock.content.titleColor} onChange={(v) => updateBlockContent('titleColor', v)} />
-                    <Field label="Sous-titre" type="textarea" value={activeBlock.content.subtitle} onChange={(v) => updateBlockContent('subtitle', v)} />
+                    <Field label="Couleur de Fond" type="color" value={activeBlock.content.bgColor} onChange={(v: any) => updateBlockContent('bgColor', v)} />
+                    <Field label="Titre principal" type="text" value={activeBlock.content.title} onChange={(v: any) => updateBlockContent('title', v)} />
+                    <Field label="Couleur du titre" type="color" value={activeBlock.content.titleColor} onChange={(v: any) => updateBlockContent('titleColor', v)} />
+                    <Field label="Sous-titre" type="textarea" value={activeBlock.content.subtitle} onChange={(v: any) => updateBlockContent('subtitle', v)} />
                     <SpacingControls content={activeBlock.content} onChange={updateBlockContent} />
                   </div>
                 )}
                 
                 {activeBlock.type === 'header' && (
                   <div className="space-y-4">
-                    <Field label="Couleur de Fond" type="color" value={activeBlock.content.bgColor} onChange={(v) => updateBlockContent('bgColor', v)} />
-                    <Field label="Nom de la marque" type="text" value={activeBlock.content.text} onChange={(v) => updateBlockContent('text', v)} />
-                    <Field label="Couleur de texte" type="color" value={activeBlock.content.color} onChange={(v) => updateBlockContent('color', v)} />
+                    <Field label="Couleur de Fond" type="color" value={activeBlock.content.bgColor} onChange={(v: any) => updateBlockContent('bgColor', v)} />
+                    <Field label="Nom de la marque" type="text" value={activeBlock.content.text} onChange={(v: any) => updateBlockContent('text', v)} />
+                    <Field label="Couleur de texte" type="color" value={activeBlock.content.color} onChange={(v: any) => updateBlockContent('color', v)} />
                     <SpacingControls content={activeBlock.content} onChange={updateBlockContent} />
                   </div>
                 )}
@@ -378,8 +378,8 @@ export default function SiteBuilder() {
                       <input type="checkbox" checked={activeBlock.content.isHeading} onChange={(e) => updateBlockContent('isHeading', e.target.checked)} />
                       Titre de section (h3)
                     </label>
-                    <Field label="Texte" type="textarea" value={activeBlock.content.text} onChange={(v) => updateBlockContent('text', v)} />
-                    <Field label="Couleur" type="color" value={activeBlock.content.color} onChange={(v) => updateBlockContent('color', v)} />
+                    <Field label="Texte" type="textarea" value={activeBlock.content.text} onChange={(v: any) => updateBlockContent('text', v)} />
+                    <Field label="Couleur" type="color" value={activeBlock.content.color} onChange={(v: any) => updateBlockContent('color', v)} />
                     
                     <div className="grid grid-cols-2 gap-2">
                       <div>
@@ -440,8 +440,8 @@ export default function SiteBuilder() {
 
                  {activeBlock.type === 'button' && (
                   <div className="space-y-4">
-                    <Field label="Texte du bouton" type="text" value={activeBlock.content.text} onChange={(v) => updateBlockContent('text', v)} />
-                    <Field label="Couleur de fond" type="color" value={activeBlock.content.bgColor} onChange={(v) => updateBlockContent('bgColor', v)} />
+                    <Field label="Texte du bouton" type="text" value={activeBlock.content.text} onChange={(v: any) => updateBlockContent('text', v)} />
+                    <Field label="Couleur de fond" type="color" value={activeBlock.content.bgColor} onChange={(v: any) => updateBlockContent('bgColor', v)} />
                     
                     <div className="pt-2 border-t border-gray-100">
                       <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Comportement</label>
@@ -455,7 +455,7 @@ export default function SiteBuilder() {
                       </select>
                       
                       {activeBlock.content.behavior !== 'checkout' && (
-                        <Field label="Lien de redirection (Optionnel)" type="text" value={activeBlock.content.link} onChange={(v) => updateBlockContent('link', v)} />
+                        <Field label="Lien de redirection (Optionnel)" type="text" value={activeBlock.content.link} onChange={(v: any) => updateBlockContent('link', v)} />
                       )}
                     </div>
 
@@ -506,14 +506,14 @@ export default function SiteBuilder() {
                 
                 {activeBlock.type === 'countdown' && (
                   <div className="space-y-4">
-                    <Field label="Texte d'urgence" type="text" value={activeBlock.content.text} onChange={(v) => updateBlockContent('text', v)} />
+                    <Field label="Texte d'urgence" type="text" value={activeBlock.content.text} onChange={(v: any) => updateBlockContent('text', v)} />
                     <SpacingControls content={activeBlock.content} onChange={updateBlockContent} noLeftRight />
                   </div>
                 )}
                 
                 {activeBlock.type === 'spacer' && (
                   <div className="space-y-4">
-                    <Field label="Hauteur (px)" type="number" value={activeBlock.content.height} onChange={(v) => updateBlockContent('height', v)} />
+                    <Field label="Hauteur (px)" type="number" value={activeBlock.content.height} onChange={(v: any) => updateBlockContent('height', v)} />
                   </div>
                 )}
 
@@ -663,10 +663,10 @@ export default function SiteBuilder() {
                       <div>
                         <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Arrondi des coins (px)</label>
                         <div className="grid grid-cols-4 gap-2">
-                          <MiniField icon="◤" value={activeBlock.content.borderRadiusTL} onChange={(v) => updateBlockContent('borderRadiusTL', v)} />
-                          <MiniField icon="◥" value={activeBlock.content.borderRadiusTR} onChange={(v) => updateBlockContent('borderRadiusTR', v)} />
-                          <MiniField icon="◣" value={activeBlock.content.borderRadiusBL} onChange={(v) => updateBlockContent('borderRadiusBL', v)} />
-                          <MiniField icon="◢" value={activeBlock.content.borderRadiusBR} onChange={(v) => updateBlockContent('borderRadiusBR', v)} />
+                          <MiniField icon="◤" value={activeBlock.content.borderRadiusTL} onChange={(v: any) => updateBlockContent('borderRadiusTL', v)} />
+                          <MiniField icon="◥" value={activeBlock.content.borderRadiusTR} onChange={(v: any) => updateBlockContent('borderRadiusTR', v)} />
+                          <MiniField icon="◣" value={activeBlock.content.borderRadiusBL} onChange={(v: any) => updateBlockContent('borderRadiusBL', v)} />
+                          <MiniField icon="◢" value={activeBlock.content.borderRadiusBR} onChange={(v: any) => updateBlockContent('borderRadiusBR', v)} />
                         </div>
                       </div>
                     </div>

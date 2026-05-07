@@ -13,6 +13,10 @@ declare global {
         mode: string;
         isInfluencer: boolean;
         canImpersonate: boolean;
+        canManageProducts: boolean;
+        canManageLeads: boolean;
+        canManageOrders: boolean;
+        canManageInfluencerLinks: boolean;
       };
     }
   }
@@ -30,6 +34,10 @@ declare module 'express-serve-static-core' {
       mode: string;
       isInfluencer: boolean;
       canImpersonate: boolean;
+      canManageProducts: boolean;
+      canManageLeads: boolean;
+      canManageOrders: boolean;
+      canManageInfluencerLinks: boolean;
     };
   }
 }

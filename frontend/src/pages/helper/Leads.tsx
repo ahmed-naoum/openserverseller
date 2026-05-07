@@ -28,6 +28,7 @@ interface Lead {
   productVariant?: string;
   productPrice?: number;
   order?: { totalAmountMad: number; coliatyPackageCode?: string; orderNumber?: string };
+  callbackAt?: string | Date;
 }
 
 interface Vendor { id: number; fullName?: string; email?: string; role?: string }

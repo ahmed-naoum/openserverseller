@@ -970,7 +970,7 @@ router.get(
   authorize('VENDOR', 'INFLUENCER', 'HELPER', 'SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const linkId = parseInt(req.params.id);
+    const linkId = parseInt(String(req.params.id));
 
     const link = await (prisma as any).referralLink.findUnique({
       where: { id: linkId }
@@ -1036,7 +1036,7 @@ router.put(
   authorize('VENDOR', 'INFLUENCER', 'HELPER', 'SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const linkId = parseInt(req.params.id);
+    const linkId = parseInt(String(req.params.id));
     const { themeColor, title, description, buttonText, customStructure } = req.body;
 
     const link = await (prisma as any).referralLink.findUnique({
@@ -1078,7 +1078,7 @@ router.patch(
   authorize('VENDOR', 'INFLUENCER', 'HELPER', 'SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const linkId = parseInt(req.params.id);
+    const linkId = parseInt(String(req.params.id));
 
     // Initial check: if Link exists
     const link = await (prisma as any).referralLink.findUnique({
@@ -1125,7 +1125,7 @@ router.patch(
   authorize('VENDOR', 'INFLUENCER', 'HELPER', 'SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const linkId = parseInt(req.params.id);
+    const linkId = parseInt(String(req.params.id));
     const { isActive } = req.body;
 
     // Initial check: if Link exists

@@ -62,7 +62,7 @@ export default function HelperScanner() {
       playSound('success');
       setHistory(prev => [{
         code: trimmedCode,
-        status: 'success',
+        status: 'success' as 'success',
         message: res.data.message || 'Retour traité',
         timestamp: new Date()
       }, ...prev].slice(0, 50));
@@ -70,7 +70,7 @@ export default function HelperScanner() {
       playSound('error');
       setHistory(prev => [{
         code: trimmedCode,
-        status: 'error',
+        status: 'error' as 'error',
         message: error.response?.data?.message || 'Erreur lors du traitement',
         timestamp: new Date()
       }, ...prev].slice(0, 50));

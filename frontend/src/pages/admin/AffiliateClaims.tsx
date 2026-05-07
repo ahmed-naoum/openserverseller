@@ -43,6 +43,7 @@ export default function AdminAffiliateClaims() {
   const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
   const [selectedClaimForClone, setSelectedClaimForClone] = useState<any>(null);
   const [cloneName, setCloneName] = useState('');
+  const [cloneSku, setCloneSku] = useState('');
   const [cloneDescription, setCloneDescription] = useState('');
   const [clonePrice, setClonePrice] = useState(0);
   const [cloneQuantity, setCloneQuantity] = useState(1);
@@ -69,7 +70,7 @@ export default function AdminAffiliateClaims() {
 
   const handleUpdateStatus = async (
     id: number, 
-    data: { status: string; actionType?: string; cloneName?: string; cloneDescription?: string; clonePrice?: number; cloneImageUrls?: string[] }
+    data: { status: string; actionType?: string; cloneName?: string; cloneDescription?: string; clonePrice?: number; cloneQuantity?: number; cloneSku?: string; cloneImageUrls?: string[] }
   ) => {
     try {
       if (data.actionType === 'CLONE_PRODUCT') setIsCloning(true);
@@ -93,6 +94,7 @@ export default function AdminAffiliateClaims() {
   const openCloneModal = (claim: any) => {
     setSelectedClaimForClone(claim);
     setCloneName(claim.product?.nameFr || '');
+    setCloneSku(claim.product?.sku || '');
     setCloneDescription(claim.product?.description || '');
     setClonePrice(claim.product?.retailPriceMad || 0);
     setCloneQuantity(claim.requestedQty || 1);
@@ -117,6 +119,7 @@ export default function AdminAffiliateClaims() {
       status: 'APPROVED',
       actionType: 'CLONE_PRODUCT',
       cloneName,
+      cloneSku,
       cloneDescription,
       clonePrice,
       cloneQuantity,
@@ -523,6 +526,18 @@ export default function AdminAffiliateClaims() {
                     required
                     value={cloneName}
                     onChange={(e) => setCloneName(e.target.value)}
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    SKU
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={cloneSku}
+                    onChange={(e) => setCloneSku(e.target.value)}
                     className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
                   />
                 </div>

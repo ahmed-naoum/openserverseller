@@ -43,9 +43,7 @@ router.get(
       prisma.shipment.findMany({
         where,
         include: {
-          order: {
-            include: { brand: true },
-          },
+          order: true,
           courier: true,
           trackingEvents: { orderBy: { eventTime: 'desc' }, take: 5 },
           deliveryProof: true,

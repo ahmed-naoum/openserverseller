@@ -24,7 +24,7 @@ export const triggerBackup = asyncHandler(async (req: Request, res: Response) =>
 
 export const downloadBackup = asyncHandler(async (req: Request, res: Response) => {
   const { filename } = req.params;
-  const filePath = BackupService.getBackupPath(filename);
+  const filePath = BackupService.getBackupPath(String(filename));
 
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({ status: 'error', message: 'Backup file not found' });
@@ -35,7 +35,7 @@ export const downloadBackup = asyncHandler(async (req: Request, res: Response) =
 
 export const deleteBackup = asyncHandler(async (req: Request, res: Response) => {
   const { filename } = req.params;
-  const filePath = BackupService.getBackupPath(filename);
+  const filePath = BackupService.getBackupPath(String(filename));
 
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);
@@ -47,6 +47,6 @@ export const deleteBackup = asyncHandler(async (req: Request, res: Response) => 
 export const restoreBackup = asyncHandler(async (req: Request, res: Response) => {
   const { filename } = req.params;
   console.log(`Restoration attempt initiated for backup: ${filename}`);
-  await BackupService.restoreBackup(filename);
+  await BackupService.restoreBackup(String(filename));
   res.json({ status: 'success', message: 'Database restored successfully' });
 });

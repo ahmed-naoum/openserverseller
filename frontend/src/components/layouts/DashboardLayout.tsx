@@ -279,8 +279,8 @@ export default function DashboardLayout() {
 
   // Auto-expand if child is active
   useEffect(() => {
-    const activeParent = navItems.find(item => 
-      item.children?.some(child => location.pathname === child.href)
+    const activeParent = navItems.find((item: any) => 
+      item.children?.some((child: any) => location.pathname === child.href)
     );
     if (activeParent && !expandedGroups.includes(activeParent.name)) {
       setExpandedGroups(prev => [...prev, activeParent.name]);
