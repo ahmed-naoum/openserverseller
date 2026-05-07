@@ -698,52 +698,46 @@ export default function InfluencerLeads() {
               placeholder="Rechercher par nom, téléphone ou ville..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-influencer-500 transition-all font-medium"
             />
           </div>
         </div>
 
-        {/* Status Filter Chips */}
+        {/* Status Filter Dropdown */}
         <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setStatusFilter('ALL')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
-              statusFilter === 'ALL'
-                ? 'bg-gray-900 text-white border-gray-900 shadow-md'
-                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-            }`}
-          >
-            Tout ({dateFilteredCommissions.length})
-          </button>
-          {(() => {
-            const renderedLabels = new Set();
-            return activeStatuses.map(status => {
-              const badge = ALL_STATUS_BADGES[status.toUpperCase()] || { label: status, color: 'bg-gray-100 text-gray-800', icon: Package };
-              
-              // Skip if we already rendered a button with this label (e.g. Expédié)
-              if (renderedLabels.has(badge.label)) return null;
-              renderedLabels.add(badge.label);
-
-              const count = statusCounts[status.toUpperCase()] || 0;
-              const isActive = statusFilter === status;
-              const IconComp = badge.icon;
-              
-              return (
-                <button
-                  key={status}
-                  onClick={() => setStatusFilter(status)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
-                    isActive
-                      ? `${badge.color} border-current shadow-md`
-                      : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  <IconComp className="w-3 h-3" />
-                  {badge.label} ({count})
-                </button>
-              );
-            });
-          })()}
+          <div className="relative min-w-[280px]">
+            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+              <Filter className="w-4 h-4 text-gray-400" />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full pl-10 pr-10 py-2.5 text-xs font-bold text-gray-700 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-influencer-500 transition-all appearance-none cursor-pointer hover:bg-gray-100/50"
+            >
+              <option value="ALL">Tous les statuts ({dateFilteredCommissions.length})</option>
+              {(() => {
+                const renderedLabels = new Set();
+                return activeStatuses
+                  .map(status => {
+                    const badge = ALL_STATUS_BADGES[status.toUpperCase()] || { label: status };
+                    const count = statusCounts[status.toUpperCase()] || 0;
+                    return { status, label: badge.label, count };
+                  })
+                  .filter(item => {
+                    if (renderedLabels.has(item.label)) return false;
+                    renderedLabels.add(item.label);
+                    return true;
+                  })
+                  .map(item => (
+                    <option key={item.status} value={item.status}>
+                      {item.label} ({item.count})
+                    </option>
+                  ));
+              })()}
+            </select>
+            <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+              <ChevronDown className="w-4 h-4 text-gray-400" />
+            </div>
+          </div>
         </div>
       </div>
 
