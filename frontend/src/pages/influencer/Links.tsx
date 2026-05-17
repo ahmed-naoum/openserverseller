@@ -14,7 +14,7 @@ export default function InfluencerLinks() {
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<'earnings' | 'clicks' | 'conversions' | 'date'>('date');
   const [dailyStats, setDailyStats] = useState<any[]>([]);
-  const [dateRange, setDateRange] = useState<number | 'custom'>(1);
+  const [dateRange, setDateRange] = useState<number | 'custom' | 'all'>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedLinkIdForChart, setSelectedLinkIdForChart] = useState<number | null>(null);
@@ -34,6 +34,9 @@ export default function InfluencerLinks() {
     variant: 'primary' | 'danger';
     isLoading?: boolean;
     requiresConfirmationText?: string;
+    step?: 'send' | 'verify';
+    maskedEmail?: string;
+    linkId?: number;
   }>({
     isOpen: false,
     title: '',
@@ -42,7 +45,10 @@ export default function InfluencerLinks() {
     icon: <RefreshCw size={24} />,
     confirmText: 'Régénérer',
     variant: 'primary',
-    requiresConfirmationText: ''
+    requiresConfirmationText: '',
+    step: 'send',
+    maskedEmail: '',
+    linkId: undefined
   });
   const [isToggling, setIsToggling] = useState<number | null>(null);
 
@@ -132,27 +138,61 @@ export default function InfluencerLinks() {
     }
   };
 
-  const handleRegenerateCode = (link: ReferralLink) => {
+  const handleRegenerateCode = async (link: ReferralLink) => {
+    // Step 1: Send OTP to influencer email
     setConfirmInputValue('');
     setConfirmModal({
       isOpen: true,
-      title: '⚠️ Attention : Risque de perte de leads',
-      message: `Si vous régénérez ce code, les anciens partages deviendront obsolètes. Pour confirmer, veuillez taper "REGENERATE CODE" ci-dessous.`,
-      icon: <AlertCircle size={32} className="text-red-500 animate-pulse" />,
-      confirmText: 'Régénérer',
-      variant: 'danger',
-      requiresConfirmationText: 'REGENERATE CODE',
+      title: '🔐 Vérification par Email',
+      message: `Un code de vérification va être envoyé à l'email de l'influenceur pour confirmer la régénération du code.`,
+      icon: <AlertCircle size={32} className="text-amber-500" />,
+      confirmText: 'Envoyer le code',
+      variant: 'primary',
+      isLoading: false,
+      step: 'send',
+      maskedEmail: '',
+      linkId: link.id,
       onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isLoading: true }));
         try {
-          const res = await influencerApi.regenerateLink(link.id);
-          setLinks(prev => prev.map(l => l.id === link.id ? { ...l, code: res.data.code } : l));
-          toast.success('Code régénéré !');
-          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          const res = await influencerApi.sendRegenOtp(link.id);
+          const maskedEmail = res.data?.data?.maskedEmail || res.data?.maskedEmail || '***';
+          // Move to step 2: enter OTP
+          setConfirmInputValue('');
+          setConfirmModal(prev => ({
+            ...prev,
+            isLoading: false,
+            step: 'verify',
+            title: '🔐 Entrer le code de vérification',
+            message: `Un code à 6 chiffres a été envoyé à ${maskedEmail}. Veuillez le saisir ci-dessous.`,
+            icon: <AlertCircle size={32} className="text-blue-500" />,
+            confirmText: 'Confirmer',
+            variant: 'danger',
+            maskedEmail,
+            onConfirm: async () => {
+              // This will be overridden by the verify handler below
+            }
+          }));
         } catch (err: any) {
-          toast.error('Erreur lors de la régénération');
+          toast.error(err?.response?.data?.message || 'Erreur lors de l\'envoi du code');
+          setConfirmModal(prev => ({ ...prev, isLoading: false }));
         }
       }
     });
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!confirmModal.linkId || confirmInputValue.length !== 6) return;
+    setConfirmModal(prev => ({ ...prev, isLoading: true }));
+    try {
+      const res = await influencerApi.verifyRegenOtp(confirmModal.linkId, confirmInputValue);
+      setLinks(prev => prev.map(l => l.id === confirmModal.linkId ? { ...l, code: res.data.code } : l));
+      toast.success('Code régénéré avec succès !');
+      setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Code incorrect ou expiré');
+      setConfirmModal(prev => ({ ...prev, isLoading: false }));
+    }
   };
 
   const totalClicks = links.reduce((sum, l) => sum + l.clicks, 0);
@@ -265,7 +305,7 @@ export default function InfluencerLinks() {
           <div className="flex items-center gap-4">
             <div>
               <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                <Activity className="w-5 h-5 text-influencer-500" /> Performance Temporelle ({dateRange === 'custom' ? 'Custom' : `${dateRange}j`})
+                <Activity className="w-5 h-5 text-influencer-500" /> Performance Temporelle ({dateRange === 'custom' ? 'Custom' : dateRange === 'all' ? 'Tous' : `${dateRange}j`})
               </h3>
               <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">
                 {selectedLinkIdForChart 
@@ -296,6 +336,16 @@ export default function InfluencerLinks() {
               </select>
 
               <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100">
+                <button
+                  onClick={() => setDateRange('all')}
+                  className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                    dateRange === 'all'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  Tous
+                </button>
                 {[1, 7, 15, 30, 90].map((days) => (
                   <button
                     key={days}
@@ -549,16 +599,23 @@ export default function InfluencerLinks() {
                         </div>
                       </td>
                       <td className="px-8 py-5">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleToggleStatus(link); }}
-                          disabled={isToggling === link.id}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all ${
-                            link.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'
-                          }`}
-                        >
-                          <Power className={`w-3 h-3 ${link.isActive ? 'text-emerald-500' : 'text-slate-400'}`} />
-                          <span className="text-[10px] font-black uppercase tracking-wider">{link.isActive ? 'Actif' : 'Pause'}</span>
-                        </button>
+                        {link.status === 'BUILDING' ? (
+                          <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 text-amber-600 rounded-xl w-fit">
+                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                            <span className="text-[10px] font-black uppercase tracking-wider">En construction</span>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleToggleStatus(link); }}
+                            disabled={isToggling === link.id}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all ${
+                              link.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'
+                            }`}
+                          >
+                            <Power className={`w-3 h-3 ${link.isActive ? 'text-emerald-500' : 'text-slate-400'}`} />
+                            <span className="text-[10px] font-black uppercase tracking-wider">{link.isActive ? 'Actif' : 'Pause'}</span>
+                          </button>
+                        )}
                       </td>
                       <td className="px-8 py-5 text-right">
                         <div className="flex items-center justify-end gap-3">
@@ -597,7 +654,7 @@ export default function InfluencerLinks() {
         )}
       </div>
 
-      {/* Confirmation Modal */}
+      {/* OTP Verification Modal */}
       {confirmModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
           <div className="bg-white rounded-[2.5rem] w-full max-w-sm overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200">
@@ -612,34 +669,73 @@ export default function InfluencerLinks() {
                 {confirmModal.message}
               </p>
 
-              {confirmModal.requiresConfirmationText && (
+              {confirmModal.step === 'verify' && (
                 <div className="animate-in slide-in-from-bottom-2 duration-300">
-                  <input
-                    type="text"
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-center text-sm font-black uppercase tracking-widest focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none transition-all placeholder:text-slate-300"
-                    placeholder={`Taper "${confirmModal.requiresConfirmationText}"`}
-                    value={confirmInputValue}
-                    onChange={(e) => setConfirmInputValue(e.target.value)}
-                    autoFocus
-                  />
+                  <div className="flex justify-center gap-2 mb-4">
+                    {[0, 1, 2, 3, 4, 5].map((i) => (
+                      <input
+                        key={i}
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={1}
+                        className="w-12 h-14 bg-slate-50 border-2 border-slate-200 rounded-xl text-center text-xl font-black text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                        value={confirmInputValue[i] || ''}
+                        autoFocus={i === 0}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, '');
+                          if (!val && e.target.value) return;
+                          const newValue = confirmInputValue.split('');
+                          newValue[i] = val;
+                          const joined = newValue.join('').slice(0, 6);
+                          setConfirmInputValue(joined);
+                          // Auto-focus next input
+                          if (val && i < 5) {
+                            const next = e.target.parentElement?.children[i + 1] as HTMLInputElement;
+                            next?.focus();
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Backspace' && !confirmInputValue[i] && i > 0) {
+                            const prev = (e.target as HTMLElement).parentElement?.children[i - 1] as HTMLInputElement;
+                            prev?.focus();
+                          }
+                        }}
+                        onPaste={(e) => {
+                          e.preventDefault();
+                          const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+                          setConfirmInputValue(pasted);
+                          // Focus last filled input
+                          const target = (e.target as HTMLElement).parentElement?.children[Math.min(pasted.length, 5)] as HTMLInputElement;
+                          target?.focus();
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                    ⏱ Le code expire dans 10 minutes
+                  </p>
                 </div>
               )}
             </div>
             <div className="p-8 bg-slate-50/50 flex gap-4">
               <button
                 onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-                className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-400 bg-white border border-slate-100 rounded-2xl transition-all"
+                disabled={confirmModal.isLoading}
+                className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-400 bg-white border border-slate-100 rounded-2xl transition-all disabled:opacity-50"
               >
                 Annuler
               </button>
               <button
-                onClick={confirmModal.onConfirm}
-                disabled={confirmModal.requiresConfirmationText ? confirmInputValue !== confirmModal.requiresConfirmationText : false}
-                className={`flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-white rounded-2xl shadow-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed ${
+                onClick={confirmModal.step === 'verify' ? handleVerifyOtp : confirmModal.onConfirm}
+                disabled={confirmModal.isLoading || (confirmModal.step === 'verify' && confirmInputValue.length !== 6)}
+                className={`flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-white rounded-2xl shadow-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
                   confirmModal.variant === 'danger' ? 'bg-red-500 hover:bg-red-600' : 'bg-slate-900 hover:bg-slate-800'
                 }`}
               >
-                Confirmer
+                {confirmModal.isLoading && (
+                  <RefreshCw size={14} className="animate-spin" />
+                )}
+                {confirmModal.confirmText}
               </button>
             </div>
           </div>

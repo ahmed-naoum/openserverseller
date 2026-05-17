@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
-import { influencerApi } from '../../lib/api';
+import { influencerApi, leadsApi } from '../../lib/api';
 import { ReferralLink, InfluencerCommission } from '../../types';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import {
   Users, MousePointerClick, UserCheck, ShoppingCart,
-  Filter, Download, Search, Calendar,
+  Filter, Search, Calendar,
   MapPin, Phone, Package, Clock, Trash2, Headphones, RefreshCw,
-  ChevronDown, ChevronUp, Truck, CheckCircle2, Box, AlertCircle, X, BarChart3, Activity, PieChart as PieIcon, Zap, TrendingUp, History
+  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Truck, CheckCircle, CheckCircle2, XCircle, Box, AlertCircle, X, BarChart3, Activity, PieChart as PieIcon, Zap, TrendingUp, History, MessageSquare
 } from 'lucide-react';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 const ALL_STATUS_BADGES: Record<string, { label: string; color: string; icon: React.ComponentType<any> }> = {
   // --- Cycle de vie / Stock ---
@@ -52,11 +52,15 @@ const ALL_STATUS_BADGES: Record<string, { label: string; color: string; icon: Re
   'CONFIRMED': { label: 'Confirmé', color: 'bg-blue-50 text-blue-600 border border-blue-100', icon: CheckCircle2 },
   'SHIPPED': { label: 'Expédié', color: 'bg-violet-50 text-violet-600 border border-violet-100', icon: Truck },
   'CANCELLED': { label: 'Annulé', color: 'bg-red-50 text-red-600 border border-red-100', icon: AlertCircle },
+  'PRICE_CONFIRMED': { label: 'price CONFIRMED', color: 'bg-blue-50 text-blue-600 border border-blue-100', icon: CheckCircle2 },
+  'PRICE_REJECTED': { label: 'price rejected', color: 'bg-rose-50 text-rose-600 border border-rose-100', icon: X },
 };
 
 const PAYMENT_SITUATION_BADGES: Record<string, { label: string; color: string }> = {
   PAID: { label: 'Payé', color: 'bg-emerald-50 text-emerald-600 border border-emerald-100' },
+  'Payé': { label: 'Payé', color: 'bg-emerald-50 text-emerald-600 border border-emerald-100' },
   NOT_PAID: { label: 'Non Payé', color: 'bg-rose-50 text-rose-600 border border-rose-100' },
+  'no Payé': { label: 'Non Payé', color: 'bg-rose-50 text-rose-600 border border-rose-100' },
   FACTURED: { label: 'Facturé', color: 'bg-blue-50 text-blue-600 border border-blue-100' },
 };
 
@@ -71,6 +75,10 @@ export default function InfluencerLeads() {
   const [endDate, setEndDate] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [isPushingBulk, setIsPushingBulk] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [tableDateRange, setTableDateRange] = useState<'TOUS' | 'AUJOURD_HUI' | '7J' | '15J' | '30J' | '90J' | 'CUSTOM'>('TOUS');
+  const [tableSelectedProductId, setTableSelectedProductId] = useState<string>('ALL');
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -88,25 +96,33 @@ export default function InfluencerLeads() {
   const [duplicateCheck, setDuplicateCheck] = useState<{
     isOpen: boolean;
     ids: number[];
+    deleteIds: number[];
     groups: Record<string, InfluencerCommission[]>;
   }>({
     isOpen: false,
     ids: [],
+    deleteIds: [],
     groups: {},
   });
   const [historyModal, setHistoryModal] = useState<{
     isOpen: boolean;
     customerName: string;
+    leadNotes?: string;
     history: Array<{ id: number; oldStatus: string; newStatus: string; notes?: string; createdAt: string; changer?: { profile?: { fullName?: string } } }>;
   }>({
     isOpen: false,
     customerName: '',
+    leadNotes: '',
     history: [],
   });
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, searchTerm, startDate, endDate, itemsPerPage]);
 
   const loadData = async () => {
     try {
@@ -126,21 +142,46 @@ export default function InfluencerLeads() {
     }
   };
  
-  // Filter commissions by date for ALL calculations
+  // Filter commissions by date and product for ALL calculations
   const dateFilteredCommissions = commissions.filter(c => {
-    if (!startDate && !endDate) return true;
+    // Product filter
+    if (tableSelectedProductId !== 'ALL' && String(c.referralLinkId) !== tableSelectedProductId) {
+      return false;
+    }
+
     const leadDate = new Date(c.order?.createdAt || c.createdAt);
-    if (startDate) {
-      const start = new Date(startDate);
-      start.setHours(0, 0, 0, 0);
-      if (leadDate < start) return false;
+    
+    // Date filter
+    if (tableDateRange === 'TOUS') return true;
+    
+    const now = new Date();
+    if (tableDateRange === 'AUJOURD_HUI') {
+      return leadDate.toDateString() === now.toDateString();
     }
-    if (endDate) {
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      if (leadDate > end) return false;
+    
+    if (tableDateRange === 'CUSTOM') {
+      if (!startDate && !endDate) return true;
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        if (leadDate < start) return false;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        if (leadDate > end) return false;
+      }
+      return true;
     }
-    return true;
+
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    if (tableDateRange === '7J') d.setDate(now.getDate() - 7);
+    else if (tableDateRange === '15J') d.setDate(now.getDate() - 15);
+    else if (tableDateRange === '30J') d.setDate(now.getDate() - 30);
+    else if (tableDateRange === '90J') d.setDate(now.getDate() - 90);
+    
+    return leadDate >= d;
   });
 
   const totalClicks = links.reduce((sum, l) => sum + l.clicks, 0);
@@ -155,7 +196,12 @@ export default function InfluencerLeads() {
     'CANCEL_REASON_PRICE', 'WRONG_ORDER', 'CANCEL_ORDER'
   ];
   
-  const deliveryStatuses = ['PENDING', 'PUSHED_TO_DELIVERY', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED', 'CONFIRMED_DELIVERY'];
+  const deliveryStatuses = [
+    'PENDING', 'PUSHED_TO_DELIVERY', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED', 'CONFIRMED_DELIVERY',
+    'NEW_PARCEL', 'WAITING_PICKUP', 'PICKED_UP', 'SENT', 'RECEIVED', 'DISTRIBUTION', 'PROGRAMMER_AUTO', 'POSTPONED',
+    'WAITING_PREPARATION', 'PREPARED', 'ENCORE_PREPARED', 'CANCELED_BY_SELLER', 'CANCELED_BY_SYSTEM', 'REFUSE',
+    'NOANSWER', 'CANCELED', 'ERR', 'PROGRAMMER', 'INCORRECT_ADDRESS'
+  ];
 
   const confirmedLeads = dateFilteredCommissions.filter(c => {
     const s = (c.order?.status || 'UNKNOWN').toUpperCase();
@@ -168,9 +214,20 @@ export default function InfluencerLeads() {
   const deliveryRate = confirmedLeads > 0 ? (deliveredLeads / confirmedLeads) * 100 : 0;
 
   // Payment situation totals
-  const paidLeads = dateFilteredCommissions.filter(c => (c.order as any)?.lead?.paymentSituation === 'PAID').length;
-  const nonPaidLeads = dateFilteredCommissions.filter(c => (c.order as any)?.lead?.paymentSituation === 'NOT_PAID' || !(c.order as any)?.lead?.paymentSituation).length;
-  const facturedLeads = dateFilteredCommissions.filter(c => (c.order as any)?.lead?.paymentSituation === 'FACTURED').length;
+  const paidLeads = dateFilteredCommissions.filter(c => {
+    const sit = (c.order as any)?.lead?.paymentSituation;
+    return sit === 'PAID' || sit === 'Payé';
+  }).length;
+  
+  const nonPaidLeads = dateFilteredCommissions.filter(c => {
+    const sit = (c.order as any)?.lead?.paymentSituation;
+    return sit === 'NOT_PAID' || sit === 'no Payé' || !sit;
+  }).length;
+  
+  const facturedLeads = dateFilteredCommissions.filter(c => {
+    const sit = (c.order as any)?.lead?.paymentSituation;
+    return sit === 'FACTURED';
+  }).length;
 
   // Build status counts for filter chips
   const statusCounts: Record<string, number> = {};
@@ -189,7 +246,10 @@ export default function InfluencerLeads() {
     'CANCELLED', 'NO_REPLY', 'UNREACHABLE', 'INVALID', 
     'CONTACTED', 'INTERESTED', 'NOT_INTERESTED',
     'CANCEL_REASON_PRICE', 'WRONG_ORDER', 
-    'CANCEL_ORDER', 'RETURNED', 'REFUNDED'
+    'CANCEL_ORDER', 'RETURNED', 'REFUNDED',
+    'NEW_PARCEL', 'WAITING_PICKUP', 'PICKED_UP', 'SENT', 'RECEIVED', 'DISTRIBUTION', 'PROGRAMMER_AUTO', 'POSTPONED',
+    'WAITING_PREPARATION', 'PREPARED', 'ENCORE_PREPARED', 'CANCELED_BY_SELLER', 'CANCELED_BY_SYSTEM', 'REFUSE',
+    'NOANSWER', 'CANCELED', 'ERR', 'PROGRAMMER', 'INCORRECT_ADDRESS'
   ];
   // Add any statuses not in our predefined list that actually have count > 0
   Object.keys(statusCounts).forEach(s => {
@@ -216,6 +276,12 @@ export default function InfluencerLeads() {
   const sortedCommissions = [...filteredCommissions].sort((a, b) => {
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
+
+  const totalPages = Math.ceil(sortedCommissions.length / itemsPerPage);
+  const paginatedCommissions = sortedCommissions.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   const getStatusColorHex = (status: string) => {
     const colorClass = ALL_STATUS_BADGES[status]?.color || '';
@@ -261,21 +327,25 @@ export default function InfluencerLeads() {
       color: getStatusColorHex(status.toUpperCase())
     })).sort((a, b) => b.value - a.value);
 
-  // Data for Volume Trend (by Day)
-  const volumeTrendData = commissions.reduce((acc: any[], comm) => {
-    const date = format(new Date(comm.createdAt), 'dd MMM');
-    const existing = acc.find(item => item.date === date);
-    if (existing) {
-      existing.count += 1;
-    } else {
-      acc.push({ date, count: 1 });
-    }
-    return acc;
-  }, []).slice(-10);
+  // Data for Volume Trend (Performance) - Now uses global filters
+  const performanceData = (() => {
+    const groupedMap = new Map();
+    dateFilteredCommissions.forEach(comm => {
+      const dateKey = format(new Date(comm.createdAt), 'yyyy-MM-dd');
+      groupedMap.set(dateKey, (groupedMap.get(dateKey) || 0) + 1);
+    });
 
-  // Data for City Distribution (Only for leads successfully DELIVERED)
+    return Array.from(groupedMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, count]) => ({
+        date: format(new Date(date), 'dd MMM'),
+        Leads: count
+      }));
+  })();
+
+  // Data for City Distribution (Count leads that have a tracking number)
   const pushedLeadsForCity = commissions.filter(c => 
-    c.order?.status === 'DELIVERED'
+    c.order?.coliatyPackageCode || (c.order as any)?.trackingNumber
   );
   const totalPushedLeads = pushedLeadsForCity.length;
 
@@ -318,15 +388,23 @@ export default function InfluencerLeads() {
     const ids = idsToPush || selectedIds;
     if (ids.length === 0) return;
 
-    // Find full lead objects for these ids
-    const leadsToProcess = commissions.filter(c => {
+    // Find full lead objects for the base selection
+    const baseLeads = commissions.filter(c => {
       const numericId = Number(String(c.id).replace('lead-', ''));
       return ids.includes(numericId);
     });
 
+    // Extract unique phone numbers from these leads
+    const phones = new Set(baseLeads.map(l => l.order?.customerPhone).filter(Boolean));
+
+    // Find ALL leads in the system with these phone numbers that are still in 'LEAD' status
+    const allRelatedLeads = commissions.filter(c => 
+      c.order?.status === 'LEAD' && phones.has(c.order?.customerPhone)
+    );
+
     // Group by phone
     const groups: Record<string, InfluencerCommission[]> = {};
-    leadsToProcess.forEach(c => {
+    allRelatedLeads.forEach(c => {
       const phone = c.order?.customerPhone || 'no-phone';
       if (!groups[phone]) groups[phone] = [];
       groups[phone].push(c);
@@ -335,18 +413,31 @@ export default function InfluencerLeads() {
     const duplicateGroups = Object.values(groups).filter(g => g.length > 1);
 
     if (duplicateGroups.length > 0) {
-      // Create a set of IDs to keep: for each group, only keep the first one
       const idsToKeep = new Set<number>();
+      const idsToDelete = new Set<number>();
+      
       Object.values(groups).forEach(group => {
         if (group.length > 0) {
-          const firstId = Number(String(group[0].id).replace('lead-', ''));
-          idsToKeep.add(firstId);
+          // Check if any lead in this group was in the original selection
+          const selectedInGroup = group.find(l => ids.includes(Number(String(l.id).replace('lead-', ''))));
+          const keepId = selectedInGroup 
+            ? Number(String(selectedInGroup.id).replace('lead-', ''))
+            : Number(String(group[0].id).replace('lead-', ''));
+            
+          idsToKeep.add(keepId);
+          
+          // Mark others in this group as 'Delete' by default
+          group.forEach(lead => {
+            const leadId = Number(String(lead.id).replace('lead-', ''));
+            if (leadId !== keepId) idsToDelete.add(leadId);
+          });
         }
       });
 
       setDuplicateCheck({
         isOpen: true,
         ids: Array.from(idsToKeep),
+        deleteIds: Array.from(idsToDelete),
         groups: groups
       });
     } else {
@@ -434,16 +525,73 @@ export default function InfluencerLeads() {
             {showStats ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             Statistiques
           </button>
-          <button className="flex items-center gap-1.5 px-4 py-2 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50 transition-all">
-            <Download className="w-3.5 h-3.5" />
-            Exporter
-          </button>
+
         </div>
       </div>
 
       {/* Collapsible Stats & Analytics */}
       {showStats && (
         <div className="space-y-6 animate-fadeIn">
+          
+          {/* Global Stats Filter */}
+          <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm flex flex-col xl:flex-row items-start xl:items-center gap-4 justify-between">
+            <div className="flex items-center gap-2 mb-2 xl:mb-0">
+              <Filter className="w-4 h-4 text-influencer-500" />
+              <span className="text-xs font-black text-gray-900 uppercase tracking-widest">Filtres Globaux</span>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row items-center gap-4 w-full xl:w-auto">
+              {/* Product Filter */}
+              <select 
+                value={tableSelectedProductId}
+                onChange={(e) => setTableSelectedProductId(e.target.value)}
+                className="w-full sm:w-auto px-4 py-2.5 text-xs font-bold bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-influencer-500 transition-all text-gray-600"
+              >
+                <option value="ALL">Tous les produits</option>
+                {links.map(link => (
+                  <option key={link.id} value={link.id}>
+                    {link.product?.nameFr || link.code} {link.product?.sku ? `(${link.product.sku})` : ''}
+                  </option>
+                ))}
+              </select>
+
+              {/* Date Range Pills */}
+              <div className="flex flex-wrap items-center bg-gray-50 p-1 rounded-xl border border-gray-100 w-full sm:w-auto">
+                {['TOUS', 'AUJOURD_HUI', '7J', '15J', '30J', '90J', 'CUSTOM'].map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setTableDateRange(r as any)}
+                    className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all flex-1 sm:flex-none text-center ${
+                      tableDateRange === r 
+                        ? 'bg-white text-gray-900 shadow-sm' 
+                        : 'text-gray-400 hover:text-gray-600'
+                    }`}
+                  >
+                    {r === 'AUJOURD_HUI' ? "AUJOURD'HUI" : r}
+                  </button>
+                ))}
+              </div>
+
+              {tableDateRange === 'CUSTOM' && (
+                <div className="flex items-center gap-2 animate-fadeIn w-full sm:w-auto">
+                   <input 
+                     type="date"
+                     value={startDate}
+                     onChange={(e) => setStartDate(e.target.value)}
+                     className="flex-1 sm:flex-none text-[10px] font-bold bg-white border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-influencer-500/20"
+                   />
+                   <span className="text-[10px] text-gray-400 font-bold uppercase">au</span>
+                   <input 
+                     type="date"
+                     value={endDate}
+                     onChange={(e) => setEndDate(e.target.value)}
+                     className="flex-1 sm:flex-none text-[10px] font-bold bg-white border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-influencer-500/20"
+                   />
+                </div>
+              )}
+            </div>
+          </div>
+          
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm text-center">
               <Zap className="w-5 h-5 mx-auto mb-2 text-green-500" />
@@ -470,21 +618,28 @@ export default function InfluencerLeads() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
                 <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-influencer-500" />
-                  Flux des Leads (10 derniers jours)
+                  <TrendingUp className="w-4 h-4 text-influencer-500" />
+                  Performance
                 </h3>
               </div>
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={volumeTrendData}>
+                  <LineChart data={performanceData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700, fill: '#94a3b8'}} />
                     <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700, fill: '#94a3b8'}} />
                     <RechartsTooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
-                    <Bar dataKey="count" fill="#8b5cf6" radius={[6, 6, 0, 0]} barSize={30} />
-                  </BarChart>
+                    <Line 
+                      type="monotone" 
+                      dataKey="Leads" 
+                      stroke="#8b5cf6" 
+                      strokeWidth={4}
+                      dot={{ r: 4, fill: '#8b5cf6', strokeWidth: 2, stroke: '#fff' }}
+                      activeDot={{ r: 6, strokeWidth: 0 }}
+                    />
+                  </LineChart>
                 </ResponsiveContainer>
               </div>
             </div>
@@ -508,7 +663,7 @@ export default function InfluencerLeads() {
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
-                      <RechartsTooltip />
+                      <RechartsTooltip wrapperStyle={{ zIndex: 100 }} content={<CustomPieTooltip total={totalPushedLeads} />} />
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
@@ -524,7 +679,7 @@ export default function InfluencerLeads() {
                         <span className="text-[10px] font-bold text-gray-500 truncate max-w-[100px]">{item.name}</span>
                       </div>
                       <span className="text-[10px] font-black text-gray-900">
-                        {totalPushedLeads > 0 ? Math.round((item.value / totalPushedLeads) * 100) : 0}%
+                        {item.value}
                       </span>
                     </div>
                   ))}
@@ -555,7 +710,7 @@ export default function InfluencerLeads() {
                             <Cell key={`cell-${index}`} fill={entry.color} />
                           ))}
                         </Pie>
-                        <RechartsTooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
+                        <RechartsTooltip wrapperStyle={{ zIndex: 100 }} content={<CustomPieTooltip total={confirmationDistData.reduce((acc: number, curr: any) => acc + curr.value, 0)} />} />
                       </PieChart>
                     </ResponsiveContainer>
                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
@@ -591,22 +746,6 @@ export default function InfluencerLeads() {
                 <Truck className="w-4 h-4 text-emerald-500" />
                 Analyse de Livraison
               </h3>
-              
-              {/* Payment Summary Cards */}
-              <div className="grid grid-cols-3 gap-2 mb-6">
-                <div className="bg-red-50 p-2.5 rounded-2xl border border-red-100 text-center">
-                  <span className="block text-[10px] font-black text-red-400 uppercase tracking-tighter mb-0.5">Non Payé</span>
-                  <span className="text-lg font-black text-red-600">{nonPaidLeads}</span>
-                </div>
-                <div className="bg-blue-50 p-2.5 rounded-2xl border border-blue-100 text-center">
-                  <span className="block text-[10px] font-black text-blue-400 uppercase tracking-tighter mb-0.5">Facturé</span>
-                  <span className="text-lg font-black text-blue-600">{facturedLeads}</span>
-                </div>
-                <div className="bg-emerald-50 p-2.5 rounded-2xl border border-emerald-100 text-center">
-                  <span className="block text-[10px] font-black text-emerald-400 uppercase tracking-tighter mb-0.5">Payé</span>
-                  <span className="text-lg font-black text-emerald-600">{paidLeads}</span>
-                </div>
-              </div>
 
               {deliveryDistData.length > 0 ? (
                 <>
@@ -624,7 +763,7 @@ export default function InfluencerLeads() {
                             <Cell key={`cell-${index}`} fill={entry.color} />
                           ))}
                         </Pie>
-                        <RechartsTooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
+                        <RechartsTooltip wrapperStyle={{ zIndex: 100 }} content={<CustomPieTooltip total={deliveryDistData.reduce((acc: number, curr: any) => acc + curr.value, 0)} />} />
                       </PieChart>
                     </ResponsiveContainer>
                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
@@ -696,47 +835,18 @@ export default function InfluencerLeads() {
             </div>
           </div>
 
-          {/* Date Filters */}
-          <div className="flex flex-col sm:flex-row items-center gap-2">
-            <div className="relative flex-1 sm:w-40">
-              <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          {/* Search Bar Only */}
+          <div className="flex flex-col xl:flex-row items-start xl:items-center gap-4 w-full">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 text-xs bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-influencer-500 transition-all font-bold text-gray-600"
+                type="text"
+                placeholder="Rechercher par nom, téléphone ou ville..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-11 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-influencer-500 transition-all font-medium placeholder:text-gray-400"
               />
             </div>
-            <div className="relative flex-1 sm:w-40">
-              <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 text-xs bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-influencer-500 transition-all font-bold text-gray-600"
-              />
-            </div>
-            {(startDate || endDate) && (
-              <button
-                onClick={() => { setStartDate(''); setEndDate(''); }}
-                className="p-2.5 text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-                title="Réinitialiser les dates"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-          
-          {/* Search Bar */}
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Rechercher par nom, téléphone ou ville..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-11 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-influencer-500 transition-all font-medium placeholder:text-gray-400"
-            />
           </div>
         </div>
       </div>
@@ -750,313 +860,442 @@ export default function InfluencerLeads() {
             <span className="text-gray-400 font-medium">({sortedCommissions.length})</span>
           </h2>
 
-          <div className="flex items-center gap-2">
-            {selectedIds.length > 0 && (
-              <button
-                onClick={() => handleBulkPush()}
-                disabled={isPushingBulk}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-influencer-100 text-influencer-700 rounded-lg text-[10px] font-bold hover:bg-influencer-200 transition-all"
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-gray-400 uppercase">Par page:</span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                className="text-[10px] font-black bg-gray-50 border border-gray-100 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-influencer-500 transition-all cursor-pointer"
               >
-                <Headphones className="w-3.5 h-3.5" />
-                Pousser la sélection ({selectedIds.length})
-              </button>
-            )}
-            {selectedIds.length > 0 && (
-              <button
-                onClick={handleBulkDelete}
-                disabled={isPushingBulk}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold hover:bg-red-200 transition-all"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Supprimer ({selectedIds.length})
-              </button>
-            )}
+                {[10, 20, 30, 50, 100].map(val => (
+                  <option key={val} value={val}>{val}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {selectedIds.length > 0 && (
+                <button
+                  onClick={() => handleBulkPush()}
+                  disabled={isPushingBulk}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-influencer-100 text-influencer-700 rounded-lg text-[10px] font-bold hover:bg-influencer-200 transition-all"
+                >
+                  <Headphones className="w-3.5 h-3.5" />
+                  Pousser la sélection ({selectedIds.length})
+                </button>
+              )}
+              {selectedIds.length > 0 && (
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={isPushingBulk}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold hover:bg-red-200 transition-all"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Supprimer ({selectedIds.length})
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
         {sortedCommissions.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-100">
-              <thead className="bg-gray-50/50">
-                <tr>
-                  <th className="px-5 py-3 text-left">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 text-influencer-600 border-gray-300 rounded focus:ring-influencer-500"
-                      checked={pushableLeads.length > 0 && selectedIds.length === pushableLeads.length}
-                      onChange={handleSelectAll}
-                    />
-                  </th>
-                  <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Tracking Number</th>
-                  <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Client</th>
-                  <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Produit</th>
-                  <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Pack/Option</th>
-                  <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Montant</th>
-                  <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Date</th>
-                  <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Situation</th>
-                  <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Commentaires</th>
-                  <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 bg-white">
-                {sortedCommissions.map((commission) => {
-                  const status = ((commission.order?.status || 'PENDING') as string).trim().toUpperCase();
-                  let badge = ALL_STATUS_BADGES[status] || { label: status, color: 'bg-gray-100 text-gray-800', icon: Package };
-                  
-                  // Special case: If confirmed but has a tracking code, it's a delivery-stage lead
-                  if (status === 'CONFIRMED' && commission.order?.coliatyPackageCode) {
-                    badge = {
-                      ...ALL_STATUS_BADGES['PUSHED_TO_DELIVERY'],
-                      label: 'Confirmé (Livraison)'
-                    };
-                  }
-                  
-                  const StatusIcon = badge.icon;
-                  const productImage = commission.referralLink?.product?.images?.[0]?.imageUrl;
-
-                  let packPriceMad: number | null = null;
-                  const productVariant = commission.order?.productVariant || (commission as any).order?.productVariant;
-                  if (productVariant && commission.referralLink?.landingPage?.customStructure) {
-                    try {
-                      const structure = commission.referralLink.landingPage.customStructure;
-                      const blocks = Array.isArray(structure) ? structure : (structure.blocks || []);
-                      const checkoutBlock = blocks.find((b: any) => b.type === 'express_checkout');
-                      if (checkoutBlock?.content?.options) {
-                        const option = checkoutBlock.content.options.find((o: any) => o.name === productVariant);
-                        if (option && option.price) {
-                          packPriceMad = Number(option.price);
-                        }
-                      }
-                    } catch (e) {
-                      // fallback
+          <>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-100">
+                <thead className="bg-gray-50/50">
+                  <tr>
+                    <th className="px-5 py-3 text-left">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 text-influencer-600 border-gray-300 rounded focus:ring-influencer-500"
+                        checked={pushableLeads.length > 0 && selectedIds.length === pushableLeads.length}
+                        onChange={handleSelectAll}
+                      />
+                    </th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Tracking Number</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Client</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Produit</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Pack/Option</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Montant</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Situation</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Commentaires</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 bg-white">
+                  {paginatedCommissions.map((commission) => {
+                    const status = ((commission.order?.status || 'PENDING') as string).trim().toUpperCase();
+                    let badge = ALL_STATUS_BADGES[status] || { label: status, color: 'bg-gray-100 text-gray-800', icon: Package };
+                    
+                    const priceStatus = (commission.order as any)?.lead?.requestedPriceStatus;
+                    
+                    // Special case: If confirmed but has a tracking code, it's a delivery-stage lead
+                    if ((status === 'CONFIRMED' || status === 'PRICE_CONFIRMED') && commission.order?.coliatyPackageCode) {
+                      badge = {
+                        ...ALL_STATUS_BADGES['PUSHED_TO_DELIVERY'],
+                        label: status === 'PRICE_CONFIRMED' ? 'price CONFIRMED (Livraison)' : 'Confirmé (Livraison)'
+                      };
                     }
-                  }
+                    
+                    const StatusIcon = badge.icon || Package;
+                    const productImage = commission.referralLink?.product?.images?.[0]?.imageUrl;
 
-                  return (
-                    <tr key={commission.id} className={`hover:bg-gray-50/50 transition-colors group ${selectedIds.includes(Number(String(commission.id).replace('lead-', ''))) ? 'bg-influencer-50/30' : ''}`}>
-                      {/* Checkbox */}
-                      <td className="px-5 py-4">
-                        {status === 'LEAD' && (
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4 text-influencer-600 border-gray-300 rounded focus:ring-influencer-500"
-                            checked={selectedIds.includes(Number(String(commission.id).replace('lead-', '')))}
-                            onChange={() => handleSelectOne(Number(String(commission.id).replace('lead-', '')))}
-                          />
-                        )}
-                      </td>
+                    let packPriceMad: number | null = null;
+                    const productVariant = commission.order?.productVariant || (commission as any).order?.productVariant;
+                    if (productVariant && commission.referralLink?.landingPage?.customStructure) {
+                      try {
+                        const structure = commission.referralLink.landingPage.customStructure;
+                        const blocks = Array.isArray(structure) ? structure : (structure.blocks || []);
+                        const checkoutBlock = blocks.find((b: any) => b.type === 'express_checkout');
+                        if (checkoutBlock?.content?.options) {
+                          const option = checkoutBlock.content.options.find((o: any) => o.name === productVariant);
+                          if (option && option.price) {
+                            packPriceMad = Number(option.price);
+                          }
+                        }
+                      } catch (e) {
+                        // fallback
+                      }
+                    }
 
-                      {/* Tracking Number */}
-                      <td className="px-5 py-4">
-                        {commission.order?.coliatyPackageCode && (
-                          <div className="flex flex-col items-start">
-                            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-violet-50 text-violet-600 rounded border border-violet-100 text-[9px] font-black">
-                              <Truck className="w-2.5 h-2.5" />
-                              <span>{commission.order.coliatyPackageCode}</span>
+                    return (
+                      <tr key={commission.id} className={`hover:bg-gray-50/50 transition-colors group ${selectedIds.includes(Number(String(commission.id).replace('lead-', ''))) ? 'bg-influencer-50/30' : ''}`}>
+                        {/* Checkbox */}
+                        <td className="px-5 py-4">
+                          {status === 'LEAD' && (
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4 text-influencer-600 border-gray-300 rounded focus:ring-influencer-500"
+                              checked={selectedIds.includes(Number(String(commission.id).replace('lead-', '')))}
+                              onChange={() => handleSelectOne(Number(String(commission.id).replace('lead-', '')))}
+                            />
+                          )}
+                        </td>
+
+                        {/* Tracking Number */}
+                        <td className="px-5 py-4">
+                          {commission.order?.coliatyPackageCode && (
+                            <div className="flex flex-col items-start">
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-violet-50 text-violet-600 rounded border border-violet-100 text-[9px] font-black">
+                                <Truck className="w-2.5 h-2.5" />
+                                <span>{commission.order.coliatyPackageCode}</span>
+                              </div>
+                              {commission.order.coliatyPackageId && (
+                                <span className="text-[8px] font-bold text-gray-400 mt-0.5">ID: #{commission.order.coliatyPackageId}</span>
+                              )}
                             </div>
-                            {commission.order.coliatyPackageId && (
-                              <span className="text-[8px] font-bold text-gray-400 mt-0.5">ID: #{commission.order.coliatyPackageId}</span>
+                          )}
+                        </td>
+
+                        {/* Client */}
+                        <td className="px-5 py-4">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-bold text-gray-900">{commission.order?.customerName || '-'}</span>
+                            <div className="flex items-center gap-3 mt-1 text-[10px] text-gray-500 font-medium uppercase tracking-wider">
+                              <span className="flex items-center gap-1"><Phone className="w-2.5 h-2.5" /> {commission.order?.customerPhone}</span>
+                              <span className="flex items-center gap-1"><MapPin className="w-2.5 h-2.5" /> {commission.order?.customerCity || '-'}</span>
+                            </div>
+                            {commission.order?.customerAddress && (
+                              <span className="text-[10px] text-gray-400 mt-1 truncate max-w-[200px]">📍 {commission.order.customerAddress}</span>
                             )}
                           </div>
-                        )}
-                      </td>
+                        </td>
 
-                      {/* Client */}
-                      <td className="px-5 py-4">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-bold text-gray-900">{commission.order?.customerName || '-'}</span>
-                          <div className="flex items-center gap-3 mt-1 text-[10px] text-gray-500 font-medium uppercase tracking-wider">
-                            <span className="flex items-center gap-1"><Phone className="w-2.5 h-2.5" /> {commission.order?.customerPhone}</span>
-                            <span className="flex items-center gap-1"><MapPin className="w-2.5 h-2.5" /> {commission.order?.customerCity || '-'}</span>
-                          </div>
-                          {commission.order?.customerAddress && (
-                            <span className="text-[10px] text-gray-400 mt-1 truncate max-w-[200px]">📍 {commission.order.customerAddress}</span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Produit */}
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          {productImage ? (
-                            <img src={productImage} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
-                          ) : (
-                            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                              <Package className="w-4 h-4 text-gray-400" />
+                        {/* Produit */}
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            {productImage ? (
+                              <img src={productImage} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                                <Package className="w-4 h-4 text-gray-400" />
+                              </div>
+                            )}
+                            <div className="flex flex-col">
+                              <span className="text-sm font-bold text-gray-900">{commission.referralLink?.product?.nameFr || '-'}</span>
+                              <span className="text-[10px] text-gray-400 font-mono mt-0.5 uppercase">SKU: {commission.referralLink?.product?.sku || '-'}</span>
                             </div>
-                          )}
-                          <div className="flex flex-col">
-                            <span className="text-sm font-bold text-gray-900">{commission.referralLink?.product?.nameFr || '-'}</span>
-                            <span className="text-[10px] text-gray-400 font-mono mt-0.5 uppercase">SKU: {commission.referralLink?.product?.sku || '-'}</span>
                           </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* Option */}
-                      <td className="px-5 py-4">
-                        <div className="flex flex-col">
-                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter mb-0.5">Sélection</span>
-                          <span className="text-xs font-black text-influencer-600 truncate max-w-[100px]">
-                            {(commission.order as any)?.productVariant || (commission as any).order?.productVariant || '-'}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Montant */}
-                      <td className="px-5 py-4">
-                        <span className="text-sm font-bold text-gray-900">
-                          {Number(commission.order?.totalAmountMad) > 0
-                            ? `${Number(commission.order!.totalAmountMad).toFixed(2)} MAD`
-                            : packPriceMad !== null
-                              ? `${packPriceMad.toFixed(2)} MAD`
-                              : commission.referralLink?.product?.retailPriceMad
-                                ? `${Number(commission.referralLink.product.retailPriceMad).toFixed(2)} MAD`
-                                : '-'}
-                        </span>
-                      </td>
-
-                      {/* Status */}
-                      <td className="px-5 py-4">
-                        <div className="flex flex-col items-start gap-1">
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${badge.color}`}>
-                            <StatusIcon className="w-3 h-3" />
-                            {badge.label}
-                          </span>
-                          {status === 'CALL_LATER' && (commission.order as any)?.lead?.callbackDate && (
-                            <span className="flex items-center gap-1 px-1.5 py-0.5 bg-orange-50 text-orange-600 rounded border border-orange-100 text-[8px] font-black uppercase shadow-sm animate-pulse">
-                              <Calendar className="w-2 h-2" />
-                              {format(new Date((commission.order as any).lead.callbackDate), 'dd MMM HH:mm')}
+                        {/* Option */}
+                        <td className="px-5 py-4">
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter mb-0.5">Sélection</span>
+                            <span className="text-xs font-black text-influencer-600 truncate max-w-[100px]">
+                              {(commission.order as any)?.productVariant || (commission as any).order?.productVariant || '-'}
                             </span>
-                          )}
-                        </div>
-                      </td>
+                          </div>
+                        </td>
 
-                      {/* Date */}
-                      <td className="px-5 py-4">
-                        <div className="flex flex-col text-xs text-gray-500 font-medium whitespace-nowrap">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3" /> 
-                            {commission.createdAt ? format(new Date(commission.createdAt), 'dd MMM yyyy') : '-'}
+                        {/* Montant */}
+                        <td className="px-5 py-4">
+                          <span className="text-sm font-bold text-gray-900">
+                            {Number(commission.order?.totalAmountMad) > 0
+                              ? `${Number(commission.order!.totalAmountMad).toFixed(2)} MAD`
+                              : packPriceMad !== null
+                                ? `${packPriceMad.toFixed(2)} MAD`
+                                : commission.referralLink?.product?.retailPriceMad
+                                  ? `${Number(commission.referralLink.product.retailPriceMad).toFixed(2)} MAD`
+                                  : '-'}
                           </span>
-                          <span className="flex items-center gap-1 mt-0.5 opacity-60">
-                            <Clock className="w-3 h-3" /> 
-                            {commission.createdAt ? format(new Date(commission.createdAt), 'HH:mm') : '-'}
-                          </span>
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* Situation */}
-                      <td className="px-5 py-4">
-                        {(() => {
-                          const sit = (commission.order as any)?.lead?.paymentSituation || 'NOT_PAID';
-                          const badge = PAYMENT_SITUATION_BADGES[sit] || PAYMENT_SITUATION_BADGES.NOT_PAID;
-                          return (
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest ${badge.color}`}>
+                        {/* Status */}
+                        <td className="px-5 py-4">
+                          <div className="flex flex-col items-start gap-1">
+                            {status === 'CANCEL_REASON_PRICE' && (commission.order as any)?.lead?.requestedPriceMad && (
+                              <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-600 text-white rounded border border-gray-400 text-[9px] font-black shadow-sm mb-1">
+                                💰 {(commission.order as any).lead.requestedPriceMad} MAD 
+                                {(commission.order as any).lead.requestedPriceStatus === 'PENDING' ? ' (En attente)' : 
+                                 (commission.order as any).lead.requestedPriceStatus === 'APPROVED' ? ' (Approuvé)' : 
+                                 (commission.order as any).lead.requestedPriceStatus === 'REJECTED' ? ' (Rejeté)' : ''}
+                              </span>
+                            )}
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${badge.color}`}>
+                              <StatusIcon className="w-3 h-3" />
                               {badge.label}
                             </span>
-                          );
-                        })()}
-                      </td>
-                      
-                      {/* Commentaires */}
-                      <td className="px-5 py-4">
-                        {(commission.order as any)?.lead?.notes ? (
-                          <div className="max-w-[200px]">
-                            <p className="text-[10px] text-gray-600 font-medium line-clamp-2 italic" title={(commission.order as any).lead.notes}>
-                              "{(commission.order as any).lead.notes}"
-                            </p>
+                            {status === 'CALL_LATER' && (commission.order as any)?.lead?.callbackDate && (
+                              <span className="flex items-center gap-1 px-1.5 py-0.5 bg-orange-50 text-orange-600 rounded border border-orange-100 text-[8px] font-black uppercase shadow-sm animate-pulse">
+                                <Calendar className="w-2 h-2" />
+                                {format(new Date((commission.order as any).lead.callbackDate), 'dd MMM HH:mm')}
+                              </span>
+                            )}
                           </div>
-                        ) : (
-                          <span className="text-[10px] text-gray-300 italic">Aucun commentaire</span>
-                        )}
-                      </td>
+                        </td>
 
-                      {/* Actions */}
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-1">
-                          {commission.order?.status === 'LEAD' && (
-                            <>
-                              <button
-                                onClick={async () => {
-                                  const realId = String(commission.id).replace('lead-', '');
-                                  try {
-                                    await influencerApi.pushLeadToCallCenter(Number(realId));
-                                    toast.success('Lead envoyé au Call Center!');
-                                    loadData();
-                                  } catch (err: any) {
-                                    toast.error(err?.response?.data?.message || 'Erreur');
-                                  }
-                                }}
-                                className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-all" title="Envoyer au Call Center"
-                              >
-                                <Headphones className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  const realId = String(commission.id).replace('lead-', '');
-                                  setConfirmModal({
-                                    isOpen: true,
-                                    title: 'Supprimer ce lead ?',
-                                    message: 'Cette action est irréversible. Voulez-vous vraiment continuer ?',
-                                    variant: 'danger',
-                                    onConfirm: async () => {
-                                      try {
-                                        await influencerApi.deleteLead(Number(realId));
-                                        toast.success('Lead supprimé');
-                                        loadData();
-                                        setConfirmModal(prev => ({ ...prev, isOpen: false }));
-                                      } catch (err: any) {
-                                        toast.error(err?.response?.data?.message || 'Erreur');
-                                      }
-                                    }
-                                  });
-                                }}
-                                className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-all" title="Supprimer"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </>
-                          )}
-                          {commission.order?.status === 'ASSIGNED' && (
-                            <span className="text-[10px] text-cyan-600 font-bold bg-cyan-50 px-2 py-1 rounded-lg">Au Call Center</span>
-                          )}
-                          {/* History button always visible */}
+                        {/* Date */}
+                        <td className="px-5 py-4">
+                          <div className="flex flex-col text-xs text-gray-500 font-medium whitespace-nowrap">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3" /> 
+                              {commission.createdAt ? format(new Date(commission.createdAt), 'dd MMM yyyy') : '-'}
+                            </span>
+                            <span className="flex items-center gap-1 mt-0.5 opacity-60">
+                              <Clock className="w-3 h-3" /> 
+                              {commission.createdAt ? format(new Date(commission.createdAt), 'HH:mm') : '-'}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Situation */}
+                        <td className="px-5 py-4">
                           {(() => {
-                            const leadHistory = (commission.order as any)?.lead?.statusHistory || (commission as any)?.statusHistory || [];
-                            const orderHistory = (commission.order as any)?.statusHistory || [];
-                            
-                            // Merge and normalize histories
-                            const mergedHistory = [
-                              ...leadHistory.map((h: any) => ({ ...h, type: 'LEAD' })),
-                              ...orderHistory.map((h: any) => ({ 
-                                ...h, 
-                                type: 'ORDER',
-                                changer: h.changedByUser // Normalize to same field name
-                              }))
-                            ].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-                            return mergedHistory.length > 0 ? (
-                              <button
-                                onClick={() => setHistoryModal({
-                                  isOpen: true,
-                                  customerName: commission.order?.customerName || '-',
-                                  history: mergedHistory,
-                                })}
-                                className="p-1.5 rounded-lg text-violet-500 hover:bg-violet-50 transition-all" title="Voir l'historique"
-                              >
-                                <History className="w-4 h-4" />
-                              </button>
-                            ) : null;
+                            const sit = (commission.order as any)?.lead?.paymentSituation || 'NOT_PAID';
+                            const badge = PAYMENT_SITUATION_BADGES[sit] || PAYMENT_SITUATION_BADGES.NOT_PAID;
+                            return (
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest ${badge.color}`}>
+                                {badge.label}
+                              </span>
+                            );
                           })()}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        </td>
+                        
+                        {/* Commentaires */}
+                        <td className="px-5 py-4">
+                          {(commission.order as any)?.lead?.notes ? (
+                            <div className="max-w-[200px]">
+                              <p className="text-[10px] text-gray-600 font-medium line-clamp-2 italic" title={(commission.order as any).lead.notes}>
+                                "{(commission.order as any).lead.notes}"
+                              </p>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-gray-300 italic">Aucun commentaire</span>
+                          )}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-1">
+                            {commission.order?.status === 'LEAD' && (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    const realId = String(commission.id).replace('lead-', '');
+                                    handleBulkPush([Number(realId)]);
+                                  }}
+                                  className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-all" title="Envoyer au Call Center"
+                                >
+                                  <Headphones className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    const realId = String(commission.id).replace('lead-', '');
+                                    setConfirmModal({
+                                      isOpen: true,
+                                      title: 'Supprimer ce lead ?',
+                                      message: 'Cette action est irréversible. Voulez-vous vraiment continuer ?',
+                                      variant: 'danger',
+                                      onConfirm: async () => {
+                                        try {
+                                          await influencerApi.deleteLead(Number(realId));
+                                          toast.success('Lead supprimé');
+                                          loadData();
+                                          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                                        } catch (err: any) {
+                                          toast.error(err?.response?.data?.message || 'Erreur');
+                                        }
+                                      }
+                                    });
+                                  }}
+                                  className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-all" title="Supprimer"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
+                            {(commission.order?.status === 'ASSIGNED' || status === 'CANCEL_REASON_PRICE') && (
+                              <span className="text-[10px] text-cyan-600 font-bold bg-cyan-50 px-2 py-1 rounded-lg">Au Call Center</span>
+                            )}
+                            {status === 'CANCEL_REASON_PRICE' && (commission.order as any)?.lead?.requestedPriceStatus === 'PENDING' && (
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await leadsApi.respondPriceRequest(Number(String(commission.id).replace('lead-', '')), 'APPROVE');
+                                      toast.success('Demande de prix approuvée');
+                                      loadData();
+                                    } catch (err: any) {
+                                      toast.error(err?.response?.data?.message || 'Erreur');
+                                    }
+                                  }}
+                                  className="p-2 rounded-xl text-emerald-600 bg-emerald-50 hover:bg-emerald-100 transition-all text-[11px] font-black uppercase shadow-sm border border-emerald-100 flex flex-col items-center gap-1 min-w-[50px]" title="Accepter"
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                  OUI
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await leadsApi.respondPriceRequest(Number(String(commission.id).replace('lead-', '')), 'REJECT');
+                                      toast.success('Demande de prix rejetée');
+                                      loadData();
+                                    } catch (err: any) {
+                                      toast.error(err?.response?.data?.message || 'Erreur');
+                                    }
+                                  }}
+                                  className="p-2 rounded-xl text-rose-600 bg-rose-50 hover:bg-rose-100 transition-all text-[11px] font-black uppercase shadow-sm border border-rose-100 flex flex-col items-center gap-1 min-w-[50px]" title="Refuser"
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                  NON
+                                </button>
+                              </div>
+                            )}
+                            {/* History button always visible */}
+                            {(() => {
+                              const leadHistory = (commission.order as any)?.lead?.statusHistory || (commission as any)?.statusHistory || [];
+                              const orderHistory = (commission.order as any)?.statusHistory || [];
+                              
+                              // Merge and normalize histories
+                              const mergedHistory = [
+                                ...leadHistory.map((h: any) => ({ ...h, type: 'LEAD' })),
+                                ...orderHistory.map((h: any) => ({ 
+                                  ...h, 
+                                  type: 'ORDER',
+                                  changer: h.changedByUser // Normalize to same field name
+                                }))
+                              ]
+                              .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+                              // Remove consecutive duplicate statuses (caused by both lead & order history updating)
+                              .filter((entry, i, arr) => {
+                                if (i === 0) return true;
+                                return entry.newStatus !== arr[i - 1].newStatus;
+                              });
+
+                              return mergedHistory.length > 0 ? (
+                                <button
+                                  onClick={() => setHistoryModal({
+                                    isOpen: true,
+                                    customerName: commission.order?.customerName || '-',
+                                    leadNotes: (commission.order as any)?.lead?.notes || '',
+                                    history: mergedHistory,
+                                  })}
+                                  className="p-1.5 rounded-lg text-violet-500 hover:bg-violet-50 transition-all" title="Voir l'historique"
+                                >
+                                  <History className="w-4 h-4" />
+                                </button>
+                              ) : null;
+                            })()}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="p-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white">
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                    Affichage de <span className="text-gray-900">{Math.min(sortedCommissions.length, (currentPage - 1) * itemsPerPage + 1)}</span> à <span className="text-gray-900">{Math.min(sortedCommissions.length, currentPage * itemsPerPage)}</span> sur <span className="text-gray-900">{sortedCommissions.length}</span> leads
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase">Par page:</span>
+                    <select
+                      value={itemsPerPage}
+                      onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                      className="text-[10px] font-black bg-gray-50 border border-gray-100 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-influencer-500 transition-all"
+                    >
+                      {[10, 20, 30, 50, 100].map(val => (
+                        <option key={val} value={val}>{val}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="p-2 border border-gray-100 rounded-xl hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  >
+                    <ChevronLeft className="w-4 h-4 text-gray-600" />
+                  </button>
+                  
+                  <div className="flex items-center gap-1">
+                    {(() => {
+                      const pages = [];
+                      for (let i = 1; i <= totalPages; i++) {
+                        if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+                          pages.push(
+                            <button
+                              key={i}
+                              onClick={() => setCurrentPage(i)}
+                              className={`w-8 h-8 rounded-xl text-xs font-black transition-all ${
+                                currentPage === i
+                                  ? 'bg-influencer-600 text-white shadow-lg shadow-influencer-200 scale-110'
+                                  : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600'
+                              }`}
+                            >
+                              {i}
+                            </button>
+                          );
+                        } else if (i === currentPage - 2 || i === currentPage + 2) {
+                          pages.push(<span key={i} className="px-1 text-gray-300">...</span>);
+                        }
+                      }
+                      return pages;
+                    })()}
+                  </div>
+
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="p-2 border border-gray-100 rounded-xl hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  >
+                    <ChevronRight className="w-4 h-4 text-gray-600" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <div className="p-12 text-center">
             <Package className="w-12 h-12 mx-auto text-gray-200 mb-3" />
@@ -1076,16 +1315,28 @@ export default function InfluencerLeads() {
           <div className="bg-white rounded-[2rem] w-full max-w-lg overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200">
             {/* Header */}
             <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100">
-              <div>
+              <div className="flex-1">
                 <h2 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
                   <History className="w-5 h-5 text-violet-500" />
                   Historique des statuts
                 </h2>
-                <p className="text-xs text-gray-400 font-medium mt-0.5">{historyModal.customerName}</p>
+                <div className="flex flex-col gap-1 mt-1">
+                  <p className="text-xs text-gray-400 font-medium">{historyModal.customerName}</p>
+                  {historyModal.leadNotes && (
+                    <div className="bg-amber-50 border border-amber-100/50 rounded-xl px-3 py-2 mt-2">
+                      <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest flex items-center gap-1.5 mb-1">
+                        <MessageSquare className="w-3 h-3" /> Commentaire du Lead
+                      </p>
+                      <p className="text-xs text-amber-900/80 font-medium italic">
+                        "{historyModal.leadNotes}"
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
               <button
                 onClick={() => setHistoryModal(prev => ({ ...prev, isOpen: false }))}
-                className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all"
+                className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all self-start"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1222,36 +1473,71 @@ export default function InfluencerLeads() {
                           return (
                             <div 
                               key={lead.id} 
-                              onClick={() => {
-                                setDuplicateCheck(prev => {
-                                  const newIds = prev.ids.includes(leadId) 
-                                    ? prev.ids.filter(id => id !== leadId)
-                                    : [...prev.ids, leadId];
-                                  return { ...prev, ids: newIds };
-                                });
-                              }}
-                              className={`p-6 flex items-center gap-4 cursor-pointer transition-all ${
-                                isSelected ? 'bg-white' : 'opacity-60 grayscale-[0.5]'
+                              className={`p-6 flex items-center justify-between transition-all ${
+                                isSelected ? 'bg-influencer-50/10' : duplicateCheck.deleteIds.includes(leadId) ? 'bg-red-50/10' : 'bg-white'
                               }`}
                             >
-                              <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
-                                isSelected 
-                                  ? 'bg-influencer-500 border-influencer-500 text-white shadow-lg shadow-influencer-500/20' 
-                                  : 'border-slate-200'
-                              }`}>
-                                {isSelected && <CheckCircle2 size={14} />}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-black text-slate-900 truncate tracking-tight">{lead.order?.customerName}</p>
-                                <div className="flex items-center gap-3 mt-1.5">
-                                  <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase">
-                                    <MapPin size={10} /> {lead.order?.customerCity || '—'}
-                                  </span>
-                                  <span className="w-1 h-1 rounded-full bg-slate-200" />
-                                  <span className="text-[10px] font-bold text-slate-400 uppercase">
-                                    {format(new Date(lead.createdAt), 'dd MMM yyyy')}
-                                  </span>
+                              <div className="flex items-center gap-4 flex-1 min-w-0">
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-black text-slate-900 truncate tracking-tight">{lead.order?.customerName}</p>
+                                  <div className="flex items-center gap-3 mt-1.5">
+                                    <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase">
+                                      <MapPin size={10} /> {lead.order?.customerCity || '—'}
+                                    </span>
+                                    <span className="w-1 h-1 rounded-full bg-slate-200" />
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase">
+                                      {format(new Date(lead.createdAt), 'dd MMM yyyy')}
+                                    </span>
+                                  </div>
                                 </div>
+                              </div>
+
+                              <div className="flex items-center gap-6 shrink-0">
+                                {/* Option 1: PUSH */}
+                                <button
+                                  onClick={() => {
+                                    setDuplicateCheck(prev => {
+                                      const isAlreadyPushing = prev.ids.includes(leadId);
+                                      let newIds = isAlreadyPushing ? prev.ids.filter(id => id !== leadId) : [...prev.ids, leadId];
+                                      // If pushing, cannot be deleting
+                                      let newDeleteIds = prev.deleteIds.filter(id => id !== leadId);
+                                      return { ...prev, ids: newIds, deleteIds: newDeleteIds };
+                                    });
+                                  }}
+                                  className="flex flex-col items-center gap-1.5"
+                                >
+                                  <div className={`w-10 h-10 rounded-xl border-2 flex items-center justify-center transition-all ${
+                                    isSelected 
+                                      ? 'bg-influencer-500 border-influencer-500 text-white shadow-lg shadow-influencer-500/20' 
+                                      : 'border-slate-200 bg-white hover:border-influencer-300'
+                                  }`}>
+                                    <Headphones size={18} />
+                                  </div>
+                                  <span className={`text-[9px] font-black uppercase tracking-widest ${isSelected ? 'text-influencer-600' : 'text-slate-400'}`}>Envoyer</span>
+                                </button>
+
+                                {/* Option 2: DELETE */}
+                                <button
+                                  onClick={() => {
+                                    setDuplicateCheck(prev => {
+                                      const isAlreadyDeleting = prev.deleteIds.includes(leadId);
+                                      let newDeleteIds = isAlreadyDeleting ? prev.deleteIds.filter(id => id !== leadId) : [...prev.deleteIds, leadId];
+                                      // If deleting, cannot be pushing
+                                      let newIds = prev.ids.filter(id => id !== leadId);
+                                      return { ...prev, ids: newIds, deleteIds: newDeleteIds };
+                                    });
+                                  }}
+                                  className="flex flex-col items-center gap-1.5"
+                                >
+                                  <div className={`w-10 h-10 rounded-xl border-2 flex items-center justify-center transition-all ${
+                                    duplicateCheck.deleteIds.includes(leadId) 
+                                      ? 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-500/20' 
+                                      : 'border-slate-200 bg-white hover:border-red-300'
+                                  }`}>
+                                    <Trash2 size={18} />
+                                  </div>
+                                  <span className={`text-[9px] font-black uppercase tracking-widest ${duplicateCheck.deleteIds.includes(leadId) ? 'text-red-600' : 'text-slate-400'}`}>Supprimer</span>
+                                </button>
                               </div>
                             </div>
                           );
@@ -1282,17 +1568,56 @@ export default function InfluencerLeads() {
                   <button
                     onClick={() => {
                       setDuplicateCheck(prev => ({ ...prev, isOpen: false }));
-                      proceedWithBulkPush(duplicateCheck.ids);
+
+                      if (duplicateCheck.deleteIds.length > 0) {
+                        setConfirmModal({
+                          isOpen: true,
+                          title: 'Nettoyage des doublons',
+                          message: `Vous allez envoyer ${duplicateCheck.ids.length} leads. Les ${duplicateCheck.deleteIds.length} doublons sélectionnés seront définitivement supprimés pour nettoyer votre liste. Confirmer ?`,
+                          variant: 'danger',
+                          onConfirm: async () => {
+                            try {
+                              setIsPushingBulk(true);
+                              
+                              // Proceed with pushing FIRST to trigger any validation errors
+                              if (duplicateCheck.ids.length > 0) {
+                                await influencerApi.pushLeadsToCallCenterBulk(duplicateCheck.ids);
+                              }
+
+                              // Proceed with deletion ONLY if push was successful
+                              if (duplicateCheck.deleteIds.length > 0) {
+                                try {
+                                  await influencerApi.deleteLeadsBulk(duplicateCheck.deleteIds);
+                                } catch (e: any) {
+                                  // If 404, they might have already been deleted, we can proceed
+                                  if (e.response?.status !== 404) throw e;
+                                }
+                              }
+
+                              toast.success(`${duplicateCheck.ids.length} envoyés et ${duplicateCheck.deleteIds.length} supprimés`);
+                              setSelectedIds([]);
+                              setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                            } catch (err: any) {
+                              toast.error(err.response?.data?.message || 'Erreur lors du traitement');
+                            } finally {
+                              loadData();
+                              setIsPushingBulk(false);
+                            }
+                          }
+                        });
+                      } else {
+                        proceedWithBulkPush(duplicateCheck.ids);
+                      }
                     }}
-                    disabled={hasDuplicateSelections || duplicateCheck.ids.length === 0}
+                    disabled={hasDuplicateSelections || (duplicateCheck.ids.length === 0 && duplicateCheck.deleteIds.length === 0)}
                     className={`flex-[2] px-8 py-4 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all shadow-xl flex items-center justify-center gap-2 ${
-                      hasDuplicateSelections || duplicateCheck.ids.length === 0
+                      hasDuplicateSelections || (duplicateCheck.ids.length === 0 && duplicateCheck.deleteIds.length === 0)
                         ? 'bg-gray-300 cursor-not-allowed shadow-none'
                         : 'bg-gray-900 hover:bg-black shadow-gray-900/20'
                     }`}
                   >
                     <Headphones size={16} />
-                    {hasDuplicateSelections ? 'Doublons sélectionnés' : `Confirmer l'envoi (${duplicateCheck.ids.length})`}
+                    {hasDuplicateSelections ? 'Doublons sélectionnés' : `Confirmer (${duplicateCheck.ids.length + duplicateCheck.deleteIds.length})`}
                   </button>
                 );
               })()}
@@ -1341,4 +1666,23 @@ export default function InfluencerLeads() {
       )}
     </div>
   );
+}
+
+function CustomPieTooltip({ active, payload, total }: any) {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    const percent = total > 0 ? ((data.value / total) * 100).toFixed(1) : 0;
+    return (
+      <div className="bg-white p-3 rounded-2xl shadow-xl border border-gray-100 flex flex-col gap-1 z-50 relative outline-none">
+        <div className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: data.color || data.fill || '#cbd5e1' }} />
+          <span className="text-[10px] font-bold text-gray-500 uppercase">{data.name}</span>
+        </div>
+        <div className="flex items-baseline gap-1.5 pl-4">
+          <span className="text-sm font-black text-gray-900">{percent}%</span>
+        </div>
+      </div>
+    );
+  }
+  return null;
 }

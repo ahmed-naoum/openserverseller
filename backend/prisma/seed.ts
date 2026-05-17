@@ -110,13 +110,13 @@ async function main() {
 
   // Seed Demo Users
   console.log('👥 Creating demo users...');
-  const hashedPassword = await bcrypt.hash('password123', 12);
+  const hashedPassword = await bcrypt.hash('Silacod@@007', 12);
 
   const superAdmin = await prisma.user.upsert({
-    where: { email: 'admin@silacod.ma' },
+    where: { email: 'admin@silacod.com' },
     update: {},
     create: {
-      email: 'admin@silacod.ma',
+      email: 'admin@silacod.com',
       phone: '+212600000001',
       password: hashedPassword,
       roleId: roleMap['SUPER_ADMIN'],
@@ -135,10 +135,10 @@ async function main() {
   });
 
   const vendor = await prisma.user.upsert({
-    where: { email: 'vendor@silacod.ma' },
+    where: { email: 'vendor@silacod.com' },
     update: {},
     create: {
-      email: 'vendor@silacod.ma',
+      email: 'vendor@silacod.com',
       phone: '+212600000002',
       password: hashedPassword,
       roleId: roleMap['VENDOR'],
@@ -166,10 +166,10 @@ async function main() {
 
   await Promise.all([
     prisma.user.upsert({
-      where: { email: 'agent@silacod.ma' },
+      where: { email: 'agent@silacod.com' },
       update: {},
       create: {
-        email: 'agent@silacod.ma',
+        email: 'agent@silacod.com',
         phone: '+212600000003',
         password: hashedPassword,
         roleId: roleMap['CALL_CENTER_AGENT'],
@@ -186,10 +186,10 @@ async function main() {
       },
     }),
     prisma.user.upsert({
-      where: { email: 'confirmation@silacod.ma' },
+      where: { email: 'confirmation@silacod.com' },
       update: {},
       create: {
-        email: 'confirmation@silacod.ma',
+        email: 'confirmation@silacod.com',
         phone: '+212600000004',
         password: hashedPassword,
         roleId: roleMap['CONFIRMATION_AGENT'],
@@ -198,7 +198,7 @@ async function main() {
         emailVerifiedAt: new Date(),
         profile: {
           create: {
-            fullName: 'Ahmed Naoum',
+            fullName: 'Ahmed Khalid',
             city: 'Casablanca',
             language: 'fr',
           },
@@ -206,10 +206,10 @@ async function main() {
       },
     }),
     prisma.user.upsert({
-      where: { email: 'influencer@silacod.ma' },
+      where: { email: 'influencer@silacod.com' },
       update: {},
       create: {
-        email: 'influencer@silacod.ma',
+        email: 'influencer@silacod.com',
         phone: '+212600000005',
         password: hashedPassword,
         roleId: roleMap['INFLUENCER'],
@@ -229,10 +229,10 @@ async function main() {
       },
     }),
     prisma.user.upsert({
-      where: { email: 'support@silacod.ma' },
+      where: { email: 'support@silacod.com' },
       update: {},
       create: {
-        email: 'support@silacod.ma',
+        email: 'support@silacod.com',
         phone: '+212600000006',
         password: hashedPassword,
         roleId: roleMap['SYSTEM_SUPPORT'],
@@ -249,10 +249,10 @@ async function main() {
       },
     }),
     prisma.user.upsert({
-      where: { email: 'helper@silacod.ma' },
+      where: { email: 'helper@silacod.com' },
       update: {},
       create: {
-        email: 'helper@silacod.ma',
+        email: 'helper@silacod.com',
         phone: '+212600000007',
         password: hashedPassword,
         roleId: roleMap['HELPER'],
@@ -291,15 +291,15 @@ async function main() {
   🎉 Database seeding completed successfully!
   ═════════════════════════════════════════════════
   
-  Demo Accounts (password: password123):
+  Demo Accounts (password: Silacod@@007):
   ─────────────────────────────────────────────────
-  Super Admin : admin@silacod.ma
-  Support     : support@silacod.ma
-  Helper      : helper@silacod.ma
-  Vendor      : vendor@silacod.ma
-  Agent       : agent@silacod.ma
-  Conf. Agent : confirmation@silacod.ma
-  Influencer  : influencer@silacod.ma
+  Super Admin : admin@silacod.com
+  Support     : support@silacod.com
+  Helper      : helper@silacod.com
+  Vendor      : vendor@silacod.com
+  Agent       : agent@silacod.com
+  Conf. Agent : confirmation@silacod.com
+  Influencer  : influencer@silacod.com
   ─────────────────────────────────────────────────
   `);
 }

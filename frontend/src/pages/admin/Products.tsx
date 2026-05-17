@@ -1,11 +1,17 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { productsApi, publicApi, adminApi } from '../../lib/api';
 import AddProductModal from '../grosseller/AddProductModal';
 import toast from 'react-hot-toast';
-import { Trash2, Pencil, Package, ChevronLeft, ChevronRight, ShieldAlert } from 'lucide-react';
+import { 
+  Trash2, Pencil, Package, ChevronLeft, ChevronRight, 
+  ShieldAlert, Search, Plus, Filter, LayoutGrid, 
+  List as ListIcon, Calendar, DollarSign, Tag, Eye,
+  Clock, CheckCircle
+} from 'lucide-react';
 
 export default function AdminProducts() {
   const { user } = useAuth();
@@ -13,19 +19,20 @@ export default function AdminProducts() {
   // Permission Guard for Helpers
   if (user?.role === 'HELPER' && !user?.canManageProducts) {
     return (
-      <div className="flex flex-col items-center justify-center h-[60vh] text-center px-4">
-        <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center mb-6 animate-bounce">
-          <ShieldAlert size={40} />
+      <div className="flex flex-col items-center justify-center min-h-[70vh] text-center px-4">
+        <div className="w-24 h-24 bg-rose-50 text-rose-500 rounded-[2rem] flex items-center justify-center mb-8 shadow-xl shadow-rose-100 animate-in zoom-in duration-500">
+          <ShieldAlert size={48} />
         </div>
-        <h2 className="text-2xl font-black text-slate-800 mb-2">Accès Non Autorisé</h2>
-        <p className="text-slate-500 max-w-md mb-8">
-          Vous n'avez pas la permission de gérer les produits. Veuillez contacter un administrateur pour obtenir l'accès.
+        <h2 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">Accès Restreint</h2>
+        <p className="text-slate-500 max-w-md mb-8 font-medium leading-relaxed">
+          Vous n'avez pas les habilitations nécessaires pour accéder au catalogue. Contactez votre superviseur.
         </p>
         <Link 
           to="/helper" 
-          className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
+          className="group relative px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 shadow-2xl shadow-slate-200 overflow-hidden"
         >
-          Retour au Tableau de Bord
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+          <span className="relative">Retour au Tableau de Bord</span>
         </Link>
       </div>
     );
@@ -66,29 +73,18 @@ export default function AdminProducts() {
   const handleStatusChange = async (id: string, status: 'APPROVED' | 'REJECTED') => {
     try {
       await productsApi.updateStatus(id, { status });
+      toast.success(`Produit ${status === 'APPROVED' ? 'approuvé' : 'rejeté'}`);
       refetch();
     } catch (error) {
-      console.error('Error updating product status:', error);
-    }
-  };
-
-  const handleVisibilityChange = async (id: string, visibility: string[]) => {
-    try {
-      await productsApi.update(id, { visibility });
-      refetch();
-    } catch (error) {
-      console.error('Error updating product visibility:', error);
+      toast.error('Erreur lors de la mise à jour');
     }
   };
 
   const handleEdit = async (product: any) => {
     try {
-      // Fetch full product with images
       const response = await productsApi.get(product.id.toString());
-      const fullProduct = response.data.data.product;
-      setEditingProduct(fullProduct);
+      setEditingProduct(response.data.data.product);
     } catch (error) {
-      // Fallback to the product from the list
       setEditingProduct(product);
     }
   };
@@ -96,11 +92,11 @@ export default function AdminProducts() {
   const handleDelete = async (id: string) => {
     try {
       await productsApi.delete(id);
-      toast.success('Produit supprimé avec succès');
+      toast.success('Produit supprimé');
       setDeletingProductId(null);
       refetch();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Erreur lors de la suppression');
+      toast.error(error.response?.data?.message || 'Erreur');
     }
   };
 
@@ -108,324 +104,344 @@ export default function AdminProducts() {
   const products = data?.data?.data?.products || [];
 
   return (
-    <div className="space-y-6">
-      {/* Header Area */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 flex items-center gap-3">
-            <Package className="w-8 h-8 text-primary-600 p-1.5 bg-primary-50 rounded-lg" />
-            Catalogue Produits
-          </h1>
-          <p className="text-sm font-medium text-gray-500 mt-2 flex items-center gap-2">
-            <span>Gestion de l'inventaire global</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-gray-300"></span>
-            <span className="text-primary-600 font-bold bg-primary-50 px-2 py-0.5 rounded-full">
-              {pagination?.total || products.length || 0} produits trouvés
-            </span>
-          </p>
+    <div className="space-y-8 pb-12">
+      {/* Premium Header Area */}
+      <div className="relative group">
+        <div className="absolute -inset-1 bg-gradient-to-r from-primary-600 to-violet-600 rounded-3xl blur opacity-10 group-hover:opacity-20 transition duration-1000"></div>
+        <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/40">
+          <div className="flex items-center gap-6">
+            <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-200 flex-shrink-0 transform -rotate-3 group-hover:rotate-0 transition-transform duration-500">
+              <Package size={32} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-black text-slate-900 tracking-tight">Catalogue Produits</h1>
+              <div className="flex items-center gap-3 mt-1.5">
+                <span className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest rounded-full border border-slate-200/50">
+                  <Filter size={12} /> Gestion Global
+                </span>
+                <span className="flex items-center gap-1.5 px-3 py-1 bg-primary-50 text-primary-600 text-[10px] font-black uppercase tracking-widest rounded-full border border-primary-100/50">
+                  <Tag size={12} /> {pagination?.total || 0} Produits
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <button 
+            onClick={() => setIsAddProductModalOpen(true)} 
+            className="relative group/btn overflow-hidden px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-3 transition-all hover:scale-105 active:scale-95 shadow-2xl shadow-slate-300"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-primary-600 to-violet-600 opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500" />
+            <Plus size={20} className="relative z-10" />
+            <span className="relative z-10">NOUVEAU PRODUIT</span>
+          </button>
         </div>
-        <button 
-          onClick={() => setIsAddProductModalOpen(true)} 
-          className="btn-primary shadow-lg shadow-primary-500/30 flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl hover:scale-[1.02] transition-transform"
-        >
-          <span className="text-xl leading-none">+</span>
-          Ajouter un produit
-        </button>
       </div>
 
-      {/* Filters Section */}
-      <div className="flex flex-col xl:flex-row gap-4">
-        {/* Search Bar */}
-        <div className="flex-1 relative group">
-          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-            <svg className="w-5 h-5 text-gray-400 group-focus-within:text-primary-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+      {/* Glassmorphism Filters Section */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+        {/* Search */}
+        <div className="xl:col-span-4 relative group">
+          <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
+            <Search className="w-5 h-5 text-slate-400 group-focus-within:text-primary-500 transition-colors" />
           </div>
           <input
             type="text"
-            placeholder="Rechercher un produit (Nom, SKU...)"
+            placeholder="Rechercher par nom, SKU..."
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm font-medium focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all shadow-sm"
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="w-full pl-14 pr-5 py-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 placeholder:text-slate-400 focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all shadow-lg shadow-slate-100"
           />
         </div>
-      </div>
 
-      {/* Filters Container */}
-      <div className="bg-white p-2 rounded-2xl shadow-sm border border-gray-100 flex flex-col xl:flex-row gap-2 justify-between items-start xl:items-center">
-        {/* Status Pills */}
-        <div className="flex p-1 bg-gray-50/80 backdrop-blur-sm rounded-xl border border-gray-200/60 overflow-x-auto max-w-full">
+        {/* Status Scroller */}
+        <div className="xl:col-span-8 bg-white border border-slate-200 rounded-2xl p-1.5 shadow-lg shadow-slate-100 flex items-center overflow-x-auto scrollbar-hide gap-1">
           {[
-            { id: 'ALL', label: 'Tous', icon: '📦' }, 
-            { id: 'PENDING', label: 'En Attente', icon: '⏳' }, 
-            { id: 'APPROVED', label: 'Approuvés', icon: '✅' }, 
-            { id: 'REJECTED', label: 'Rejetés', icon: '❌' }
+            { id: 'ALL', label: 'TOUS LES PRODUITS', icon: <Package size={16} /> }, 
+            { id: 'PENDING', label: 'EN ATTENTE', icon: <Clock size={16} /> }, 
+            { id: 'APPROVED', label: 'APPROUVÉS', icon: <CheckCircle size={16} /> }, 
+            { id: 'REJECTED', label: 'REJETÉS', icon: <Trash2 size={16} /> }
           ].map((status) => (
             <button
               key={status.id}
-              onClick={() => {
-                setStatusFilter(status.id);
-                setPage(1);
-              }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${
+              onClick={() => { setStatusFilter(status.id); setPage(1); }}
+              className={`flex items-center gap-2.5 px-5 py-3 rounded-xl text-[10px] font-black tracking-widest transition-all whitespace-nowrap ${
                 statusFilter === status.id
-                  ? 'bg-white text-gray-900 shadow-sm border border-gray-200/50 scale-100'
-                  : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/50 scale-95 opacity-80 hover:opacity-100'
+                  ? 'bg-slate-900 text-white shadow-xl shadow-slate-200 scale-100'
+                  : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50 scale-95'
               }`}
             >
-              <span>{status.icon}</span>
+              {status.icon}
               {status.label}
             </button>
           ))}
         </div>
-
-        {/* Categories Scroller */}
-        <div className="flex gap-2 overflow-x-auto w-full xl:w-auto p-1 scrollbar-hide">
-          <button
-            onClick={() => {
-              setSelectedCategory('');
-              setPage(1);
-            }}
-            className={`px-4 py-2 rounded-xl whitespace-nowrap text-sm font-bold transition-all border ${
-              !selectedCategory 
-                ? 'bg-primary-600 text-white border-primary-500 shadow-md shadow-primary-500/20' 
-                : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            Toutes les catégories
-          </button>
-          {categories.map((cat: any) => (
-            <button
-              key={cat.id}
-              onClick={() => {
-                setSelectedCategory(cat.slug);
-                setPage(1);
-              }}
-              className={`px-4 py-2 rounded-xl whitespace-nowrap text-sm font-bold transition-all border ${
-                selectedCategory === cat.slug 
-                  ? 'bg-primary-600 text-white border-primary-500 shadow-md shadow-primary-500/20' 
-                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              {cat.nameFr}
-            </button>
-          ))}
-        </div>
       </div>
 
-      {/* Products Table */}
-      {isLoading ? (
-        <div className="text-center py-12">Chargement...</div>
-      ) : (
-        <div className="card overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Produit</th>
-                {(user?.role === 'SUPER_ADMIN' || user?.role === 'HELPER') && (
-                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Vendeur</th>
-                )}
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">SKU</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Catégorie</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Coût</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Prix</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Visibilité</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Statut</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {products.map((product: any) => (
-                <tr key={product.id} className="hover:bg-gray-50/80 transition-colors group">
-                  <td className="py-4 px-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-white rounded-xl shadow-sm border border-gray-100 flex items-center justify-center overflow-hidden flex-shrink-0 relative group-hover:shadow-md transition-shadow">
-                        {product.primaryImage ? (
-                          <img src={product.primaryImage} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <Package size={20} className="text-gray-300" />
-                        )}
-                        <div className="absolute inset-0 ring-1 ring-inset ring-black/5 rounded-xl"></div>
-                      </div>
-                      <div className="min-w-0">
-                        <div className="font-bold text-gray-900 truncate pr-4 text-sm">{product.nameFr}</div>
-                        <div className="text-xs font-medium text-gray-500 truncate pr-4 mt-0.5" dir="auto">{product.nameAr}</div>
-                      </div>
-                    </div>
-                  </td>
-                  {(user?.role === 'SUPER_ADMIN' || user?.role === 'HELPER') && (
-                    <td className="py-4 px-4">
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Propriétaire</span>
-                        <span className="text-xs font-bold text-slate-700 truncate max-w-[120px]">{product.ownerName}</span>
+      {/* Category Scroller */}
+      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+        <button
+          onClick={() => { setSelectedCategory(''); setPage(1); }}
+          className={`px-5 py-2.5 rounded-xl whitespace-nowrap text-[11px] font-black tracking-wider transition-all border ${
+            !selectedCategory 
+              ? 'bg-primary-50 text-primary-700 border-primary-200 shadow-sm' 
+              : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'
+          }`}
+        >
+          TOUTES CATÉGORIES
+        </button>
+        {categories.map((cat: any) => (
+          <button
+            key={cat.id}
+            onClick={() => { setSelectedCategory(cat.slug); setPage(1); }}
+            className={`px-5 py-2.5 rounded-xl whitespace-nowrap text-[11px] font-black tracking-wider transition-all border ${
+              selectedCategory === cat.slug 
+                ? 'bg-primary-50 text-primary-700 border-primary-200 shadow-sm' 
+                : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'
+            }`}
+          >
+            {cat.nameFr.toUpperCase()}
+          </button>
+        ))}
+      </div>
+
+      {/* Pro Table Section */}
+      <div className="relative group/table">
+        <div className="absolute -inset-2 bg-gradient-to-b from-slate-100 to-transparent rounded-[2.5rem] opacity-50 pointer-events-none" />
+        <div className="relative bg-white border border-slate-200/60 rounded-[2rem] overflow-hidden shadow-2xl shadow-slate-200/30">
+          <div className="overflow-x-auto scrollbar-pro">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-slate-50/50 border-b border-slate-100">
+                  <th className="text-left py-6 px-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Produit</th>
+                  <th className="text-left py-6 px-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Vendeur</th>
+                  <th className="text-left py-6 px-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">SKU & Cat</th>
+                  <th className="text-left py-6 px-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Date de Création</th>
+                  <th className="text-left py-6 px-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Tarification</th>
+                  <th className="text-left py-6 px-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Visibilité</th>
+                  <th className="text-left py-6 px-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Statut</th>
+                  <th className="text-right py-6 px-8 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {isLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <tr key={i} className="animate-pulse">
+                      <td colSpan={8} className="py-8 px-6"><div className="h-12 bg-slate-100 rounded-2xl w-full" /></td>
+                    </tr>
+                  ))
+                ) : products.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-24 text-center">
+                      <div className="flex flex-col items-center">
+                        <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-slate-200 mb-4">
+                          <Package size={40} />
+                        </div>
+                        <p className="text-slate-400 font-bold">Aucun produit trouvé</p>
                       </div>
                     </td>
-                  )}
-                  <td className="py-4 px-4">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono font-medium bg-gray-100 text-gray-600 border border-gray-200/60">
-                      {product.sku}
-                    </span>
-                  </td>
-                  <td className="py-4 px-4">
-                    <div className="flex flex-wrap gap-1 max-w-[200px]">
-                      {product.categories && product.categories.length > 0 ? (
-                        product.categories.map((c: any, idx: number) => (
-                          <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100/50">
-                            {c.nameFr}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-xs text-gray-400 font-medium italic">Non classé</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="py-4 px-4">
-                    <div className="text-sm font-bold text-gray-900">{Number(product.baseCostMad).toLocaleString()} <span className="text-[10px] font-bold text-gray-400 uppercase">MAD</span></div>
-                  </td>
-                  <td className="py-4 px-4">
-                    <div className="text-sm font-bold text-primary-600 bg-primary-50 px-2 py-1 rounded-lg inline-block border border-primary-100/50">
-                      {Number(product.retailPriceMad).toLocaleString()} <span className="text-[10px] font-bold uppercase">MAD</span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-4">
-                    <div className="flex gap-1 flex-wrap">
-                      {product.visibility?.map((vis: string) => (
-                        <span key={vis} className={`px-2 py-1 text-xs font-semibold rounded-full shadow-sm border ${vis === 'REGULAR' ? 'bg-blue-50 text-blue-700 border-blue-200' : vis === 'AFFILIATE' ? 'bg-purple-50 text-purple-700 border-purple-200' : vis === 'INFLUENCER' ? 'bg-pink-50 text-pink-700 border-pink-200' : 'bg-gray-50 text-gray-700 border-gray-200'}`}>
-                          {vis}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="py-4 px-4">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
-                      product.status === 'APPROVED' ? 'bg-green-50 text-green-700 border-green-200' : 
-                      product.status === 'PENDING' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-red-50 text-red-700 border-red-200'
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${
-                        product.status === 'APPROVED' ? 'bg-green-500' : 
-                        product.status === 'PENDING' ? 'bg-amber-500' : 'bg-red-500'
-                      }`}></span>
-                      {product.status === 'APPROVED' ? 'Approuvé' : product.status === 'PENDING' ? 'En Attente' : 'Rejeté'}
-                    </span>
-                  </td>
-                  <td className="py-4 px-4">
-                    <div className="flex items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
-                      {product.status === 'PENDING' && (
-                        <>
+                  </tr>
+                ) : (
+                  products.map((product: any) => (
+                    <tr key={product.id} className="group/row hover:bg-slate-50/50 transition-all duration-300">
+                      <td className="py-5 px-6">
+                        <div className="flex items-center gap-4">
+                          <div className="w-14 h-14 bg-white rounded-2xl shadow-lg shadow-slate-200 border border-slate-100 flex items-center justify-center overflow-hidden flex-shrink-0 relative group-hover/row:scale-105 transition-transform duration-500">
+                            {product.primaryImage ? (
+                              <img src={product.primaryImage} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <Package size={24} className="text-slate-200" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-black text-slate-900 text-sm truncate max-w-[200px] mb-1 leading-tight">{product.nameFr}</div>
+                            <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                              <Tag size={10} /> {product.sku}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-5 px-6">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black text-primary-600/60 uppercase tracking-tighter leading-none mb-1">PROPRIÉTAIRE</span>
+                          <span className="text-xs font-bold text-slate-700">{product.ownerName || 'Système'}</span>
+                        </div>
+                      </td>
+                      <td className="py-5 px-6">
+                        <div className="flex flex-wrap gap-1 max-w-[150px]">
+                          {product.categories?.map((c: any, idx: number) => (
+                            <span key={idx} className="px-2 py-0.5 rounded-lg text-[9px] font-black bg-white border border-slate-200 text-slate-500 uppercase tracking-tighter">
+                              {c.nameFr}
+                            </span>
+                          )) || <span className="text-[10px] text-slate-300 italic">Sans cat.</span>}
+                        </div>
+                      </td>
+                      <td className="py-5 px-6">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 bg-slate-100 rounded-xl text-slate-400">
+                            <Calendar size={14} />
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-black text-slate-900">
+                              {product.createdAt ? format(new Date(product.createdAt), 'dd MMM yyyy') : '—'}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-400">
+                              À {product.createdAt ? format(new Date(product.createdAt), 'HH:mm') : '—'}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-5 px-6">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="w-8 text-[9px] font-black text-slate-300">COÛT</span>
+                            <span className="text-xs font-black text-slate-600">{Number(product.baseCostMad).toLocaleString()} MAD</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="w-8 text-[9px] font-black text-primary-400">VTE</span>
+                            <span className="text-xs font-black text-primary-600">{Number(product.retailPriceMad).toLocaleString()} MAD</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-5 px-6">
+                        <div className="flex gap-1 flex-wrap max-w-[120px]">
+                          {product.visibility?.map((vis: string) => (
+                            <span key={vis} className={`px-2 py-1 text-[8px] font-black rounded-md border tracking-tighter ${
+                              vis === 'REGULAR' ? 'bg-blue-50 text-blue-600 border-blue-100' : 
+                              vis === 'AFFILIATE' ? 'bg-purple-50 text-purple-600 border-purple-100' : 
+                              vis === 'INFLUENCER' ? 'bg-pink-50 text-pink-600 border-pink-100' : 
+                              'bg-slate-50 text-slate-500 border-slate-100'
+                            }`}>
+                              {vis}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="py-5 px-6">
+                        <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black tracking-widest border transition-all ${
+                          product.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm shadow-emerald-50' : 
+                          product.status === 'PENDING' ? 'bg-amber-50 text-amber-700 border-amber-100 shadow-sm shadow-amber-50' : 
+                          'bg-rose-50 text-rose-700 border-rose-100 shadow-sm shadow-rose-50'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            product.status === 'APPROVED' ? 'bg-emerald-500 animate-pulse' : 
+                            product.status === 'PENDING' ? 'bg-amber-500' : 'bg-rose-500'
+                          }`} />
+                          {product.status === 'APPROVED' ? 'ACTIF' : product.status === 'PENDING' ? 'ATTENTE' : 'REJETÉ'}
+                        </div>
+                      </td>
+                      <td className="py-5 px-8 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {product.status === 'PENDING' && (
+                            <div className="flex items-center gap-1 pr-2 mr-2 border-r border-slate-100">
+                              <button 
+                                onClick={() => handleStatusChange(product.id, 'APPROVED')}
+                                className="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center hover:scale-110 active:scale-95 transition-all shadow-lg shadow-emerald-200"
+                                title="Approuver"
+                              >
+                                <CheckCircle size={14} />
+                              </button>
+                              <button 
+                                onClick={() => handleStatusChange(product.id, 'REJECTED')}
+                                className="w-8 h-8 rounded-xl bg-rose-500 text-white flex items-center justify-center hover:scale-110 active:scale-95 transition-all shadow-lg shadow-rose-200"
+                                title="Rejeter"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          )}
+                          
                           <button 
-                            onClick={() => handleStatusChange(product.id, 'APPROVED')}
-                            className="p-1.5 text-green-600 bg-green-50 hover:bg-green-100 hover:text-green-700 rounded-lg shadow-sm border border-transparent hover:border-green-200 transition-all"
-                            title="Approuver"
+                            onClick={() => handleEdit(product)}
+                            className="w-9 h-9 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center hover:bg-slate-900 hover:text-white transition-all group/btn2"
+                            title="Modifier"
                           >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                            </svg>
+                            <Pencil size={16} className="group-hover/btn2:rotate-12 transition-transform" />
                           </button>
+
                           <button 
-                            onClick={() => handleStatusChange(product.id, 'REJECTED')}
-                            className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 hover:text-red-700 rounded-lg shadow-sm border border-transparent hover:border-red-200 transition-all"
-                            title="Rejeter"
+                            onClick={() => setDeletingProductId(product.id)}
+                            className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all shadow-sm"
+                            title="Supprimer"
                           >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
+                            <Trash2 size={16} />
                           </button>
-                          <div className="w-px h-6 bg-gray-200 mx-1"></div>
-                        </>
-                      )}
-                      
-
-                      <button 
-                        onClick={() => handleEdit(product)}
-                        className="p-1.5 text-gray-500 bg-gray-50 hover:bg-amber-50 hover:text-amber-600 border border-transparent hover:border-amber-200 rounded-lg transition-all"
-                        title="Modifier"
-                      >
-                        <Pencil size={16} />
-                      </button>
-
-                      <button 
-                        onClick={() => setDeletingProductId(product.id)}
-                        className="p-1.5 text-gray-500 bg-gray-50 hover:bg-red-50 hover:text-red-600 border border-transparent hover:border-red-200 rounded-lg transition-all"
-                        title="Supprimer"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
           
-          {/* Pagination Controls */}
+          {/* Pro Pagination */}
           {pagination && pagination.totalPages > 1 && (
-            <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-white">
-              <span className="text-sm text-gray-500">
-                Page <span className="font-medium text-gray-900">{pagination.page}</span> sur <span className="font-medium text-gray-900">{pagination.totalPages}</span>
-              </span>
-              <div className="flex gap-2">
+            <div className="px-8 py-6 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Page</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-xs font-black text-slate-900 shadow-sm">{pagination.page}</span>
+                  <span className="text-[10px] font-black text-slate-300">/</span>
+                  <span className="text-[10px] font-black text-slate-400">{pagination.totalPages}</span>
+                </div>
+              </div>
+              
+              <div className="flex gap-3">
                 <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  onClick={() => { setPage(p => Math.max(1, p - 1)); window.scrollTo(0, 0); }}
                   disabled={pagination.page === 1}
-                  className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black tracking-widest text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all shadow-sm"
                 >
-                  <ChevronLeft size={16} />
+                  <ChevronLeft size={14} /> PRÉCÉDENT
                 </button>
                 <button
-                  onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
+                  onClick={() => { setPage(p => Math.min(pagination.totalPages, p + 1)); window.scrollTo(0, 0); }}
                   disabled={pagination.page === pagination.totalPages}
-                  className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black tracking-widest text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all shadow-sm"
                 >
-                  <ChevronRight size={16} />
+                  SUIVANT <ChevronRight size={14} />
                 </button>
               </div>
             </div>
           )}
         </div>
-      )}
+      </div>
 
-      {/* Add/Edit Product Modal */}
+      {/* Modals remain same logic but could be updated too if needed */}
       <AddProductModal 
         isOpen={isAddProductModalOpen || !!editingProduct} 
-        onClose={() => {
-          setIsAddProductModalOpen(false);
-          setEditingProduct(null);
-        }} 
+        onClose={() => { setIsAddProductModalOpen(false); setEditingProduct(null); }} 
         onSuccess={() => refetch()} 
         isAdmin={true} 
         vendors={vendorsData?.data?.data?.users || []}
         editProduct={editingProduct}
       />
 
-      {/* Delete Confirmation Modal */}
+      {/* Premium Delete Confirmation */}
       {deletingProductId && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setDeletingProductId(null)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 z-10">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setDeletingProductId(null)} />
+          <div className="relative bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm p-8 z-10 border border-slate-100 animate-in zoom-in-95 duration-200">
             <div className="flex flex-col items-center text-center">
-              <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mb-4">
-                <Trash2 size={24} className="text-red-600" />
+              <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-[2rem] flex items-center justify-center mb-6 shadow-xl shadow-rose-100/50">
+                <Trash2 size={32} />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Supprimer ce produit ?</h3>
-              <p className="text-sm text-gray-500 mb-6">
-                Cette action est irréversible. Le produit et toutes ses images seront définitivement supprimés.
+              <h3 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">Supprimer ?</h3>
+              <p className="text-slate-500 text-sm font-medium mb-8 leading-relaxed">
+                Cette action est définitive. Le produit sera retiré du catalogue et des stocks.
               </p>
-              <div className="flex gap-3 w-full">
+              <div className="flex gap-4 w-full">
                 <button
                   onClick={() => setDeletingProductId(null)}
-                  className="flex-1 px-4 py-2.5 rounded-xl text-gray-600 font-semibold bg-gray-100 hover:bg-gray-200 transition-colors"
+                  className="flex-1 px-6 py-4 rounded-2xl text-slate-500 font-black text-xs tracking-widest bg-slate-100 hover:bg-slate-200 transition-all"
                 >
-                  Annuler
+                  ANNULER
                 </button>
                 <button
                   onClick={() => handleDelete(deletingProductId)}
-                  className="flex-1 px-4 py-2.5 rounded-xl text-white font-semibold bg-red-600 hover:bg-red-700 transition-colors"
+                  className="flex-1 px-6 py-4 rounded-2xl text-white font-black text-xs tracking-widest bg-rose-600 hover:bg-rose-700 shadow-xl shadow-rose-200 transition-all active:scale-95"
                 >
-                  Supprimer
+                  SUPPRIMER
                 </button>
               </div>
             </div>

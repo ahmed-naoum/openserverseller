@@ -8,6 +8,22 @@ import { io } from '../index.js';
 const router = Router();
 const prisma = new PrismaClient();
 
+// Helper to log conversation actions
+async function logConversationAction(conversationId: number, userId: number | null, action: string, details?: string) {
+    try {
+        await prisma.conversationLog.create({
+            data: {
+                conversationId,
+                userId,
+                action,
+                details
+            }
+        });
+    } catch (err) {
+        console.error('Failed to log conversation action:', err);
+    }
+}
+
 // Get all conversations for a user
 router.get(
     '/conversations',
@@ -37,24 +53,24 @@ router.get(
             // They should NOT see unclaimed ones in their main message list
             whereClause.participants = { some: { userId: req.user!.id } };
             if (!status) {
-                whereClause.status = 'ACTIVE';
+                whereClause.status = { in: ['ACTIVE', 'CLOSED'] };
             }
         } else if (role === 'SUPER_ADMIN') {
             // Super admins see ALL conversations
             if (!status) {
-                whereClause.status = { in: ['ACTIVE', 'PENDING_CLAIM'] };
+                whereClause.status = { in: ['ACTIVE', 'PENDING_CLAIM', 'CLOSED'] };
             }
         } else if (role === 'FINANCE_ADMIN') {
             // Finance admins only see their own conversations
             if (!status && !orderNumber) {
                 whereClause.participants = { some: { userId: req.user!.id } };
-                whereClause.status = 'ACTIVE';
+                whereClause.status = { in: ['ACTIVE', 'CLOSED'] };
             }
         } else {
-            // Normal users see only their own, both active and pending
+            // Normal users see only their own
             whereClause.participants = { some: { userId: req.user!.id } };
             if (!status) {
-                whereClause.status = { in: ['ACTIVE', 'PENDING_CLAIM'] };
+                whereClause.status = { in: ['ACTIVE', 'PENDING_CLAIM', 'CLOSED'] };
             }
         }
 
@@ -165,6 +181,70 @@ router.get(
     })
 );
 
+// Get a single conversation detail
+router.get(
+    '/conversations/:id',
+    authenticate,
+    asyncHandler(async (req, res) => {
+        const { id } = req.params;
+        const convId = Number(id);
+
+        if (isNaN(convId)) {
+            throw new AppException(400, 'Invalid conversation ID');
+        }
+
+        const role = req.user!.roleName;
+        let whereClause: any = { id: convId };
+
+        if (role !== 'SUPER_ADMIN' && role !== 'SYSTEM_SUPPORT') {
+            whereClause.participants = { some: { userId: req.user!.id } };
+        }
+
+        const c = await prisma.conversation.findFirst({
+            where: whereClause,
+            include: {
+                participants: {
+                    include: {
+                        user: {
+                            include: { profile: true, role: true },
+                        },
+                    },
+                },
+                messages: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 1,
+                },
+            },
+        });
+
+        if (!c) {
+            throw new AppException(404, 'Conversation not found');
+        }
+
+        res.json({
+            status: 'success',
+            data: {
+                conversation: {
+                    id: c.id,
+                    type: c.type,
+                    title: c.title,
+                    status: c.status,
+                    updatedAt: c.updatedAt,
+                    lastMessage: c.messages[0] || null,
+                    participants: c.participants.map((p) => ({
+                        userId: p.userId,
+                        fullName: p.user.profile?.fullName,
+                        email: p.user.email,
+                        phone: p.user.phone,
+                        role: p.user.role.name,
+                    })),
+                    metadata: c.metadata,
+                }
+            }
+        });
+    })
+);
+
 // Get a specific conversation and its messages
 router.get(
     '/conversations/:id/messages',
@@ -176,12 +256,8 @@ router.get(
         let authWhereClause: any = { id: Number(id) };
         const role = req.user!.roleName;
 
-        if (role === 'SYSTEM_SUPPORT') {
-            // SYSTEM_SUPPORT can only read messages in conversations they are a participant of
-            authWhereClause.participants = {
-                some: { userId: req.user!.id }
-            };
-        } else if (role !== 'SUPER_ADMIN') {
+        if (role !== 'SUPER_ADMIN' && role !== 'SYSTEM_SUPPORT') {
+            // Non-admins can only read messages in conversations they are a participant of
             authWhereClause.participants = {
                 some: { userId: req.user!.id }
             };
@@ -438,6 +514,9 @@ router.post(
             }
         });
 
+        // Log creation
+        await logConversationAction(conversation.id, req.user!.id, 'CREATED', 'Conversation de support créée');
+
         let systemContent = '';
         if (order) {
             systemContent = `🛍️ Nouvelle demande d'achat\n\nProduit : ${product.nameFr} (SKU: ${product.sku})\nCommande : #${order.orderNumber}\nMarque : ${brandName || 'N/A'}\nQuantité : ${requestedQty || 0} unités\nPrix unitaire : ${product.retailPriceMad} MAD\nTotal : ${order.totalAmountMad} MAD\n\n📎 Étiquette PDF jointe`;
@@ -572,6 +651,9 @@ router.post(
             }
         });
 
+        // Log claim
+        await logConversationAction(conversation.id, req.user!.id, 'CLAIMED', `Assignée à ${participant.user.profile?.fullName || 'un agent'}`);
+
         res.json({
             status: 'success',
             data: { participant, conversation: updatedConversation }
@@ -598,6 +680,10 @@ router.post(
 
         if (!conversation) {
             throw new AppException(404, 'Conversation not found');
+        }
+
+        if (conversation.status === 'CLOSED') {
+            throw new AppException(403, 'Cette conversation est terminée. Vous ne pouvez plus envoyer de messages.');
         }
 
         // Allow sending messages if ACTIVE, or if PENDING_CLAIM (for support)
@@ -699,6 +785,132 @@ router.patch(
         });
 
         res.json({ status: 'success' });
+    })
+);
+
+// Close a conversation
+router.post(
+    '/conversations/:id/close',
+    authenticate,
+    asyncHandler(async (req, res) => {
+        const { id } = req.params;
+        const role = req.user!.roleName;
+
+        if (role !== 'SYSTEM_SUPPORT' && role !== 'SUPER_ADMIN') {
+            throw new AppException(403, 'Not authorized to close conversations');
+        }
+
+        const conversation = await prisma.conversation.findUnique({
+            where: { id: Number(id) }
+        });
+
+        if (!conversation) {
+            throw new AppException(404, 'Conversation not found');
+        }
+
+        const updatedConversation = await prisma.$transaction(async (tx) => {
+            const updated = await tx.conversation.update({
+                where: { id: conversation.id },
+                data: { status: 'CLOSED' }
+            });
+
+            if (conversation.supportRequestId) {
+                await tx.supportRequest.update({
+                    where: { id: conversation.supportRequestId },
+                    data: { status: 'CLOSED' }
+                });
+            }
+
+            return updated;
+        });
+
+        // Notify participants
+        io.to(`conversation:${conversation.id}`).emit('conversation-closed', {
+            conversationId: conversation.id
+        });
+
+        // Log close
+        await logConversationAction(conversation.id, req.user!.id, 'CLOSED', 'Ticket clôturé par un agent');
+
+        res.json({
+            status: 'success',
+            data: { conversation: updatedConversation }
+        });
+    })
+);
+
+// Re-open a closed conversation
+router.post(
+    '/conversations/:id/open',
+    authenticate,
+    asyncHandler(async (req, res) => {
+        const { id } = req.params;
+        const role = req.user!.roleName;
+
+        if (role !== 'SYSTEM_SUPPORT' && role !== 'SUPER_ADMIN') {
+            throw new AppException(403, 'Not authorized to open conversations');
+        }
+
+        const conversation = await prisma.conversation.findUnique({
+            where: { id: Number(id) }
+        });
+
+        if (!conversation) {
+            throw new AppException(404, 'Conversation not found');
+        }
+
+        const updatedConversation = await prisma.$transaction(async (tx) => {
+            const updated = await tx.conversation.update({
+                where: { id: conversation.id },
+                data: { status: 'ACTIVE' }
+            });
+
+            if (conversation.supportRequestId) {
+                await tx.supportRequest.update({
+                    where: { id: conversation.supportRequestId },
+                    data: { status: 'IN_PROGRESS' }
+                });
+            }
+
+            return updated;
+        });
+
+        // Notify participants
+        io.to(`conversation:${conversation.id}`).emit('conversation-opened', {
+            conversationId: conversation.id
+        });
+
+        // Log open
+        await logConversationAction(conversation.id, req.user!.id, 'OPENED', 'Ticket ré-ouvert par un agent');
+
+        res.json({
+            status: 'success',
+            data: { conversation: updatedConversation }
+        });
+    })
+);
+
+// Get conversation logs
+router.get(
+    '/conversations/:id/logs',
+    authenticate,
+    asyncHandler(async (req, res) => {
+        const { id } = req.params;
+
+        const logs = await prisma.conversationLog.findMany({
+            where: { conversationId: Number(id) },
+            include: {
+                user: {
+                    include: { profile: true, role: true }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        res.json({
+            status: 'success',
+            data: { logs }
+        });
     })
 );
 

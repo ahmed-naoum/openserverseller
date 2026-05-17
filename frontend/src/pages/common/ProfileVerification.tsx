@@ -6,8 +6,9 @@ import {
   Mail, Shield, Building2, CreditCard, CheckCircle2, Clock, Lock,
   ChevronDown, ChevronUp, Upload, FileText, X, Loader2, Send,
   Building, Landmark, ArrowRight, Sparkles, AlertTriangle,
-  Camera, CameraOff, RefreshCw, Smartphone, Book, Car, User
+  Camera, CameraOff, RefreshCw, Smartphone, Book, Car, User, Trash2, Plus
 } from 'lucide-react';
+import BankSelect from '../../components/common/BankSelect';
 
 type StepStatus = 'COMPLETED' | 'IN_PROGRESS' | 'PENDING' | 'LOCKED' | 'REJECTED';
 
@@ -151,163 +152,148 @@ function EmailVerificationForm({ onComplete }: { onComplete: () => void }) {
   );
 }
 
-// ─── Identity Verification Form (KYC Document Upload + Liveness) ───
+// ─── Identity Verification Form (KYC Document Upload) ──────────────
 function IdentityVerificationForm({ onComplete }: { onComplete: () => void }) {
   const { user } = useAuth();
   const [documentType, setDocumentType] = useState('CIN');
   const [documentFiles, setDocumentFiles] = useState<File[]>([]);
-  const [cameraFile, setCameraFile] = useState<File | null>(null);
   const [documentPreviews, setDocumentPreviews] = useState<string[]>([]);
-  const [cameraPreview, setCameraPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [extractionLoading, setExtractionLoading] = useState(false);
+  const [kycForm, setKycForm] = useState({
+    fullName: user?.profile?.fullName || '',
+    cinNumber: '',
+    birthDate: '',
+    address: '',
+    city: '',
+  });
+  const [extractionData, setExtractionData] = useState<{
+    recto?: any;
+    verso?: any;
+    rectoText?: string;
+    versoText?: string;
+  }>({});
 
-  // Liveness States
-  const [cameraActive, setCameraActive] = useState(false);
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const [livenessStep, setLivenessStep] = useState<0 | 1 | 2 | 3>(0); // 0: Not started, 1: Front, 2: Right, 3: Left
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  const livenessInstructions = {
-    1: 'Prenez une photo de face',
-    2: '',
-    3: ''
-  };
+  const rectoInputRef = useRef<HTMLInputElement>(null);
+  const versoInputRef = useRef<HTMLInputElement>(null);
 
   const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'application/pdf'];
+
+  const handleSingleFileChange = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Format de fichier non supporté. Veuillez utiliser JPG, PNG, WEBP ou PDF.');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Fichier trop volumineux. La taille maximale est de 10MB.');
+      return;
+    }
+
+    setDocumentFiles(prev => {
+      const next = [...prev];
+      next[index] = file;
+      return next;
+    });
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setDocumentPreviews(prev => {
+        const next = [...prev];
+        next[index] = reader.result as string;
+        return next;
+      });
+    };
+    reader.readAsDataURL(file);
+
+    handleExtraction(file, index);
+    e.target.value = '';
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
     const newFiles = Array.from(e.target.files);
-
     const validFiles = newFiles.filter(file => allowedTypes.includes(file.type));
-    if (validFiles.length < newFiles.length) {
-      toast.error('Seuls les formats JPG, PNG, WEBP et PDF sont autorisés.');
-    }
-
     const availableSlots = 2 - documentFiles.length;
     const toAdd = validFiles.slice(0, availableSlots);
 
-    if (toAdd.length < validFiles.length) {
-      toast.error('Vous ne pouvez uploader que 2 photos (Recto et Verso).');
-    }
-
     if (toAdd.length > 0) {
-      setDocumentFiles(prev => [...prev, ...toAdd]);
-
+      const newFilesArr = [...documentFiles, ...toAdd];
+      setDocumentFiles(newFilesArr);
+      toAdd.forEach((file, idx) => {
+        const fileIndex = documentFiles.length + idx;
+        if (fileIndex < 2) handleExtraction(file, fileIndex);
+      });
       toAdd.forEach(file => {
         const reader = new FileReader();
         reader.onload = () => setDocumentPreviews(p => [...p, reader.result as string]);
         reader.readAsDataURL(file);
       });
     }
-
-    // Reset file input value so same files can be re-selected if deleted
     e.target.value = '';
   };
 
-  const removeFile = (index: number) => {
-    if (index < documentFiles.length) {
-      setDocumentFiles(prev => prev.filter((_, i) => i !== index));
-      setDocumentPreviews(prev => prev.filter((_, i) => i !== index));
-    } else {
-      setCameraFile(null);
-      setCameraPreview(null);
-    }
-  };
-
-  // Camera Functions
-  const startCamera = async () => {
+  const handleExtraction = async (file: File, fileIndex: number) => {
+    setExtractionLoading(true);
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
-      setStream(mediaStream);
-      setCameraActive(true);
-      setLivenessStep(1);
-    } catch (error) {
-      toast.error('Impossible d\'accéder à la caméra');
+      const type = fileIndex === 0 ? 'recto' : 'verso';
+      const res = await authApi.extractKycData(file, type);
+      const data = res.data.data;
+      
+      setExtractionData(prev => ({ 
+        ...prev, 
+        [type]: data,
+        [`${type}Text`]: data.rawText || ''
+      }));
+      
+      const fileName = fileIndex === 0 ? 'du Recto' : 'du Verso';
+      toast.success(`Analyse ${fileName} terminée.`);
+    } catch (err) {
+      console.error('Extraction error:', err);
+    } finally {
+      setExtractionLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (cameraActive && stream && videoRef.current) {
-      videoRef.current.srcObject = stream;
-      videoRef.current.play().catch(e => console.error("Video play error:", e));
-    }
-  }, [cameraActive, stream]);
+  const isFormValid = !!documentFiles[0] && !!documentFiles[1] &&
+    !!kycForm.fullName.trim() && !!kycForm.cinNumber.trim() &&
+    !!kycForm.birthDate && !!kycForm.city.trim() && !!kycForm.address.trim();
 
-  const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
-    }
-    setCameraActive(false);
+  const removeFile = (index: number) => {
+    setDocumentFiles(prev => prev.filter((_, i) => i !== index));
+    setDocumentPreviews(prev => prev.filter((_, i) => i !== index));
   };
-
-  const captureFrame = () => {
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        // Draw image and horizontally flip it so it acts like a mirror
-        ctx.translate(canvas.width, 0);
-        ctx.scale(-1, 1);
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        
-        ctx.setTransform(1, 0, 0, 1, 0, 0); // reset transform
-        
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-        
-        // Convert base64 to File
-        fetch(dataUrl)
-          .then(res => res.blob())
-          .then(blob => {
-            const stepName = 'face';
-            const file = new File([blob], `liveness_${stepName}.jpg`, { type: 'image/jpeg' });
-            setCameraFile(file);
-            setCameraPreview(dataUrl);
-            
-            toast.success('Photo biométrique capturée avec succès !');
-            stopCamera();
-            setLivenessStep(0);
-          });
-      }
-    }
-  };
-
-  // Clean up on unmount
-  useEffect(() => {
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [stream]);
 
   const handleSubmit = async () => {
-    if (documentFiles.length !== 2) return toast.error('Veuillez uploader exactement 2 photos de votre document (Recto et Verso)');
-    if (!cameraFile) return toast.error('Veuillez effectuer la vérification faciale avec la caméra');
+    const validDocs = documentFiles.filter(Boolean);
+    if (validDocs.length !== 2) return toast.error('Veuillez uploader les deux faces du document (Recto et Verso)');
     
-    const allFiles = [...documentFiles, cameraFile];
+    if (!kycForm.fullName.trim()) return toast.error('Le nom complet est requis');
+    if (!kycForm.cinNumber.trim()) return toast.error('Le numéro de CIN est requis');
+    if (!kycForm.birthDate) return toast.error('La date de naissance est requise');
+    if (!kycForm.city.trim()) return toast.error('La ville est requise');
+    if (!kycForm.address.trim()) return toast.error('L\'adresse est requise');
+
     setLoading(true);
     try {
       const formData = new FormData();
-      allFiles.forEach(file => formData.append('files', file));
+      validDocs.forEach(file => formData.append('files', file));
       const uploadRes = await api.post('/upload/kyc', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       const uploadedFiles = uploadRes.data.data.files;
-
-      await api.post('/auth/kyc', {
-        documents: uploadedFiles.map((f: any) => ({
+      await authApi.submitKyc({
+        documents: uploadedFiles.map((f: any, idx: number) => ({
           type: documentType,
           url: f.url,
-        }))
+          metadata: idx === 0 ? extractionData : null 
+        })),
+        ...kycForm
       });
-
-      toast.success('Documents soumis avec succès ! En attente de vérification.');
+      toast.success('Documents et informations soumis avec succès !');
       onComplete();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Erreur lors de la soumission');
@@ -332,7 +318,6 @@ function IdentityVerificationForm({ onComplete }: { onComplete: () => void }) {
         <ul className="list-disc list-inside space-y-1 text-xs">
           <li>Sélectionnez le type de votre pièce d'identité.</li>
           <li>Uploadez les photos recto et verso de votre document.</li>
-          <li>Utilisez la caméra pour capturer votre visage (de face).</li>
         </ul>
       </div>
 
@@ -363,58 +348,83 @@ function IdentityVerificationForm({ onComplete }: { onComplete: () => void }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* Upload Area */}
-        <div>
-          <label className="block text-sm font-bold text-slate-600 mb-2">
-            2. Photos du document
-          </label>
-          <div className="border-2 border-dashed border-slate-200 rounded-2xl p-6 h-36 flex flex-col items-center justify-center text-center hover:border-primary-300 hover:bg-primary-50/30 transition-all cursor-pointer relative group">
-            <input
-              type="file"
-              accept="image/*,application/pdf"
-              multiple
-              onChange={handleFileChange}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            />
-            <Upload size={28} className="mx-auto text-slate-300 group-hover:text-primary-400 transition-colors mb-2" />
-            <p className="text-sm font-bold text-slate-500">Uploader les photos</p>
-            <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider">Recto / Verso</p>
+      {/* Separate Upload Zones */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Photo Recto</label>
+          <div 
+            onClick={() => rectoInputRef.current?.click()}
+            className={`relative border-2 border-dashed rounded-2xl p-4 transition-all cursor-pointer group flex flex-col items-center justify-center min-h-[144px] ${
+              documentPreviews[0] ? 'border-emerald-200 bg-emerald-50/20' : 'border-slate-200 hover:border-primary-400 hover:bg-primary-50/20'
+            }`}
+          >
+            {documentPreviews[0] ? (
+              <div className="relative w-full h-full rounded-xl overflow-hidden shadow-sm">
+                <img src={documentPreviews[0]} alt="Recto" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <p className="text-white text-[10px] font-black uppercase">Changer</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                  <Camera size={20} />
+                </div>
+                <p className="text-[11px] font-bold text-slate-500">Recto CIN</p>
+              </>
+            )}
+            {extractionLoading && documentFiles[0] && !extractionData?.rectoText && (
+              <div className="absolute inset-0 bg-white/80 backdrop-blur-[1px] rounded-2xl flex flex-col items-center justify-center gap-2">
+                <Loader2 className="animate-spin text-primary-500" size={20} />
+                <span className="text-[9px] font-black uppercase text-primary-600">Analyse...</span>
+              </div>
+            )}
           </div>
+          <input type="file" ref={rectoInputRef} className="hidden" accept="image/*,application/pdf" onChange={(e) => handleSingleFileChange(e, 0)} />
         </div>
 
-        {/* Liveness Area */}
-        <div>
-          <label className="block text-sm font-bold text-slate-600 mb-2">
-            3. Vérification faciale
-          </label>
-          {!cameraActive ? (
-            <button
-              onClick={startCamera}
-              className="w-full border-2 border-dashed border-slate-200 rounded-2xl p-6 h-36 flex flex-col items-center justify-center text-center hover:border-blue-300 hover:bg-blue-50/30 transition-all"
-            >
-              <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-2 shadow-inner">
-                <Camera size={20} />
+        <div className="space-y-2">
+          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Photo Verso</label>
+          <div 
+            onClick={() => versoInputRef.current?.click()}
+            className={`relative border-2 border-dashed rounded-2xl p-4 transition-all cursor-pointer group flex flex-col items-center justify-center min-h-[144px] ${
+              documentPreviews[1] ? 'border-emerald-200 bg-emerald-50/20' : 'border-slate-200 hover:border-primary-400 hover:bg-primary-50/20'
+            }`}
+          >
+            {documentPreviews[1] ? (
+              <div className="relative w-full h-full rounded-xl overflow-hidden shadow-sm">
+                <img src={documentPreviews[1]} alt="Verso" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <p className="text-white text-[10px] font-black uppercase">Changer</p>
+                </div>
               </div>
-              <p className="text-sm font-bold text-slate-600">Activer la caméra</p>
-              <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider">Liveness Test</p>
-            </button>
-          ) : (
-            <div className="w-full border-2 border-solid border-blue-200 rounded-2xl p-6 h-36 flex flex-col items-center justify-center text-center bg-blue-50">
-              <Loader2 className="animate-spin text-blue-500 mb-2" size={24} />
-              <p className="text-sm font-bold text-blue-700">Caméra active</p>
-              <p className="text-[10px] text-blue-500 mt-1 uppercase tracking-wider">Veuillez suivre les instructions</p>
-            </div>
-          )}
+            ) : (
+              <>
+                <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                  <Camera size={20} />
+                </div>
+                <p className="text-[11px] font-bold text-slate-500">Verso CIN</p>
+              </>
+            )}
+            {extractionLoading && documentFiles[1] && !extractionData?.versoText && (
+              <div className="absolute inset-0 bg-white/80 backdrop-blur-[1px] rounded-2xl flex flex-col items-center justify-center gap-2">
+                <Loader2 className="animate-spin text-primary-500" size={20} />
+                <span className="text-[9px] font-black uppercase text-primary-600">Analyse...</span>
+              </div>
+            )}
+          </div>
+          <input type="file" ref={versoInputRef} className="hidden" accept="image/*,application/pdf" onChange={(e) => handleSingleFileChange(e, 1)} />
         </div>
       </div>
 
       {/* File Previews */}
-      {(documentPreviews.length > 0 || cameraPreview) && (
+      {documentPreviews.length > 0 && (
         <div className="space-y-2">
-           <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Documents Prêts à l'envoi ({documentPreviews.length + (cameraPreview ? 1 : 0)})</label>
-           <div className="flex gap-3 flex-wrap p-3 bg-slate-50 border border-slate-100 rounded-xl">
-            {[...documentPreviews, ...(cameraPreview ? [cameraPreview] : [])].map((preview, i) => (
+          <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+            Documents Prêts à l'envoi ({documentPreviews.length})
+          </label>
+          <div className="flex gap-3 flex-wrap p-3 bg-slate-50 border border-slate-100 rounded-xl">
+            {documentPreviews.map((preview, i) => (
               <div key={i} className="relative group w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden border-2 border-slate-200 shadow-sm">
                 {preview.startsWith('data:image') ? (
                   <img src={preview} alt="Preview" className="w-full h-full object-cover" />
@@ -435,75 +445,88 @@ function IdentityVerificationForm({ onComplete }: { onComplete: () => void }) {
         </div>
       )}
 
+      {/* Identity Details Form */}
+      <div className="space-y-4 pt-4 border-t border-slate-100 animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+            <FileText size={16} className="text-primary-500" />
+            Détails de l'identité
+            {extractionLoading && <Loader2 size={14} className="animate-spin text-primary-500" />}
+          </h3>
+        </div>
+
+        <p className="text-[10px] text-slate-400 font-bold uppercase leading-relaxed">
+          Veuillez entrer vos informations manuellement pour validation. Tous les champs sont obligatoires (*).
+        </p>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Nom complet (comme sur la CIN) *</label>
+            <input
+              type="text"
+              required
+              value={kycForm.fullName}
+              onChange={(e) => setKycForm({...kycForm, fullName: e.target.value.toUpperCase()})}
+              className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all font-medium"
+              placeholder="EX: AHMED KHALID"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">N° CIN *</label>
+            <input
+              type="text"
+              required
+              value={kycForm.cinNumber}
+              onChange={(e) => setKycForm({...kycForm, cinNumber: e.target.value.toUpperCase()})}
+              className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all font-mono font-bold"
+              placeholder="EX: AB123456"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Date de naissance *</label>
+            <input
+              type="date"
+              required
+              value={kycForm.birthDate}
+              onChange={(e) => setKycForm({...kycForm, birthDate: e.target.value})}
+              className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all font-medium"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Ville *</label>
+            <input
+              type="text"
+              required
+              value={kycForm.city}
+              onChange={(e) => setKycForm({...kycForm, city: e.target.value})}
+              className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all font-medium"
+              placeholder="Casablanca"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Adresse *</label>
+            <input
+              type="text"
+              required
+              value={kycForm.address}
+              onChange={(e) => setKycForm({...kycForm, address: e.target.value})}
+              className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all font-medium"
+              placeholder="Rue..."
+            />
+          </div>
+        </div>
+      </div>
+
       <button
         onClick={handleSubmit}
-        disabled={loading || documentFiles.length !== 2 || !cameraFile}
-        className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-primary-600 hover:bg-primary-700 text-white font-black rounded-xl shadow-lg shadow-primary-500/20 transition-all disabled:opacity-50 text-base"
+        disabled={loading || !isFormValid}
+        className={`w-full flex items-center justify-center gap-2 px-6 py-4 text-white font-black rounded-xl shadow-lg transition-all disabled:opacity-50 text-base ${
+          isFormValid ? 'bg-primary-600 hover:bg-primary-700 shadow-primary-500/20' : 'bg-slate-400 cursor-not-allowed'
+        }`}
       >
         {loading ? <Loader2 size={20} className="animate-spin" /> : <Shield size={20} />}
         Soumettre pour vérification
       </button>
-
-      {/* Liveness Modal */}
-      {cameraActive && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/90 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl overflow-hidden shadow-2xl w-full max-w-md flex flex-col relative animate-in zoom-in-95 duration-200">
-            {/* Header */}
-            <div className="flex justify-between items-center p-4 border-b border-slate-100 bg-slate-50">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                <Camera size={18} className="text-blue-500" />
-                Vérification faciale
-              </h3>
-              <button onClick={stopCamera} className="p-2 bg-slate-200 hover:bg-slate-300 rounded-full text-slate-600 transition-colors focus:outline-none focus:ring-2 focus:ring-slate-300">
-                <X size={16} />
-              </button>
-            </div>
-            
-            {/* Video Container */}
-            <div className="relative aspect-[3/4] sm:aspect-video bg-slate-900 w-full overflow-hidden flex items-center justify-center group shadow-[inset_0_0_40px_rgba(0,0,0,0.5)]">
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover transform -scale-x-100"
-              />
-              <canvas ref={canvasRef} className="hidden" />
-              
-              {/* Facial Guide Circle */}
-              <div className="absolute inset-0 z-0 flex items-center justify-center pointer-events-none overflow-hidden">
-                 <div className="h-[75%] aspect-square flex-shrink-0 rounded-full border-2 border-dashed border-white/60 shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] transition-all flex items-center justify-center">
-                    <div className="w-full h-full rounded-full border border-white/20 scale-90"></div>
-                 </div>
-              </div>
-              
-              {/* Overlay Instructions */}
-              <div className="absolute top-4 left-0 right-0 flex justify-center z-10 pointer-events-none px-4">
-                <div className="bg-black/70 backdrop-blur-md px-6 py-3 rounded-2xl border border-white/10 shadow-2xl">
-                  <span className="text-white text-sm md:text-md font-bold text-center block tracking-wide">
-                    {livenessInstructions[livenessStep as 1|2|3]}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer & Capture Button */}
-            <div className="p-6 bg-white flex flex-col items-center gap-4">
-               <p className="text-xs text-slate-500 font-medium text-center max-w-xs">
-                 Assurez-vous d'être dans un endroit bien éclairé et que votre visage est clairement visible.
-               </p>
-               <button
-                 onClick={captureFrame}
-                 className="w-16 h-16 bg-white rounded-full border-4 border-blue-500/20 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform shadow-lg group-hover:border-blue-500/40 focus:outline-none focus:ring-4 focus:ring-blue-500/30"
-               >
-                 <div className="w-12 h-12 bg-blue-500 group-hover:bg-blue-600 rounded-full flex items-center justify-center text-white transition-colors shadow-inner">
-                   <Camera size={24} />
-                 </div>
-               </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -511,7 +534,7 @@ function IdentityVerificationForm({ onComplete }: { onComplete: () => void }) {
 
 // ─── Bank Payment Method Form ──────────────────────────────────────
 function BankPaymentForm({ onComplete }: { onComplete: () => void }) {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [formData, setFormData] = useState({
     bankName: '',
     ribAccount: '',
@@ -519,25 +542,48 @@ function BankPaymentForm({ onComplete }: { onComplete: () => void }) {
   });
   const [loading, setLoading] = useState(false);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
-  };
+  // Bank OTP verification states
+  const [bankOtpStep, setBankOtpStep] = useState<'idle' | 'sending' | 'verify'>('idle');
+  const [bankOtpValue, setBankOtpValue] = useState('');
+  const [bankOtpMaskedEmail, setBankOtpMaskedEmail] = useState('');
 
-  const handleSubmit = async () => {
-    if (!formData.bankName.trim()) return toast.error('Le nom de la banque est requis');
-    if (!formData.ribAccount.trim()) return toast.error('Le RIB est requis');
-    if (formData.ribAccount.replace(/\s/g, '').length !== 24)
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.bankName) return toast.error('Le nom de la banque est requis');
+    if (!formData.ribAccount) return toast.error('Le RIB est requis');
+    if (formData.ribAccount.length !== 24)
       return toast.error('Le RIB doit contenir 24 chiffres');
     
+    setBankOtpStep('sending');
     setLoading(true);
     try {
-      if (!user) throw new Error('Utilisateur non connecté.');
+      const res = await authApi.sendBankOtp(formData);
+      const maskedEmail = res.data?.data?.maskedEmail || res.data?.maskedEmail || '***';
+      setBankOtpMaskedEmail(maskedEmail);
+      setBankOtpValue('');
+      setBankOtpStep('verify');
+      toast.success('Code de vérification envoyé !');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || 'Erreur lors de l\'envoi du code');
+      setBankOtpStep('idle');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      await authApi.addBankAccount(formData);
+  const handleBankOtpVerify = async () => {
+    if (bankOtpValue.length !== 6) return;
+    setLoading(true);
+    try {
+      await authApi.verifyBankOtp(bankOtpValue);
       toast.success('Compte bancaire ajouté avec succès !');
+      await refreshUser();
+      setFormData({ bankName: '', ribAccount: '', iceNumber: '' });
+      setBankOtpStep('idle');
+      setBankOtpValue('');
       onComplete();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || err.message || 'Erreur lors de l\'ajout');
+      toast.error(err?.response?.data?.message || 'Code incorrect ou expiré');
     } finally {
       setLoading(false);
     }
@@ -597,52 +643,126 @@ function BankPaymentForm({ onComplete }: { onComplete: () => void }) {
         </div>
       )}
 
-      <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-sm text-amber-700">
-        <p className="font-semibold">🏦 Ajoutez une nouvelle méthode de paiement</p>
-        <p className="text-xs mt-1 text-amber-500">Requis pour recevoir vos paiements et retraits</p>
-      </div>
+      {/* Add New Bank Account Section */}
+      <div className="pt-6 border-t border-slate-100 space-y-4">
+        <div>
+          <h4 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+            <Plus size={16} className="text-primary-500" /> Ajouter un nouveau compte
+          </h4>
+          <p className="text-xs text-slate-400 font-medium mt-1">
+            Toutes les nouvelles méthodes sont soumises à une vérification manuelle.
+          </p>
+        </div>
 
-      <div>
-        <label className="block text-sm font-bold text-slate-600 mb-1.5">Nom de la banque *</label>
-        <input
-          name="bankName"
-          value={formData.bankName}
-          onChange={handleChange}
-          placeholder="Ex: Attijariwafa Bank, BMCE, CIH..."
-          className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all text-sm font-medium"
-        />
-      </div>
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-5 bg-slate-50/50 p-5 sm:p-6 rounded-2xl border border-slate-100">
+          <div className="space-y-3">
+            <BankSelect 
+              value={formData.bankName} 
+              onChange={(name) => setFormData(prev => ({ ...prev, bankName: name }))} 
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-sm font-bold text-slate-600 uppercase tracking-wider flex items-center gap-2">
+              RIB Bancaire (24 chiffres)
+            </label>
+            <input
+              type="text"
+              maxLength={24}
+              placeholder="RIB à 24 chiffres"
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all font-mono font-bold text-sm tracking-wider"
+              value={formData.ribAccount}
+              onChange={(e) => setFormData(prev => ({ ...prev, ribAccount: e.target.value.replace(/\D/g, '').slice(0, 24) }))}
+            />
+          </div>
+          <div className="flex justify-end pt-2">
+            <button
+              type="submit"
+              disabled={loading || bankOtpStep === 'verify'}
+              className="px-8 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold shadow-lg shadow-primary-600/20 transition-all flex items-center gap-2 disabled:opacity-50 text-sm"
+            >
+              {loading && bankOtpStep === 'sending' ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}
+              Envoyer le code de vérification
+            </button>
+          </div>
+        </form>
 
-      <div>
-        <label className="block text-sm font-bold text-slate-600 mb-1.5">RIB Bancaire (24 chiffres) *</label>
-        <input
-          name="ribAccount"
-          value={formData.ribAccount}
-          onChange={handleChange}
-          maxLength={28}
-          placeholder="000 000 0000000000000000 00"
-          className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all text-sm font-medium font-mono tracking-wider"
-        />
-      </div>
+        {/* OTP Verification Step */}
+        {bankOtpStep === 'verify' && (
+          <div className="mt-4 p-5 sm:p-6 bg-blue-50/50 rounded-2xl border-2 border-blue-100 animate-in slide-in-from-bottom-4 duration-300">
+            <div className="text-center mb-5">
+              <div className="w-12 h-12 bg-blue-100 rounded-full mx-auto mb-3 flex items-center justify-center">
+                <Mail size={22} className="text-blue-600" />
+              </div>
+              <h4 className="text-base font-black text-slate-800">Vérification par Email</h4>
+              <p className="text-xs text-slate-400 font-medium mt-1">
+                Un code à 6 chiffres a été envoyé à <strong>{bankOtpMaskedEmail}</strong>
+              </p>
+            </div>
 
-      <div>
-        <label className="block text-sm font-bold text-slate-600 mb-1.5">ICE (optionnel)</label>
-        <input
-          name="iceNumber"
-          value={formData.iceNumber}
-          onChange={handleChange}
-          placeholder="Ex: 001234567000012"
-          className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all text-sm font-medium font-mono"
-        />
+            <div className="flex justify-center gap-2 mb-3">
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <input
+                  key={i}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  className="w-10 h-12 bg-white border-2 border-slate-200 rounded-lg text-center text-lg font-black text-slate-800 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                  value={bankOtpValue[i] || ''}
+                  autoFocus={i === 0}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '');
+                    if (!val && e.target.value) return;
+                    const newValue = bankOtpValue.split('');
+                    newValue[i] = val;
+                    const joined = newValue.join('').slice(0, 6);
+                    setBankOtpValue(joined);
+                    if (val && i < 5) {
+                      const next = e.target.parentElement?.children[i + 1] as HTMLInputElement;
+                      next?.focus();
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Backspace' && !bankOtpValue[i] && i > 0) {
+                      const prev = (e.target as HTMLElement).parentElement?.children[i - 1] as HTMLInputElement;
+                      prev?.focus();
+                    }
+                  }}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+                    setBankOtpValue(pasted);
+                    const target = (e.target as HTMLElement).parentElement?.children[Math.min(pasted.length, 5)] as HTMLInputElement;
+                    target?.focus();
+                  }}
+                />
+              ))}
+            </div>
+
+            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest text-center mb-5">
+              ⏱ Le code expire dans 10 minutes
+            </p>
+
+            <div className="flex gap-3 justify-center">
+              <button
+                type="button"
+                onClick={() => { setBankOtpStep('idle'); setBankOtpValue(''); }}
+                className="px-5 py-2.5 bg-white border border-slate-200 text-slate-500 rounded-xl font-bold text-xs hover:bg-slate-50 transition-all"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleBankOtpVerify}
+                disabled={bankOtpValue.length !== 6 || loading}
+                className="px-6 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold shadow-lg shadow-primary-600/20 transition-all flex items-center gap-2 disabled:opacity-50 text-xs"
+              >
+                {loading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                Confirmer et Ajouter
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-      <button
-        onClick={handleSubmit}
-        disabled={loading}
-        className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-xl shadow-lg shadow-primary-500/20 transition-all disabled:opacity-50"
-      >
-        {loading ? <Loader2 size={18} className="animate-spin" /> : <Landmark size={18} />}
-        Ajouter le compte bancaire
-      </button>
     </div>
   );
 }

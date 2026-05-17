@@ -284,6 +284,7 @@ export interface ReferralLink {
   conversions: number;
   earnings: number;
   isActive: boolean;
+  status: string;
   landingPage?: any;
   createdAt: string;
 }

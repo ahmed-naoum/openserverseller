@@ -498,7 +498,7 @@ export default function ProductDetail() {
                   titleEn="Customize label in Canva"
                   titleAr="صمم ملصق المنتج الخاص بك عبر Canva"
                   desc="Customize the product label with your own brand"
-                  isActive={true}
+                  isActive={!isCurrentlyPending}
                   isDone={!!product.userStatus?.brandingLabelMockupUrl}
                   actionLabel="Open Link"
                   variant="purple"
@@ -511,7 +511,7 @@ export default function ProductDetail() {
                   titleEn="Upload PDF label for printing"
                   titleAr="قم برفع ملف PDF الخاص بالملصق للطباعة"
                   desc="Submit final High-Resolution PDF for production"
-                  isActive={true}
+                  isActive={!isCurrentlyPending}
                   isDone={!!(product.userStatus?.brandingLabelPrintUrl || tempPdfUrl)}
                   actionLabel={(product.userStatus?.brandingLabelPrintUrl || tempPdfUrl) ? 'Update' : 'Upload'}
                   variant="green"

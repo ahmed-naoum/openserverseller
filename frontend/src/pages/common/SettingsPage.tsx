@@ -21,6 +21,7 @@ import { FaXTwitter } from 'react-icons/fa6';
 import toast from 'react-hot-toast';
 import ProfileVerification from './ProfileVerification';
 import AvatarCropModal from '../../components/common/AvatarCropModal';
+import BankSelect from '../../components/common/BankSelect';
 
 export default function SettingsPage() {
   const { user, refreshUser } = useAuth();
@@ -105,34 +106,27 @@ export default function SettingsPage() {
     e.target.value = '';
   };
 
-  // Bank Mutations
-  const addBankMutation = useMutation({
-    mutationFn: authApi.addBankAccount,
-    onSuccess: () => {
-      toast.success('Compte bancaire ajouté !');
-      refreshUser();
-      setBankForm({ bankName: '', ribAccount: '', iceNumber: '' });
-    },
-    onError: (err: any) => toast.error(err.response?.data?.message || 'Erreur lors de l\'ajout'),
-  });
+  // Bank OTP verification states
+  const [bankOtpStep, setBankOtpStep] = useState<'idle' | 'sending' | 'verify'>('idle');
+  const [bankOtpValue, setBankOtpValue] = useState('');
+  const [bankOtpMaskedEmail, setBankOtpMaskedEmail] = useState('');
+  const [bankOtpLoading, setBankOtpLoading] = useState(false);
 
-  const setDefaultBankMutation = useMutation({
-    mutationFn: authApi.setDefaultBankAccount,
-    onSuccess: () => {
+  const handleSetDefaultBank = async (id: number) => {
+    try {
+      await authApi.setDefaultBankAccount(id);
       toast.success('Méthode par défaut mise à jour');
       refreshUser();
-    },
-    onError: () => toast.error('Erreur lors du changement'),
-  });
+    } catch { toast.error('Erreur lors du changement'); }
+  };
 
-  const deleteBankMutation = useMutation({
-    mutationFn: authApi.deleteBankAccount,
-    onSuccess: () => {
+  const handleDeleteBank = async (id: number) => {
+    try {
+      await authApi.deleteBankAccount(id);
       toast.success('Compte supprimé');
       refreshUser();
-    },
-    onError: () => toast.error('Erreur lors de la suppression'),
-  });
+    } catch { toast.error('Erreur lors de la suppression'); }
+  };
 
   const [bankForm, setBankForm] = useState({
     bankName: '',
@@ -140,11 +134,44 @@ export default function SettingsPage() {
     iceNumber: '',
   });
 
-  const handleBankSubmit = (e: React.FormEvent) => {
+  const handleBankSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!bankForm.bankName || !bankForm.ribAccount) return toast.error('Veuillez remplir les champs requis');
     if (bankForm.ribAccount.length !== 24) return toast.error('Le RIB doit contenir 24 chiffres');
-    addBankMutation.mutate(bankForm);
+
+    // Step 1: Send OTP
+    setBankOtpStep('sending');
+    setBankOtpLoading(true);
+    try {
+      const res = await authApi.sendBankOtp(bankForm);
+      const maskedEmail = res.data?.data?.maskedEmail || res.data?.maskedEmail || '***';
+      setBankOtpMaskedEmail(maskedEmail);
+      setBankOtpValue('');
+      setBankOtpStep('verify');
+      toast.success('Code de vérification envoyé !');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Erreur lors de l\'envoi du code');
+      setBankOtpStep('idle');
+    } finally {
+      setBankOtpLoading(false);
+    }
+  };
+
+  const handleBankOtpVerify = async () => {
+    if (bankOtpValue.length !== 6) return;
+    setBankOtpLoading(true);
+    try {
+      await authApi.verifyBankOtp(bankOtpValue);
+      toast.success('Compte bancaire ajouté avec succès !');
+      refreshUser();
+      setBankForm({ bankName: '', ribAccount: '', iceNumber: '' });
+      setBankOtpStep('idle');
+      setBankOtpValue('');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Code incorrect ou expiré');
+    } finally {
+      setBankOtpLoading(false);
+    }
   };
 
   const handleAvatarSave = async (croppedBlob: Blob) => {
@@ -318,9 +345,7 @@ export default function SettingsPage() {
     { id: 'profile', label: 'Profil', icon: User, desc: 'Informations personnelles' },
     { id: 'payment', label: 'Paiement', icon: CreditCard, desc: 'Configurez comment vous recevez vos commissions.' },
     { id: 'password', label: 'Sécurité', icon: ShieldCheck, desc: 'Mots de passe et 2FA' },
-    { id: 'kyc', label: 'Vérification KYC', icon: Shield, desc: 'Validation du compte' },
-    { id: 'notifications', label: 'Notifications', icon: Bell, desc: 'Préférences d\'emails' },
-    { id: 'preferences', label: 'Préférences', icon: SettingsIcon, desc: 'Langue et région' },
+    { id: 'kyc', label: 'Vérification KYC', icon: Shield, desc: 'Validation du compte' }
   ];
 
   return (
@@ -653,7 +678,7 @@ export default function SettingsPage() {
                                       )}
                                       {!isDefault && isApproved && (
                                         <button 
-                                          onClick={() => setDefaultBankMutation.mutate(ba.id)}
+                                          onClick={() => handleSetDefaultBank(ba.id)}
                                           className="text-[10px] font-bold text-primary-600 hover:underline"
                                         >
                                           Utiliser par défaut
@@ -679,7 +704,7 @@ export default function SettingsPage() {
                                 <div className="flex items-center gap-2">
                                   {!isDefault && (
                                     <button 
-                                      onClick={() => deleteBankMutation.mutate(ba.id)}
+                                      onClick={() => handleDeleteBank(ba.id)}
                                       className="p-3 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-2xl transition-all"
                                       title="Supprimer"
                                     >
@@ -710,19 +735,13 @@ export default function SettingsPage() {
                     </div>
 
                     <form onSubmit={handleBankSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50/50 p-6 sm:p-8 rounded-3xl border border-gray-100">
-                      <div className="space-y-2">
-                        <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-2">
-                          Nom de la banque
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Ex: CIH, BMCE, Attijari..."
-                          className="w-full px-4 py-3.5 rounded-xl border border-gray-200 bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all font-medium"
-                          value={bankForm.bankName}
-                          onChange={(e) => setBankForm({ ...bankForm, bankName: e.target.value })}
+                      <div className="md:col-span-2 space-y-3">
+                        <BankSelect 
+                          value={bankForm.bankName} 
+                          onChange={(name) => setBankForm({ ...bankForm, bankName: name })} 
                         />
                       </div>
-                      <div className="space-y-2">
+                      <div className="md:col-span-2 space-y-2">
                         <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-2">
                           RIB Bancaire (24 chiffres)
                         </label>
@@ -738,14 +757,89 @@ export default function SettingsPage() {
                       <div className="md:col-span-2 flex justify-end pt-2">
                         <button
                           type="submit"
-                          disabled={addBankMutation.isPending}
+                          disabled={bankOtpLoading || bankOtpStep === 'verify'}
                           className="px-8 py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold shadow-lg shadow-primary-600/20 transition-all flex items-center gap-2 disabled:opacity-50"
                         >
-                          {addBankMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
-                          Ajouter le compte
+                          {bankOtpLoading && bankOtpStep === 'sending' ? <Loader2 size={18} className="animate-spin" /> : <Mail size={18} />}
+                          Envoyer le code de vérification
                         </button>
                       </div>
                     </form>
+
+                    {/* OTP Verification Step */}
+                    {bankOtpStep === 'verify' && (
+                      <div className="mt-6 p-6 sm:p-8 bg-blue-50/50 rounded-3xl border-2 border-blue-100 animate-in slide-in-from-bottom-4 duration-300">
+                        <div className="text-center mb-6">
+                          <div className="w-16 h-16 bg-blue-100 rounded-full mx-auto mb-4 flex items-center justify-center">
+                            <Mail size={28} className="text-blue-600" />
+                          </div>
+                          <h3 className="text-lg font-black text-gray-900">Vérification par Email</h3>
+                          <p className="text-sm text-gray-500 mt-1">
+                            Un code à 6 chiffres a été envoyé à <strong>{bankOtpMaskedEmail}</strong>
+                          </p>
+                        </div>
+
+                        <div className="flex justify-center gap-2 mb-4">
+                          {[0, 1, 2, 3, 4, 5].map((i) => (
+                            <input
+                              key={i}
+                              type="text"
+                              inputMode="numeric"
+                              maxLength={1}
+                              className="w-12 h-14 bg-white border-2 border-gray-200 rounded-xl text-center text-xl font-black text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                              value={bankOtpValue[i] || ''}
+                              autoFocus={i === 0}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/\D/g, '');
+                                if (!val && e.target.value) return;
+                                const newValue = bankOtpValue.split('');
+                                newValue[i] = val;
+                                const joined = newValue.join('').slice(0, 6);
+                                setBankOtpValue(joined);
+                                if (val && i < 5) {
+                                  const next = e.target.parentElement?.children[i + 1] as HTMLInputElement;
+                                  next?.focus();
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Backspace' && !bankOtpValue[i] && i > 0) {
+                                  const prev = (e.target as HTMLElement).parentElement?.children[i - 1] as HTMLInputElement;
+                                  prev?.focus();
+                                }
+                              }}
+                              onPaste={(e) => {
+                                e.preventDefault();
+                                const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+                                setBankOtpValue(pasted);
+                                const target = (e.target as HTMLElement).parentElement?.children[Math.min(pasted.length, 5)] as HTMLInputElement;
+                                target?.focus();
+                              }}
+                            />
+                          ))}
+                        </div>
+
+                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest text-center mb-6">
+                          ⏱ Le code expire dans 10 minutes
+                        </p>
+
+                        <div className="flex gap-3 justify-center">
+                          <button
+                            onClick={() => { setBankOtpStep('idle'); setBankOtpValue(''); }}
+                            className="px-6 py-3 bg-white border border-gray-200 text-gray-500 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all"
+                          >
+                            Annuler
+                          </button>
+                          <button
+                            onClick={handleBankOtpVerify}
+                            disabled={bankOtpValue.length !== 6 || bankOtpLoading}
+                            className="px-8 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold shadow-lg shadow-primary-600/20 transition-all flex items-center gap-2 disabled:opacity-50"
+                          >
+                            {bankOtpLoading ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                            Confirmer et Ajouter
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1012,96 +1106,6 @@ export default function SettingsPage() {
                 
                 <div className="p-4 sm:p-8">
                   <ProfileVerification hideHeader={true} />
-                </div>
-              </div>
-            )}
-
-            {/* Notifications Tab */}
-            {activeTab === 'notifications' && (
-              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="p-8 border-b border-gray-100 bg-gray-50/50">
-                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-                    <Bell className="text-primary-500" size={28} />
-                    Préférences de notification
-                  </h2>
-                  <p className="text-gray-500 mt-1">Choisissez comment et quand vous souhaitez être contacté.</p>
-                </div>
-                
-                <div className="p-8">
-                  <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-100 shadow-sm overflow-hidden">
-                    {[
-                      { key: 'emailOrders', label: 'Emails de Commandes', desc: 'Recevoir une alerte pour chaque nouvelle commande validée' },
-                      { key: 'emailPayouts', label: 'Emails de Paiements', desc: 'Être notifié lorsqu\'un virement est émis vers votre compte' },
-                      { key: 'smsOrders', label: 'Alertes SMS urgentes', desc: 'Recevoir un SMS pour les anomalies de commandes' },
-                      { key: 'whatsappOrders', label: 'Mises à jour WhatsApp', desc: 'Recevoir le suivi quotidien de vos colis via WhatsApp' },
-                    ].map((setting) => (
-                      <div key={setting.key} className="flex items-center justify-between p-6 hover:bg-gray-50/50 transition-colors">
-                        <div className="pr-8">
-                          <div className="font-bold text-gray-900 text-base">{setting.label}</div>
-                          <div className="text-sm text-gray-500 mt-1 leading-relaxed">{setting.desc}</div>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                          <input
-                            type="checkbox"
-                            checked={notificationSettings[setting.key as keyof typeof notificationSettings]}
-                            onChange={(e) => setNotificationSettings({
-                              ...notificationSettings,
-                              [setting.key]: e.target.checked,
-                            })}
-                            className="sr-only peer"
-                          />
-                          <div className="w-14 h-7 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-primary-500 shadow-inner"></div>
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Preferences Tab */}
-            {activeTab === 'preferences' && (
-              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="p-8 border-b border-gray-100 bg-gray-50/50">
-                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-                    <SettingsIcon className="text-primary-500" size={28} />
-                    Préférences générales
-                  </h2>
-                  <p className="text-gray-500 mt-1">Configurez l'interface selon vos besoins.</p>
-                </div>
-                
-                <div className="p-8 space-y-8 max-w-2xl">
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Langue de l'interface</label>
-                    <select
-                      className="w-full px-4 py-3 rounded-xl border-gray-200 bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all font-medium text-gray-900 shadow-sm"
-                      value={profileForm.language}
-                      onChange={(e) => setProfileForm({ ...profileForm, language: e.target.value })}
-                    >
-                      <option value="fr">🇫🇷 Français</option>
-                      <option value="ar">🇲🇦 العربية</option>
-                      <option value="en">🇬🇧 English</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Devise d'affichage</label>
-                    <select className="w-full px-4 py-3 rounded-xl border-gray-200 bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all font-medium text-gray-900 shadow-sm" defaultValue="MAD">
-                      <option value="MAD">MAD - Dirham marocain</option>
-                      <option value="EUR">EUR - Euro</option>
-                      <option value="USD">USD - Dollar américain</option>
-                    </select>
-                    <p className="text-xs text-gray-500 mt-2">Cette devise sera utilisée à titre indicatif sur les tableaux de bord.</p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Fuseau horaire</label>
-                    <select className="w-full px-4 py-3 rounded-xl border-gray-200 bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all font-medium text-gray-900 shadow-sm" defaultValue="Africa/Casablanca">
-                      <option value="Africa/Casablanca">(GMT+01:00) Casablanca</option>
-                      <option value="Europe/Paris">(GMT+01:00) Paris</option>
-                      <option value="UTC">(GMT+00:00) UTC</option>
-                    </select>
-                  </div>
                 </div>
               </div>
             )}

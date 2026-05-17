@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi, walletApi, payoutsApi } from '../../lib/api';
 import toast from 'react-hot-toast';
@@ -24,7 +24,10 @@ import {
   X,
   FileText,
   ArrowRight,
-  Banknote
+  Banknote,
+  PlusCircle,
+  MinusCircle,
+  UserPlus
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -35,10 +38,53 @@ export default function AdminFinance() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
+  // Manual Adjustment State
+  const [adjustModalOpen, setAdjustModalOpen] = useState(false);
+  const [adjustTargetUser, setAdjustTargetUser] = useState<any>(null);
+  const [adjustAmount, setAdjustAmount] = useState('');
+  const [adjustType, setAdjustType] = useState<'CREDIT' | 'DEBIT'>('CREDIT');
+  const [adjustDescription, setAdjustDescription] = useState('');
+  const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [activeTab, setActiveTab] = useState<'PAYOUTS' | 'ADJUSTMENTS'>('PAYOUTS');
+
+  const { data: financeUsersData } = useQuery({
+    queryKey: ['admin-finance-users'],
+    queryFn: () => adminApi.getFinanceUsers(),
+  });
+
+  const financeUsers = financeUsersData?.data?.data || [];
+
+  const filteredFinanceUsers = useMemo(() => {
+    if (!userSearchTerm) return [];
+    return financeUsers.filter((u: any) => 
+      u.fullName?.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+      u.email?.toLowerCase().includes(userSearchTerm.toLowerCase())
+    ).slice(0, 8);
+  }, [financeUsers, userSearchTerm]);
+
   const { data: payoutsData, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['admin-payouts'],
     queryFn: () => payoutsApi.list({ limit: 100 }),
   });
+
+  const adjustMutation = useMutation({
+    mutationFn: (data: any) => adminApi.adjustWallet(data),
+    onSuccess: (res) => {
+      toast.success(res.data.message);
+      setAdjustModalOpen(false);
+      setAdjustAmount('');
+      setAdjustDescription('');
+      setAdjustTargetUser(null);
+      queryClient.invalidateQueries({ queryKey: ['admin-payouts'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Erreur lors de l\'ajustement');
+    }
+  });
+
+  // ... rest of the logic
 
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [selectedPayout, setSelectedPayout] = useState<any>(null);
@@ -229,7 +275,7 @@ export default function AdminFinance() {
     } else {
       setSelectedIds([...selectedIds, id]);
     }
-  };
+  }; 
 
   const statusColors: Record<string, any> = {
     PENDING: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-100', icon: <Clock size={14}/> },
@@ -265,37 +311,183 @@ export default function AdminFinance() {
             <Download size={18} />
             Exporter CSV
           </button>
-          {selectedIds.length > 0 && (
-            <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-4">
-              <select 
-                onChange={(e) => {
-                  if (e.target.value) {
-                    bulkUpdateStatusMutation.mutate({ ids: selectedIds, status: e.target.value });
-                    e.target.value = '';
-                  }
-                }}
-                className="px-4 py-2.5 bg-violet-50 border border-violet-200 text-violet-700 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-violet-500/20 transition-all"
-              >
-                <option value="">Changer Statut ({selectedIds.length})</option>
-                <option value="PENDING">En attente</option>
-                <option value="COMPLETED">Payé</option>
-                <option value="REJECTED">Rejeté</option>
-                <option value="RECEIVED">Reçu</option>
-              </select>
-              <button 
-                onClick={() => bulkApproveMutation.mutate(selectedIds)}
-                disabled={bulkApproveMutation.isPending || bulkUpdateStatusMutation.isPending}
-                className="flex items-center gap-2 px-4 py-2.5 bg-violet-600 text-white rounded-xl font-bold text-sm hover:bg-violet-700 transition-all shadow-md disabled:opacity-50"
-              >
-                <CheckCircle size={18} />
-                Approuver tout
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Stats Grid */}
+      {/* Tabs */}
+      <div className="flex items-center gap-4 border-b border-gray-100">
+        <button 
+          onClick={() => setActiveTab('PAYOUTS')}
+          className={`pb-4 px-2 text-sm font-black transition-all relative ${activeTab === 'PAYOUTS' ? 'text-violet-600 border-b-2 border-violet-600' : 'text-gray-400 hover:text-gray-600'}`}
+        >
+          Demandes de Retrait
+        </button>
+        <button 
+          onClick={() => setActiveTab('ADJUSTMENTS')}
+          className={`pb-4 px-2 text-sm font-black transition-all relative ${activeTab === 'ADJUSTMENTS' ? 'text-violet-600 border-b-2 border-violet-600' : 'text-gray-400 hover:text-gray-600'}`}
+        >
+          Ajustements Manuels
+        </button>
+      </div>
+
+      {activeTab === 'ADJUSTMENTS' && (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+          {/* Manual Adjustment Card (Quick Access) */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+        <div className="md:col-span-12 lg:col-span-12">
+          <div className="bg-gradient-to-br from-violet-600 to-indigo-700 rounded-[32px] p-8 text-white shadow-xl shadow-violet-200 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-8 opacity-10">
+              <Wallet size={120} />
+            </div>
+            <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
+              <div className="max-w-md">
+                <h2 className="text-2xl font-black tracking-tight">Ajustement de Solde</h2>
+                <p className="text-violet-100 font-medium mt-2">Donnez des bonus (donations) ou appliquez des frais manuels aux utilisateurs en toute sécurité.</p>
+                <div className="mt-6 flex items-center gap-4">
+                  <div className="flex -space-x-3">
+                    {payouts.slice(0, 5).map((p: any, i: number) => (
+                      <div key={i} className="w-10 h-10 rounded-full border-4 border-violet-600 bg-violet-100 text-violet-700 flex items-center justify-center text-[10px] font-black">
+                        {p.vendor?.profile?.fullName?.[0] || 'U'}
+                      </div>
+                    ))}
+                    <div className="w-10 h-10 rounded-full border-4 border-violet-600 bg-violet-500 flex items-center justify-center text-[10px] font-black">
+                      +{payouts.length}
+                    </div>
+                  </div>
+                  <p className="text-xs font-bold text-violet-200 uppercase tracking-widest">Utilisateurs actifs</p>
+                </div>
+              </div>
+              
+              <div className="flex-1 w-full max-w-lg bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <button 
+                    onClick={() => setAdjustType('CREDIT')}
+                    className={`flex items-center justify-center gap-2 py-3 rounded-xl font-black text-xs transition-all ${adjustType === 'CREDIT' ? 'bg-emerald-500 text-white shadow-lg' : 'bg-white/5 text-violet-100 hover:bg-white/10'}`}
+                  >
+                    <PlusCircle size={16} />
+                    CRÉDIT (+)
+                  </button>
+                  <button 
+                    onClick={() => setAdjustType('DEBIT')}
+                    className={`flex items-center justify-center gap-2 py-3 rounded-xl font-black text-xs transition-all ${adjustType === 'DEBIT' ? 'bg-rose-500 text-white shadow-lg' : 'bg-white/5 text-violet-100 hover:bg-white/10'}`}
+                  >
+                    <MinusCircle size={16} />
+                    DÉBIT (-)
+                  </button>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="relative">
+                    <UserPlus className="absolute left-4 top-1/2 -translate-y-1/2 text-violet-300" size={18} />
+                    <input 
+                      type="text"
+                      placeholder={adjustTargetUser ? (adjustTargetUser.fullName || adjustTargetUser.email) : "Chercher un utilisateur..."}
+                      value={userSearchTerm}
+                      onFocus={() => setShowUserDropdown(true)}
+                      onChange={(e) => {
+                        setUserSearchTerm(e.target.value);
+                        setShowUserDropdown(true);
+                      }}
+                      className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white placeholder-violet-300 focus:bg-white/10 focus:border-white/30 outline-none transition-all"
+                    />
+                    
+                    {showUserDropdown && filteredFinanceUsers.length > 0 && (
+                      <div className="absolute top-full left-0 right-0 mt-2 bg-violet-800 border border-violet-700 rounded-xl shadow-2xl overflow-hidden z-[100] animate-in slide-in-from-top-2">
+                        {filteredFinanceUsers.map((u: any) => (
+                            <button
+                              key={u.id}
+                              onClick={() => {
+                                setAdjustTargetUser(u);
+                                setUserSearchTerm('');
+                                setShowUserDropdown(false);
+                              }}
+                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-violet-700 transition-colors text-left border-b border-violet-700/50 last:border-0"
+                            >
+                              <div>
+                                <p className="text-xs font-black text-white">{u.fullName}</p>
+                                <p className="text-[10px] text-violet-300">{u.email}</p>
+                              </div>
+                              <span className={`text-[9px] font-black px-2 py-0.5 rounded text-white uppercase tracking-tighter ${
+                                u.role === 'VENDOR' ? 'bg-blue-500' : 
+                                u.role === 'GROSSELLER' ? 'bg-amber-500' : 
+                                u.role === 'INFLUENCER' ? 'bg-pink-500' : 'bg-violet-600'
+                              }`}>
+                                {u.role === 'VENDOR' ? 'Vendeur' : 
+                                 u.role === 'GROSSELLER' ? 'Grossiste' : 
+                                 u.role === 'INFLUENCER' ? 'Influenceur' : u.role}
+                              </span>
+                            </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {adjustTargetUser && !userSearchTerm && (
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                        <span className="text-[10px] font-black bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded uppercase border border-emerald-500/30">
+                          {adjustTargetUser.role === 'VENDOR' ? 'Vendeur' : 
+                           adjustTargetUser.role === 'GROSSELLER' ? 'Grossiste' : 
+                           adjustTargetUser.role === 'INFLUENCER' ? 'Influenceur' : adjustTargetUser.role}
+                        </span>
+                        <button 
+                          onClick={() => setAdjustTargetUser(null)}
+                          className="text-violet-300 hover:text-white"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="relative">
+                      <Banknote className="absolute left-4 top-1/2 -translate-y-1/2 text-violet-300" size={18} />
+                      <input 
+                        type="number"
+                        placeholder="Montant (MAD)"
+                        value={adjustAmount}
+                        onChange={(e) => setAdjustAmount(e.target.value)}
+                        className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white placeholder-violet-300 focus:bg-white/10 focus:border-white/30 outline-none transition-all"
+                      />
+                    </div>
+                    <input 
+                      type="text"
+                      placeholder="Description (ex: Donation)"
+                      value={adjustDescription}
+                      onChange={(e) => setAdjustDescription(e.target.value)}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white placeholder-violet-300 focus:bg-white/10 focus:border-white/30 outline-none transition-all"
+                    />
+                  </div>
+
+                  <button 
+                    onClick={() => {
+                      if (!adjustTargetUser || !adjustAmount) {
+                        toast.error('Veuillez remplir tous les champs');
+                        return;
+                      }
+                      adjustMutation.mutate({
+                        userId: adjustTargetUser.id,
+                        amount: Number(adjustAmount),
+                        type: adjustType,
+                        description: adjustDescription
+                      });
+                    }}
+                    disabled={adjustMutation.isPending}
+                    className="w-full py-4 bg-white text-violet-700 rounded-xl font-black text-sm hover:bg-violet-50 transition-all shadow-xl disabled:opacity-50"
+                  >
+                    {adjustMutation.isPending ? 'Traitement...' : 'Appliquer l\'ajustement'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+      )}
+
+      {activeTab === 'PAYOUTS' && (
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
@@ -536,6 +728,8 @@ export default function AdminFinance() {
           </table>
         </div>
       </div>
+      </div>
+      )}
 
       {/* History Modal */}
       {historyModalOpen && (

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { invoiceApi } from '../../lib/api';
-import { FileText, ChevronRight, ArrowLeft, Download, Eye, Calendar, Package, User, Phone, MapPin, Tag } from 'lucide-react';
+import { FileText, ChevronRight, ArrowLeft, Download, Eye, Calendar, Package, User, Phone, MapPin, Tag, TrendingUp, TrendingDown, Wallet, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { generateInvoicePDF } from '../../utils/pdfGenerator';
@@ -10,10 +10,17 @@ export default function UserInvoices() {
   const [page, setPage] = useState(1);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
 
+  const { data: statsData } = useQuery({
+    queryKey: ['user-invoices-stats'],
+    queryFn: () => invoiceApi.stats(),
+  });
+
   const { data, isLoading } = useQuery({
     queryKey: ['user-invoices', page],
     queryFn: () => invoiceApi.list({ page, limit: 20 }),
   });
+
+  const stats = statsData?.data?.data;
 
   const { data: invoiceDetails, isLoading: isLoadingDetails } = useQuery({
     queryKey: ['user-invoice-details', selectedInvoice?.id],
@@ -206,6 +213,30 @@ export default function UserInvoices() {
           <h1 className="text-2xl font-black text-gray-900 tracking-tight">Mes Factures</h1>
           <p className="text-sm text-gray-500 font-medium">Historique de vos factures et paiements</p>
         </div>
+      </div>
+
+      {/* Stats Section */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+        {[  
+          { label: 'Gains Bruts', value: stats?.totalEarnings || 0, icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50', isPrice: true },
+          { label: 'Retours', value: (stats?.totalDeductions || 0) - (stats?.manualFees || 0), icon: RotateCcw, color: 'text-amber-600', bg: 'bg-amber-50', isPrice: true },
+          { label: 'Frais / Débits', value: stats?.manualFees || 0, icon: TrendingDown, color: 'text-rose-600', bg: 'bg-rose-50', isPrice: true },
+          { label: 'Solde Net', value: stats?.netBalance || 0, icon: Wallet, color: 'text-violet-600', bg: 'bg-violet-50', isPrice: true },
+          { label: 'Total Colis', value: stats?.totalColis || 0, icon: Package, color: 'text-blue-600', bg: 'bg-blue-50' },
+          { label: 'Factures (Qté)', value: stats?.totalFactures || 0, icon: FileText, color: 'text-slate-600', bg: 'bg-slate-50' },
+        ].map((stat, i) => (
+          <div key={i} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-4">
+            <div className={`w-12 h-12 ${stat.bg} rounded-xl flex items-center justify-center`}>
+              <stat.icon className={`w-6 h-6 ${stat.color}`} />
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{stat.label}</p>
+              <p className={`text-lg font-black text-gray-900`}>
+                {stat.isPrice ? `${stat.value.toLocaleString(undefined, { minimumFractionDigits: 2 })} MAD` : stat.value}
+              </p>
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">

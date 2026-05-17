@@ -65,7 +65,9 @@ router.post(
       data: {
         influencerId: userId,
         productId,
-        code
+        code,
+        isActive: false,
+        status: 'BUILDING'
       }
     });
 
@@ -159,53 +161,53 @@ router.get(
       orderBy: { createdAt: 'desc' }
     });
 
-    if (start && end) {
-      const startDate = new Date(start as string);
-      const endDate = new Date(end as string);
+    const startDate = start ? new Date(start as string) : undefined;
+    const endDate = end ? new Date(end as string) : undefined;
+    if (endDate) {
       endDate.setHours(23, 59, 59, 999);
-
-      const formattedLinks = await Promise.all(links.map(async (link) => {
-        const [clicksData, leadsCount, earningsSum] = await Promise.all([
-          (prisma as any).referralLinkClick.findMany({
-            where: {
-              referralLinkId: link.id,
-              createdAt: { gte: startDate, lte: endDate }
-            },
-            select: { ipAddress: true, userAgent: true }
-          }),
-          prisma.lead.count({
-            where: {
-              referralLinkId: link.id,
-              createdAt: { gte: startDate, lte: endDate }
-            }
-          }),
-          prisma.influencerCommission.aggregate({
-            where: {
-              referralLinkId: link.id,
-              createdAt: { gte: startDate, lte: endDate }
-            },
-            _sum: { amount: true }
-          })
-        ]);
-
-        // Calculate unique clicks (IP + User Agent)
-        const uniqueClicksSet = new Set();
-        clicksData.forEach((c: any) => {
-          uniqueClicksSet.add(`${c.ipAddress}-${c.userAgent || 'unknown'}`);
-        });
-
-        return {
-          ...link,
-          clicks: uniqueClicksSet.size,
-          conversions: leadsCount,
-          earnings: earningsSum._sum.amount || 0
-        };
-      }));
-
-      return res.json(formattedLinks);
     }
 
-    res.json(links);
+    const formattedLinks = await Promise.all(links.map(async (link) => {
+      const dateFilter = startDate && endDate ? { createdAt: { gte: startDate, lte: endDate } } : {};
+      
+      const [clicksData, leadsCount, earningsSum] = await Promise.all([
+        (prisma as any).referralLinkClick.findMany({
+          where: {
+            referralLinkId: link.id,
+            ...dateFilter
+          },
+          select: { ipAddress: true, userAgent: true }
+        }),
+        prisma.lead.count({
+          where: {
+            referralLinkId: link.id,
+            ...dateFilter
+          }
+        }),
+        prisma.influencerCommission.aggregate({
+          where: {
+            referralLinkId: link.id,
+            ...dateFilter
+          },
+          _sum: { amount: true }
+        })
+      ]);
+
+      // Calculate unique clicks (IP + User Agent)
+      const uniqueClicksSet = new Set();
+      clicksData.forEach((c: any) => {
+        uniqueClicksSet.add(`${c.ipAddress}-${c.userAgent || 'unknown'}`);
+      });
+
+      return {
+        ...link,
+        clicks: uniqueClicksSet.size,
+        conversions: leadsCount,
+        earnings: earningsSum._sum.amount || 0
+      };
+    }));
+
+    res.json(formattedLinks);
   })
 );
 
@@ -394,13 +396,31 @@ router.get(
 
     let dateLimitStart: Date;
     let dateLimitEnd = new Date();
-    const numDays = parseInt(days as string) || 30;
+    const isAllTime = days === 'all';
+    const numDays = isAllTime ? 0 : (parseInt(days as string) || 30);
     const isHourly = numDays === 1 && !start;
 
     if (start && end) {
       dateLimitStart = new Date(start as string);
       dateLimitEnd = new Date(end as string);
       dateLimitEnd.setHours(23, 59, 59, 999);
+    } else if (isAllTime) {
+      const whereOldest: any = { influencerId: userId };
+      if (referralLinkId) {
+        whereOldest.id = parseInt(referralLinkId as string);
+      }
+      const oldestLink = await prisma.referralLink.findFirst({
+        where: whereOldest,
+        orderBy: { createdAt: 'asc' }
+      });
+      if (oldestLink) {
+        dateLimitStart = new Date(oldestLink.createdAt);
+        dateLimitStart.setHours(0, 0, 0, 0);
+      } else {
+        dateLimitStart = new Date();
+        dateLimitStart.setDate(dateLimitStart.getDate() - 30);
+      }
+      dateLimitEnd = new Date();
     } else {
       dateLimitStart = new Date();
       dateLimitStart.setDate(dateLimitStart.getDate() - (numDays - 1));
@@ -438,10 +458,14 @@ router.get(
     ]);
 
     const getKey = (date: Date) => {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
       if (isHourly) {
-        return date.toISOString().substring(0, 13); // "YYYY-MM-DDTHH"
+        const h = String(date.getHours()).padStart(2, '0');
+        return `${y}-${m}-${d}T${h}`;
       }
-      return date.toISOString().split('T')[0];
+      return `${y}-${m}-${d}`;
     };
 
     const clicksByDate: Record<string, Set<string>> = {};
@@ -926,11 +950,14 @@ router.get(
         totalAmountMad: (lead as any).order?.totalAmountMad || 0,
         coliatyPackageCode: (lead as any).order?.coliatyPackageCode,
         coliatyPackageId: (lead as any).order?.coliatyPackageId,
+        statusHistory: (lead as any).order?.statusHistory || [],
         lead: {
           paymentSituation: lead.paymentSituation,
           callbackDate: lead.callbackAt,
           notes: lead.notes,
-          statusHistory: (lead as any).statusHistory || []
+          statusHistory: (lead as any).statusHistory || [],
+          requestedPriceMad: lead.requestedPriceMad,
+          requestedPriceStatus: lead.requestedPriceStatus,
         }
       }
     }));
@@ -1075,15 +1102,112 @@ router.put(
   })
 );
 
-router.patch(
-  '/links/:id/code',
+// In-memory OTP store for regeneration verification (linkId -> { otp, expiresAt, email })
+const regenOtpStore = new Map<number, { otp: string; expiresAt: Date; email: string }>();
+
+// Step 1: Send verification OTP to the influencer's email
+router.post(
+  '/links/:id/send-regen-otp',
   authenticate,
   authorize('VENDOR', 'INFLUENCER', 'HELPER', 'SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const linkId = parseInt(String(req.params.id));
 
-    // Initial check: if Link exists
+    const link = await (prisma as any).referralLink.findUnique({
+      where: { id: linkId },
+      include: { influencer: { select: { id: true, email: true, profile: { select: { fullName: true } } } } }
+    });
+
+    if (!link) {
+      throw new AppException(404, 'Referral link not found');
+    }
+
+    // Permission Check
+    const isAdmin = req.user!.roleName === 'SUPER_ADMIN';
+    const isOwner = link.influencerId === userId;
+    let isAuthorizedHelper = false;
+
+    if (req.user!.roleName === 'HELPER' && req.user!.canManageInfluencerLinks) {
+      const assignment = await (prisma as any).helperUserAssignment.findFirst({
+        where: { helperId: userId, targetUserId: link.influencerId }
+      });
+      if (assignment) isAuthorizedHelper = true;
+    }
+
+    if (!isAdmin && !isOwner && !isAuthorizedHelper) {
+      throw new AppException(403, 'You do not have permission to perform this action');
+    }
+
+    const email = link.influencer?.email;
+    if (!email) {
+      throw new AppException(400, 'No email found for this influencer');
+    }
+
+    // Generate 6-digit OTP
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    regenOtpStore.set(linkId, { otp, expiresAt, email });
+
+    // Send email
+    const { sendEmail } = await import('../utils/mailer.js');
+    const influencerName = link.influencer?.profile?.fullName || email;
+    await sendEmail({
+      to: email,
+      subject: '🔐 Code de vérification - Régénération de lien',
+      html: `
+        <div style="font-family: 'Segoe UI', sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <div style="width: 60px; height: 60px; background: #fee2e2; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px;">
+              <span style="font-size: 28px;">🔐</span>
+            </div>
+            <h2 style="color: #1e293b; margin: 0; font-size: 22px;">Vérification Requise</h2>
+          </div>
+          <p style="color: #64748b; font-size: 14px; line-height: 1.6;">
+            Bonjour <strong>${influencerName}</strong>,<br><br>
+            Une demande de régénération de code pour votre lien de parrainage a été initiée. 
+            Voici votre code de vérification :
+          </p>
+          <div style="text-align: center; margin: 30px 0;">
+            <div style="display: inline-block; background: #f1f5f9; padding: 16px 40px; border-radius: 16px; border: 2px dashed #cbd5e1;">
+              <span style="font-size: 36px; font-weight: 900; letter-spacing: 8px; color: #0f172a;">${otp}</span>
+            </div>
+          </div>
+          <p style="color: #94a3b8; font-size: 12px; text-align: center;">
+            ⏱ Ce code expire dans <strong>10 minutes</strong>.<br>
+            Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.
+          </p>
+        </div>
+      `
+    });
+
+    // Mask email for frontend display
+    const [localPart, domain] = email.split('@');
+    const maskedEmail = `${localPart.slice(0, 2)}***@${domain}`;
+
+    res.json({ 
+      status: 'success', 
+      message: 'OTP sent',
+      data: { maskedEmail }
+    });
+  })
+);
+
+// Step 2: Verify OTP and regenerate the code
+router.post(
+  '/links/:id/verify-regen-otp',
+  authenticate,
+  authorize('VENDOR', 'INFLUENCER', 'HELPER', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const linkId = parseInt(String(req.params.id));
+    const { otp } = req.body;
+
+    if (!otp) {
+      throw new AppException(400, 'OTP is required');
+    }
+
     const link = await (prisma as any).referralLink.findUnique({
       where: { id: linkId }
     });
@@ -1107,6 +1231,24 @@ router.patch(
     if (!isAdmin && !isOwner && !isAuthorizedHelper) {
       throw new AppException(403, 'You do not have permission to perform this action');
     }
+
+    // Verify OTP
+    const stored = regenOtpStore.get(linkId);
+    if (!stored) {
+      throw new AppException(400, 'Aucun code de vérification trouvé. Veuillez en demander un nouveau.');
+    }
+
+    if (new Date() > stored.expiresAt) {
+      regenOtpStore.delete(linkId);
+      throw new AppException(400, 'Le code de vérification a expiré. Veuillez en demander un nouveau.');
+    }
+
+    if (stored.otp !== otp) {
+      throw new AppException(400, 'Code de vérification incorrect.');
+    }
+
+    // OTP verified — regenerate the code
+    regenOtpStore.delete(linkId);
 
     const newCode = uuidv4().slice(0, 8).toUpperCase();
 
@@ -1129,7 +1271,7 @@ router.patch(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const linkId = parseInt(String(req.params.id));
-    const { isActive } = req.body;
+    const { isActive, status } = req.body;
 
     // Initial check: if Link exists
     const link = await (prisma as any).referralLink.findUnique({
@@ -1156,9 +1298,13 @@ router.patch(
       throw new AppException(403, 'You do not have permission to perform this action');
     }
 
+    const updateData: any = {};
+    if (isActive !== undefined) updateData.isActive = isActive;
+    if (status !== undefined) updateData.status = status;
+
     const updatedLink = await (prisma as any).referralLink.update({
       where: { id: linkId },
-      data: { isActive },
+      data: updateData,
       include: {
         product: { include: { images: { where: { isPrimary: true }, take: 1 } } }
       }

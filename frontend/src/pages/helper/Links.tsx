@@ -17,8 +17,9 @@ interface ReferralLink {
   conversions: number;
   earnings: number;
   isActive: boolean;
+  status: string;
   createdAt: string;
-  product?: { nameFr?: string; images?: { url: string }[] };
+  product?: { sku?: string; nameFr?: string; retailPriceMad?: number | string; images?: { url: string }[] };
   influencer?: { id: number; fullName?: string; email?: string; phone?: string };
 }
 
@@ -94,6 +95,18 @@ export default function HelperLinks() {
             Gérez les liens de tous vos influenceurs assignés — {links.length} lien{links.length !== 1 ? 's' : ''} au total.
           </p>
         </div>
+
+        <button
+          onClick={() => {
+            setLoading(true);
+            loadLinks();
+          }}
+          disabled={loading}
+          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-100 rounded-xl text-xs font-black text-gray-600 hover:bg-gray-50 hover:text-orange-600 transition-all shadow-sm group"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : 'group-hover:rotate-180'} transition-all duration-500`} />
+          ACTUALISER
+        </button>
       </div>
 
       {/* Stats */}
@@ -137,6 +150,8 @@ export default function HelperLinks() {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Influenceur</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Produit</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">SKU</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Prix</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Code</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Statut</th>
                   <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
@@ -173,6 +188,18 @@ export default function HelperLinks() {
                         <span className="text-sm font-bold text-gray-900 truncate max-w-[140px]">{link.product?.nameFr || '—'}</span>
                       </div>
                     </td>
+                    {/* SKU */}
+                    <td className="px-6 py-4">
+                      <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-2 py-1 rounded-md border border-slate-200/50 uppercase tracking-tighter">
+                        {link.product?.sku || '—'}
+                      </span>
+                    </td>
+                    {/* Price */}
+                    <td className="px-6 py-4">
+                      <span className="text-[10px] font-black text-gray-600">
+                        {link.product?.retailPriceMad ? `${Number(link.product.retailPriceMad).toLocaleString()} DH` : '—'}
+                      </span>
+                    </td>
                     {/* Code */}
                     <td className="px-6 py-4">
                       <code className="text-xs font-mono bg-gray-100 text-gray-700 px-2 py-1 rounded-lg">{link.code}</code>
@@ -180,16 +207,41 @@ export default function HelperLinks() {
 
                     {/* Status */}
                     <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${
-                        link.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'
-                      }`}>
-                        {link.isActive ? 'Actif' : 'Inactif'}
-                      </span>
+                      {link.status === 'BUILDING' ? (
+                        <span className="px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-600 flex items-center gap-1.5 w-fit">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                          Building
+                        </span>
+                      ) : (
+                        <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${
+                          link.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'
+                        }`}>
+                          {link.isActive ? 'Actif' : 'Inactif'}
+                        </span>
+                      )}
                     </td>
                     {/* Actions */}
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end">
                         <div className="inline-flex items-center gap-3 p-2 bg-gray-50/50 backdrop-blur-sm border border-gray-100 rounded-xl opacity-0 group-hover:opacity-100 group-hover:translate-x-0 translate-x-2 transition-all duration-200">
+                          {link.status === 'BUILDING' && (
+                            <button
+                              onClick={() => {
+                                toast.promise(
+                                  helperApi.updateLinkStatus(link.id, true, 'ACTIVE'),
+                                  {
+                                    loading: 'Activation...',
+                                    success: () => { loadLinks(); return 'Lien activé avec succès'; },
+                                    error: 'Erreur lors de l\'activation'
+                                  }
+                                );
+                              }}
+                              className="px-3 py-1.5 bg-slate-900 text-white rounded-lg text-[10px] uppercase font-black tracking-widest hover:bg-emerald-600 transition-colors shadow-sm"
+                              title="Terminer la construction"
+                            >
+                              Finish building
+                            </button>
+                          )}
                           <button
                             onClick={() => copyLink(link.code)}
                             className="p-2 rounded-lg text-slate-400 hover:text-orange-600 hover:bg-orange-50 hover:scale-110 transition-all duration-200"

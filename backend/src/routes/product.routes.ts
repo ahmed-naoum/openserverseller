@@ -70,15 +70,7 @@ router.get(
         where.status = status;
       }
     } else if (req.user?.roleName === 'HELPER') {
-      // Helper sees products from their assigned vendors + their own
-      const assignments = await prisma.helperUserAssignment.findMany({
-        where: { helperId: req.user.id },
-        select: { targetUserId: true }
-      });
-      const assignedIds = assignments.map(a => a.targetUserId);
-      assignedIds.push(req.user.id);
-      
-      where.ownerId = { in: assignedIds };
+      // Helper sees all products
       if (status && status !== 'ALL') {
         where.status = status;
       }
@@ -140,6 +132,7 @@ router.get(
           ownerName: (p as any).owner?.profile?.fullName || 'SILACOD',
           categories: (p as any).categories, // Bypass strict types if necessary since include was used
           primaryImage: (p as any).images?.[0]?.imageUrl,
+          createdAt: p.createdAt,
         })),
         pagination: {
           page: Number(page),

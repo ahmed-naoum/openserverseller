@@ -114,14 +114,33 @@ export const authApi = {
   disable2FA: () => api.post('/auth/2fa/disable'),
   impersonate: (data: { targetUserId: number }) =>
     api.post('/auth/impersonate', data),
-  addBankAccount: (data: { bankName: string; ribAccount: string; iceNumber?: string }) =>
-    api.post('/auth/bank-accounts', data),
+  sendBankOtp: (data: { bankName: string; ribAccount: string; iceNumber?: string }) =>
+    api.post('/auth/bank-accounts/send-otp', data),
+  verifyBankOtp: (otp: string) =>
+    api.post('/auth/bank-accounts/verify-otp', { otp }),
   setDefaultBankAccount: (id: number) =>
     api.patch(`/auth/bank-accounts/${id}/default`),
   deleteBankAccount: (id: number) =>
     api.delete(`/auth/bank-accounts/${id}`),
   resendOtp: (data: { email?: string; phone?: string }) =>
     api.post('/auth/resend-otp', data),
+  extractKycData: async (file: File, type: 'recto' | 'verso' = 'recto') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('type', type);
+    const response = await api.post('/auth/kyc/extract', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response;
+  },
+  submitKyc: (data: { 
+    documents: { type: string; url: string; metadata?: any }[]; 
+    cinNumber?: string; 
+    birthDate?: string; 
+    fullName?: string; 
+    address?: string; 
+    city?: string;
+  }) => api.post('/auth/kyc', data),
 };
 
 
@@ -148,8 +167,10 @@ export const leadsApi = {
   importWithProduct: (data: { productId: number; leads: any[]; sourceMode?: string }) => api.post('/leads/import', data),
   getMyProducts: (params?: { mode?: string }) => api.get('/leads/my-products', { params }),
   update: (id: string, data: any) => api.patch(`/leads/${id}`, data),
-  updateStatus: (id: string, data: { status: string; notes?: string }) =>
+  updateStatus: (id: string, data: { status: string; notes?: string; callbackAt?: string; requestedPriceMad?: number }) =>
     api.patch(`/leads/${id}/status`, data),
+  respondPriceRequest: (id: number, action: 'APPROVE' | 'REJECT') =>
+    api.post(`/leads/${id}/respond-price-request`, { action }),
   bulkUpdateStatus: (data: { ids: number[]; status: string }) =>
     api.patch('/leads/bulk-status', data),
   assign: (id: string, data: { agentId: string }) => api.post(`/leads/${id}/assign`, data),
@@ -181,6 +202,7 @@ export const leadsApi = {
   updatePaymentSituation: (id: string, data: { paymentSituation: string }) =>
     api.patch(`/leads/${id}/payment-situation`, data),
   delete: (id: string) => api.delete(`/leads/${id}`),
+  getHistoryByPhone: (phone: string) => api.get(`/leads/history-by-phone/${phone}`),
 };
 
 export const ordersApi = {
@@ -203,6 +225,15 @@ export const ordersApi = {
   updateNormal: (id: number, data: any) => api.put(`/orders/${id}/update-normal`, data),
   getParcelLabel: (code: string) => api.get(`/orders/parcel/${code}/label`),
   getProductsWithParcels: () => api.get('/orders/products-with-parcels'),
+  // Pickup Notes
+  getPickupNoteDetail: (reference: string) => api.get(`/orders/pickup-note/detail/${reference}`),
+  createPickupNote: () => api.post('/orders/pickup-note/create', {}),
+  addParcelsToPickup: (data: { pickup_note_reference: string; parcel_codes: string[] }) =>
+    api.post('/orders/pickup-note/add-parcels', data),
+  removeParcelsFromPickup: (data: { pickup_note_reference: string; parcel_codes: string[] }) =>
+    api.post('/orders/pickup-note/remove-parcels', data),
+  generatePickupLabels: (reference: string) =>
+    api.get(`/orders/pickup-note/${reference}/generate-labels`),
 };
 
 export const walletApi = {
@@ -260,6 +291,7 @@ export const adminApi = {
     api.patch(`/admin/users/${uuid}/verify-kyc`, { status }),
   verifyBank: (id: number, status: 'APPROVED' | 'REJECTED') =>
     api.patch(`/admin/bank-accounts/${id}/status`, { status }),
+  verifyUser: (uuid: string, isActive: boolean) => api.patch(`/admin/users/${uuid}/active`, { isActive }),
   users: (params?: { role?: string; status?: string; page?: number; limit?: number; search?: string }) =>
     api.get('/users', { params }),
   createUser: (data: any) => api.post('/users', data),
@@ -290,6 +322,8 @@ export const adminApi = {
   deleteCampaign: (id: number) => api.delete(`/admin/campaigns/${id}`),
   getCustomers: (params?: { page?: number; limit?: number; search?: string }) =>
     api.get('/admin/customers', { params }),
+  getOrders: (params?: { page?: number; limit?: number; search?: string }) =>
+    api.get('/orders', { params }),
   // Agent-Influencer Assignments
   getInfluencers: () => api.get('/admin/influencers'),
   getAgentInfluencerAssignments: (agentId?: number) =>
@@ -325,6 +359,9 @@ export const adminApi = {
   getCallCenterAgents: (params?: { startDate?: string; endDate?: string }) => api.get('/admin/call-center-agents', { params }),
   getCallCenterAgentLeads: (agentId: number, params?: { status?: string; search?: string; page?: number; limit?: number; startDate?: string; endDate?: string }) =>
     api.get('/admin/call-center-agents', { params: { agentId, ...params } }),
+  getFinanceUsers: () => api.get('/admin/finance/users'),
+  adjustWallet: (data: { userId: number; amount: number; type: 'CREDIT' | 'DEBIT'; description?: string }) => 
+    api.post('/admin/wallet/adjust', data),
 };
 
 export const chatApi = {
@@ -345,9 +382,12 @@ export const chatApi = {
     description?: string;
   }) => api.post('/chat/conversations/auto-open', params),
   claimConversation: (id: string) => api.post(`/chat/conversations/${id}/claim`),
+  closeConversation: (id: string) => api.post(`/chat/conversations/${id}/close`),
+  openConversation: (id: string) => api.post(`/chat/conversations/${id}/open`),
   messages: (conversationId: string, params?: { page?: number; limit?: number }) => api.get(`/chat/conversations/${conversationId}/messages`, { params }),
   sendMessage: (conversationId: string, data: { content: string; messageType?: string; attachmentUrl?: string }) => api.post(`/chat/conversations/${conversationId}/messages`, data),
   markAsRead: (conversationId: string) => api.patch(`/chat/conversations/${conversationId}/read`),
+  getConversationLogs: (id: string) => api.get(`/chat/conversations/${id}/logs`),
 };
 
 export const inventoryApi = {
@@ -406,18 +446,22 @@ export const influencerApi = {
   createCampaign: (data: any) => api.post('/influencer/campaigns', data),
   updateCampaign: (id: number, data: any) => api.patch(`/influencer/campaigns/${id}`, data),
   deleteCampaign: (id: number) => api.delete(`/influencer/campaigns/${id}`),
-  regenerateLink: (id: number) => api.patch(`/influencer/links/${id}/code`),
-  updateLinkStatus: (id: number, isActive: boolean) => api.patch(`/influencer/links/${id}/status`, { isActive }),
+  sendRegenOtp: (id: number) => api.post(`/influencer/links/${id}/send-regen-otp`),
+  verifyRegenOtp: (id: number, otp: string) => api.post(`/influencer/links/${id}/verify-regen-otp`, { otp }),
+  updateLinkStatus: (id: number, isActive: boolean, status?: string) => api.patch(`/influencer/links/${id}/status`, { isActive, status }),
   getDailyAnalytics: (params?: { days?: number; start?: string; end?: string; referralLinkId?: number }) => 
     api.get('/influencer/analytics/daily', { params }),
 };
 
 export const helperApi = {
   getAssignedLinks: () => api.get('/influencer/helper/links'),
-  regenerateLink: (id: number) => api.patch(`/influencer/links/${id}/code`),
-  updateLinkStatus: (id: number, isActive: boolean) => api.patch(`/influencer/links/${id}/status`, { isActive }),
+  sendRegenOtp: (id: number) => api.post(`/influencer/links/${id}/send-regen-otp`),
+  verifyRegenOtp: (id: number, otp: string) => api.post(`/influencer/links/${id}/verify-regen-otp`, { otp }),
+  updateLinkStatus: (id: number, isActive: boolean, status?: string) => api.patch(`/influencer/links/${id}/status`, { isActive, status }),
   getLandingPage: (id: number) => api.get(`/influencer/links/${id}/landing-page`),
   updateLandingPage: (id: number, data: any) => api.put(`/influencer/links/${id}/landing-page`, data),
+  verifyReturnCode: (code: string) => api.post('/leads/verify-return', { code }),
+  bulkScanReturns: (orderIds: number[]) => api.post('/leads/bulk-scan-returns', { orderIds }),
   scanReturn: (code: string) => api.post('/leads/scan-return', { code }),
 };
 
@@ -446,13 +490,14 @@ export const settingsApi = {
   getMaintenanceStatus: () => api.get('/settings/maintenance'),
   verifyMaintenanceBypass: (password: string) => api.post('/settings/maintenance/verify', { password }),
   getAdminMaintenanceSettings: () => api.get('/settings/maintenance/admin'),
-  updateMaintenanceSettings: (data: { enabled: boolean; secret: string }) => api.put('/settings/maintenance', data),
+  updateMaintenanceSettings: (data: { enabled: boolean; secret: string; registrationBlocked: boolean; influencerRegistrationBlocked: boolean }) => api.put('/settings/maintenance', data),
 };
 
 export const webhooksApi = {
   getLogs: (params?: { page?: number; limit?: number; provider?: string; status?: string }) =>
     api.get('/webhooks/logs', { params }),
   clearLogs: () => api.delete('/webhooks/logs'),
+  simulateColiaty: (data: any) => api.post('/webhooks/coliaty', data),
 };
 
 export const supportApi = {
@@ -462,6 +507,7 @@ export const supportApi = {
 
 export const invoiceApi = {
   list: (params?: { page?: number; limit?: number }) => api.get('/invoices', { params }),
+  stats: () => api.get('/invoices/stats'),
   get: (id: number) => api.get(`/invoices/${id}`),
 };
 

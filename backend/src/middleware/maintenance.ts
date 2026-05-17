@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 const prisma = new PrismaClient();
 
 // In-memory cache for performance
-let maintenanceCache: { enabled: boolean; secret: string; expiresAt: number } | null = null;
+let maintenanceCache: { enabled: boolean; secret: string; registrationBlocked: boolean; influencerRegistrationBlocked: boolean; expiresAt: number } | null = null;
 const CACHE_TTL = 30000; // 30 seconds
 
 export const fetchMaintenanceSettings = async () => {
@@ -20,10 +20,12 @@ export const fetchMaintenanceSettings = async () => {
     });
     
     if (setting && setting.value) {
-      const data = setting.value as { enabled: boolean; secret: string };
+      const data = setting.value as { enabled: boolean; secret: string; registrationBlocked?: boolean; influencerRegistrationBlocked?: boolean };
       maintenanceCache = {
         enabled: data.enabled || false,
         secret: data.secret || 'silacod-admin',
+        registrationBlocked: data.registrationBlocked || false,
+        influencerRegistrationBlocked: data.influencerRegistrationBlocked || false,
         expiresAt: now + CACHE_TTL
       };
       return maintenanceCache;
@@ -33,7 +35,7 @@ export const fetchMaintenanceSettings = async () => {
   }
 
   // Default if not set
-  return { enabled: false, secret: 'silacod-admin' };
+  return { enabled: false, secret: 'silacod-admin', registrationBlocked: false, influencerRegistrationBlocked: false };
 };
 
 export const clearMaintenanceCache = () => {

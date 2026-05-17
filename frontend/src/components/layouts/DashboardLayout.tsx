@@ -115,8 +115,6 @@ const navigation = {
     { name: 'Tableau de bord', href: '/agent', icon: Home },
     { name: 'Réclamer Leads', href: '/agent/leads', icon: Zap },
     { name: 'Livraison', href: '/agent/livraison', icon: Truck },
-    { name: 'Support & Tickets', href: '/agent/support', icon: MessageSquare },
-    { name: 'Messages', href: '/agent/chat', icon: MessageSquare },
     { name: 'Paramètres', href: '/agent/settings', icon: Settings },
   ],
   admin: [
@@ -124,7 +122,6 @@ const navigation = {
     { name: 'Tous les Leads', href: '/admin/leads', icon: Users },
     { name: 'Vérifications', href: '/admin/verifications', icon: ShieldCheck },
     { name: 'Utilisateurs', href: '/admin/users', icon: Users },
-    { name: 'Clients', href: '/admin/customers', icon: Users },
     { name: 'Inspect Call Center', href: '/admin/call-center-inspector', icon: Headphones },
     { name: 'Catégories', href: '/admin/categories', icon: Tag },
     { name: 'Produits', href: '/admin/products', icon: Package },
@@ -144,6 +141,7 @@ const navigation = {
     { name: 'Factures', href: '/admin/invoices', icon: FileText },
     { name: 'Journaux d\'Activité', href: '/admin/activity-logs', icon: History },
     { name: 'Sauvegardes DB', href: '/admin/backups', icon: Database },
+    { name: 'Scanner Retour', href: '/admin/scanner', icon: ScanLine },
     { name: 'Paramètres', href: '/admin/settings', icon: Settings },
   ],
   system_support: [
@@ -165,7 +163,8 @@ const navigation = {
     { name: 'Liens de Parrainage', href: '/helper/links', icon: Tag },
     { name: 'Colis', href: '/helper/colis', icon: Package },
     { name: 'Scanner Retour', href: '/helper/scanner', icon: ScanLine },
-    { name: 'Packaging Tickets', href: '/helper/tickets', icon: FileText },
+    { name: 'Tickets & Ramassage', href: '/helper/tickets', icon: FileText },
+    { name: 'Marketplace', href: '/helper/marketplace', icon: ShoppingCart },
     { name: 'Produits', href: '/helper/products', icon: Tag },
     { name: 'Paramètres', href: '/helper/settings', icon: Settings },
   ],
@@ -842,15 +841,7 @@ export default function DashboardLayout() {
                 {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
               </button>
 
-              {/* Help button */}
-              <button
-                onClick={() => window.open('https://silacod.com', '_blank')}
-                className="hidden md:flex relative p-2.5 bg-white rounded-xl border border-slate-100 text-slate-400 hover:text-primary-600 hover:border-primary-200 transition-all shadow-sm hover:shadow-md active:scale-95"
-                title="Centre d'aide"
-                id="help-button"
-              >
-                <HelpCircle size={20} />
-              </button>
+
 
               {/* Notifications */}
               <button 

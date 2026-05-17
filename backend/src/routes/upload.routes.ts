@@ -135,10 +135,10 @@ router.post(
 router.post(
   '/kyc',
   authenticate,
-  upload.array('files', 3),
+  upload.array('files', 2),
   asyncHandler(async (req, res) => {
-    if (!req.files || req.files.length !== 3) {
-      throw new AppException(400, 'Vous devez envoyer exactement 3 fichiers: Document Recto, Document Verso, et Photo Faciale');
+    if (!req.files || req.files.length !== 2) {
+      throw new AppException(400, 'Vous devez envoyer exactement 2 fichiers: Document Recto et Document Verso');
     }
 
     const files = (req.files as Express.Multer.File[]).map((file) => ({

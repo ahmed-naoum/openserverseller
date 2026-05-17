@@ -50,6 +50,7 @@ import IntegrationsPage from './pages/vendor/IntegrationsPage';
 import PlatformSettings from './pages/admin/PlatformSettings';
 import SecurityFirewall from './pages/admin/SecurityFirewall';
 import WebhookLogs from './pages/admin/WebhookLogs';
+import WebhookTester from './pages/admin/WebhookTester';
 import GrossellerDashboard from './pages/grosseller/Dashboard';
 import GrossellerProfile from './pages/grosseller/Profile';
 import GrossellerInventory from './pages/grosseller/Inventory';
@@ -253,6 +254,8 @@ function App() {
           <Route path="colis" element={<HelperColis />} />
           <Route path="scanner" element={<HelperScanner />} />
           <Route path="tickets" element={<HelperTickets />} />
+          <Route path="marketplace" element={<PublicMarketplace />} />
+          <Route path="product/:id" element={<ProductDetail />} />
           <Route path="products" element={<AdminProducts />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="verification" element={<ProfileVerification />} />
@@ -267,7 +270,6 @@ function App() {
           <Route index element={<AdminDashboard />} />
           <Route path="leads" element={<AdminLeads />} />
           <Route path="users" element={<AdminUsers />} />
-          <Route path="customers" element={<AdminCustomers />} />
           <Route path="categories" element={<AdminCategories />} />
           <Route path="products" element={<AdminProducts />} />
           <Route path="orders" element={<AdminOrders />} />
@@ -282,6 +284,7 @@ function App() {
           <Route path="platform-settings" element={<PlatformSettings />} />
           <Route path="security" element={<SecurityFirewall />} />
           <Route path="webhook-logs" element={<WebhookLogs />} />
+          <Route path="webhook-tester" element={<WebhookTester />} />
           <Route path="payment-monitoring" element={<AdminPaymentMonitoring />} />
           <Route path="marketplace" element={<PublicMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
@@ -289,6 +292,7 @@ function App() {
           <Route path="activity-logs" element={<ActivityLogs />} />
           <Route path="backups" element={<BackupManager />} />
           <Route path="call-center-inspector" element={<CallCenterInspector />} />
+          <Route path="scanner" element={<HelperScanner />} />
           <Route path="settings" element={<SettingsPage />} />
 
           <Route path="verification" element={<ProfileVerification />} />

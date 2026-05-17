@@ -128,6 +128,7 @@ model User {
   targetedAnnouncements Announcement[]     @relation("TargetedAnnouncements")
   bankAccounts         UserBankAccount[]
   invoices             Invoice[]
+  conversationLogs     ConversationLog[]  @relation("UserLogs")
 
   @@map("users")
 }
@@ -154,6 +155,8 @@ model UserProfile {
   avatarUrl String?
   city      String?
   address   String?
+  cinNumber String?
+  birthDate DateTime?
   language  String  @default("fr")
   metadata  Json?
 
@@ -176,6 +179,7 @@ model KycDocument {
   documentType String
   documentUrl  String
   status       String   @default("PENDING")
+  metadata     Json?
   createdAt    DateTime @default(now())
 
   @@map("kyc_documents")
@@ -334,6 +338,8 @@ model Lead {
   productVariant  String?
   notes           String?
   callbackAt      DateTime?
+  requestedPriceMad Float?
+  requestedPriceStatus String? @default("PENDING") // PENDING, APPROVED, REJECTED
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
@@ -408,6 +414,7 @@ model Order {
   paymentMethod       String   @default("COD")
   coliatyPackageCode  String?
   coliatyPackageId    Int?
+  coliatyPickupRef    String?
   packageContent      String?
   packageNoOpen       Boolean  @default(false)
   productVariant      String?
@@ -754,8 +761,22 @@ model Conversation {
 
   participants ConversationParticipant[]
   messages     Message[]
+  logs         ConversationLog[]
 
   @@map("conversations")
+}
+
+model ConversationLog {
+  id             Int          @id @default(autoincrement())
+  conversationId Int
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         Int?
+  user           User?        @relation("UserLogs", fields: [userId], references: [id])
+  action         String       // CREATED, CLAIMED, CLOSED, etc.
+  details        String?
+  createdAt      DateTime     @default(now())
+
+  @@map("conversation_logs")
 }
 
 model ConversationParticipant {
@@ -803,6 +824,7 @@ model ReferralLink {
   conversions  Int      @default(0)
   earnings     Float    @default(0)
   isActive     Boolean  @default(true)
+  status       String   @default("BUILDING")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

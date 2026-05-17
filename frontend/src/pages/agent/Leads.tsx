@@ -5,6 +5,46 @@ import { socket, connectToCallCenter, disconnectSocket } from '../../lib/socket'
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 
+const AssignedTimer = ({ lead, onTimeout }: { lead: any; onTimeout?: () => void }) => {
+  const [globalCooldown, setGlobalCooldown] = useState<number>(0);
+
+  useEffect(() => {
+    if (lead.status !== 'ASSIGNED') return;
+
+    const storageKey = `lead_cooldown_${lead.id}`;
+    const savedStart = sessionStorage.getItem(storageKey);
+    const startTime = savedStart 
+      ? parseInt(savedStart, 10) 
+      : new Date(lead.updatedAt).getTime();
+
+    const calculateGlobal = () => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      return Math.max(0, 300 - elapsed);
+    };
+
+    setGlobalCooldown(calculateGlobal());
+
+    const interval = setInterval(() => {
+      const remaining = calculateGlobal();
+      setGlobalCooldown(remaining);
+      if (remaining <= 0) {
+        clearInterval(interval);
+        if (onTimeout) onTimeout();
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [lead.status, lead.id, lead.updatedAt, onTimeout]);
+
+  if (lead.status !== 'ASSIGNED' || globalCooldown <= 0) return null;
+
+  return (
+    <span className="text-[10px] font-black text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-100 flex items-center gap-1 animate-pulse">
+      ⏱️ {Math.floor(globalCooldown / 60)}:{(Math.floor(globalCooldown % 60)).toString().padStart(2, '0')}
+    </span>
+  );
+};
+
 export default function AgentLeads() {
   const [availableLeads, setAvailableLeads] = useState<any[]>([]);
   const [myLeads, setMyLeads] = useState<any[]>([]);
@@ -48,7 +88,7 @@ export default function AgentLeads() {
 
       const myData = myRes.data?.data || myRes.data;
       const allMyLeads = myData?.leads || [];
-      const allowedAgentStatuses = ['ASSIGNED', 'CALL_LATER', 'NO_REPLY', 'CONFIRMED', 'WRONG_ORDER', 'CANCEL_REASON_PRICE', 'CANCEL_ORDER', 'INVALID', 'CONTACTED'];
+      const allowedAgentStatuses = ['ASSIGNED', 'CALL_LATER', 'NO_REPLY', 'CONFIRMED', 'WRONG_ORDER', 'CANCEL_REASON_PRICE', 'INVALID', 'CONTACTED', 'PRICE_CONFIRMED'];
       setMyLeads(allMyLeads.filter((l: any) => allowedAgentStatuses.includes(l.status)));
     } catch (error) {
       console.error('Failed to load leads:', error);
@@ -372,7 +412,7 @@ export default function AgentLeads() {
               <option value="CONFIRMED">Confirmé</option>
               <option value="WRONG_ORDER">Mauvaise commande</option>
               <option value="CANCEL_REASON_PRICE">Annulé - Prix</option>
-              <option value="CANCEL_ORDER">Annulé</option>
+              <option value="PRICE_CONFIRMED">Price CONFIRMED</option>
               <option value="INVALID">Invalide</option>
             </select>
           </div>
@@ -401,10 +441,15 @@ export default function AgentLeads() {
                       lead.status === 'WRONG_ORDER' ? 'amber' :
                       lead.status === 'CANCEL_REASON_PRICE' ? 'rose' :
                       lead.status === 'CANCEL_ORDER' ? 'rose' :
+                      lead.status === 'PRICE_CONFIRMED' ? 'primary' :
+                      lead.status === 'PRICE_REJECTED' ? 'rose' :
                       'gray'
                     }`}>
-                      {lead.status}
+                      {lead.status === 'PRICE_CONFIRMED' ? 'PRICE CONFIRMED' : 
+                       lead.status === 'PRICE_REJECTED' ? 'PRICE REJECTED' : 
+                       lead.status}
                     </span>
+                    <AssignedTimer lead={lead} onTimeout={loadData} />
                     {lead.callbackAt && lead.status === 'CALL_LATER' && (
                       <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center gap-1">
                         ⏰ {format(new Date(lead.callbackAt), 'dd/MM HH:mm')}

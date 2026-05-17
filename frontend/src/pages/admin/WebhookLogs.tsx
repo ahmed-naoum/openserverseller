@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { webhooksApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -14,6 +15,7 @@ import {
   ChevronDown,
   ChevronUp,
   AlertTriangle,
+  Terminal,
 } from 'lucide-react';
 
 interface WebhookLog {
@@ -97,7 +99,14 @@ export default function WebhookLogs() {
             {total} notifications reçues au total. Les mises à jour de statut se font automatiquement.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <Link
+            to="/admin/webhook-tester"
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white text-xs font-black rounded-xl hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
+          >
+            <Terminal size={14} />
+            Simulateur Webhook
+          </Link>
           <button
             onClick={() => { setClearConfirm(false); fetchLogs(); }}
             className="p-2.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all"
@@ -150,7 +159,7 @@ export default function WebhookLogs() {
             {/* Table Header */}
             <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest">
               <div className="col-span-2">Statut</div>
-              <div className="col-span-2">Provider</div>
+              <div className="col-span-2">Type</div>
               <div className="col-span-3">Package Code</div>
               <div className="col-span-3">Date</div>
               <div className="col-span-2">Détails</div>
@@ -159,8 +168,10 @@ export default function WebhookLogs() {
             {logs.map(log => {
               const style = getStatusStyle(log.status, log.processed);
               const isExpanded = expandedId === log.id;
-              const packageCode = log.payload?.package_code || log.payload?.tracking_code || '—';
-              const coliatyStatus = log.payload?.status || log.payload?.statut || '—';
+              const eventType = log.payload?.EVENT || 'PARCEL_STATUS_CHANGED';
+              const packageCode = log.payload?.TRACKING || log.payload?.package_code || log.payload?.tracking_code || '—';
+              const coliatyStatus = log.payload?.STATUS || log.payload?.status || log.payload?.statut || '—';
+              const isSituation = eventType === 'PARCEL_SITUATION_CHANGED';
 
               return (
                 <div key={log.id} className="hover:bg-slate-50/50 transition-colors">
@@ -172,14 +183,21 @@ export default function WebhookLogs() {
                       </span>
                     </div>
                     <div className="col-span-2">
-                      <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">
-                        {log.provider}
+                      <span className={`text-xs font-bold px-2 py-1 rounded-md ${
+                        isSituation ? 'text-emerald-600 bg-emerald-50' : 'text-indigo-600 bg-indigo-50'
+                      }`}>
+                        {isSituation ? 'SITUATION' : 'STATUS'}
                       </span>
                     </div>
                     <div className="col-span-3">
                       <p className="text-xs font-bold text-slate-700 font-mono">{packageCode}</p>
                       {coliatyStatus !== '—' && (
                         <p className="text-[10px] text-slate-400 mt-0.5">→ {coliatyStatus}</p>
+                      )}
+                      {isSituation && log.payload?.SITUATION && (
+                        <p className="text-[10px] text-emerald-600 font-bold mt-0.5">
+                          💰 {log.payload.SITUATION} {log.payload.NET != null ? `(NET: ${log.payload.NET} MAD)` : ''}
+                        </p>
                       )}
                     </div>
                     <div className="col-span-3">

@@ -4,7 +4,8 @@ import { chatApi, adminApi, uploadApi, BACKEND_URL } from '../../lib/api';
 import {
   Send, Search, Plus, MessageSquare, CheckCheck,
   ChevronLeft, Headphones, MoreVertical, Smile, Paperclip, Clock,
-  FileText, Download, Image as ImageIcon
+  FileText, Download, Image as ImageIcon,
+  CheckCircle, UserPlus, X, RotateCcw
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSocket } from '../../contexts/SocketContext';
@@ -93,6 +94,65 @@ export default function Chat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showActionMenu, setShowActionMenu] = useState(false);
+  const actionMenuRef = useRef<HTMLDivElement>(null);
+  const [showLogsModal, setShowLogsModal] = useState(false);
+
+  const { data: logsData, isLoading: isLoadingLogs } = useQuery({
+    queryKey: ['conversation-logs', selectedConvId],
+    queryFn: () => chatApi.getConversationLogs(selectedConvId!),
+    enabled: !!selectedConvId && showLogsModal,
+  });
+  const logs = logsData?.data?.data?.logs || [];
+
+  // Click outside to close action menu
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (actionMenuRef.current && !actionMenuRef.current.contains(event.target as Node)) {
+        setShowActionMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleClaim = async () => {
+    if (!selectedConvId) return;
+    try {
+      await chatApi.claimConversation(selectedConvId);
+      toast.success('Conversation prise en charge');
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      setShowActionMenu(false);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Erreur lors de la prise en charge');
+    }
+  };
+
+  const handleCloseTicket = async () => {
+    if (!selectedConvId) return;
+    try {
+      await chatApi.closeConversation(selectedConvId);
+      toast.success('Ticket terminé');
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['conversation-detail', selectedConvId] });
+      setShowActionMenu(false);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Erreur lors de la fermeture');
+    }
+  };
+
+  const handleOpenTicket = async () => {
+    if (!selectedConvId) return;
+    try {
+      await chatApi.openConversation(selectedConvId);
+      toast.success('Ticket ré-ouvert');
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['conversation-detail', selectedConvId] });
+      setShowActionMenu(false);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Erreur lors de la ré-ouverture');
+    }
+  };
 
   // Fetch conversations
   const { data: convData, isLoading: isLoadingConvs } = useQuery({
@@ -100,6 +160,8 @@ export default function Chat() {
     queryFn: () => chatApi.conversations(),
     refetchInterval: false, // Turn off polling since we have sockets
   });
+
+  const conversations: any[] = convData?.data?.data?.conversations || [];
 
   // Fetch messages for selected conversation
   const { data: messagesData, isLoading: isLoadingMessages } = useQuery({
@@ -109,8 +171,15 @@ export default function Chat() {
     refetchInterval: false, // Turn off polling
   });
 
-  const conversations: any[] = convData?.data?.data?.conversations || [];
   const messages: any[] = messagesData?.data?.data?.messages || [];
+
+  // Fetch single conversation detail if it's not in the main list (for admins deep-linking)
+  const { data: singleConvData } = useQuery({
+    queryKey: ['conversation-detail', selectedConvId],
+    queryFn: () => chatApi.getConversation(selectedConvId!),
+    enabled: !!selectedConvId && !conversations.find((c: any) => c.id.toString() === selectedConvId),
+  });
+
   const orderNum = searchParams.get('orderNum');
   const urlConvId = searchParams.get('convId');
 
@@ -252,13 +321,21 @@ export default function Chat() {
       queryClient.setQueryData(['conversations'], (oldData: any) => {
         if (!oldData?.data?.data?.conversations) return oldData;
         
-        // If I claimed it, keep it. If someone else claimed it, remove it (it will be ACTIVE now and not meet the OR criteria for others)
         const isMe = data.participant.userId === user?.id;
+        const isAgent = ['SUPER_ADMIN', 'SYSTEM_SUPPORT'].includes(user?.roleName || '');
         
-        const newConvs = oldData.data.data.conversations.filter((c: any) => {
+        const newConvs = oldData.data.data.conversations.map((c: any) => {
           if (c.id === data.conversationId) {
-            return isMe; // Keep only if it's me
+            // Update status to ACTIVE for everyone who keeps the conversation
+            return { ...c, status: 'ACTIVE', participants: [...(c.participants || []), data.participant] };
           }
+          return c;
+        }).filter((c: any) => {
+          if (c.id === data.conversationId && isAgent) {
+            // Agents only keep it if they are the one who claimed it
+            return isMe;
+          }
+          // Non-agents (clients) always keep their conversations
           return true;
         });
 
@@ -267,18 +344,68 @@ export default function Chat() {
           data: { ...oldData.data, data: { ...oldData.data.data, conversations: newConvs } }
         };
       });
+
+      // Also invalidate selected conversation if it's the one claimed
+      if (selectedConvId === String(data.conversationId)) {
+        queryClient.invalidateQueries({ queryKey: ['messages', selectedConvId] });
+      }
+    };
+    const handleClosed = (data: { conversationId: number }) => {
+      queryClient.setQueryData(['conversations'], (oldData: any) => {
+        if (!oldData?.data?.data?.conversations) return oldData;
+        const newConvs = oldData.data.data.conversations.map((c: any) => {
+          if (c.id === data.conversationId) {
+            return { ...c, status: 'CLOSED' };
+          }
+          return c;
+        });
+        return {
+          ...oldData,
+          data: { ...oldData.data, data: { ...oldData.data.data, conversations: newConvs } }
+        };
+      });
+      // Invalidate specific message query to ensure state consistency
+      if (selectedConvId === String(data.conversationId)) {
+        queryClient.invalidateQueries({ queryKey: ['messages', selectedConvId] });
+        queryClient.invalidateQueries({ queryKey: ['conversation-detail', selectedConvId] });
+      }
+    };
+
+    const handleOpened = (data: { conversationId: number }) => {
+      queryClient.setQueryData(['conversations'], (oldData: any) => {
+        if (!oldData?.data?.data?.conversations) return oldData;
+        const newConvs = oldData.data.data.conversations.map((c: any) => {
+          if (c.id === data.conversationId) {
+            return { ...c, status: 'ACTIVE' };
+          }
+          return c;
+        });
+        return {
+          ...oldData,
+          data: { ...oldData.data, data: { ...oldData.data.data, conversations: newConvs } }
+        };
+      });
+      // Invalidate queries to refresh UI
+      if (selectedConvId === String(data.conversationId)) {
+        queryClient.invalidateQueries({ queryKey: ['messages', selectedConvId] });
+        queryClient.invalidateQueries({ queryKey: ['conversation-detail', selectedConvId] });
+      }
     };
 
     socket.on('new-message', handleNewMessage);
     socket.on('typing', handleTypingEvent);
     socket.on('new-support-ticket', handleNewTicket);
     socket.on('conversation-claimed', handleClaimed);
+    socket.on('conversation-closed', handleClosed);
+    socket.on('conversation-opened', handleOpened);
     
     return () => {
       socket.off('new-message', handleNewMessage);
       socket.off('typing', handleTypingEvent);
       socket.off('new-support-ticket', handleNewTicket);
       socket.off('conversation-claimed', handleClaimed);
+      socket.off('conversation-closed', handleClosed);
+      socket.off('conversation-opened', handleOpened);
     };
   }, [socket, selectedConvId, queryClient, user?.id]);
 
@@ -449,7 +576,7 @@ export default function Chat() {
     getConvTitle(c, user?.id).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const selectedConv = conversations.find((c: any) => c.id.toString() === selectedConvId);
+  const selectedConv = conversations.find((c: any) => c.id.toString() === selectedConvId) || singleConvData?.data?.data?.conversation;
   const isAdmin = user?.roleName === 'SUPER_ADMIN' || user?.roleName === 'FINANCE_ADMIN';
 
   const handleSelectConv = (id: string) => {
@@ -601,24 +728,95 @@ export default function Chat() {
                   {getConvTitle(selectedConv, user?.id)}
                 </h3>
                 <div className="flex items-center gap-1.5">
-                  <span className={`w-1.5 h-1.5 rounded-full ${selectedConv?.status === 'ACTIVE' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                  <span className={`w-1.5 h-1.5 rounded-full ${
+                    selectedConv?.status === 'ACTIVE' ? 'bg-emerald-400 animate-pulse' : 
+                    selectedConv?.status === 'CLOSED' ? 'bg-slate-400' : 
+                    'bg-amber-400'
+                  }`} />
                   <span className="text-xs text-slate-400">
-                    {selectedConv?.status === 'ACTIVE' ? 'En ligne' : 'En attente'}
+                    {selectedConv?.status === 'ACTIVE' ? 'En ligne' : 
+                     selectedConv?.status === 'CLOSED' ? 'Clôturé' : 
+                     'En attente'}
                   </span>
-                  {Object.values(typingUsers).some(u => u.isTyping) && (
-                    <>
-                      <span className="text-xs text-slate-300">·</span>
-                      <span className="text-xs font-black text-violet-500 animate-pulse">
-                        En train d'écrire...
-                      </span>
-                    </>
-                  )}
                 </div>
               </div>
 
-              <button className="w-8 h-8 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
-                <MoreVertical size={16} />
-              </button>
+              <div className="relative" ref={actionMenuRef}>
+                <button 
+                  onClick={() => setShowActionMenu(!showActionMenu)}
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
+                    showActionMenu ? 'bg-slate-100 text-slate-900 shadow-inner' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'
+                  }`}
+                >
+                  <MoreVertical size={16} />
+                </button>
+
+                {showActionMenu && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-[60] animate-in fade-in zoom-in-95 duration-200 origin-top-right">
+                    <div className="px-3 py-2 border-b border-slate-50 mb-1">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Actions Ticket</p>
+                    </div>
+
+                    {(user?.role === 'SYSTEM_SUPPORT' || user?.role === 'SUPER_ADMIN') && selectedConv?.status === 'PENDING_CLAIM' && (
+                      <button
+                        onClick={handleClaim}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm font-bold text-emerald-600 hover:bg-emerald-50 transition-colors group"
+                      >
+                        <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <UserPlus size={16} />
+                        </div>
+                        <div>
+                          <p className="leading-none">Pris en charge</p>
+                          <p className="text-[10px] font-medium text-emerald-600/60 mt-1">Assigner à moi</p>
+                        </div>
+                      </button>
+                    )}
+
+                    {(user?.role === 'SYSTEM_SUPPORT' || user?.role === 'SUPER_ADMIN') && selectedConv?.status === 'ACTIVE' && (
+                      <button
+                        onClick={handleCloseTicket}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm font-bold text-rose-600 hover:bg-rose-50 transition-colors group"
+                      >
+                        <div className="w-8 h-8 rounded-xl bg-rose-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <CheckCircle size={16} />
+                        </div>
+                        <div>
+                          <p className="leading-none">Terminé les tickets</p>
+                          <p className="text-[10px] font-medium text-rose-600/60 mt-1">Clôturer la demande</p>
+                        </div>
+                      </button>
+                    )}
+
+                    {(user?.role === 'SYSTEM_SUPPORT' || user?.role === 'SUPER_ADMIN') && selectedConv?.status === 'CLOSED' && (
+                      <button
+                        onClick={handleOpenTicket}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm font-bold text-emerald-600 hover:bg-emerald-50 transition-colors group"
+                      >
+                        <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <RotateCcw size={16} />
+                        </div>
+                        <div>
+                          <p className="leading-none">Ré-ouvrir le ticket</p>
+                          <p className="text-[10px] font-medium text-emerald-600/60 mt-1">Reprendre la discussion</p>
+                        </div>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => { setShowLogsModal(true); setShowActionMenu(false); }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors group"
+                    >
+                      <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center group-hover:scale-110 transition-transform text-slate-400">
+                        <Clock size={16} />
+                      </div>
+                      <div>
+                        <p className="leading-none">Historique</p>
+                        <p className="text-[10px] font-medium text-slate-400 mt-1">Voir les logs</p>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Waiting for Agent Banner (For Users Only) */}
@@ -808,62 +1006,97 @@ export default function Chat() {
               <div ref={messagesEndRef} />
             </div>
 
+            {/* Typing Indicator at bottom */}
+            {Object.values(typingUsers).some(u => u.isTyping) && (
+              <div className="px-5 py-2 flex items-center gap-2 animate-in slide-in-from-bottom-2 duration-300">
+                <div className="flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                  <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                  <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" />
+                </div>
+                <span className="text-xs font-bold text-violet-500">
+                  En train d'écrire...
+                </span>
+              </div>
+            )}
+
             {/* Input Area */}
             <div className="bg-white px-4 pb-4 pt-3 border-t border-slate-100">
-              <form onSubmit={handleSend}>
-                <div className="flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2 focus-within:ring-2 focus-within:ring-violet-500/20 focus-within:border-violet-400 transition-all">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={sendMessageMutation.isPending}
-                    className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors mb-0.5"
-                  >
-                    <Paperclip size={16} />
-                  </button>
-
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileSelect}
-                    accept=".png,.jpeg,.jpg,.webp,.pdf"
-                    className="hidden"
-                  />
-
-                  <textarea
-                    ref={textareaRef}
-                    value={newMessage}
-                    onChange={(e) => {
-                      setNewMessage(e.target.value);
-                      handleTyping();
-                    }}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Write a message… (Enter to send)"
-                    className="flex-1 bg-transparent resize-none focus:outline-none text-sm text-slate-800 placeholder-slate-400 py-1.5 max-h-28 leading-relaxed"
-                    rows={1}
-                  />
-
-                  <button
-                    type="submit"
-                    disabled={!newMessage.trim() || sendMessageMutation.isPending}
-                    className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all mb-0.5 ${
-                      newMessage.trim() && !sendMessageMutation.isPending
-                        ? 'bg-gradient-to-br from-violet-600 to-purple-700 text-white hover:shadow-lg hover:shadow-violet-500/25 hover:scale-105'
-                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                    }`}
-                  >
-                    {sendMessageMutation.isPending ? (
-                      <span className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <Send size={15} strokeWidth={2.5} />
-                    )}
-                  </button>
+              {selectedConv?.status === 'CLOSED' ? (
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center gap-2">
+                  <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center text-slate-500">
+                    <CheckCircle size={20} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-slate-900 uppercase tracking-widest">Cette conversation est terminée</p>
+                    <p className="text-[10px] font-bold text-slate-400">Ce ticket a été clôturé par un agent de support. Vous pouvez toujours consulter l'historique.</p>
+                  </div>
                 </div>
-                <p className="text-[9px] text-slate-400 text-center mt-2 tracking-wide">
-                  ↵ Send · Shift+↵ New line
-                </p>
-              </form>
+              ) : (
+                <form onSubmit={handleSend}>
+                  <div className="flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2 focus-within:ring-2 focus-within:ring-violet-500/20 focus-within:border-violet-400 transition-all">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={sendMessageMutation.isPending}
+                      className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors mb-0.5"
+                    >
+                      <Paperclip size={16} />
+                    </button>
+
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileSelect}
+                      accept=".png,.jpeg,.jpg,.webp,.pdf"
+                      className="hidden"
+                    />
+
+                    <textarea
+                      ref={textareaRef}
+                      value={newMessage}
+                      onChange={(e) => {
+                        setNewMessage(e.target.value);
+                        handleTyping();
+                      }}
+                      onKeyDown={handleKeyDown}
+                      placeholder="Write a message… (Enter to send)"
+                      className="flex-1 bg-transparent resize-none focus:outline-none text-sm text-slate-800 placeholder-slate-400 py-1.5 max-h-28 leading-relaxed"
+                      rows={1}
+                    />
+
+                    <button
+                      type="submit"
+                      disabled={!newMessage.trim() || sendMessageMutation.isPending}
+                      className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all mb-0.5 ${
+                        newMessage.trim() && !sendMessageMutation.isPending
+                          ? 'bg-gradient-to-br from-violet-600 to-purple-700 text-white hover:shadow-lg hover:shadow-violet-500/25 hover:scale-105'
+                          : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                      }`}
+                    >
+                      {sendMessageMutation.isPending ? (
+                        <span className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <Send size={15} strokeWidth={2.5} />
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-[9px] text-slate-400 text-center mt-2 tracking-wide">
+                    ↵ Send · Shift+↵ New line
+                  </p>
+                </form>
+              )}
             </div>
           </>
+        ) : selectedConvId ? (
+          /* Loading state when a conversation is selected but not yet available in the list */
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-10">
+            <div className="w-16 h-16 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center mb-4">
+              <span className="w-8 h-8 border-4 border-violet-100 border-t-violet-600 rounded-full animate-spin" />
+            </div>
+            <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Ouverture du chat...</h3>
+            <p className="text-xs text-slate-500 mt-1">Veuillez patienter un instant</p>
+          </div>
         ) : (
           /* Empty state */
           <div className="flex-1 flex flex-col items-center justify-center text-center p-10">
@@ -877,6 +1110,95 @@ export default function Chat() {
           </div>
         )}
       </div>
+
+      {/* Logs Modal */}
+      {showLogsModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+          <div 
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300"
+            onClick={() => setShowLogsModal(false)}
+          />
+          <div className="relative w-full max-w-lg bg-white rounded-[2rem] shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+            <div className="flex-shrink-0 p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-black text-slate-900">Historique du Ticket</h3>
+                <p className="text-sm text-slate-500 font-medium mt-1">Traçabilité des actions</p>
+              </div>
+              <button 
+                onClick={() => setShowLogsModal(false)}
+                className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6">
+              {isLoadingLogs ? (
+                <div className="flex justify-center py-10">
+                  <div className="w-8 h-8 border-4 border-violet-100 border-t-violet-500 rounded-full animate-spin" />
+                </div>
+              ) : logs.length === 0 ? (
+                <div className="text-center py-10">
+                  <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Clock size={24} className="text-slate-400" />
+                  </div>
+                  <p className="text-sm font-bold text-slate-900">Aucun historique</p>
+                  <p className="text-xs text-slate-500 mt-1">Les actions seront affichées ici</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {logs.map((log: any, index: number) => (
+                    <div key={log.id} className="relative pl-6">
+                      {/* Timeline line */}
+                      {index !== logs.length - 1 && (
+                        <div className="absolute left-[11px] top-8 bottom-[-24px] w-0.5 bg-slate-100" />
+                      )}
+                      
+                      {/* Timeline dot */}
+                      <div className={`absolute left-0 top-1.5 w-6 h-6 rounded-full border-4 border-white flex items-center justify-center shadow-sm ${
+                        log.action === 'CREATED' ? 'bg-violet-500' :
+                        log.action === 'CLAIMED' ? 'bg-emerald-500' :
+                        log.action === 'CLOSED' ? 'bg-slate-400' :
+                        'bg-blue-500'
+                      }`}>
+                        <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                      </div>
+
+                      <div className="bg-slate-50 rounded-2xl p-4 ml-2">
+                        <div className="flex items-start justify-between gap-4 mb-2">
+                          <p className="text-sm font-bold text-slate-900">
+                            {log.action === 'CREATED' ? 'Création' :
+                             log.action === 'CLAIMED' ? 'Prise en charge' :
+                             log.action === 'CLOSED' ? 'Clôture' :
+                             log.action}
+                          </p>
+                          <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">
+                            {new Date(log.createdAt).toLocaleString('fr-FR', {
+                              day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+                            })}
+                          </span>
+                        </div>
+                        {log.details && (
+                          <p className="text-xs text-slate-500 font-medium">{log.details}</p>
+                        )}
+                        {log.user && (
+                          <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-200/60">
+                            <Avatar name={log.user.profile?.fullName || log.user.email} size="sm" />
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-700">{log.user.profile?.fullName || 'Utilisateur'}</p>
+                              <p className="text-[9px] text-slate-400 font-medium">{log.user.role?.name}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

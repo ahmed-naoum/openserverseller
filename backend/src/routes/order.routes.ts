@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { body, validationResult } from 'express-validator';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import axios from 'axios';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
@@ -113,16 +113,30 @@ router.get(
           'Content-Type': 'application/json',
         },
         timeout: 15000,
+        responseType: 'arraybuffer'
       });
 
-      res.status(200).json({
-        status: 'success',
-        data: response.data?.data
-      });
+      const contentType = response.headers['content-type'] || '';
+      if (contentType.includes('application/pdf')) {
+        const base64 = Buffer.from(response.data).toString('base64');
+        return res.status(200).json({ status: 'success', data: { pdf: base64 } });
+      }
+
+      try {
+        const jsonStr = Buffer.from(response.data).toString('utf-8');
+        const jsonData = JSON.parse(jsonStr);
+        res.status(200).json({ status: 'success', data: jsonData?.data || jsonData });
+      } catch (e) {
+        const base64 = Buffer.from(response.data).toString('base64');
+        res.status(200).json({ status: 'success', data: { pdf: base64 } });
+      }
     } catch (error: any) {
       console.error('[Coliaty] Label Generation Error:', error.response?.data || error.message);
+      let data = error.response?.data;
+      if (data instanceof Buffer) {
+        try { data = JSON.parse(data.toString('utf-8')); } catch (e) {}
+      }
       const status = error.response?.status || 500;
-      const data = error.response?.data;
       throw new AppException(status, data?.message || 'Erreur lors de la génération de l\'étiquette');
     }
   })
@@ -151,49 +165,63 @@ router.get(
       throw new AppException(403, 'Access denied');
     }
 
-    const orders = await prisma.order.findMany({
-      where,
-      include: {
-        items: {
-          include: {
-            product: {
-              include: { images: { where: { isPrimary: true }, take: 1 } }
-            }
-          }
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+    // Using a single, comprehensive raw query to ensure we get all fields correctly
+    // especially the coliatyPickupRef which might be ignored by an outdated Prisma client.
+    const rawData: any[] = await prisma.$queryRaw`
+      SELECT 
+        o.id as "orderId",
+        o."orderNumber",
+        o."customerName",
+        o."customerPhone",
+        o."customerCity",
+        o."coliatyPackageCode",
+        o."coliatyPickupRef",
+        o."totalAmountMad",
+        o."createdAt",
+        o."vendorId",
+        p.id as "productId",
+        p.sku as "sku",
+        p."nameFr" as "productName",
+        (SELECT "imageUrl" FROM product_images WHERE "productId" = p.id AND "isPrimary" = true LIMIT 1) as "productImage"
+      FROM orders o
+      JOIN order_items oi ON o.id = oi."orderId"
+      JOIN products p ON oi."productId" = p.id
+      WHERE o.status = 'PENDING' 
+        AND o."coliatyPackageCode" IS NOT NULL
+        ${req.user!.roleName === 'VENDOR' ? Prisma.sql`AND o."vendorId" = ${req.user!.id}` : Prisma.sql``}
+        ${req.user!.roleName === 'HELPER' ? Prisma.sql`AND o."vendorId" IN (SELECT "targetUserId" FROM "helper_user_assignments" WHERE "helperId" = ${req.user!.id})` : Prisma.sql``}
+      ORDER BY o."createdAt" DESC
+    `;
 
     // Group by product
     const productGroups: Record<number, any> = {};
 
-    orders.forEach(order => {
-      order.items.forEach(item => {
-        const product = item.product;
-        if (!productGroups[product.id]) {
-          productGroups[product.id] = {
-            id: product.id,
-            name: product.nameFr,
-            image: product.images[0]?.imageUrl,
-            pendingParcels: []
-          };
-        }
-        
-        // Add order to this product's pending parcels if not already added
-        if (!productGroups[product.id].pendingParcels.find((p: any) => p.id === order.id)) {
-            productGroups[product.id].pendingParcels.push({
-              id: order.id,
-              orderNumber: order.orderNumber,
-              customerName: order.customerName,
-              customerPhone: order.customerPhone,
-              customerCity: order.customerCity,
-              coliatyPackageCode: order.coliatyPackageCode,
-              totalAmountMad: order.totalAmountMad,
-              createdAt: order.createdAt
-            });
-        }
-      });
+    rawData.forEach(row => {
+      const productId = Number(row.productId);
+      if (!productGroups[productId]) {
+        productGroups[productId] = {
+          id: productId,
+          name: row.productName,
+          sku: row.sku,
+          image: row.productImage,
+          pendingParcels: []
+        };
+      }
+      
+      const orderId = Number(row.orderId);
+      if (!productGroups[productId].pendingParcels.find((p: any) => p.id === orderId)) {
+          productGroups[productId].pendingParcels.push({
+            id: orderId,
+            orderNumber: row.orderNumber,
+            customerName: row.customerName,
+            customerPhone: row.customerPhone,
+            customerCity: row.customerCity,
+            coliatyPackageCode: row.coliatyPackageCode,
+            coliatyPickupRef: row.coliatyPickupRef,
+            totalAmountMad: Number(row.totalAmountMad),
+            createdAt: row.createdAt
+          });
+      }
     });
 
     res.json({
@@ -818,7 +846,224 @@ router.put(
     }
   })
 );
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Pickup Notes — Coliaty proxy
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+const getColiatyConfig = () => {
+  const pub = process.env.COLIATY_PUBLIC_KEY;
+  const sec = process.env.COLIATY_SECRET_KEY;
+  const base = (process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com').replace(/\/$/, '');
+  if (!pub || !sec || pub === 'your_coliaty_public_key') {
+    throw new AppException(500, '[Coliaty] Clés API non configurées.');
+  }
+  return { base, headers: { Authorization: `Bearer ${pub}:${sec}`, 'Content-Type': 'application/json' } };
+};
 
+router.post(
+  '/pickup-note/create',
+  authenticate,
+  authorize('HELPER', 'SUPER_ADMIN', 'VENDOR'),
+  asyncHandler(async (req, res) => {
+    const cfg = getColiatyConfig();
+    try {
+      const response = await axios.post(`${cfg.base}/pickup-note/create`, {}, { headers: cfg.headers, timeout: 15000 });
+      res.json({ status: 'success', data: response.data?.data || response.data });
+    } catch (error: any) {
+      handleColiatyError(error, 'Création Bon');
+    }
+  })
+);
+
+router.get(
+  '/pickup-note/detail/:reference',
+  authenticate,
+  authorize('HELPER', 'SUPER_ADMIN', 'VENDOR'),
+  asyncHandler(async (req, res) => {
+    const { reference } = req.params;
+    const cfg = getColiatyConfig();
+    try {
+      const response = await axios.get(`${cfg.base}/pickup-note/detail/${reference}`, { headers: cfg.headers, timeout: 15000 });
+      res.json({ status: 'success', data: response.data?.data || response.data });
+    } catch (error: any) {
+      handleColiatyError(error, 'Détail Bon');
+    }
+  })
+);
+
+router.post(
+  '/pickup-note/add-parcels',
+  authenticate,
+  authorize('HELPER', 'SUPER_ADMIN', 'VENDOR'),
+  asyncHandler(async (req, res) => {
+    const { pickup_note_reference, parcel_codes } = req.body;
+    if (!pickup_note_reference || !Array.isArray(parcel_codes) || parcel_codes.length === 0) {
+      throw new AppException(400, 'pickup_note_reference et parcel_codes[] sont requis.');
+    }
+    const cfg = getColiatyConfig();
+    try {
+      const response = await axios.post(`${cfg.base}/pickup-note/add-parcels`, { pickup_note_reference, parcel_codes }, { headers: cfg.headers, timeout: 15000 });
+      const responseData = response.data?.data || response.data;
+      
+      // Check for ignorable duplicate errors
+      const errorParcels = responseData?.error_parcels || {};
+      const ignorableIds = Object.values(errorParcels)
+        .filter((err: any) => err.error_can_ignore === true && err.error_id)
+        .map((err: any) => err.error_id);
+
+      if (ignorableIds.length > 0) {
+        console.log(`[Coliaty] Automatically ignoring ${ignorableIds.length} duplicate errors...`);
+        for (const error_id of ignorableIds) {
+          try {
+            await axios.post(`${cfg.base}/parcel/error/ignore`, { error_id }, { headers: cfg.headers, timeout: 5000 });
+          } catch (e: any) {
+            console.error(`[Coliaty] Failed to ignore error ${error_id}:`, e.message);
+          }
+        }
+        
+        // Retry adding parcels after ignoring errors
+        console.log(`[Coliaty] Retrying add-parcels for ${parcel_codes.length} parcels...`);
+        const retryRes = await axios.post(`${cfg.base}/pickup-note/add-parcels`, { pickup_note_reference, parcel_codes }, { headers: cfg.headers, timeout: 15000 });
+        const retryData = retryRes.data?.data || retryRes.data;
+        
+        // Update responseData with the retry result
+        Object.assign(responseData, retryData);
+      }
+
+      // 1. Persist to DB for successful ones
+      const successParcels = responseData?.success_parcels || {};
+      const successfulCodes = Array.isArray(successParcels) ? successParcels : Object.keys(successParcels);
+
+      if (successfulCodes.length > 0) {
+        console.log(`[Coliaty] Persisting pickup ref ${pickup_note_reference} for ${successfulCodes.length} parcels via raw SQL`);
+        await prisma.$executeRaw`
+          UPDATE orders 
+          SET "coliatyPickupRef" = ${pickup_note_reference} 
+          WHERE "coliatyPackageCode" IN (${Prisma.join(successfulCodes)})
+        `;
+      }
+
+      // 2. Handle self-healing for "already in pickup" errors
+      const finalErrorParcels = responseData?.error_parcels || {};
+      const errorCodes = Object.keys(finalErrorParcels);
+
+      for (const code of errorCodes) {
+        const errorEntry = finalErrorParcels[code];
+        const errorMsg = errorEntry?.message || errorEntry?.error_message || "";
+        if (errorMsg.includes('déjà dans un bon de ramassage')) {
+          console.log(`[Coliaty] Self-healing pickup ref for ${code}...`);
+          try {
+            // 1. First: use the pickup_note_reference directly from the error response
+            let actualRef = errorEntry?.pickup_note_reference;
+
+            // 2. Fallback: fetch parcel info if not provided in the error
+            if (!actualRef) {
+              const parcelInfo = await axios.get(`${cfg.base}/parcel/${code}`, { headers: cfg.headers, timeout: 5000 });
+              actualRef = parcelInfo.data?.data?.pickup_note_reference || 
+                          parcelInfo.data?.pickup_note_reference ||
+                          parcelInfo.data?.data?.pickup_note_ref ||
+                          parcelInfo.data?.pickup_note_ref;
+            }
+            
+            if (actualRef) {
+              console.log(`[Coliaty] Found actual ref ${actualRef} for ${code}. Updating DB via raw SQL.`);
+              await prisma.$executeRaw`
+                UPDATE orders 
+                SET "coliatyPickupRef" = ${actualRef} 
+                WHERE "coliatyPackageCode" = ${code}
+              `;
+            }
+          } catch (e: any) {
+            console.error(`[Coliaty] Failed to self-heal ${code}:`, e.message);
+          }
+        }
+      }
+
+      res.json({ status: 'success', data: responseData });
+    } catch (error: any) {
+      handleColiatyError(error, 'Ajout Colis Bon');
+    }
+  })
+);
+
+router.post(
+  '/pickup-note/remove-parcels',
+  authenticate,
+  authorize('HELPER', 'SUPER_ADMIN', 'VENDOR'),
+  asyncHandler(async (req, res) => {
+    const { pickup_note_reference, parcel_codes } = req.body;
+    if (!pickup_note_reference || !Array.isArray(parcel_codes) || parcel_codes.length === 0) {
+      throw new AppException(400, 'pickup_note_reference et parcel_codes[] sont requis.');
+    }
+    const cfg = getColiatyConfig();
+    const response = await axios.post(`${cfg.base}/pickup-note/remove-parcels`, { pickup_note_reference, parcel_codes }, { headers: cfg.headers, timeout: 15000 });
+    res.json({ status: 'success', data: response.data?.data || response.data });
+  })
+);
+
+router.get(
+  '/pickup-note/:reference/generate-labels',
+  authenticate,
+  authorize('HELPER', 'SUPER_ADMIN', 'VENDOR'),
+  asyncHandler(async (req, res) => {
+    const { reference } = req.params;
+    const cfg = getColiatyConfig();
+    try {
+      const response = await axios.get(`${cfg.base}/pickup-note/${reference}/generate-labels`, { 
+        headers: cfg.headers, 
+        timeout: 30000,
+        responseType: 'arraybuffer' // Handle both JSON and PDF binary
+      });
+
+      const contentType = response.headers['content-type'] || '';
+      
+      if (contentType.includes('application/pdf')) {
+        // Direct PDF binary -> Convert to base64 for the frontend
+        const base64 = Buffer.from(response.data).toString('base64');
+        return res.json({ status: 'success', data: { pdf: base64 } });
+      }
+
+      // If it's JSON, parse the arraybuffer back to JSON
+      try {
+        const jsonStr = Buffer.from(response.data).toString('utf-8');
+        const jsonData = JSON.parse(jsonStr);
+        res.json({ status: 'success', data: jsonData?.data || jsonData });
+      } catch (e) {
+        // Fallback: maybe it's just a base64 string?
+        const base64 = Buffer.from(response.data).toString('base64');
+        res.json({ status: 'success', data: { pdf: base64 } });
+      }
+    } catch (error: any) {
+      handleColiatyError(error, 'Génération PDF Bon');
+    }
+  })
+);
+
+// Helper to handle Coliaty specific errors
+function handleColiatyError(error: any, context: string) {
+  let data = error.response?.data;
+  const status = error.response?.status;
+
+  // If we used arraybuffer, the error data might be a Buffer
+  if (data instanceof Buffer) {
+    try {
+      data = JSON.parse(data.toString('utf-8'));
+    } catch (e) {
+      // Not JSON
+    }
+  }
+
+  console.error(`[Coliaty] ${context} Error:`, data || error.message);
+  
+  if (status && [400, 401, 403, 404, 422].includes(status)) {
+    let msg = data?.message || "Erreur API Coliaty";
+    if (data?.errors) {
+      const firstErr = Array.isArray(data.errors) ? data.errors[0] : Object.values(data.errors)[0];
+      if (firstErr) msg = String(firstErr);
+    }
+    throw new AppException(status, `Coliaty (${context}): ${msg}`);
+  }
+  throw new AppException(500, `Erreur ${context} (Status: ${status || '?'}). Détail: ${error.message}`);
+}
 
 export default router;

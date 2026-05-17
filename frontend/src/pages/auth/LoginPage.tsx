@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { settingsApi } from '../../lib/api';
 import { Eye, EyeOff, ShieldCheck, Mail, Lock, TrendingUp, ShoppingCart, Store, Globe, Package } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
 import toast from 'react-hot-toast';
@@ -51,6 +52,20 @@ export default function LoginPage() {
       const user = res.user!;
       toast.success('Connexion réussie!');
       
+      // If user is not active, check if manual approval is required
+      if (!user.isActive) {
+        try {
+          const statusRes = await settingsApi.getMaintenanceStatus();
+          const { registrationBlocked, influencerRegistrationBlocked } = statusRes.data?.data || {};
+          
+          if ((user.role === 'INFLUENCER' && influencerRegistrationBlocked) || 
+              (user.role !== 'INFLUENCER' && registrationBlocked)) {
+            navigate('/pending-verification');
+            return;
+          }
+        } catch {}
+      }
+
       // Redirect based on role
       if (user.role === 'SUPER_ADMIN' || user.role === 'FINANCE_ADMIN' || user.role === 'SYSTEM_SUPPORT') {
         navigate('/admin');
@@ -82,6 +97,20 @@ export default function LoginPage() {
       const user = await login2FA({ twoFactorToken, code: twoFactorCode });
       toast.success('Connexion réussie!');
       
+      // If user is not active, check if manual approval is required
+      if (!user.isActive) {
+        try {
+          const statusRes = await settingsApi.getMaintenanceStatus();
+          const { registrationBlocked, influencerRegistrationBlocked } = statusRes.data?.data || {};
+          
+          if ((user.role === 'INFLUENCER' && influencerRegistrationBlocked) || 
+              (user.role !== 'INFLUENCER' && registrationBlocked)) {
+            navigate('/pending-verification');
+            return;
+          }
+        } catch {}
+      }
+
       // Redirect based on role
       if (user.role === 'SUPER_ADMIN' || user.role === 'FINANCE_ADMIN' || user.role === 'SYSTEM_SUPPORT') {
         navigate('/admin');
@@ -153,6 +182,20 @@ export default function LoginPage() {
       const user = res.user!;
       toast.success('Connexion avec Google réussie!');
       
+      // If user is not active, check if manual approval is required
+      if (!user.isActive) {
+        try {
+          const statusRes = await settingsApi.getMaintenanceStatus();
+          const { registrationBlocked, influencerRegistrationBlocked } = statusRes.data?.data || {};
+          
+          if ((user.role === 'INFLUENCER' && influencerRegistrationBlocked) || 
+              (user.role !== 'INFLUENCER' && registrationBlocked)) {
+            navigate('/pending-verification');
+            return;
+          }
+        } catch {}
+      }
+
       // Redirect based on role
       if (user.role === 'SUPER_ADMIN' || user.role === 'FINANCE_ADMIN' || user.role === 'SYSTEM_SUPPORT') {
         navigate('/admin');

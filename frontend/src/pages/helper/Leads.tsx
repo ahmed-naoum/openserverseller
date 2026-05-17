@@ -628,7 +628,7 @@ export default function HelperLeads() {
         <Modal title="Nouveau Lead" onClose={closeModals}>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Nom complet *">
-              <input value={form.fullName} onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))} placeholder="Ahmed Naoum" className={inputCls} />
+              <input value={form.fullName} onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))} placeholder="Ahmed Khalid" className={inputCls} />
             </Field>
             <Field label="Téléphone *">
               <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="0612345678" className={inputCls} />

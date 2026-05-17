@@ -8,6 +8,7 @@ import {
   Plus, ShoppingBag, Wallet, Activity, BarChart3, CheckCircle2, Truck, ExternalLink, Eye, RefreshCw
 } from 'lucide-react';
 import { ProCard } from '../../components/common/ProCard';
+import { TierProgressBanner } from '../../components/influencer/TierProgressBanner';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -123,27 +124,45 @@ export default function InfluencerDashboard() {
     return { date, balance: Number(val.toFixed(2)) };
   });
 
-  // Calculate Top Products based on Lead Counts (Performance)
-  const topProducts = leadCountsByLink.map(lc => {
-    const link = referralLinks.find(l => l.id === lc.referralLinkId);
-    if (!link) return null;
 
-    // Calculate earnings for this link in the period
-    const earnings = commissions
-      .filter(c => c.referralLinkId === lc.referralLinkId)
-      .reduce((sum, c) => sum + c.amount, 0);
+  // Financial calculations based on filtered transactions
+  const periodEarned = walletTransactions.reduce((sum, tx) => tx.amountMad > 0 ? sum + tx.amountMad : sum, 0);
+  const periodWithdrawn = Math.abs(walletTransactions.reduce((sum, tx) => tx.amountMad < 0 ? sum + tx.amountMad : sum, 0));
+  
+  // Use period-based stats if date filter is active, otherwise use all-time wallet totals
+  const isFiltered = dateRange !== 'all';
+  const displayEarned = isFiltered ? periodEarned : (wallet?.totalEarnedMad || 0);
+  const displayWithdrawn = isFiltered ? periodWithdrawn : (wallet?.totalWithdrawnMad || 0);
+  
+  // For balance, we usually show current balance unless it's a historical report
+  // But to be consistent with "filter effect", we'll show the balance as of the end of the period
+  const displayBalance = (isFiltered && walletTransactions.length > 0) 
+    ? walletTransactions[0].balanceAfterMad 
+    : (wallet?.balanceMad || 0);
 
-    return {
-      productId: link.productId,
-      name: link.product?.nameFr || 'Produit sans nom',
-      image: link.product?.images?.[0]?.url || '',
-      earnings,
-      sales: lc._count // Number of leads in the period
-    };
-  })
-  .filter(Boolean)
-  .sort((a: any, b: any) => b.sales - a.sales) // Sort by sales volume (Performance)
-  .slice(0, 3);
+  // Tier Calculation (always based on all-time earned for progression)
+  const totalEarnedAllTime = wallet?.totalEarnedMad || 0;
+  let currentTier = { name: 'Bronze', color: 'text-amber-700 bg-amber-50' };
+  let nextTier: { name: string, limit: number, color: string, textColor: string } | null = null;
+  let progress = 0;
+
+  if (totalEarnedAllTime >= 10000000) {
+    currentTier = { name: 'Platine', color: 'text-indigo-600 bg-indigo-50' };
+    nextTier = null;
+    progress = 100;
+  } else if (totalEarnedAllTime >= 1000000) {
+    currentTier = { name: 'Gold', color: 'text-yellow-600 bg-yellow-50' };
+    nextTier = { name: 'Platine', limit: 10000000, color: 'bg-indigo-400', textColor: 'text-indigo-500' };
+    progress = (totalEarnedAllTime / 10000000) * 100;
+  } else if (totalEarnedAllTime >= 100000) {
+    currentTier = { name: 'Silver', color: 'text-slate-600 bg-slate-100' };
+    nextTier = { name: 'Gold', limit: 1000000, color: 'bg-yellow-400', textColor: 'text-yellow-600' };
+    progress = (totalEarnedAllTime / 1000000) * 100;
+  } else {
+    currentTier = { name: 'Débutant', color: 'text-slate-500 bg-slate-100' };
+    nextTier = { name: 'Silver', limit: 100000, color: 'bg-slate-300', textColor: 'text-slate-400' };
+    progress = (totalEarnedAllTime / 100000) * 100;
+  }
 
   if (loading) {
     return (
@@ -155,34 +174,33 @@ export default function InfluencerDashboard() {
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-8 p-4 md:p-8">
-      {/* Header Section */}
-      <div className="relative overflow-hidden bg-slate-900 rounded-[3rem] p-8 md:p-12 text-white shadow-2xl">
-        <div className="absolute inset-0 opacity-40">
-          <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_30%_20%,#8b5cf6_0%,transparent_40%)]" />
-          <div className="absolute bottom-0 right-0 w-full h-full bg-[radial-gradient(circle_at_70%_80%,#3b82f6_0%,transparent_40%)]" />
-        </div>
-        
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
-          <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/10">
-              <span className="text-xl">🚀</span>
-              <span className="text-xs font-black uppercase tracking-widest">Tableau de Bord Influenceur</span>
+
+
+      {/* Tier Progress Banner */}
+      <TierProgressBanner totalEarned={wallet?.totalEarnedMad || 0} />
+
+      {/* Stats Quick Cards: Grid of 5 */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+        {[
+          { label: 'Page Views', val: todayClicks, icon: MousePointerClick, color: 'text-blue-600', bg: 'bg-blue-50' },
+          { label: 'Ventes', val: todayConversions, icon: Zap, color: 'text-green-600', bg: 'bg-green-50' },
+          { label: 'Taux de Conv.', val: `${todayClicks > 0 ? ((todayConversions / todayClicks) * 100).toFixed(1) : 0}%`, icon: TrendingUp, color: 'text-purple-600', bg: 'bg-purple-50' },
+          { label: 'Confirmation', val: `${confirmationRate.toFixed(1)}%`, icon: CheckCircle2, color: 'text-amber-600', bg: 'bg-amber-50' },
+          { label: 'Livraison', val: `${deliveryRate.toFixed(1)}%`, icon: Truck, color: 'text-emerald-600', bg: 'bg-emerald-50' }
+        ].map((stat) => (
+          <div key={stat.label} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</p>
+            <div className="flex items-center justify-between mt-3">
+              <h3 className={`text-2xl font-black ${stat.color}`}>{stat.val}</h3>
+              <div className={`p-2.5 ${stat.bg} ${stat.color} rounded-2xl group-hover:scale-110 transition-transform`}>
+                <stat.icon className="w-4 h-4" />
+              </div>
             </div>
-            <h1 className="text-4xl md:text-5xl font-black tracking-tight">
-              Salut, <span className="text-transparent bg-clip-text bg-gradient-to-r from-influencer-300 to-white">{user?.fullName?.split(' ')[0]}</span>!
-            </h1>
           </div>
-          
-          <div className="flex flex-wrap gap-4">
-            <Link to="/influencer/links" className="flex items-center gap-2 px-8 py-4 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-2xl text-sm font-black transition-all">
-              <Plus className="w-4 h-4" /> Nouveau Lien
-            </Link>
-            <Link to="/influencer/marketplace" className="flex items-center gap-2 px-8 py-4 bg-white text-slate-900 rounded-2xl text-sm font-black hover:shadow-2xl transition-all">
-              <ShoppingBag className="w-4 h-4" /> Marketplace
-            </Link>
-          </div>
-        </div>
+        ))}
       </div>
+
+
 
       {/* Main Grid: Financial Cards (3) + Analytics (Chart) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -194,9 +212,9 @@ export default function InfluencerDashboard() {
               <Wallet className="w-24 h-24 text-white" />
             </div>
             <div className="relative z-10 space-y-4">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Solde Portefeuille</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{isFiltered ? 'Solde à la fin' : 'Solde Portefeuille'}</p>
               <div className="flex items-baseline gap-2">
-                <h3 className="text-5xl font-black text-white">{wallet?.balanceMad?.toLocaleString() || 0}</h3>
+                <h3 className="text-5xl font-black text-white">{displayBalance?.toLocaleString() || 0}</h3>
                 <span className="text-sm font-bold text-slate-400 uppercase">DH</span>
               </div>
               <Link to="/influencer/wallet" className="flex items-center gap-2 text-xs font-black text-influencer-400 hover:text-white transition-colors group/link">
@@ -210,13 +228,20 @@ export default function InfluencerDashboard() {
             <div className="absolute -right-4 -top-4 opacity-[0.03] group-hover:scale-110 transition-transform duration-500">
               <TrendingUp className="w-24 h-24 text-slate-900" />
             </div>
-            <div className="relative z-10 space-y-2">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Gagné</p>
-              <div className="flex items-baseline gap-2">
-                <h3 className="text-3xl font-black text-green-600">+{wallet?.totalEarnedMad?.toLocaleString() || 0}</h3>
-                <span className="text-sm font-bold text-slate-400 uppercase">DH</span>
+            <div className="relative z-10 space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{isFiltered ? 'Gagné (Période)' : 'Total Gagné'}</p>
+                  <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${currentTier.color}`}>
+                    {currentTier.name}
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <h3 className="text-3xl font-black text-green-600">+{displayEarned?.toLocaleString() || 0}</h3>
+                  <span className="text-sm font-bold text-slate-400 uppercase">DH</span>
+                </div>
+                <p className="text-[9px] font-bold text-slate-300 italic mt-1">{isFiltered ? 'Sur la période sélectionnée' : 'Depuis la création du compte'}</p>
               </div>
-              <p className="text-[9px] font-bold text-slate-300 italic">Depuis la création du compte</p>
             </div>
           </div>
 
@@ -226,12 +251,12 @@ export default function InfluencerDashboard() {
               <DollarSign className="w-24 h-24 text-slate-900" />
             </div>
             <div className="relative z-10 space-y-2">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Retiré</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{isFiltered ? 'Retiré (Période)' : 'Total Retiré'}</p>
               <div className="flex items-baseline gap-2">
-                <h3 className="text-3xl font-black text-blue-600">-{wallet?.totalWithdrawnMad?.toLocaleString() || 0}</h3>
+                <h3 className="text-3xl font-black text-blue-600">-{displayWithdrawn?.toLocaleString() || 0}</h3>
                 <span className="text-sm font-bold text-slate-400 uppercase">DH</span>
               </div>
-              <p className="text-[9px] font-bold text-slate-300 italic">Virements effectués</p>
+              <p className="text-[9px] font-bold text-slate-300 italic">{isFiltered ? 'Sur la période sélectionnée' : 'Virements effectués'}</p>
             </div>
           </div>
         </div>
@@ -266,7 +291,7 @@ export default function InfluencerDashboard() {
                   </button>
                   <div className="w-px h-3 bg-slate-200 mx-1" />
                   <div className="flex items-center">
-                    {[1, 7, 30, 'all', 'custom'].map((range) => (
+                    {['all', 1, 7, 30, 'custom'].map((range) => (
                       <button
                         key={range}
                         onClick={() => setDateRange(range as any)}
@@ -353,64 +378,8 @@ export default function InfluencerDashboard() {
         </div>
       </div>
 
-      {/* Stats Quick Cards: Grid of 5 */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
-        {[
-          { label: 'Page Views', val: todayClicks, icon: MousePointerClick, color: 'text-blue-600', bg: 'bg-blue-50' },
-          { label: 'Ventes', val: todayConversions, icon: Zap, color: 'text-green-600', bg: 'bg-green-50' },
-          { label: 'Taux de Conv.', val: `${todayClicks > 0 ? ((todayConversions / todayClicks) * 100).toFixed(1) : 0}%`, icon: TrendingUp, color: 'text-purple-600', bg: 'bg-purple-50' },
-          { label: 'Confirmation', val: `${confirmationRate.toFixed(1)}%`, icon: CheckCircle2, color: 'text-amber-600', bg: 'bg-amber-50' },
-          { label: 'Livraison', val: `${deliveryRate.toFixed(1)}%`, icon: Truck, color: 'text-emerald-600', bg: 'bg-emerald-50' }
-        ].map((stat) => (
-          <div key={stat.label} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</p>
-            <div className="flex items-center justify-between mt-3">
-              <h3 className={`text-2xl font-black ${stat.color}`}>{stat.val}</h3>
-              <div className={`p-2.5 ${stat.bg} ${stat.color} rounded-2xl group-hover:scale-110 transition-transform`}>
-                <stat.icon className="w-4 h-4" />
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
 
-      {/* Meilleurs Produits */}
-      <ProCard variant="glass" className="p-8 bg-white border border-slate-100 shadow-sm">
-        <h2 className="text-2xl font-black text-slate-900 mb-8 flex items-center gap-2">
-          <BarChart3 className="w-6 h-6 text-influencer-500" /> Meilleurs Produits Performance
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {topProducts.length > 0 ? topProducts.map((product, idx) => (
-            <div key={product.productId} className="flex items-center gap-4 p-6 rounded-[2.5rem] bg-slate-50/50 hover:bg-white border border-transparent hover:border-slate-100 transition-all group">
-              <div className="relative">
-                <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-sm border border-slate-100 group-hover:scale-110 transition-transform duration-500">
-                  {product.image ? (
-                    <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full bg-slate-100 flex items-center justify-center text-2xl">📦</div>
-                  )}
-                </div>
-                <div className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-white shadow-md border border-slate-100 flex items-center justify-center text-xs">
-                  {idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}
-                </div>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-black text-slate-900 truncate">{product.name}</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{product.sales} Ventes</p>
-                  <div className="w-1 h-1 bg-slate-300 rounded-full" />
-                  <p className="text-sm font-black text-green-600">+{product.earnings.toFixed(2)} DH</p>
-                </div>
-              </div>
-            </div>
-          )) : (
-            <div className="col-span-3 text-center py-12 text-slate-400 font-medium bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
-              <ShoppingBag className="w-10 h-10 mx-auto mb-2 opacity-20" />
-              Aucun produit performant pour le moment
-            </div>
-          )}
-        </div>
-      </ProCard>
+
     </div>
   );
 }

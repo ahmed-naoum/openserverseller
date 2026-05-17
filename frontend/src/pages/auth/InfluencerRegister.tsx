@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { settingsApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { FaTiktok, FaFacebook, FaEye, FaEyeSlash, FaInstagram, FaSnapchatGhost, FaYoutube } from 'react-icons/fa';
 import { FaXTwitter } from 'react-icons/fa6';
@@ -186,6 +187,15 @@ export default function InfluencerRegister() {
             snapchatUsername: formData.snapchatUsername || undefined,
         });
         toast.success('Compte créateur créé avec succès ! Bienvenue 🎉');
+        
+        try {
+          const statusRes = await settingsApi.getMaintenanceStatus();
+          if (statusRes.data?.data?.influencerRegistrationBlocked) {
+            navigate('/pending-verification');
+            return;
+          }
+        } catch {}
+
         navigate('/influencer/verification');
       }
     } catch (error: any) {

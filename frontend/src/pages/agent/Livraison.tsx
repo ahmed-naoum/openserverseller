@@ -400,45 +400,55 @@ export default function AgentLivraison() {
         ))}
       </div>
 
-      {/* Search */}
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1">
+      {/* Filters Bar */}
+      <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row items-center gap-4">
+        <div className="relative flex-1 w-full">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Rechercher par nom, téléphone, ville, code Coliaty..."
-            className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all shadow-sm"
+            className="w-full pl-10 pr-4 py-2.5 bg-gray-50/50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
           />
         </div>
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
-          <button
-            onClick={() => setSelectedStatus('ALL')}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
-              selectedStatus === 'ALL'
-                ? 'bg-gray-900 text-white border-gray-900 shadow-md'
-                : 'bg-white text-gray-500 border-gray-100 hover:border-gray-200'
-            }`}
-          >
-            Tous
-          </button>
-          {Object.entries(statusConfig).map(([key, config]) => (
-            <button
-              key={key}
-              onClick={() => setSelectedStatus(key)}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
-                selectedStatus === key
-                  ? `${config.bg.replace('bg-', 'bg-').split(' ')[0]} ${config.color} ${config.bg.split(' ')[1]} shadow-sm`
-                  : 'bg-white text-gray-500 border-gray-100 hover:border-gray-200'
-              }`}
+
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="relative flex-1 md:min-w-[240px]">
+            <div className="absolute left-3.5 top-1/2 -translate-y-1/2">
+              <Package className="w-4 h-4 text-indigo-500" />
+            </div>
+            <select
+              value={selectedStatus}
+              onChange={e => setSelectedStatus(e.target.value)}
+              className="w-full pl-10 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 rounded-xl text-sm font-bold text-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none appearance-none cursor-pointer hover:bg-gray-100/50 transition-colors"
             >
-              {config.label}
-              <span className="ml-1.5 px-1.5 py-0.5 bg-white/50 rounded-md text-[10px] opacity-70">
-                {parcels.filter(p => p.status === key).length}
-              </span>
+              <option value="ALL">Tous les statuts ({parcels.length})</option>
+              {Object.entries(statusConfig)
+                .sort((a, b) => a[1].label.localeCompare(b[1].label))
+                .map(([key, config]) => {
+                  const count = parcels.filter(p => p.status === key).length;
+                  return (
+                    <option key={key} value={key}>
+                      {config.label} ({count})
+                    </option>
+                  );
+                })}
+            </select>
+            <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          </div>
+
+          {(search || selectedStatus !== 'ALL') && (
+            <button
+              onClick={() => {
+                setSearch('');
+                setSelectedStatus('ALL');
+              }}
+              className="px-4 py-2.5 text-xs font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 rounded-xl border border-indigo-100 transition-all whitespace-nowrap"
+            >
+              Réinitialiser
             </button>
-          ))}
+          )}
         </div>
       </div>
 

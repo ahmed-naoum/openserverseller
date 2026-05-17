@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { chatApi, BACKEND_URL } from '../../lib/api';
 import { 
   Package, 
@@ -21,6 +22,7 @@ import { useAuth } from '../../contexts/AuthContext';
 
 export default function AdminSupportQueue() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { socket } = useSocket();
   const { user } = useAuth();
   const [queue, setQueue] = useState<any[]>([]);
@@ -104,6 +106,7 @@ export default function AdminSupportQueue() {
     try {
       setClaimingId(convId);
       await chatApi.claimConversation(convId.toString());
+      await queryClient.invalidateQueries({ queryKey: ['conversations'] });
       navigate(`/admin/chat?convId=${convId}`);
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erreur lors de la réclamation');

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { settingsApi } from '../../lib/api';
 import { Eye, EyeOff, User, Mail, Phone, Lock, Sparkles, Globe, TrendingUp, Store, Package } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
 import toast from 'react-hot-toast';
@@ -127,6 +128,15 @@ export default function RegisterPage() {
       });
       toast.success('Compte créé avec succès !');
       
+      // Check if manual approval is required
+      try {
+        const statusRes = await settingsApi.getMaintenanceStatus();
+        if (statusRes.data?.data?.registrationBlocked && !user.isActive) {
+          navigate('/pending-verification');
+          return;
+        }
+      } catch {}
+
       if (user.roleName === 'SUPER_ADMIN' || user.roleName === 'FINANCE_ADMIN') {
         navigate('/admin');
       } else if (user.roleName === 'CALL_CENTER_AGENT') {

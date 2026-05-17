@@ -21,7 +21,9 @@ import {
   Building2,
   Hash,
   AlertCircle,
-  Landmark
+  Landmark,
+  Shield,
+  Sparkles
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -66,6 +68,16 @@ export default function AdminVerifications() {
       toast.success('Statut du compte bancaire mis à jour');
     },
     onError: () => toast.error('Erreur lors de la mise à jour bancaire'),
+  });
+
+  const verifyUserMutation = useMutation({
+    mutationFn: ({ uuid, isActive }: { uuid: string; isActive: boolean }) => 
+      adminApi.verifyUser(uuid, isActive),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-verifications'] });
+      toast.success('Statut utilisateur mis à jour');
+    },
+    onError: () => toast.error('Erreur lors de la mise à jour du statut utilisateur'),
   });
 
   const filteredVerifications = verifications.filter((user: any) => {
@@ -268,9 +280,10 @@ export default function AdminVerifications() {
                       <div className="p-5 rounded-3xl bg-white border border-slate-100 shadow-sm space-y-2">
                         <div className="flex items-center gap-2 text-slate-400">
                           <MapPin size={14} />
-                          <span className="text-[10px] font-black uppercase tracking-widest">Ville</span>
+                          <span className="text-[10px] font-black uppercase tracking-widest">Ville & Adresse</span>
                         </div>
                         <p className="text-sm font-bold text-slate-800">{user.profile?.city || user.detectedCity || '—'}</p>
+                        {user.profile?.address && <p className="text-[10px] font-medium text-slate-400 truncate">{user.profile.address}</p>}
                       </div>
                     </div>
 
@@ -345,6 +358,77 @@ export default function AdminVerifications() {
                                 <Eye size={14} className="text-slate-300 group-hover:text-primary-500" />
                               </a>
                             ))}
+                          </div>
+                        )}
+
+                        {/* Identity Details Comparison */}
+                        {user.profile?.cinNumber && (
+                          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-3">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                              <Shield size={12} /> Informations Déclarées
+                            </p>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
+                              <div className="col-span-2">
+                                <span className="block text-[9px] text-slate-400 uppercase font-black tracking-tighter">Nom Complet</span>
+                                <span className="font-bold text-slate-700">{user.profile.fullName || '—'}</span>
+                              </div>
+                              <div>
+                                <span className="block text-[9px] text-slate-400 uppercase font-black tracking-tighter">N° CIN</span>
+                                <span className="font-bold text-slate-700">{user.profile.cinNumber}</span>
+                              </div>
+                              <div>
+                                <span className="block text-[9px] text-slate-400 uppercase font-black tracking-tighter">Date Naissance</span>
+                                <span className="font-bold text-slate-700">
+                                  {user.profile.birthDate ? format(new Date(user.profile.birthDate), 'dd/MM/yyyy') : '—'}
+                                </span>
+                              </div>
+                              <div className="col-span-2">
+                                <span className="block text-[9px] text-slate-400 uppercase font-black tracking-tighter">Adresse Complète</span>
+                                <span className="font-bold text-slate-700">{user.profile.address || '—'}, {user.profile.city || '—'}</span>
+                              </div>
+                            </div>
+                            
+                            {/* OCR Data if available */}
+                            {user.kycDocuments?.find((d: any) => d.metadata)?.metadata && (
+                              <div className="mt-2 pt-3 border-t border-slate-200">
+                                <p className="text-[10px] font-black text-primary-500 uppercase tracking-widest flex items-center gap-1.5">
+                                  <Sparkles size={12} className="animate-pulse" /> Extrait Automatiquement (OCR)
+                                </p>
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] mt-2 bg-white/50 p-2 rounded-xl border border-primary-50">
+                                  {user.kycDocuments.find((d: any) => d.metadata).metadata.cinNumber && (
+                                    <div>
+                                      <span className="block text-[9px] text-primary-400 uppercase font-black tracking-tighter">CIN OCR</span>
+                                      <span className={`font-black ${user.kycDocuments.find((d: any) => d.metadata).metadata.cinNumber === user.profile.cinNumber ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                        {user.kycDocuments.find((d: any) => d.metadata).metadata.cinNumber}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {user.kycDocuments.find((d: any) => d.metadata).metadata.birthDate && (
+                                    <div>
+                                      <span className="block text-[9px] text-primary-400 uppercase font-black tracking-tighter">Date OCR</span>
+                                      <span className="font-black text-primary-700">
+                                        {user.kycDocuments.find((d: any) => d.metadata).metadata.birthDate}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {user.kycDocuments.find((d: any) => d.metadata).metadata.expiryDate && (
+                                    <div className="col-span-2 mt-1 pt-1 border-t border-primary-50 flex items-center justify-between">
+                                      <div>
+                                        <span className="text-[9px] text-primary-400 uppercase font-black tracking-tighter">Valable jusqu'au: </span>
+                                        <span className="text-[11px] font-bold text-primary-700">{user.kycDocuments.find((d: any) => d.metadata).metadata.expiryDate}</span>
+                                      </div>
+                                      <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider border ${
+                                        user.kycDocuments.find((d: any) => d.metadata).metadata.isExpired 
+                                          ? 'bg-rose-50 text-rose-600 border-rose-200' 
+                                          : 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                                      }`}>
+                                        {user.kycDocuments.find((d: any) => d.metadata).metadata.isExpired ? 'Expirée' : 'Valide'}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
 
@@ -465,6 +549,16 @@ export default function AdminVerifications() {
                       <div className={`flex items-center gap-2 px-4 py-2 rounded-2xl border text-xs font-black uppercase tracking-widest ${user.isActive ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-rose-50 text-rose-600 border-rose-200'}`}>
                         {user.isActive ? 'Actif' : 'Inactif'}
                       </div>
+                      
+                      {!user.isActive && (
+                        <button
+                          onClick={() => verifyUserMutation.mutate({ uuid: user.uuid, isActive: true })}
+                          disabled={verifyUserMutation.isPending}
+                          className="px-4 py-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-200 hover:from-emerald-600 hover:to-emerald-700 transition-all active:scale-95 disabled:opacity-50"
+                        >
+                          {verifyUserMutation.isPending ? 'Activation...' : 'Activer le Compte'}
+                        </button>
+                      )}
                       {user.contractAccepted && (
                         <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-blue-50 border border-blue-200 text-xs font-black uppercase tracking-widest text-blue-600">
                           Contrat signé

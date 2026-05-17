@@ -117,7 +117,7 @@ export default function PublicMarketplace() {
   const getDefaultView = (): 'REGULAR' | 'AFFILIATE' | 'INFLUENCER' => {
     if (!isAuthenticated || !user) return 'REGULAR'; // Public default
     const role = user.role || user.roleName || '';
-    if (role === 'SUPER_ADMIN' || role === 'FINANCE_ADMIN') return 'REGULAR'; // Admin sees all, default to REGULAR
+    if (role === 'SUPER_ADMIN' || role === 'FINANCE_ADMIN' || role === 'HELPER') return 'REGULAR'; // Admin/Helper sees all, default to REGULAR
     if (role === 'INFLUENCER') return 'INFLUENCER';
     if (role === 'VENDOR') return user.mode === 'AFFILIATE' ? 'AFFILIATE' : 'REGULAR';
     if (role === 'GROSSELLER') return 'REGULAR';
@@ -128,7 +128,7 @@ export default function PublicMarketplace() {
   const canToggle = (): boolean => {
     if (!isAuthenticated || !user) return true; // Public can toggle
     const role = user.role || user.roleName || '';
-    if (role === 'SUPER_ADMIN' || role === 'FINANCE_ADMIN') return true; // Admin can toggle
+    if (role === 'SUPER_ADMIN' || role === 'FINANCE_ADMIN' || role === 'HELPER') return true; // Admin/Helper can toggle
     return false; // Everyone else is locked
   };
 

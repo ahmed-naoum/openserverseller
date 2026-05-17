@@ -228,13 +228,6 @@ export default function SiteBuilder() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button 
-            onClick={() => setIsPreviewMode(!isPreviewMode)}
-            className={`flex items-center gap-2 px-4 py-2 border font-bold rounded-lg transition-all ${isPreviewMode ? 'bg-orange-50 border-orange-200 text-orange-600' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}
-          >
-            <LayoutTemplate className="w-4 h-4" />
-            {isPreviewMode ? 'Mode Édition' : 'Mode Aperçu'}
-          </button>
           {referralCode && (
             <button 
               onClick={() => window.open(`/r/${referralCode}`, '_blank')}

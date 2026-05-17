@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import { PrismaClient } from '@prisma/client';
+import multer from 'multer';
+import { OcrService } from '../services/ocr.service.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { authenticate, authorize } from '../middleware/auth.js';
@@ -12,6 +14,7 @@ import QRCode from 'qrcode';
 import { OAuth2Client } from 'google-auth-library';
 import rateLimit from 'express-rate-limit';
 import { encrypt, decrypt } from '../utils/crypto.js';
+import { fetchMaintenanceSettings } from '../middleware/maintenance.js';
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID || 'UNCONFIGURED_CLIENT_ID');
 
@@ -1359,14 +1362,89 @@ router.get(
 );
 
 router.post(
+  '/change-password',
+  authenticate,
+  [
+    body('currentPassword').notEmpty(),
+    body('newPassword').isLength({ min: 8 }).withMessage('Le nouveau mot de passe doit contenir au moins 8 caractères'),
+  ],
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new AppException(400, 'Validation échouée');
+    }
+
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user!.id;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new AppException(401, 'Utilisateur non trouvé');
+    }
+
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isPasswordValid) {
+      throw new AppException(400, 'Le mot de passe actuel est incorrect');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10));
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Mot de passe mis à jour avec succès',
+    });
+  })
+);
+
+const kycExtractionUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'application/pdf'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Seuls les formats JPG, PNG, WEBP et PDF sont acceptés pour l\'extraction'));
+    }
+  },
+});
+
+router.post(
+  '/kyc/extract',
+  authenticate,
+  kycExtractionUpload.single('file'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) {
+      throw new AppException(400, 'Aucun fichier envoyé');
+    }
+
+    const type = (req.body.type as 'recto' | 'verso') || 'recto';
+    const data = await OcrService.extractCinData(req.file.buffer, type);
+
+    res.json({
+      status: 'success',
+      data,
+    });
+  })
+);
+
+router.post(
   '/kyc',
   authenticate,
   asyncHandler(async (req, res) => {
     const userId = req.user!.id;
-    const { documents } = req.body;
+    const { documents, cinNumber, birthDate, fullName, address, city } = req.body;
 
-    if (!documents || !Array.isArray(documents) || documents.length !== 3) {
-      throw new AppException(400, 'Vous devez soumettre exactement 3 documents (Recto, Verso, Liveness)');
+    if (!documents || !Array.isArray(documents) || documents.length !== 2) {
+      throw new AppException(400, 'Vous devez soumettre exactement 2 documents (Recto et Verso)');
     }
 
     await prisma.$transaction(async (tx) => {      
@@ -1378,9 +1456,30 @@ router.post(
             documentType: doc.type || 'ID',
             documentUrl: doc.url,
             status: 'PENDING',
+            metadata: doc.metadata || null,
           } as any,
         });
       }
+
+      // Update User Profile with verified data
+      await tx.userProfile.upsert({
+        where: { userId },
+        create: {
+          userId,
+          fullName,
+          cinNumber,
+          birthDate: birthDate ? new Date(birthDate) : null,
+          address,
+          city,
+        },
+        update: {
+          fullName: fullName || undefined,
+          cinNumber,
+          birthDate: birthDate ? new Date(birthDate) : null,
+          address,
+          city,
+        }
+      });
 
       await tx.user.update({
         where: { id: userId },
@@ -1558,8 +1657,12 @@ router.post(
   })
 );
 
+// In-memory OTP store for bank account verification
+const bankOtpStore = new Map<number, { otp: string; expiresAt: Date; bankName: string; ribAccount: string; iceNumber?: string }>();
+
+// Step 1: Send OTP to user's email before adding bank account
 router.post(
-  '/bank-accounts',
+  '/bank-accounts/send-otp',
   authenticate,
   [
     body('bankName').notEmpty().trim(),
@@ -1573,13 +1676,103 @@ router.post(
 
     const { bankName, ribAccount, iceNumber } = req.body;
     const userId = req.user!.id;
+    const email = req.user!.email;
+
+    if (!email) {
+      throw new AppException(400, 'Aucun email associé à votre compte');
+    }
+
+    // Generate 6-digit OTP
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    bankOtpStore.set(userId, { otp, expiresAt, bankName, ribAccount, iceNumber });
+
+    // Send email
+    const { sendEmail } = await import('../utils/mailer.js');
+    const user = await prisma.user.findUnique({ where: { id: userId }, include: { profile: true } });
+    const userName = user?.profile?.fullName || email;
+
+    await sendEmail({
+      to: email,
+      subject: '🏦 Vérification - Ajout de compte bancaire',
+      html: `
+        <div style="font-family: 'Segoe UI', sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <div style="width: 60px; height: 60px; background: #dbeafe; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px;">
+              <span style="font-size: 28px;">🏦</span>
+            </div>
+            <h2 style="color: #1e293b; margin: 0; font-size: 22px;">Nouveau Compte Bancaire</h2>
+          </div>
+          <p style="color: #64748b; font-size: 14px; line-height: 1.6;">
+            Bonjour <strong>${userName}</strong>,<br><br>
+            Une demande d'ajout de compte bancaire a été initiée sur votre espace :
+          </p>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin: 16px 0;">
+            <p style="margin: 0; color: #475569; font-size: 13px;"><strong>Banque :</strong> ${bankName}</p>
+            <p style="margin: 8px 0 0; color: #475569; font-size: 13px;"><strong>RIB :</strong> ${ribAccount.substring(0, 4)} **** **** **** **** ****</p>
+          </div>
+          <p style="color: #64748b; font-size: 14px;">Voici votre code de vérification :</p>
+          <div style="text-align: center; margin: 24px 0;">
+            <div style="display: inline-block; background: #f1f5f9; padding: 16px 40px; border-radius: 16px; border: 2px dashed #cbd5e1;">
+              <span style="font-size: 36px; font-weight: 900; letter-spacing: 8px; color: #0f172a;">${otp}</span>
+            </div>
+          </div>
+          <p style="color: #94a3b8; font-size: 12px; text-align: center;">
+            ⏱ Ce code expire dans <strong>10 minutes</strong>.<br>
+            Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.
+          </p>
+        </div>
+      `
+    });
+
+    // Mask email for frontend
+    const [localPart, domain] = email.split('@');
+    const maskedEmail = `${localPart.slice(0, 2)}***@${domain}`;
+
+    res.json({
+      status: 'success',
+      message: 'OTP sent',
+      data: { maskedEmail }
+    });
+  })
+);
+
+// Step 2: Verify OTP and add the bank account
+router.post(
+  '/bank-accounts/verify-otp',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { otp } = req.body;
+    const userId = req.user!.id;
+
+    if (!otp) {
+      throw new AppException(400, 'Le code de vérification est requis');
+    }
+
+    const stored = bankOtpStore.get(userId);
+    if (!stored) {
+      throw new AppException(400, 'Aucun code de vérification trouvé. Veuillez en demander un nouveau.');
+    }
+
+    if (new Date() > stored.expiresAt) {
+      bankOtpStore.delete(userId);
+      throw new AppException(400, 'Le code de vérification a expiré. Veuillez en demander un nouveau.');
+    }
+
+    if (stored.otp !== otp) {
+      throw new AppException(400, 'Code de vérification incorrect.');
+    }
+
+    // OTP verified — create bank account
+    bankOtpStore.delete(userId);
 
     const bankAccount = await prisma.userBankAccount.create({
       data: {
         userId,
-        bankName,
-        ribAccount: encrypt(ribAccount),
-        iceNumber,
+        bankName: stored.bankName,
+        ribAccount: encrypt(stored.ribAccount),
+        iceNumber: stored.iceNumber,
         isDefault: (await prisma.userBankAccount.count({ where: { userId } })) === 0,
       },
     });

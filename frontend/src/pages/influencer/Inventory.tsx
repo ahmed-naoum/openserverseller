@@ -7,12 +7,13 @@ import {
   XCircle,
   ExternalLink,
   Search,
-  Filter
+  Filter,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 
-type ClaimStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+type ClaimStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'BUILDING';
 
 export default function InfluencerInventory() {
   const [claims, setClaims] = useState<any[]>([]);
@@ -40,7 +41,16 @@ export default function InfluencerInventory() {
   };
 
   const filteredClaims = claims.filter(claim => {
-    const matchesTab = activeTab === 'ALL' || claim.status === activeTab;
+    let matchesTab = false;
+    if (activeTab === 'ALL') {
+      matchesTab = true;
+    } else if (activeTab === 'BUILDING') {
+      matchesTab = claim.status === 'APPROVED' && claim.referralLink?.status === 'BUILDING';
+    } else if (activeTab === 'APPROVED') {
+      matchesTab = claim.status === 'APPROVED' && claim.referralLink?.status !== 'BUILDING';
+    } else {
+      matchesTab = claim.status === activeTab;
+    }
     const matchesSearch = claim.product.nameFr.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          claim.product.sku.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesTab && matchesSearch;
@@ -48,7 +58,8 @@ export default function InfluencerInventory() {
 
   const stats = {
     pending: claims.filter(c => c.status === 'PENDING').length,
-    approved: claims.filter(c => c.status === 'APPROVED').length,
+    building: claims.filter(c => c.status === 'APPROVED' && c.referralLink?.status === 'BUILDING').length,
+    approved: claims.filter(c => c.status === 'APPROVED' && c.referralLink?.status !== 'BUILDING').length,
     rejected: claims.filter(c => c.status === 'REJECTED').length,
   };
 
@@ -95,6 +106,13 @@ export default function InfluencerInventory() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button 
+            onClick={fetchClaims}
+            className="p-2.5 bg-white border border-gray-200 rounded-xl text-gray-500 hover:text-influencer-600 hover:border-influencer-200 hover:bg-influencer-50 transition-all shadow-sm group"
+            title="Actualiser"
+          >
+            <RefreshCw className="w-4 h-4 group-active:animate-spin" />
+          </button>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input 
@@ -109,7 +127,7 @@ export default function InfluencerInventory() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
             <Clock className="w-6 h-6" />
@@ -117,6 +135,15 @@ export default function InfluencerInventory() {
           <div>
             <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">En attente</p>
             <p className="text-xl font-black text-gray-900">{stats.pending}</p>
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center text-orange-600">
+            <Package className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">En construction</p>
+            <p className="text-xl font-black text-gray-900">{stats.building}</p>
           </div>
         </div>
         <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
@@ -141,7 +168,7 @@ export default function InfluencerInventory() {
 
       {/* Tabs */}
       <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-gray-200 w-fit">
-        {(['ALL', 'PENDING', 'APPROVED', 'REJECTED'] as const).map((tab) => (
+        {(['ALL', 'PENDING', 'BUILDING', 'APPROVED', 'REJECTED'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -151,7 +178,7 @@ export default function InfluencerInventory() {
                 : 'text-gray-500 hover:bg-gray-50'
             }`}
           >
-            {tab === 'ALL' ? 'Tous' : tab === 'PENDING' ? 'En attente' : tab === 'APPROVED' ? 'Approuvés' : 'Refusés'}
+            {tab === 'ALL' ? 'Tous' : tab === 'PENDING' ? 'En attente' : tab === 'BUILDING' ? 'En construction' : tab === 'APPROVED' ? 'Approuvés' : 'Refusés'}
           </button>
         ))}
       </div>
@@ -212,13 +239,25 @@ export default function InfluencerInventory() {
                   
                   {claim.status === 'APPROVED' ? (
                     claim.referralLink ? (
-                      <button 
-                        onClick={() => handleCopyLink(claim.referralLink.code)}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-influencer-50 text-influencer-600 rounded-lg hover:bg-influencer-100 transition-colors text-xs font-bold"
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                        Copier
-                      </button>
+                      claim.referralLink.status === 'BUILDING' ? (
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="px-2 py-1 bg-amber-50 text-amber-600 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            En construction
+                          </span>
+                          <span className="text-[8px] text-gray-400 italic text-right max-w-[120px]">
+                            Lien en préparation par l'équipe...
+                          </span>
+                        </div>
+                      ) : (
+                        <button 
+                          onClick={() => handleCopyLink(claim.referralLink.code)}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-influencer-50 text-influencer-600 rounded-lg hover:bg-influencer-100 transition-colors text-xs font-bold"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          Copier
+                        </button>
+                      )
                     ) : (
                       <button 
                         onClick={() => handleGenerateLink(claim.productId)}

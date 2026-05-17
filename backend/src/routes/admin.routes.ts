@@ -794,6 +794,28 @@ router.patch(
   })
 );
 
+// Manually activate or deactivate user
+router.patch(
+  '/users/:uuid/active',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { uuid } = req.params;
+    const { isActive } = req.body;
+
+    const user = await prisma.user.update({
+      where: { uuid: String(uuid) },
+      data: { isActive: Boolean(isActive) },
+    });
+
+    res.json({
+      status: 'success',
+      message: `Compte utilisateur ${isActive ? 'activé' : 'désactivé'} avec succès`,
+      data: user,
+    });
+  })
+);
+
 // Update KYC status
 router.patch(
   '/users/:uuid/verify-kyc',
@@ -1103,7 +1125,13 @@ router.get(
     const { status, type } = req.query;
 
     const where: any = {};
-    if (status) where.status = status;
+    if (status) {
+      if (status === 'CLOSED') {
+        where.status = { in: ['CLOSED', 'RESOLVED'] };
+      } else {
+        where.status = status;
+      }
+    }
     if (type) where.type = type;
 
     const requests = await prisma.supportRequest.findMany({
@@ -1210,7 +1238,7 @@ router.get(
         referralLinks: {
           some: {
             leads: {
-              some: { paymentSituation: 'PAID' }
+              some: { paymentSituation: { in: ['PAID', 'Payé'] } }
             }
           }
         }
@@ -1221,7 +1249,7 @@ router.get(
         referralLinks: {
           include: {
             leads: {
-              where: { paymentSituation: 'PAID' },
+              where: { paymentSituation: { in: ['PAID', 'Payé'] } },
               include: { order: true }
             }
           }
@@ -1234,14 +1262,14 @@ router.get(
       where: {
         role: { name: 'VENDOR' },
         leads: {
-          some: { paymentSituation: 'PAID' }
+          some: { paymentSituation: { in: ['PAID', 'Payé'] } }
         }
       },
       include: {
         profile: true,
         role: true,
         leads: {
-          where: { paymentSituation: 'PAID' },
+          where: { paymentSituation: { in: ['PAID', 'Payé'] } },
           include: { order: true }
         }
       }
@@ -1301,7 +1329,7 @@ router.get(
     // Fetch both direct leads and referral leads
     const leads = await prisma.lead.findMany({
       where: {
-        paymentSituation: 'PAID',
+        paymentSituation: { in: ['PAID', 'Payé'] },
         OR: [
           { vendorId: userId },
           { referralLink: { influencerId: userId } }
@@ -1337,7 +1365,7 @@ router.patch(
   asyncHandler(async (req: Request, res: Response) => {
     const { leadIds, situation } = req.body;
 
-    if (!Array.isArray(leadIds) || !['PAID', 'NOT_PAID', 'FACTURED'].includes(situation)) {
+    if (!Array.isArray(leadIds) || !['PAID', 'NOT_PAID', 'FACTURED', 'Payé', 'no Payé'].includes(situation)) {
       res.status(400).json({ status: 'error', message: 'Invalid request' });
       return;
     }
@@ -1426,6 +1454,93 @@ router.patch(
     res.json({
       status: 'success',
       message: `${leadIds.length} leads mis à jour avec succès`
+    });
+  })
+);
+
+// Get all users for wallet adjustment search
+router.get(
+  '/finance/users',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const users = await prisma.user.findMany({
+      where: {
+        OR: [
+          { role: { name: { in: ['VENDOR', 'GROSSELLER', 'INFLUENCER'] } } },
+          { isInfluencer: true }
+        ],
+        deletedAt: null
+      },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        profile: {
+          select: { fullName: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({
+      status: 'success',
+      data: users.map(u => ({
+        id: u.id,
+        email: u.email,
+        fullName: u.profile?.fullName || u.email,
+        role: u.role.name
+      }))
+    });
+  })
+);
+
+// Manual wallet adjustment (Donations / Fees)
+router.post(
+  '/wallet/adjust',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { userId, amount, type, description } = req.body;
+
+    if (!userId || isNaN(Number(amount)) || !['CREDIT', 'DEBIT'].includes(type)) {
+      throw new AppException(400, 'Données invalides');
+    }
+
+    const amountNum = Math.abs(Number(amount));
+    const adjustment = type === 'CREDIT' ? amountNum : -amountNum;
+
+    const result = await prisma.$transaction(async (tx) => {
+      let wallet = await tx.wallet.findUnique({ where: { userId: Number(userId) } });
+      if (!wallet) {
+        wallet = await tx.wallet.create({ data: { userId: Number(userId) } });
+      }
+
+      const updatedWallet = await tx.wallet.update({
+        where: { id: wallet.id },
+        data: {
+          balanceMad: { increment: adjustment },
+          totalEarnedMad: type === 'CREDIT' ? { increment: amountNum } : undefined
+        }
+      });
+
+      await tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: type === 'CREDIT' ? 'CREDIT' : 'DEBIT',
+          amountMad: adjustment,
+          balanceAfterMad: updatedWallet.balanceMad,
+          description: description || (type === 'CREDIT' ? 'Crédit manuel (Donation)' : 'Débit manuel (Frais)')
+        }
+      });
+
+      return updatedWallet;
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Portefeuille mis à jour avec succès',
+      data: result
     });
   })
 );

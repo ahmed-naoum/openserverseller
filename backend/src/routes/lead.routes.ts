@@ -558,6 +558,83 @@ router.get(
   })
 );
 
+router.get(
+  '/history-by-phone/:phone',
+  authenticate,
+  authorize('CALL_CENTER_AGENT', 'SUPER_ADMIN', 'HELPER', 'VENDOR'),
+  asyncHandler(async (req, res) => {
+    const { phone } = req.params;
+    
+    // Normalize input phone: remove non-digits
+    const searchPhone = phone.replace(/\D/g, '');
+    if (searchPhone.length < 8) {
+      throw new AppException(400, 'Numéro de téléphone invalide pour la recherche');
+    }
+
+    // Find all leads with this phone number
+    const leads = await prisma.lead.findMany({
+      where: {
+        OR: [
+          { phone: { contains: searchPhone } },
+          { whatsapp: { contains: searchPhone } }
+        ]
+      },
+      select: {
+        status: true,
+        createdAt: true,
+        vendor: { select: { profile: { select: { fullName: true } } } }
+      }
+    });
+
+    // Find all orders with this phone number
+    const orders = await prisma.order.findMany({
+      where: {
+        customerPhone: { contains: searchPhone }
+      },
+      select: {
+        status: true,
+        createdAt: true,
+        vendor: { select: { profile: { select: { fullName: true } } } }
+      }
+    });
+
+    // Summarize history
+    const leadStats = leads.reduce((acc: any, curr) => {
+      acc[curr.status] = (acc[curr.status] || 0) + 1;
+      return acc;
+    }, {});
+
+    const orderStats = orders.reduce((acc: any, curr) => {
+      acc[curr.status] = (acc[curr.status] || 0) + 1;
+      return acc;
+    }, {});
+
+    res.json({
+      status: 'success',
+      data: {
+        summary: {
+          totalLeads: leads.length,
+          totalOrders: orders.length,
+          leadStats,
+          orderStats
+        },
+        rawHistory: {
+          leads: leads.map(l => ({
+            status: l.status,
+            createdAt: l.createdAt,
+            vendorName: l.vendor?.profile?.fullName || 'Vendeur Inconnu'
+          })),
+          orders: orders.map(o => ({
+            status: o.status,
+            createdAt: o.createdAt,
+            vendorName: o.vendor?.profile?.fullName || 'Vendeur Inconnu'
+          }))
+        }
+      }
+    });
+  })
+);
+
 router.post(
   '/:id/claim',
   authenticate,
@@ -633,7 +710,19 @@ router.get(
     });
 
     if (!lead) {
-      throw new AppException(404, 'Lead not found');
+      throw new AppException(404, 'Lead introuvable');
+    }
+
+    // Role-based restrictions for agents
+    if (req.user!.roleName === 'CALL_CENTER_AGENT') {
+      if (lead.assignedAgentId !== req.user!.id) {
+        throw new AppException(403, 'Permission denied: Ce lead ne vous est pas assigné');
+      }
+      
+      const finishedStatuses = ['PUSHED_TO_DELIVERY', 'ORDERED', 'SHIPPED', 'DELIVERED', 'RETURNED', 'CANCELLED'];
+      if (finishedStatuses.includes(lead.status)) {
+        throw new AppException(403, 'Permission denied: Ce lead a déjà été traité et envoyé à la livraison');
+      }
     }
 
     const { vendor, referralLink, ...leadData } = lead;
@@ -1023,7 +1112,7 @@ router.patch(
     const { id } = req.params;
     const { paymentSituation } = req.body;
 
-    const valid = ['NOT_PAID', 'PAID', 'FACTURED'];
+    const valid = ['NOT_PAID', 'PAID', 'FACTURED', 'Payé', 'no Payé'];
     if (!valid.includes(paymentSituation)) {
       throw new AppException(400, `Invalid paymentSituation. Must be one of: ${valid.join(', ')}`);
     }
@@ -1049,7 +1138,7 @@ router.patch(
   authenticate,
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { status, notes, callbackAt } = req.body;
+    const { status, notes, callbackAt, requestedPriceMad } = req.body;
 
     const validStatuses = [
       'NEW',
@@ -1067,6 +1156,8 @@ router.patch(
       'CALLBACK_REQUESTED',
       'ORDERED',
       'PUSHED_TO_DELIVERY',
+      'PRICE_CONFIRMED',
+      'PRICE_REJECTED',
       'UNREACHABLE',
     ];
 
@@ -1105,6 +1196,8 @@ router.patch(
           status,
           notes: notes !== undefined ? notes : lead.notes,
           callbackAt: callbackAt !== undefined ? callbackAt : lead.callbackAt,
+          requestedPriceMad: requestedPriceMad !== undefined ? requestedPriceMad : lead.requestedPriceMad,
+          requestedPriceStatus: requestedPriceMad !== undefined ? 'PENDING' : lead.requestedPriceStatus,
         },
       });
     });
@@ -1532,6 +1625,179 @@ router.post(
   })
 );
 
+// Verify Return Code (Helper - identifying before processing)
+router.post(
+  '/verify-return',
+  authenticate,
+  authorize('SUPER_ADMIN', 'HELPER'),
+  asyncHandler(async (req, res) => {
+    const { code } = req.body;
+    if (!code) throw new AppException(400, 'Code is required');
+
+    const order = await prisma.order.findFirst({
+      where: {
+        OR: [
+          { coliatyPackageCode: { equals: code, mode: 'insensitive' } },
+          { orderNumber: { equals: code, mode: 'insensitive' } }
+        ]
+      },
+      include: { 
+        vendor: { select: { id: true, profile: { select: { fullName: true } } } },
+        lead: { 
+          include: { 
+            referralLink: { 
+              include: { 
+                influencer: { select: { id: true, profile: { select: { fullName: true } } } } 
+              } 
+            } 
+          } 
+        }
+      }
+    });
+
+    if (!order) throw new AppException(404, 'Colis non trouvé');
+
+    const owner = order.lead?.referralLink?.influencer || order.vendor;
+    const ownerName = owner?.profile?.fullName || 'Utilisateur inconnu';
+    const ownerId = owner?.id;
+
+    res.json({
+      status: 'success',
+      data: {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        coliatyCode: order.coliatyPackageCode,
+        customerName: order.customerName,
+        ownerName,
+        ownerId,
+        alreadyReturned: order.status === 'RETURNED' && order.lead?.paymentSituation === 'FACTURED'
+      }
+    });
+  })
+);
+
+// Bulk Scan Returns (Helper)
+router.post(
+  '/bulk-scan-returns',
+  authenticate,
+  authorize('SUPER_ADMIN', 'HELPER'),
+  asyncHandler(async (req, res) => {
+    const { orderIds } = req.body;
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+      throw new AppException(400, 'orderIds array is required');
+    }
+
+    const results = await prisma.$transaction(async (tx) => {
+      const orders = await tx.order.findMany({
+        where: { id: { in: orderIds.map(Number) } },
+        include: { 
+          lead: { include: { referralLink: true } },
+          items: true
+        }
+      });
+
+      const processed: number[] = [];
+      const errors: any[] = [];
+      const userGroups: Record<number, any[]> = {};
+
+      for (const order of orders) {
+        if (!order.lead) continue;
+        if (order.status === 'RETURNED' && order.lead.paymentSituation === 'FACTURED') {
+          errors.push({ orderId: order.id, message: 'Déjà retourné et facturé' });
+          continue;
+        }
+
+        const userId = order.lead.referralLink?.influencerId || order.vendorId;
+        if (!userGroups[userId]) userGroups[userId] = [];
+        userGroups[userId].push(order);
+      }
+
+      for (const [userIdStr, userOrders] of Object.entries(userGroups)) {
+        const userId = Number(userIdStr);
+        const count = userOrders.length;
+        const totalDeduction = count * 3;
+
+        try {
+          // 1. Create consolidated Invoice
+          const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+          const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
+          const invoiceNumber = `RET-BULK-${dateStr}-${randomStr}`;
+
+          const invoice = await tx.invoice.create({
+            data: {
+              invoiceNumber,
+              userId,
+              totalAmountMad: -totalDeduction,
+              status: 'PAID',
+            }
+          });
+
+          // 2. Process each order in the group
+          for (const order of userOrders) {
+            // Update Order
+            await tx.order.update({
+              where: { id: order.id },
+              data: { status: 'RETURNED' }
+            });
+
+            // Update Lead
+            await tx.lead.update({
+              where: { id: order.leadId! },
+              data: { 
+                status: 'RETURNED', 
+                paymentSituation: 'FACTURED',
+                invoiceId: invoice.id 
+              }
+            });
+
+            // Restore Stock
+            const stockRestorable = !['CANCELED', 'CANCELED_BY_SELLER', 'CANCELED_BY_SYSTEM', 'REFUSE', 'RETURNED', 'CANCELLED'].includes(order.status);
+            if (stockRestorable) {
+              for (const item of order.items) {
+                await tx.product.update({
+                  where: { id: item.productId },
+                  data: { stockQuantity: { increment: item.quantity } }
+                });
+              }
+            }
+            processed.push(order.id);
+          }
+
+          // 3. Consolidated Wallet Deduction
+          let wallet = await tx.wallet.findUnique({ where: { userId } });
+          if (!wallet) wallet = await tx.wallet.create({ data: { userId } });
+
+          const updatedWallet = await tx.wallet.update({
+            where: { id: wallet.id },
+            data: { balanceMad: { decrement: totalDeduction } }
+          });
+
+          await tx.walletTransaction.create({
+            data: {
+              walletId: wallet.id,
+              type: 'RETURN_FEE',
+              amountMad: -totalDeduction,
+              balanceAfterMad: updatedWallet.balanceMad,
+              description: `Frais de retour groupés - ${count} colis`,
+            }
+          });
+
+        } catch (err: any) {
+          errors.push({ userId, message: err.message });
+        }
+      }
+
+      return { processed, errors };
+    });
+
+    res.json({
+      status: 'success',
+      message: `${results.processed.length} retours traités avec succès.`,
+      data: results
+    });
+  })
+);
+
 // Scan Return (Helper)
 router.post(
   '/scan-return',
@@ -1546,8 +1812,8 @@ router.post(
     const order = await prisma.order.findFirst({
       where: {
         OR: [
-          { coliatyPackageCode: code },
-          { orderNumber: code }
+          { coliatyPackageCode: { equals: code, mode: 'insensitive' } },
+          { orderNumber: { equals: code, mode: 'insensitive' } }
         ]
       },
       include: { 
@@ -1757,6 +2023,68 @@ router.delete(
     res.json({
       status: 'success',
       message: 'Lead deleted completely',
+    });
+  })
+);
+router.post(
+  '/:id/respond-price-request',
+  authenticate,
+  authorize('VENDOR', 'SUPER_ADMIN', 'HELPER', 'INFLUENCER'),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { action } = req.body; // 'APPROVE' | 'REJECT'
+
+    if (!['APPROVE', 'REJECT'].includes(action)) {
+      throw new AppException(400, 'L\'action doit être APPROVE ou REJECT');
+    }
+
+    const where: any = { id: Number(id) };
+    if (req.user!.roleName === 'VENDOR') {
+      where.vendorId = req.user!.id;
+    } else if (req.user!.roleName === 'INFLUENCER') {
+      // Find the lead through its referral link owned by the influencer
+      const influencerLinks = await prisma.referralLink.findMany({
+        where: { influencerId: req.user!.id },
+        select: { id: true }
+      });
+      where.referralLinkId = { in: influencerLinks.map(l => l.id) };
+    }
+
+    const lead = await prisma.lead.findFirst({ where });
+    if (!lead) {
+      throw new AppException(404, 'Lead introuvable ou vous n\'avez pas les permissions');
+    }
+
+    if (lead.status !== 'CANCEL_REASON_PRICE' || lead.requestedPriceStatus !== 'PENDING') {
+      throw new AppException(400, 'Ce lead n\'a pas de demande de prix en attente');
+    }
+
+    const newStatus = action === 'APPROVE' ? 'PRICE_CONFIRMED' : 'PRICE_REJECTED';
+
+    const updatedLead = await prisma.$transaction(async (tx) => {
+      await tx.leadStatusHistory.create({
+        data: {
+          leadId: lead.id,
+          oldStatus: lead.status,
+          newStatus,
+          changedBy: req.user!.id,
+          notes: `Demande de prix ${action === 'APPROVE' ? 'approuvée' : 'rejetée'}`
+        },
+      });
+
+      return tx.lead.update({
+        where: { id: lead.id },
+        data: {
+          status: newStatus,
+          requestedPriceStatus: action === 'APPROVE' ? 'APPROVED' : 'REJECTED',
+        },
+      });
+    });
+
+    res.json({
+      status: 'success',
+      message: `Demande de prix ${action === 'APPROVE' ? 'approuvée' : 'rejetée'}`,
+      data: { lead: updatedLead },
     });
   })
 );

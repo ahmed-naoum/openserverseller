@@ -21,7 +21,11 @@ router.get(
     };
 
     if (status && status !== 'ALL') {
-      where.status = status;
+      if (status === 'CLOSED') {
+        where.status = { in: ['CLOSED', 'RESOLVED'] };
+      } else {
+        where.status = status;
+      }
     }
 
     if (search) {

@@ -11,7 +11,11 @@ export const getMaintenanceStatus = async (req: Request, res: Response) => {
     const settings = await fetchMaintenanceSettings();
     return res.json({
       status: 'success',
-      data: { enabled: settings.enabled }
+      data: { 
+        enabled: settings.enabled,
+        registrationBlocked: settings.registrationBlocked,
+        influencerRegistrationBlocked: settings.influencerRegistrationBlocked
+      }
     });
   } catch (error) {
     return res.status(500).json({ status: 'error', message: 'Failed to fetch settings' });
@@ -55,7 +59,7 @@ export const verifyMaintenanceBypass = async (req: Request, res: Response) => {
 // Admin: PUT /api/v1/settings/maintenance
 export const updateMaintenanceMode = async (req: Request, res: Response) => {
   try {
-    const { enabled, secret } = req.body;
+    const { enabled, secret, registrationBlocked, influencerRegistrationBlocked } = req.body;
 
     if (typeof enabled !== 'boolean' || typeof secret !== 'string') {
         return res.status(400).json({ status: 'error', message: 'Invalid payload' });
@@ -64,11 +68,11 @@ export const updateMaintenanceMode = async (req: Request, res: Response) => {
     await prisma.platformSettings.upsert({
       where: { key: 'maintenance_mode' },
       update: {
-        value: { enabled, secret }
+        value: { enabled, secret, registrationBlocked: !!registrationBlocked, influencerRegistrationBlocked: !!influencerRegistrationBlocked }
       },
       create: {
         key: 'maintenance_mode',
-        value: { enabled, secret }
+        value: { enabled, secret, registrationBlocked: !!registrationBlocked, influencerRegistrationBlocked: !!influencerRegistrationBlocked }
       }
     });
 

@@ -19,7 +19,9 @@ export default function PlatformSettings() {
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState({
     enabled: false,
-    secret: 'silacod-admin'
+    secret: 'silacod-admin',
+    registrationBlocked: false,
+    influencerRegistrationBlocked: false
   });
 
   useEffect(() => {
@@ -101,6 +103,32 @@ export default function PlatformSettings() {
                   className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${settings.enabled ? 'bg-amber-500' : 'bg-slate-300'}`}
                >
                   <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${settings.enabled ? 'translate-x-7' : 'translate-x-1'}`} />
+               </button>
+            </div>
+
+            <div className="flex items-center justify-between p-6 bg-slate-50 rounded-2xl border border-slate-100">
+               <div className="max-w-[70%]">
+                 <p className="font-bold text-slate-700">Approbation Manuelle des Inscriptions</p>
+                 <p className="text-xs text-slate-500 mt-1">Les nouveaux utilisateurs doivent être approuvés par un admin avant d'accéder à la plateforme. Leurs données sont collectées normalement.</p>
+               </div>
+               <button 
+                  onClick={() => setSettings(s => ({ ...s, registrationBlocked: !s.registrationBlocked }))}
+                  className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${settings.registrationBlocked ? 'bg-rose-500' : 'bg-slate-300'}`}
+               >
+                  <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${settings.registrationBlocked ? 'translate-x-7' : 'translate-x-1'}`} />
+               </button>
+            </div>
+
+            <div className="flex items-center justify-between p-6 bg-slate-50 rounded-2xl border border-slate-100">
+               <div className="max-w-[70%]">
+                 <p className="font-bold text-slate-700">Approbation Influenceurs</p>
+                 <p className="text-xs text-slate-500 mt-1">Les nouveaux influenceurs doivent être approuvés avant d'accéder à leur espace. Indépendant du contrôle vendeurs.</p>
+               </div>
+               <button 
+                  onClick={() => setSettings(s => ({ ...s, influencerRegistrationBlocked: !s.influencerRegistrationBlocked }))}
+                  className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${settings.influencerRegistrationBlocked ? 'bg-violet-500' : 'bg-slate-300'}`}
+               >
+                  <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${settings.influencerRegistrationBlocked ? 'translate-x-7' : 'translate-x-1'}`} />
                </button>
             </div>
 
