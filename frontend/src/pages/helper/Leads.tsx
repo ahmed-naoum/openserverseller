@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import {
   Users, Plus, Search, Edit2, X, Save, ChevronLeft, ChevronRight,
   DollarSign, CheckCircle, AlertCircle, FileText, RefreshCw, ChevronDown, ShieldAlert,
-  Calendar, Clock, Truck
+  Calendar, Clock, Truck, Headphones
 } from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -131,6 +131,20 @@ export default function HelperLeads() {
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [expandedNotes, setExpandedNotes] = useState<number | null>(null);
+  
+  // Call Center Pushing States
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+  const [isPushingBulk, setIsPushingBulk] = useState(false);
 
   // Fetch leads
   const fetchLeads = useCallback(async () => {
@@ -324,6 +338,30 @@ export default function HelperLeads() {
     }
   };
 
+  const handlePushCallCenter = (lead: Lead) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Confirmation d'envoi",
+      message: "Envoyer 1 leads au Call Center ?",
+      onConfirm: async () => {
+        try {
+          setIsPushingBulk(true);
+          await api.patch('/leads/bulk-status', {
+            ids: [lead.id],
+            status: 'AVAILABLE'
+          });
+          toast.success("Lead envoyé au Call Center !");
+          fetchLeads();
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        } catch (err: any) {
+          toast.error(err.response?.data?.message || "Erreur lors de l'envoi");
+        } finally {
+          setIsPushingBulk(false);
+        }
+      }
+    });
+  };
+
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -421,7 +459,7 @@ export default function HelperLeads() {
                   <th className="px-4 py-4 text-left whitespace-nowrap">Contact & Livraison</th>
                   <th className="px-4 py-4 text-left whitespace-nowrap">Option</th>
                   <th className="px-4 py-4 text-left whitespace-nowrap">Source / Vendeur</th>
-                  <th className="px-4 py-4 text-left whitespace-nowrap">Agent / Statut</th>
+                  <th className="px-4 py-4 text-left whitespace-nowrap">Call Center</th>
                   <th className="px-4 py-4 text-right whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
@@ -519,47 +557,36 @@ export default function HelperLeads() {
                       )}
                     </td>
 
-                    {/* Agent & Status */}
+                    {/* Call Center */}
                     <td className="px-4 py-4 align-top">
                       <div className="flex flex-col gap-2">
-                        {/* Agent Assignment */}
-                        <div className="relative group/select">
-                          <Users size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 z-10" />
-                          <select
-                            value={(lead as any).assignedAgent?.id || ''}
-                            onChange={(e) => handleAssignAgent(lead.id, e.target.value)}
-                            className="text-[11px] font-bold pl-8 pr-6 py-1.5 rounded-lg border border-gray-100 bg-white hover:border-indigo-300 focus:ring-2 focus:ring-indigo-100 outline-none cursor-pointer transition-all appearance-none w-full shadow-sm"
+                        {lead.status === 'NEW' && (
+                          <button
+                            onClick={() => handlePushCallCenter(lead)}
+                            className="w-full py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-indigo-700 transition-all shadow-md flex justify-center items-center gap-1.5"
                           >
-                            <option value="">— Assigner Agent —</option>
-                            {agents.map(a => (
-                              <option key={a.id} value={a.id}>{a.fullName || a.email}</option>
-                            ))}
-                          </select>
-                          <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                        </div>
+                            <Headphones size={12} />
+                            Envoyer au Call Center
+                          </button>
+                        )}
 
-                        {/* Status Change */}
-                        <div className="relative">
-                          <select
-                            value={lead.status}
-                            onChange={(e) => handleStatusChange(lead, e.target.value)}
-                            disabled={!(lead as any).assignedAgent?.id || !!lead.coliatyPackageCode}
-                            className={`text-xs font-bold px-2.5 py-1.5 rounded-xl border-0 outline-none transition-all focus:ring-2 focus:ring-indigo-300 w-full shadow-sm ${STATUS_COLORS[lead.status] || 'bg-gray-100 text-gray-500'} ${(!(lead as any).assignedAgent?.id || !!lead.coliatyPackageCode) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                            style={{ appearance: 'none' }}
-                          >
-                            {[...new Set([lead.status, ...LEAD_STATUSES.filter(s => {
-                              if ((lead as any).assignedAgent?.id) {
-                                return s !== 'NEW';
-                              }
-                              return true;
-                            })])].map(s => (
-                              <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
-                            ))}
-                          </select>
-                          <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-50 pointer-events-none" />
-                        </div>
+                        {['AVAILABLE', 'ASSIGNED'].includes(lead.status) && (
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[10px] text-cyan-600 font-bold bg-cyan-50 border border-cyan-100 px-2.5 py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm font-mono uppercase tracking-wider">
+                              <Headphones size={12} className="text-cyan-500" />
+                              Au Call Center
+                            </span>
+                          </div>
+                        )}
 
-                        {/* Callback Date */}
+                        {!['NEW', 'AVAILABLE', 'ASSIGNED'].includes(lead.status) && (
+                          <div className="flex flex-col gap-1.5">
+                            <span className={`text-[11px] font-bold px-2.5 py-1.5 rounded-xl border text-center ${STATUS_COLORS[lead.status] || 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                              {lead.status.replace(/_/g, ' ')}
+                            </span>
+                          </div>
+                        )}
+
                         {lead.status === 'CALL_LATER' && lead.callbackAt && (
                           <div className="mt-1.5 flex items-center justify-center gap-1.5 px-2.5 py-1 bg-orange-50 border border-orange-100 rounded-xl text-[10px] font-black text-orange-600 animate-pulse shadow-sm">
                             <Clock size={10} className="text-orange-400" />
@@ -567,16 +594,15 @@ export default function HelperLeads() {
                           </div>
                         )}
 
-                        {/* Delivery Button */}
                         {['ORDERED', 'CONFIRMED'].includes(lead.status) && !lead.coliatyPackageCode && (
-                           <button
-                             onClick={() => handleOpenDeliveryModal(lead)}
-                             className="w-full mt-1.5 py-1.5 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase hover:bg-emerald-600 transition-all shadow-md flex justify-center items-center gap-1.5 group/ship"
-                           >
-                             <Truck size={12} className="group-hover/ship:translate-x-1 transition-transform" />
-                             Pousser à Coliaty 🚀
-                           </button>
-                         )}
+                          <button
+                            onClick={() => handleOpenDeliveryModal(lead)}
+                            className="w-full mt-1.5 py-1.5 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase hover:bg-emerald-600 transition-all shadow-md flex justify-center items-center gap-1.5 group/ship"
+                          >
+                            <Truck size={12} className="group-hover/ship:translate-x-1 transition-transform" />
+                            Pousser à Coliaty 🚀
+                          </button>
+                        )}
                       </div>
                     </td>
 
@@ -897,6 +923,40 @@ export default function HelperLeads() {
             </div>
           </form>
         </Modal>
+      )}
+      {/* Confirmation Modal */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2rem] w-full max-w-sm overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center bg-indigo-50 text-indigo-600">
+                <Headphones size={32} />
+              </div>
+              <h2 className="text-xl font-black text-slate-800 tracking-tight mb-2">
+                {confirmModal.title}
+              </h2>
+              <p className="text-sm text-slate-500 font-medium leading-relaxed">
+                {confirmModal.message}
+              </p>
+            </div>
+            
+            <div className="p-6 bg-slate-50/50 flex gap-3">
+              <button
+                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                className="flex-1 px-6 py-3 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 bg-white border border-slate-100 rounded-2xl transition-all shadow-sm"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={confirmModal.onConfirm}
+                disabled={isPushingBulk}
+                className="flex-1 px-6 py-3 text-xs font-black uppercase tracking-widest text-white rounded-2xl shadow-lg transition-all bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200"
+              >
+                {isPushingBulk ? 'En cours...' : 'Confirmer'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
