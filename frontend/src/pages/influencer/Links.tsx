@@ -392,8 +392,6 @@ export default function InfluencerLinks() {
             <div className="hidden lg:block h-8 w-[1px] bg-slate-100" />
             <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest">
               <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-blue-500 rounded-full" /> Visiteurs Uniques</div>
-              <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-purple-500 rounded-full" /> Ventes</div>
-              <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-indigo-500 rounded-full" /> Taux Conv.</div>
             </div>
           </div>
         </div>
@@ -406,7 +404,7 @@ export default function InfluencerLinks() {
             >
               <defs>
                 <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1}/>
+                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
                   <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                 </linearGradient>
               </defs>
@@ -430,14 +428,6 @@ export default function InfluencerLinks() {
                 tickLine={false} 
                 tick={{fontSize: 10, fontWeight: 700, fill: '#64748b'}} 
               />
-              <YAxis 
-                yAxisId="right"
-                orientation="right"
-                axisLine={false} 
-                tickLine={false} 
-                tick={{fontSize: 10, fontWeight: 700, fill: '#6366f1'}}
-                tickFormatter={(val) => `${val}%`}
-              />
               <RechartsTooltip 
                 contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '15px' }}
                 itemStyle={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase' }}
@@ -450,41 +440,18 @@ export default function InfluencerLinks() {
                   }
                   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
                 }}
-                formatter={(value, name) => {
-                  if (name === 'Taux Conv.') return [`${value}%`, name];
-                  return [value, name];
-                }}
               />
               <Area 
                 yAxisId="left"
                 type="monotone" 
                 dataKey="views" 
                 stroke="#3b82f6" 
-                strokeWidth={2}
-                fillOpacity={0} 
-                strokeOpacity={0}
-                activeDot={{ r: 4, strokeWidth: 0, fill: '#3b82f6' }}
+                strokeWidth={3}
+                fillOpacity={1} 
+                dot={{ r: 4, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }}
+                activeDot={{ r: 6, strokeWidth: 0, fill: '#3b82f6' }}
                 fill="url(#colorViews)" 
                 name="Visiteurs Uniques"
-              />
-              <Bar 
-                yAxisId="left"
-                dataKey="sales" 
-                fill="#8b5cf6" 
-                radius={[4, 4, 0, 0]} 
-                barSize={20} 
-                opacity={0}
-                name="Ventes" 
-              />
-              <Line 
-                yAxisId="right"
-                type="monotone" 
-                dataKey="convRate" 
-                stroke="#6366f1" 
-                strokeWidth={3}
-                dot={{ r: 4, fill: '#6366f1', strokeWidth: 2, stroke: '#fff' }}
-                activeDot={{ r: 6, strokeWidth: 0 }}
-                name="Taux Conv."
               />
             </ComposedChart>
           </ResponsiveContainer>
