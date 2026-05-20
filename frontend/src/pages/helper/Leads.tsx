@@ -70,6 +70,39 @@ const STATUS_COLORS: Record<string, string> = {
   INVALID: 'bg-rose-100 text-rose-600 border-rose-200',
 };
 
+const renderStatusBadge = (status: string) => {
+  const label = status.replace(/_/g, ' ');
+  let colorClasses = 'bg-gray-50 text-gray-600 border-gray-200';
+  let dotColor = 'bg-gray-400';
+
+  if (status === 'CONFIRMED') {
+    colorClasses = 'bg-emerald-50 text-emerald-700 border-emerald-200/60';
+    dotColor = 'bg-emerald-500';
+  } else if (status === 'ORDERED') {
+    colorClasses = 'bg-teal-50 text-teal-700 border-teal-200/60';
+    dotColor = 'bg-teal-500';
+  } else if (['NEW', 'AVAILABLE', 'ASSIGNED'].includes(status)) {
+    colorClasses = 'bg-blue-50 text-blue-700 border-blue-200/60';
+    dotColor = 'bg-blue-500';
+  } else if (status === 'CALL_LATER' || status === 'CALLBACK_REQUESTED') {
+    colorClasses = 'bg-amber-50 text-amber-700 border-amber-200/60';
+    dotColor = 'bg-amber-500';
+  } else if (status === 'NO_REPLY' || status === 'UNREACHABLE') {
+    colorClasses = 'bg-rose-50 text-rose-700 border-rose-200/60';
+    dotColor = 'bg-rose-500';
+  } else if (status === 'INVALID' || status === 'CANCEL_ORDER' || status === 'CANCEL_REASON_PRICE') {
+    colorClasses = 'bg-red-50 text-red-700 border-red-200/60';
+    dotColor = 'bg-red-500';
+  }
+
+  return (
+    <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1.5 rounded-xl border flex items-center justify-center gap-1.5 w-full ${colorClasses}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${dotColor} animate-pulse`} />
+      {label}
+    </span>
+  );
+};
+
 // ─── Empty form state ─────────────────────────────────────────────────────────
 const emptyForm = () => ({
   fullName: '', phone: '', whatsapp: '', city: '', address: '', notes: '', vendorId: '',
@@ -457,9 +490,9 @@ export default function HelperLeads() {
                 <tr className="border-b border-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-widest bg-gray-50/30">
                   <th className="px-6 py-4 text-left whitespace-nowrap">Infos Client & Notes</th>
                   <th className="px-4 py-4 text-left whitespace-nowrap">Contact & Livraison</th>
-                  <th className="px-4 py-4 text-left whitespace-nowrap">Option</th>
+                  <th className="px-4 py-4 text-left whitespace-nowrap">Pack & Prix</th>
                   <th className="px-4 py-4 text-left whitespace-nowrap">Source / Vendeur</th>
-                  <th className="px-4 py-4 text-left whitespace-nowrap">Call Center</th>
+                  <th className="px-4 py-4 text-left whitespace-nowrap min-w-[190px]">Call Center</th>
                   <th className="px-4 py-4 text-right whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
@@ -508,18 +541,18 @@ export default function HelperLeads() {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-4 align-top w-[120px]">
-                      <div className="flex flex-col gap-3">
+                    <td className="px-4 py-4 align-top w-[140px]">
+                      <div className="flex flex-col gap-2.5">
                         <div className="flex flex-col">
                           <span className="text-[9px] font-black tracking-widest text-gray-400 uppercase mb-1">Pack</span>
-                          <span className={`text-[11px] font-bold px-2.5 py-1 rounded-xl border w-fit ${lead.productVariant ? 'text-indigo-600 bg-indigo-50/50 border-indigo-100' : 'text-gray-400 bg-gray-50 border-gray-100'}`}>
+                          <span className={`text-[11px] font-bold px-2.5 py-1 rounded-xl border w-fit ${lead.productVariant ? 'text-indigo-700 bg-gradient-to-r from-indigo-50 to-violet-50 border-indigo-200/60 shadow-sm' : 'text-gray-400 bg-gray-50 border-gray-100'}`}>
                              {lead.productVariant || 'N/A'}
                           </span>
                         </div>
                         <div className="flex flex-col">
                           <span className="text-[9px] font-black tracking-widest text-gray-400 uppercase mb-1">Prix</span>
-                          <span className="text-[13px] font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-100 w-fit shadow-sm">
-                             {(lead.productPrice || lead.order?.totalAmountMad || 0).toLocaleString()} <span className="text-[9px]">MAD</span>
+                          <span className="text-[14px] font-black text-emerald-700 bg-gradient-to-r from-emerald-50 to-teal-50 px-3 py-1.5 rounded-xl border border-emerald-200/60 w-fit shadow-sm">
+                             {(lead.productPrice || lead.order?.totalAmountMad || 0).toLocaleString()} <span className="text-[9px] font-bold text-emerald-500">MAD</span>
                           </span>
                         </div>
                       </div>
@@ -563,17 +596,17 @@ export default function HelperLeads() {
                         {lead.status === 'NEW' && (
                           <button
                             onClick={() => handlePushCallCenter(lead)}
-                            className="w-full py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-indigo-700 transition-all shadow-md flex justify-center items-center gap-1.5"
+                            className="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl text-[10px] font-extrabold uppercase hover:from-indigo-700 hover:to-violet-700 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-md hover:shadow-indigo-500/25 flex justify-center items-center gap-1.5 whitespace-nowrap"
                           >
-                            <Headphones size={12} />
+                            <Headphones size={12} className="animate-bounce" style={{ animationDuration: '3s' }} />
                             Envoyer au Call Center
                           </button>
                         )}
 
                         {['AVAILABLE', 'ASSIGNED'].includes(lead.status) && (
                           <div className="flex flex-col gap-1">
-                            <span className="text-[10px] text-cyan-600 font-bold bg-cyan-50 border border-cyan-100 px-2.5 py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm font-mono uppercase tracking-wider">
-                              <Headphones size={12} className="text-cyan-500" />
+                            <span className="text-[10px] text-cyan-700 font-black bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-200/50 px-3 py-1.5 rounded-xl flex items-center justify-center gap-1.5 shadow-sm uppercase tracking-wider whitespace-nowrap">
+                              <Headphones size={12} className="text-cyan-500 animate-pulse" />
                               Au Call Center
                             </span>
                           </div>
@@ -581,14 +614,12 @@ export default function HelperLeads() {
 
                         {!['NEW', 'AVAILABLE', 'ASSIGNED'].includes(lead.status) && (
                           <div className="flex flex-col gap-1.5">
-                            <span className={`text-[11px] font-bold px-2.5 py-1.5 rounded-xl border text-center ${STATUS_COLORS[lead.status] || 'bg-gray-100 text-gray-500 border-gray-200'}`}>
-                              {lead.status.replace(/_/g, ' ')}
-                            </span>
+                            {renderStatusBadge(lead.status)}
                           </div>
                         )}
 
                         {lead.status === 'CALL_LATER' && lead.callbackAt && (
-                          <div className="mt-1.5 flex items-center justify-center gap-1.5 px-2.5 py-1 bg-orange-50 border border-orange-100 rounded-xl text-[10px] font-black text-orange-600 animate-pulse shadow-sm">
+                          <div className="mt-1 flex items-center justify-center gap-1.5 px-2.5 py-1 bg-orange-50 border border-orange-100 rounded-xl text-[10px] font-black text-orange-600 animate-pulse shadow-sm">
                             <Clock size={10} className="text-orange-400" />
                             {format(new Date(lead.callbackAt), 'dd MMM, HH:mm')}
                           </div>
@@ -597,7 +628,7 @@ export default function HelperLeads() {
                         {['ORDERED', 'CONFIRMED'].includes(lead.status) && !lead.coliatyPackageCode && (
                           <button
                             onClick={() => handleOpenDeliveryModal(lead)}
-                            className="w-full mt-1.5 py-1.5 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase hover:bg-emerald-600 transition-all shadow-md flex justify-center items-center gap-1.5 group/ship"
+                            className="w-full mt-1.5 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-[10px] font-extrabold uppercase hover:from-emerald-600 hover:to-teal-600 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-md hover:shadow-emerald-500/25 flex justify-center items-center gap-1.5 group/ship whitespace-nowrap"
                           >
                             <Truck size={12} className="group-hover/ship:translate-x-1 transition-transform" />
                             Pousser à Coliaty 🚀
@@ -610,11 +641,10 @@ export default function HelperLeads() {
                     <td className="px-4 py-4 align-top text-right">
                       <button
                         onClick={() => openEdit(lead)}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-600 text-indigo-600 hover:text-white rounded-xl transition-all shadow-sm group/btn"
-                        title="Détails & Modification"
+                        className="p-2.5 bg-gray-50 hover:bg-indigo-600 text-gray-400 hover:text-white rounded-xl transition-all shadow-sm hover:shadow-indigo-500/20 group/btn"
+                        title="Modifier"
                       >
-                        <Edit2 size={14} className="group-hover/btn:scale-110 transition-transform" />
-                        <span className="text-xs font-bold">Éditer</span>
+                        <Edit2 size={15} className="group-hover/btn:scale-110 transition-transform" />
                       </button>
                     </td>
                   </tr>
