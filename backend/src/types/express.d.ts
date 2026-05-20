@@ -17,6 +17,7 @@ declare global {
         canManageLeads: boolean;
         canManageOrders: boolean;
         canManageInfluencerLinks: boolean;
+        isImpersonated?: boolean;
       };
     }
   }
@@ -38,6 +39,7 @@ declare module 'express-serve-static-core' {
       canManageLeads: boolean;
       canManageOrders: boolean;
       canManageInfluencerLinks: boolean;
+      isImpersonated?: boolean;
     };
   }
 }

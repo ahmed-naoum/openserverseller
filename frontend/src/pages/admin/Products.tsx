@@ -42,7 +42,6 @@ export default function AdminProducts() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
-  const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const limit = 10;
@@ -89,16 +88,7 @@ export default function AdminProducts() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    try {
-      await productsApi.delete(id);
-      toast.success('Produit supprimé');
-      setDeletingProductId(null);
-      refetch();
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Erreur');
-    }
-  };
+
 
   const categories = categoriesData?.data?.data?.categories || [];
   const products = data?.data?.data?.products || [];
@@ -358,13 +348,7 @@ export default function AdminProducts() {
                             <Pencil size={16} className="group-hover/btn2:rotate-12 transition-transform" />
                           </button>
 
-                          <button 
-                            onClick={() => setDeletingProductId(product.id)}
-                            className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all shadow-sm"
-                            title="Supprimer"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+             
                         </div>
                       </td>
                     </tr>
@@ -416,38 +400,6 @@ export default function AdminProducts() {
         vendors={vendorsData?.data?.data?.users || []}
         editProduct={editingProduct}
       />
-
-      {/* Premium Delete Confirmation */}
-      {deletingProductId && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setDeletingProductId(null)} />
-          <div className="relative bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm p-8 z-10 border border-slate-100 animate-in zoom-in-95 duration-200">
-            <div className="flex flex-col items-center text-center">
-              <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-[2rem] flex items-center justify-center mb-6 shadow-xl shadow-rose-100/50">
-                <Trash2 size={32} />
-              </div>
-              <h3 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">Supprimer ?</h3>
-              <p className="text-slate-500 text-sm font-medium mb-8 leading-relaxed">
-                Cette action est définitive. Le produit sera retiré du catalogue et des stocks.
-              </p>
-              <div className="flex gap-4 w-full">
-                <button
-                  onClick={() => setDeletingProductId(null)}
-                  className="flex-1 px-6 py-4 rounded-2xl text-slate-500 font-black text-xs tracking-widest bg-slate-100 hover:bg-slate-200 transition-all"
-                >
-                  ANNULER
-                </button>
-                <button
-                  onClick={() => handleDelete(deletingProductId)}
-                  className="flex-1 px-6 py-4 rounded-2xl text-white font-black text-xs tracking-widest bg-rose-600 hover:bg-rose-700 shadow-xl shadow-rose-200 transition-all active:scale-95"
-                >
-                  SUPPRIMER
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

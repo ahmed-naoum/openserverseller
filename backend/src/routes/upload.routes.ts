@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { io } from '../index.js';
+import { uploadRateLimiter } from '../middleware/security.js';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -35,10 +36,12 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
-    if (allowedTypes.includes(file.mimetype)) {
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.pdf'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedTypes.includes(file.mimetype) && allowedExtensions.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type'));
+      cb(new Error('Invalid file type or extension'));
     }
   },
 });
@@ -48,7 +51,9 @@ const productImageUpload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
-    if (allowedTypes.includes(file.mimetype)) {
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedTypes.includes(file.mimetype) && allowedExtensions.includes(ext)) {
       cb(null, true);
     } else {
       cb(new Error('Seuls les formats PNG, JPG, JPEG et WEBP sont acceptés'));
@@ -60,6 +65,7 @@ const productImageUpload = multer({
 router.post(
   '/product-images',
   authenticate,
+  uploadRateLimiter,
   authorize('SUPER_ADMIN', 'ADMIN', 'GROSSELLER'),
   productImageUpload.array('images', 10),
   asyncHandler(async (req, res) => {
@@ -112,6 +118,7 @@ router.post(
 router.post(
   '/image',
   authenticate,
+  uploadRateLimiter,
   upload.single('file'),
   asyncHandler(async (req, res) => {
     if (!req.file) {
@@ -135,6 +142,7 @@ router.post(
 router.post(
   '/kyc',
   authenticate,
+  uploadRateLimiter,
   upload.array('files', 2),
   asyncHandler(async (req, res) => {
     if (!req.files || req.files.length !== 2) {
@@ -157,6 +165,7 @@ router.post(
 router.post(
   '/logo',
   authenticate,
+  uploadRateLimiter,
   upload.single('file'),
   asyncHandler(async (req, res) => {
     if (!req.file) {
@@ -178,6 +187,7 @@ router.post(
 router.post(
   '/bulk',
   authenticate,
+  uploadRateLimiter,
   authorize('SUPER_ADMIN'),
   upload.array('files', 20),
   asyncHandler(async (req, res) => {
@@ -209,7 +219,9 @@ const avatarUpload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
-    if (allowedTypes.includes(file.mimetype)) {
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedTypes.includes(file.mimetype) && allowedExtensions.includes(ext)) {
       cb(null, true);
     } else {
       cb(new Error('Seuls les formats PNG, JPG et WEBP sont acceptés'));
@@ -220,6 +232,7 @@ const avatarUpload = multer({
 router.post(
   '/avatar',
   authenticate,
+  uploadRateLimiter,
   avatarUpload.single('avatar'),
   asyncHandler(async (req, res) => {
     if (!req.file) {

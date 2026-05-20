@@ -548,7 +548,7 @@ export default function SiteBuilder() {
                         <h4 className="text-[10px] font-bold text-gray-400 uppercase">Options du Produit</h4>
                         <button 
                           onClick={() => {
-                            const newOptions = [...(activeBlock.content.options || []), { id: Math.random().toString(36).substr(2, 9), name: '', price: '' }];
+                            const newOptions = [...(activeBlock.content.options || []), { id: Math.random().toString(36).substr(2, 9), name: '', price: '', color: '' }];
                             updateBlockContent('options', newOptions);
                           }}
                           className="p-1 hover:bg-orange-50 text-orange-600 rounded-lg transition-all"
@@ -588,15 +588,19 @@ export default function SiteBuilder() {
                                 updateBlockContent('options', newOptions);
                               }} 
                             />
+                            <Field 
+                              label="Couleur du Pack" 
+                              type="color" 
+                              value={opt.color || activeBlock.content.packColor || '#f97316'} 
+                              onChange={(v: string) => {
+                                const newOptions = [...activeBlock.content.options];
+                                newOptions[index].color = v;
+                                updateBlockContent('options', newOptions);
+                              }} 
+                            />
                           </div>
                         ))}
                       </div>
-                      <Field 
-                        label="Couleur des Packs" 
-                        type="color" 
-                        value={activeBlock.content.packColor || '#f97316'} 
-                        onChange={(v: string) => updateBlockContent('packColor', v)} 
-                      />
                       <div className="grid grid-cols-2 gap-4 mt-2">
                         <Field 
                           label="Épaisseur Bordure" 
@@ -741,26 +745,30 @@ const CheckoutPreview = ({ content, product }: any) => {
 
       {content.options && content.options.length > 0 && (
         <div className="mb-8 grid grid-cols-1 gap-2">
-          {content.options.map((opt: any, i: number) => (
-            <div 
-              key={i} 
-              className={`py-3 px-3 transition-all flex justify-between items-center outline-none ${i === 0 ? '' : 'border-b border-gray-100'}`}
-              style={i === 0 ? { 
-                borderColor: content.packColor || '#f97316', 
-                borderWidth: `${content.packBorderWidth ?? 2}px`,
-                borderRadius: `${content.packBorderRadius ?? 16}px`,
-                backgroundColor: `${content.packColor || '#f97316'}10`
-              } : {}}
-            >
-              <div>
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Option {i + 1}</div>
-                <div className="font-black text-gray-900" style={i === 0 ? { color: content.packColor || '#f97316' } : {}}>{opt.name || `Pack ${i + 1}`}</div>
+          {content.options.map((opt: any, i: number) => {
+            const optionColor = opt.color || content.packColor || '#f97316';
+            const isFirst = i === 0;
+            return (
+              <div 
+                key={i} 
+                className={`py-3 px-3 transition-all flex justify-between items-center outline-none ${isFirst ? '' : 'border-b border-gray-100'}`}
+                style={isFirst ? { 
+                  borderColor: optionColor, 
+                  borderWidth: `${content.packBorderWidth ?? 2}px`,
+                  borderRadius: `${content.packBorderRadius ?? 16}px`,
+                  backgroundColor: `${optionColor}10`
+                } : {}}
+              >
+                <div>
+                  <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Option {i + 1}</div>
+                  <div className="font-black text-gray-900" style={isFirst ? { color: optionColor } : {}}>{opt.name || `Pack ${i + 1}`}</div>
+                </div>
+                <div className="text-lg font-black" style={{ color: isFirst ? optionColor : '#111827' }}>
+                  {opt.price || '...'} <span className="text-[10px] opacity-60">MAD</span>
+                </div>
               </div>
-              <div className="text-lg font-black" style={{ color: i === 0 ? (content.packColor || '#f97316') : '#111827' }}>
-                {opt.price || '...'} <span className="text-[10px] opacity-60">MAD</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
       

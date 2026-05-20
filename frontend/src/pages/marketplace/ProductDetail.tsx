@@ -399,40 +399,42 @@ export default function ProductDetail() {
             <ChevronLeft size={16} /> Back to Catalog
           </button>
 
-          <div className="flex items-center gap-3">
-             <div className="relative">
-               <button
-                 onClick={handleWholesaleOrder}
-                 disabled={!isBought && !isClaimed && !isCurrentlyPending && !showWholesaleBadge}
-                 className="px-6 py-3 bg-slate-900 text-white text-[11px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-slate-900/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-               >
-                 <ShoppingCart size={14} /> Wholesale Order
-               </button>
-               {showWholesaleBadge && (
-                 <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white animate-bounce">
-                   1
-                 </span>
-               )}
-             </div>
+          {user?.role !== 'HELPER' && (
+            <div className="flex items-center gap-3">
+               <div className="relative">
+                 <button
+                   onClick={handleWholesaleOrder}
+                   disabled={!isBought && !isClaimed && !isCurrentlyPending && !showWholesaleBadge}
+                   className="px-6 py-3 bg-slate-900 text-white text-[11px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-slate-900/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                 >
+                   <ShoppingCart size={14} /> Wholesale Order
+                 </button>
+                 {showWholesaleBadge && (
+                   <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white animate-bounce">
+                     1
+                   </span>
+                 )}
+               </div>
 
-             {isBought || isClaimed ? (
-               <div className="px-6 py-3 bg-[#21c55d]/10 text-[#21c55d] text-[11px] font-black uppercase tracking-widest rounded-xl border border-[#21c55d]/20 flex items-center gap-2">
-                 <Check size={14} strokeWidth={3} /> Product Active
-               </div>
-             ) : isCurrentlyPending ? (
-               <div className="px-6 py-3 bg-amber-500/10 text-amber-600 text-[11px] font-black uppercase tracking-widest rounded-xl border border-amber-500/20 flex items-center gap-2">
-                 <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse mr-2" /> Pending Approval
-               </div>
-             ) : (
-               <button
-                 onClick={handleAction}
-                 disabled={isSubmitting || (!isAffiliateClaimable && !tempPdfUrl && !isBought && !isClaimed)}
-                 className="px-8 py-3 bg-[#21c55d] text-white text-[11px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-green-500/20 hover:bg-[#19a34a] hover:scale-105 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50"
-               >
-                 <Plus size={14} strokeWidth={3} /> {isSubmitting ? 'Processing...' : actionText}
-               </button>
-             )}
-          </div>
+               {isBought || isClaimed ? (
+                 <div className="px-6 py-3 bg-[#21c55d]/10 text-[#21c55d] text-[11px] font-black uppercase tracking-widest rounded-xl border border-[#21c55d]/20 flex items-center gap-2">
+                   <Check size={14} strokeWidth={3} /> Product Active
+                 </div>
+               ) : isCurrentlyPending ? (
+                 <div className="px-6 py-3 bg-amber-500/10 text-amber-600 text-[11px] font-black uppercase tracking-widest rounded-xl border border-amber-500/20 flex items-center gap-2">
+                   <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse mr-2" /> Pending Approval
+                 </div>
+               ) : (
+                 <button
+                   onClick={handleAction}
+                   disabled={isSubmitting || (!isAffiliateClaimable && !tempPdfUrl && !isBought && !isClaimed)}
+                   className="px-8 py-3 bg-[#21c55d] text-white text-[11px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-green-500/20 hover:bg-[#19a34a] hover:scale-105 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50"
+                 >
+                   <Plus size={14} strokeWidth={3} /> {isSubmitting ? 'Processing...' : actionText}
+                 </button>
+               )}
+            </div>
+          )}
 
           <div className="hidden lg:flex items-center gap-4 text-right">
              <div className="flex flex-col">
@@ -484,7 +486,7 @@ export default function ProductDetail() {
           {/* Right Column: Steps & Accordions */}
           <div className="lg:col-span-5 space-y-4">
                      {/* Branding Section */}
-            {(!isAffiliateClaimable && (isVendorPurchasable || isInfluencerClaimable || isBought || isClaimed)) && (
+            {user?.role !== 'HELPER' && (!isAffiliateClaimable && (isVendorPurchasable || isInfluencerClaimable || isBought || isClaimed)) && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">

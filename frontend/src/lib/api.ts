@@ -1,4 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import toast from 'react-hot-toast';
 
 const API_URL = (import.meta.env as any).VITE_API_URL || 'http://localhost:3001/api/v1';
 export const BACKEND_URL = API_URL.replace('/api/v1', '');
@@ -26,6 +27,19 @@ export const api = axios.create({
 
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    // If helper is impersonating (assistance mode), block mutating actions
+    const isImpersonating = !!localStorage.getItem('originalToken');
+    const method = config.method?.toUpperCase();
+    const url = config.url || '';
+
+    if (isImpersonating && method && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      // Allow logout, revert, and non-mutating routes if any (logout is the only one needed here)
+      if (!url.includes('/auth/logout')) {
+        toast.error("Lecture seule : Les modifications ne sont pas autorisées en mode assistance.");
+        return Promise.reject(new Error("Lecture seule : Les modifications ne sont pas autorisées en mode assistance."));
+      }
+    }
+
     const token = localStorage.getItem('accessToken');
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -484,6 +498,8 @@ export const securityApi = {
   blockIP: (ip: string) => api.post('/admin/security/block-ip', { ip }),
   unblockIP: (ip: string) => api.delete('/admin/security/block-ip', { data: { ip } }),
   clearThreat: (ip?: string) => api.delete('/admin/security/clear-threat', { data: { ip } }),
+  getSettings: () => api.get('/admin/security/settings'),
+  updateSettings: (data: any) => api.put('/admin/security/settings', data),
 };
 
 export const settingsApi = {

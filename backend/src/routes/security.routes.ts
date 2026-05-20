@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { fetchSecuritySettings, clearSecurityCache, DynamicSecuritySettings } from '../middleware/security.js';
 import os from 'os';
 
 const router = Router();
@@ -39,6 +40,8 @@ router.get(
     const now = Date.now();
     const oneHour = 60 * 60 * 1000;
     const oneDay = 24 * oneHour;
+
+    const settings = await fetchSecuritySettings();
 
     // Active threats (login failures in last hour with ≥ 3 attempts)
     const activeThreats = Array.from(loginFailures.entries())
@@ -175,6 +178,9 @@ router.get(
       checks.filter(c => c.status === 'PASS').length / checks.length * 100
     );
 
+    // Merge in-memory and database blocked IPs
+    const allBlocked = Array.from(new Set([...settings.blockedIPs, ...Array.from(blockedIPs)]));
+
     res.json({
       status: 'success',
       data: {
@@ -183,7 +189,7 @@ router.get(
         threats: {
           active: activeThreats.slice(0, 20),
           suspicious: suspiciousIPs.slice(0, 20),
-          blockedIPs: Array.from(blockedIPs),
+          blockedIPs: allBlocked,
           failedLoginsLast24h: failedLogins,
         },
         system: {
@@ -217,13 +223,25 @@ router.post(
       return res.status(400).json({ status: 'error', message: 'Valid IP required' });
     }
 
-    blockedIPs.add(ip.trim());
+    const cleanIp = ip.trim();
+    blockedIPs.add(cleanIp);
     
-    // Persist to env (in-memory only — would need DB in production)
+    // Persist to database settings
+    const settings = await fetchSecuritySettings();
+    if (!settings.blockedIPs.includes(cleanIp)) {
+      settings.blockedIPs.push(cleanIp);
+      await prisma.platformSettings.upsert({
+        where: { key: 'security_settings' },
+        update: { value: settings as any },
+        create: { key: 'security_settings', value: settings as any }
+      });
+      clearSecurityCache();
+    }
+
     res.json({
       status: 'success',
-      message: `IP ${ip} blocked (session only — add to SECURITY_BLOCKED_IPS in .env for persistence)`,
-      blockedIPs: Array.from(blockedIPs),
+      message: `IP ${ip} blocked and persisted successfully`,
+      blockedIPs: settings.blockedIPs,
     });
   })
 );
@@ -237,14 +255,27 @@ router.delete(
     const { ip } = req.body;
     if (!ip) return res.status(400).json({ status: 'error', message: 'IP required' });
 
-    blockedIPs.delete(ip.trim());
-    loginFailures.delete(ip.trim());
-    suspiciousRequests.delete(ip.trim());
+    const cleanIp = ip.trim();
+    blockedIPs.delete(cleanIp);
+    loginFailures.delete(cleanIp);
+    suspiciousRequests.delete(cleanIp);
+
+    // Remove from database settings
+    const settings = await fetchSecuritySettings();
+    if (settings.blockedIPs.includes(cleanIp)) {
+      settings.blockedIPs = settings.blockedIPs.filter(x => x !== cleanIp);
+      await prisma.platformSettings.upsert({
+        where: { key: 'security_settings' },
+        update: { value: settings as any },
+        create: { key: 'security_settings', value: settings as any }
+      });
+      clearSecurityCache();
+    }
 
     res.json({
       status: 'success',
-      message: `IP ${ip} unblocked`,
-      blockedIPs: Array.from(blockedIPs),
+      message: `IP ${ip} unblocked successfully`,
+      blockedIPs: settings.blockedIPs,
     });
   })
 );
@@ -264,6 +295,86 @@ router.delete(
       suspiciousRequests.clear();
     }
     res.json({ status: 'success', message: ip ? `Threat record for ${ip} cleared` : 'All threat records cleared' });
+  })
+);
+
+// ─── GET /admin/security/settings ────────────────────────────────────────────
+router.get(
+  '/settings',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const settings = await fetchSecuritySettings();
+    res.json({
+      status: 'success',
+      data: settings,
+    });
+  })
+);
+
+// ─── PUT /admin/security/settings ────────────────────────────────────────────
+router.put(
+  '/settings',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const {
+      enableIPBlocking,
+      enableAuditLog,
+      enableRequestSanitization,
+      blockedIPs: reqBlockedIPs,
+      whitelistedIPs: reqWhitelistedIPs,
+      globalRateLimitWindowMs,
+      globalRateLimitMax,
+      uploadRateLimitMax,
+      payoutRateLimitMax,
+    } = req.body;
+
+    // Validate structure
+    if (
+      typeof enableIPBlocking !== 'boolean' ||
+      typeof enableAuditLog !== 'boolean' ||
+      typeof enableRequestSanitization !== 'boolean' ||
+      !Array.isArray(reqBlockedIPs) ||
+      !Array.isArray(reqWhitelistedIPs) ||
+      typeof globalRateLimitMax !== 'number' ||
+      typeof uploadRateLimitMax !== 'number' ||
+      typeof payoutRateLimitMax !== 'number'
+    ) {
+      return res.status(400).json({ status: 'error', message: 'Payload is invalid or has an incorrect structure' });
+    }
+
+    const payload: DynamicSecuritySettings = {
+      enableIPBlocking,
+      enableAuditLog,
+      enableRequestSanitization,
+      blockedIPs: reqBlockedIPs.map((ip: any) => String(ip).trim()).filter(Boolean),
+      whitelistedIPs: reqWhitelistedIPs.map((ip: any) => String(ip).trim()).filter(Boolean),
+      globalRateLimitWindowMs: typeof globalRateLimitWindowMs === 'number' ? globalRateLimitWindowMs : 900000,
+      globalRateLimitMax,
+      uploadRateLimitMax,
+      payoutRateLimitMax,
+    };
+
+    await prisma.platformSettings.upsert({
+      where: { key: 'security_settings' },
+      update: {
+        value: payload as any,
+      },
+      create: {
+        key: 'security_settings',
+        value: payload as any,
+      },
+    });
+
+    // Clear backend cached settings
+    clearSecurityCache();
+
+    res.json({
+      status: 'success',
+      message: 'Paramètres de sécurité mis à jour avec succès',
+      data: payload,
+    });
   })
 );
 

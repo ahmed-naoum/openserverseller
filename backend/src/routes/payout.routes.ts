@@ -4,6 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { encrypt, decrypt } from '../utils/crypto.js';
+import { payoutRateLimiter } from '../middleware/security.js';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -60,6 +61,7 @@ router.get(
 router.post(
   '/',
   authenticate,
+  payoutRateLimiter,
   authorize('SELLER', 'GROSSELLER', 'INFLUENCER'),
   [
     body('amountMad').isFloat({ min: 200 }),
@@ -135,9 +137,13 @@ router.patch(
   authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
+    const payoutId = Number(id);
+    if (isNaN(payoutId)) {
+      throw new AppException(400, 'Invalid Payout ID format');
+    }
     const { status: targetStatus } = req.body;
     
-    const payout = await prisma.payoutRequest.findUnique({ where: { id: Number(id) } });
+    const payout = await prisma.payoutRequest.findUnique({ where: { id: payoutId } });
     if (!payout) throw new AppException(404, 'Payout not found');
     
     const currentStatus = payout.status;
@@ -361,10 +367,14 @@ router.get(
   authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
+    const payoutId = Number(id);
+    if (isNaN(payoutId)) {
+      throw new AppException(400, 'Invalid Payout ID format');
+    }
     
     // 1. Get current payout
     const currentPayout = await prisma.payoutRequest.findUnique({
-      where: { id: Number(id) }
+      where: { id: payoutId }
     });
     
     if (!currentPayout) throw new AppException(404, 'Payout not found');

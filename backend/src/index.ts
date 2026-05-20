@@ -12,7 +12,7 @@ import routes from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { setupPassport } from './config/passport.js';
-import { securityHeaders, ipFilter, sanitizeInput, validateRequestSize } from './middleware/security.js';
+import { securityHeaders, ipFilter, sanitizeInput, validateRequestSize, globalRateLimiter, rateLimitCheckMiddleware } from './middleware/security.js';
 import { maintenanceMiddleware } from './middleware/maintenance.js';
 import { startLeadsReassignmentCron } from './jobs/leadReassignment.js';
 
@@ -63,7 +63,7 @@ setupPassport();
 
 app.use(maintenanceMiddleware);
 
-app.use(`${API_PREFIX}`, routes);
+app.use(`${API_PREFIX}`, rateLimitCheckMiddleware, globalRateLimiter, routes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

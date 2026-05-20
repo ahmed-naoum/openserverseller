@@ -344,8 +344,7 @@ export default function SettingsPage() {
   const tabs = [
     { id: 'profile', label: 'Profil', icon: User, desc: 'Informations personnelles' },
     { id: 'payment', label: 'Paiement', icon: CreditCard, desc: 'Configurez comment vous recevez vos commissions.' },
-    { id: 'password', label: 'Sécurité', icon: ShieldCheck, desc: 'Mots de passe et 2FA' },
-    { id: 'kyc', label: 'Vérification KYC', icon: Shield, desc: 'Validation du compte' }
+    { id: 'password', label: 'Sécurité', icon: ShieldCheck, desc: 'Mots de passe et 2FA' }
   ];
 
   return (
@@ -1099,13 +1098,12 @@ export default function SettingsPage() {
                 <div className="p-8 border-b border-gray-100 bg-gray-50/50">
                   <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
                     <Shield className="text-primary-500" size={28} />
-                    Vérification du profil (KYC)
+                    
                   </h2>
-                  <p className="text-gray-500 mt-1">Complétez les étapes ci-dessous pour valider votre compte.</p>
+                  <p className="text-gray-500 mt-1"></p>
                 </div>
                 
                 <div className="p-4 sm:p-8">
-                  <ProfileVerification hideHeader={true} />
                 </div>
               </div>
             )}

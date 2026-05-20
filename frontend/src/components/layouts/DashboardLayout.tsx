@@ -443,9 +443,9 @@ export default function DashboardLayout() {
     <div className="min-h-screen bg-[#F8FAFC] font-['Inter']">
       {/* Impersonation Banner */}
       {isImpersonating && (
-        <div className="bg-red-500 text-white text-center py-2 px-4 shadow-md sticky top-0 z-[100] flex items-center justify-center gap-4">
+        <div className="bg-gradient-to-r from-red-600 to-amber-600 text-white text-center py-2 px-4 shadow-md sticky top-0 z-[100] flex items-center justify-center gap-4 animate-pulse">
           <span className="font-bold text-sm">
-            ⚠️ Mode Assistance: Vous êtes connecté en tant que {user?.fullName || user?.email || 'un utilisateur'}.
+            ⚠️ Mode Assistance (Lecture Seule) : Vous êtes connecté en tant que {user?.fullName || user?.email || 'un utilisateur'}. Aucune action n'est autorisée.
           </span>
           <button
             onClick={revertImpersonation}

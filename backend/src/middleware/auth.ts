@@ -23,6 +23,7 @@ export const authenticate = async (
     
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
       userId: string;
+      isImpersonated?: boolean;
     };
 
     const user = await prisma.user.findUnique({
@@ -53,7 +54,20 @@ export const authenticate = async (
       canManageLeads: user.canManageLeads,
       canManageOrders: user.canManageOrders,
       canManageInfluencerLinks: user.canManageInfluencerLinks,
+      isImpersonated: decoded.isImpersonated || false,
     };
+
+    // If impersonated, block mutating actions (POST, PUT, PATCH, DELETE) except logout
+    if (
+      req.user.isImpersonated &&
+      ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method.toUpperCase()) &&
+      !req.path.includes('/auth/logout')
+    ) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Lecture seule : Les modifications ne sont pas autorisées en mode assistance.',
+      });
+    }
 
     await prisma.user.update({
       where: { id: user.id },
@@ -107,6 +121,7 @@ export const optionalAuth = async (
     
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
       userId: string;
+      isImpersonated?: boolean;
     };
 
     const user = await prisma.user.findUnique({
@@ -129,6 +144,7 @@ export const optionalAuth = async (
         canManageLeads: user.canManageLeads,
         canManageOrders: user.canManageOrders,
         canManageInfluencerLinks: user.canManageInfluencerLinks,
+        isImpersonated: decoded.isImpersonated || false,
       };
     }
 

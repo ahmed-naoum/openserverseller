@@ -183,7 +183,7 @@ export default function ReferralForm() {
                 <div className="grid grid-cols-1 gap-0">
                   {blockContent.options.map((opt: any, i: number) => {
                     const isSelected = selectedOption?.id === opt.id || (!selectedOption && i === 0);
-                    const accentColor = blockContent.packColor || '#f97316';
+                    const accentColor = opt.color || blockContent.packColor || '#f97316';
                     
                     return (
                       <div 

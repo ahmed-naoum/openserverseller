@@ -932,13 +932,27 @@ router.post(
       throw new AppException(404, 'User not found');
     }
 
-    // Prevent helpers from impersonating Super Admins
-    if (req.user!.roleName === 'HELPER' && targetUser.role.name === 'SUPER_ADMIN') {
-      throw new AppException(403, 'Permission denied. Cannot impersonate a Super Admin.');
+    // Prevent helpers from impersonating administrative, support, or other elevated roles
+    if (req.user!.roleName === 'HELPER') {
+      const allowedRoles = ['VENDOR', 'SELLER', 'GROSSELLER', 'INFLUENCER'];
+      if (!allowedRoles.includes(targetUser.role.name)) {
+        throw new AppException(403, "Permission denied. Helpers are only allowed to impersonate client roles (Vendor, Seller, Grosseller, Influencer).");
+      }
     }
 
-    // Generate tokens for the target user
-    const { accessToken, refreshToken } = generateTokens(targetUser.uuid);
+    // Generate tokens for the target user with isImpersonated claim
+    const jwt = require('jsonwebtoken');
+    const accessToken = jwt.sign(
+      { userId: targetUser.uuid, isImpersonated: true },
+      process.env.JWT_SECRET as string,
+      { expiresIn: (process.env.JWT_EXPIRES_IN || '7d') as any }
+    );
+
+    const refreshToken = jwt.sign(
+      { userId: targetUser.uuid, type: 'refresh', isImpersonated: true },
+      process.env.JWT_SECRET as string,
+      { expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '30d') as any }
+    );
 
     res.json({
       status: 'success',
