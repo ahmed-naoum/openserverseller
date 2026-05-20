@@ -372,10 +372,19 @@ export default function HelperLeads() {
   };
 
   const handlePushCallCenter = (lead: Lead) => {
+    // Frontend pre-check: look for duplicate phone numbers already at the Call Center
+    const duplicateAtCC = leads.find(
+      l => l.id !== lead.id && l.phone === lead.phone && ['AVAILABLE', 'ASSIGNED'].includes(l.status)
+    );
+    if (duplicateAtCC) {
+      toast.error(`⚠️ Doublon détecté : le numéro ${lead.phone} est déjà actif au Call Center (Lead #${duplicateAtCC.id})`);
+      return;
+    }
+
     setConfirmModal({
       isOpen: true,
       title: "Confirmation d'envoi",
-      message: "Envoyer 1 leads au Call Center ?",
+      message: `Envoyer le lead "${lead.fullName}" (${lead.phone}) au Call Center ?`,
       onConfirm: async () => {
         try {
           setIsPushingBulk(true);
