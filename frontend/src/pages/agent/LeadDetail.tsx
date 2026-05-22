@@ -116,7 +116,12 @@ export default function AgentLeadDetail() {
       // Check if sessionStorage is stale:
       if (savedStart) {
         const parsedStart = parseInt(savedStart, 10);
-        if (Date.now() - parsedStart > totalCooldownSeconds * 1000 || parsedStart < leadUpdatedAt - 5000) {
+        // Reset the timer if transitioning from ASSIGNED to WRONG_ORDER or CANCEL_ORDER
+        // The lead updated recently, but the savedStart is far behind (the original 7 min start)
+        if (isShortTimeout && (leadUpdatedAt - parsedStart > 5000)) {
+           sessionStorage.removeItem(storageKey);
+           savedStart = null;
+        } else if (Date.now() - parsedStart > totalCooldownSeconds * 1000 || parsedStart < leadUpdatedAt - 5000) {
           sessionStorage.removeItem(storageKey);
           savedStart = null;
         }
@@ -219,8 +224,8 @@ export default function AgentLeadDetail() {
       await leadsApi.updateStatus(String(id), { status, notes, ...extra });
       toast.success(`Statut mis à jour: ${status}`);
       
-      // Clear sessionStorage to prevent stale timers on re-testing
-      if (id) {
+      // Only clear timer if we're navigating away immediately (so the new status isn't tracked)
+      if (id && ['CALL_LATER', 'NO_REPLY', 'CONFIRMED', 'CANCEL_REASON_PRICE', 'INVALID'].includes(status)) {
         sessionStorage.removeItem(`lead_cooldown_${id}`);
       }
 
