@@ -16,8 +16,6 @@ export const startLeadsReassignmentCron = () => {
 
       const statusesToDrop = [
         'NO_REPLY',
-        'WRONG_ORDER',
-        'CANCEL_ORDER',
         'INVALID',
         'CONTACTED',
         'INTERESTED',
@@ -84,7 +82,7 @@ export const startLeadsReassignmentCron = () => {
       }
 
       // Check 2: Idle ASSIGNED leads
-      const idleThresholdDate = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes
+      const idleThresholdDate = new Date(Date.now() - 7 * 60 * 1000); // 7 minutes
       const idleLeads = await prisma.lead.findMany({
         where: {
           assignedAgentId: { not: null },
@@ -93,7 +91,7 @@ export const startLeadsReassignmentCron = () => {
         },
         select: { id: true, assignedAgentId: true, status: true }
       });
-
+ 
       if (idleLeads.length > 0) {
         console.log(`[Cron] Found ${idleLeads.length} idle ASSIGNED leads to unassign.`);
         for (const lead of idleLeads) {
@@ -109,13 +107,51 @@ export const startLeadsReassignmentCron = () => {
                 oldStatus: lead.status,
                 newStatus: 'AVAILABLE',
                 changedBy: lead.assignedAgentId!,
-                notes: 'Système : Lead désassigné automatiquement pour inactivité (5 minutes).',
+                notes: 'Système : Lead désassigné automatiquement pour inactivité (7 minutes).',
               }
             });
             
             await tx.lead.update({
               where: { id: lead.id },
               data: { assignedAgentId: null, status: 'AVAILABLE' }
+            });
+          });
+        }
+      }
+
+      // Check 3: WRONG_ORDER and CANCEL_ORDER leads unassignment after 2 minutes
+      const shortTimeoutThreshold = new Date(Date.now() - 2 * 60 * 1000); // 2 minutes
+      const shortTimeoutLeads = await prisma.lead.findMany({
+        where: {
+          assignedAgentId: { not: null },
+          status: { in: ['WRONG_ORDER', 'CANCEL_ORDER'] },
+          updatedAt: { lte: shortTimeoutThreshold }
+        },
+        select: { id: true, assignedAgentId: true, status: true }
+      });
+
+      if (shortTimeoutLeads.length > 0) {
+        console.log(`[Cron] Found ${shortTimeoutLeads.length} WRONG_ORDER/CANCEL_ORDER leads to unassign after 2 minutes.`);
+        for (const lead of shortTimeoutLeads) {
+          await prisma.$transaction(async (tx) => {
+            await tx.leadAssignment.updateMany({
+              where: { leadId: lead.id, agentId: lead.assignedAgentId!, unassignedAt: null },
+              data: { unassignedAt: new Date() }
+            });
+            
+            await tx.leadStatusHistory.create({
+              data: {
+                leadId: lead.id,
+                oldStatus: lead.status,
+                newStatus: lead.status,
+                changedBy: lead.assignedAgentId!,
+                notes: `Système : Agent désassigné après 2 minutes. Statut conservé: ${lead.status}.`,
+              }
+            });
+            
+            await tx.lead.update({
+              where: { id: lead.id },
+              data: { assignedAgentId: null }
             });
           });
         }

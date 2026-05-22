@@ -10,7 +10,11 @@ const AssignedTimer = ({ lead, onTimeout, isGirly, isPrincess }: { lead: any; on
   const [globalCooldown, setGlobalCooldown] = useState<number>(0);
 
   useEffect(() => {
-    if (lead.status !== 'ASSIGNED') return;
+    const isAssigned = lead.status === 'ASSIGNED';
+    const isWrongOrder = lead.status === 'WRONG_ORDER';
+    const isCancelOrder = lead.status === 'CANCEL_ORDER';
+
+    if (!isAssigned && !isWrongOrder && !isCancelOrder) return;
 
     const storageKey = `lead_cooldown_${lead.id}`;
     const savedStart = sessionStorage.getItem(storageKey);
@@ -18,9 +22,12 @@ const AssignedTimer = ({ lead, onTimeout, isGirly, isPrincess }: { lead: any; on
       ? parseInt(savedStart, 10) 
       : new Date(lead.updatedAt).getTime();
 
+    const isShortTimeout = isWrongOrder || isCancelOrder;
+    const totalCooldownSeconds = isShortTimeout ? 120 : 420; // 2 mins for short timeouts, 7 mins for ASSIGNED
+
     const calculateGlobal = () => {
       const elapsed = (Date.now() - startTime) / 1000;
-      return Math.max(0, 300 - elapsed);
+      return Math.max(0, totalCooldownSeconds - elapsed);
     };
 
     setGlobalCooldown(calculateGlobal());
@@ -37,11 +44,18 @@ const AssignedTimer = ({ lead, onTimeout, isGirly, isPrincess }: { lead: any; on
     return () => clearInterval(interval);
   }, [lead.status, lead.id, lead.updatedAt, onTimeout]);
 
-  if (lead.status !== 'ASSIGNED' || globalCooldown <= 0) return null;
+  const isAssigned = lead.status === 'ASSIGNED';
+  const isWrongOrder = lead.status === 'WRONG_ORDER';
+  const isCancelOrder = lead.status === 'CANCEL_ORDER';
+  if ((!isAssigned && !isWrongOrder && !isCancelOrder) || globalCooldown <= 0) return null;
+
+  const isShortTimeout = isWrongOrder || isCancelOrder;
 
   return (
     <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border flex items-center gap-1 animate-pulse ${
-      isPrincess
+      isShortTimeout
+        ? 'text-amber-800 bg-amber-50 border-amber-200'
+        : isPrincess
         ? 'text-amber-800 bg-amber-50 border-amber-200'
         : isGirly 
         ? 'text-rose-600 bg-rose-50 border-rose-100' 
@@ -114,7 +128,7 @@ export default function AgentLeads() {
 
       const myData = myRes.data?.data || myRes.data;
       const allMyLeads = myData?.leads || [];
-      const allowedAgentStatuses = ['ASSIGNED', 'CALL_LATER', 'NO_REPLY', 'CONFIRMED', 'WRONG_ORDER', 'CANCEL_REASON_PRICE', 'INVALID', 'CONTACTED', 'PRICE_CONFIRMED'];
+      const allowedAgentStatuses = ['ASSIGNED', 'CALL_LATER', 'NO_REPLY', 'CONFIRMED', 'WRONG_ORDER', 'CANCEL_REASON_PRICE', 'CANCEL_ORDER', 'INVALID', 'CONTACTED', 'PRICE_CONFIRMED'];
       setMyLeads(allMyLeads.filter((l: any) => allowedAgentStatuses.includes(l.status)));
     } catch (error) {
       console.error('Failed to load leads:', error);
@@ -534,6 +548,7 @@ export default function AgentLeads() {
               <option value="CONFIRMED">Confirmé</option>
               <option value="WRONG_ORDER">Mauvaise commande</option>
               <option value="CANCEL_REASON_PRICE">Annulé - Prix</option>
+              <option value="CANCEL_ORDER">Annulé</option>
               <option value="PRICE_CONFIRMED">Price CONFIRMED</option>
               <option value="INVALID">Invalide</option>
             </select>

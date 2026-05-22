@@ -1077,17 +1077,18 @@ router.patch(
   })
 );
 
-// PATCH /:id - Edit basic lead fields (HELPER, VENDOR, SUPER_ADMIN)
+// PATCH /:id - Edit basic lead fields (HELPER, VENDOR, SUPER_ADMIN, CALL_CENTER_AGENT)
 router.patch(
   '/:id',
   authenticate,
-  authorize('SUPER_ADMIN', 'VENDOR', 'HELPER'),
+  authorize('SUPER_ADMIN', 'VENDOR', 'HELPER', 'CALL_CENTER_AGENT'),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { fullName, phone, whatsapp, city, address, notes } = req.body;
 
     const where: any = { id: Number(id) };
     if (req.user!.roleName === 'VENDOR') where.vendorId = req.user!.id;
+    if (req.user!.roleName === 'CALL_CENTER_AGENT') where.assignedAgentId = req.user!.id;
 
     const lead = await prisma.lead.findFirst({ where });
     if (!lead) throw new AppException(404, 'Lead not found');

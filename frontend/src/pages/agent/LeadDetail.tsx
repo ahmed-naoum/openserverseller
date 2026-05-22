@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { leadsApi } from '../../lib/api';
 import toast from 'react-hot-toast';
@@ -57,6 +57,37 @@ export default function AgentLeadDetail() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [notes, setNotes] = useState('');
+  const [isEditingAddress, setIsEditingAddress] = useState(false);
+  const [editedAddress, setEditedAddress] = useState('');
+  const [editedCity, setEditedCity] = useState('');
+  const [savingAddress, setSavingAddress] = useState(false);
+  const [coliatyCities, setColiatyCities] = useState<any[]>([]);
+  const [loadingCities, setLoadingCities] = useState(false);
+  const [citySearch, setCitySearch] = useState('');
+  const [showCityDropdown, setShowCityDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowCityDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const fetchColiatyCities = async () => {
+    setLoadingCities(true);
+    try {
+      const res = await leadsApi.getColiatyCities();
+      setColiatyCities(res.data?.data || []);
+    } catch (err) {
+      console.error('Failed to load Coliaty cities');
+    } finally {
+      setLoadingCities(false);
+    }
+  };
   const [callbackDate, setCallbackDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [callbackHour, setCallbackHour] = useState<string>(format(new Date(), 'HH'));
   const [callbackMinute, setCallbackMinute] = useState<string>(format(new Date(), 'mm'));
@@ -70,18 +101,22 @@ export default function AgentLeadDetail() {
   const [globalCooldown, setGlobalCooldown] = useState<number>(0);
 
   useEffect(() => {
-    if (data?.lead?.status === 'ASSIGNED') {
+    const isAssigned = data?.lead?.status === 'ASSIGNED';
+    const isWrongOrder = data?.lead?.status === 'WRONG_ORDER';
+    const isCancelOrder = data?.lead?.status === 'CANCEL_ORDER';
+
+    if (isAssigned || isWrongOrder || isCancelOrder) {
       const storageKey = `lead_cooldown_${data.lead.id}`;
       let savedStart = sessionStorage.getItem(storageKey);
       
       const leadUpdatedAt = data?.lead?.updatedAt ? new Date(data.lead.updatedAt).getTime() : 0;
+      const isShortTimeout = isWrongOrder || isCancelOrder;
+      const totalCooldownSeconds = isShortTimeout ? 120 : 420; // 2 minutes for short timeouts, 7 minutes for ASSIGNED
       
       // Check if sessionStorage is stale:
-      // 1. If it's more than 5 minutes old (300,000 ms), it's definitely stale since the cron unassigns after 5m.
-      // 2. If it's older than the lead's updatedAt (with a 5 second tolerance for clock skew), it's from a previous assignment.
       if (savedStart) {
         const parsedStart = parseInt(savedStart, 10);
-        if (Date.now() - parsedStart > 5 * 60 * 1000 || parsedStart < leadUpdatedAt - 5000) {
+        if (Date.now() - parsedStart > totalCooldownSeconds * 1000 || parsedStart < leadUpdatedAt - 5000) {
           sessionStorage.removeItem(storageKey);
           savedStart = null;
         }
@@ -100,7 +135,7 @@ export default function AgentLeadDetail() {
 
       const calculateGlobal = () => {
         const elapsed = (Date.now() - startTime) / 1000;
-        return Math.max(0, 300 - elapsed);
+        return Math.max(0, totalCooldownSeconds - elapsed);
       };
 
       setCooldownRemaining(calculateRemaining());
@@ -115,10 +150,14 @@ export default function AgentLeadDetail() {
         
         if (globalRemaining <= 0) {
           clearInterval(interval);
-          toast.error("Temps écoulé : Le lead a été réassigné automatiquement.");
+          if (isWrongOrder) {
+            toast.error("Délai expiré : Le lead erroné a été libéré automatiquement.");
+          } else if (isCancelOrder) {
+            toast.error("Délai expiré : Le lead annulé a été libéré automatiquement.");
+          } else {
+            toast.error("Temps écoulé : Le lead a été réassigné automatiquement.");
+          }
           navigate('/agent/leads');
-        } else if (remaining <= 0) {
-          // Keep ticking for the global remaining
         }
       }, 1000);
 
@@ -134,6 +173,7 @@ export default function AgentLeadDetail() {
 
   useEffect(() => {
     loadDetail();
+    fetchColiatyCities();
   }, [id]);
 
   const loadDetail = async () => {
@@ -142,11 +182,34 @@ export default function AgentLeadDetail() {
       const d = res.data?.data || res.data;
       setData(d);
       setNotes(d?.lead?.notes || '');
+      setEditedAddress(d?.lead?.address || '');
+      setEditedCity(d?.lead?.city || '');
+      setCitySearch(d?.lead?.city || '');
     } catch (err: any) {
       toast.error('Lead introuvable');
       navigate('/agent/leads');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveAddress = async () => {
+    if (!data?.lead?.id) return;
+    setSavingAddress(true);
+    try {
+      await leadsApi.update(String(data.lead.id), {
+        address: editedAddress,
+        city: editedCity
+      });
+      toast.success("Adresse et ville mises à jour avec succès !");
+      setIsEditingAddress(false);
+      setShowCityDropdown(false);
+      setCitySearch(editedCity);
+      loadDetail();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Erreur lors de la mise à jour de l'adresse");
+    } finally {
+      setSavingAddress(false);
     }
   };
 
@@ -161,7 +224,7 @@ export default function AgentLeadDetail() {
         sessionStorage.removeItem(`lead_cooldown_${id}`);
       }
 
-      if (['CALL_LATER', 'NO_REPLY', 'CONFIRMED', 'WRONG_ORDER', 'CANCEL_REASON_PRICE', 'CANCEL_ORDER', 'INVALID'].includes(status)) {
+      if (['CALL_LATER', 'NO_REPLY', 'CONFIRMED', 'CANCEL_REASON_PRICE', 'INVALID'].includes(status)) {
         navigate('/agent/leads');
       } else {
         loadDetail();
@@ -248,7 +311,7 @@ export default function AgentLeadDetail() {
             </div>
           </div>
 
-          {lead.status === 'ASSIGNED' && globalCooldown > 0 && (
+          {(lead.status === 'ASSIGNED' || lead.status === 'WRONG_ORDER' || lead.status === 'CANCEL_ORDER') && globalCooldown > 0 && (
             <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold animate-pulse border ${
               isPrincess ? 'bg-amber-50 border-amber-200 text-amber-600' : isGirly ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-red-50 border-red-200 text-red-600'
             }`}>
@@ -442,6 +505,135 @@ export default function AgentLeadDetail() {
           </div>
         </div>
       )}
+
+      {/* Adresse & Ville Modification Card */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold text-gray-900 flex items-center gap-2">
+            📍 Adresse & Ville de livraison
+          </h2>
+          {(editedAddress !== (lead.address || '') || editedCity !== (lead.city || '')) && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setEditedAddress(lead.address || '');
+                  setEditedCity(lead.city || '');
+                  setCitySearch(lead.city || '');
+                  setShowCityDropdown(false);
+                  toast.info("Modifications annulées");
+                }}
+                className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-700 rounded-xl transition-all text-xs font-black"
+                title="Annuler les modifications et restaurer les anciennes valeurs"
+              >
+                ✕ Annuler
+              </button>
+              <button
+                onClick={handleSaveAddress}
+                disabled={savingAddress}
+                className={`px-3 py-1.5 text-white font-bold text-xs rounded-xl transition-all uppercase tracking-wider ${
+                  isPrincess 
+                    ? 'bg-gradient-to-r from-amber-500 to-rose-500 shadow-sm shadow-amber-500/20 hover:from-amber-600 hover:to-rose-600' 
+                    : isGirly 
+                    ? 'bg-gradient-to-r from-pink-500 to-rose-500 shadow-sm shadow-pink-500/20 hover:from-pink-600 hover:to-rose-600' 
+                    : 'bg-indigo-600 hover:bg-indigo-700 shadow-sm shadow-indigo-600/20'
+                }`}
+              >
+                {savingAddress ? 'Enregistrement...' : '✓ Enregistrer'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="md:col-span-1 space-y-1 relative" ref={dropdownRef}>
+            <label className="text-xs text-gray-400 font-bold uppercase tracking-wider">Ville</label>
+            <div className="relative">
+              <input
+                type="text"
+                value={citySearch}
+                onChange={(e) => {
+                  setCitySearch(e.target.value);
+                  setShowCityDropdown(true);
+                  setEditedCity(e.target.value);
+                }}
+                onFocus={() => setShowCityDropdown(true)}
+                placeholder="Rechercher une ville..."
+                className={`w-full pl-3 pr-10 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:bg-white focus:ring-2 focus:border-transparent outline-none transition-all ${
+                  isPrincess ? 'focus:ring-amber-400' : isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-500'
+                }`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowCityDropdown(!showCityDropdown)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors text-xs"
+              >
+                {showCityDropdown ? '▲' : '▼'}
+              </button>
+            </div>
+
+            {/* Searchable Floating Cities Dropdown */}
+            {showCityDropdown && (
+              <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-gray-100 rounded-xl shadow-2xl z-50 p-2 space-y-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                {loadingCities ? (
+                  <div className="text-xs text-gray-400 text-center py-3 animate-pulse">
+                    Chargement des villes de Coliaty...
+                  </div>
+                ) : (() => {
+                  const filtered = coliatyCities.filter(c =>
+                    c.city_name?.toLowerCase().includes(citySearch.toLowerCase())
+                  );
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="text-xs text-gray-400 text-center py-3">
+                        Aucune ville officielle trouvée. Conserver "{citySearch}"
+                      </div>
+                    );
+                  }
+
+                  return filtered.map((c) => (
+                    <button
+                      key={c.city_id}
+                      type="button"
+                      onClick={() => {
+                        setEditedCity(c.city_name);
+                        setCitySearch(c.city_name);
+                        setShowCityDropdown(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all flex items-center justify-between ${
+                        editedCity === c.city_name
+                          ? isPrincess
+                            ? 'bg-amber-50 text-amber-700 font-bold'
+                            : isGirly
+                            ? 'bg-pink-50 text-pink-700 font-bold'
+                            : 'bg-indigo-50 text-indigo-700 font-bold'
+                          : 'hover:bg-gray-50 text-gray-700 font-medium'
+                      }`}
+                    >
+                      <span>{c.city_name}</span>
+                      <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-md font-mono font-bold">
+                        {c.hub_name}
+                      </span>
+                    </button>
+                  ));
+                })()}
+              </div>
+            )}
+          </div>
+          <div className="md:col-span-2 space-y-1">
+            <label className="text-xs text-gray-400 font-bold uppercase tracking-wider">Adresse complète</label>
+            <input
+              type="text"
+              value={editedAddress}
+              onChange={(e) => setEditedAddress(e.target.value)}
+              placeholder="Saisissez l'adresse complète de livraison..."
+              className={`w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:bg-white focus:ring-2 focus:border-transparent outline-none transition-all ${
+                isPrincess ? 'focus:ring-amber-400' : isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-500'
+              }`}
+            />
+          </div>
+        </div>
+      </div>
 
       {/* Notes */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
