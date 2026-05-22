@@ -52,8 +52,8 @@ const ALL_STATUS_BADGES: Record<string, { label: string; color: string; icon: Re
   'CONFIRMED': { label: 'Confirmé', color: 'bg-blue-50 text-blue-600 border border-blue-100', icon: CheckCircle2 },
   'SHIPPED': { label: 'Expédié', color: 'bg-violet-50 text-violet-600 border border-violet-100', icon: Truck },
   'CANCELLED': { label: 'Annulé', color: 'bg-red-50 text-red-600 border border-red-100', icon: AlertCircle },
-  'PRICE_CONFIRMED': { label: 'price CONFIRMED', color: 'bg-blue-50 text-blue-600 border border-blue-100', icon: CheckCircle2 },
-  'PRICE_REJECTED': { label: 'price rejected', color: 'bg-rose-50 text-rose-600 border border-rose-100', icon: X },
+  'PRICE_CONFIRMED': { label: 'Prix Confirmé', color: 'bg-blue-50 text-blue-600 border border-blue-100', icon: CheckCircle2 },
+  'PRICE_REJECTED': { label: 'Prix Refusé', color: 'bg-rose-50 text-rose-600 border border-rose-100', icon: X },
 };
 
 const PAYMENT_SITUATION_BADGES: Record<string, { label: string; color: string }> = {
@@ -534,7 +534,7 @@ export default function InfluencerLeads() {
         <div className="space-y-6 animate-fadeIn">
           
           {/* Global Stats Filter */}
-          <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm flex flex-col xl:flex-row items-start xl:items-center gap-4 justify-between">
+          <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col xl:flex-row items-start xl:items-center gap-4 justify-between">
             <div className="flex items-center gap-2 mb-2 xl:mb-0">
               <Filter className="w-4 h-4 text-influencer-500" />
               <span className="text-xs font-black text-gray-900 uppercase tracking-widest">Filtres Globaux</span>
@@ -593,12 +593,12 @@ export default function InfluencerLeads() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm text-center">
+            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center">
               <Zap className="w-5 h-5 mx-auto mb-2 text-green-500" />
               <h3 className="text-xl font-black text-gray-900">{totalLeads.toLocaleString()}</h3>
               <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">Total Leads</p>
             </div>
-            <div className="relative bg-white rounded-3xl p-5 border border-gray-100 shadow-sm text-center border-b-4 border-b-amber-400 pb-8">
+            <div className="relative bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center border-b-4 border-b-amber-400 pb-8">
               <CheckCircle2 className="w-5 h-5 mx-auto mb-2 text-amber-600" />
               <h3 className="text-xl font-black text-amber-600">{confirmationRate.toFixed(1)}%</h3>
               <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">Taux de Confirmation</p>
@@ -606,7 +606,7 @@ export default function InfluencerLeads() {
                 {confirmedLeads} LEADS CONFIRMÉS
               </div>
             </div>
-            <div className="relative bg-white rounded-3xl p-5 border border-gray-100 shadow-sm text-center border-b-4 border-b-emerald-400 pb-8">
+            <div className="relative bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center border-b-4 border-b-emerald-400 pb-8">
               <Truck className="w-5 h-5 mx-auto mb-2 text-emerald-600" />
               <h3 className="text-xl font-black text-emerald-600">{deliveryRate.toFixed(1)}%</h3>
               <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">Taux de Livraison</p>
@@ -617,7 +617,7 @@ export default function InfluencerLeads() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+            <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
                 <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-influencer-500" />
@@ -644,7 +644,7 @@ export default function InfluencerLeads() {
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col">
+            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col">
                <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-2 mb-6">
                   <MapPin className="w-4 h-4 text-orange-500" />
                   Top Villes Performance
@@ -689,7 +689,7 @@ export default function InfluencerLeads() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
             {/* Confirmation Analytics */}
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col">
+            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col">
               <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-2 mb-6">
                 <PieIcon className="w-4 h-4 text-blue-500" />
                 Analyse de Confirmation
@@ -741,7 +741,7 @@ export default function InfluencerLeads() {
             </div>
 
             {/* Delivery Analytics */}
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col">
+            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col">
               <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-2 mb-6">
                 <Truck className="w-4 h-4 text-emerald-500" />
                 Analyse de Livraison
@@ -797,7 +797,7 @@ export default function InfluencerLeads() {
   )}
 
   {/* Search + Filters Bar */}
-    <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm">
+    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-4">
           {/* Status Filter */}
           <div className="relative min-w-[220px]">
@@ -1312,7 +1312,7 @@ export default function InfluencerLeads() {
       {/* History Modal */}
       {historyModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-[2rem] w-full max-w-lg overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200">
             {/* Header */}
             <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100">
               <div className="flex-1">
@@ -1414,7 +1414,7 @@ export default function InfluencerLeads() {
       {/* Duplicate Check Modal */}
       {duplicateCheck.isOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[150] p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl border border-white/20 animate-in zoom-in-95 duration-300">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl border border-white/20 animate-in zoom-in-95 duration-300">
             <div className="p-8 border-b border-gray-100">
               <div className="flex items-center justify-between">
                 <div>
@@ -1454,7 +1454,7 @@ export default function InfluencerLeads() {
                 {Object.entries(duplicateCheck.groups)
                   .filter(([_, group]) => group.length > 1)
                   .map(([phone, group], groupIdx) => (
-                    <div key={phone} className="bg-slate-50/50 border border-slate-100 rounded-[2rem] overflow-hidden shadow-sm transition-all hover:shadow-md">
+                    <div key={phone} className="bg-slate-50/50 border border-slate-100 rounded-2xl overflow-hidden shadow-sm transition-all hover:shadow-md">
                       <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
@@ -1629,7 +1629,7 @@ export default function InfluencerLeads() {
       {/* Confirmation Modal */}
       {confirmModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-[2rem] w-full max-w-sm overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200">
             <div className="p-6 text-center">
               <div className={`w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center ${confirmModal.variant === 'danger' ? 'bg-red-50 text-red-500' : 'bg-influencer-50 text-influencer-600'}`}>
                 {confirmModal.variant === 'danger' ? <AlertCircle size={32} /> : <Headphones size={32} />}

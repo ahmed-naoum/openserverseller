@@ -124,6 +124,29 @@ const historyStatusLabels: Record<string, string> = {
 };
 
 export default function AgentLivraison() {
+  const [theme, setTheme] = useState<'classic' | 'girly' | 'princess'>(() => {
+    return (localStorage.getItem('agent-theme') as 'classic' | 'girly' | 'princess') || 'girly';
+  });
+
+  const changeTheme = (next: 'classic' | 'girly' | 'princess') => {
+    setTheme(next);
+    localStorage.setItem('agent-theme', next);
+    window.dispatchEvent(new Event('agent-theme-change'));
+  };
+
+  useEffect(() => {
+    const syncTheme = () => {
+      const current = (localStorage.getItem('agent-theme') as 'classic' | 'girly' | 'princess') || 'girly';
+      setTheme(current);
+    };
+    window.addEventListener('agent-theme-change', syncTheme);
+    return () => window.removeEventListener('agent-theme-change', syncTheme);
+  }, []);
+
+  const isClassic = theme === 'classic';
+  const isGirly = theme === 'girly';
+  const isPrincess = theme === 'princess';
+
   const [parcels, setParcels] = useState<Parcel[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -348,17 +371,45 @@ export default function AgentLivraison() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
+          <h1 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg ${
+              isPrincess
+                ? 'bg-gradient-to-br from-amber-400 via-pink-500 to-rose-500 shadow-amber-200'
+                : isGirly 
+                ? 'bg-gradient-to-br from-pink-400 to-rose-500 shadow-pink-200' 
+                : 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-indigo-200'
+            }`}>
               <Truck className="w-5 h-5 text-white" />
             </div>
-            Livraison Coliaty
+            {isPrincess ? 'Livraison Princesse Royale 👑' : isGirly ? 'Livraison Coliaty 🌸' : 'Livraison Coliaty'}
           </h1>
           <p className="text-sm text-gray-500 mt-1 ml-13">
             Suivez vos colis envoyés à la livraison via Coliaty
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Theme Dropdown Select */}
+          <div className="relative inline-block">
+            <select
+              value={theme}
+              onChange={(e) => changeTheme(e.target.value as any)}
+              className={`pl-3 pr-8 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300 shadow-sm border outline-none appearance-none cursor-pointer ${
+                isPrincess 
+                  ? 'bg-gradient-to-r from-amber-500 via-pink-500 to-rose-500 text-white border-amber-600 shadow-md shadow-amber-500/20'
+                  : isGirly 
+                  ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white border-pink-600 shadow-md shadow-pink-500/20' 
+                  : 'bg-indigo-600 text-white border-indigo-700'
+              }`}
+            >
+              <option value="classic" className="text-gray-900 bg-white font-bold">🕶️ Classique</option>
+              <option value="girly" className="text-gray-900 bg-white font-bold">🌸 Thème Girly ✨</option>
+              <option value="princess" className="text-gray-900 bg-white font-bold">💅 Princess Pink 👑</option>
+            </select>
+            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-white font-black text-[8px]">
+              ▼
+            </div>
+          </div>
+
           {/* Live connection indicator */}
           <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border ${
             liveConnected
@@ -385,12 +436,17 @@ export default function AgentLivraison() {
       {/* Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: 'Total envoyés', value: stats.total, icon: Package, color: 'from-blue-500 to-indigo-500', shadow: 'shadow-blue-200' },
-          { label: 'Avec Coliaty', value: stats.withColiaty, icon: Truck, color: 'from-purple-500 to-pink-500', shadow: 'shadow-purple-200' },
+          { label: 'Total envoyés', value: stats.total, icon: Package, color: isPrincess ? 'from-amber-400 via-pink-500 to-rose-500' : isGirly ? 'from-pink-400 to-rose-500' : 'from-blue-500 to-indigo-500', shadow: isPrincess ? 'shadow-amber-100' : isGirly ? 'shadow-pink-100' : 'shadow-blue-200' },
+          { label: 'Avec Coliaty', value: stats.withColiaty, icon: Truck, color: isPrincess ? 'from-amber-400 to-rose-500' : isGirly ? 'from-rose-400 to-fuchsia-500' : 'from-purple-500 to-pink-500', shadow: isPrincess ? 'shadow-amber-100' : isGirly ? 'shadow-fuchsia-100' : 'shadow-purple-200' },
           { label: 'En attente', value: stats.pending, icon: Clock, color: 'from-amber-400 to-orange-500', shadow: 'shadow-amber-200' },
           { label: 'Livré', value: stats.delivered, icon: CheckCircle2, color: 'from-emerald-400 to-teal-500', shadow: 'shadow-emerald-200' },
         ].map(stat => (
-          <div key={stat.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-shadow">
+          <div 
+            key={stat.label} 
+            className={`bg-white rounded-2xl border shadow-sm p-5 hover:shadow-md transition-all duration-300 ${
+              isPrincess ? 'border-amber-100/40' : isGirly ? 'border-pink-100/40' : 'border-gray-100'
+            }`}
+          >
             <div className={`w-10 h-10 bg-gradient-to-br ${stat.color} rounded-xl flex items-center justify-center shadow-lg ${stat.shadow} mb-3`}>
               <stat.icon className="w-5 h-5 text-white" />
             </div>
@@ -401,7 +457,9 @@ export default function AgentLivraison() {
       </div>
 
       {/* Filters Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row items-center gap-4">
+      <div className={`bg-white p-4 rounded-2xl border shadow-sm flex flex-col md:flex-row items-center gap-4 ${
+        isPrincess ? 'border-amber-100/40' : isGirly ? 'border-pink-100/40' : 'border-gray-100'
+      }`}>
         <div className="relative flex-1 w-full">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
@@ -409,19 +467,23 @@ export default function AgentLivraison() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Rechercher par nom, téléphone, ville, code Coliaty..."
-            className="w-full pl-10 pr-4 py-2.5 bg-gray-50/50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+            className={`w-full pl-10 pr-4 py-2.5 bg-gray-50/50 border border-gray-200 rounded-xl text-sm outline-none transition-all ${
+              isPrincess ? 'focus:ring-2 focus:ring-amber-400 focus:border-transparent' : isGirly ? 'focus:ring-2 focus:ring-pink-400 focus:border-transparent' : 'focus:ring-2 focus:ring-indigo-500 focus:border-transparent'
+            }`}
           />
         </div>
 
         <div className="flex items-center gap-3 w-full md:w-auto">
           <div className="relative flex-1 md:min-w-[240px]">
             <div className="absolute left-3.5 top-1/2 -translate-y-1/2">
-              <Package className="w-4 h-4 text-indigo-500" />
+              <Package className={`w-4 h-4 ${isPrincess ? 'text-amber-500' : isGirly ? 'text-pink-500' : 'text-indigo-500'}`} />
             </div>
             <select
               value={selectedStatus}
               onChange={e => setSelectedStatus(e.target.value)}
-              className="w-full pl-10 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 rounded-xl text-sm font-bold text-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none appearance-none cursor-pointer hover:bg-gray-100/50 transition-colors"
+              className={`w-full pl-10 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 rounded-xl text-sm font-bold text-gray-700 outline-none appearance-none cursor-pointer hover:bg-gray-100/50 transition-all ${
+                isPrincess ? 'focus:ring-2 focus:ring-amber-400' : isGirly ? 'focus:ring-2 focus:ring-pink-400' : 'focus:ring-2 focus:ring-indigo-500'
+              }`}
             >
               <option value="ALL">Tous les statuts ({parcels.length})</option>
               {Object.entries(statusConfig)
@@ -444,7 +506,11 @@ export default function AgentLivraison() {
                 setSearch('');
                 setSelectedStatus('ALL');
               }}
-              className="px-4 py-2.5 text-xs font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 rounded-xl border border-indigo-100 transition-all whitespace-nowrap"
+              className={`px-4 py-2.5 text-xs font-bold rounded-xl border transition-all whitespace-nowrap ${
+                isGirly 
+                  ? 'text-pink-600 hover:text-pink-700 bg-pink-50 border-pink-100' 
+                  : 'text-indigo-600 hover:text-indigo-700 bg-indigo-50 border-indigo-100'
+              }`}
             >
               Réinitialiser
             </button>
@@ -455,13 +521,17 @@ export default function AgentLivraison() {
       {/* Parcels List */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-16 gap-4">
-          <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-500 rounded-full animate-spin" />
+          <div className={`w-12 h-12 border-4 rounded-full animate-spin ${
+            isGirly ? 'border-pink-100 border-t-pink-500' : 'border-indigo-100 border-t-indigo-500'
+          }`} />
           <p className="text-gray-400 text-sm font-medium">Chargement des livraisons...</p>
         </div>
       ) : filtered.length === 0 ? (
         <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-16 text-center">
-          <div className="w-20 h-20 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-full flex items-center justify-center mx-auto mb-5">
-            <Truck className="w-10 h-10 text-indigo-300" />
+          <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 ${
+            isGirly ? 'bg-gradient-to-br from-pink-50 to-rose-50' : 'bg-gradient-to-br from-indigo-50 to-purple-50'
+          }`}>
+            <Truck className={`w-10 h-10 ${isGirly ? 'text-pink-300' : 'text-indigo-300'}`} />
           </div>
           <h3 className="text-lg font-bold text-gray-800 mb-2">
             {search ? 'Aucun résultat' : 'Aucune livraison'}
@@ -482,7 +552,9 @@ export default function AgentLivraison() {
             return (
               <div
                 key={parcel.id}
-                className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all overflow-hidden"
+                className={`bg-white rounded-2xl border shadow-sm hover:shadow-md transition-all overflow-hidden ${
+                  isGirly ? 'border-pink-100/40 hover:border-pink-200' : 'border-gray-100 hover:border-gray-200'
+                }`}
               >
                 {/* Card Header */}
                 <div className="p-5">
@@ -490,7 +562,9 @@ export default function AgentLivraison() {
                     {/* Left: Customer Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3 mb-2">
-                        <div className="w-10 h-10 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-full flex items-center justify-center text-indigo-700 font-black text-base flex-shrink-0">
+                        <div className={`w-10 h-10 bg-gradient-to-br rounded-full flex items-center justify-center font-black text-base flex-shrink-0 ${
+                          isGirly ? 'from-pink-100 to-rose-100 text-pink-700' : 'from-indigo-100 to-purple-100 text-indigo-700'
+                        }`}>
                           {parcel.customerName.charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
@@ -499,7 +573,12 @@ export default function AgentLivraison() {
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500">
-                        <a href={`tel:${parcel.customerPhone}`} className="flex items-center gap-1.5 hover:text-indigo-600 transition-colors font-medium">
+                        <a 
+                          href={`tel:${parcel.customerPhone}`} 
+                          className={`flex items-center gap-1.5 transition-colors font-medium ${
+                            isGirly ? 'hover:text-pink-600' : 'hover:text-indigo-600'
+                          }`}
+                        >
                           <Phone className="w-3.5 h-3.5" />
                           {parcel.customerPhone}
                         </a>
@@ -508,7 +587,9 @@ export default function AgentLivraison() {
                           {parcel.customerCity}
                         </span>
                         {parcel.packageContent && (
-                          <span className="flex items-center gap-1.5 text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                          <span className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                            isGirly ? 'text-pink-600 bg-pink-50' : 'text-indigo-600 bg-indigo-50'
+                          }`}>
                             📦 {parcel.packageContent}
                           </span>
                         )}

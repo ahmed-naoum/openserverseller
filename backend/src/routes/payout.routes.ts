@@ -123,6 +123,18 @@ router.post(
       return payout;
     });
 
+    try {
+      const { createNotification } = await import('../utils/notification.js');
+      await createNotification(
+        req.user!.id,
+        'PAYOUT_REQUEST_STATUS',
+        '💸 Demande de retrait soumise',
+        `Votre demande de retrait d'un montant de ${amountMad} MAD (#${result.id}) a été soumise avec succès.`
+      );
+    } catch (err) {
+      console.error('Failed to trigger payout submission notification:', err);
+    }
+
     res.status(201).json({
       status: 'success',
       message: 'Payout request submitted successfully',
@@ -217,6 +229,28 @@ router.patch(
       });
     });
 
+    try {
+      let title = '';
+      let body = '';
+      if (['COMPLETED', 'RECEIVED'].includes(targetStatus)) {
+        title = '✅ Retrait effectué !';
+        body = `Votre demande de retrait de ${updatedPayout.amountMad} MAD (#${updatedPayout.id}) a été payée avec succès.`;
+      } else if (targetStatus === 'REJECTED') {
+        title = '❌ Retrait rejeté';
+        body = `Votre demande de retrait de ${updatedPayout.amountMad} MAD (#${updatedPayout.id}) a été rejetée. Les fonds ont été restitués à votre portefeuille.`;
+      } else if (targetStatus === 'PENDING') {
+        title = '⏳ Retrait en attente';
+        body = `Votre demande de retrait de ${updatedPayout.amountMad} MAD (#${updatedPayout.id}) est maintenant en cours de traitement.`;
+      }
+
+      if (title && body) {
+        const { createNotification } = await import('../utils/notification.js');
+        await createNotification(updatedPayout.vendorId, 'PAYOUT_REQUEST_STATUS', title, body);
+      }
+    } catch (err) {
+      console.error('Failed to trigger payout status notification:', err);
+    }
+
     res.json({ status: 'success', message: `Status mis à jour vers ${targetStatus}`, data: updatedPayout });
   })
 );
@@ -261,6 +295,20 @@ router.post(
       }
       return updatedPayouts;
     });
+
+    try {
+      const { createNotification } = await import('../utils/notification.js');
+      for (const item of results) {
+        await createNotification(
+          item.vendorId,
+          'PAYOUT_REQUEST_STATUS',
+          '✅ Retrait effectué !',
+          `Votre demande de retrait de ${item.amountMad} MAD (#${item.id}) a été payée avec succès.`
+        );
+      }
+    } catch (err) {
+      console.error('Failed to trigger bulk approve payout notifications:', err);
+    }
 
     res.json({
       status: 'success',
@@ -352,6 +400,30 @@ router.patch(
       }
       return updatedPayouts;
     });
+
+    try {
+      const { createNotification } = await import('../utils/notification.js');
+      for (const item of results) {
+        let title = '';
+        let body = '';
+        if (['COMPLETED', 'RECEIVED'].includes(targetStatus)) {
+          title = '✅ Retrait effectué !';
+          body = `Votre demande de retrait de ${item.amountMad} MAD (#${item.id}) a été payée avec succès.`;
+        } else if (targetStatus === 'REJECTED') {
+          title = '❌ Retrait rejeté';
+          body = `Votre demande de retrait de ${item.amountMad} MAD (#${item.id}) a été rejetée. Les fonds ont été restitués à votre portefeuille.`;
+        } else if (targetStatus === 'PENDING') {
+          title = '⏳ Retrait en attente';
+          body = `Votre demande de retrait de ${item.amountMad} MAD (#${item.id}) est maintenant en cours de traitement.`;
+        }
+
+        if (title && body) {
+          await createNotification(item.vendorId, 'PAYOUT_REQUEST_STATUS', title, body);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to trigger bulk status payout notifications:', err);
+    }
 
     res.json({
       status: 'success',

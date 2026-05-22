@@ -71,6 +71,7 @@ import InfluencerCampaigns from './pages/influencer/Campaigns';
 import InfluencerLeads from './pages/influencer/Leads';
 import InfluencerMarketplace from './pages/influencer/Marketplace';
 import InfluencerInventory from './pages/influencer/Inventory';
+import InfluencerNotifications from './pages/influencer/Notifications';
 import ConfirmationDashboard from './pages/confirmation/Dashboard';
 import HelperDashboard from './pages/helper/Dashboard';
 import HelperLeads from './pages/helper/Leads';
@@ -171,6 +172,7 @@ function App() {
           <Route path="campaigns" element={<InfluencerCampaigns />} />
           <Route path="leads" element={<InfluencerLeads />} />
           <Route path="inventory" element={<InfluencerInventory />} />
+          <Route path="notifications" element={<InfluencerNotifications />} />
           <Route path="marketplace" element={<InfluencerMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />

@@ -589,7 +589,7 @@ export default function Chat() {
 
   return (
     <div
-      className="flex bg-white rounded-3xl shadow-2xl shadow-slate-200/60 border border-slate-100 overflow-hidden"
+      className="flex bg-white rounded-2xl shadow-2xl shadow-slate-200/60 border border-slate-100 overflow-hidden"
       style={{ height: 'calc(100vh - 9rem)' }}
     >
       {/* ── Sidebar ──────────────────────────────────────────────────── */}
@@ -631,7 +631,7 @@ export default function Chat() {
             </div>
           ) : filteredConvs.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-              <div className="w-14 h-14 bg-slate-50 rounded-3xl flex items-center justify-center mb-3">
+              <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center mb-3">
                 <MessageSquare size={24} className="text-slate-300" />
               </div>
               <p className="text-sm font-semibold text-slate-500">No conversations yet</p>
@@ -908,7 +908,7 @@ export default function Chat() {
                 </div>
               ) : messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center">
-                  <div className="w-16 h-16 bg-slate-100 rounded-3xl flex items-center justify-center mb-4">
+                  <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mb-4">
                     <MessageSquare size={28} className="text-slate-300" />
                   </div>
                   <p className="text-sm font-semibold text-slate-500">No messages yet</p>

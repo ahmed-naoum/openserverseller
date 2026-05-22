@@ -25,7 +25,15 @@ import {
   Shield,
   Box,
   Tag,
-  FileText
+  FileText,
+  Landmark,
+  CreditCard,
+  User,
+  Globe,
+  MapPin,
+  Camera,
+  Calendar,
+  Link
 } from 'lucide-react';
 
 function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; onClose: () => void; agent: any }) {
@@ -579,25 +587,90 @@ function AddUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
 }
 
 function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: () => void; user: any }) {
-  const [formData, setFormData] = useState({
-    fullName: user?.fullName || '',
-    email: user?.email || '',
-    phone: user?.phone || '',
-    role: user?.role || 'VENDOR',
-    canImpersonate: user?.canImpersonate || false,
-    canManageProducts: user?.canManageProducts || false,
-    canManageLeads: user?.canManageLeads || false,
-    canManageOrders: user?.canManageOrders || false,
-    canManageInfluencerLinks: user?.canManageInfluencerLinks || false,
-    canManageTickets: user?.canManageTickets || false,
-  });
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<'access' | 'personal' | 'bank' | 'social'>('access');
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  const [formData, setFormData] = useState({
+    fullName: '',
+    email: '',
+    phone: '',
+    role: 'VENDOR',
+    isActive: true,
+    kycStatus: 'PENDING',
+    canImpersonate: false,
+    canManageProducts: false,
+    canManageLeads: false,
+    canManageOrders: false,
+    canManageInfluencerLinks: false,
+    canManageTickets: false,
+    city: '',
+    address: '',
+    cinNumber: '',
+    birthDate: '',
+    language: 'fr',
+    avatarUrl: '',
+    instagramUsername: '',
+    tiktokUsername: '',
+    facebookUsername: '',
+    xUsername: '',
+    youtubeUsername: '',
+    snapchatUsername: '',
+    ribAccount: '',
+    bankName: '',
+    iceNumber: '',
+    bankStatus: 'PENDING',
+  });
+
+  const { data: fullUserData, isLoading: isUserLoading } = useQuery({
+    queryKey: ['admin-user-detail', user?.uuid],
+    queryFn: () => adminApi.getUser(user.uuid),
+    enabled: !!user?.uuid && isOpen,
+  });
+
+  const fullUser = fullUserData?.data?.data?.user;
+
+  useEffect(() => {
+    if (fullUser) {
+      setFormData({
+        fullName: fullUser.fullName || '',
+        email: fullUser.email || '',
+        phone: fullUser.phone || '',
+        role: fullUser.role || 'VENDOR',
+        isActive: fullUser.isActive ?? true,
+        kycStatus: fullUser.kycStatus || 'PENDING',
+        canImpersonate: fullUser.canImpersonate || false,
+        canManageProducts: fullUser.canManageProducts || false,
+        canManageLeads: fullUser.canManageLeads || false,
+        canManageOrders: fullUser.canManageOrders || false,
+        canManageInfluencerLinks: fullUser.canManageInfluencerLinks || false,
+        canManageTickets: fullUser.canManageTickets || false,
+        city: fullUser.city || '',
+        address: fullUser.address || '',
+        cinNumber: fullUser.cinNumber || '',
+        birthDate: fullUser.birthDate ? fullUser.birthDate.split('T')[0] : '',
+        language: fullUser.language || 'fr',
+        avatarUrl: fullUser.avatarUrl || '',
+        instagramUsername: fullUser.instagramUsername || '',
+        tiktokUsername: fullUser.tiktokUsername || '',
+        facebookUsername: fullUser.facebookUsername || '',
+        xUsername: fullUser.xUsername || '',
+        youtubeUsername: fullUser.youtubeUsername || '',
+        snapchatUsername: fullUser.snapchatUsername || '',
+        ribAccount: fullUser.bankAccounts?.[0]?.ribAccount || '',
+        bankName: fullUser.bankAccounts?.[0]?.bankName || '',
+        iceNumber: fullUser.bankAccounts?.[0]?.iceNumber || '',
+        bankStatus: fullUser.bankAccounts?.[0]?.status || 'PENDING',
+      });
+    }
+  }, [fullUser]);
 
   const updateMutation = useMutation({
     mutationFn: (data: any) => adminApi.updateUser(user.uuid, data),
     onSuccess: () => {
       toast.success('Utilisateur mis à jour avec succès');
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-user-detail', user.uuid] });
       onClose();
     },
     onError: (error: any) => {
@@ -609,192 +682,605 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xl flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
-      <div className="bg-white rounded-[2.5rem] w-full max-w-lg max-h-[90vh] overflow-hidden shadow-2xl border border-white/20 flex flex-col">
-        <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-gradient-to-br from-indigo-50/50 to-purple-50/30 shrink-0">
+      <div className="bg-white rounded-[2.5rem] w-full max-w-3xl max-h-[90vh] overflow-hidden shadow-2xl border border-white/20 flex flex-col scale-in-center transition-transform duration-500">
+        
+        {/* Header */}
+        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-gradient-to-br from-indigo-50/50 to-purple-50/30 shrink-0">
           <div>
-            <h2 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-              <Edit2 size={24} className="text-indigo-600" />
-              Éditer l'Accès
+            <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-3">
+              <Edit2 size={22} className="text-indigo-600" />
+              Modification Complète de l'Utilisateur
             </h2>
-            <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">ID: {user.uuid.split('-')[0]}</p>
+            <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">
+              Nom: <span className="text-indigo-600 font-extrabold">{formData.fullName || user.fullName || user.email}</span> • ID: {user.uuid.split('-')[0]}
+            </p>
           </div>
-          <button onClick={onClose} className="p-3 text-slate-400 hover:text-slate-600 rounded-2xl hover:bg-white transition-all">
-            <X size={24} />
+          <button onClick={onClose} className="p-2.5 text-slate-400 hover:text-slate-600 rounded-2xl hover:bg-white transition-all">
+            <X size={20} />
           </button>
         </div>
-        
-        <form onSubmit={(e) => { e.preventDefault(); updateMutation.mutate(formData); }} className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar">
-            <div className="space-y-6">
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Identification Nom</label>
-              <input
-                type="text"
-                required
-                className="input"
-                value={formData.fullName}
-                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Contact Professionnel (Email)</label>
-              <input
-                type="email"
-                className="input"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Coordonnées (Phone)</label>
-              <input
-                type="tel"
-                className="input"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Niveau de Privilège (Rôle)</label>
-              <select
-                required
-                className="input"
-                value={formData.role}
-                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-              >
-                <option value="VENDOR">Vendeur</option>
-                <option value="INFLUENCER">Influenceur</option>
-                <option value="GROSSELLER">Grossiste</option>
-                <option value="HELPER">Helper</option>
-                <option value="CALL_CENTER_AGENT">Agent Call Center</option>
-                <option value="CONFIRMATION_AGENT">Agent de Confirmation</option>
-                <option value="SYSTEM_SUPPORT">Agent de Support</option>
-                <option value="FINANCE_ADMIN">Admin Finance</option>
-                <option value="SUPER_ADMIN">Super Admin</option>
-              </select>
-            </div>
 
-            {formData.role === 'HELPER' && (
+        {/* Tab Selection */}
+        <div className="flex bg-slate-50 p-1.5 gap-1 border-b border-slate-100 shrink-0">
+          <button
+            type="button"
+            onClick={() => setActiveTab('access')}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-[10px] font-black uppercase tracking-wider rounded-2xl transition-all duration-300 ${
+              activeTab === 'access'
+                ? 'bg-white text-indigo-600 shadow-md shadow-indigo-100/50'
+                : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'
+            }`}
+          >
+            <Shield size={16} />
+            Accès & Privilèges
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('personal')}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-[10px] font-black uppercase tracking-wider rounded-2xl transition-all duration-300 ${
+              activeTab === 'personal'
+                ? 'bg-white text-indigo-600 shadow-md shadow-indigo-100/50'
+                : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'
+            }`}
+          >
+            <User size={16} />
+            Infos Personnelles
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('bank')}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-[10px] font-black uppercase tracking-wider rounded-2xl transition-all duration-300 ${
+              activeTab === 'bank'
+                ? 'bg-white text-indigo-600 shadow-md shadow-indigo-100/50'
+                : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'
+            }`}
+          >
+            <CreditCard size={16} />
+            RIB & Finance
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('social')}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-[10px] font-black uppercase tracking-wider rounded-2xl transition-all duration-300 ${
+              activeTab === 'social'
+                ? 'bg-white text-indigo-600 shadow-md shadow-indigo-100/50'
+                : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'
+            }`}
+          >
+            <Globe size={16} />
+            Réseaux Sociaux
+          </button>
+        </div>
+
+        {/* Content & Form */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            updateMutation.mutate(formData);
+          }}
+          className="flex-1 flex flex-col min-h-0 overflow-hidden"
+        >
+          <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
+            {isUserLoading ? (
+              <div className="flex flex-col items-center justify-center py-24 gap-4">
+                <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Récupération complète des données de l'utilisateur...</p>
+              </div>
+            ) : (
               <>
-                <div className="flex items-center justify-between p-2.5 bg-orange-50 rounded-xl border border-orange-100">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-white rounded-lg text-orange-600 shadow-sm">
-                      <Package size={16} />
-                    </div>
-                    <div>
-                      <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Produits</h4>
-                      <p className="text-[8px] font-bold text-orange-400 uppercase tracking-tighter">Accès catalogue</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, canManageProducts: !formData.canManageProducts })}
-                    className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageProducts ? 'bg-orange-500' : 'bg-slate-200'}`}
-                  >
-                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageProducts ? 'left-5.5' : 'left-0.5'}`} />
-                  </button>
-                </div>
+                {/* 1. Tab: ACCESS & PRIVILEGES */}
+                {activeTab === 'access' && (
+                  <div className="space-y-6 animate-in fade-in duration-300">
+                    <div className="grid grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Statut de Connexion (Compte)</label>
+                        <select
+                          className={`input font-bold ${formData.isActive ? 'text-green-600 bg-green-50/20' : 'text-rose-600 bg-rose-50/20'}`}
+                          value={formData.isActive ? 'true' : 'false'}
+                          onChange={(e) => setFormData({ ...formData, isActive: e.target.value === 'true' })}
+                        >
+                          <option value="true" className="text-green-600 font-bold">🟢 Actif (Accès autorisé)</option>
+                          <option value="false" className="text-rose-600 font-bold">🔴 Suspendu (Accès bloqué)</option>
+                        </select>
+                      </div>
 
-                <div className="flex items-center justify-between p-2.5 bg-blue-50 rounded-xl border border-blue-100">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-white rounded-lg text-blue-600 shadow-sm">
-                      <Users size={16} />
-                    </div>
-                    <div>
-                      <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Leads</h4>
-                      <p className="text-[8px] font-bold text-blue-400 uppercase tracking-tighter">Accès tous les leads</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, canManageLeads: !formData.canManageLeads })}
-                    className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageLeads ? 'bg-blue-500' : 'bg-slate-200'}`}
-                  >
-                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageLeads ? 'left-5.5' : 'left-0.5'}`} />
-                  </button>
-                </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Statut KYC (Vérification d'Identité)</label>
+                        <select
+                          className="input font-bold"
+                          value={formData.kycStatus}
+                          onChange={(e) => setFormData({ ...formData, kycStatus: e.target.value })}
+                        >
+                          <option value="PENDING">⏳ En attente (Non soumis)</option>
+                          <option value="UNDER_REVIEW">🔍 En cours de révision</option>
+                          <option value="APPROVED">✅ Approuvé</option>
+                          <option value="REJECTED">❌ Rejeté</option>
+                        </select>
+                      </div>
 
-                <div className="flex items-center justify-between p-2.5 bg-green-50 rounded-xl border border-green-100">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-white rounded-lg text-green-600 shadow-sm">
-                      <Box size={16} />
-                    </div>
-                    <div>
-                      <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Colis</h4>
-                      <p className="text-[8px] font-bold text-green-400 uppercase tracking-tighter">Accès expéditions</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, canManageOrders: !formData.canManageOrders })}
-                    className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageOrders ? 'bg-green-500' : 'bg-slate-200'}`}
-                  >
-                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageOrders ? 'left-5.5' : 'left-0.5'}`} />
-                  </button>
-                </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Email Professionnel</label>
+                        <input
+                          type="email"
+                          required
+                          className="input"
+                          value={formData.email}
+                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        />
+                      </div>
 
-                <div className="flex items-center justify-between p-2.5 bg-purple-50 rounded-xl border border-purple-100">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-white rounded-lg text-purple-600 shadow-sm">
-                      <Tag size={16} />
-                    </div>
-                    <div>
-                      <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Liens de Parrainage</h4>
-                      <p className="text-[8px] font-bold text-purple-400 uppercase tracking-tighter">Gérer les liens influenceurs</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, canManageInfluencerLinks: !formData.canManageInfluencerLinks })}
-                    className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageInfluencerLinks ? 'bg-purple-500' : 'bg-slate-200'}`}
-                  >
-                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageInfluencerLinks ? 'left-5.5' : 'left-0.5'}`} />
-                  </button>
-                </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Numéro de Téléphone</label>
+                        <input
+                          type="tel"
+                          required
+                          className="input"
+                          value={formData.phone}
+                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        />
+                      </div>
 
-                <div className="flex items-center justify-between p-2.5 bg-teal-50 rounded-xl border border-teal-100">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-white rounded-lg text-teal-600 shadow-sm">
-                      <FileText size={16} />
+                      <div className="col-span-2">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Niveau de Privilège (Rôle)</label>
+                        <select
+                          required
+                          className="input font-bold text-slate-800"
+                          value={formData.role}
+                          onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                        >
+                          <option value="VENDOR">Vendeur</option>
+                          <option value="INFLUENCER">Influenceur</option>
+                          <option value="GROSSELLER">Grossiste</option>
+                          <option value="HELPER">Helper</option>
+                          <option value="CALL_CENTER_AGENT">Agent Call Center</option>
+                          <option value="CONFIRMATION_AGENT">Agent de Confirmation</option>
+                          <option value="SYSTEM_SUPPORT">Agent de Support</option>
+                          <option value="FINANCE_ADMIN">Admin Finance</option>
+                          <option value="SUPER_ADMIN">Super Admin</option>
+                        </select>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Tickets</h4>
-                      <p className="text-[8px] font-bold text-teal-400 uppercase tracking-tighter">Étiquettes Coliaty</p>
+
+                    {/* Helper & Admin Impersonation Permissions */}
+                    {formData.role === 'HELPER' && (
+                      <div className="mt-6 border-t border-slate-100 pt-6 space-y-4">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Droits de gestion du Helper</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="flex items-center justify-between p-3 bg-orange-50/50 rounded-2xl border border-orange-100/50">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-2 bg-white rounded-xl text-orange-600 shadow-sm">
+                                <Package size={16} />
+                              </div>
+                              <div>
+                                <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Produits</h4>
+                                <p className="text-[8px] font-bold text-orange-400 uppercase tracking-tighter">Accès catalogue</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setFormData({ ...formData, canManageProducts: !formData.canManageProducts })}
+                              className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageProducts ? 'bg-orange-500' : 'bg-slate-200'}`}
+                            >
+                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageProducts ? 'left-5.5' : 'left-0.5'}`} />
+                            </button>
+                          </div>
+
+                          <div className="flex items-center justify-between p-3 bg-blue-50/50 rounded-2xl border border-blue-100/50">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-2 bg-white rounded-xl text-blue-600 shadow-sm">
+                                <Users size={16} />
+                              </div>
+                              <div>
+                                <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Leads</h4>
+                                <p className="text-[8px] font-bold text-blue-400 uppercase tracking-tighter">Accès tous les leads</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setFormData({ ...formData, canManageLeads: !formData.canManageLeads })}
+                              className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageLeads ? 'bg-blue-500' : 'bg-slate-200'}`}
+                            >
+                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageLeads ? 'left-5.5' : 'left-0.5'}`} />
+                            </button>
+                          </div>
+
+                          <div className="flex items-center justify-between p-3 bg-green-50/50 rounded-2xl border border-green-100/50">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-2 bg-white rounded-xl text-green-600 shadow-sm">
+                                <Box size={16} />
+                              </div>
+                              <div>
+                                <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Colis</h4>
+                                <p className="text-[8px] font-bold text-green-400 uppercase tracking-tighter">Accès expéditions</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setFormData({ ...formData, canManageOrders: !formData.canManageOrders })}
+                              className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageOrders ? 'bg-green-500' : 'bg-slate-200'}`}
+                            >
+                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageOrders ? 'left-5.5' : 'left-0.5'}`} />
+                            </button>
+                          </div>
+
+                          <div className="flex items-center justify-between p-3 bg-purple-50/50 rounded-2xl border border-purple-100/50">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-2 bg-white rounded-xl text-purple-600 shadow-sm">
+                                <Tag size={16} />
+                              </div>
+                              <div>
+                                <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Parrainages</h4>
+                                <p className="text-[8px] font-bold text-purple-400 uppercase tracking-tighter">Gérer les liens influenceurs</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setFormData({ ...formData, canManageInfluencerLinks: !formData.canManageInfluencerLinks })}
+                              className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageInfluencerLinks ? 'bg-purple-500' : 'bg-slate-200'}`}
+                            >
+                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageInfluencerLinks ? 'left-5.5' : 'left-0.5'}`} />
+                            </button>
+                          </div>
+
+                          <div className="flex items-center justify-between p-3 bg-teal-50/50 rounded-2xl border border-teal-100/50 col-span-2">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-2 bg-white rounded-xl text-teal-600 shadow-sm">
+                                <FileText size={16} />
+                              </div>
+                              <div>
+                                <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Tickets</h4>
+                                <p className="text-[8px] font-bold text-teal-400 uppercase tracking-tighter">Support & Étiquettes</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setFormData({ ...formData, canManageTickets: !formData.canManageTickets })}
+                              className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageTickets ? 'bg-teal-500' : 'bg-slate-200'}`}
+                            >
+                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageTickets ? 'left-5.5' : 'left-0.5'}`} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {(formData.role === 'HELPER' || formData.role === 'SUPER_ADMIN') && (
+                      <div className="mt-4 flex items-center justify-between p-3 bg-rose-50/50 rounded-2xl border border-rose-100/50">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 bg-white rounded-xl text-rose-600 shadow-sm">
+                            <Shield size={16} />
+                          </div>
+                          <div>
+                            <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Assistance Spéciale</h4>
+                            <p className="text-[8px] font-bold text-rose-400 uppercase tracking-tighter">Autoriser la connexion sous l'identité d'autres utilisateurs (Impersonation)</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, canImpersonate: !formData.canImpersonate })}
+                          className={`w-10 h-5 rounded-full transition-all relative ${formData.canImpersonate ? 'bg-rose-500' : 'bg-slate-200'}`}
+                        >
+                          <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canImpersonate ? 'left-5.5' : 'left-0.5'}`} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 2. Tab: PERSONAL INFO */}
+                {activeTab === 'personal' && (
+                  <div className="space-y-6 animate-in fade-in duration-300">
+                    <div className="grid grid-cols-2 gap-6">
+                      <div className="col-span-2">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Nom Complet</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            required
+                            className="input pl-11"
+                            value={formData.fullName}
+                            onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                          />
+                          <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">CIN (N° Carte d'Identité)</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            className="input pl-11"
+                            placeholder="Ex: AB123456"
+                            value={formData.cinNumber}
+                            onChange={(e) => setFormData({ ...formData, cinNumber: e.target.value })}
+                          />
+                          <CreditCard size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Date de Naissance</label>
+                        <div className="relative">
+                          <input
+                            type="date"
+                            className="input pl-11"
+                            value={formData.birthDate}
+                            onChange={(e) => setFormData({ ...formData, birthDate: e.target.value })}
+                          />
+                          <Calendar size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Ville</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            className="input pl-11"
+                            placeholder="Ex: Casablanca"
+                            value={formData.city}
+                            onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                          />
+                          <MapPin size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Langue Préférée</label>
+                        <div className="relative">
+                          <select
+                            className="input pl-11 font-bold text-slate-800"
+                            value={formData.language}
+                            onChange={(e) => setFormData({ ...formData, language: e.target.value })}
+                          >
+                            <option value="fr">Français (FR)</option>
+                            <option value="ar">العربية (AR)</option>
+                            <option value="en">English (EN)</option>
+                          </select>
+                          <Globe size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                        </div>
+                      </div>
+
+                      <div className="col-span-2">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Adresse Complète</label>
+                        <div className="relative">
+                          <textarea
+                            rows={2}
+                            className="input pl-11 pt-3 resize-none"
+                            placeholder="Ex: 12 Rue de la Liberté, Appt 5..."
+                            value={formData.address}
+                            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                          />
+                          <MapPin size={18} className="absolute left-4 top-4 text-slate-300" />
+                        </div>
+                      </div>
+
+                      <div className="col-span-2">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">URL Avatar (Image de Profil)</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            className="input pl-11"
+                            placeholder="Ex: https://..."
+                            value={formData.avatarUrl}
+                            onChange={(e) => setFormData({ ...formData, avatarUrl: e.target.value })}
+                          />
+                          <Camera size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* KYC Documents Panel inside Edit Modal */}
+                    {fullUser?.kycDocuments && fullUser.kycDocuments.length > 0 && (
+                      <div className="mt-6 border-t border-slate-100 pt-6">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Documents d'Identité Chargés (KYC)</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          {fullUser.kycDocuments.map((doc: any) => {
+                            const isImage = /\.(jpg|jpeg|png|webp)$/i.test(doc.documentUrl);
+                            return (
+                              <div key={doc.id} className="p-4 bg-slate-50 border border-slate-100 rounded-3xl flex flex-col gap-3 group relative overflow-hidden">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="text-[10px] font-black text-slate-700 tracking-tight uppercase">{doc.documentType}</p>
+                                    <p className="text-[8px] font-bold text-slate-400 tracking-widest uppercase mt-0.5">Statut: {doc.status}</p>
+                                  </div>
+                                  <span className={`text-[8px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider ${
+                                    doc.status === 'APPROVED' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                                  }`}>
+                                    {doc.status}
+                                  </span>
+                                </div>
+                                {isImage ? (
+                                  <div className="relative w-full h-32 bg-slate-200 rounded-2xl overflow-hidden cursor-pointer" onClick={() => setPreviewImage(doc.documentUrl)}>
+                                    <img src={doc.documentUrl} alt={doc.documentType} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-300" />
+                                    <div className="absolute inset-0 bg-slate-900/10 group-hover:bg-slate-900/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
+                                      <p className="text-[10px] font-black text-white uppercase tracking-wider bg-slate-900/60 px-3 py-1.5 rounded-xl backdrop-blur-sm">Agrandir 🔍</p>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <a
+                                    href={doc.documentUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="h-32 bg-white border border-slate-100 rounded-2xl flex flex-col items-center justify-center gap-2 text-primary-600 hover:text-primary-800 transition-colors"
+                                  >
+                                    <FileText size={32} />
+                                    <span className="text-[10px] font-black tracking-wider uppercase">Ouvrir le Document</span>
+                                  </a>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 3. Tab: BANK & FINANCE */}
+                {activeTab === 'bank' && (
+                  <div className="space-y-6 animate-in fade-in duration-300">
+                    <div className="grid grid-cols-2 gap-6">
+                      <div className="col-span-2">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">RIB (Relevé d'Identité Bancaire - 24 Chiffres)</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            maxLength={24}
+                            className="input pl-11 tracking-wider font-mono font-bold"
+                            placeholder="Ex: 011780000012345678901234"
+                            value={formData.ribAccount}
+                            onChange={(e) => setFormData({ ...formData, ribAccount: e.target.value.replace(/\s/g, '') })}
+                          />
+                          <CreditCard size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Nom de la Banque</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            className="input pl-11 font-bold text-slate-800"
+                            placeholder="Ex: Attijariwafa Bank"
+                            value={formData.bankName}
+                            onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
+                          />
+                          <Landmark size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Statut du Compte Bancaire</label>
+                        <div className="relative">
+                          <select
+                            className="input pl-11 font-bold text-slate-800"
+                            value={formData.bankStatus}
+                            onChange={(e) => setFormData({ ...formData, bankStatus: e.target.value })}
+                          >
+                            <option value="PENDING">⏳ En Attente d'Approbation</option>
+                            <option value="APPROVED">✅ Approuvé</option>
+                            <option value="REJECTED">❌ Rejeté</option>
+                          </select>
+                          <ShieldAlert size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                        </div>
+                      </div>
+
+                      <div className="col-span-2">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">N° ICE (Identifiant Commun de l'Entreprise)</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            className="input pl-11 font-bold text-slate-800"
+                            placeholder="Ex: 001567894000089"
+                            value={formData.iceNumber}
+                            onChange={(e) => setFormData({ ...formData, iceNumber: e.target.value })}
+                          />
+                          <FileText size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, canManageTickets: !formData.canManageTickets })}
-                    className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageTickets ? 'bg-teal-500' : 'bg-slate-200'}`}
-                  >
-                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageTickets ? 'left-5.5' : 'left-0.5'}`} />
-                  </button>
-                </div>
+                )}
+
+                {/* 4. Tab: SOCIAL MEDIA USERNAMES */}
+                {activeTab === 'social' && (
+                  <div className="space-y-6 animate-in fade-in duration-300">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Comptes sur les Réseaux Sociaux (Généralement pour les Influenceurs)</p>
+                    <div className="grid grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-[10px] font-black text-pink-600 uppercase tracking-widest mb-2">Instagram @</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            className="input pl-11 border-pink-100 focus:border-pink-400"
+                            placeholder="Nom d'utilisateur"
+                            value={formData.instagramUsername}
+                            onChange={(e) => setFormData({ ...formData, instagramUsername: e.target.value })}
+                          />
+                          <Link size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-pink-300" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-800 uppercase tracking-widest mb-2">TikTok @</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            className="input pl-11 border-slate-200 focus:border-slate-800"
+                            placeholder="Nom d'utilisateur"
+                            value={formData.tiktokUsername}
+                            onChange={(e) => setFormData({ ...formData, tiktokUsername: e.target.value })}
+                          />
+                          <Link size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2">Facebook</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            className="input pl-11 border-blue-100 focus:border-blue-500"
+                            placeholder="Nom d'utilisateur"
+                            value={formData.facebookUsername}
+                            onChange={(e) => setFormData({ ...formData, facebookUsername: e.target.value })}
+                          />
+                          <Link size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-300" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-sky-600 uppercase tracking-widest mb-2">X / Twitter</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            className="input pl-11 border-sky-100 focus:border-sky-400"
+                            placeholder="Nom d'utilisateur"
+                            value={formData.xUsername}
+                            onChange={(e) => setFormData({ ...formData, xUsername: e.target.value })}
+                          />
+                          <Link size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-sky-300" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-rose-600 uppercase tracking-widest mb-2">YouTube</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            className="input pl-11 border-rose-100 focus:border-rose-400"
+                            placeholder="Nom de chaine / @ handle"
+                            value={formData.youtubeUsername}
+                            onChange={(e) => setFormData({ ...formData, youtubeUsername: e.target.value })}
+                          />
+                          <Link size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-rose-300" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-yellow-600 uppercase tracking-widest mb-2">Snapchat</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            className="input pl-11 border-yellow-100 focus:border-yellow-400"
+                            placeholder="Nom d'utilisateur"
+                            value={formData.snapchatUsername}
+                            onChange={(e) => setFormData({ ...formData, snapchatUsername: e.target.value })}
+                          />
+                          <Link size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-yellow-400" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </>
             )}
-
-            {(formData.role === 'HELPER' || formData.role === 'SUPER_ADMIN') && (
-              <div className="flex items-center justify-between p-2.5 bg-rose-50 rounded-xl border border-rose-100">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 bg-white rounded-lg text-rose-600 shadow-sm">
-                    <Shield size={16} />
-                  </div>
-                  <div>
-                    <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Assistance</h4>
-                    <p className="text-[8px] font-bold text-rose-400 uppercase tracking-tighter">Impersonation</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, canImpersonate: !formData.canImpersonate })}
-                  className={`w-10 h-5 rounded-full transition-all relative ${formData.canImpersonate ? 'bg-rose-500' : 'bg-slate-200'}`}
-                >
-                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canImpersonate ? 'left-5.5' : 'left-0.5'}`} />
-                </button>
-              </div>
-            )}
           </div>
-          
-          <div className="p-8 pt-4 border-t border-slate-50 flex gap-4 shrink-0 bg-slate-50/50">
+
+          {/* Action Buttons */}
+          <div className="p-6 border-t border-slate-100 flex gap-4 shrink-0 bg-slate-50/50">
             <button
               type="button"
               onClick={onClose}
@@ -804,14 +1290,26 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
             </button>
             <button
               type="submit"
-              disabled={updateMutation.isPending}
+              disabled={updateMutation.isPending || isUserLoading}
               className="flex-[2] px-6 py-3.5 text-xs font-black uppercase tracking-widest text-white bg-indigo-600 hover:bg-indigo-700 rounded-2xl shadow-lg shadow-indigo-200/50 transition-all disabled:opacity-50"
             >
-              {updateMutation.isPending ? 'Sync...' : 'Sauvegarder'}
+              {updateMutation.isPending ? 'Mise à jour en cours...' : 'Sauvegarder les Modifications'}
             </button>
           </div>
         </form>
       </div>
+
+      {/* KYC Document Fullscreen Zoom Modal */}
+      {previewImage && (
+        <div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setPreviewImage(null)}>
+          <div className="relative max-w-4xl max-h-[85vh] overflow-hidden rounded-[2rem] bg-white border border-white/20 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <button className="absolute right-4 top-4 p-2 bg-slate-900/60 text-white rounded-full hover:bg-slate-900 transition-colors z-10" onClick={() => setPreviewImage(null)}>
+              <X size={20} />
+            </button>
+            <img src={previewImage} alt="Document KYC Agrandissement" className="w-full h-full object-contain max-h-[85vh] rounded-[2rem]" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

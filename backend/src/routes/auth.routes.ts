@@ -106,7 +106,7 @@ router.post(
   '/register',
   authLimiter,
   [
-    body('email').optional().isEmail().normalizeEmail(),
+    body('email').optional().isEmail().normalizeEmail({ gmail_remove_dots: false, gmail_remove_subaddress: false, outlookdotcom_remove_subaddress: false, yahoo_remove_subaddress: false, icloud_remove_subaddress: false }),
     body('phone').optional().custom((value) => {
       const normalized = normalizePhoneNumber(value);
       if (!normalized) {
@@ -274,7 +274,7 @@ router.post(
   '/register-influencer',
   authLimiter,
   [
-    body('email').optional().isEmail().normalizeEmail(),
+    body('email').optional().isEmail().normalizeEmail({ gmail_remove_dots: false, gmail_remove_subaddress: false, outlookdotcom_remove_subaddress: false, yahoo_remove_subaddress: false, icloud_remove_subaddress: false }),
     body('phone').optional().custom((value, { req }) => {
       if (!value) return true;
       const normalized = normalizePhoneNumber(value);
@@ -446,7 +446,7 @@ router.post(
   '/login',
   loginLimiter,
   [
-    body('email').optional().isEmail().normalizeEmail(),
+    body('email').optional().isEmail().normalizeEmail({ gmail_remove_dots: false, gmail_remove_subaddress: false, outlookdotcom_remove_subaddress: false, yahoo_remove_subaddress: false, icloud_remove_subaddress: false }),
     body('phone').optional().matches(/^\+212[5678][0-9]{8}$/),
     body('password').notEmpty(),
   ],
@@ -1073,7 +1073,7 @@ router.post(
 router.post(
   '/verify-otp',
   [
-    body('email').optional().isEmail().normalizeEmail(),
+    body('email').optional().isEmail().normalizeEmail({ gmail_remove_dots: false, gmail_remove_subaddress: false, outlookdotcom_remove_subaddress: false, yahoo_remove_subaddress: false, icloud_remove_subaddress: false }),
     body('phone').optional().matches(/^\+212[5678][0-9]{8}$/),
     body('otp').isLength({ min: 6, max: 6 }),
   ],
@@ -1138,7 +1138,7 @@ router.post(
 router.post(
   '/resend-otp',
   [
-    body('email').optional().isEmail().normalizeEmail(),
+    body('email').optional().isEmail().normalizeEmail({ gmail_remove_dots: false, gmail_remove_subaddress: false, outlookdotcom_remove_subaddress: false, yahoo_remove_subaddress: false, icloud_remove_subaddress: false }),
     body('phone').optional().matches(/^\+212[5678][0-9]{8}$/),
   ],
   asyncHandler(async (req: Request, res: Response) => {
@@ -1217,7 +1217,7 @@ router.post(
   '/forgot-password',
   passwordResetLimiter,
   [
-    body('email').optional().isEmail().normalizeEmail(),
+    body('email').optional().isEmail().normalizeEmail({ gmail_remove_dots: false, gmail_remove_subaddress: false, outlookdotcom_remove_subaddress: false, yahoo_remove_subaddress: false, icloud_remove_subaddress: false }),
     body('phone').optional().matches(/^\+212[5678][0-9]{8}$/),
   ],
   asyncHandler(async (req, res) => {
@@ -1832,6 +1832,25 @@ router.delete(
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = req.user!.id;
+    const password = req.body.password || req.query.password;
+
+    if (!password) {
+      throw new AppException(400, 'Veuillez saisir votre mot de passe pour confirmer la suppression');
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new AppException(401, 'Utilisateur non trouvé');
+    }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      throw new AppException(400, 'Mot de passe incorrect');
+    }
 
     const bankAccount = await prisma.userBankAccount.findFirst({
       where: { id: parseInt(String(id)), userId },
@@ -1842,7 +1861,6 @@ router.delete(
     }
 
     // Only allow deleting if not APPROVED or if admin
-    // For now let's allow it but maybe warn
     await prisma.userBankAccount.delete({
       where: { id: parseInt(String(id)) },
     });

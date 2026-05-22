@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { v4 as uuidv4 } from 'uuid';
-import { decrypt } from '../utils/crypto.js';
+import { decrypt, encrypt } from '../utils/crypto.js';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -212,11 +212,17 @@ router.patch(
   authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
   asyncHandler(async (req, res) => {
     const { uuid } = req.params;
-    const { fullName, email, phone, role, canImpersonate, canManageProducts, canManageLeads, canManageOrders, canManageInfluencerLinks, canManageTickets } = req.body;
+    const {
+      fullName, email, phone, role, isActive, kycStatus,
+      canImpersonate, canManageProducts, canManageLeads, canManageOrders, canManageInfluencerLinks, canManageTickets,
+      city, address, cinNumber, birthDate, language, avatarUrl,
+      instagramUsername, tiktokUsername, facebookUsername, xUsername, youtubeUsername, snapchatUsername,
+      ribAccount, bankName, iceNumber, bankStatus
+    } = req.body;
 
     const user = await prisma.user.findUnique({
       where: { uuid },
-      include: { role: true },
+      include: { role: true, profile: true },
     });
 
     if (!user) {
@@ -230,23 +236,77 @@ router.patch(
       roleId = roleRecord.id;
     }
 
+    // Update bank details
+    if (ribAccount !== undefined || bankName !== undefined || iceNumber !== undefined || bankStatus !== undefined) {
+      const existingBank = await prisma.userBankAccount.findFirst({
+        where: { userId: user.id, isDefault: true }
+      });
+      if (existingBank) {
+        await prisma.userBankAccount.update({
+          where: { id: existingBank.id },
+          data: {
+            ribAccount: ribAccount !== undefined ? (ribAccount ? encrypt(ribAccount) : '') : undefined,
+            bankName: bankName !== undefined ? bankName : undefined,
+            iceNumber: iceNumber !== undefined ? iceNumber : undefined,
+            status: bankStatus !== undefined ? bankStatus : undefined
+          }
+        });
+      } else {
+        await prisma.userBankAccount.create({
+          data: {
+            userId: user.id,
+            ribAccount: ribAccount ? encrypt(ribAccount) : '',
+            bankName: bankName || '',
+            iceNumber: iceNumber || '',
+            status: bankStatus || 'PENDING',
+            isDefault: true
+          }
+        });
+      }
+    }
+
+    // Upsert Profile
+    const profileData: any = {};
+    if (fullName !== undefined) profileData.fullName = fullName;
+    if (city !== undefined) profileData.city = city;
+    if (address !== undefined) profileData.address = address;
+    if (cinNumber !== undefined) profileData.cinNumber = cinNumber;
+    if (birthDate !== undefined) profileData.birthDate = birthDate ? new Date(birthDate) : null;
+    if (language !== undefined) profileData.language = language;
+    if (avatarUrl !== undefined) profileData.avatarUrl = avatarUrl;
+    if (instagramUsername !== undefined) profileData.instagramUsername = instagramUsername;
+    if (tiktokUsername !== undefined) profileData.tiktokUsername = tiktokUsername;
+    if (facebookUsername !== undefined) profileData.facebookUsername = facebookUsername;
+    if (xUsername !== undefined) profileData.xUsername = xUsername;
+    if (youtubeUsername !== undefined) profileData.youtubeUsername = youtubeUsername;
+    if (snapchatUsername !== undefined) profileData.snapchatUsername = snapchatUsername;
+
+    if (Object.keys(profileData).length > 0) {
+      await prisma.userProfile.upsert({
+        where: { userId: user.id },
+        create: {
+          userId: user.id,
+          ...profileData
+        },
+        update: profileData
+      });
+    }
+
+    // Update User
     const updatedUser = await prisma.user.update({
       where: { uuid },
       data: {
-        email: email || user.email,
-        phone: phone || user.phone,
+        email: email !== undefined ? email : undefined,
+        phone: phone !== undefined ? phone : undefined,
         role: { connect: { id: roleId } },
-        canImpersonate: typeof canImpersonate === 'boolean' ? canImpersonate : user.canImpersonate,
-        canManageProducts: typeof canManageProducts === 'boolean' ? canManageProducts : user.canManageProducts,
-        canManageLeads: typeof canManageLeads === 'boolean' ? canManageLeads : user.canManageLeads,
-        canManageOrders: typeof canManageOrders === 'boolean' ? canManageOrders : user.canManageOrders,
-        canManageInfluencerLinks: typeof canManageInfluencerLinks === 'boolean' ? canManageInfluencerLinks : user.canManageInfluencerLinks,
-        canManageTickets: typeof canManageTickets === 'boolean' ? canManageTickets : user.canManageTickets,
-        profile: {
-          update: {
-            fullName: fullName || undefined,
-          },
-        },
+        isActive: isActive !== undefined ? Boolean(isActive) : undefined,
+        kycStatus: kycStatus !== undefined ? kycStatus : undefined,
+        canImpersonate: typeof canImpersonate === 'boolean' ? canImpersonate : undefined,
+        canManageProducts: typeof canManageProducts === 'boolean' ? canManageProducts : undefined,
+        canManageLeads: typeof canManageLeads === 'boolean' ? canManageLeads : undefined,
+        canManageOrders: typeof canManageOrders === 'boolean' ? canManageOrders : undefined,
+        canManageInfluencerLinks: typeof canManageInfluencerLinks === 'boolean' ? canManageInfluencerLinks : undefined,
+        canManageTickets: typeof canManageTickets === 'boolean' ? canManageTickets : undefined,
       },
       include: {
         profile: true,
@@ -429,7 +489,7 @@ router.patch(
         await prisma.userBankAccount.update({
           where: { id: existingBank.id },
           data: {
-            ribAccount: ribAccount || existingBank.ribAccount,
+            ribAccount: ribAccount ? encrypt(ribAccount) : existingBank.ribAccount,
             bankName: bankName || existingBank.bankName,
             iceNumber: iceNumber !== undefined ? iceNumber : existingBank.iceNumber,
             // Only reset status if RIB changed and user is NOT admin
@@ -440,7 +500,7 @@ router.patch(
         await prisma.userBankAccount.create({
           data: {
             userId: user.id,
-            ribAccount: ribAccount || '',
+            ribAccount: ribAccount ? encrypt(ribAccount) : '',
             bankName: bankName || '',
             iceNumber: iceNumber || '',
             isDefault: true,

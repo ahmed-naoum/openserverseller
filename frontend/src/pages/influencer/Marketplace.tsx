@@ -310,7 +310,7 @@ export default function InfluencerMarketplace() {
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="bg-white rounded-[2rem] py-20 px-8 text-center border-2 border-dashed border-gray-100"
+            className="bg-white rounded-2xl py-20 px-8 text-center border-2 border-dashed border-gray-100"
           >
             <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Package className="w-8 h-8 text-gray-400" />

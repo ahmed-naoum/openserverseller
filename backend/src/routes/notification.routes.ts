@@ -77,4 +77,39 @@ router.post(
   })
 );
 
+router.delete(
+  '/:id',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    const result = await prisma.notification.deleteMany({
+      where: {
+        id: Number(id),
+        userId: req.user!.id,
+      },
+    });
+
+    if (result.count === 0) {
+      return res.status(404).json({ status: 'error', message: 'Notification introuvable' });
+    }
+
+    res.json({ status: 'success', message: 'Notification supprimée avec succès' });
+  })
+);
+
+router.delete(
+  '/',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    await prisma.notification.deleteMany({
+      where: {
+        userId: req.user!.id,
+      },
+    });
+
+    res.json({ status: 'success', message: 'Toutes les notifications ont été supprimées' });
+  })
+);
+
 export default router;

@@ -50,3 +50,17 @@ export const restoreBackup = asyncHandler(async (req: Request, res: Response) =>
   await BackupService.restoreBackup(String(filename));
   res.json({ status: 'success', message: 'Database restored successfully' });
 });
+
+export const getBackupConfig = asyncHandler(async (req: Request, res: Response) => {
+  const config = await BackupService.loadConfig();
+  res.json({ status: 'success', data: config });
+});
+
+export const updateBackupConfig = asyncHandler(async (req: Request, res: Response) => {
+  const { interval, maxBackups, enabled } = req.body;
+  if (typeof interval !== 'string' || typeof maxBackups !== 'number' || typeof enabled !== 'boolean') {
+    return res.status(400).json({ status: 'error', message: 'Invalid payload' });
+  }
+  await BackupService.updateConfig({ interval, maxBackups, enabled });
+  res.json({ status: 'success', message: 'Backup configuration updated successfully' });
+});

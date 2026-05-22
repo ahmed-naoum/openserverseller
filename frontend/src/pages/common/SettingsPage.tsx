@@ -29,6 +29,29 @@ export default function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'profile');
 
+  const [theme, setTheme] = useState<'classic' | 'girly' | 'princess'>(() => {
+    return (localStorage.getItem('agent-theme') as 'classic' | 'girly' | 'princess') || 'girly';
+  });
+
+  const changeTheme = (next: 'classic' | 'girly' | 'princess') => {
+    setTheme(next);
+    localStorage.setItem('agent-theme', next);
+    window.dispatchEvent(new Event('agent-theme-change'));
+  };
+
+  useEffect(() => {
+    const syncTheme = () => {
+      const current = (localStorage.getItem('agent-theme') as 'classic' | 'girly' | 'princess') || 'girly';
+      setTheme(current);
+    };
+    window.addEventListener('agent-theme-change', syncTheme);
+    return () => window.removeEventListener('agent-theme-change', syncTheme);
+  }, []);
+
+  const isClassic = theme === 'classic';
+  const isGirly = theme === 'girly';
+  const isPrincess = theme === 'princess';
+
   // Sync activeTab with URL search params
   useEffect(() => {
     const tab = searchParams.get('tab');
@@ -120,12 +143,51 @@ export default function SettingsPage() {
     } catch { toast.error('Erreur lors du changement'); }
   };
 
-  const handleDeleteBank = async (id: number) => {
+  // Delete bank account confirmation modal state
+  const [deleteBankConfirm, setDeleteBankConfirm] = useState<{
+    isOpen: boolean;
+    bankAccountId: number | null;
+    password: string;
+    loading: boolean;
+  }>({
+    isOpen: false,
+    bankAccountId: null,
+    password: '',
+    loading: false
+  });
+
+  const handleDeleteBankClick = (id: number) => {
+    setDeleteBankConfirm({
+      isOpen: true,
+      bankAccountId: id,
+      password: '',
+      loading: false
+    });
+  };
+
+  const handleConfirmDeleteBank = async () => {
+    if (!deleteBankConfirm.bankAccountId) return;
+    if (!deleteBankConfirm.password) {
+      toast.error('Veuillez saisir votre mot de passe');
+      return;
+    }
+
+    setDeleteBankConfirm(prev => ({ ...prev, loading: true }));
     try {
-      await authApi.deleteBankAccount(id);
-      toast.success('Compte supprimé');
+      await authApi.deleteBankAccount(deleteBankConfirm.bankAccountId, deleteBankConfirm.password);
+      toast.success('Compte supprimé avec succès');
+      setDeleteBankConfirm({
+        isOpen: false,
+        bankAccountId: null,
+        password: '',
+        loading: false
+      });
       refreshUser();
-    } catch { toast.error('Erreur lors de la suppression'); }
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || 'Erreur lors de la suppression';
+      toast.error(errorMsg);
+      setDeleteBankConfirm(prev => ({ ...prev, loading: false }));
+    }
   };
 
   const [bankForm, setBankForm] = useState({
@@ -350,7 +412,7 @@ export default function SettingsPage() {
   return (
     <div className="max-w-6xl mx-auto pb-12 animate-fade-in">
       {/* Premium Header */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-gray-900 via-primary-900 to-gray-900 p-8 sm:p-12 mb-8 shadow-2xl">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-gray-900 via-primary-900 to-gray-900 p-6 sm:p-8 mb-6 shadow-xl">
         <div className="absolute top-0 right-0 -translate-y-12 translate-x-1/3">
           <div className="w-96 h-96 bg-primary-500/30 rounded-full blur-3xl"></div>
         </div>
@@ -396,7 +458,7 @@ export default function SettingsPage() {
       <div className="flex flex-col lg:flex-row gap-8">
         {/* Sidebar Navigation */}
         <div className="w-full lg:w-72 flex-shrink-0">
-          <div className="bg-white/60 backdrop-blur-xl rounded-2xl border border-gray-100/50 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-3 sticky top-24">
+          <div className="bg-white/60 backdrop-blur-xl rounded-2xl border border-gray-100/50 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-2 sticky top-24">
             <nav className="space-y-1.5">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
@@ -407,29 +469,35 @@ export default function SettingsPage() {
                     onClick={() => handleTabChange(tab.id)}
                     className={`w-full group flex items-start gap-4 p-4 rounded-xl text-left transition-all duration-300 ${
                       isActive
-                        ? 'bg-gradient-to-br from-primary-50 to-primary-100/50 shadow-sm border border-primary-100/50'
+                        ? (isPrincess ? 'bg-gradient-to-br from-amber-50 to-amber-100/50 shadow-sm border border-amber-100/50' : isGirly ? 'bg-gradient-to-br from-pink-50 to-pink-100/50 shadow-sm border border-pink-100/50' : 'bg-gradient-to-br from-primary-50 to-primary-100/50 shadow-sm border border-primary-100/50')
                         : 'hover:bg-gray-50/80 border border-transparent'
                     }`}
                   >
                     <div className={`mt-0.5 p-2 rounded-lg transition-colors duration-300 ${
-                      isActive ? 'bg-primary-600 text-white shadow-md' : 'bg-gray-100 text-gray-500 group-hover:bg-gray-200 group-hover:text-gray-700'
+                      isActive 
+                        ? (isPrincess ? 'bg-amber-600 text-white shadow-md' : isGirly ? 'bg-pink-600 text-white shadow-md' : 'bg-primary-600 text-white shadow-md') 
+                        : 'bg-gray-100 text-gray-500 group-hover:bg-gray-200 group-hover:text-gray-700'
                     }`}>
                       <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
                     </div>
                     <div>
                       <div className={`font-semibold transition-colors duration-300 ${
-                        isActive ? 'text-primary-900' : 'text-gray-700 group-hover:text-gray-900'
+                        isActive 
+                          ? (isPrincess ? 'text-amber-900 font-bold' : isGirly ? 'text-pink-900' : 'text-primary-900') 
+                          : 'text-gray-700 group-hover:text-gray-900'
                       }`}>
                         {tab.label}
                       </div>
                       <div className={`text-xs mt-0.5 transition-colors duration-300 ${
-                        isActive ? 'text-primary-700' : 'text-gray-500 group-hover:text-gray-600'
+                        isActive 
+                          ? (isPrincess ? 'text-amber-700' : isGirly ? 'text-pink-700' : 'text-primary-700') 
+                          : 'text-gray-500 group-hover:text-gray-600'
                       }`}>
                         {tab.desc}
                       </div>
                     </div>
                     {isActive && (
-                      <ChevronRight size={16} className="ml-auto mt-2 text-primary-500" />
+                      <ChevronRight size={16} className={`ml-auto mt-2 ${isPrincess ? 'text-amber-500' : isGirly ? 'text-pink-500' : 'text-primary-500'}`} />
                     )}
                   </button>
                 );
@@ -440,20 +508,21 @@ export default function SettingsPage() {
 
         {/* Content Area */}
         <div className="flex-1 min-w-0">
-          <div className="bg-white rounded-3xl border border-gray-100/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden transition-all duration-500 ease-in-out">
+          <div className="bg-white rounded-2xl border border-gray-100/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden transition-all duration-500 ease-in-out">
             
             {/* Profile Tab */}
             {activeTab === 'profile' && (
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="p-8 border-b border-gray-100 bg-gray-50/50">
+                <div className="p-5 border-b border-gray-100 bg-gray-50/50">
                   <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-                    <User className="text-primary-500" size={28} />
+                    <User className={isPrincess ? 'text-amber-500' : isGirly ? 'text-pink-500' : 'text-primary-500'} size={28} />
                     Informations du profil
                   </h2>
                   <p className="text-gray-500 mt-1">Mettez à jour vos informations publiques et de contact.</p>
                 </div>
                 
-                <form onSubmit={handleProfileSubmit} className="p-8 space-y-8">
+                <form onSubmit={handleProfileSubmit} className="p-6 space-y-6">
+
                   <div className="grid md:grid-cols-2 gap-8">
                     <div className="space-y-2">
                       <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-2">
@@ -461,7 +530,9 @@ export default function SettingsPage() {
                       </label>
                       <input
                         type="text"
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all duration-200 text-gray-900 font-medium"
+                        className={`w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:ring-4 transition-all duration-200 text-gray-900 font-medium ${
+                          isPrincess ? 'focus:border-amber-500 focus:ring-amber-500/10' : isGirly ? 'focus:border-pink-500 focus:ring-pink-500/10' : 'focus:border-primary-500 focus:ring-primary-500/10'
+                        }`}
                         value={profileForm.fullName}
                         onChange={(e) => setProfileForm({ ...profileForm, fullName: e.target.value })}
                       />
@@ -472,7 +543,9 @@ export default function SettingsPage() {
                       </label>
                       <input
                         type="email"
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all duration-200 text-gray-900 font-medium disabled:opacity-50"
+                        className={`w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:ring-4 transition-all duration-200 text-gray-900 font-medium disabled:opacity-50 ${
+                          isPrincess ? 'focus:border-amber-500 focus:ring-amber-500/10' : isGirly ? 'focus:border-pink-500 focus:ring-pink-500/10' : 'focus:border-primary-500 focus:ring-primary-500/10'
+                        }`}
                         value={profileForm.email}
                         disabled
                       />
@@ -483,7 +556,9 @@ export default function SettingsPage() {
                       </label>
                       <input
                         type="tel"
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all duration-200 text-gray-900 font-medium"
+                        className={`w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:ring-4 transition-all duration-200 text-gray-900 font-medium ${
+                          isPrincess ? 'focus:border-amber-500 focus:ring-amber-500/10' : isGirly ? 'focus:border-pink-500 focus:ring-pink-500/10' : 'focus:border-primary-500 focus:ring-primary-500/10'
+                        }`}
                         value={profileForm.phone}
                         onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
                       />
@@ -622,7 +697,7 @@ export default function SettingsPage() {
             {/* Payment Tab */}
             {activeTab === 'payment' && (
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="p-8 border-b border-gray-100 bg-gray-50/50">
+                <div className="p-5 border-b border-gray-100 bg-gray-50/50">
                   <div className="flex items-center justify-between">
                     <div>
                       <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
@@ -634,7 +709,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 
-                <div className="p-8 space-y-10">
+                <div className="p-6 space-y-6">
                   {/* Bank Accounts List */}
                   <div className="space-y-6">
                     <div className="flex items-center justify-between">
@@ -655,7 +730,7 @@ export default function SettingsPage() {
                           const isDefault = ba.isDefault;
 
                           return (
-                            <div key={ba.id} className={`group relative p-6 rounded-3xl border-2 transition-all duration-300 ${
+                            <div key={ba.id} className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${
                               isDefault ? 'border-primary-500 bg-primary-50/30 shadow-lg shadow-primary-500/5' : 'border-gray-100 bg-white hover:border-gray-200'
                             }`}>
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
@@ -703,7 +778,7 @@ export default function SettingsPage() {
                                 <div className="flex items-center gap-2">
                                   {!isDefault && (
                                     <button 
-                                      onClick={() => handleDeleteBank(ba.id)}
+                                      onClick={() => handleDeleteBankClick(ba.id)}
                                       className="p-3 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-2xl transition-all"
                                       title="Supprimer"
                                     >
@@ -716,7 +791,7 @@ export default function SettingsPage() {
                           );
                         })
                       ) : (
-                        <div className="text-center p-10 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200">
+                        <div className="text-center p-10 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
                           <CreditCard className="mx-auto text-gray-300 mb-4" size={48} />
                           <p className="text-gray-500 font-bold">Aucune méthode de paiement configurée</p>
                         </div>
@@ -733,7 +808,7 @@ export default function SettingsPage() {
                       <p className="text-sm text-gray-500 mt-1">Toutes les nouvelles méthodes sont soumises à une vérification manuelle.</p>
                     </div>
 
-                    <form onSubmit={handleBankSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50/50 p-6 sm:p-8 rounded-3xl border border-gray-100">
+                    <form onSubmit={handleBankSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50/50 p-6 sm:p-8 rounded-2xl border border-gray-100">
                       <div className="md:col-span-2 space-y-3">
                         <BankSelect 
                           value={bankForm.bankName} 
@@ -767,7 +842,7 @@ export default function SettingsPage() {
 
                     {/* OTP Verification Step */}
                     {bankOtpStep === 'verify' && (
-                      <div className="mt-6 p-6 sm:p-8 bg-blue-50/50 rounded-3xl border-2 border-blue-100 animate-in slide-in-from-bottom-4 duration-300">
+                      <div className="mt-6 p-6 sm:p-8 bg-blue-50/50 rounded-2xl border-2 border-blue-100 animate-in slide-in-from-bottom-4 duration-300">
                         <div className="text-center mb-6">
                           <div className="w-16 h-16 bg-blue-100 rounded-full mx-auto mb-4 flex items-center justify-center">
                             <Mail size={28} className="text-blue-600" />
@@ -847,7 +922,7 @@ export default function SettingsPage() {
             {/* Security Tab */}
             {activeTab === 'password' && (
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="p-8 border-b border-gray-100 bg-gray-50/50">
+                <div className="p-5 border-b border-gray-100 bg-gray-50/50">
                   <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
                     <ShieldCheck className="text-primary-500" size={28} />
                     Sécurité et Connexion
@@ -855,7 +930,7 @@ export default function SettingsPage() {
                   <p className="text-gray-500 mt-1">Gérez votre mot de passe et l'authentification à deux facteurs.</p>
                 </div>
 
-                <div className="p-8 space-y-12">
+                <div className="p-6 space-y-6">
                   {/* Password Section */}
                   <form onSubmit={handlePasswordSubmit} className="space-y-6">
                     <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
@@ -955,7 +1030,7 @@ export default function SettingsPage() {
                     </div>
                     
                     {user?.isTwoFactorEnabled && (
-                      <div className="bg-gradient-to-br from-emerald-50 via-white to-white border-2 border-emerald-100 rounded-3xl p-8 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-xl shadow-emerald-500/5 relative overflow-hidden">
+                      <div className="bg-gradient-to-br from-emerald-50 via-white to-white border-2 border-emerald-100 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-xl shadow-emerald-500/5 relative overflow-hidden">
                         <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/2 w-64 h-64 bg-emerald-100/20 rounded-full blur-3xl"></div>
                         
                         <div className="flex items-center gap-6 relative z-10">
@@ -1014,7 +1089,7 @@ export default function SettingsPage() {
                     )}
 
                     {twoFactorData && (
-                      <div className="bg-gradient-to-br from-primary-50 via-white to-primary-50/30 rounded-3xl p-8 border border-primary-100 shadow-xl shadow-primary-500/5">
+                      <div className="bg-gradient-to-br from-primary-50 via-white to-primary-50/30 rounded-2xl p-8 border border-primary-100 shadow-xl shadow-primary-500/5">
                         <div className="grid lg:grid-cols-2 gap-12">
                           <div className="space-y-6">
                             <div className="flex items-center gap-3">
@@ -1118,6 +1193,80 @@ export default function SettingsPage() {
           onClose={() => setAvatarCropSrc(null)}
           onSave={handleAvatarSave}
         />
+      )}
+
+      {/* Delete Bank Account Password Confirmation Modal */}
+      {deleteBankConfirm.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md bg-white border border-slate-200/60 rounded-2xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Top accent */}
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-rose-500" />
+            
+            <div className="p-6">
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center text-rose-500 flex-shrink-0">
+                  <AlertCircle size={22} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-base font-black text-slate-900 tracking-tight">Supprimer la méthode de paiement</h3>
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                    Pour des raisons de sécurité, veuillez saisir votre mot de passe pour confirmer la suppression de ce compte bancaire.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-4">
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">
+                    Mot de passe
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="password"
+                      placeholder="Saisissez votre mot de passe actuel..."
+                      className="w-full bg-slate-50 border border-slate-200/60 rounded-xl pl-4 pr-10 py-3 text-xs font-semibold focus:outline-none focus:border-rose-500/50 focus:bg-white focus:ring-2 focus:ring-rose-500/5 transition-all text-slate-700"
+                      value={deleteBankConfirm.password}
+                      onChange={(e) => setDeleteBankConfirm(prev => ({ ...prev, password: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleConfirmDeleteBank();
+                        }
+                      }}
+                    />
+                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                      <Lock size={15} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDeleteBankConfirm({ isOpen: false, bankAccountId: null, password: '', loading: false })}
+                  className="flex-1 px-4 py-3 bg-slate-50 text-slate-500 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-100 hover:text-slate-900 transition-all active:scale-95"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDeleteBank}
+                  disabled={deleteBankConfirm.loading || !deleteBankConfirm.password}
+                  className="flex-[2] bg-rose-600 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-rose-700 shadow-md hover:-translate-y-0.5 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  {deleteBankConfirm.loading ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      Suppression...
+                    </>
+                  ) : (
+                    'Confirmer la suppression'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

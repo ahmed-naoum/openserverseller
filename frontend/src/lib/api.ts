@@ -134,8 +134,8 @@ export const authApi = {
     api.post('/auth/bank-accounts/verify-otp', { otp }),
   setDefaultBankAccount: (id: number) =>
     api.patch(`/auth/bank-accounts/${id}/default`),
-  deleteBankAccount: (id: number) =>
-    api.delete(`/auth/bank-accounts/${id}`),
+  deleteBankAccount: (id: number, password?: string) =>
+    api.delete(`/auth/bank-accounts/${id}`, { data: { password } }),
   resendOtp: (data: { email?: string; phone?: string }) =>
     api.post('/auth/resend-otp', data),
   extractKycData: async (file: File, type: 'recto' | 'verso' = 'recto') => {
@@ -308,6 +308,7 @@ export const adminApi = {
   verifyUser: (uuid: string, isActive: boolean) => api.patch(`/admin/users/${uuid}/active`, { isActive }),
   users: (params?: { role?: string; status?: string; page?: number; limit?: number; search?: string }) =>
     api.get('/users', { params }),
+  getUser: (uuid: string) => api.get(`/users/${uuid}`),
   createUser: (data: any) => api.post('/users', data),
   updateUser: (uuid: string, data: any) => api.patch(`/users/${uuid}/admin-edit`, data),
   activateUser: (uuid: string) => api.patch(`/users/${uuid}/activate`),
@@ -366,6 +367,8 @@ export const adminApi = {
   downloadBackupUrl: (filename: string) => `${BACKEND_URL}/api/v1/admin/backups/download/${filename}`,
   deleteBackup: (filename: string) => api.delete(`/admin/backups/${filename}`),
   restoreBackup: (filename: string) => api.post(`/admin/backups/restore/${filename}`),
+  getBackupConfig: () => api.get('/admin/backups/config'),
+  updateBackupConfig: (data: { interval: string; maxBackups: number; enabled: boolean }) => api.post('/admin/backups/config', data),
   // Activity Logs
   getActivityLogs: (params?: { page?: number; limit?: number; userId?: number; action?: string }) => 
     api.get('/admin/audit-logs', { params }),
@@ -525,5 +528,13 @@ export const invoiceApi = {
   list: (params?: { page?: number; limit?: number }) => api.get('/invoices', { params }),
   stats: () => api.get('/invoices/stats'),
   get: (id: number) => api.get(`/invoices/${id}`),
+};
+
+export const notificationsApi = {
+  list: (params?: { page?: number; limit?: number }) => api.get('/notifications', { params }),
+  markRead: (id: number) => api.patch(`/notifications/${id}/read`),
+  markAllRead: () => api.post('/notifications/read-all'),
+  delete: (id: number) => api.delete(`/notifications/${id}`),
+  deleteAll: () => api.delete('/notifications'),
 };
 

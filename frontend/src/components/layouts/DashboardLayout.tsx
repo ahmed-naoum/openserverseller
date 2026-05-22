@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { dashboardApi, chatApi } from '../../lib/api';
+import { dashboardApi, chatApi, notificationsApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { useSocket } from '../../contexts/SocketContext';
 import AnnouncementBanner from '../common/AnnouncementBanner';
 import ProfileProgressBanner from '../common/ProfileProgressBanner';
+import ConfirmationModal from '../ui/ConfirmationModal';
 import { 
   Home, 
   Package, 
@@ -49,7 +50,9 @@ import {
   Database,
   History,
   ScanLine,
-  Headphones
+  Headphones,
+  Trash,
+  Check
 } from 'lucide-react';
 
 const navigation = {
@@ -185,6 +188,154 @@ export default function DashboardLayout() {
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { socket } = useSocket();
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
+  const [toasts, setToasts] = useState<any[]>([]);
+
+  // Confirmation Modal states
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [confirmData, setConfirmData] = useState({
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
+
+  // Synthesize crystal double synth bell chime sound
+  const playChime = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+      
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(523.25, now); // C5
+      osc1.frequency.exponentialRampToValueAtTime(1046.50, now + 0.15); // C6
+      
+      gain1.gain.setValueAtTime(0.15, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+      
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.6);
+      
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(659.25, now + 0.08); // E5
+      osc2.frequency.exponentialRampToValueAtTime(1318.51, now + 0.25); // E6
+      
+      gain2.gain.setValueAtTime(0.1, now + 0.08);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+      
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.08);
+      osc2.stop(now + 0.8);
+    } catch (err) {
+      console.warn('WebAudio chime failed:', err);
+    }
+  };
+
+  // Play custom high-quality money MP3 sound provided in the public directory
+  const playMoneySound = () => {
+    try {
+      const audio = new Audio('/soundes/Money_sound.mp3');
+      audio.play().catch(err => {
+        console.warn('Playback blocked by browser audio policy or file missing:', err);
+      });
+    } catch (err) {
+      console.warn('Failed to play custom MP3 sound:', err);
+    }
+  };
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await notificationsApi.list({ page: 1, limit: 20 });
+      setNotifications(res.data.data.notifications || []);
+    } catch (err) {
+      console.error('Failed to fetch notifications:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchNotifications();
+    }
+  }, [user?.id]);
+
+  const getNotificationRedirect = (type: string) => {
+    switch (type) {
+      case 'PRODUCT_CLAIM_STATUS':
+        return '/influencer/inventory';
+      case 'REFERRAL_LINK_STATUS':
+      case 'REFERRAL_LINK_CLICKS':
+        return '/influencer/links';
+      case 'PAYOUT_REQUEST_STATUS':
+        return '/influencer/wallet';
+      case 'NEW_LEAD':
+      case 'LEAD_STATUS_CHANGED':
+        return '/influencer/leads';
+      default:
+        return '/influencer/notifications';
+    }
+  };
+
+  const handleNotificationClick = async (notif: any) => {
+    try {
+      if (!notif.isRead) {
+        await notificationsApi.markRead(notif.id);
+        setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, isRead: true } : n));
+      }
+      setShowNotificationsMenu(false);
+      navigate(getNotificationRedirect(notif.type));
+    } catch (err) {
+      console.error('Failed to handle notification click:', err);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await notificationsApi.markAllRead();
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+      toast.success('Toutes les notifications ont été marquées comme lues.');
+    } catch (err) {
+      console.error('Failed to mark all as read:', err);
+    }
+  };
+
+  const handleDeleteNotification = async (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await notificationsApi.delete(id);
+      setNotifications(prev => prev.filter(n => n.id !== id));
+      toast.success('Notification supprimée.');
+    } catch (err) {
+      console.error('Failed to delete notification:', err);
+    }
+  };
+
+  const handleDeleteAllNotifications = () => {
+    setConfirmData({
+      title: "Supprimer toutes les notifications",
+      message: "Voulez-vous vraiment supprimer définitivement toutes vos notifications ? Cette action est irréversible.",
+      onConfirm: async () => {
+        try {
+          await notificationsApi.deleteAll();
+          setNotifications([]);
+          toast.success('Toutes les notifications ont été supprimées.');
+        } catch (err) {
+          toast.error('Erreur lors de la suppression');
+          console.error(err);
+        }
+      }
+    });
+    setIsConfirmOpen(true);
+  };
+
   const [totalUnread, setTotalUnread] = useState(0);
   const [queueCount, setQueueCount] = useState(0);
 
@@ -227,9 +378,24 @@ export default function DashboardLayout() {
       setQueueCount(prev => Math.max(0, prev - 1));
     };
 
+    const handleNewNotification = (notification: any) => {
+      setNotifications(prev => [notification, ...prev]);
+      if (['NEW_LEAD', 'LEAD_STATUS_CHANGED'].includes(notification.type)) {
+        playMoneySound();
+      } else {
+        playChime();
+      }
+      const toastId = Date.now();
+      setToasts(prev => [...prev, { ...notification, toastId }]);
+      setTimeout(() => {
+        setToasts(prev => prev.filter(t => t.toastId !== toastId));
+      }, 6000);
+    };
+
     socket.on('new-message', handleNewMessage);
     socket.on('new-support-ticket', handleNewTicket);
     socket.on('conversation-claimed', handleClaimed);
+    socket.on('new-notification', handleNewNotification);
 
     // Join support queue room if agent
     const isAgent = ['SUPER_ADMIN', 'SYSTEM_SUPPORT'].includes(user?.role || '');
@@ -241,6 +407,7 @@ export default function DashboardLayout() {
       socket.off('new-message', handleNewMessage);
       socket.off('new-support-ticket', handleNewTicket);
       socket.off('conversation-claimed', handleClaimed);
+      socket.off('new-notification', handleNewNotification);
       if (isAgent) {
         socket.emit('leave-room', 'support-queue');
       }
@@ -302,6 +469,12 @@ export default function DashboardLayout() {
     if (location.pathname.startsWith('/helper')) return navigation.helper;
     return navigation.vendor;
   };
+
+  const unreadNotifications = notifications.filter(n => !n.isRead);
+  const inventoryUnreadCount = unreadNotifications.filter(n => n.type === 'PRODUCT_CLAIM_STATUS').length;
+  const linksUnreadCount = unreadNotifications.filter(n => ['REFERRAL_LINK_STATUS', 'REFERRAL_LINK_CLICKS'].includes(n.type)).length;
+  const walletUnreadCount = unreadNotifications.filter(n => n.type === 'PAYOUT_REQUEST_STATUS').length;
+  const leadsUnreadCount = unreadNotifications.filter(n => ['NEW_LEAD', 'LEAD_STATUS_CHANGED'].includes(n.type)).length;
 
   const isVendorDashboard = !location.pathname.startsWith('/admin') && !location.pathname.startsWith('/agent') && !location.pathname.startsWith('/grosseller') && !location.pathname.startsWith('/influencer') && !location.pathname.startsWith('/confirmation') && !location.pathname.startsWith('/helper');
   const currentMode = user?.mode || 'SELLER';
@@ -465,24 +638,24 @@ export default function DashboardLayout() {
 
       {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 glass-sidebar z-50 transition-all duration-300 ease-in-out
-        ${sidebarCollapsed ? 'lg:w-20' : 'lg:w-64'}
-        w-64 lg:translate-x-0
+        ${sidebarCollapsed ? 'lg:w-20' : 'lg:w-56'}
+        w-56 lg:translate-x-0
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         {/* Sidebar Header */}
-        <div className={`flex items-center h-20 transition-all duration-300 relative z-20 ${
-          sidebarCollapsed ? 'lg:justify-center lg:px-0 px-8 justify-between' : 'px-8 justify-between'
+        <div className={`flex items-center h-14 transition-all duration-300 relative z-20 ${
+          sidebarCollapsed ? 'lg:justify-center lg:px-0 px-5 justify-between' : 'px-5 justify-between'
         }`}>
-          <div className={`flex items-center gap-3 transition-all duration-300 ${
+          <div className={`flex items-center gap-2.5 transition-all duration-300 ${
             sidebarCollapsed ? 'lg:gap-0' : ''
           }`}>
-            <div className="w-10 h-10 bg-white rounded-2xl shadow-xl shadow-slate-200/50 flex items-center justify-center overflow-hidden flex-shrink-0 border border-slate-100">
-               <img src="/new logo/logo filess-25.svg" alt="SILACOD" className="w-7 h-7 object-contain" />
+            <div className="w-9 h-9 bg-white rounded-xl shadow-lg shadow-slate-200/50 flex items-center justify-center overflow-hidden flex-shrink-0 border border-slate-100">
+               <img src="/new logo/logo filess-25.svg" alt="SILACOD" className="w-6 h-6 object-contain" />
             </div>
             <img 
               src="/new logo/logo filess-24.svg" 
               alt="SILACOD" 
-              className={`h-7 transition-all duration-300 ${
+              className={`h-3.5 transition-all duration-300 ${
                 sidebarCollapsed ? 'lg:hidden' : ''
               }`} 
             />
@@ -490,14 +663,14 @@ export default function DashboardLayout() {
           {/* Mobile close button */}
           <button 
             onClick={() => setSidebarOpen(false)}
-            className="lg:hidden p-2 rounded-xl hover:bg-slate-100 text-slate-400 transition-colors"
+            className="lg:hidden p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 transition-colors"
           >
-            <X size={20} />
+            <X size={16} />
           </button>
         </div>
 
         {/* Separator with Gradient */}
-        <div className="px-6 mb-4">
+        <div className="px-4 mb-2">
           <div className="h-px bg-gradient-to-r from-transparent via-slate-200/50 to-transparent" />
         </div>
 
@@ -505,8 +678,8 @@ export default function DashboardLayout() {
         <div className="bg-noise absolute inset-0 mix-blend-overlay opacity-[0.15] pointer-events-none z-10" />
 
         {/* Nav Items */}
-        <nav className={`space-y-1.5 overflow-y-auto max-h-[calc(100vh-160px)] scrollbar-hide transition-all duration-300 ${
-          sidebarCollapsed ? 'lg:p-3 p-6' : 'p-6'
+        <nav className={`space-y-0.5 overflow-y-auto max-h-[calc(100vh-120px)] scrollbar-hide transition-all duration-300 ${
+          sidebarCollapsed ? 'lg:p-2 p-3' : 'p-3'
         }`}>
           {navItems.map((item) => {
             // Render either as a Link (if no children) or a Button (if it has children)
@@ -519,8 +692,8 @@ export default function DashboardLayout() {
             const isGrosseller = location.pathname.startsWith('/grosseller');
             const isInfluencer = location.pathname.startsWith('/influencer');
 
-            const navClass = `w-full flex items-center gap-3 rounded-2xl text-[13px] font-black tracking-wide transition-all duration-500 group relative z-20 ${
-              sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3 px-4 py-3' : 'px-4 py-3'
+            const navClass = `w-full flex items-center gap-2.5 rounded-xl text-[11px] font-black tracking-wide transition-all duration-500 group relative z-20 ${
+              sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-2 px-3 py-2' : 'px-3 py-2'
             } ${
               isActive
                 ? (isGrosseller ? 'bg-grosseller-50 text-grosseller-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.6)]' : isInfluencer ? 'bg-influencer-50 text-influencer-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.6)]' : 'bg-primary-50 text-primary-900 border border-primary-100/50 shadow-[0_8px_20px_rgba(0,0,0,0.04)]')
@@ -529,30 +702,53 @@ export default function DashboardLayout() {
 
             const commonContent = (
               <>
-                <div className={`p-1.5 rounded-xl transition-all duration-500 flex-shrink-0 ${isActive ? 'bg-white shadow-sm scale-110' : 'group-hover:bg-white group-hover:scale-105 group-hover:shadow-md group-hover:shadow-slate-200/50'}`}>
-                  <Icon size={18} strokeWidth={isActive ? 2.5 : 2} className={isActive ? 'text-inherit' : 'text-slate-400 group-hover:text-slate-900'} />
+                <div className={`p-1 rounded-lg transition-all duration-500 flex-shrink-0 ${isActive ? 'bg-white shadow-sm scale-110' : 'group-hover:bg-white group-hover:scale-105 group-hover:shadow-md group-hover:shadow-slate-200/50'}`}>
+                  <Icon size={15} strokeWidth={isActive ? 2.5 : 2} className={isActive ? 'text-inherit' : 'text-slate-400 group-hover:text-slate-900'} />
                 </div>
-                <div className="flex-1 flex items-center justify-between min-w-0">
-                  <span className={`transition-all duration-300 whitespace-nowrap overflow-hidden text-ellipsis ${
-                    sidebarCollapsed ? 'lg:hidden' : ''
-                  }`}>{item.name}</span>
-                  
-                  {/* Notification Badge */}
-                  {item.href?.includes('/chat') && totalUnread > 0 && !sidebarCollapsed && (
-                    <span className="bg-rose-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-rose-200 animate-in zoom-in duration-300">
-                      {totalUnread}
-                    </span>
-                  )}
-                  {item.href?.includes('/support') && queueCount > 0 && !sidebarCollapsed && (
-                    <span className="bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-amber-200 animate-in zoom-in duration-300">
-                      {queueCount}
-                    </span>
-                  )}
+                
+                {!sidebarCollapsed && (
+                  <div className="flex-1 flex items-center justify-between min-w-0 animate-in fade-in duration-300">
+                    <span className="transition-all duration-300 whitespace-nowrap overflow-hidden text-ellipsis">{item.name}</span>
+                    
+                    {/* Notification Badge */}
+                    {item.href?.includes('/chat') && totalUnread > 0 && (
+                      <span className="bg-rose-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-rose-200 animate-in zoom-in duration-300">
+                        {totalUnread}
+                      </span>
+                    )}
+                    {item.href?.includes('/support') && queueCount > 0 && (
+                      <span className="bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-amber-200 animate-in zoom-in duration-300">
+                        {queueCount}
+                      </span>
+                    )}
 
-                  {hasChildren && !sidebarCollapsed && (
-                    <ChevronDown size={14} className={`transition-transform duration-500 flex-shrink-0 ${isExpanded ? 'rotate-180 text-slate-900' : 'text-slate-400 group-hover:text-slate-900'}`} />
-                  )}
-                </div>
+                    {/* Influencer Specific Badges */}
+                    {isInfluencer && item.href === '/influencer/inventory' && inventoryUnreadCount > 0 && (
+                      <span className="bg-purple-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-purple-200 animate-in zoom-in duration-300">
+                        {inventoryUnreadCount}
+                      </span>
+                    )}
+                    {isInfluencer && item.href === '/influencer/links' && linksUnreadCount > 0 && (
+                      <span className="bg-rose-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-rose-200 animate-in zoom-in duration-300">
+                        {linksUnreadCount}
+                      </span>
+                    )}
+                    {isInfluencer && item.href === '/influencer/wallet' && walletUnreadCount > 0 && (
+                      <span className="bg-emerald-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-emerald-200 animate-in zoom-in duration-300">
+                        {walletUnreadCount}
+                      </span>
+                    )}
+                    {isInfluencer && item.href === '/influencer/leads' && leadsUnreadCount > 0 && (
+                      <span className="bg-blue-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-blue-200 animate-in zoom-in duration-300">
+                        {leadsUnreadCount}
+                      </span>
+                    )}
+
+                    {hasChildren && (
+                      <ChevronDown size={14} className={`transition-transform duration-500 flex-shrink-0 ${isExpanded ? 'rotate-180 text-slate-900' : 'text-slate-400 group-hover:text-slate-900'}`} />
+                    )}
+                  </div>
+                )}
                 
                 {sidebarCollapsed && (
                   <div className="hidden lg:block absolute left-full ml-3 px-4 py-2 bg-slate-900 text-white text-[10px] uppercase font-black tracking-widest rounded-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-300 translate-x-[-10px] group-hover:translate-x-0 whitespace-nowrap z-[100] shadow-2xl">
@@ -565,6 +761,26 @@ export default function DashboardLayout() {
                     {item.href?.includes('/support') && queueCount > 0 && (
                       <span className="ml-2 bg-amber-500 text-white px-1.5 py-0.5 rounded-full text-[9px]">
                         {queueCount}
+                      </span>
+                    )}
+                    {isInfluencer && item.href === '/influencer/inventory' && inventoryUnreadCount > 0 && (
+                      <span className="ml-2 bg-purple-500 text-white px-1.5 py-0.5 rounded-full text-[9px]">
+                        {inventoryUnreadCount}
+                      </span>
+                    )}
+                    {isInfluencer && item.href === '/influencer/links' && linksUnreadCount > 0 && (
+                      <span className="ml-2 bg-rose-500 text-white px-1.5 py-0.5 rounded-full text-[9px]">
+                        {linksUnreadCount}
+                      </span>
+                    )}
+                    {isInfluencer && item.href === '/influencer/wallet' && walletUnreadCount > 0 && (
+                      <span className="ml-2 bg-emerald-500 text-white px-1.5 py-0.5 rounded-full text-[9px]">
+                        {walletUnreadCount}
+                      </span>
+                    )}
+                    {isInfluencer && item.href === '/influencer/leads' && leadsUnreadCount > 0 && (
+                      <span className="ml-2 bg-blue-500 text-white px-1.5 py-0.5 rounded-full text-[9px]">
+                        {leadsUnreadCount}
                       </span>
                     )}
                   </div>
@@ -595,7 +811,7 @@ export default function DashboardLayout() {
 
                 {/* Professional Sub-navigation with Connection Line */}
                 {hasChildren && isExpanded && !sidebarCollapsed && (
-                  <div className="relative ml-6 pl-4 space-y-1 mt-1 animate-in slide-in-from-top-2 fade-in duration-300">
+                  <div className="relative ml-5 pl-3 space-y-0.5 mt-0.5 animate-in slide-in-from-top-2 fade-in duration-300">
                     {/* Connection Line */}
                     <div className="absolute left-0 top-0 bottom-4 w-px bg-gradient-to-b from-primary-200 via-primary-100 to-transparent" />
                     
@@ -606,7 +822,7 @@ export default function DashboardLayout() {
                         <Link
                           key={child.name}
                           to={child.href}
-                          className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-[12px] font-bold transition-all relative group/item ${
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all relative group/item ${
                             isChildActive 
                               ? 'text-primary-600 bg-primary-50/30' 
                               : 'text-slate-400 hover:text-slate-900 hover:bg-slate-50/50'
@@ -617,8 +833,8 @@ export default function DashboardLayout() {
                             isChildActive ? 'bg-primary-500 scale-125' : 'bg-slate-200 group-hover/item:bg-slate-400'
                           }`} />
                           
-                          <div className={`p-1 rounded-lg transition-colors ${isChildActive ? 'bg-white shadow-sm' : 'group-hover:bg-white'}`}>
-                            <ChildIcon size={13} className={isChildActive ? 'text-primary-600' : 'text-slate-400 group-hover/item:text-slate-600'} />
+                          <div className={`p-0.5 rounded transition-colors ${isChildActive ? 'bg-white shadow-sm' : 'group-hover:bg-white'}`}>
+                            <ChildIcon size={12} className={isChildActive ? 'text-primary-600' : 'text-slate-400 group-hover/item:text-slate-600'} />
                           </div>
                           <span className="tracking-tight">{child.name}</span>
                         </Link>
@@ -634,7 +850,7 @@ export default function DashboardLayout() {
         {/* Collapse toggle button (desktop only) */}
         <button
           onClick={toggleSidebarCollapsed}
-          className={`hidden lg:flex absolute bottom-20 bg-white border border-slate-200 rounded-full p-1.5 shadow-lg hover:shadow-xl hover:bg-slate-50 text-slate-400 hover:text-primary-600 transition-all duration-300 z-[60] ${
+          className={`hidden lg:flex absolute bottom-16 bg-white border border-slate-200 rounded-full p-1.5 shadow-lg hover:shadow-xl hover:bg-slate-50 text-slate-400 hover:text-primary-600 transition-all duration-300 z-[60] ${
             sidebarCollapsed ? 'right-[-14px]' : 'right-[-14px]'
           }`}
           title={sidebarCollapsed ? 'Développer le menu' : 'Réduire le menu'}
@@ -650,9 +866,11 @@ export default function DashboardLayout() {
             <button
               onClick={handleSwitchMode}
               title={sidebarCollapsed ? (currentMode === 'AFFILIATE' ? 'Mode Affilié' : 'Mode Vendeur') : undefined}
-              className={`w-full flex items-center gap-3 rounded-[2rem] glass-panel border border-white/50 shadow-2xl shadow-slate-200/50 hover:bg-white hover:scale-[1.02] transition-all group group/btn p-3`}
+              className={`w-full flex items-center ${
+                sidebarCollapsed ? 'lg:justify-center lg:gap-0' : 'gap-2'
+              } rounded-xl glass-panel border border-white/50 shadow-2xl shadow-slate-200/50 hover:bg-white hover:scale-[1.02] transition-all group group/btn p-2`}
             >
-              <div className={`w-10 h-10 rounded-[1.25rem] flex items-center justify-center text-white text-sm font-black transition-all group-hover/btn:rotate-12 shadow-lg flex-shrink-0 ${
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-black transition-all group-hover/btn:rotate-12 shadow-lg flex-shrink-0 ${
                 currentMode === 'AFFILIATE' ? 'bg-gradient-to-tr from-accent-500 to-orange-400 shadow-accent-200' : 'bg-gradient-to-tr from-primary-600 to-influencer-500 shadow-primary-200'
               }`}>
                 {currentMode === 'AFFILIATE' ? 'A' : 'V'}
@@ -660,10 +878,10 @@ export default function DashboardLayout() {
               <div className={`text-left flex-1 transition-all duration-300 ${
                 sidebarCollapsed ? 'lg:hidden' : ''
               }`}>
-                <p className="text-[10px] font-black text-slate-900 uppercase tracking-tight leading-none">
+                <p className="text-[9px] font-black text-slate-900 uppercase tracking-tight leading-none">
                   {currentMode === 'AFFILIATE' ? 'Affilié' : 'Vendeur'}
                 </p>
-                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter mt-1">PRO SWITCH</p>
+                <p className="text-[7px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">PRO SWITCH</p>
               </div>
               <div className={`p-1.5 bg-slate-50 rounded-xl group-hover:bg-primary-50 transition-colors ${
                 sidebarCollapsed ? 'lg:hidden' : ''
@@ -766,11 +984,11 @@ export default function DashboardLayout() {
 
       {/* Main content */}
       <div className={`min-h-screen transition-all duration-300 ease-in-out ${
-        sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'
+        sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-56'
       }`}>
         {/* Header */}
-        <header className="sticky top-0 h-20 bg-[#F8FAFC]/80 backdrop-blur-xl border-b border-slate-200/50 z-20">
-          <div className="flex items-center justify-between h-full px-4 sm:px-6 lg:px-8">
+        <header className="sticky top-0 h-14 bg-[#F8FAFC]/80 backdrop-blur-xl border-b border-slate-200/50 z-20">
+          <div className="flex items-center justify-between h-full px-3 sm:px-4 lg:px-6">
             {/* Left section */}
             <div className="flex items-center gap-3">
               {/* Hamburger: mobile = open drawer, desktop = collapse/expand */}
@@ -784,24 +1002,24 @@ export default function DashboardLayout() {
                     toggleSidebarCollapsed();
                   }
                 }}
-                className="p-2.5 bg-white rounded-xl border border-slate-100 text-slate-500 hover:text-primary-600 hover:border-primary-200 transition-all shadow-sm active:scale-95"
+                className="p-2 bg-white rounded-lg border border-slate-100 text-slate-500 hover:text-primary-600 hover:border-primary-200 transition-all shadow-sm active:scale-95"
                 id="sidebar-toggle"
                 title={sidebarCollapsed ? 'Développer le menu' : 'Réduire le menu'}
               >
-                {sidebarCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+                {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
               </button>
 
               {/* Breadcrumb navigation */}
               <div className="hidden sm:flex items-center gap-2">
-                <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest ${section.color}`}>
+                <div className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest ${section.color}`}>
                   {section.label}
                 </div>
                 {currentPage && (
                   <>
-                    <ChevronRight size={14} className="text-slate-300" />
-                    <div className="h-10 px-4 bg-white rounded-xl border border-slate-100 flex items-center gap-3 shadow-sm">
-                      <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                      <span className="text-xs font-black text-slate-600 uppercase tracking-widest leading-none pt-0.5">
+                    <ChevronRight size={12} className="text-slate-300" />
+                    <div className="h-7 px-3 bg-white rounded-lg border border-slate-100 flex items-center gap-2 shadow-sm">
+                      <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                      <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest leading-none">
                         {currentPage.name}
                       </span>
                     </div>
@@ -822,49 +1040,185 @@ export default function DashboardLayout() {
               {/* Search button */}
               <button
                 onClick={() => { setSearchOpen(true); setTimeout(() => searchInputRef.current?.focus(), 100); }}
-                className="relative p-2.5 bg-white rounded-xl border border-slate-100 text-slate-400 hover:text-primary-600 hover:border-primary-200 transition-all shadow-sm hover:shadow-md active:scale-95 group"
+                className="relative p-2 bg-white rounded-lg border border-slate-100 text-slate-400 hover:text-primary-600 hover:border-primary-200 transition-all shadow-sm hover:shadow-md active:scale-95 group"
                 id="search-toggle"
               >
-                <Search size={20} />
-                <span className="hidden lg:inline-flex absolute -bottom-1 -right-1 items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-slate-100 text-[9px] font-bold text-slate-400 border border-slate-200 group-hover:bg-primary-50 group-hover:text-primary-500 group-hover:border-primary-200 transition-colors">
-                  <Command size={9} />K
+                <Search size={16} />
+                <span className="hidden lg:inline-flex absolute -bottom-1 -right-1 items-center gap-0.5 px-1 py-0.5 rounded bg-slate-100 text-[8px] font-bold text-slate-400 border border-slate-200 group-hover:bg-primary-50 group-hover:text-primary-500 group-hover:border-primary-200 transition-colors">
+                  <Command size={8} />K
                 </span>
               </button>
 
               {/* Fullscreen toggle */}
               <button
                 onClick={toggleFullscreen}
-                className="hidden sm:flex relative p-2.5 bg-white rounded-xl border border-slate-100 text-slate-400 hover:text-primary-600 hover:border-primary-200 transition-all shadow-sm hover:shadow-md active:scale-95"
+                className="hidden sm:flex relative p-2 bg-white rounded-lg border border-slate-100 text-slate-400 hover:text-primary-600 hover:border-primary-200 transition-all shadow-sm hover:shadow-md active:scale-95"
                 title={isFullscreen ? 'Quitter le plein écran' : 'Plein écran'}
                 id="fullscreen-toggle"
               >
-                {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
+                {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
               </button>
 
 
 
               {/* Notifications */}
-              <button 
-                className="relative p-2.5 bg-white rounded-xl border border-slate-100 text-slate-400 hover:text-primary-600 hover:border-primary-200 transition-all shadow-sm hover:shadow-md active:scale-95"
-                id="notifications-toggle"
-              >
-                <Bell size={20} />
-                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-gradient-to-r from-accent-500 to-rose-500 border-2 border-[#F8FAFC] rounded-full flex items-center justify-center">
-                  <span className="text-[9px] font-black text-white leading-none">3</span>
-                </span>
-              </button>
+              <div className="relative">
+                <button 
+                  onClick={() => setShowNotificationsMenu(!showNotificationsMenu)}
+                  className={`relative p-2 bg-white rounded-lg border text-slate-400 transition-all shadow-sm hover:shadow-md active:scale-95 ${
+                    showNotificationsMenu ? 'border-primary-200 text-primary-600' : 'border-slate-100 hover:text-primary-600 hover:border-primary-200'
+                  }`}
+                  id="notifications-toggle"
+                >
+                  <Bell size={16} />
+                  {unreadNotifications.length > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] bg-gradient-to-r from-accent-500 to-rose-500 border-2 border-[#F8FAFC] rounded-full flex items-center justify-center animate-pulse">
+                      <span className="text-[8px] font-black text-white leading-none">
+                        {unreadNotifications.length}
+                      </span>
+                    </span>
+                  )}
+                </button>
+
+                {showNotificationsMenu && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowNotificationsMenu(false)}></div>
+                    <div className="absolute right-0 mt-3 w-80 sm:w-[420px] bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300">
+                      {/* Tray Header */}
+                      <div className="px-5 py-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-black text-slate-900 uppercase tracking-wider">Notifications</p>
+                          <p className="text-[10px] font-bold text-slate-400 mt-0.5">
+                            {unreadNotifications.length} non lues
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {notifications.length > 0 && (
+                            <>
+                              <button 
+                                onClick={handleMarkAllRead}
+                                className="text-[9px] font-black text-primary-600 hover:text-primary-700 bg-primary-50 px-2 py-1.5 rounded-md transition-colors"
+                              >
+                                Tout lire
+                              </button>
+                              <button 
+                                onClick={handleDeleteAllNotifications}
+                                className="text-[9px] font-black text-rose-600 hover:text-rose-700 bg-rose-50 px-2 py-1.5 rounded-md transition-colors"
+                              >
+                                Tout effacer
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Tray List */}
+                      <div className="max-h-[360px] overflow-y-auto divide-y divide-slate-50">
+                        {notifications.length === 0 ? (
+                          <div className="py-12 px-6 text-center">
+                            <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto text-slate-400 mb-3">
+                              <Bell size={20} className="animate-bounce" />
+                            </div>
+                            <p className="text-xs font-black text-slate-800">Aucune notification</p>
+                            <p className="text-[10px] text-slate-400 font-bold mt-1">
+                              Vous serez notifié en temps réel lors de vos ventes et de vos demandes.
+                            </p>
+                          </div>
+                        ) : (
+                          notifications.slice(0, 5).map((notif) => {
+                            // Custom icon mapping
+                            let iconBg = 'bg-slate-50 text-slate-500';
+                            let IconComponent = Bell;
+                            if (notif.type === 'PRODUCT_CLAIM_STATUS') {
+                              iconBg = 'bg-purple-50 text-purple-600';
+                              IconComponent = Package;
+                            } else if (['REFERRAL_LINK_STATUS', 'REFERRAL_LINK_CLICKS'].includes(notif.type)) {
+                              iconBg = 'bg-rose-50 text-rose-600';
+                              IconComponent = Tag;
+                            } else if (notif.type === 'PAYOUT_REQUEST_STATUS') {
+                              iconBg = 'bg-emerald-50 text-emerald-600';
+                              IconComponent = CreditCard;
+                            } else if (['NEW_LEAD', 'LEAD_STATUS_CHANGED'].includes(notif.type)) {
+                              iconBg = 'bg-blue-50 text-blue-600';
+                              IconComponent = Users;
+                            }
+
+                            return (
+                              <div
+                                key={notif.id}
+                                onClick={() => handleNotificationClick(notif)}
+                                className={`flex items-start gap-3 p-4 hover:bg-slate-50/80 cursor-pointer transition-all duration-300 group relative ${
+                                  !notif.isRead ? 'bg-primary-50/20' : ''
+                                }`}
+                              >
+                                {/* Active Indicator Dot */}
+                                {!notif.isRead && (
+                                  <div className="absolute left-1.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-primary-500 rounded-full animate-pulse" />
+                                )}
+
+                                {/* Icon */}
+                                <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110 ${iconBg}`}>
+                                  <IconComponent size={14} />
+                                </div>
+
+                                {/* Texts */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <p className="text-[11px] font-black text-slate-900 truncate pr-4">
+                                      {notif.title}
+                                    </p>
+                                    <span className="text-[8px] font-bold text-slate-400 whitespace-nowrap">
+                                      {new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] font-medium text-slate-500 leading-relaxed mt-1">
+                                    {notif.body}
+                                  </p>
+                                </div>
+
+                                {/* Individual Delete button */}
+                                <button
+                                  onClick={(e) => handleDeleteNotification(notif.id, e)}
+                                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 bg-white border border-slate-100 rounded-lg text-slate-400 hover:text-rose-600 hover:border-rose-200 transition-all opacity-0 group-hover:opacity-100 shadow-sm active:scale-95"
+                                  title="Supprimer"
+                                >
+                                  <Trash size={10} />
+                                </button>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+
+                      {/* Tray Footer */}
+                      {notifications.length > 0 && (
+                        <div className="px-4 py-3 bg-slate-50/50 border-t border-slate-50 text-center">
+                          <Link
+                            to="/influencer/notifications"
+                            onClick={() => setShowNotificationsMenu(false)}
+                            className="inline-flex items-center gap-1.5 text-[10px] font-black text-slate-600 hover:text-primary-600 transition-colors uppercase tracking-wider"
+                          >
+                            <span>Voir tout l'historique</span>
+                            <ChevronRight size={10} />
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
 
               {/* Divider */}
-              <div className="hidden sm:block w-px h-8 bg-slate-200/80 mx-1" />
+              <div className="hidden sm:block w-px h-6 bg-slate-200/80 mx-0.5" />
 
               {/* Profile dropdown */}
               <div className="relative">
                 <button
                   onClick={() => setShowProfileMenu(!showProfileMenu)}
-                  className="flex items-center gap-3 hover:bg-white border border-transparent hover:border-slate-100 rounded-2xl p-1.5 pr-3 sm:pr-4 transition-all duration-300 group"
+                  className="flex items-center gap-2 hover:bg-white border border-transparent hover:border-slate-100 rounded-xl p-1 pr-2 sm:pr-3 transition-all duration-300 group"
                   id="profile-menu-toggle"
                 >
-                  <div className="w-10 h-10 sm:w-11 sm:h-11 bg-gradient-to-tr from-primary-600 to-indigo-400 rounded-full flex items-center justify-center text-white font-black text-base sm:text-lg shadow-lg shadow-primary-200/50 group-hover:rotate-6 transition-transform overflow-hidden">
+                  <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-tr from-primary-600 to-indigo-400 rounded-full flex items-center justify-center text-white font-black text-sm shadow-lg shadow-primary-200/50 group-hover:rotate-6 transition-transform overflow-hidden">
                     {user?.avatarUrl ? (
                       <img src={user.avatarUrl} alt={user.fullName || 'User'} className="w-full h-full object-cover" />
                     ) : (
@@ -872,18 +1226,18 @@ export default function DashboardLayout() {
                     )}
                   </div>
                   <div className="text-left hidden sm:block">
-                    <p className="text-[13px] font-black text-slate-900 leading-tight tracking-tight">{user?.fullName}</p>
-                    <p className={`text-[10px] font-black uppercase tracking-[0.1em] ${
+                    <p className="text-[11px] font-black text-slate-900 leading-tight tracking-tight">{user?.fullName}</p>
+                    <p className={`text-[9px] font-black uppercase tracking-[0.1em] ${
                       isVendorDashboard && currentMode === 'AFFILIATE' ? 'text-accent-500' : 'text-primary-500'
                     }`}>{getRoleLabel()}</p>
                   </div>
-                  <ChevronDown size={16} className={`text-slate-400 transition-transform duration-500 hidden sm:block ${showProfileMenu ? 'rotate-180' : ''}`} />
+                  <ChevronDown size={14} className={`text-slate-400 transition-transform duration-500 hidden sm:block ${showProfileMenu ? 'rotate-180' : ''}`} />
                 </button>
 
                 {showProfileMenu && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setShowProfileMenu(false)}></div>
-                    <div className="absolute right-0 mt-4 w-72 bg-white rounded-[2rem] shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300">
+                    <div className="absolute right-0 mt-3 w-64 bg-white rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300">
                       <div className="px-6 py-6 border-b border-slate-50 bg-slate-50/50 flex items-center">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-black text-slate-900 truncate">{user?.fullName}</p>
@@ -938,7 +1292,7 @@ export default function DashboardLayout() {
         </header>
 
         {/* Page content */}
-        <div className="flex-1 overflow-y-auto relative px-4 sm:px-6 lg:px-8 py-6 sm:py-10 min-h-[calc(100vh-80px)]">
+        <div className="flex-1 overflow-y-auto relative px-3 sm:px-4 lg:px-6 py-3 sm:py-4 min-h-[calc(100vh-56px)]">
           {/* Background Mesh for content area */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40">
             <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary-400/5 rounded-full blur-[100px]" />
@@ -953,6 +1307,74 @@ export default function DashboardLayout() {
           </div>
         </div>
       </div>
+
+      {/* Dynamic Slide-Up Toasts alert popup from bottom right */}
+      <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-3 w-full max-w-sm pointer-events-none">
+        {toasts.map((t) => {
+          let iconBg = 'bg-slate-50 text-slate-500';
+          let IconComponent = Bell;
+          if (t.type === 'PRODUCT_CLAIM_STATUS') {
+            iconBg = 'bg-purple-500 text-white';
+            IconComponent = Package;
+          } else if (['REFERRAL_LINK_STATUS', 'REFERRAL_LINK_CLICKS'].includes(t.type)) {
+            iconBg = 'bg-rose-500 text-white';
+            IconComponent = Tag;
+          } else if (t.type === 'PAYOUT_REQUEST_STATUS') {
+            iconBg = 'bg-emerald-500 text-white';
+            IconComponent = CreditCard;
+          } else if (['NEW_LEAD', 'LEAD_STATUS_CHANGED'].includes(t.type)) {
+            iconBg = 'bg-blue-500 text-white';
+            IconComponent = Users;
+          }
+
+          return (
+            <div
+              key={t.toastId}
+              onClick={() => handleNotificationClick(t)}
+              className="pointer-events-auto flex items-start gap-3 p-4 bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] border border-slate-100 hover:border-primary-100 cursor-pointer animate-in slide-in-from-bottom-5 fade-in duration-500 w-full relative group overflow-hidden"
+            >
+              {/* Premium Top Line Accent */}
+              <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-primary-500 to-indigo-500" />
+              
+              {/* Icon */}
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 shadow-md ${iconBg}`}>
+                <IconComponent size={16} />
+              </div>
+
+              {/* Text info */}
+              <div className="flex-1 min-w-0 pr-4">
+                <p className="text-[11px] font-black text-slate-900 leading-tight">
+                  {t.title}
+                </p>
+                <p className="text-[10px] font-semibold text-slate-500 leading-normal mt-1">
+                  {t.body}
+                </p>
+              </div>
+
+              {/* Close Button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setToasts(prev => prev.filter(toastItem => toastItem.toastId !== t.toastId));
+                }}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <ConfirmationModal
+        isOpen={isConfirmOpen}
+        onClose={() => setIsConfirmOpen(false)}
+        onConfirm={confirmData.onConfirm}
+        title={confirmData.title}
+        message={confirmData.message}
+        type="danger"
+        confirmText="Supprimer"
+      />
     </div>
   );
 }

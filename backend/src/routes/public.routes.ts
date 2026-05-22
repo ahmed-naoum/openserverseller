@@ -260,6 +260,19 @@ router.post(
       data: { conversions: { increment: 1 } }
     });
 
+    try {
+      const productName = link.product?.nameFr || link.product?.nameAr || 'Produit';
+      const { createNotification } = await import('../utils/notification.js');
+      await createNotification(
+        link.influencerId,
+        'NEW_LEAD',
+        '🎉 Nouvelle vente (Lead) !',
+        `Vous avez reçu un nouveau lead de ${fullName} (${city}) pour le produit "${productName}".`
+      );
+    } catch (err) {
+      console.error('Failed to trigger new lead notification:', err);
+    }
+
     res.status(201).json({
       status: 'success',
       data: { leadId: lead.id }

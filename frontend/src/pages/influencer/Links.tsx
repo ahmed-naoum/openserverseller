@@ -196,6 +196,7 @@ export default function InfluencerLinks() {
   };
 
   const totalClicks = links.reduce((sum, l) => sum + l.clicks, 0);
+  const totalRawClicks = links.reduce((sum, l) => sum + (l.rawClicks || l.clicks), 0);
   const totalConversions = links.reduce((sum, l) => sum + l.conversions, 0);
   const totalEarnings = links.reduce((sum, l) => sum + l.earnings, 0);
   
@@ -226,7 +227,7 @@ export default function InfluencerLinks() {
   }
 
   return (
-    <div className="max-w-[1600px] mx-auto space-y-8 p-4 md:p-8">
+    <div className="max-w-[1600px] mx-auto space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
@@ -261,36 +262,43 @@ export default function InfluencerLinks() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-6">
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Visiteurs Uniques Totaux</p>
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Vues Totales</p>
+          <div className="flex items-center justify-between">
+            <h3 className="text-2xl font-black text-slate-900">{totalRawClicks.toLocaleString()}</h3>
+            <div className="p-2 bg-violet-50 text-violet-600 rounded-xl"><Eye className="w-4 h-4" /></div>
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Visiteurs Uniques</p>
           <div className="flex items-center justify-between">
             <h3 className="text-2xl font-black text-slate-900">{totalClicks.toLocaleString()}</h3>
             <div className="p-2 bg-blue-50 text-blue-600 rounded-xl"><MousePointerClick className="w-4 h-4" /></div>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Ventes Totales</p>
           <div className="flex items-center justify-between">
             <h3 className="text-2xl font-black text-slate-900">{totalConversions.toLocaleString()}</h3>
             <div className="p-2 bg-purple-50 text-purple-600 rounded-xl"><Zap className="w-4 h-4" /></div>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Taux de Conv.</p>
           <div className="flex items-center justify-between">
             <h3 className="text-2xl font-black text-indigo-600">{globalCTR.toFixed(1)}%</h3>
             <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><Target className="w-4 h-4" /></div>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Liens Actifs</p>
           <div className="flex items-center justify-between">
             <h3 className="text-2xl font-black text-emerald-600">{activeLinksCount}</h3>
             <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl"><Power className="w-4 h-4" /></div>
           </div>
         </div>
-        <div className="bg-slate-900 p-6 rounded-3xl shadow-xl">
+        <div className="bg-slate-900 p-4 rounded-xl shadow-md">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Total Liens</p>
           <div className="flex items-center justify-between">
             <h3 className="text-2xl font-black text-white">{totalLinksCount}</h3>
@@ -300,12 +308,12 @@ export default function InfluencerLinks() {
       </div>
 
       {/* Performance Chart Section */}
-      <div id="performance-chart" className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+      <div id="performance-chart" className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
             <div>
               <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                <Activity className="w-5 h-5 text-influencer-500" /> Performance Temporelle ({dateRange === 'custom' ? 'Custom' : dateRange === 'all' ? 'Tous' : `${dateRange}j`})
+                <Activity className="w-5 h-5 text-influencer-500" /> Performance Temporelle ({dateRange === 'custom' ? 'Personnalisé' : dateRange === 'all' ? 'Tous' : `${dateRange}j`})
               </h3>
               <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">
                 {selectedLinkIdForChart 
@@ -367,7 +375,7 @@ export default function InfluencerLinks() {
                       : 'text-slate-400 hover:text-slate-600'
                   }`}
                 >
-                  Custom
+                  Personnalisé
                 </button>
               </div>
 
@@ -392,11 +400,12 @@ export default function InfluencerLinks() {
             <div className="hidden lg:block h-8 w-[1px] bg-slate-100" />
             <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest">
               <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-blue-500 rounded-full" /> Visiteurs Uniques</div>
+              <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-violet-500 rounded-full" /> Vues Totales</div>
             </div>
           </div>
         </div>
         
-        <div className="h-80 w-full">
+        <div className="h-72 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart 
               data={dailyStats} 
@@ -406,6 +415,10 @@ export default function InfluencerLinks() {
                 <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
                   <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                </linearGradient>
+                <linearGradient id="colorRawViews" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.2}/>
+                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -444,12 +457,24 @@ export default function InfluencerLinks() {
               <Area 
                 yAxisId="left"
                 type="monotone" 
-                dataKey="views" 
-                stroke="#3b82f6" 
+                dataKey="rawViews" 
+                stroke="#8b5cf6" 
                 strokeWidth={3}
                 fillOpacity={1} 
-                dot={{ r: 4, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }}
-                activeDot={{ r: 6, strokeWidth: 0, fill: '#3b82f6' }}
+                dot={{ r: 4, fill: '#8b5cf6', strokeWidth: 2, stroke: '#fff' }}
+                activeDot={{ r: 6, strokeWidth: 0, fill: '#8b5cf6' }}
+                fill="url(#colorRawViews)" 
+                name="Vues Totales"
+              />
+              <Area 
+                yAxisId="left"
+                type="monotone" 
+                dataKey="views" 
+                stroke="#3b82f6" 
+                strokeWidth={2}
+                fillOpacity={1} 
+                dot={{ r: 3, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }}
+                activeDot={{ r: 5, strokeWidth: 0, fill: '#3b82f6' }}
                 fill="url(#colorViews)" 
                 name="Visiteurs Uniques"
               />
@@ -489,7 +514,7 @@ export default function InfluencerLinks() {
       </div>
 
       {/* Links Pro Table */}
-      <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         {filteredLinks.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
@@ -540,15 +565,22 @@ export default function InfluencerLinks() {
                       </td>
                       <td className="px-8 py-5">
                         <div className="flex items-center justify-center">
-                          <div className="flex items-center gap-8">
+                          <div className="flex items-center gap-6">
                             <div className="text-center group-hover:transform group-hover:scale-110 transition-all duration-300">
+                              <p className="text-xs font-black text-slate-900 mb-0.5">{(link.rawClicks || link.clicks).toLocaleString()}</p>
+                              <div className="flex items-center justify-center gap-1">
+                                <Eye size={10} className="text-violet-500" />
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">Vues</p>
+                              </div>
+                            </div>
+                            <div className="text-center group-hover:transform group-hover:scale-110 transition-all duration-300 delay-75">
                               <p className="text-xs font-black text-slate-900 mb-0.5">{link.clicks.toLocaleString()}</p>
                               <div className="flex items-center justify-center gap-1">
                                 <MousePointerClick size={10} className="text-blue-500" />
                                 <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">Visiteurs</p>
                               </div>
                             </div>
-                            <div className="text-center group-hover:transform group-hover:scale-110 transition-all duration-300 delay-75">
+                            <div className="text-center group-hover:transform group-hover:scale-110 transition-all duration-300 delay-100">
                               <p className="text-xs font-black text-slate-900 mb-0.5">{link.conversions.toLocaleString()}</p>
                               <div className="flex items-center justify-center gap-1">
                                 <Zap size={10} className="text-purple-500" />
@@ -624,7 +656,7 @@ export default function InfluencerLinks() {
       {/* OTP Verification Modal */}
       {confirmModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-sm overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200">
             <div className="p-8 text-center">
               <div className="w-20 h-20 rounded-full mx-auto mb-6 flex items-center justify-center bg-slate-50">
                 {confirmModal.icon}
@@ -712,10 +744,10 @@ export default function InfluencerLinks() {
       {/* QR Code Modal */}
       {showQrModal && selectedLink && (
         <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white rounded-[3rem] shadow-2xl max-w-sm w-full p-10 text-center animate-in zoom-in-95 duration-300">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-10 text-center animate-in zoom-in-95 duration-300">
             <h2 className="text-2xl font-black text-slate-900 mb-2">QR Code Pro</h2>
             <p className="text-sm text-slate-400 font-medium mb-8">Partagez visuellement votre lien.</p>
-            <div className="bg-white p-6 rounded-[2rem] border-4 border-dashed border-slate-100 inline-block mb-8">
+            <div className="bg-white p-6 rounded-2xl border-4 border-dashed border-slate-100 inline-block mb-8">
               <img 
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(`${window.location.origin}/r/${selectedLink?.code}`)}`}
                 alt="QR Code"

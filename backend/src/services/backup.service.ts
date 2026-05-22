@@ -2,10 +2,12 @@ import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { promisify } from 'util';
+import { PrismaClient } from '@prisma/client';
 
 const readdir = promisify(fs.readdir);
 const stat = promisify(fs.stat);
 const unlink = promisify(fs.unlink);
+const prisma = new PrismaClient();
 
 const BACKUP_DIR = path.join(process.cwd(), 'backups');
 // Ensure we are in the backend directory if running from root
@@ -14,13 +16,86 @@ const finalBackupDir = fs.existsSync(path.join(process.cwd(), 'backend'))
   : BACKUP_DIR;
 const PG_DUMP_PATH = 'C:\\Program Files\\PostgreSQL\\18\\bin\\pg_dump.exe';
 const PG_RESTORE_PATH = 'C:\\Program Files\\PostgreSQL\\18\\bin\\pg_restore.exe';
-const MAX_BACKUPS = 10000;
 
 export class BackupService {
+  static activeInterval: NodeJS.Timeout | null = null;
+
   static async init() {
     if (!fs.existsSync(finalBackupDir)) {
       fs.mkdirSync(finalBackupDir, { recursive: true });
     }
+  }
+
+  static async loadConfig() {
+    try {
+      const setting = await prisma.platformSettings.findUnique({
+        where: { key: 'backup_config' }
+      });
+      if (setting && typeof setting.value === 'object' && setting.value !== null) {
+        const val = setting.value as any;
+        return {
+          interval: val.interval || '24h',
+          maxBackups: typeof val.maxBackups === 'number' ? val.maxBackups : 100,
+          enabled: val.enabled !== false
+        };
+      }
+    } catch (err) {
+      console.error('Failed to load backup config:', err);
+    }
+    return { interval: '24h', maxBackups: 100, enabled: true };
+  }
+
+  static async startScheduler() {
+    if (this.activeInterval) {
+      clearInterval(this.activeInterval);
+      this.activeInterval = null;
+    }
+
+    const config = await this.loadConfig();
+    if (!config.enabled || config.interval === 'disabled') {
+      console.log('Automated backups are currently disabled.');
+      return;
+    }
+
+    let intervalMs = 24 * 60 * 60 * 1000; // default 24h
+    switch (config.interval) {
+      case '1m':
+        intervalMs = 60 * 1000;
+        break;
+      case '1h':
+        intervalMs = 60 * 60 * 1000;
+        break;
+      case '12h':
+        intervalMs = 12 * 60 * 60 * 1000;
+        break;
+      case '24h':
+        intervalMs = 24 * 60 * 60 * 1000;
+        break;
+      case '7d':
+        intervalMs = 7 * 24 * 60 * 60 * 1000;
+        break;
+    }
+
+    console.log(`Starting automated backup scheduler: Interval = ${config.interval} (${intervalMs}ms), Max Backups = ${config.maxBackups}`);
+
+    this.activeInterval = setInterval(async () => {
+      try {
+        console.log('Running scheduled automated backup...');
+        await this.createBackup();
+      } catch (error) {
+        console.error('Scheduled automated backup failed:', error);
+      }
+    }, intervalMs);
+  }
+
+  static async updateConfig(newConfig: { interval: string; maxBackups: number; enabled: boolean }) {
+    await prisma.platformSettings.upsert({
+      where: { key: 'backup_config' },
+      update: { value: newConfig },
+      create: { key: 'backup_config', value: newConfig }
+    });
+    console.log('Backup configuration updated:', newConfig);
+    await this.startScheduler();
   }
 
   static async createBackup(): Promise<string> {
@@ -72,10 +147,12 @@ export class BackupService {
 
   static async cleanup() {
     try {
+      const config = await this.loadConfig();
+      const maxBackups = config.maxBackups;
       const files = await readdir(finalBackupDir);
       const backupFiles = files.filter(f => (f.startsWith('backup-')) && (f.endsWith('.sql') || f.endsWith('.dump')));
 
-      if (backupFiles.length > MAX_BACKUPS) {
+      if (backupFiles.length > maxBackups) {
         // Get file stats to sort by creation time
         const fileStats = await Promise.all(
           backupFiles.map(async (f) => {
@@ -88,7 +165,7 @@ export class BackupService {
         // Sort by time (oldest first)
         fileStats.sort((a, b) => a.time - b.time);
 
-        const filesToDelete = fileStats.slice(0, backupFiles.length - MAX_BACKUPS);
+        const filesToDelete = fileStats.slice(0, backupFiles.length - maxBackups);
         
         for (const file of filesToDelete) {
           await unlink(path.join(finalBackupDir, file.filename));

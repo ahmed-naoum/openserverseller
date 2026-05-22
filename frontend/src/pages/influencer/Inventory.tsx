@@ -279,7 +279,7 @@ export default function InfluencerInventory() {
         </AnimatePresence>
 
         {filteredClaims.length === 0 && (
-          <div className="col-span-full py-20 flex flex-col items-center justify-center text-gray-400 bg-white rounded-3xl border-2 border-dashed border-gray-100">
+          <div className="col-span-full py-20 flex flex-col items-center justify-center text-gray-400 bg-white rounded-2xl border-2 border-dashed border-gray-100">
             <Package className="w-16 h-16 mb-4 opacity-20" />
             <p className="font-bold">Aucun produit trouvé</p>
             <p className="text-sm">Essayez de modifier vos filtres ou de réclamer des produits au marché.</p>

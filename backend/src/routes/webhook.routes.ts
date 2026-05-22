@@ -308,6 +308,43 @@ router.post(
       });
     }
 
+    if (processed && orderMatched && orderMatched.leadId) {
+      try {
+        const lead = await prisma.lead.findUnique({
+          where: { id: orderMatched.leadId }
+        });
+        
+        if (lead && lead.referralLinkId) {
+          const statusesToNotify = ['CONFIRMED', 'DELIVERED', 'CANCEL_REASON_PRICE', 'RETURNED'];
+          if (statusesToNotify.includes(lead.status)) {
+            const link = await prisma.referralLink.findUnique({
+              where: { id: lead.referralLinkId },
+              include: { product: true }
+            });
+            if (link) {
+              const statusLabels: Record<string, string> = {
+                'CONFIRMED': 'CONFIRMÉ',
+                'DELIVERED': 'LIVRÉ',
+                'CANCEL_REASON_PRICE': 'ANNULÉ (PRIX)',
+                'RETURNED': 'RETOURNÉ'
+              };
+              const label = statusLabels[lead.status] || lead.status;
+              const productName = link.product?.nameFr || link.product?.nameAr || 'Produit';
+              const { createNotification } = await import('../utils/notification.js');
+              await createNotification(
+                link.influencerId,
+                'LEAD_STATUS_CHANGED',
+                `📈 Statut du lead mis à jour via Livraison : ${label}`,
+                `Le lead de ${lead.fullName} pour le produit "${productName}" est maintenant ${label}.`
+              );
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to trigger webhook lead status notification:', err);
+      }
+    }
+
     // Always respond 200 OK
     res.status(200).json({ success: true, loggedId: webhookLogId });
   })

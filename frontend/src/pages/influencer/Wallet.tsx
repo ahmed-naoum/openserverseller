@@ -49,9 +49,9 @@ export default function InfluencerWallet() {
     : commissions.filter(c => c.status === activeFilter);
 
   const getTier = () => {
-    if (totalEarnings >= 50000) return { name: 'Diamond', icon: '💎', rate: '18%', next: null, remaining: 0 };
-    if (totalEarnings >= 10000) return { name: 'Gold', icon: '🥇', rate: '15%', next: 'Diamond', remaining: 50000 - totalEarnings };
-    return { name: 'Silver', icon: '🥈', rate: '12%', next: 'Gold', remaining: 10000 - totalEarnings };
+    if (totalEarnings >= 50000) return { name: 'Diamant', icon: '💎', rate: '18%', next: null, remaining: 0 };
+    if (totalEarnings >= 10000) return { name: 'Or', icon: '🥇', rate: '15%', next: 'Diamant', remaining: 50000 - totalEarnings };
+    return { name: 'Argent', icon: '🥈', rate: '12%', next: 'Or', remaining: 10000 - totalEarnings };
   };
   const tier = getTier();
 
@@ -80,7 +80,7 @@ export default function InfluencerWallet() {
         </button>
       </div>
  {/* Tier Progress */}
-      <div className="card p-6">
+      <div className="card p-5 rounded-2xl">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
             <Crown className="w-5 h-5 text-influencer-500" />
@@ -93,7 +93,7 @@ export default function InfluencerWallet() {
           {/* Silver */}
           <div className={`flex-1 text-center p-3 rounded-xl border-2 ${totalEarnings < 10000 ? 'border-influencer-300 bg-influencer-50' : 'border-green-300 bg-green-50'}`}>
             <span className="text-2xl">🥈</span>
-            <p className="text-xs font-bold mt-1 text-gray-900">Silver</p>
+            <p className="text-xs font-bold mt-1 text-gray-900">Argent</p>
             <p className="text-[10px] text-gray-500">12%</p>
           </div>
           <div className="flex-1 h-1 bg-gray-200 rounded-full overflow-hidden">
@@ -102,7 +102,7 @@ export default function InfluencerWallet() {
           {/* Gold */}
           <div className={`flex-1 text-center p-3 rounded-xl border-2 ${totalEarnings >= 10000 && totalEarnings < 50000 ? 'border-influencer-300 bg-influencer-50' : totalEarnings >= 50000 ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
             <span className="text-2xl">🥇</span>
-            <p className="text-xs font-bold mt-1">Gold</p>
+            <p className="text-xs font-bold mt-1">Or</p>
             <p className="text-[10px] text-gray-500">15%</p>
           </div>
           <div className="flex-1 h-1 bg-gray-200 rounded-full overflow-hidden">
@@ -111,7 +111,7 @@ export default function InfluencerWallet() {
           {/* Diamond */}
           <div className={`flex-1 text-center p-3 rounded-xl border-2 ${totalEarnings >= 50000 ? 'border-influencer-300 bg-influencer-50' : 'border-gray-200 bg-gray-50'}`}>
             <span className="text-2xl">💎</span>
-            <p className="text-xs font-bold mt-1">Diamond</p>
+            <p className="text-xs font-bold mt-1">Diamant</p>
             <p className="text-[10px] text-gray-500">18%</p>
           </div>
         </div>
@@ -125,16 +125,16 @@ export default function InfluencerWallet() {
 
       {/* Balance Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="card p-5 bg-gradient-to-br from-influencer-500 to-purple-600 text-white border-0">
+        <div className="card p-4 rounded-xl bg-gradient-to-br from-influencer-500 to-purple-600 text-white border-0 shadow-md">
           <div className="flex items-center justify-between mb-3">
-            <WalletIcon className="w-8 h-8 opacity-80" />
-            <span className="text-xs font-bold bg-white/20 px-2 py-0.5 rounded-full text-gray-900">{tier.icon} {tier.name}</span>
+            <WalletIcon className="w-6 h-6 text-white/90" />
+            <span className="text-xs font-bold bg-white/20 px-2.5 py-0.5 rounded-full text-white">{tier.icon} {tier.name}</span>
           </div>
-          <p className="text-sm text-gray-900  font-medium opacity-80">Solde Total</p>
-          <h2 className="text-3xl font-black text-gray-900">{totalEarnings.toFixed(2)} <span className="text-lg font-medium opacity-70">MAD</span></h2>
+          <p className="text-xs text-white/80 font-bold uppercase tracking-wider">Solde Total</p>
+          <h2 className="text-2xl font-black text-white mt-1">{totalEarnings.toFixed(2)} <span className="text-sm font-bold opacity-80">MAD</span></h2>
         </div>
 
-        <div className="card p-5 border-l-4 border-l-amber-500">
+        <div className="card p-4 rounded-xl border-l-4 border-l-amber-500">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">En Attente</p>
@@ -145,7 +145,7 @@ export default function InfluencerWallet() {
           </div>
         </div>
 
-        <div className="card p-5 border-l-4 border-l-blue-500">
+        <div className="card p-4 rounded-xl border-l-4 border-l-blue-500">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Approuvé</p>
@@ -156,7 +156,7 @@ export default function InfluencerWallet() {
           </div>
         </div>
 
-        <div className="card p-5 border-l-4 border-l-green-500">
+        <div className="card p-4 rounded-xl border-l-4 border-l-green-500">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Déjà Payé</p>
@@ -171,7 +171,7 @@ export default function InfluencerWallet() {
      
 
       {/* Commission History */}
-      <div className="card overflow-hidden">
+      <div className="card overflow-hidden rounded-2xl">
         <div className="p-6 border-b border-gray-100">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">

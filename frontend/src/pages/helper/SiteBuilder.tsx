@@ -5,7 +5,7 @@ import BlockRenderer, { EditorBlock, BlockType } from '../../components/helper/s
 import { 
   Type, Image as ImageIcon, Heading, LayoutTemplate, Link as LinkIcon, 
   ShoppingCart, ArrowUp, ArrowDown, Trash2, Save, ChevronLeft, Loader2,
-  Clock, Space, Upload, ShieldCheck, Plus, ExternalLink
+  Clock, Space, Upload, ShieldCheck, Plus, ExternalLink, Code, Copy, Download
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -22,6 +22,46 @@ export default function SiteBuilder() {
   const [productData, setProductData] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
+
+  // JSON Input/Export states
+  const [jsonInput, setJsonInput] = useState('');
+
+  const handleCopyJSON = () => {
+    try {
+      const layoutData = {
+        blocks,
+        settings: pageSettings
+      };
+      navigator.clipboard.writeText(JSON.stringify(layoutData, null, 2));
+      toast.success('Layout JSON copié !');
+    } catch (err) {
+      toast.error('Impossible de copier.');
+    }
+  };
+
+  const handleImportJSON = () => {
+    if (!jsonInput.trim()) {
+      toast.error('Le champ JSON est vide');
+      return;
+    }
+    try {
+      const parsed = JSON.parse(jsonInput);
+      if (parsed.blocks && Array.isArray(parsed.blocks)) {
+        setBlocks(parsed.blocks);
+        if (parsed.settings) {
+          setPageSettings(parsed.settings);
+        }
+        toast.success('Layout importé avec succès !');
+      } else if (Array.isArray(parsed)) {
+        setBlocks(parsed);
+        toast.success('Blocks importés avec succès !');
+      } else {
+        toast.error('Format de layout invalide');
+      }
+    } catch (err) {
+      toast.error('JSON invalide. Veuillez vérifier le code.');
+    }
+  };
 
   // Load existing data
   useEffect(() => {
@@ -694,6 +734,41 @@ export default function SiteBuilder() {
                   value={pageSettings.backgroundColor} 
                   onChange={(v: string) => setPageSettings(prev => ({ ...prev, backgroundColor: v }))} 
                 />
+
+                <div className="pt-6 border-t border-gray-100">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Code className="w-4 h-4 text-purple-500" />
+                    <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Données du Layout (JSON)</h4>
+                  </div>
+                  <p className="text-[10px] text-gray-400 font-medium leading-relaxed mb-3">
+                    Copiez les données actuelles ou collez un layout existant ci-dessous pour le charger instantanément.
+                  </p>
+                  
+                  <div className="space-y-3">
+                    <button
+                      onClick={handleCopyJSON}
+                      className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs rounded-xl transition-all active:scale-95 border border-purple-100"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      Copier le Layout (JSON)
+                    </button>
+                    
+                    <textarea
+                      placeholder='Collez votre code JSON de layout ici...'
+                      value={jsonInput}
+                      onChange={(e) => setJsonInput(e.target.value)}
+                      className="w-full h-32 p-3 border border-gray-200 rounded-xl text-[10px] font-mono focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none resize-none bg-gray-50/50"
+                    />
+                    
+                    <button
+                      onClick={handleImportJSON}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-md shadow-purple-100 transition-all active:scale-95"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Appliquer le JSON
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 

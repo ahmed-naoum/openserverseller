@@ -337,6 +337,33 @@ router.patch(
         return updatedClaim;
     });
 
+    try {
+      const product = await prisma.product.findUnique({
+        where: { id: claim.productId }
+      });
+      const productName = product?.nameFr || product?.nameAr || 'Produit';
+
+      let notifTitle = '';
+      let notifBody = '';
+      if (claim.status === 'APPROVED') {
+        notifTitle = '🎉 Votre produit a été approuvé !';
+        notifBody = `Félicitations ! Votre demande d'affiliation pour le produit "${productName}" a été acceptée. Vous pouvez maintenant générer des liens.`;
+      } else if (claim.status === 'REJECTED') {
+        notifTitle = '❌ Votre demande de produit a été refusée';
+        notifBody = `Désolé, votre demande d'affiliation pour le produit "${productName}" a été refusée par l'administrateur.`;
+      } else if (claim.status === 'REVOKED') {
+        notifTitle = '⚠️ Accès au produit révoqué';
+        notifBody = `Votre accès d'affiliation au produit "${productName}" a été révoqué.`;
+      }
+
+      if (notifTitle && notifBody) {
+        const { createNotification } = await import('../utils/notification.js');
+        await createNotification(claim.userId, 'PRODUCT_CLAIM_STATUS', notifTitle, notifBody);
+      }
+    } catch (err) {
+      console.error('Failed to trigger claim notification:', err);
+    }
+
     res.json({
       status: 'success',
       data: claim

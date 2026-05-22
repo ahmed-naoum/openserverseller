@@ -180,6 +180,7 @@ export default function AdminLeads() {
                 <th className="px-5 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Montant</th>
                 <th className="px-5 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Statut</th>
                 <th className="px-5 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Agent</th>
+                <th className="px-5 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Propriétaire</th>
                 <th className="px-5 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Date</th>
                 <th className="px-5 py-3 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Actions</th>
               </tr>
@@ -188,12 +189,12 @@ export default function AdminLeads() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    <td colSpan={7} className="px-5 py-4"><div className="h-10 bg-gray-100 rounded-lg w-full"></div></td>
+                    <td colSpan={8} className="px-5 py-4"><div className="h-10 bg-gray-100 rounded-lg w-full"></div></td>
                   </tr>
                 ))
               ) : leads.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-5 py-12 text-center text-gray-400 font-medium">
+                  <td colSpan={8} className="px-5 py-12 text-center text-gray-400 font-medium">
                     <Package className="w-12 h-12 mx-auto text-gray-100 mb-3" />
                     Aucun lead trouvé
                   </td>
@@ -271,6 +272,22 @@ export default function AdminLeads() {
                           </div>
                         ) : (
                           <span className="text-[10px] font-bold text-gray-300 uppercase italic tracking-wider">Non assigné</span>
+                        )}
+                      </td>
+
+                      {/* Propriétaire */}
+                      <td className="px-5 py-4">
+                        {lead.vendor ? (
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-gray-900">{lead.vendor.fullName}</span>
+                            {lead.vendor.phone && (
+                              <span className="text-[10px] text-gray-400 font-medium flex items-center gap-1 mt-0.5">
+                                <Phone className="w-2.5 h-2.5 text-cyan-500" /> {lead.vendor.phone}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-[10px] font-bold text-gray-300 uppercase italic tracking-wider">Aucun</span>
                         )}
                       </td>
 

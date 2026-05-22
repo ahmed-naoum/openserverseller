@@ -281,6 +281,7 @@ export interface ReferralLink {
   product?: Product;
   code: string;
   clicks: number;
+  rawClicks?: number;
   conversions: number;
   earnings: number;
   isActive: boolean;

@@ -40,9 +40,46 @@ const BackupManager = () => {
   const [selectedBackup, setSelectedBackup] = useState<string | null>(null);
   const [confirmationText, setConfirmationText] = useState('');
 
+  // Backup Configuration States
+  const [configInterval, setConfigInterval] = useState('24h');
+  const [configMaxBackups, setConfigMaxBackups] = useState(100);
+  const [configEnabled, setConfigEnabled] = useState(true);
+  const [savingConfig, setSavingConfig] = useState(false);
+
   useEffect(() => {
     fetchBackups();
+    fetchBackupConfig();
   }, [currentPage, startDate, endDate]);
+
+  const fetchBackupConfig = async () => {
+    try {
+      const res = await adminApi.getBackupConfig();
+      const { interval, maxBackups, enabled } = res.data.data;
+      setConfigInterval(interval);
+      setConfigMaxBackups(maxBackups);
+      setConfigEnabled(enabled);
+    } catch (error) {
+      console.error('Failed to fetch backup config:', error);
+    }
+  };
+
+  const handleSaveConfig = async () => {
+    try {
+      setSavingConfig(true);
+      await adminApi.updateBackupConfig({
+        interval: configInterval,
+        maxBackups: Number(configMaxBackups),
+        enabled: configEnabled
+      });
+      toast.success('Configuration de sauvegarde mise à jour');
+      fetchBackupConfig();
+    } catch (error) {
+      console.error('Failed to save config:', error);
+      toast.error('Échec de la mise à jour');
+    } finally {
+      setSavingConfig(false);
+    }
+  };
 
   const fetchBackups = async () => {
     try {
@@ -141,8 +178,8 @@ const BackupManager = () => {
             Gestionnaire de Sauvegardes
           </h1>
           <p className="text-slate-500 mt-2 font-medium flex items-center gap-2">
-            <ShieldCheck size={16} className="text-emerald-500" />
-            Protection automatique de vos données toutes les minutes (Limite: 10,000 fichiers)
+            <ShieldCheck size={16} className={configEnabled ? 'text-emerald-500' : 'text-slate-400'} />
+            {configEnabled ? `Sauvegarde automatique active (${configInterval === '1m' ? 'Chaque minute' : configInterval === '1h' ? 'Toutes les heures' : configInterval === '12h' ? 'Toutes les 12 heures' : configInterval === '24h' ? 'Tous les jours' : configInterval === '7d' ? 'Toutes les semaines' : configInterval})` : 'Sauvegarde automatique désactivée'} (Limite : {configMaxBackups} fichiers)
           </p>
         </div>
 
@@ -209,6 +246,87 @@ const BackupManager = () => {
         <div className="absolute bottom-0 left-0 translate-y-1/2 -translate-x-1/4 w-96 h-96 bg-indigo-400 rounded-full blur-[100px] opacity-20" />
       </div>
 
+      {/* Planification des Sauvegardes Card */}
+      <div className="bg-white rounded-[32px] p-8 border border-slate-100 shadow-xl shadow-slate-100/50 space-y-6">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-5">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+              <Clock size={20} />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-slate-900 tracking-tight">Planification des Sauvegardes</h2>
+              <p className="text-slate-400 text-xs font-medium">Configurez la fréquence des snapshots automatiques et la limite d'archivage</p>
+            </div>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input 
+              type="checkbox" 
+              checked={configEnabled}
+              onChange={(e) => setConfigEnabled(e.target.checked)}
+              className="sr-only peer" 
+            />
+            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+            <span className="ml-3 text-xs font-black uppercase tracking-wider text-slate-600">
+              {configEnabled ? 'Activé' : 'Désactivé'}
+            </span>
+          </label>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* Frequency Select */}
+          <div className="space-y-2">
+            <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+              Fréquence Automatique
+            </label>
+            <select
+              value={configInterval}
+              onChange={(e) => setConfigInterval(e.target.value)}
+              disabled={!configEnabled}
+              className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-600/5 focus:border-indigo-600 transition-all font-bold text-sm text-slate-800 disabled:opacity-50"
+            >
+              <option value="1m">Chaque minute (Mode Test / Démo)</option>
+              <option value="1h">Toutes les heures</option>
+              <option value="12h">Toutes les 12 heures (Deux fois par jour)</option>
+              <option value="24h">Tous les jours (Recommandé en Production)</option>
+              <option value="7d">Toutes les semaines</option>
+            </select>
+            <p className="text-[10px] text-slate-400 font-medium">
+              💡 Le mode "Chaque minute" est idéal pour tester mais consomme beaucoup de CPU sur le serveur en production.
+            </p>
+          </div>
+
+          {/* Retention Limit Input */}
+          <div className="space-y-2">
+            <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+              Nombre de sauvegardes conservées (FIFO)
+            </label>
+            <input
+              type="number"
+              value={configMaxBackups}
+              onChange={(e) => setConfigMaxBackups(Math.max(1, Number(e.target.value)))}
+              disabled={!configEnabled}
+              className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-600/5 focus:border-indigo-600 transition-all font-bold text-sm text-slate-800 disabled:opacity-50"
+              placeholder="Ex: 100"
+              min="1"
+            />
+            <p className="text-[10px] text-slate-400 font-medium">
+              Lorsque cette limite est dépassée, la sauvegarde la plus ancienne est automatiquement supprimée.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-2">
+          <button
+            onClick={handleSaveConfig}
+            disabled={savingConfig}
+            className="flex items-center gap-2 px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-indigo-100 active:scale-95 disabled:opacity-50"
+          >
+            {savingConfig ? <RefreshCcw size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+            Enregistrer les modifications
+          </button>
+        </div>
+      </div>
+
       {/* Stats / Status Bar */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex items-center gap-4">
@@ -217,7 +335,7 @@ const BackupManager = () => {
           </div>
           <div>
             <p className="text-xs font-black text-slate-400 uppercase tracking-wider">État du Système</p>
-            <p className="text-xl font-black text-slate-900">Actif & Sécurisé</p>
+            <p className="text-xl font-black text-slate-900">{configEnabled ? 'Actif & Sécurisé' : 'Sauvegarde Off'}</p>
           </div>
         </div>
         <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex items-center gap-4">
@@ -226,7 +344,9 @@ const BackupManager = () => {
           </div>
           <div>
             <p className="text-xs font-black text-slate-400 uppercase tracking-wider">Fréquence</p>
-            <p className="text-xl font-black text-slate-900">1 Minute</p>
+            <p className="text-xl font-black text-slate-900">
+              {!configEnabled ? 'Désactivé' : configInterval === '1m' ? '1 Minute' : configInterval === '1h' ? '1 Heure' : configInterval === '12h' ? '12 Heures' : configInterval === '24h' ? '24 Heures' : configInterval === '7d' ? '7 Jours' : configInterval}
+            </p>
           </div>
         </div>
         <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex items-center gap-4">
@@ -235,7 +355,7 @@ const BackupManager = () => {
           </div>
           <div>
             <p className="text-xs font-black text-slate-400 uppercase tracking-wider">Total Fichiers</p>
-            <p className="text-xl font-black text-slate-900">{stats.totalCount} / 10,000</p>
+            <p className="text-xl font-black text-slate-900">{stats.totalCount} / {configMaxBackups}</p>
           </div>
         </div>
         <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex items-center gap-4">

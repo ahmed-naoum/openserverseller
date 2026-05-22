@@ -290,6 +290,13 @@ router.get(
               fullName: l.assignedAgent.profile?.fullName,
             }
             : null,
+          vendor: l.vendor
+            ? {
+              id: l.vendor.id,
+              fullName: l.vendor.profile?.fullName || 'Utilisateur',
+              phone: l.vendor.phone || '',
+            }
+            : null,
           recentCalls: l.callLogs.length,
           lastCall: l.callLogs[0]?.createdAt || null,
           productPrice: getPackPrice(l),
@@ -1201,6 +1208,37 @@ router.patch(
         },
       });
     });
+
+    if (updatedLead && updatedLead.referralLinkId) {
+      const statusesToNotify = ['CONFIRMED', 'DELIVERED', 'CANCEL_REASON_PRICE', 'RETURNED'];
+      if (statusesToNotify.includes(status)) {
+        try {
+          const link = await prisma.referralLink.findUnique({
+            where: { id: updatedLead.referralLinkId },
+            include: { product: true }
+          });
+          if (link) {
+            const statusLabels: Record<string, string> = {
+              'CONFIRMED': 'CONFIRMÉ',
+              'DELIVERED': 'LIVRÉ',
+              'CANCEL_REASON_PRICE': 'ANNULÉ (PRIX)',
+              'RETURNED': 'RETOURNÉ'
+            };
+            const label = statusLabels[status] || status;
+            const productName = link.product?.nameFr || link.product?.nameAr || 'Produit';
+            const { createNotification } = await import('../utils/notification.js');
+            await createNotification(
+              link.influencerId,
+              'LEAD_STATUS_CHANGED',
+              `📈 Statut du lead mis à jour : ${label}`,
+              `Le lead de ${updatedLead.fullName} pour le produit "${productName}" est maintenant ${label}.`
+            );
+          }
+        } catch (err) {
+          console.error('Failed to trigger lead status notification:', err);
+        }
+      }
+    }
 
     res.json({
       status: 'success',

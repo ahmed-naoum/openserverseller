@@ -23,8 +23,14 @@ import {
   AlertCircle,
   Landmark,
   Shield,
-  Sparkles
+  Sparkles,
+  X,
+  ZoomIn,
+  Globe,
+  Navigation
 } from 'lucide-react';
+import { FaInstagram, FaTiktok, FaFacebook, FaYoutube, FaSnapchat } from 'react-icons/fa';
+import { FaXTwitter } from 'react-icons/fa6';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -33,6 +39,7 @@ export default function AdminVerifications() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'PENDING' | 'ALL'>('PENDING');
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [imageModal, setImageModal] = useState<{ url: string; title: string } | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-verifications', activeTab],
@@ -122,6 +129,27 @@ export default function AdminVerifications() {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-700">
+      {/* Image Modal */}
+      {imageModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setImageModal(null)}>
+          <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setImageModal(null)}
+              className="absolute -top-4 -right-4 z-10 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-2xl hover:bg-rose-50 transition-colors"
+            >
+              <X size={20} className="text-slate-700" />
+            </button>
+            <div className="bg-white rounded-3xl p-3 shadow-2xl">
+              <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-3 pb-2">{imageModal.title}</p>
+              <img
+                src={imageModal.url}
+                alt={imageModal.title}
+                className="max-w-[85vw] max-h-[80vh] object-contain rounded-2xl"
+              />
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="relative overflow-hidden rounded-[2.5rem] bg-[#2c2f74] p-10 text-white shadow-2xl">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -282,10 +310,73 @@ export default function AdminVerifications() {
                           <MapPin size={14} />
                           <span className="text-[10px] font-black uppercase tracking-widest">Ville & Adresse</span>
                         </div>
-                        <p className="text-sm font-bold text-slate-800">{user.profile?.city || user.detectedCity || '—'}</p>
-                        {user.profile?.address && <p className="text-[10px] font-medium text-slate-400 truncate">{user.profile.address}</p>}
+                        {user.detectedCity && (
+                          <div className="flex items-center gap-1.5">
+                            <Navigation size={11} className="text-blue-400" />
+                            <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">IP:</span>
+                            <span className="text-sm font-bold text-slate-800">{user.detectedCity}</span>
+                          </div>
+                        )}
+                        {user.profile?.city && (
+                          <div className="flex items-center gap-1.5">
+                            <MapPin size={11} className="text-emerald-400" />
+                            <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Déclaré:</span>
+                            <span className="text-sm font-bold text-slate-800">{user.profile.city}</span>
+                          </div>
+                        )}
+                        {user.profile?.address && <p className="text-[10px] font-medium text-slate-400 mt-1">{user.profile.address}</p>}
+                        {!user.detectedCity && !user.profile?.city && <p className="text-sm font-bold text-slate-300">—</p>}
                       </div>
                     </div>
+
+                    {/* Social Media Accounts */}
+                    {(user.profile?.instagramUsername || user.profile?.tiktokUsername || user.profile?.facebookUsername || user.profile?.youtubeUsername || user.profile?.xUsername || user.profile?.snapchatUsername) && (
+                      <div className="p-5 rounded-3xl bg-white border border-slate-100 shadow-sm space-y-3">
+                        <div className="flex items-center gap-2 text-slate-400">
+                          <Globe size={14} />
+                          <span className="text-[10px] font-black uppercase tracking-widest">Réseaux Sociaux</span>
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                          {user.profile?.instagramUsername && (
+                            <a href={`https://instagram.com/${user.profile.instagramUsername}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-pink-50 to-purple-50 border border-pink-100 hover:border-pink-300 transition-all group">
+                              <FaInstagram className="text-pink-500" size={16} />
+                              <span className="text-xs font-bold text-pink-700 group-hover:text-pink-900">@{user.profile.instagramUsername}</span>
+                              {user.profile?.instagramFollowers && <span className="text-[9px] font-black text-pink-400 bg-pink-100 px-1.5 py-0.5 rounded-full">{user.profile.instagramFollowers?.toLocaleString()}</span>}
+                            </a>
+                          )}
+                          {user.profile?.tiktokUsername && (
+                            <a href={`https://tiktok.com/@${user.profile.tiktokUsername}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-slate-400 transition-all group">
+                              <FaTiktok className="text-slate-800" size={14} />
+                              <span className="text-xs font-bold text-slate-700 group-hover:text-slate-900">@{user.profile.tiktokUsername}</span>
+                            </a>
+                          )}
+                          {user.profile?.facebookUsername && (
+                            <a href={`https://facebook.com/${user.profile.facebookUsername}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-blue-50 border border-blue-100 hover:border-blue-300 transition-all group">
+                              <FaFacebook className="text-blue-600" size={15} />
+                              <span className="text-xs font-bold text-blue-700 group-hover:text-blue-900">{user.profile.facebookUsername}</span>
+                            </a>
+                          )}
+                          {user.profile?.youtubeUsername && (
+                            <a href={`https://youtube.com/@${user.profile.youtubeUsername}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-red-50 border border-red-100 hover:border-red-300 transition-all group">
+                              <FaYoutube className="text-red-600" size={16} />
+                              <span className="text-xs font-bold text-red-700 group-hover:text-red-900">@{user.profile.youtubeUsername}</span>
+                            </a>
+                          )}
+                          {user.profile?.xUsername && (
+                            <a href={`https://x.com/${user.profile.xUsername}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-slate-400 transition-all group">
+                              <FaXTwitter className="text-slate-800" size={14} />
+                              <span className="text-xs font-bold text-slate-700 group-hover:text-slate-900">@{user.profile.xUsername}</span>
+                            </a>
+                          )}
+                          {user.profile?.snapchatUsername && (
+                            <a href={`https://snapchat.com/add/${user.profile.snapchatUsername}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-yellow-50 border border-yellow-100 hover:border-yellow-300 transition-all group">
+                              <FaSnapchat className="text-yellow-500" size={15} />
+                              <span className="text-xs font-bold text-yellow-700 group-hover:text-yellow-900">@{user.profile.snapchatUsername}</span>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Action Sections */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -342,22 +433,44 @@ export default function AdminVerifications() {
                         {user.kycDocuments?.length > 0 && (
                           <div className="space-y-2">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Documents soumis</p>
-                            {user.kycDocuments.map((doc: any) => (
-                              <a
-                                key={doc.id}
-                                href={doc.documentUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-100 hover:bg-primary-50 hover:border-primary-200 transition-all group"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <FileText size={14} className="text-slate-400 group-hover:text-primary-500" />
-                                  <span className="text-xs font-bold text-slate-600 group-hover:text-primary-700">{doc.documentType}</span>
-                                  <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${getStatusColor(doc.status)}`}>{getStatusLabel(doc.status)}</span>
+                            {user.kycDocuments.map((doc: any) => {
+                              const isImage = /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(doc.documentUrl || '');
+                              return (
+                                <div key={doc.id} className="space-y-2">
+                                  <button
+                                    onClick={() => {
+                                      if (isImage) {
+                                        setImageModal({ url: doc.documentUrl, title: doc.documentType });
+                                      } else {
+                                        window.open(doc.documentUrl, '_blank');
+                                      }
+                                    }}
+                                    className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-100 hover:bg-primary-50 hover:border-primary-200 transition-all group text-left"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <FileText size={14} className="text-slate-400 group-hover:text-primary-500" />
+                                      <span className="text-xs font-bold text-slate-600 group-hover:text-primary-700">{doc.documentType}</span>
+                                      <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${getStatusColor(doc.status)}`}>{getStatusLabel(doc.status)}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1 text-slate-300 group-hover:text-primary-500">
+                                      {isImage ? <ZoomIn size={14} /> : <ExternalLink size={14} />}
+                                    </div>
+                                  </button>
+                                  {/* Thumbnail preview for images */}
+                                  {isImage && (
+                                    <button
+                                      onClick={() => setImageModal({ url: doc.documentUrl, title: doc.documentType })}
+                                      className="relative w-full h-32 rounded-2xl overflow-hidden border border-slate-100 hover:border-primary-300 transition-all group/img cursor-pointer"
+                                    >
+                                      <img src={doc.documentUrl} alt={doc.documentType} className="w-full h-full object-cover" />
+                                      <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/30 transition-all flex items-center justify-center">
+                                        <ZoomIn size={24} className="text-white opacity-0 group-hover/img:opacity-100 transition-opacity" />
+                                      </div>
+                                    </button>
+                                  )}
                                 </div>
-                                <Eye size={14} className="text-slate-300 group-hover:text-primary-500" />
-                              </a>
-                            ))}
+                              );
+                            })}
                           </div>
                         )}
 

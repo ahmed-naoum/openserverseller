@@ -111,6 +111,18 @@ router.post(
         requestedLandingPageUrl
       }
     });
+    try {
+      const productName = product?.nameFr || product?.nameAr || 'Produit';
+      const { createNotification } = await import('../utils/notification.js');
+      await createNotification(
+        userId,
+        'PRODUCT_CLAIM_STATUS',
+        '📝 Demande d\'affiliation soumise',
+        `Votre demande d'affiliation pour le produit "${productName}" est en attente d'approbation par l'administrateur.`
+      );
+    } catch (err) {
+      console.error('Failed to trigger claim submission notification:', err);
+    }
 
     res.status(201).json(claim);
   })
@@ -202,6 +214,7 @@ router.get(
       return {
         ...link,
         clicks: uniqueClicksSet.size,
+        rawClicks: clicksData.length,
         conversions: leadsCount,
         earnings: earningsSum._sum.amount || 0
       };
@@ -250,10 +263,23 @@ router.get(
 
     // Only increment the counter if it's a new IP
     if (!existingClick) {
-      await (prisma as any).referralLink.update({
+      const updatedLink = await (prisma as any).referralLink.update({
         where: { id: link.id },
         data: { clicks: { increment: 1 } }
       });
+      if (updatedLink.clicks === 100) {
+        try {
+          const { createNotification } = await import('../utils/notification.js');
+          await createNotification(
+            link.influencerId,
+            'REFERRAL_LINK_CLICKS',
+            '🎉 Objectif 100 visiteurs atteint !',
+            `Félicitations ! Votre lien de parrainage (${link.code}) a généré 100 visiteurs uniques !`
+          );
+        } catch (err) {
+          console.error('Failed to trigger clicks milestone notification:', err);
+        }
+      }
     }
 
     res.json(link);
@@ -300,10 +326,23 @@ router.get(
 
     // Only increment the click counter if it's a new IP
     if (!existingClick) {
-      await (prisma as any).referralLink.update({
+      const updatedLink = await (prisma as any).referralLink.update({
         where: { id: link.id },
         data: { clicks: { increment: 1 } }
       });
+      if (updatedLink.clicks === 100) {
+        try {
+          const { createNotification } = await import('../utils/notification.js');
+          await createNotification(
+            link.influencerId,
+            'REFERRAL_LINK_CLICKS',
+            '🎉 Objectif 100 visiteurs atteint !',
+            `Félicitations ! Votre lien de parrainage (${link.code}) a généré 100 visiteurs uniques !`
+          );
+        } catch (err) {
+          console.error('Failed to trigger clicks milestone notification:', err);
+        }
+      }
     }
 
     // We only return public-safe data
@@ -469,10 +508,12 @@ router.get(
     };
 
     const clicksByDate: Record<string, Set<string>> = {};
+    const rawClicksByDate: Record<string, number> = {};
     clicks.forEach((c: any) => {
       const key = getKey(c.createdAt);
       if (!clicksByDate[key]) clicksByDate[key] = new Set();
       clicksByDate[key].add(`${c.ipAddress}-${c.userAgent || 'unknown'}`);
+      rawClicksByDate[key] = (rawClicksByDate[key] || 0) + 1;
     });
 
     const uniqueClicksByDate: Record<string, number> = {};
@@ -492,10 +533,12 @@ router.get(
     while (curr <= dateLimitEnd) {
       const key = getKey(curr);
       const views = uniqueClicksByDate[key] || 0;
+      const rawViews = rawClicksByDate[key] || 0;
       const sales = salesByDate[key] || 0;
       stats.push({
         date: curr.toISOString(),
         views,
+        rawViews,
         sales,
         convRate: views > 0 ? Number(((sales / views) * 100).toFixed(1)) : 0
       });
@@ -1309,6 +1352,28 @@ router.patch(
         product: { include: { images: { where: { isPrimary: true }, take: 1 } } }
       }
     });
+
+    if (status && status !== link.status) {
+      try {
+        const statusLabels: Record<string, string> = {
+          'BUILDING': 'En construction',
+          'ACTIVE': 'Actif',
+          'INACTIVE': 'Inactif',
+          'SUSPENDED': 'Suspendu'
+        };
+        const label = statusLabels[status] || status;
+        const productName = updatedLink.product?.nameFr || updatedLink.product?.nameAr || 'Produit';
+        const { createNotification } = await import('../utils/notification.js');
+        await createNotification(
+          link.influencerId,
+          'REFERRAL_LINK_STATUS',
+          '🔄 Statut de votre lien mis à jour',
+          `Le statut de votre lien de parrainage pour le produit "${productName}" est maintenant : ${label}.`
+        );
+      } catch (err) {
+        console.error('Failed to trigger link status notification:', err);
+      }
+    }
 
     res.json(updatedLink);
   })

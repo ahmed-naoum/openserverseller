@@ -111,7 +111,7 @@ export default function SupportTickets() {
   );
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] p-4 md:p-8 relative overflow-hidden">
+    <div className="relative overflow-hidden space-y-6">
       {/* Decorative Background Elements */}
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden">
         <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-blue-400/5 rounded-full blur-[120px] animate-pulse" />
@@ -119,7 +119,7 @@ export default function SupportTickets() {
         <div className="absolute -bottom-[10%] left-[20%] w-[35%] h-[35%] bg-emerald-400/5 rounded-full blur-[130px]" />
       </div>
 
-      <div className="max-w-7xl mx-auto space-y-12 relative z-10">
+      <div className="relative z-10 space-y-6">
         
         {/* Header Section: Pro Max Style */}
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
@@ -162,7 +162,7 @@ export default function SupportTickets() {
               <input
                 type="text"
                 placeholder="Rechercher par sujet..."
-                className="w-full bg-white border border-slate-200/60 rounded-3xl py-4.5 pl-12 pr-4 text-sm font-bold focus:outline-none focus:border-primary-500/50 focus:ring-[6px] focus:ring-primary-500/5 transition-all shadow-sm group-hover:shadow-md"
+                className="w-full bg-white border border-slate-200/60 rounded-xl py-3 pl-11 pr-4 text-xs font-bold focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/5 transition-all shadow-sm group-hover:shadow-md"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -170,7 +170,7 @@ export default function SupportTickets() {
 
             <button
               onClick={() => setIsModalOpen(true)}
-              className="w-full sm:w-auto px-10 py-4.5 bg-slate-900 text-white rounded-3xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 shadow-[0_20px_40px_-10px_rgba(15,23,42,0.3)] hover:-translate-y-1 transition-all active:scale-95 flex items-center justify-center gap-3 shrink-0"
+              className="w-full sm:w-auto px-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 shadow-md hover:-translate-y-0.5 transition-all active:scale-95 flex items-center justify-center gap-2 shrink-0"
             >
               <Plus size={20} strokeWidth={3} />
               Nouveau Ticket
@@ -183,7 +183,7 @@ export default function SupportTickets() {
           <AnimatePresence mode='popLayout'>
             {isLoading ? (
               [1, 2, 3].map(n => (
-                <div key={n} className="bg-[#111] border border-[#1a1a1a] rounded-[2.5rem] p-8 h-64 animate-pulse" />
+                <div key={n} className="bg-[#111] border border-[#1a1a1a] rounded-2xl p-6 h-64 animate-pulse" />
               ))
             ) : filteredTickets.length > 0 ? (
               filteredTickets.map((ticket) => (
@@ -334,7 +334,7 @@ export default function SupportTickets() {
               <div className="col-span-full py-32 flex flex-col items-center text-center space-y-8">
                 <div className="relative">
                   <div className="absolute inset-0 bg-primary-500/20 blur-3xl rounded-full" />
-                  <div className="relative w-32 h-32 bg-white rounded-[3rem] shadow-xl border border-slate-100 flex items-center justify-center text-slate-200">
+                  <div className="relative w-28 h-28 bg-white rounded-2xl shadow-md border border-slate-100 flex items-center justify-center text-slate-200">
                     <MessageSquare size={48} strokeWidth={1} className="text-slate-300" />
                   </div>
                 </div>
@@ -371,7 +371,7 @@ export default function SupportTickets() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-xl bg-white border border-slate-200/60 rounded-[2.5rem] shadow-[0_30px_100px_-20px_rgba(15,23,42,0.3)] overflow-hidden"
+              className="relative w-full max-w-xl bg-white border border-slate-200/60 rounded-2xl shadow-xl overflow-hidden"
             >
               {/* Decorative Accent */}
               <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-primary-500 via-violet-500 to-emerald-500" />
@@ -430,7 +430,7 @@ export default function SupportTickets() {
                       placeholder="Décrivez votre situation avec le plus de précisions possible..."
                       required
                       rows={5}
-                      className="w-full bg-slate-50/50 border border-slate-200/60 rounded-[2rem] py-5 px-6 text-sm font-medium focus:outline-none focus:border-primary-500 focus:bg-white focus:ring-4 focus:ring-primary-500/5 transition-all resize-none text-slate-600 leading-relaxed"
+                      className="w-full bg-slate-50/50 border border-slate-200/60 rounded-2xl py-4 px-6 text-sm font-medium focus:outline-none focus:border-primary-500/50 focus:bg-white focus:ring-2 focus:ring-primary-500/5 transition-all resize-none text-slate-600 leading-relaxed"
                       value={newTicket.description}
                       onChange={(e) => setNewTicket({ ...newTicket, description: e.target.value })}
                     />
@@ -440,14 +440,14 @@ export default function SupportTickets() {
                     <button
                       type="button"
                       onClick={() => setIsModalOpen(false)}
-                      className="flex-1 px-8 py-5 bg-slate-50 text-slate-500 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-slate-100 hover:text-slate-900 transition-all active:scale-95"
+                      className="flex-1 px-6 py-4 bg-slate-50 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-100 hover:text-slate-900 transition-all active:scale-95"
                     >
                       Annuler
                     </button>
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="flex-[2] bg-slate-900 text-white py-5 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-primary-600 shadow-[0_20px_40px_-10px_rgba(15,23,42,0.3)] hover:-translate-y-1 active:scale-95 transition-all flex items-center justify-center gap-3 group disabled:opacity-50"
+                      className="flex-[2] bg-slate-900 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-primary-600 shadow-md hover:-translate-y-0.5 active:scale-95 transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
                     >
                       {isSubmitting ? 'Création en cours...' : 'Envoyer ma demande'}
                       <ChevronRight size={18} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" />

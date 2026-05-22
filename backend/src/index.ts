@@ -143,20 +143,8 @@ import { BackupService } from './services/backup.service.js';
 // Start background jobs
 startLeadsReassignmentCron();
 
-// Start 1-minute automated backup scheduler
-const runBackup = async () => {
-  try {
-    await BackupService.createBackup();
-  } catch (error) {
-    console.error('Automated backup failed:', error);
-  }
-};
-
-// Run immediately on start
-runBackup();
-
-// Then run every 60 seconds
-setInterval(runBackup, 60 * 1000);
+// Start dynamic automated backup scheduler
+BackupService.startScheduler();
 
 server.listen(PORT, () => {
   console.log(`

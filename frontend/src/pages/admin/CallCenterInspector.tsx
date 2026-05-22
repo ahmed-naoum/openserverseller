@@ -22,6 +22,14 @@ const STATUS_BADGES: Record<string, { label: string; color: string; bgCard: stri
   PUSHED_TO_DELIVERY: { label: 'En livraison', icon: Truck, color: 'bg-indigo-100 text-indigo-800', bgCard: 'from-indigo-500 to-indigo-600' },
   NEW: { label: 'Nouveau', icon: Clock, color: 'bg-blue-100 text-blue-800', bgCard: 'from-blue-400 to-blue-500' },
   AVAILABLE: { label: 'Disponible', icon: CheckCircle2, color: 'bg-emerald-100 text-emerald-800', bgCard: 'from-emerald-400 to-emerald-500' },
+  CONFIRMED: { label: 'Confirmé', icon: CheckCircle2, color: 'bg-emerald-100 text-emerald-800', bgCard: 'from-emerald-500 to-emerald-600' },
+  DELIVERED: { label: 'Livré', icon: Truck, color: 'bg-green-100 text-green-800', bgCard: 'from-green-500 to-green-600' },
+  EN_LIVRAISON: { label: 'En livraison', icon: Truck, color: 'bg-indigo-100 text-indigo-800', bgCard: 'from-indigo-500 to-indigo-600' },
+  SHIPPED: { label: 'Expédié', icon: Truck, color: 'bg-sky-100 text-sky-800', bgCard: 'from-sky-500 to-sky-600' },
+  RETURNED: { label: 'Retourné', icon: RotateCcw, color: 'bg-rose-100 text-rose-800', bgCard: 'from-rose-500 to-rose-600' },
+  CANCELLED: { label: 'Annulé', icon: XCircle, color: 'bg-slate-100 text-slate-800', bgCard: 'from-slate-500 to-slate-600' },
+  CANCEL_REASON_PRICE: { label: 'Annulé (Prix)', icon: XCircle, color: 'bg-red-100 text-red-800', bgCard: 'from-red-500 to-red-600' },
+  PRICE_REJECTED: { label: 'Refusé (Prix)', icon: AlertCircle, color: 'bg-rose-100 text-rose-800', bgCard: 'from-rose-500 to-rose-600' },
 };
 
 const allStatuses = Object.keys(STATUS_BADGES);
@@ -184,6 +192,30 @@ export default function CallCenterInspector() {
                 .sort(([, a]: any, [, b]: any) => b - a)
                 .slice(0, 5);
 
+              // Calculate Confirmed Leads count
+              const confirmedCount = Object.entries(breakdown).reduce((sum, [status, count]) => {
+                const isConfirmed = [
+                  'CONFIRMED',
+                  'ORDERED',
+                  'PUSHED_TO_DELIVERY',
+                  'DELIVERED',
+                  'EN_LIVRAISON',
+                  'SHIPPED',
+                  'IN_TRANSIT',
+                  'RETURNED'
+                ].includes(status.toUpperCase());
+                return sum + (isConfirmed ? Number(count) : 0);
+              }, 0);
+
+              // Calculate Delivered Leads count
+              const deliveredCount = Object.entries(breakdown).reduce((sum, [status, count]) => {
+                const isDelivered = ['DELIVERED'].includes(status.toUpperCase());
+                return sum + (isDelivered ? Number(count) : 0);
+              }, 0);
+
+              const confirmationRate = totalLeads > 0 ? ((confirmedCount / totalLeads) * 100).toFixed(1) : '0';
+              const deliveryRate = confirmedCount > 0 ? ((deliveredCount / confirmedCount) * 100).toFixed(1) : '0';
+
               return (
                 <button
                   key={agent.id}
@@ -224,10 +256,11 @@ export default function CallCenterInspector() {
                       <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Répartition Statuts</p>
                       <div className="flex flex-wrap gap-1.5">
                         {topStatuses.map(([status, count]: any) => {
-                          const badge = STATUS_BADGES[status] || { label: status, color: 'bg-gray-100 text-gray-600', icon: Clock };
+                          const normalizedStatus = status.toUpperCase().replace(' ', '_');
+                          const badge = STATUS_BADGES[normalizedStatus] || { label: status, color: 'bg-gray-100 text-gray-600', icon: Clock };
                           const StatusIcon = badge.icon;
                           return (
-                            <span key={status} className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${badge.color}`}>
+                            <span key={status} className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${badge.color || 'bg-gray-100 text-gray-600'}`}>
                               <StatusIcon className="w-2.5 h-2.5" />
                               {badge.label} <span className="opacity-70">({count})</span>
                             </span>
@@ -239,6 +272,7 @@ export default function CallCenterInspector() {
                         <div className="flex h-1.5 rounded-full overflow-hidden bg-gray-200/50 mt-2">
                           {topStatuses.map(([status, count]: any) => {
                             const pct = (count / totalLeads) * 100;
+                            const normalizedStatus = status.toUpperCase().replace(' ', '_');
                             const colors: Record<string, string> = {
                               ASSIGNED: 'bg-cyan-500',
                               CONTACTED: 'bg-blue-500',
@@ -248,6 +282,14 @@ export default function CallCenterInspector() {
                               NOT_INTERESTED: 'bg-red-500',
                               UNREACHABLE: 'bg-gray-400',
                               PUSHED_TO_DELIVERY: 'bg-indigo-500',
+                              CONFIRMED: 'bg-emerald-500',
+                              DELIVERED: 'bg-green-500',
+                              EN_LIVRAISON: 'bg-indigo-500',
+                              SHIPPED: 'bg-sky-500',
+                              RETURNED: 'bg-rose-500',
+                              CANCELLED: 'bg-slate-500',
+                              CANCEL_REASON_PRICE: 'bg-red-500',
+                              PRICE_REJECTED: 'bg-rose-500',
                             };
                             return (
                               <div
@@ -267,6 +309,33 @@ export default function CallCenterInspector() {
                     </div>
                   )}
 
+                  {/* Rates Section */}
+                  <div className="grid grid-cols-2 gap-3 mt-4 pt-3 border-t border-gray-100">
+                    <div className="bg-cyan-50/50 rounded-xl p-2.5 border border-cyan-100/50 flex flex-col justify-between">
+                      <div className="flex items-center gap-1.5 text-[9px] font-black text-cyan-700 uppercase tracking-wider mb-1">
+                        <TrendingUp className="w-3 h-3" /> Conf. Rate
+                      </div>
+                      <div>
+                        <span className="text-base font-black text-cyan-900 leading-none">{confirmationRate}%</span>
+                        <div className="w-full bg-cyan-100 rounded-full h-1 mt-1.5">
+                          <div className="bg-cyan-500 h-1 rounded-full transition-all" style={{ width: `${Math.min(100, Number(confirmationRate))}%` }} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-emerald-50/50 rounded-xl p-2.5 border border-emerald-100/50 flex flex-col justify-between">
+                      <div className="flex items-center gap-1.5 text-[9px] font-black text-emerald-700 uppercase tracking-wider mb-1">
+                        <Truck className="w-3 h-3" /> Deliv. Rate
+                      </div>
+                      <div>
+                        <span className="text-base font-black text-emerald-900 leading-none">{deliveryRate}%</span>
+                        <div className="w-full bg-emerald-100 rounded-full h-1 mt-1.5">
+                          <div className="bg-emerald-500 h-1 rounded-full transition-all" style={{ width: `${Math.min(100, Number(deliveryRate))}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Action hint */}
                   <div className="flex items-center justify-center gap-2 mt-4 text-[10px] font-bold text-gray-300 group-hover:text-cyan-500 transition-colors">
                     <Eye className="w-3.5 h-3.5" />
@@ -282,6 +351,32 @@ export default function CallCenterInspector() {
   }
 
   // Agent Detail View (agent selected)
+  const selectedAgentTotalLeads = Number(Object.values(statusBreakdown).reduce((s: any, c: any) => s + c, 0));
+
+  // Calculate Confirmed Leads count
+  const selectedAgentConfirmedCount = Object.entries(statusBreakdown).reduce((sum, [status, count]) => {
+    const isConfirmed = [
+      'CONFIRMED',
+      'ORDERED',
+      'PUSHED_TO_DELIVERY',
+      'DELIVERED',
+      'EN_LIVRAISON',
+      'SHIPPED',
+      'IN_TRANSIT',
+      'RETURNED'
+    ].includes(status.toUpperCase());
+    return sum + (isConfirmed ? Number(count) : 0);
+  }, 0);
+
+  // Calculate Delivered Leads count
+  const selectedAgentDeliveredCount = Object.entries(statusBreakdown).reduce((sum, [status, count]) => {
+    const isDelivered = ['DELIVERED'].includes(status.toUpperCase());
+    return sum + (isDelivered ? Number(count) : 0);
+  }, 0);
+
+  const selectedAgentConfirmationRate = selectedAgentTotalLeads > 0 ? ((selectedAgentConfirmedCount / selectedAgentTotalLeads) * 100).toFixed(1) : '0';
+  const selectedAgentDeliveryRate = selectedAgentConfirmedCount > 0 ? ((selectedAgentDeliveredCount / selectedAgentConfirmedCount) * 100).toFixed(1) : '0';
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -310,18 +405,34 @@ export default function CallCenterInspector() {
       </div>
 
       {/* Status Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
         {/* Total */}
         <div className="bg-gradient-to-br from-slate-700 to-slate-900 rounded-2xl p-4 text-white shadow-lg shadow-slate-200/50">
           <Users className="w-5 h-5 mb-1.5 opacity-80" />
-          <h3 className="text-xl font-black">{Number(Object.values(statusBreakdown).reduce((s: any, c: any) => s + c, 0))}</h3>
+          <h3 className="text-xl font-black">{selectedAgentTotalLeads}</h3>
           <p className="text-[9px] font-bold opacity-60 uppercase tracking-wider mt-0.5">Total Leads</p>
         </div>
+
+        {/* Confirmation Rate */}
+        <div className="bg-gradient-to-br from-cyan-600 to-blue-700 rounded-2xl p-4 text-white shadow-lg shadow-cyan-100/50">
+          <TrendingUp className="w-5 h-5 mb-1.5 opacity-80" />
+          <h3 className="text-xl font-black">{selectedAgentConfirmationRate}%</h3>
+          <p className="text-[9px] font-bold opacity-60 uppercase tracking-wider mt-0.5">Taux Confirmation</p>
+        </div>
+
+        {/* Delivery Rate */}
+        <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-2xl p-4 text-white shadow-lg shadow-emerald-100/50">
+          <Truck className="w-5 h-5 mb-1.5 opacity-80" />
+          <h3 className="text-xl font-black">{selectedAgentDeliveryRate}%</h3>
+          <p className="text-[9px] font-bold opacity-60 uppercase tracking-wider mt-0.5">Taux Livraison</p>
+        </div>
+
         {Object.entries(statusBreakdown)
           .sort(([, a]: any, [, b]: any) => b - a)
           .slice(0, 4)
           .map(([status, count]: any) => {
-            const badge = STATUS_BADGES[status] || { label: status, bgCard: 'from-gray-500 to-gray-600', icon: Clock };
+            const normalizedStatus = status.toUpperCase().replace(' ', '_');
+            const badge = STATUS_BADGES[normalizedStatus] || { label: status, bgCard: 'from-gray-500 to-gray-600', icon: Clock };
             const StatusIcon = badge.icon;
             return (
               <div key={status} className={`bg-gradient-to-br ${badge.bgCard} rounded-2xl p-4 text-white shadow-lg`}>
@@ -388,7 +499,9 @@ export default function CallCenterInspector() {
           </button>
           {allStatuses.map(status => {
             const badge = STATUS_BADGES[status];
-            const count = statusBreakdown[status] || 0;
+            const count = (statusBreakdown[status] !== undefined ? Number(statusBreakdown[status]) : 0) || 
+                          (statusBreakdown[status.replace('_', ' ')] !== undefined ? Number(statusBreakdown[status.replace('_', ' ')]) : 0) ||
+                          (statusBreakdown[status.replace(' ', '_')] !== undefined ? Number(statusBreakdown[status.replace(' ', '_')]) : 0) || 0;
             if (count === 0 && statusFilter !== status) return null;
             const IconComp = badge.icon;
             const isActive = statusFilter === status;
@@ -447,7 +560,8 @@ export default function CallCenterInspector() {
                 </tr>
               ) : (
                 leads.map((lead: any) => {
-                  const statusInfo = STATUS_BADGES[lead.status] || { label: lead.status, color: 'bg-gray-100 text-gray-800', icon: Clock };
+                  const normalizedStatus = lead.status?.toUpperCase()?.replace(' ', '_') || '';
+                  const statusInfo = STATUS_BADGES[normalizedStatus] || { label: lead.status, color: 'bg-gray-100 text-gray-800', icon: Clock };
                   const StatusIcon = statusInfo.icon;
                   const productImage = lead.product?.image;
 

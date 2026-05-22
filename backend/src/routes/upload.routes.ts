@@ -35,8 +35,8 @@ const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
-    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.pdf'];
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.pdf'];
     const ext = path.extname(file.originalname).toLowerCase();
     if (allowedTypes.includes(file.mimetype) && allowedExtensions.includes(ext)) {
       cb(null, true);
@@ -125,15 +125,44 @@ router.post(
       throw new AppException(400, 'No file uploaded');
     }
 
-    const fileUrl = `/uploads/${req.file.filename}`;
+    const ext = path.extname(req.file.filename).toLowerCase();
+    let finalFilename = req.file.filename;
+    let finalSize = req.file.size;
+    let finalMimetype = req.file.mimetype;
+
+    // Automatically compress and resize static images (JPG, JPEG, PNG, WEBP) to highly optimized 1200px WebP formats to save major storage space
+    if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
+      try {
+        const webpFilename = `${path.basename(req.file.filename, ext)}-optimized.webp`;
+        const outputPath = path.join(process.cwd(), 'uploads', webpFilename);
+
+        const info = await sharp(req.file.path)
+          .resize({ width: 1200, withoutEnlargement: true })
+          .webp({ quality: 80 })
+          .toFile(outputPath);
+
+        // Delete the original uncompressed file to save space
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+
+        finalFilename = webpFilename;
+        finalSize = info.size;
+        finalMimetype = 'image/webp';
+      } catch (err) {
+        console.error('Image compression failed, falling back to original:', err);
+      }
+    }
+
+    const fileUrl = `/uploads/${finalFilename}`;
 
     res.json({
       status: 'success',
       data: {
         url: fileUrl,
-        filename: req.file.filename,
-        size: req.file.size,
-        mimetype: req.file.mimetype,
+        filename: finalFilename,
+        size: finalSize,
+        mimetype: finalMimetype,
       },
     });
   })

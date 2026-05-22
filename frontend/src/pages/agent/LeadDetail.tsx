@@ -28,6 +28,29 @@ const STATUS_LABELS: Record<string, { label: string, icon: string, color: string
 };
 
 export default function AgentLeadDetail() {
+  const [theme, setTheme] = useState<'classic' | 'girly' | 'princess'>(() => {
+    return (localStorage.getItem('agent-theme') as 'classic' | 'girly' | 'princess') || 'girly';
+  });
+
+  const changeTheme = (next: 'classic' | 'girly' | 'princess') => {
+    setTheme(next);
+    localStorage.setItem('agent-theme', next);
+    window.dispatchEvent(new Event('agent-theme-change'));
+  };
+
+  useEffect(() => {
+    const syncTheme = () => {
+      const current = (localStorage.getItem('agent-theme') as 'classic' | 'girly' | 'princess') || 'girly';
+      setTheme(current);
+    };
+    window.addEventListener('agent-theme-change', syncTheme);
+    return () => window.removeEventListener('agent-theme-change', syncTheme);
+  }, []);
+
+  const isClassic = theme === 'classic';
+  const isGirly = theme === 'girly';
+  const isPrincess = theme === 'princess';
+
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<any>(null);
@@ -170,8 +193,12 @@ export default function AgentLeadDetail() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary-200 border-t-primary-500"></div>
+      <div className={`flex items-center justify-center h-64 rounded-3xl ${
+        isPrincess ? 'bg-amber-50/10' : isGirly ? 'bg-rose-50/10' : ''
+      }`}>
+        <div className={`animate-spin rounded-full h-12 w-12 border-4 ${
+          isPrincess ? 'border-amber-200 border-t-amber-500' : isGirly ? 'border-pink-200 border-t-pink-500' : 'border-indigo-200 border-t-indigo-500'
+        }`}></div>
       </div>
     );
   }
@@ -187,22 +214,52 @@ export default function AgentLeadDetail() {
         <div>
           <button
             onClick={() => navigate('/agent/leads')}
-            className="text-sm text-gray-400 hover:text-gray-600 mb-2 flex items-center gap-1"
+            className={`text-sm mb-2 flex items-center gap-1 font-bold ${
+              isPrincess ? 'text-amber-500 hover:text-amber-700' : isGirly ? 'text-pink-400 hover:text-pink-600' : 'text-gray-400 hover:text-gray-600'
+            }`}
           >
             ← Retour aux leads
           </button>
-          <h1 className="text-2xl font-extrabold text-gray-900">Confirmation du Lead</h1>
+          <h1 className="text-2xl font-black text-gray-900 tracking-tight">
+            {isPrincess ? 'Espace Princesse Royale 👑' : isGirly ? 'Confirmation du Lead 🌸' : 'Confirmation du Lead 📋'}
+          </h1>
           <p className="text-sm text-gray-500 mt-1">Appelez le client et mettez à jour le statut.</p>
         </div>
         <div className="flex items-center gap-3">
+          {/* Theme Dropdown Select */}
+          <div className="relative inline-block">
+            <select
+              value={theme}
+              onChange={(e) => changeTheme(e.target.value as any)}
+              className={`pl-3 pr-8 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300 shadow-sm border outline-none appearance-none cursor-pointer ${
+                isPrincess 
+                  ? 'bg-gradient-to-r from-amber-500 via-pink-500 to-rose-500 text-white border-amber-600 shadow-md shadow-amber-500/20'
+                  : isGirly 
+                  ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white border-pink-600 shadow-md shadow-pink-500/20' 
+                  : 'bg-indigo-600 text-white border-indigo-700'
+              }`}
+            >
+              <option value="classic" className="text-gray-900 bg-white font-bold">🕶️ Classique</option>
+              <option value="girly" className="text-gray-900 bg-white font-bold">🌸 Thème Girly ✨</option>
+              <option value="princess" className="text-gray-900 bg-white font-bold">💅 Princess Pink 👑</option>
+            </select>
+            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-white font-black text-[8px]">
+              ▼
+            </div>
+          </div>
+
           {lead.status === 'ASSIGNED' && globalCooldown > 0 && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg text-red-600 text-xs font-bold animate-pulse">
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold animate-pulse border ${
+              isPrincess ? 'bg-amber-50 border-amber-200 text-amber-600' : isGirly ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-red-50 border-red-200 text-red-600'
+            }`}>
               <Clock className="w-3.5 h-3.5" />
               {Math.floor(globalCooldown / 60)}:{(Math.floor(globalCooldown % 60)).toString().padStart(2, '0')}
             </div>
           )}
           <span className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase ${
-            lead.status === 'ASSIGNED' ? 'bg-amber-100 text-amber-800 animate-pulse' : 'bg-blue-100 text-blue-800'
+            lead.status === 'ASSIGNED' 
+              ? (isPrincess ? 'bg-amber-100 text-amber-800 animate-pulse' : isGirly ? 'bg-pink-100 text-pink-800 animate-pulse' : 'bg-amber-100 text-amber-800 animate-pulse') 
+              : (isPrincess ? 'bg-amber-50 text-amber-700' : isGirly ? 'bg-pink-50 text-pink-700' : 'bg-blue-100 text-blue-800')
           }`}>
             {lead.status}
           </span>
@@ -210,8 +267,12 @@ export default function AgentLeadDetail() {
       </div>
 
       {/* Customer Info */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="bg-gradient-to-r from-primary-500 to-primary-600 px-6 py-4">
+      <div className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${
+        isPrincess ? 'border-amber-100/50' : isGirly ? 'border-pink-100/50' : 'border-gray-100'
+      }`}>
+        <div className={`px-6 py-4 ${
+          isPrincess ? 'bg-gradient-to-r from-amber-500 via-pink-500 to-rose-500' : isGirly ? 'bg-gradient-to-r from-pink-500 to-rose-500' : 'bg-gradient-to-r from-indigo-500 to-indigo-600'
+        }`}>
           <h2 className="text-white font-bold flex items-center gap-2">👤 Client</h2>
         </div>
         <div className="p-6">
@@ -223,12 +284,23 @@ export default function AgentLeadDetail() {
             <div>
               <p className="text-xs text-gray-400 font-medium uppercase mb-1">Téléphone</p>
               <div className="flex items-center gap-2">
-                <a href={`tel:${lead.phone}`} className="text-lg font-bold text-primary-600 hover:underline flex items-center gap-2">
+                <a 
+                  href={`tel:${lead.phone}`} 
+                  className={`text-lg font-bold hover:underline flex items-center gap-2 ${
+                    isPrincess ? 'text-amber-600' : isGirly ? 'text-pink-600' : 'text-indigo-600'
+                  }`}
+                >
                   <Phone className="w-4 h-4" /> {lead.phone}
                 </a>
                 <button
                   onClick={handleViewHistory}
-                  className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-all border border-indigo-100 shadow-sm"
+                  className={`p-1.5 rounded-lg transition-all border shadow-sm ${
+                    isPrincess
+                      ? 'bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100'
+                      : isGirly 
+                      ? 'bg-pink-50 text-pink-600 border-pink-100 hover:bg-pink-100' 
+                      : 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100'
+                  }`}
                   title="Voir l'historique du client"
                 >
                   <Eye className="w-4 h-4" />
@@ -268,7 +340,9 @@ export default function AgentLeadDetail() {
                     href={`/r/${lead.referralLink.code}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg font-mono text-sm font-bold border border-gray-200 hover:bg-gray-200 hover:text-primary-600 transition-all shadow-sm"
+                    className={`flex items-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg font-mono text-sm font-bold border border-gray-200 hover:bg-gray-200 transition-all shadow-sm ${
+                      isPrincess ? 'hover:text-amber-600' : isGirly ? 'hover:text-pink-600' : 'hover:text-indigo-600'
+                    }`}
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-70">
                       <line x1="7" y1="17" x2="17" y2="7"></line>
@@ -292,8 +366,16 @@ export default function AgentLeadDetail() {
 
       {/* Product Info */}
       {product && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="bg-gradient-to-r from-purple-500 to-purple-600 px-6 py-4">
+        <div className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${
+          isPrincess ? 'border-amber-100/50' : isGirly ? 'border-pink-100/50' : 'border-gray-100'
+        }`}>
+          <div className={`px-6 py-4 ${
+            isPrincess 
+              ? 'bg-gradient-to-r from-amber-500 via-pink-500 to-rose-500'
+              : isGirly 
+              ? 'bg-gradient-to-r from-pink-500 via-rose-500 to-fuchsia-500' 
+              : 'bg-gradient-to-r from-purple-500 to-purple-600'
+          }`}>
             <h2 className="text-white font-bold flex items-center gap-2">📦 Produit</h2>
           </div>
           <div className="p-6">
@@ -328,16 +410,24 @@ export default function AgentLeadDetail() {
                   return (
                     <div className="mt-2">
                       <div className="flex items-baseline gap-2">
-                        <p className="text-xl font-black text-purple-600">{Number(displayPrice).toFixed(2)} MAD</p>
+                        <p className={`text-xl font-black ${isPrincess ? 'text-rose-600' : isGirly ? 'text-pink-600' : 'text-indigo-600'}`}>
+                          {Number(displayPrice).toFixed(2)} MAD
+                        </p>
                         {variantPrice !== null && (
-                          <span className="px-2 py-0.5 bg-purple-50 text-purple-600 text-[10px] font-bold uppercase rounded-md border border-purple-100">
+                          <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-md border ${
+                            isPrincess 
+                              ? 'bg-amber-50 text-amber-700 border-amber-100'
+                              : isGirly 
+                              ? 'bg-pink-50 text-pink-600 border-pink-100' 
+                              : 'bg-purple-50 text-purple-600 border-purple-100'
+                          }`}>
                             Prix du Pack
                           </span>
                         )}
                       </div>
                       {lead.productVariant && (
                         <p className="text-xs font-bold text-gray-500 mt-1 flex items-center gap-1">
-                          <span className="text-purple-400 font-black">↳</span> Sélection: {lead.productVariant}
+                          <span className={`font-black ${isPrincess ? 'text-amber-500' : isGirly ? 'text-pink-400' : 'text-purple-400'}`}>↳</span> Sélection: {lead.productVariant}
                         </p>
                       )}
                     </div>
@@ -359,7 +449,9 @@ export default function AgentLeadDetail() {
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+          className={`w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:border-transparent outline-none transition-all ${
+            isPrincess ? 'focus:ring-amber-400' : isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-500'
+          }`}
           rows={3}
           placeholder="Ajoutez des notes sur l'appel..."
         />
@@ -379,14 +471,22 @@ export default function AgentLeadDetail() {
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <div className="relative group">
             {lead.callbackAt && (
-              <div className="absolute -top-2 -right-1 z-10 px-2 py-0.5 bg-blue-600 text-white text-[9px] font-black rounded-full shadow-lg border border-blue-400 animate-bounce">
+              <div className={`absolute -top-2 -right-1 z-10 px-2 py-0.5 text-white text-[9px] font-black rounded-full shadow-lg border animate-bounce ${
+                isPrincess ? 'bg-rose-600 border-rose-400' : isGirly ? 'bg-pink-600 border-pink-400' : 'bg-blue-600 border-blue-400'
+              }`}>
                 ⏰ {format(new Date(lead.callbackAt), 'dd/MM HH:mm')}
               </div>
             )}
             <button
               onClick={() => setShowScheduleModal(true)}
               disabled={updating || cooldownRemaining > 0}
-              className="w-full py-3 px-4 bg-blue-50 text-blue-700 rounded-xl text-sm font-bold hover:bg-blue-100 transition-all border border-blue-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className={`w-full py-3 px-4 rounded-xl text-sm font-bold transition-all border flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                isPrincess
+                  ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 shadow-sm'
+                  : isGirly 
+                  ? 'bg-pink-50 text-pink-700 border-pink-200 hover:bg-pink-100' 
+                  : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+              }`}
             >
               📞 CALL LATER
             </button>
@@ -414,7 +514,9 @@ export default function AgentLeadDetail() {
           </button>
           <div className="relative group">
             {lead.requestedPriceMad && (
-              <div className="absolute -top-2 -right-1 z-10 px-2 py-0.5 bg-gray-600 text-white text-[9px] font-black rounded-full shadow-lg border border-gray-400">
+              <div className={`absolute -top-2 -right-1 z-10 px-2 py-0.5 text-white text-[9px] font-black rounded-full shadow-lg border ${
+                isPrincess ? 'bg-rose-600 border-rose-400 animate-pulse' : isGirly ? 'bg-rose-600 border-rose-400' : 'bg-gray-600 border-gray-400'
+              }`}>
                 💰 {lead.requestedPriceMad} MAD 
                 {lead.requestedPriceStatus === 'PENDING' ? ' (En attente)' : 
                  lead.requestedPriceStatus === 'APPROVED' ? ' (Approuvé)' : 
@@ -424,7 +526,13 @@ export default function AgentLeadDetail() {
             <button
               onClick={() => setShowPriceModal(true)}
               disabled={updating || cooldownRemaining > 0}
-              className="w-full py-3 px-4 bg-gray-100 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-200 transition-all border border-gray-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className={`w-full py-3 px-4 rounded-xl text-sm font-bold transition-all border flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                isPrincess
+                  ? 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200 shadow-sm'
+                  : isGirly 
+                  ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100' 
+                  : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
+              }`}
             >
               💰 CANCEL REASON PRICE
             </button>
@@ -447,7 +555,13 @@ export default function AgentLeadDetail() {
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] w-full max-w-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
             {/* Modal Header */}
-            <div className="bg-indigo-600 p-6 text-white shrink-0 relative overflow-hidden">
+            <div className={`p-6 text-white shrink-0 relative overflow-hidden ${
+              isPrincess 
+                ? 'bg-gradient-to-r from-amber-500 via-pink-500 to-rose-600'
+                : isGirly 
+                ? 'bg-gradient-to-r from-pink-500 to-rose-500' 
+                : 'bg-indigo-600'
+            }`}>
               <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
               <div className="relative z-10 flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -631,7 +745,13 @@ export default function AgentLeadDetail() {
       {showScheduleModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="bg-gradient-to-br from-blue-600 to-blue-700 p-6 text-center text-white">
+            <div className={`p-6 text-center text-white ${
+              isPrincess 
+                ? 'bg-gradient-to-r from-amber-500 via-pink-500 to-rose-600'
+                : isGirly 
+                ? 'bg-gradient-to-r from-pink-500 to-rose-500' 
+                : 'bg-gradient-to-br from-blue-600 to-blue-700'
+            }`}>
               <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-md">
                 <span className="text-3xl">⏰</span>
               </div>
@@ -646,7 +766,9 @@ export default function AgentLeadDetail() {
                   <input
                     type="date"
                     min={format(new Date(), 'yyyy-MM-dd')}
-                    className="w-full pl-4 pr-6 py-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-gray-900 font-bold text-base focus:bg-white focus:border-blue-500 focus:ring-0 transition-all outline-none"
+                    className={`w-full pl-4 pr-6 py-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-gray-900 font-bold text-base focus:bg-white focus:ring-0 transition-all outline-none ${
+                      isPrincess ? 'focus:border-amber-400' : isGirly ? 'focus:border-pink-400' : 'focus:border-blue-500'
+                    }`}
                     value={callbackDate}
                     onChange={(e) => setCallbackDate(e.target.value)}
                   />
@@ -655,7 +777,9 @@ export default function AgentLeadDetail() {
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Heure (24h)</label>
                   <div className="flex gap-2">
                     <select
-                      className="flex-1 px-4 py-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-gray-900 font-bold text-base focus:bg-white focus:border-blue-500 focus:ring-0 transition-all outline-none appearance-none text-center"
+                      className={`flex-1 px-4 py-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-gray-900 font-bold text-base focus:bg-white focus:ring-0 transition-all outline-none appearance-none text-center ${
+                        isPrincess ? 'focus:border-amber-400' : isGirly ? 'focus:border-pink-400' : 'focus:border-blue-500'
+                      }`}
                       value={callbackHour}
                       onChange={(e) => setCallbackHour(e.target.value)}
                     >
@@ -665,7 +789,9 @@ export default function AgentLeadDetail() {
                     </select>
                     <span className="flex items-center font-bold text-gray-400">:</span>
                     <select
-                      className="flex-1 px-4 py-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-gray-900 font-bold text-base focus:bg-white focus:border-blue-500 focus:ring-0 transition-all outline-none appearance-none text-center"
+                      className={`flex-1 px-4 py-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-gray-900 font-bold text-base focus:bg-white focus:ring-0 transition-all outline-none appearance-none text-center ${
+                        isPrincess ? 'focus:border-amber-400' : isGirly ? 'focus:border-pink-400' : 'focus:border-blue-500'
+                      }`}
                       value={callbackMinute}
                       onChange={(e) => setCallbackMinute(e.target.value)}
                     >
@@ -697,7 +823,13 @@ export default function AgentLeadDetail() {
                     setShowScheduleModal(false);
                   }}
                   disabled={updating}
-                  className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-600/20 transition-all disabled:opacity-50"
+                  className={`flex-1 py-4 text-white rounded-2xl font-bold transition-all disabled:opacity-50 ${
+                    isPrincess 
+                      ? 'bg-gradient-to-r from-amber-500 to-rose-500 shadow-lg shadow-amber-500/20' 
+                      : isGirly 
+                      ? 'bg-gradient-to-r from-pink-500 to-rose-500 shadow-lg shadow-pink-500/20' 
+                      : 'bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-600/20'
+                  }`}
                 >
                   Confirmer
                 </button>
@@ -710,7 +842,13 @@ export default function AgentLeadDetail() {
       {showPriceModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="bg-gradient-to-br from-gray-600 to-gray-700 p-6 text-center text-white">
+            <div className={`p-6 text-center text-white ${
+              isPrincess 
+                ? 'bg-gradient-to-r from-amber-500 via-pink-500 to-rose-600'
+                : isGirly 
+                ? 'bg-gradient-to-r from-pink-500 to-rose-500' 
+                : 'bg-gradient-to-br from-gray-600 to-gray-700'
+            }`}>
               <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-md">
                 <span className="text-3xl">💰</span>
               </div>
@@ -726,7 +864,9 @@ export default function AgentLeadDetail() {
                     type="number"
                     min="0"
                     placeholder="Ex: 199"
-                    className="w-full pl-4 pr-12 py-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-gray-900 font-bold text-base focus:bg-white focus:border-gray-500 focus:ring-0 transition-all outline-none"
+                    className={`w-full pl-4 pr-12 py-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-gray-900 font-bold text-base focus:bg-white focus:ring-0 transition-all outline-none ${
+                      isPrincess ? 'focus:border-amber-400' : isGirly ? 'focus:border-pink-400' : 'focus:border-gray-500'
+                    }`}
                     value={requestedPriceInput}
                     onChange={(e) => setRequestedPriceInput(e.target.value)}
                   />
@@ -751,7 +891,13 @@ export default function AgentLeadDetail() {
                     setShowPriceModal(false);
                   }}
                   disabled={updating}
-                  className="flex-1 py-4 bg-gray-800 text-white rounded-2xl font-bold hover:bg-gray-900 shadow-lg shadow-gray-800/20 transition-all disabled:opacity-50"
+                  className={`flex-1 py-4 text-white rounded-2xl font-bold transition-all disabled:opacity-50 ${
+                    isPrincess 
+                      ? 'bg-gradient-to-r from-amber-500 to-rose-500 shadow-lg shadow-amber-500/20' 
+                      : isGirly 
+                      ? 'bg-gradient-to-r from-pink-500 to-rose-500 shadow-lg shadow-pink-500/20' 
+                      : 'bg-gray-800 hover:bg-gray-900 shadow-lg shadow-gray-800/20'
+                  }`}
                 >
                   Soumettre
                 </button>

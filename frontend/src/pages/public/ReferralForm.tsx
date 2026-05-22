@@ -214,7 +214,6 @@ export default function ReferralForm() {
                           >
                             {opt.name || `Pack ${i + 1}`}
                           </div>
-                          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5 whitespace-nowrap">Meilleure Valeur</div>
                         </div>
                         <div 
                           className="text-2xl font-black transition-colors"

@@ -141,7 +141,7 @@ export default function InfluencerProfile() {
   return (
     <div className="space-y-6">
       {/* Profile Header */}
-      <div className="card overflow-hidden">
+      <div className="card overflow-hidden rounded-2xl">
         <div className="h-32 bg-gradient-to-br from-influencer-500 via-influencer-400 to-purple-500" />
         <div className="px-6 pb-6">
           <div className="flex items-end gap-4 -mt-12">
@@ -182,7 +182,7 @@ export default function InfluencerProfile() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="grid grid-cols-1 gap-6">
         {/* Social Platforms */}
-        <div className="card p-6">
+        <div className="card p-5 rounded-2xl">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-xl font-black text-slate-900 flex items-center gap-2 uppercase tracking-tight">
               <Globe className="w-6 h-6 text-influencer-500" />
@@ -196,7 +196,7 @@ export default function InfluencerProfile() {
               const isSavingThis = savingPlatform === platform.id;
 
               return (
-                <div key={platform.name} className={`flex flex-col gap-4 p-6 rounded-3xl border transition-all duration-300 ${
+                <div key={platform.name} className={`flex flex-col gap-4 p-4 rounded-2xl border transition-all duration-300 ${
                   isEditingThis ? 'border-influencer-200 bg-white ring-4 ring-influencer-500/5 shadow-xl' : 'border-slate-100 bg-slate-50/50 hover:bg-white hover:border-slate-200 hover:shadow-lg'
                 }`}>
                   <div className="flex items-center gap-4">
@@ -278,12 +278,12 @@ export default function InfluencerProfile() {
 
       {/* KYC & Security */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="card p-8 border border-slate-100 shadow-sm hover:shadow-md transition-all group">
+        <div className="card p-5 border border-slate-100 shadow-sm hover:shadow-md transition-all group rounded-2xl">
           <h2 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-3 uppercase tracking-tight">
             <Shield className="w-6 h-6 text-influencer-500" />
             Statut KYC
           </h2>
-          <div className={`flex flex-col gap-4 p-6 rounded-3xl border transition-all ${
+          <div className={`flex flex-col gap-4 p-4 rounded-xl border transition-all ${
             user?.kycStatus === 'APPROVED'
               ? 'bg-emerald-50/50 border-emerald-100 text-emerald-900 shadow-inner'
               : user?.kycStatus === 'REJECTED'
@@ -319,13 +319,13 @@ export default function InfluencerProfile() {
           </div>
         </div>
 
-        <div className="card p-8 border border-slate-100 shadow-sm hover:shadow-md transition-all">
+        <div className="card p-5 border border-slate-100 shadow-sm hover:shadow-md transition-all rounded-2xl">
           <h2 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-3 uppercase tracking-tight">
             <Lock className="w-6 h-6 text-influencer-500" />
             Sécurité du Compte
           </h2>
           <div className="space-y-4">
-            <div className="flex items-center justify-between p-5 rounded-3xl border border-slate-100 bg-slate-50/30 hover:bg-white hover:shadow-md transition-all group">
+            <div className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50/30 hover:bg-white hover:shadow-md transition-all group">
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600 transition-transform group-hover:scale-110">
                   <ShieldCheck className="w-6 h-6" />
@@ -338,7 +338,7 @@ export default function InfluencerProfile() {
               <span className="text-[10px] font-black text-amber-600 bg-amber-100 px-3 py-1.5 rounded-full uppercase tracking-widest shadow-sm">Optionnel</span>
             </div>
 
-            <div className="flex items-center justify-between p-5 rounded-3xl border border-slate-100 bg-slate-50/30 hover:bg-white hover:shadow-md transition-all group">
+            <div className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50/30 hover:bg-white hover:shadow-md transition-all group">
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 transition-transform group-hover:scale-110">
                   <Key className="w-6 h-6" />

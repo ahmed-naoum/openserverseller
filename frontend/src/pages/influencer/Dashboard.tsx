@@ -173,7 +173,7 @@ export default function InfluencerDashboard() {
   }
 
   return (
-    <div className="max-w-[1600px] mx-auto space-y-8 p-4 md:p-8">
+    <div className="max-w-[1600px] mx-auto space-y-6">
 
 
       {/* Tier Progress Banner */}
@@ -182,13 +182,13 @@ export default function InfluencerDashboard() {
       {/* Stats Quick Cards: Grid of 5 */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
         {[
-          { label: 'Page Views', val: todayClicks, icon: MousePointerClick, color: 'text-blue-600', bg: 'bg-blue-50' },
+          { label: 'Vues de Page', val: todayClicks, icon: MousePointerClick, color: 'text-blue-600', bg: 'bg-blue-50' },
           { label: 'Ventes', val: todayConversions, icon: Zap, color: 'text-green-600', bg: 'bg-green-50' },
           { label: 'Taux de Conv.', val: `${todayClicks > 0 ? ((todayConversions / todayClicks) * 100).toFixed(1) : 0}%`, icon: TrendingUp, color: 'text-purple-600', bg: 'bg-purple-50' },
           { label: 'Confirmation', val: `${confirmationRate.toFixed(1)}%`, icon: CheckCircle2, color: 'text-amber-600', bg: 'bg-amber-50' },
           { label: 'Livraison', val: `${deliveryRate.toFixed(1)}%`, icon: Truck, color: 'text-emerald-600', bg: 'bg-emerald-50' }
         ].map((stat) => (
-          <div key={stat.label} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group">
+          <div key={stat.label} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</p>
             <div className="flex items-center justify-between mt-3">
               <h3 className={`text-2xl font-black ${stat.color}`}>{stat.val}</h3>
@@ -207,7 +207,7 @@ export default function InfluencerDashboard() {
         {/* Left Column: 3 Financial Cards */}
         <div className="lg:col-span-4 flex flex-col gap-6">
           {/* Card 1: Main Balance - Solid Dark Background for Maximum Contrast */}
-          <div className="bg-slate-900 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden group border border-slate-800">
+          <div className="bg-slate-900 rounded-2xl p-6 shadow-md relative overflow-hidden group border border-slate-800">
             <div className="absolute -right-4 -top-4 opacity-10 group-hover:scale-110 transition-transform duration-500">
               <Wallet className="w-24 h-24 text-white" />
             </div>
@@ -224,7 +224,7 @@ export default function InfluencerDashboard() {
           </div>
 
           {/* Card 2: Total Earned - Clean White Card */}
-          <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm relative overflow-hidden group">
+          <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group">
             <div className="absolute -right-4 -top-4 opacity-[0.03] group-hover:scale-110 transition-transform duration-500">
               <TrendingUp className="w-24 h-24 text-slate-900" />
             </div>
@@ -246,7 +246,7 @@ export default function InfluencerDashboard() {
           </div>
 
           {/* Card 3: Total Retiré - Clean White Card */}
-          <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm relative overflow-hidden group">
+          <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group">
             <div className="absolute -right-4 -top-4 opacity-[0.03] group-hover:scale-110 transition-transform duration-500">
               <DollarSign className="w-24 h-24 text-slate-900" />
             </div>
@@ -263,8 +263,8 @@ export default function InfluencerDashboard() {
 
         {/* Right Column: Analytics Chart */}
         <div className="lg:col-span-8">
-          <ProCard variant="glass" className="h-full p-8 bg-white border border-slate-100 shadow-sm">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
+          <ProCard variant="glass" className="h-full p-6 bg-white border border-slate-100 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
               <div className="space-y-1">
                 <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
                   {chartType === 'revenue' ? (
@@ -301,7 +301,7 @@ export default function InfluencerDashboard() {
                             : 'text-slate-400 hover:text-slate-600'
                         }`}
                       >
-                        {range === 'custom' ? 'Custom' : range === 'all' ? 'Tout' : range === 1 ? 'Aujourd\'hui' : `${range}J`}
+                        {range === 'custom' ? 'Personnalisé' : range === 'all' ? 'Tout' : range === 1 ? 'Aujourd\'hui' : `${range}J`}
                       </button>
                     ))}
                   </div>
@@ -345,7 +345,7 @@ export default function InfluencerDashboard() {
                 )}
               </div>
             </div>
-            <div className="h-[360px] w-full">
+            <div className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartType === 'revenue' ? revenueData : balanceData}>
                   <defs>
