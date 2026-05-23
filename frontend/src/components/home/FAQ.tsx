@@ -7,33 +7,29 @@ export default function FAQ() {
 
   const faqs = [
     {
-      q: "C'est quoi exactement le Dropshipping White-Label ?",
-      a: "Le Dropshipping White-Label avec SILACOD, c'est la liberté totale. Vous choisissez un produit de beauté (sérum, crème, etc.) de notre catalogue vierge. Vous uploadez votre Logo. Nous collons votre logo sur le produit. Vous n'avez pas besoin d'acheter de stock à l'avance ! Quand vous vendez sur votre site via Facebook Ads, nous expédions directement à votre client et nous gardons simplement notre commission."
+      q: "هل أحتاج رأس مال للبدء؟",
+      a: "لا، لا تحتاج إلى رأس مال كبير لشراء المخزون. مع نظام SILACOD، يمكنك البدء مجاناً كمسوق بالعمولة والترويج للمنتجات الجاهزة، أو استخدام خيار المنتجات ذات العلامة الخاصة والبدء بالبيع الفوري والدفع عند الاستلام."
     },
     {
-      q: "Comment fonctionne le programme Influenceur (Espace VIP) ?",
-      a: "Si vous avez +5,000 followers, vous pouvez vous inscrire en tant qu'Influenceur VIP. Vous choisissez des produits du catalogue, générez des liens, et parlez de ces produits dans vos vidéos ou stories. À chaque vente confirmée via votre lien, vous gagnez une grosse commission instantanée. Vous pouvez même créer votre propre marque sans rien investir et la dévoiler à votre audience (Reality Challenge) !"
+      q: "متى وكيف أستلم أرباحي؟",
+      a: "بمجرد توصيل الطلب للزبون وتحصيل المبلغ، تضاف الأرباح مباشرة لمحفظتك الإلكترونية على SILACOD. يمكنك طلب سحب أرباحك في أي وقت لتصلك عبر حسابك البنكي أو وكالات تحويل الأموال المعتمدة بالمغرب بشكل سريع وبدون تأخير."
     },
     {
-      q: "Je n'ai pas de capital. Puis-je utiliser SILACOD ?",
-      a: "Absolument. Vous pouvez vous inscrire en tant qu'Affilié. Vous prenez les liens des produits déjà existants et vous les promouvez sur les réseaux sociaux (TikTok, Instagram, groupes Facebook). Vous toucherez une commission sur chaque vente sans avoir dépensé 1 dirham en stock ou en création de marque."
+      q: "هل المنتجات مضمونة وذات جودة عالية؟",
+      a: "نعم، جميع الموردين المتواجدين بالمنصة موثوقون ويمرون بعملية فحص جودة صارمة لضمان رضا الزبائن وتقليل نسب المرتجعات لأدنى حد ممكن."
     },
     {
-      q: "Comment sont gérés les retours et les confirmations de commandes au Maroc ?",
-      a: "SILACOD possède son propre centre d'appels et sa flotte de livraison. Dès qu'un client commande sur votre page, notre équipe technique l'appelle pour confirmer. Ensuite, le produit est expédié en Cash On Delivery (COD). Nous gérons 100% des retours et des refus. Vous ne vous occupez de rien d'autre que du marketing."
-    },
-    {
-      q: "Comment je récupère mon argent ?",
-      a: "Chaque fois qu'une commande est livrée et payée, l'argent atterrit dans votre Wallet virtuel sur la plateforme SILACOD. Vous pouvez demander un virement bancaire ou Wafacash de vos fonds à tout moment depuis votre Dashboard. Les paiements sont ultra-rapides."
+      q: "كيف أبدأ العمل مع SILACOD خطوة بخطوة؟",
+      a: "البدء سهل للغاية: قم بإنشاء حسابك مجاناً بالمنصة، تصفح الماركت بليس واختر المنتجات التي تناسبك، وابدأ التسويق واستقبال الطلبات فوراً بينما نتولى نحن كافة العمليات من تأكيد، تغليف وتوصيل."
     }
   ];
 
   return (
-    <section className="py-24 px-4 sm:px-6 lg:px-8 bg-gray-50 border-t border-gray-100">
+    <section dir="rtl" className="py-24 px-4 sm:px-6 lg:px-8 bg-gray-50 border-t border-gray-100 text-right font-['29LT_Kaff',Cairo,sans-serif]">
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-16">
-          <h2 className="text-4xl lg:text-5xl font-extrabold text-gray-900 mb-6">Questions Fréquentes</h2>
-          <p className="text-xl text-gray-600">Tout ce que vous devez savoir avant de dominer le e-commerce marocain.</p>
+          <h2 className="text-4xl lg:text-5xl font-extrabold text-gray-900 mb-6">الأسئلة الشائعة</h2>
+          <p className="text-xl text-gray-600">كل ما تحتاج معرفته لبدء تجارتك الإلكترونية بثقة وسهولة.</p>
         </div>
 
         <div className="space-y-4">
@@ -48,9 +44,9 @@ export default function FAQ() {
             >
               <button
                 onClick={() => setOpenIndex(openIndex === i ? null : i)}
-                className="w-full flex items-center justify-between p-6 text-left focus:outline-none"
+                className="w-full flex items-center justify-between p-6 text-right focus:outline-none"
               >
-                <span className="font-bold text-lg text-gray-900 pr-8">{faq.q}</span>
+                <span className="font-bold text-lg text-gray-900 pl-8">{faq.q}</span>
                 <ChevronDown 
                   className={`w-6 h-6 text-primary-500 transition-transform duration-300 ${openIndex === i ? 'rotate-180' : ''}`}
                 />
