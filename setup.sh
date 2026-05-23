@@ -88,7 +88,7 @@ sed -i "s|CHANGE_ME_generate_a_64_char_random_string|${JWT_SECRET}|g" .env
 
 echo ""
 read -p "Enter your domain name (or VPS IP, e.g. yourdomain.com): " DOMAIN
-sed -i "s|https://yourdomain.com|https://${DOMAIN}|g" .env
+sed -i "s|FRONTEND_URL=http://localhost:5173|FRONTEND_URL=https://${DOMAIN}|g" .env
 
 echo ""
 echo "Your .env file:"

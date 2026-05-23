@@ -22,10 +22,48 @@ const server = createServer(app);
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const API_PREFIX = process.env.API_PREFIX || '/api/v1';
 
+const allowedOrigins = [
+  process.env.FRONTEND_URL || 'http://localhost:5173',
+  'http://localhost:5173',
+  'http://localhost:3001',
+];
+
+const checkOrigin = (origin: string | undefined, callback: (err: Error | null, origin?: any) => void) => {
+  if (!origin) {
+    callback(null, true);
+    return;
+  }
+
+  if (allowedOrigins.includes(origin)) {
+    callback(null, origin);
+    return;
+  }
+
+  const frontendUrl = process.env.FRONTEND_URL;
+  if (frontendUrl) {
+    try {
+      const parsedFrontend = new URL(frontendUrl);
+      const parsedOrigin = new URL(origin);
+      
+      const frontendHost = parsedFrontend.hostname.replace(/^www\./, '');
+      const originHost = parsedOrigin.hostname.replace(/^www\./, '');
+      
+      if (originHost === frontendHost) {
+        callback(null, origin);
+        return;
+      }
+    } catch (e) {
+      // Ignore URL parsing errors
+    }
+  }
+
+  callback(null, false);
+};
+
 const io = new SocketServer(server, {
   path: `${API_PREFIX}/socket.io`,
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: checkOrigin,
     credentials: true,
   },
 });
@@ -35,7 +73,7 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: [process.env.FRONTEND_URL || 'http://localhost:5173'],
+  origin: checkOrigin,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'x-maintenance-bypass'],

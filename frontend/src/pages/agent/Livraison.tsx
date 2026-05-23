@@ -212,7 +212,7 @@ export default function AgentLivraison() {
     // Open SSE stream for real-time status updates from Coliaty webhooks
     const token = localStorage.getItem('accessToken');
     if (token) {
-      const API_URL = (import.meta.env as any).VITE_API_URL || 'http://localhost:3001/api/v1';
+      const API_URL = (import.meta.env as any).VITE_API_URL || (import.meta.env.PROD && typeof window !== 'undefined' ? `${window.location.origin}/api/v1` : 'http://localhost:3001/api/v1');
       const es = new EventSource(`${API_URL}/webhooks/stream?token=${token}`);
       eventSourceRef.current = es;
 

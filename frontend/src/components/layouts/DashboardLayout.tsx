@@ -339,6 +339,19 @@ export default function DashboardLayout() {
   const [totalUnread, setTotalUnread] = useState(0);
   const [queueCount, setQueueCount] = useState(0);
 
+  // Request browser notification permission on mount
+  useEffect(() => {
+    if ('Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().then(permission => {
+          console.log('Notification permission status:', permission);
+        }).catch(err => {
+          console.warn('Failed to request notification permission:', err);
+        });
+      }
+    }
+  }, []);
+
   // Fetch initial counts
   useEffect(() => {
     const fetchCounts = async () => {
@@ -364,9 +377,31 @@ export default function DashboardLayout() {
     const handleNewMessage = (data: { message: any; conversationId: number }) => {
       const params = new URLSearchParams(location.search);
       const activeConvId = params.get('convId');
+      const isMyMessage = data.message.sender.id === user?.id;
+      const isViewingThisConv = activeConvId === String(data.conversationId);
+      const isBackground = document.hidden || !document.hasFocus();
       
-      if (data.message.sender.id !== user?.id && activeConvId !== String(data.conversationId)) {
-        setTotalUnread(prev => prev + 1);
+      if (!isMyMessage) {
+        if (!isViewingThisConv) {
+          setTotalUnread(prev => prev + 1);
+        }
+
+        // Play chime sound for any new message from someone else
+        playChime();
+
+        // Show browser system notification if the tab is hidden or not actively viewing this conversation
+        if (isBackground || !isViewingThisConv) {
+          if ('Notification' in window && Notification.permission === 'granted') {
+            try {
+              new Notification(`💬 Nouveau message de ${data.message.sender.fullName || 'Client'}`, {
+                body: data.message.content || 'Nouveau message reçu',
+                icon: '/new logo/logo filess-25.svg',
+              });
+            } catch (err) {
+              console.warn('Failed to show system notification:', err);
+            }
+          }
+        }
       }
     };
 
@@ -380,11 +415,26 @@ export default function DashboardLayout() {
 
     const handleNewNotification = (notification: any) => {
       setNotifications(prev => [notification, ...prev]);
+      
+      // Play sound based on notification type
       if (['NEW_LEAD', 'LEAD_STATUS_CHANGED'].includes(notification.type)) {
         playMoneySound();
       } else {
         playChime();
       }
+
+      // Show browser system notification
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification('🔔 Nouvelle Notification - Silacod', {
+            body: notification.message || 'Vous avez reçu une nouvelle notification',
+            icon: '/new logo/logo filess-25.svg',
+          });
+        } catch (err) {
+          console.warn('Failed to show system notification:', err);
+        }
+      }
+
       const toastId = Date.now();
       setToasts(prev => [...prev, { ...notification, toastId }]);
       setTimeout(() => {

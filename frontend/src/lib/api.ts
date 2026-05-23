@@ -1,7 +1,7 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import toast from 'react-hot-toast';
 
-const API_URL = (import.meta.env as any).VITE_API_URL || 'http://localhost:3001/api/v1';
+const API_URL = (import.meta.env as any).VITE_API_URL || (import.meta.env.PROD && typeof window !== 'undefined' ? `${window.location.origin}/api/v1` : 'http://localhost:3001/api/v1');
 export const BACKEND_URL = API_URL.replace('/api/v1', '');
 
 export interface User {

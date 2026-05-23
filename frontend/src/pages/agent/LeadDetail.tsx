@@ -525,7 +525,7 @@ export default function AgentLeadDetail() {
                   setEditedCity(lead.city || '');
                   setCitySearch(lead.city || '');
                   setShowCityDropdown(false);
-                  toast.info("Modifications annulées");
+                  toast("Modifications annulées", { icon: 'ℹ️' });
                 }}
                 className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-700 rounded-xl transition-all text-xs font-black"
                 title="Annuler les modifications et restaurer les anciennes valeurs"

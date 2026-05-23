@@ -1,6 +1,6 @@
 export const config = {
   api: {
-    baseUrl: (import.meta.env as any).VITE_API_URL || 'http://localhost:3001/api/v1',
+    baseUrl: (import.meta.env as any).VITE_API_URL || (import.meta.env.PROD && typeof window !== 'undefined' ? `${window.location.origin}/api/v1` : 'http://localhost:3001/api/v1'),
     timeout: 10000,
   },
   app: {
