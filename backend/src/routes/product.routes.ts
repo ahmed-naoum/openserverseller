@@ -260,7 +260,7 @@ router.post(
       throw new AppException(400, 'Validation failed', errors.array());
     }
 
-    const { sku, nameAr, nameFr, nameEn, description, longDescription, categoryIds, baseCostMad, retailPriceMad, affiliatePriceMad, influencerPriceMad, isCustomizable, minProductionDays, stockQuantity, imageUrl, imageUrls, isActive, visibility, status, videoUrls, landingPageUrls, commissionMad, canvaLink } = req.body;
+    const { sku, nameAr, nameFr, nameEn, description, longDescription, categoryIds, baseCostMad, retailPriceMad, affiliatePriceMad, influencerPriceMad, isCustomizable, minProductionDays, stockQuantity, imageUrl, imageUrls, isActive, showInHomepage, visibility, status, videoUrls, landingPageUrls, commissionMad, canvaLink } = req.body;
 
     const existingProduct = await prisma.product.findUnique({
       where: { sku },
@@ -302,6 +302,7 @@ router.post(
         minProductionDays: Number(minProductionDays ?? 3),
         stockQuantity: stockQuantity ? Number(stockQuantity) : 0,
         isActive: isActive ?? true,
+        showInHomepage: showInHomepage === true || showInHomepage === 'true',
         visibility: Array.isArray(visibility) ? visibility : typeof visibility === 'string' ? [visibility] : ['REGULAR'],
         status: finalStatus,
         owner: finalOwnerId ? { connect: { id: finalOwnerId } } : undefined,
@@ -417,6 +418,9 @@ router.patch(
     if (rest.minProductionDays !== undefined) updateData.minProductionDays = Number(rest.minProductionDays);
     if (rest.commissionMad !== undefined) updateData.commissionMad = Number(rest.commissionMad);
     if (canvaLink !== undefined) updateData.canvaLink = canvaLink;
+    if (rest.showInHomepage !== undefined) {
+      updateData.showInHomepage = rest.showInHomepage === true || rest.showInHomepage === 'true';
+    }
 
 
     // If imageUrls array is provided, replace all images

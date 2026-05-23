@@ -12,7 +12,7 @@ export default function LiveTicker() {
   ];
 
   return (
-    <div dir="rtl" className="bg-gray-900 border-b border-gray-800 py-3 overflow-hidden whitespace-nowrap mt-20 font-['29LT_Kaff',Cairo,Inter,sans-serif]">
+    <div dir="rtl" className="bg-gray-900 border-b border-gray-800 py-3 overflow-hidden whitespace-nowrap font-['29LT_Kaff',Cairo,Inter,sans-serif] w-full z-50 relative text-right">
       <div className="flex">
         <motion.div
           animate={{ x: [0, 2000] }}

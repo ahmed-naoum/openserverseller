@@ -25,11 +25,11 @@ export default function FAQ() {
   ];
 
   return (
-    <section dir="rtl" className="py-24 px-4 sm:px-6 lg:px-8 bg-gray-50 border-t border-gray-100 text-right font-['29LT_Kaff',Cairo,sans-serif]">
+    <section dir="rtl" className="py-24 px-4 sm:px-6 lg:px-8 bg-slate-50 border-y border-slate-100/80 text-right font-['29LT_Kaff',Cairo,sans-serif]">
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-16">
-          <h2 className="text-4xl lg:text-5xl font-extrabold text-gray-900 mb-6">الأسئلة الشائعة</h2>
-          <p className="text-xl text-gray-600">كل ما تحتاج معرفته لبدء تجارتك الإلكترونية بثقة وسهولة.</p>
+          <h2 className="text-4xl lg:text-5xl font-black text-[#2e315e] mb-6">الأسئلة الشائعة</h2>
+          <p className="text-lg text-slate-500 font-bold">كل ما تحتاج معرفته لبدء تجارتك الإلكترونية بثقة وسهولة.</p>
         </div>
 
         <div className="space-y-4">
@@ -40,15 +40,15 @@ export default function FAQ() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.1 }}
-              className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+              className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
             >
               <button
                 onClick={() => setOpenIndex(openIndex === i ? null : i)}
                 className="w-full flex items-center justify-between p-6 text-right focus:outline-none"
               >
-                <span className="font-bold text-lg text-gray-900 pl-8">{faq.q}</span>
+                <span className="font-bold text-lg text-[#2e315e] pl-8">{faq.q}</span>
                 <ChevronDown 
-                  className={`w-6 h-6 text-primary-500 transition-transform duration-300 ${openIndex === i ? 'rotate-180' : ''}`}
+                  className={`w-6 h-6 text-[#ff5722] transition-transform duration-300 ${openIndex === i ? 'rotate-180' : ''}`}
                 />
               </button>
               <AnimatePresence>
@@ -59,7 +59,7 @@ export default function FAQ() {
                     exit={{ height: 0, opacity: 0 }}
                     transition={{ duration: 0.3 }}
                   >
-                    <div className="p-6 pt-0 text-gray-600 leading-relaxed border-t border-gray-50 mt-2">
+                    <div className="p-6 pt-0 text-slate-600 font-bold leading-relaxed border-t border-slate-50 mt-2">
                       {faq.a}
                     </div>
                   </motion.div>

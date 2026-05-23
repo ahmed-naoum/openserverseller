@@ -41,15 +41,16 @@ router.get(
 router.get(
   '/products/featured',
   asyncHandler(async (_req: Request, res: Response) => {
-    const products = await prisma.product.findMany({
+    let products = await prisma.product.findMany({
       where: { 
         isActive: true, 
         status: 'APPROVED',
+        showInHomepage: true,
         NOT: { visibility: { has: 'NONE' } }
       },
       include: {
         categories: true,
-        images: { where: { isPrimary: true }, take: 1 },
+        images: { orderBy: { sortOrder: 'asc' } },
       },
       take: 12,
       orderBy: { createdAt: 'desc' },

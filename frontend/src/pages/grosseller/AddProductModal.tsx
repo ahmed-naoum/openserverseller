@@ -76,6 +76,7 @@ export default function AddProductModal({ isOpen, onClose, onSuccess, isAdmin = 
       commissionMad: editProduct?.commissionMad?.toString() || '',
       canvaLink: editProduct?.canvaLink || '',
       longDescription: editProduct?.longDescription || '',
+      showInHomepage: editProduct?.showInHomepage || false,
     };
   }, [editProduct]);
 
@@ -239,6 +240,7 @@ export default function AddProductModal({ isOpen, onClose, onSuccess, isAdmin = 
         landingPageUrls: formData.landingPageUrlsInput.split('\n').map((u: string) => u.trim()).filter(Boolean),
         canvaLink: formData.canvaLink || null,
         longDescription: formData.longDescription || null,
+        showInHomepage: formData.showInHomepage === true,
       };
 
       if (isEditMode) {
@@ -391,6 +393,23 @@ export default function AddProductModal({ isOpen, onClose, onSuccess, isAdmin = 
                         <p className="text-xs text-primary-600/80 mt-2">
                           Vous pouvez sélectionner plusieurs visibilités (ex: Affiliés et Influenceurs en même temps).
                         </p>
+
+                        {/* Homepage Slider Toggle */}
+                        <div className="mt-4 pt-4 border-t border-primary-100 flex items-center justify-between">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-sm font-bold text-primary-800">Afficher dans le Slider d'Accueil</span>
+                            <span className="text-[11px] text-primary-600/80 font-medium">Faire apparaître ce produit dans le showcase dynamique de la page d'accueil</span>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              className="sr-only peer"
+                              checked={formData.showInHomepage === true}
+                              onChange={(e) => setFormData({ ...formData, showInHomepage: e.target.checked })}
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#ff5722]"></div>
+                          </label>
+                        </div>
                       </div>
                     )}
 

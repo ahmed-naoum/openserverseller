@@ -54,6 +54,7 @@ export const productSchema = z.object({
   visibility: z.array(z.enum(['REGULAR', 'AFFILIATE', 'INFLUENCER', 'NONE'])).default(['REGULAR']),
   isCustomizable: z.boolean().default(true),
   isActive: z.boolean().default(true),
+  showInHomepage: z.boolean().default(false).optional(),
 });
 
 export const leadSchema = z.object({

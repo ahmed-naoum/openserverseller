@@ -7,12 +7,13 @@ import {
   Crown, Zap, Shield, Globe, ChevronDown, Play, Menu, X,
   Instagram, Youtube, BarChart3, Wallet, Gift, Award, Heart,
   MousePointerClick, Lock, Phone, Box, Check, RefreshCw, CheckCircle2,
-  ChevronLeft, ChevronRight, MessageCircle, HelpCircle
+  ChevronLeft, ChevronRight, MessageCircle, HelpCircle, LogIn
 } from 'lucide-react';
 import LiveTicker from '../components/home/LiveTicker';
 import ProfitSimulator from '../components/home/ProfitSimulator';
 import SuccessStories from '../components/home/SuccessStories';
 import FAQ from '../components/home/FAQ';
+import { publicApi, BACKEND_URL } from '../lib/api';
 
 /* ─── Animated Counter ─── */
 function Counter({ to, suffix = '', duration = 2000 }: { to: number; suffix?: string; duration?: number }) {
@@ -133,86 +134,98 @@ export default function HomePage() {
     { name: "أكادير", x: "22%", y: "68%", success: "92%", count: "1,450", pulseDelay: "2.5s" }
   ];
 
-  const smartwatchProducts = [
-    {
-      name: "ساعة ذكية الترا - فضي",
-      category: "أكسيسوارات تقنية",
-      rating: 5.0,
-      costPrice: "129 Dh",
-      sellPrice: "349 Dh",
-      profit: "120 Dh",
-      image: "/home page silacod copy/images/Untitled-221.png",
-      tag: "ربح مرتفع 🔥"
-    },
-    {
-      name: "ساعة ذكية رياضية - أسود",
-      category: "أكسيسوارات تقنية",
-      rating: 4.9,
-      costPrice: "129 Dh",
-      sellPrice: "349 Dh",
-      profit: "120 Dh",
-      image: "/home page silacod copy/images/Untitled-3.png",
-      tag: "جديد ✨"
-    },
-    {
-      name: "ساعة ذكية فخمة - ذهبي",
-      category: "أكسيسوارات تقنية",
-      rating: 5.0,
-      costPrice: "129 Dh",
-      sellPrice: "349 Dh",
-      profit: "120 Dh",
-      image: "/home page silacod copy/images/Untitled-5000.png",
-      tag: "الأكثر مبيعاً 👑"
-    },
-    {
-      name: "ساعة ذكية الترا بلوس - رمادي",
-      category: "أكسيسوارات تقنية",
-      rating: 4.8,
-      costPrice: "129 Dh",
-      sellPrice: "349 Dh",
-      profit: "120 Dh",
-      image: "/home page silacod copy/images/Untitled-5111.png",
-      tag: "موصى به 👍"
+  const [products, setProducts] = useState<any[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const sliderRef = useRef<HTMLDivElement>(null);
+  const [isAutoScrolling, setIsAutoScrolling] = useState(true);
+
+  useEffect(() => {
+    publicApi.featuredProducts()
+      .then(res => {
+        if (res.data?.status === 'success') {
+          setProducts(res.data.data.products || []);
+        }
+      })
+      .catch(err => console.error("Error loading featured products:", err))
+      .finally(() => setLoadingProducts(false));
+  }, []);
+
+  // Auto scroll effect
+  useEffect(() => {
+    if (!isAutoScrolling || products.length === 0) return;
+    
+    const interval = setInterval(() => {
+      if (sliderRef.current) {
+        const slider = sliderRef.current;
+        // Check if we are near the end of scroll
+        // Browsers handle RTL scrollLeft differently (some use negative, some reverse positive).
+        // A safer way is checking scrollWidth vs clientWidth + Math.abs(scrollLeft)
+        if (Math.abs(slider.scrollLeft) >= slider.scrollWidth - slider.clientWidth - 10) {
+           slider.scrollTo({ left: 0, behavior: 'smooth' });
+        } else {
+           slider.scrollBy({ left: -340, behavior: 'smooth' });
+        }
+      }
+    }, 3500);
+    
+    return () => clearInterval(interval);
+  }, [isAutoScrolling, products]);
+
+  const scrollSlider = (direction: 'left' | 'right') => {
+    if (sliderRef.current) {
+      const scrollAmount = direction === 'left' ? -340 : 340;
+      sliderRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
     }
-  ];
+  };
 
   return (
-    <div dir="rtl" className="min-h-screen bg-slate-50/30 selection:bg-primary-100 font-['29LT_Kaff',_Cairo,_Inter,_sans-serif] overflow-x-hidden relative text-right">
+    <div dir="rtl" className="min-h-screen bg-[#fafafc] selection:bg-primary-100 font-['29LT_Kaff',_Cairo,_Inter,_sans-serif] overflow-x-hidden relative text-right">
       
       {/* ── Navbar ── */}
       <motion.nav
         initial={{ y: -80 }}
         animate={{ y: 0 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'bg-white/95 backdrop-blur-xl shadow-lg shadow-slate-100/50 border-b border-slate-100/80' : 'bg-transparent'}`}
+        className="fixed top-0 left-0 right-0 z-50 flex flex-col"
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-20">
-            <Link to="/" className="flex items-center gap-3 group">
-              <motion.img whileHover={{ rotateY: 15, scale: 1.05 }} src="/new logo/logo filess-25.svg" alt="SILACOD" className="w-11 h-11 origin-center object-contain" />
-              <img src="/new logo/logo filess-24.svg" alt="SILACOD" className="h-9 hidden sm:block object-contain" />
-            </Link>
+        <LiveTicker />
+        <div className={`transition-all duration-300 ${scrolled ? 'bg-white/95 backdrop-blur-xl shadow-lg shadow-slate-100/50 border-b border-slate-100/80' : 'bg-transparent'}`}>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-[90px] relative">
+            
+            {/* Left side actions (Language selector, Login, Register) */}
+            <div className="hidden lg:flex items-center gap-3 relative z-10">
+              {/* Language Selector */}
+              <div className="flex items-center gap-1.5 text-sm font-black text-[#2e315e] ml-2">
+                <span>ع</span>
+                <Globe className="w-[18px] h-[18px]" />
+              </div>
 
-            <div className="hidden lg:flex items-center gap-8 text-sm font-bold text-slate-600">
-              <a href="#how-it-works" className="hover:text-primary-600 transition-colors">كيف نعمل؟</a>
-              <a href="#features" className="hover:text-primary-600 transition-colors">كل الميزات</a>
-              <a href="#marketplace" className="hover:text-primary-600 transition-colors flex items-center gap-1.5">
-                <ShoppingBag className="w-4 h-4 text-primary-500" /> متجر المنتجات
-              </a>
-              <a href="#morocco-network" className="hover:text-primary-600 transition-colors flex items-center gap-1.5">
-                <Truck className="w-4 h-4 text-emerald-500" /> التوصيل والتحصيل
-              </a>
-              <a href="#faq" className="hover:text-primary-600 transition-colors">الأسئلة الشائعة</a>
+              {/* Login Button (Dark Blue Square Icon Wrapper) */}
+              <Link to="/login" className="w-[42px] h-[42px] bg-[#2e315e] hover:bg-[#1e2142] text-white rounded-[10px] flex items-center justify-center transition-colors">
+                <LogIn className="w-[20px] h-[20px]" />
+              </Link>
+
+              {/* Solid Orange/Coral Register Button */}
+              <Link to="/register" className="rounded-[10px] bg-[#ff5722] hover:bg-[#e64a19] px-6 py-2.5 flex items-center justify-center text-[15px] font-bold text-white transition-all shadow-sm">
+                <span className="translate-y-[4px]">إبدأ الآن مجاناً</span>
+              </Link>
             </div>
 
-            <div className="hidden lg:flex items-center gap-4">
-              <Link to="/login" className="text-sm font-bold text-slate-700 hover:text-primary-600 transition-colors px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50">
-                تسجيل الدخول
-              </Link>
-              <Link to="/register" className="group relative overflow-hidden rounded-xl bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 px-6 py-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-white shadow-lg shadow-primary-600/20 active:scale-[0.98] transition-all">
-                <Sparkles size={14} className="animate-pulse text-amber-300" />
-                <span>إبدأ الآن مجاناً</span>
-                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+            {/* Center Navigation Links (Absolutely Centered) */}
+            <div className="hidden lg:flex absolute inset-0 items-center justify-center pointer-events-none">
+              <div className="flex items-center gap-6 text-[15px] font-black text-[#2e315e] pointer-events-auto">
+                <a href="#morocco-network" className="hover:text-[#ff5722] transition-colors">تواصل معنا</a>
+                <a href="#marketplace" className="hover:text-[#ff5722] transition-colors">متجر المنتجات</a>
+                <Link to="/influencer/register" className="hover:text-[#ff5722] transition-colors">المؤثرين</Link>
+              </div>
+            </div>
+
+            {/* Right side Logo */}
+            <div className="flex items-center relative z-10">
+              <Link to="/" className="flex items-center gap-2.5 group">
+                <img src="/new logo/logo filess-24.svg" alt="SILACOD" className="h-[26px] hidden sm:block object-contain" />
+                <motion.img whileHover={{ rotateY: 15, scale: 1.05 }} src="/new logo/logo filess-25.svg" alt="SILACOD" className="w-10 h-[3rem] origin-center object-contain mt-[-0.5rem]" />
               </Link>
             </div>
 
@@ -231,115 +244,93 @@ export default function HomePage() {
               exit={{ opacity: 0, height: 0 }}
               className="lg:hidden bg-white border-t border-slate-100 shadow-xl"
             >
-              <div className="px-4 py-6 space-y-4">
-                <a href="#how-it-works" onClick={() => setMobileMenuOpen(false)} className="block font-bold text-slate-700 py-2">كيف نعمل؟</a>
-                <a href="#features" onClick={() => setMobileMenuOpen(false)} className="block font-bold text-slate-700 py-2">كل الميزات</a>
-                <a href="#marketplace" onClick={() => setMobileMenuOpen(false)} className="block font-bold text-slate-700 py-2">متجر المنتجات</a>
-                <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block font-bold text-slate-700 py-2">تسجيل الدخول</Link>
-                <Link to="/register" onClick={() => setMobileMenuOpen(false)} className="block w-full text-center bg-primary-600 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-primary-600/10">
+              <div className="px-4 py-6 space-y-4 text-right">
+                <Link to="/influencer/register" onClick={() => setMobileMenuOpen(false)} className="block font-bold text-[#2e315e] py-2">المؤثرين</Link>
+                <a href="#marketplace" onClick={() => setMobileMenuOpen(false)} className="block font-bold text-[#2e315e] py-2">متجر المنتجات</a>
+                <a href="#morocco-network" onClick={() => setMobileMenuOpen(false)} className="block font-bold text-[#2e315e] py-2">تواصل معنا</a>
+                <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block font-bold text-[#2e315e] py-2">تسجيل الدخول</Link>
+                <Link to="/register" onClick={() => setMobileMenuOpen(false)} className="block w-full text-center bg-[#ff5722] text-white font-bold py-3.5 rounded-xl">
                   إبدأ الآن مجاناً
                 </Link>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
+        </div>
       </motion.nav>
 
-      <LiveTicker />
+      {/* Main content padding to account for fixed ticker + navbar */}
+      <div className="pt-[135px]"></div>
 
-      {/* ── HERO SECTION (ابدأ تجارتك الإلكترونية بدون تعقيد) ── */}
-      <section className="relative pt-28 pb-20 lg:pt-36 lg:pb-32 px-4 sm:px-6 lg:px-8 overflow-hidden min-h-[92vh] flex items-center bg-white">
+      {/* ── HERO SECTION ── */}
+      <section className="relative pt-12 pb-20 lg:pt-16 lg:pb-32 px-4 sm:px-6 lg:px-8 overflow-hidden min-h-[85vh] flex items-center">
         
-        {/* Glowing backgrounds */}
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-primary-50/10 pointer-events-none" />
-        <div className="absolute top-[-10%] left-[-5%] w-[600px] h-[600px] bg-primary-300/10 rounded-full blur-[120px] pointer-events-none" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-accent-300/10 rounded-full blur-[120px] pointer-events-none" />
-
-        <div className="max-w-7xl mx-auto relative z-10 w-full">
-          <div className="grid lg:grid-cols-12 gap-12 lg:gap-16 items-center">
+        <div className="max-w-[1400px] mx-auto relative z-10 w-full pl-0 pr-4 lg:pr-12">
+          <div className="grid lg:grid-cols-12 gap-8 items-center">
             
             {/* Right Side: Arabic Title and Text */}
-            <div className="lg:col-span-6 space-y-8 text-right">
+            <div className="lg:col-span-6 space-y-7 text-right">
               
-              {/* Badge */}
-              <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-slate-50 border border-slate-150 shadow-sm text-xs font-black text-slate-800">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                </span>
-                <span>🇲🇦 المنصة رقم 1 للتجارة الإلكترونية واللوجستيك في المغرب</span>
-              </div>
-
               {/* Title */}
-              <h1 className="text-4xl sm:text-5xl lg:text-[3.8rem] font-black leading-[1.15] tracking-tight text-slate-900 font-['29LT_Kaff',Cairo,sans-serif]">
-                ابدأ تجارتك الإلكترونية <br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-600 via-primary-500 to-accent-500">
-                  بدون تعقيد وبأقل مخاطرة
-                </span> <br />
-                ركّز على البيع… ونحن ندير الباقي
+              <h1 className="text-4xl sm:text-5xl lg:text-[3.25rem] font-black leading-[1.25] tracking-tight text-[#2e315e] font-['29LT_Kaff',Cairo,sans-serif]">
+                ابدأ تجارتك الإلكترونية بدون تعقيد...<br />
+                ونحن ندير الباقي
               </h1>
 
               {/* Subtext */}
-              <p className="text-slate-500 text-base sm:text-lg leading-relaxed max-w-xl">
-                SILACOD تربطك بالمنتجات، التخزين، التأكيد، التغليف، التوصيل، التتبع، والتحصيل داخل نظام واحد — لتتفرغ أنت للبيع وتحقيق الأرباح.
+              <p className="text-slate-600 text-[17px] font-bold leading-[1.8] max-w-[90%]">
+                SILACOD تربطك بالمنتجات، التخزين، التأكيد، التغليف، التوصيل، التتبع، والتحصيل داخل نظام واحد – لتتفرغ أنت للبيع وتحقيق الأرباح.
               </p>
 
-              {/* Statistics & Features List */}
-              <div className="grid grid-cols-3 gap-4 pt-2">
-                <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">منتجات جاهزة للبيع</div>
-                  <div className="text-lg font-black text-primary-600 font-mono">500+ منتج</div>
+              {/* Subtitle checklist features with custom blue checkmarks */}
+              <div className="space-y-4 pt-3">
+                <div className="flex flex-col sm:flex-row gap-6 justify-start">
+                  {/* First item (visually right in RTL) */}
+                  <div className="flex items-center gap-2.5 text-[#2e315e] font-black text-[17px]">
+                    <CheckCircle2 strokeWidth={2.5} className="w-[22px] h-[22px] shrink-0" />
+                    <span>منتجات جاهزة للبيع</span>
+                  </div>
+                  {/* Second item (visually left in RTL) */}
+                  <div className="flex items-center gap-2.5 text-[#2e315e] font-black text-[17px]">
+                    <CheckCircle2 strokeWidth={2.5} className="w-[22px] h-[22px] shrink-0" />
+                    <span>نظام COD وتحويل أرباحك بسهولة</span>
+                  </div>
                 </div>
-                <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">تأكيد وتوصيل</div>
-                  <div className="text-lg font-black text-emerald-600">كل مدن المغرب</div>
-                </div>
-                <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">نظام COD آمن</div>
-                  <div className="text-lg font-black text-slate-800">تحصيل أرباحك</div>
+                <div className="flex items-center gap-2.5 text-[#2e315e] font-black text-[17px] justify-start">
+                  <CheckCircle2 strokeWidth={2.5} className="w-[22px] h-[22px] shrink-0" />
+                  <span>تأكيد وتوصيل في جميع مدن المغرب</span>
                 </div>
               </div>
 
-              {/* CTA Buttons */}
-              <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                <Link to="/register" className="group relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 transition-all shadow-xl shadow-primary-500/20 px-8 py-4.5 flex items-center justify-center gap-2.5 text-sm font-bold text-white">
-                  <Sparkles size={14} className="animate-pulse text-amber-300" />
-                  <span>إبدأ البيع الآن</span>
-                  <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
-                </Link>
-                <Link to="/influencer/register" className="rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-slate-100 transition-all px-8 py-4.5 flex items-center justify-center gap-2 text-sm font-bold text-slate-700">
-                  <Crown size={14} className="text-amber-500 animate-bounce" />
+              {/* CTA Buttons - Aligned to the left under text block */}
+              <div className="flex flex-col sm:flex-row gap-4 pt-8 justify-end w-[90%]">
+                {/* Left button: hollow outline button with dark/blue border */}
+                <Link to="/influencer/register" className="rounded-[12px] border-[1.5px] border-[#2e315e] hover:bg-slate-100 transition-all px-8 py-[14px] flex items-center justify-center gap-2 text-[16px] font-black text-[#2e315e]">
                   <span>إبدأ الآن كمؤثر</span>
+                </Link>
+                {/* Right button: solid orange/coral color with a white arrow pointing left inside it */}
+                <Link to="/register" className="rounded-[12px] bg-[#ff5722] hover:bg-[#e64a19] transition-all px-8 py-[14px] flex items-center justify-center gap-3 text-[16px] font-black text-white">
+                  <span>إبدأ البيع الآن</span>
+                  <ArrowLeft size={18} />
                 </Link>
               </div>
 
             </div>
 
-            {/* Left Side: Animated Hero Image Block */}
-            <div className="lg:col-span-6 relative w-full flex items-center justify-center">
+            {/* Left Side: Static Hero Image Block matching screenshot */}
+            <div className="lg:col-span-6 relative w-full flex items-center justify-center lg:justify-start">
               <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.6 }}
-                className="relative w-full max-w-lg"
+                initial={{ opacity: 0, x: -30 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.8 }}
+                className="relative w-full"
               >
-                {/* Floating graphic container */}
-                <div className="bg-slate-100/40 backdrop-blur-md border border-white/80 rounded-[3rem] p-4 shadow-2xl relative overflow-hidden">
-                  <img
-                    src="/home page silacod copy/images/hero.png"
-                    alt="SILACOD Dashboard Preview"
-                    className="w-full h-auto rounded-[2.5rem] object-cover shadow-inner hover:scale-[1.02] transition-all duration-500"
-                  />
-                  
-                  {/* Glowing tag overlay */}
-                  <div className="absolute top-8 left-8 bg-slate-900/90 text-white px-4 py-2 rounded-xl text-[10px] font-bold tracking-wider uppercase shadow-xl flex items-center gap-1.5 border border-slate-800">
-                    <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping" />
-                    <span>مزامنة مباشرة</span>
-                  </div>
-                </div>
-
-                {/* Ambient glow underneath */}
-                <div className="absolute -bottom-6 -left-6 w-72 h-72 bg-primary-400/10 rounded-full blur-[70px] pointer-events-none z-[-1]" />
+                <img
+                  src="/home page silacod copy/images/hero.png"
+                  alt="SILACOD Dashboard Preview"
+                  className="w-full h-auto object-contain scale-[1.15] origin-left"
+                  style={{ transform: 'scale(1.2) translateX(-5%)' }}
+                />
               </motion.div>
             </div>
 
@@ -348,157 +339,167 @@ export default function HomePage() {
       </section>
 
       {/* ── DYNAMIC COUNTER STATISTICS SECTION ── */}
-      <section className="py-16 bg-slate-900 text-white relative overflow-hidden font-['29LT_Kaff',Cairo,sans-serif]">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.08),transparent)] pointer-events-none" />
+      <section className="py-16 bg-white text-slate-900 relative overflow-hidden font-['29LT_Kaff',Cairo,sans-serif]">
         
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="text-center space-y-4 mb-12">
-            <h2 className="text-2xl sm:text-4xl font-black">أرقام تعكس قوة المنصة وثقة المستخدمين</h2>
-            <p className="text-slate-400 max-w-2xl mx-auto text-sm sm:text-base">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="text-center space-y-4 mb-16">
+            <h2 className="text-3xl sm:text-4xl font-black text-[#2e315e]">أرقام تعكس قوة المنصة وثقة المستخدمين</h2>
+            <p className="text-slate-500 max-w-2xl mx-auto text-[16px] font-bold">
               آلاف الطلبات، مئات المنتجات، وشبكة متنامية من البائعين والمسوقين يعملون يومياً عبر SILACOD لبناء تجارة إلكترونية أكثر سهولة واحترافية.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center pt-4">
-            <div className="space-y-2">
-              <div className="text-4xl lg:text-5xl font-black text-primary-400 font-mono">
-                <Counter to={500} suffix="+" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-right pt-4">
+            
+            <div className="flex flex-col items-center justify-center gap-3">
+              <div className="w-14 h-14 bg-[#2e315e] rounded-[14px] flex items-center justify-center shrink-0 shadow-lg shadow-[#2e315e]/20">
+                <Globe className="w-7 h-7 text-white" />
               </div>
-              <p className="text-xs sm:text-sm font-bold text-slate-400 uppercase tracking-wide">منتج جاهز للبيع</p>
-            </div>
-            <div className="space-y-2">
-              <div className="text-4xl lg:text-5xl font-black text-emerald-400 font-mono">
-                <Counter to={3000} suffix="+" />
+              <div className="text-center">
+                <div className="text-2xl font-black text-[#2e315e] font-mono">100%</div>
+                <p className="text-[13px] font-bold text-slate-500 mt-1">تغطية لكافة مدن المغرب</p>
               </div>
-              <p className="text-xs sm:text-sm font-bold text-slate-400 uppercase tracking-wide">بائع نشط بالمنصة</p>
             </div>
-            <div className="space-y-2">
-              <div className="text-4xl lg:text-5xl font-black text-amber-400 font-mono">
-                <Counter to={68000} suffix="+" />
+
+            <div className="flex flex-col items-center justify-center gap-3">
+              <div className="w-14 h-14 bg-[#2e315e] rounded-[14px] flex items-center justify-center shrink-0 shadow-lg shadow-[#2e315e]/20">
+                <RefreshCw className="w-7 h-7 text-white" />
               </div>
-              <p className="text-xs sm:text-sm font-bold text-slate-400 uppercase tracking-wide">طلب يتم شحنه شهرياً</p>
-            </div>
-            <div className="space-y-2">
-              <div className="text-4xl lg:text-5xl font-black text-rose-400">
-                100%
+              <div className="text-center">
+                <div className="text-2xl font-black text-[#2e315e] font-mono">
+                  <Counter to={68000} suffix="+" />
+                </div>
+                <p className="text-[13px] font-bold text-slate-500 mt-1">طلب يتم شحنه شهرياً</p>
               </div>
-              <p className="text-xs sm:text-sm font-bold text-slate-400 uppercase tracking-wide">تغطية لكافة مدن المغرب</p>
             </div>
+
+            <div className="flex flex-col items-center justify-center gap-3">
+              <div className="w-14 h-14 bg-[#2e315e] rounded-[14px] flex items-center justify-center shrink-0 shadow-lg shadow-[#2e315e]/20">
+                <Users className="w-7 h-7 text-white" />
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-black text-[#2e315e] font-mono">
+                  <Counter to={3000} suffix="+" />
+                </div>
+                <p className="text-[13px] font-bold text-slate-500 mt-1">بائع نشط بالمنصة</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center justify-center gap-3">
+              <div className="w-14 h-14 bg-[#2e315e] rounded-[14px] flex items-center justify-center shrink-0 shadow-lg shadow-[#2e315e]/20">
+                <Package className="w-7 h-7 text-white" />
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-black text-[#2e315e] font-mono">
+                  <Counter to={500} suffix="+" />
+                </div>
+                <p className="text-[13px] font-bold text-slate-500 mt-1">منتج جاهز للبيع</p>
+              </div>
+            </div>
+
           </div>
         </div>
       </section>
 
       {/* ── ALONE VS SILACOD (لماذا يفشل أغلب الناس؟) ── */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-white relative">
-        <div className="max-w-7xl mx-auto text-center space-y-16">
+      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-white relative font-['29LT_Kaff',Cairo,sans-serif]">
+        <div className="max-w-6xl mx-auto text-center space-y-16">
           
           <div className="space-y-4">
-            <span className="text-primary-600 font-bold tracking-widest uppercase text-xs bg-primary-50 px-4 py-2 rounded-full border border-primary-100">
-              المقارنة الذكية
-            </span>
-            <h2 className="text-3xl sm:text-5xl font-black text-slate-900 leading-tight">
+            <h2 className="text-3xl sm:text-5xl font-black text-[#2e315e] leading-tight">
               لماذا يفشل أغلب الناس في التجارة الإلكترونية؟
             </h2>
-            <p className="text-slate-500 max-w-xl mx-auto text-sm sm:text-base">
-              بدل تضييع الوقت في إدارة التفاصيل التشغيلية الصعبة، ركّز فقط على النمو والتسويق — واترك العمليات بالكامل علينا.
+            <p className="text-[#2e315e] max-w-xl mx-auto text-sm sm:text-base font-bold">
+              بدل تضييع الوقت في إدارة التفاصيل، ركّز على النمو — واترك العمليات علينا
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-12 items-stretch max-w-5xl mx-auto">
+          <div className="grid md:grid-cols-2 gap-16 items-start max-w-4xl mx-auto">
             
-            {/* Alone card (العمل لوحدك) */}
+            {/* With Silacod (العمل مع SILACOD) */}
             <motion.div
               whileHover={{ y: -5 }}
-              className="bg-rose-50/30 border border-rose-100 rounded-[2.5rem] p-8 sm:p-10 flex flex-col justify-between text-right relative overflow-hidden"
+              className="flex flex-col items-center text-center space-y-8"
             >
-              <div className="space-y-6">
-                <div className="flex items-center justify-between border-b border-rose-100/50 pb-6">
-                  <div>
-                    <h3 className="text-2xl font-black text-rose-700">العمل لوحدك</h3>
-                    <p className="text-xs text-rose-500/80 mt-1">تحديات يومية مستمرة ومعقدة</p>
-                  </div>
-                  <div className="p-3.5 bg-rose-100/50 text-rose-600 rounded-2xl"><X size={20} /></div>
-                </div>
+              <div className="w-full max-w-[320px] mx-auto bg-white relative">
+                {/* Background Grid Pattern */}
+                <div className="absolute inset-0 bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:3rem_3rem] opacity-70" />
+                <img src="/home page silacod copy/images/After.png" alt="Success with Silacod" className="w-full h-auto object-cover max-h-[260px] relative z-10 p-6" />
+              </div>
 
-                <div className="my-4 rounded-2xl overflow-hidden shadow-md">
-                  <img src="/home page silacod copy/images/Before.png" alt="Struggle Working Alone" className="w-full h-auto object-cover max-h-[180px]" />
-                </div>
+              <h3 className="text-2xl sm:text-3xl font-black text-[#ff5722]">العمل مع SILACOD</h3>
 
-                <ul className="space-y-3.5 text-slate-600 text-sm">
-                  <li className="flex items-start gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">✗</span>
-                    <span>تبحث عن منتج بنفسك بدون أي ضمان للنجاح في السوق</span>
+              <div className="inline-block text-right">
+                <ul className="space-y-4 text-[#2e315e] text-sm font-bold">
+                  <li className="flex items-center justify-start gap-3">
+                    <span className="w-4 h-4 rounded-full border-[1.5px] border-[#2e315e] text-[#2e315e] flex items-center justify-center text-[9px] font-black shrink-0">✓</span>
+                    <span>منتجات جاهزة للبيع داخل المنصة</span>
                   </li>
-                  <li className="flex items-start gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">✗</span>
-                    <span>تحتاج إنشاء موقع كامل أو صفحة هبوط معقدة من الصفر</span>
+                  <li className="flex items-center justify-start gap-3">
+                    <span className="w-4 h-4 rounded-full border-[1.5px] border-[#2e315e] text-[#2e315e] flex items-center justify-center text-[9px] font-black shrink-0">✓</span>
+                    <span>صفحات هبوط جاهزة للبيع فوراً</span>
                   </li>
-                  <li className="flex items-start gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">✗</span>
-                    <span>مشاكل لا تنتهي مع شركات التوصيل ونسب إرجاع مرتفعة جداً</span>
+                  <li className="flex items-center justify-start gap-3">
+                    <span className="w-4 h-4 rounded-full border-[1.5px] border-[#2e315e] text-[#2e315e] flex items-center justify-center text-[9px] font-black shrink-0">✓</span>
+                    <span>فريق متخصص لتأكيد الطلبات</span>
                   </li>
-                  <li className="flex items-start gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">✗</span>
-                    <span>تتعامل مع تأكيد طلبات الزبناء بنفسك عبر الهاتف وتضيع وقتك</span>
+                  <li className="flex items-center justify-start gap-3">
+                    <span className="w-4 h-4 rounded-full border-[1.5px] border-[#2e315e] text-[#2e315e] flex items-center justify-center text-[9px] font-black shrink-0">✓</span>
+                    <span>توصيل وتحصيل في جميع المدن</span>
                   </li>
-                  <li className="flex items-start gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">✗</span>
-                    <span>صعوبة بالغة في تتبع وحساب أرباحك الصافية بدقة وبدون أخطاء</span>
+                  <li className="flex items-center justify-start gap-3">
+                    <span className="w-4 h-4 rounded-full border-[1.5px] border-[#2e315e] text-[#2e315e] flex items-center justify-center text-[9px] font-black shrink-0">✓</span>
+                    <span>لوحة تحكم واضحة لتتبع أرباحك</span>
+                  </li>
+                  <li className="flex items-center justify-start gap-3">
+                    <span className="w-4 h-4 rounded-full border-[1.5px] border-[#2e315e] text-[#2e315e] flex items-center justify-center text-[9px] font-black shrink-0">✓</span>
+                    <span>تركز فقط على التسويق وتنمية تجارتك</span>
                   </li>
                 </ul>
               </div>
-
-              <div className="pt-8 text-center text-xs font-bold text-rose-600">تضييع كبير للوقت والجهد والميزانية</div>
             </motion.div>
 
-            {/* With Silacod card (العمل مع SILACOD) */}
+            {/* Alone (العمل لوحدك) */}
             <motion.div
               whileHover={{ y: -5 }}
-              className="bg-emerald-50/20 border-2 border-emerald-500/30 rounded-[2.5rem] p-8 sm:p-10 flex flex-col justify-between text-right relative overflow-hidden shadow-xl shadow-emerald-500/5"
+              className="flex flex-col items-center text-center space-y-8"
             >
-              <div className="absolute top-0 right-12 left-12 h-[3px] bg-gradient-to-r from-transparent via-emerald-500 to-transparent" />
-              
-              <div className="space-y-6">
-                <div className="flex items-center justify-between border-b border-emerald-100/50 pb-6">
-                  <div>
-                    <h3 className="text-2xl font-black text-emerald-700 flex items-center gap-1.5">
-                      العمل مع SILACOD
-                      <Sparkles size={16} className="text-amber-500 animate-pulse" />
-                    </h3>
-                    <p className="text-xs text-emerald-600 font-bold mt-1">نظام متكامل يضمن لك النجاح والحرية</p>
-                  </div>
-                  <div className="p-3.5 bg-emerald-100/50 text-emerald-600 rounded-2xl"><Check size={20} /></div>
-                </div>
+              <div className="w-full max-w-[320px] mx-auto bg-white relative">
+                {/* Background Grid Pattern */}
+                <div className="absolute inset-0 bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:3rem_3rem] opacity-70" />
+                <img src="/home page silacod copy/images/Before.png" alt="Struggle Working Alone" className="w-full h-auto object-cover max-h-[260px] relative z-10 p-6" />
+              </div>
 
-                <div className="my-4 rounded-2xl overflow-hidden shadow-md">
-                  <img src="/home page silacod copy/images/After.png" alt="Success with Silacod" className="w-full h-auto object-cover max-h-[180px]" />
-                </div>
+              <h3 className="text-2xl sm:text-3xl font-black text-slate-500">العمل لوحدك</h3>
 
-                <ul className="space-y-3.5 text-slate-700 text-sm">
-                  <li className="flex items-start gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">✓</span>
-                    <span className="font-bold text-slate-800">منتجات جاهزة للبيع بنقرة واحدة داخل المنصة</span>
+              <div className="inline-block text-right">
+                <ul className="space-y-4 text-slate-500 text-sm font-bold">
+                  <li className="flex items-center justify-start gap-3">
+                    <span className="w-4 h-4 rounded-full border-[1.5px] border-slate-500 text-slate-500 flex items-center justify-center text-[9px] font-black shrink-0">✗</span>
+                    <span>تبحث عن منتج بنفسك بدون ضمان النجاح</span>
                   </li>
-                  <li className="flex items-start gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">✓</span>
-                    <span className="font-bold text-slate-800">صفحات هبوط احترافية وجاهزة للبيع الفوري</span>
+                  <li className="flex items-center justify-start gap-3">
+                    <span className="w-4 h-4 rounded-full border-[1.5px] border-slate-500 text-slate-500 flex items-center justify-center text-[9px] font-black shrink-0">✗</span>
+                    <span>تحتاج إنشاء موقع أو صفحة بيع من الصفر</span>
                   </li>
-                  <li className="flex items-start gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">✓</span>
-                    <span className="font-bold text-slate-800">فريق مركز اتصال متخصص ومحترف لتأكيد كل طلباتك</span>
+                  <li className="flex items-center justify-start gap-3">
+                    <span className="w-4 h-4 rounded-full border-[1.5px] border-slate-500 text-slate-500 flex items-center justify-center text-[9px] font-black shrink-0">✗</span>
+                    <span>مشاكل مع شركات التوصيل والإرجاع</span>
                   </li>
-                  <li className="flex items-start gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">✓</span>
-                    <span className="font-bold text-slate-800">توصيل سريع وتحصيل أموال في جميع مدن المغرب</span>
+                  <li className="flex items-center justify-start gap-3">
+                    <span className="w-4 h-4 rounded-full border-[1.5px] border-slate-500 text-slate-500 flex items-center justify-center text-[9px] font-black shrink-0">✗</span>
+                    <span>تتعامل مع الزبائن وتأكيد الطلبات</span>
                   </li>
-                  <li className="flex items-start gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">✓</span>
-                    <span className="font-bold text-slate-800">لوحة تحكم ذكية وواضحة جداً لتتبع نمو أرباحك</span>
+                  <li className="flex items-center justify-start gap-3">
+                    <span className="w-4 h-4 rounded-full border-[1.5px] border-slate-500 text-slate-500 flex items-center justify-center text-[9px] font-black shrink-0">✗</span>
+                    <span>صعوبة في تتبع الأرباح بدقة</span>
+                  </li>
+                  <li className="flex items-center justify-start gap-3">
+                    <span className="w-4 h-4 rounded-full border-[1.5px] border-slate-500 text-slate-500 flex items-center justify-center text-[9px] font-black shrink-0">✗</span>
+                    <span>تضيع وقتك في العمليات بدل التركيز على البيع</span>
                   </li>
                 </ul>
               </div>
-
-              <div className="pt-8 text-center text-xs font-bold text-emerald-600">تتفرغ بالكامل للتسويق وتحقيق الأرباح الصافية</div>
             </motion.div>
 
           </div>
@@ -507,323 +508,182 @@ export default function HomePage() {
 
       {/* ── ALL IN ONE SYSTEM (كل ما تحتاجه في نظام واحد) ── */}
       <section id="features" className="py-24 px-4 sm:px-6 lg:px-8 bg-slate-50/50 border-y border-slate-100/80">
-        <div className="max-w-7xl mx-auto space-y-16">
+        <div className="max-w-6xl mx-auto space-y-16">
           
           <div className="text-center space-y-4">
-            <span className="text-primary-600 font-bold tracking-widest uppercase text-xs bg-primary-50 px-4 py-2 rounded-full border border-primary-100">
-              ميزات النظام
-            </span>
-            <h2 className="text-3xl sm:text-5xl font-black text-slate-900 leading-tight">
+            <h2 className="text-3xl sm:text-5xl font-black text-[#2e315e] leading-tight font-['29LT_Kaff',Cairo,sans-serif]">
               كل ما تحتاجه لإدارة تجارتك في نظام واحد
             </h2>
-            <p className="text-slate-500 max-w-xl mx-auto text-sm sm:text-base">
+            <p className="text-slate-500 max-w-xl mx-auto text-sm sm:text-base font-bold">
               تحكّم في كل تفاصيل تجارتك من مكان واحد، بدون تعقيد أو الحاجة لاستعمال أدوات متعددة.
             </p>
           </div>
 
-          <div className="grid lg:grid-cols-12 gap-12 items-center">
+          <div className="grid md:grid-cols-2 gap-8">
             
-            {/* Tabs List (Right Side) */}
-            <div className="lg:col-span-4 space-y-3">
-              {[
-                { id: 'confirmation', title: 'تأكيد احترافي للطلبات', subtitle: 'فريق يرفع نسبة نجاح طلبياتك', icon: <Phone size={18} /> },
-                { id: 'tracking', title: 'تتبع الشحن المستمر', subtitle: 'راقب حالة الشحن في كل مرحلة', icon: <RefreshCw size={18} /> },
-                { id: 'products', title: 'منتجات جاهزة للبيع', subtitle: 'تصفح واختر منتجك بنقرة واحدة', icon: <Package size={18} /> },
-                { id: 'profits', title: 'شفافية كاملة للأرباح', subtitle: 'أرباحك واضحة ومحدثة فوراً', icon: <Wallet size={18} /> },
-                { id: 'orders', title: 'إدارة ذكية للطلبات', subtitle: 'تحكم في مسار طلباتك بنظام ذكي', icon: <CheckCircle2 size={18} /> }
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`w-full text-right p-5 rounded-2xl border transition-all duration-300 flex items-center gap-4 ${
-                    activeTab === tab.id
-                      ? 'bg-white border-primary-500 shadow-md shadow-slate-100'
-                      : 'bg-transparent border-transparent hover:bg-slate-100/50'
-                  }`}
-                >
-                  <div className={`p-3 rounded-xl ${activeTab === tab.id ? 'bg-primary-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                    {tab.icon}
-                  </div>
-                  <div>
-                    <h4 className={`text-base font-black ${activeTab === tab.id ? 'text-slate-900' : 'text-slate-700'}`}>{tab.title}</h4>
-                    <p className="text-xs text-slate-400 mt-0.5">{tab.subtitle}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            {/* Tab Graphic View (Left Side) */}
-            <div className="lg:col-span-8 bg-white border border-slate-100 rounded-[3rem] p-8 sm:p-10 shadow-2xl relative min-h-[440px] flex flex-col justify-between">
-              
-              <AnimatePresence mode="wait">
-                {activeTab === 'confirmation' && (
-                  <motion.div
-                    key="confirmation"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="space-y-6 flex flex-col md:flex-row gap-8 items-center h-full"
-                  >
-                    <div className="flex-1 space-y-4">
-                      <span className="px-3 py-1 bg-primary-50 border border-primary-100 rounded-lg text-[9px] font-black text-primary-600 uppercase tracking-widest">تأكيد الاتصال هاتفياً</span>
-                      <h3 className="text-2xl font-black text-slate-950">فريق متكامل لرفع نسب التوصيل وتقليل الإلغاءات</h3>
-                      <p className="text-slate-500 text-sm leading-relaxed">
-                        يتولى مركز الاتصال المتخصص لدينا التواصل المباشر والسريع مع الزبائن فور إدخال الطلب لتأكيد العنوان والمعلومات، مما يضمن رفع نسب تسليم طلباتك إلى أقصى حد وتفادي المرتجعات.
-                      </p>
-                    </div>
-                    <div className="w-full md:w-72 overflow-hidden rounded-2xl shadow-lg border border-slate-100 shrink-0">
-                      <img src="/home page silacod copy/images/Untitled-2.png" alt="Call Center Operations" className="w-full h-auto object-cover max-h-[220px]" />
-                    </div>
-                  </motion.div>
-                )}
-
-                {activeTab === 'tracking' && (
-                  <motion.div
-                    key="tracking"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="space-y-6 flex flex-col md:flex-row gap-8 items-center h-full"
-                  >
-                    <div className="flex-1 space-y-4">
-                      <span className="px-3 py-1 bg-emerald-50 border border-emerald-100 rounded-lg text-[9px] font-black text-emerald-600 uppercase tracking-widest">متابعة دقيقة</span>
-                      <h3 className="text-2xl font-black text-slate-950">راقب مسار وحالة شحن طلباتك لحظة بلحظة</h3>
-                      <p className="text-slate-500 text-sm leading-relaxed">
-                        راقب حالة شحن طلباتك في كل مرحلة: قيد المعالجة، مع الموزع، أو تم التوصيل بنجاح. كل التفاصيل والبيانات محدثة ومتاحة فوراً بلوحة التحكم بدون الحاجة للتواصل اليدوي المرهق مع شركات الشحن.
-                      </p>
-                    </div>
-                    <div className="w-full md:w-72 overflow-hidden rounded-2xl shadow-lg border border-slate-100 shrink-0">
-                      <img src="/home page silacod copy/images/DM_Macbook Pro Mockup 4.png" alt="Tracking Portal" className="w-full h-auto object-cover max-h-[220px]" />
-                    </div>
-                  </motion.div>
-                )}
-
-                {activeTab === 'products' && (
-                  <motion.div
-                    key="products"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="space-y-6 flex flex-col md:flex-row gap-8 items-center h-full"
-                  >
-                    <div className="flex-1 space-y-4">
-                      <span className="px-3 py-1 bg-amber-50 border border-amber-100 rounded-lg text-[9px] font-black text-amber-600 uppercase tracking-widest">تنوع المنتجات</span>
-                      <h3 className="text-2xl font-black text-slate-950">كتالوج منتجات واسع مجرب ومربح</h3>
-                      <p className="text-slate-500 text-sm leading-relaxed">
-                        تصفح واختر من بين تشكيلة واسعة من المنتجات الرائجة والمختارة بعناية فائقة من السوق المحلي المغربي. اعرف سعر المورد وهامش الربح المقترح، وأضف المنتج فوراً لمتجرك وابدأ بيعه مباشرة.
-                      </p>
-                    </div>
-                    <div className="w-full md:w-72 overflow-hidden rounded-2xl shadow-lg border border-slate-100 shrink-0">
-                      <img src="/home page silacod copy/images/cards-4-1.png" alt="Marketplace Catalog" className="w-full h-auto object-cover max-h-[220px]" />
-                    </div>
-                  </motion.div>
-                )}
-
-                {activeTab === 'profits' && (
-                  <motion.div
-                    key="profits"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="space-y-6 flex flex-col md:flex-row gap-8 items-center h-full"
-                  >
-                    <div className="flex-1 space-y-4">
-                      <span className="px-3 py-1 bg-rose-50 border border-rose-100 rounded-lg text-[9px] font-black text-rose-600 uppercase tracking-widest">أرباح فورية</span>
-                      <h3 className="text-2xl font-black text-slate-950">إدارة مالية شفافة جداً لحظة بلحظة</h3>
-                      <p className="text-slate-500 text-sm leading-relaxed">
-                        اطّلع على رصيد محفظتك، المصاريف اللوجستية، والأرباح الصافية الحقيقية لكل عملية بيع ناجحة. لا وجود لرسوم خفية أو اقتطاعات غير واضحة — كل البيانات تظهر فوراً مع إمكانية سحب سريعة.
-                      </p>
-                    </div>
-                    <div className="w-full md:w-72 overflow-hidden rounded-2xl shadow-lg border border-slate-100 shrink-0">
-                      <img src="/home page silacod copy/images/s2.png" alt="Profits Dashboard" className="w-full h-auto object-cover max-h-[220px]" />
-                    </div>
-                  </motion.div>
-                )}
-
-                {activeTab === 'orders' && (
-                  <motion.div
-                    key="orders"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="space-y-6 flex flex-col md:flex-row gap-8 items-center h-full"
-                  >
-                    <div className="flex-1 space-y-4">
-                      <span className="px-3 py-1 bg-indigo-50 border border-indigo-100 rounded-lg text-[9px] font-black text-indigo-600 uppercase tracking-widest">إدارة متكاملة</span>
-                      <h3 className="text-2xl font-black text-slate-950">تحكم كامل في مسار طلبياتك</h3>
-                      <p className="text-slate-500 text-sm leading-relaxed">
-                        تابع حالة كل طلبية من لحظة إدخالها إلى غاية تسليمها واستلام قيمتها نقداً من العميل. تحكم في تعديل البيانات، إضافة الشروحات للموزع، والتواصل الفوري مع الدعم الفني لحل أي عائق لوجستي.
-                      </p>
-                    </div>
-                    <div className="w-full md:w-72 overflow-hidden rounded-2xl shadow-lg border border-slate-100 shrink-0">
-                      <img src="/home page silacod copy/images/hero.png" alt="Orders Portal" className="w-full h-auto object-cover max-h-[220px]" />
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Status bar */}
-              <div className="border-t border-slate-100 pt-4 flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase mt-6">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>تحديث البيانات فوري وآمن 100%</span>
-                </div>
-                <span>SILACOD SYSTEMS</span>
+            {/* Card 1 */}
+            <motion.div whileHover={{ y: -5 }} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm flex flex-col items-center pt-10 px-6 gap-8 text-center">
+              <div className="space-y-3 w-full">
+                <span className="inline-block text-[#ff5722] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">تأكيد الطلبات</span>
+                <h3 className="text-2xl font-black text-[#2e315e]">تأكيد احترافي للطلبات</h3>
+                <p className="text-slate-500 text-sm font-bold leading-relaxed max-w-sm mx-auto">
+                  فريق متكامل لرفع نسب التوصيل وتقليل الإلغاءات. تواصل مباشر مع الزبائن لتأكيد طلباتك بدقة فائقة.
+                </p>
               </div>
+              <img src="/home page silacod copy/images/call-center-customer-service.jpg" alt="Call Center" className="w-[85%] max-w-[400px] h-auto object-cover rounded-t-[1.5rem] mt-auto" />
+            </motion.div>
 
-            </div>
+            {/* Card 2 */}
+            <motion.div whileHover={{ y: -5 }} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm flex flex-col items-center pt-10 px-6 gap-8 text-center">
+              <div className="space-y-3 w-full">
+                <span className="inline-block text-[#ff5722] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">تنوع المنتجات</span>
+                <h3 className="text-2xl font-black text-[#2e315e]">منتجات جاهزة للبيع</h3>
+                <p className="text-slate-500 text-sm font-bold leading-relaxed max-w-sm mx-auto">
+                  تصفح واختر من بين تشكيلة واسعة من المنتجات الرائجة والمختارة بعناية فائقة. ابدأ البيع فوراً بنقرة واحدة.
+                </p>
+              </div>
+              <img src="/home page silacod copy/images/cards-4-1.png" alt="Products" className="w-[85%] max-w-[400px] h-auto object-contain mt-auto" />
+            </motion.div>
+
+            {/* Card 3 */}
+            <motion.div whileHover={{ y: -5 }} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm flex flex-col items-center pt-10 px-6 gap-8 text-center">
+              <div className="space-y-3 w-full">
+                <span className="inline-block text-[#ff5722] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">إدارة متكاملة</span>
+                <h3 className="text-2xl font-black text-[#2e315e]">إدارة ذكية للطلبات</h3>
+                <p className="text-slate-500 text-sm font-bold leading-relaxed max-w-sm mx-auto">
+                  راقب مسار وحالة شحن طلباتك لحظة بلحظة وبكل سهولة. تحديث فوري وآلي للحالات لتوفير الوقت.
+                </p>
+              </div>
+              <img src="/home page silacod copy/images/cards-3.webp" alt="Orders" className="w-[85%] max-w-[400px] h-auto object-contain mt-auto" />
+            </motion.div>
+
+            {/* Card 4 */}
+            <motion.div whileHover={{ y: -5 }} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm flex flex-col items-center pt-10 px-6 gap-8 text-center">
+              <div className="space-y-3 w-full">
+                <span className="inline-block text-[#ff5722] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">أرباح فورية</span>
+                <h3 className="text-2xl font-black text-[#2e315e]">شفافية كاملة للأرباح</h3>
+                <p className="text-slate-500 text-sm font-bold leading-relaxed max-w-sm mx-auto">
+                  لوحة تحكم ذكية واضحة لعرض أرباحك الصافية الحقيقية وسحب أموالك بكل أمان وسهولة من المنصة.
+                </p>
+              </div>
+              <img src="/home page silacod copy/images/s2.png" alt="Profits" className="w-[85%] max-w-[400px] h-auto object-contain mt-auto" />
+            </motion.div>
 
           </div>
-
         </div>
       </section>
 
       {/* ── HOW IT WORKS (ابدأ تجارتك في 3 خطوات بسيطة) ── */}
       <section id="how-it-works" className="py-24 px-4 sm:px-6 lg:px-8 bg-white border-b border-slate-100">
-        <div className="max-w-7xl mx-auto space-y-16">
+        <div className="max-w-6xl mx-auto space-y-16">
           
           <div className="text-center space-y-4">
-            <span className="text-primary-600 font-bold tracking-widest uppercase text-xs bg-primary-50 px-4 py-2 rounded-full border border-primary-100">
-              خطوات العمل
-            </span>
-            <h2 className="text-3xl sm:text-5xl font-black text-slate-900 leading-tight">
+            <h2 className="text-3xl sm:text-5xl font-black text-[#2e315e] leading-tight font-['29LT_Kaff',Cairo,sans-serif]">
               ابدأ تجارتك في 3 خطوات بسيطة
             </h2>
-            <p className="text-slate-500 max-w-xl mx-auto text-sm sm:text-base">
-              من اختيار المنتج المناسب إلى توصيل الطلبات واستلام الأرباح نقداً — نوفر لك نظاماً متكاملاً يجعل البيع أسهل وأكثر احترافية.
+            <p className="text-slate-500 max-w-xl mx-auto text-sm sm:text-base font-bold">
+              من اختيار المنتج المناسب إلى توصيل الطلبات واستلام الأرباح نقداً — نوفر لك نظاماً متكاملاً يجعل البيع أسهل.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {steps.map((step) => (
-              <motion.div
-                key={step.n}
-                whileHover={{ y: -8 }}
-                className="bg-slate-50 border border-slate-100 rounded-[2rem] p-8 text-right flex flex-col justify-between min-h-[260px] shadow-sm hover:shadow-md transition-all duration-300"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-4xl font-black text-primary-200 font-mono">{step.n}</span>
-                  <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center border border-slate-100 shadow-sm">
-                    <span className="w-2.5 h-2.5 rounded-full bg-primary-500" />
-                  </div>
-                </div>
-
-                <div className="space-y-2.5 mt-6">
-                  <h3 className="text-lg font-black text-slate-950">{step.title}</h3>
-                  <p className="text-slate-500 text-xs sm:text-sm leading-relaxed">{step.desc}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-
-          {/* Delivery Man Visual Callout */}
-          <div className="bg-slate-900 rounded-[3rem] p-8 sm:p-12 text-white flex flex-col md:flex-row items-center justify-between gap-8 shadow-2xl relative overflow-hidden mt-8">
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_left,rgba(16,185,129,0.1),transparent)] pointer-events-none" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             
-            <div className="space-y-6 flex-1 text-right">
-              <span className="px-3 py-1 bg-emerald-500/20 border border-emerald-500/30 rounded-lg text-[9px] font-black text-emerald-400 uppercase tracking-widest">تغطية تشغيلية كاملة</span>
-              <h3 className="text-2xl sm:text-3xl font-black">شحن وتوصيل احترافي لجميع مدن المغرب</h3>
-              <p className="text-slate-300 text-xs sm:text-sm leading-relaxed max-w-xl">
-                بمجرد تأكيد طلب العميل، يتولى فريقنا اللوجستي تجهيز وتغليف المنتج الخاص بك وإرساله فوراً مع شبكة موزعِينا المحترفين بكافة ربوع المغرب، ليتم استلام قيمته نقداً وتحديث أرباحك الصافية فوراً.
+            {/* Step 1 */}
+            <motion.div whileHover={{ y: -5 }} className="bg-[#fafafc] rounded-[2rem] p-6 text-center shadow-sm border border-slate-100 flex flex-col items-center">
+              <div className="w-10 h-10 bg-[#ff5722] text-white rounded-full flex items-center justify-center font-black text-lg mb-4 shadow-md">1</div>
+              <h3 className="text-xl font-black text-[#2e315e] mb-3">اختر منتجات قابلة لبناء براند</h3>
+              <p className="text-slate-500 text-sm font-bold leading-relaxed mb-6">
+                تصفح الكتالوج واختر من بين منتجات مدروسة ومضمونة الجودة لتسويقها لزبائنك.
               </p>
-            </div>
-            <div className="w-48 sm:w-56 overflow-hidden rounded-[2rem] border border-white/10 shrink-0">
-              <img src="/home page silacod copy/images/delivery_man_smiling.webp" alt="Delivery Hero" className="w-full h-auto object-cover" />
-            </div>
-          </div>
+              <img src="/home page silacod copy/images/branddd.png" alt="Select Products" className="w-full h-auto object-contain max-h-[180px] mt-auto rounded-xl" />
+            </motion.div>
 
+            {/* Step 2 */}
+            <motion.div whileHover={{ y: -5 }} className="bg-[#fafafc] rounded-[2rem] p-6 text-center shadow-sm border border-slate-100 flex flex-col items-center">
+              <div className="w-10 h-10 bg-[#ff5722] text-white rounded-full flex items-center justify-center font-black text-lg mb-4 shadow-md">2</div>
+              <h3 className="text-xl font-black text-[#2e315e] mb-3">ابدأ التسويق واستقبل الطلبات بسهولة</h3>
+              <p className="text-slate-500 text-sm font-bold leading-relaxed mb-6">
+                سوّق لمنتجاتك عبر منصات السوشيال ميديا وحقق مبيعات سريعة فورية بدون حدود.
+              </p>
+              <img src="/home page silacod copy/images/www.png" alt="Marketing" className="w-full h-auto object-contain max-h-[180px] mt-auto rounded-xl" />
+            </motion.div>
+
+            {/* Step 3 */}
+            <motion.div whileHover={{ y: -5 }} className="bg-[#fafafc] rounded-[2rem] p-6 text-center shadow-sm border border-slate-100 flex flex-col items-center">
+              <div className="w-10 h-10 bg-[#ff5722] text-white rounded-full flex items-center justify-center font-black text-lg mb-4 shadow-md">3</div>
+              <h3 className="text-xl font-black text-[#2e315e] mb-3">اترك العمليات التشغيلية لـ SILACOD</h3>
+              <p className="text-slate-500 text-sm font-bold leading-relaxed mb-6">
+                نحن نتكفل بالتأكيد والتغليف والشحن إلى العميل، لنضيف أرباحك الصافية لمحفظتك مباشرة.
+              </p>
+              <img src="/home page silacod copy/images/Untitled-2.png" alt="Fulfillment" className="w-full h-auto object-contain max-h-[180px] mt-auto rounded-xl" />
+            </motion.div>
+
+          </div>
         </div>
       </section>
 
       {/* ── TARGET AUDIENCE (لمن هذه المنصة؟) ── */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-slate-50/50">
-        <div className="max-w-7xl mx-auto space-y-16">
+      <section className="py-24 bg-white border-b border-slate-100 overflow-hidden">
+        <div className="max-w-6xl mx-auto space-y-16 px-4 sm:px-6 lg:px-8">
           
           <div className="text-center space-y-4">
-            <span className="text-primary-600 font-bold tracking-widest uppercase text-xs bg-primary-50 px-4 py-2 rounded-full border border-primary-100">
-              الجمهور المستهدف
-            </span>
-            <h2 className="text-3xl sm:text-5xl font-black text-slate-900 leading-tight">
+            <h2 className="text-3xl sm:text-5xl font-black text-[#2e315e] leading-tight font-['29LT_Kaff',Cairo,sans-serif]">
               لمن هذه المنصة؟
             </h2>
-            <p className="text-slate-500 max-w-xl mx-auto text-sm sm:text-base">
-              سواء كنت تاجراً محترفاً، صانع محتوى، أو مسوقاً بالعمولة مبتدئاً — SILACOD توفر لك كل الأدوات الممكنة لتحقيق النجاح.
-            </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="space-y-12 pt-8">
             
-            {/* Vendors (للبائعين) */}
-            <motion.div
-              whileHover={{ y: -5 }}
-              className="bg-white border border-slate-100 rounded-[2.5rem] p-8 flex flex-col justify-between min-h-[420px] shadow-sm hover:shadow-md transition-all text-right"
-            >
-              <div className="space-y-6">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                  <h3 className="text-xl font-black text-slate-900">للبائعين والتجار</h3>
-                  <div className="p-3 bg-primary-50 text-primary-600 rounded-xl"><Package size={18} /></div>
-                </div>
-                <p className="text-slate-500 text-xs sm:text-sm leading-relaxed">
-                  ابدأ تجارتك الإلكترونية الخاصة بأقل تكلفة ومخاطرة ممكنة. اختر المنتجات المجربة، حدد الكميات المناسبة، وركّز فقط على الإعلانات والتسويق بينما تتولى المنصة التوصيل وتأكيد الطلبات.
+            {/* Row 1: Sellers */}
+            <motion.div whileHover={{ scale: 1.01 }} className="flex flex-col md:flex-row items-center gap-8 bg-[#fff] rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm">
+              <div className="flex-1 p-8 md:p-12 text-right">
+                <span className="inline-block text-[#ff5722] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-4">التجار والشركات</span>
+                <h3 className="text-3xl font-black text-[#2e315e] mb-4">للبائعين والتجار</h3>
+                <p className="text-slate-500 font-bold leading-relaxed mb-6">
+                  نوفر لك بنية تحتية متكاملة لرقمنة مبيعاتك وتوسيع نطاق تجارتك بدون تكاليف ثابتة أو تعقيدات تشغيلية.
                 </p>
-                <ul className="space-y-2 text-xs font-bold text-slate-700">
-                  <li className="flex items-center gap-2">✓ منتجات محلية رابحة ومضمونة الجودة</li>
-                  <li className="flex items-center gap-2">✓ إمكانية البدء برأس مال صغير للغاية</li>
-                  <li className="flex items-center gap-2">✓ توصيل وتحصيل سريع لكل الأقاليم</li>
-                </ul>
+                <Link to="/register" className="inline-block py-3 px-8 bg-[#ff5722] hover:bg-[#e64a19] text-white rounded-[12px] text-sm font-black transition-colors shadow-md shadow-[#ff5722]/20">
+                  إبدأ تجارتك الآن
+                </Link>
               </div>
-              <Link to="/register" className="mt-8 block text-center py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-xs font-bold">إبدأ مجاناً الآن</Link>
+              <div className="w-full md:w-[45%] h-64 md:h-auto self-stretch">
+                <img src="/home page silacod copy/images/Untitled-221.png" alt="Sellers" className="w-full h-full object-cover" />
+              </div>
             </motion.div>
 
-            {/* Influencers (المؤثرين) */}
-            <motion.div
-              whileHover={{ y: -5 }}
-              className="bg-slate-900 text-white border border-slate-800 rounded-[2.5rem] p-8 flex flex-col justify-between min-h-[420px] shadow-xl text-right relative overflow-hidden"
-            >
-              <div className="absolute inset-0 bg-cover bg-center opacity-10 pointer-events-none" style={{ backgroundImage: `url('/home page silacod copy/images/handsome-stylish-bearded-guy-posing-against-white-wall.png')` }} />
-              
-              <div className="space-y-6 relative z-10">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-                  <h3 className="text-xl font-black text-primary-400">للمؤثرين وصناع المحتوى</h3>
-                  <div className="p-3 bg-primary-500/20 text-primary-400 rounded-xl"><Crown size={18} /></div>
-                </div>
-                <p className="text-slate-400 text-xs sm:text-sm leading-relaxed">
-                  حوّل قوة تأثيرك ومتابعيك إلى مصدر دخل ممتاز ومستقر. أنشئ علامتك التجارية الخاصة بسهولة تامة (White Label)، أضف شعارك الخاص على منتجات التجميل أو الإكسسوارات، وقم بالبيع مباشرة لجمهورك.
+            {/* Row 2: Influencers (Dark Theme, Alternating Layout) */}
+            <motion.div whileHover={{ scale: 1.01 }} className="flex flex-col md:flex-row-reverse items-center gap-8 bg-[#1e2142] text-white rounded-[2rem] overflow-hidden shadow-xl shadow-[#1e2142]/10">
+              <div className="flex-1 p-8 md:p-12 text-right">
+                <span className="inline-block text-[#ff5722] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-4">صناع المحتوى</span>
+                <h3 className="text-3xl font-black mb-4">للمؤثرين وصناع المحتوى</h3>
+                <p className="text-slate-300 font-bold leading-relaxed mb-6">
+                  حوّل متابعيك إلى أرباح حقيقية. أطلق منتجات خاصة بك أو قم بترويج منتجات جاهزة واحصل على أعلى عمولات في السوق.
                 </p>
-                
-                <div className="my-2 rounded-xl overflow-hidden border border-white/10">
-                  <img src="/home page silacod copy/images/branddd.png" alt="White Label Branding Simulator" className="w-full h-auto object-cover max-h-[100px]" />
-                </div>
-
-                <ul className="space-y-2 text-xs font-bold text-slate-200">
-                  <li className="flex items-center gap-2">✓ إنشاء هوية تجارية وعلامة خاصة بك</li>
-                  <li className="flex items-center gap-2">✓ صفحات هبوط مصممة خصيصاً لجمهورك</li>
-                  <li className="flex items-center gap-2">✓ ركّز على الفيديوهات ونحن نشحن الباقي</li>
-                </ul>
+                <Link to="/influencer/register" className="inline-block py-3 px-8 bg-[#ff5722] hover:bg-[#e64a19] text-white rounded-[12px] text-sm font-black transition-colors shadow-lg shadow-[#ff5722]/20">
+                  إبدأ الآن كمؤثر
+                </Link>
               </div>
-              <Link to="/influencer/register" className="mt-8 block text-center py-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white rounded-xl text-xs font-bold relative z-10">إبدأ كمؤثر VIP</Link>
+              <div className="w-full md:w-[45%] h-64 md:h-auto self-stretch relative">
+                <div className="absolute inset-0 bg-gradient-to-l from-[#1e2142]/80 to-transparent md:hidden" />
+                <img src="/home page silacod copy/images/photo-1622151834677-70f982c9adef.png" alt="Influencers" className="w-full h-full object-cover object-left" />
+              </div>
             </motion.div>
 
-            {/* Affiliates (للمسوقين بالعمولة) */}
-            <motion.div
-              whileHover={{ y: -5 }}
-              className="bg-white border border-slate-100 rounded-[2.5rem] p-8 flex flex-col justify-between min-h-[420px] shadow-sm hover:shadow-md transition-all text-right"
-            >
-              <div className="space-y-6">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                  <h3 className="text-xl font-black text-slate-900">للمسوقين بالعمولة</h3>
-                  <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl"><TrendingUp size={18} /></div>
-                </div>
-                <p className="text-slate-500 text-xs sm:text-sm leading-relaxed">
-                  اربح مبالغ مالية بدون الحاجة لشراء أو تخزين أي منتجات. اختر من بين قائمة عريضة من منتجات المنصة، روّج لروابط الإحالة الخاصة بك على تيك توك وإنستغرام، واحصل على عمولات نقدية واضحة وممتازة بعد كل توصيل ناجح للزبون.
+            {/* Row 3: Affiliates */}
+            <motion.div whileHover={{ scale: 1.01 }} className="flex flex-col md:flex-row items-center gap-8 bg-[#fafafc] rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm">
+              <div className="flex-1 p-8 md:p-12 text-right">
+                <span className="inline-block text-[#ff5722] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-4">التسويق بالعمولة</span>
+                <h3 className="text-3xl font-black text-[#2e315e] mb-4">للمسوقين بالعمولة</h3>
+                <p className="text-slate-500 font-bold leading-relaxed mb-6">
+                  استثمر مهاراتك في التسويق الإلكتروني. اختر من آلاف المنتجات المربحة وسوق لها بأمان مع ضمان تحصيل أرباحك الصافية.
                 </p>
-                <ul className="space-y-2 text-xs font-bold text-slate-700">
-                  <li className="flex items-center gap-2">✓ صفر درهم استثمار في مخازن أو شراء سلع</li>
-                  <li className="flex items-center gap-2">✓ عمولات مرتفعة تُدفع مباشرة لمحفظتك</li>
-                  <li className="flex items-center gap-2">✓ روابط تتبع ذكية ودقيقة بنسبة 100%</li>
-                </ul>
+                <Link to="/register" className="inline-block py-3 px-8 bg-[#ff5722] hover:bg-[#e64a19] text-white rounded-[12px] text-sm font-black transition-colors shadow-md shadow-[#ff5722]/20">
+                  إبدأ كمسوق
+                </Link>
               </div>
-              <Link to="/register" className="mt-8 block text-center py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold">إبدأ التسويق بالعمولة</Link>
+              <div className="w-full md:w-[45%] h-64 md:h-auto self-stretch">
+                <img src="/home page silacod copy/images/handsome-stylish-bearded-guy-posing-against-white-wall.png" alt="Affiliates" className="w-full h-full object-cover" />
+              </div>
             </motion.div>
 
           </div>
@@ -846,59 +706,106 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* Carousel Showcase Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {smartwatchProducts.map((prod, idx) => (
-              <motion.div
-                key={idx}
-                whileHover={{ y: -6 }}
-                className="bg-slate-50 border border-slate-100 hover:border-slate-200 rounded-[2.5rem] p-6 text-right flex flex-col justify-between shadow-sm relative overflow-hidden transition-all duration-300"
-              >
-                <div className="absolute top-4 left-4 z-10">
-                  <span className="px-3 py-1 bg-slate-900 text-white rounded-lg text-[9px] font-black uppercase tracking-wider">
-                    {prod.tag}
-                  </span>
-                </div>
+          {/* Carousel Showcase Slider */}
+          <div 
+            className="relative group"
+            onMouseEnter={() => setIsAutoScrolling(false)}
+            onMouseLeave={() => setIsAutoScrolling(true)}
+          >
+            {/* Arrows */}
+            {!loadingProducts && products.length > 0 && (
+              <>
+                <button 
+                  onClick={() => scrollSlider('right')}
+                  className="absolute top-1/2 -right-4 md:-right-6 z-10 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.15)] border border-slate-100 flex items-center justify-center text-slate-700 hover:text-[#ff5722] hover:scale-110 transition-all active:scale-95 opacity-0 group-hover:opacity-100"
+                >
+                  <ChevronRight size={24} />
+                </button>
+                <button 
+                  onClick={() => scrollSlider('left')}
+                  className="absolute top-1/2 -left-4 md:-left-6 z-10 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.15)] border border-slate-100 flex items-center justify-center text-slate-700 hover:text-[#ff5722] hover:scale-110 transition-all active:scale-95 opacity-0 group-hover:opacity-100"
+                >
+                  <ChevronLeft size={24} />
+                </button>
+              </>
+            )}
 
-                <div className="relative aspect-square w-full rounded-2xl overflow-hidden bg-white border border-slate-100 flex items-center justify-center p-4">
-                  <img src={prod.image} alt={prod.name} className="object-contain max-h-[160px] max-w-full hover:scale-105 transition-transform duration-300" />
-                </div>
+            <div 
+              ref={sliderRef}
+              className="flex overflow-x-auto snap-x snap-mandatory gap-6 pb-8 pt-4 scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden -mx-4 px-4 sm:mx-0 sm:px-0"
+            >
+            {loadingProducts ? (
+              <div className="w-full flex flex-col items-center justify-center py-16 space-y-4">
+                <RefreshCw className="animate-spin text-[#ff5722]" size={36} />
+                <p className="text-slate-400 text-sm font-semibold">جاري تحميل المنتجات...</p>
+              </div>
+            ) : products.length === 0 ? (
+              <div className="w-full text-center py-16">
+                <p className="text-slate-400 text-sm font-semibold">لم يتم العثور على أي منتجات في الكتالوج حالياً.</p>
+              </div>
+            ) : (
+              products.map((prod, idx) => {
+                const profit = prod.retailPriceMad - prod.baseCostMad;
+                const productImage = prod.images && prod.images.length > 0
+                  ? (prod.images[0].imageUrl.startsWith('http') ? prod.images[0].imageUrl : `${BACKEND_URL}${prod.images[0].imageUrl}`)
+                  : "/placeholder.png";
+                
+                const categoryName = prod.categories?.[0]?.nameAr || prod.categories?.[0]?.nameFr || "منتج عام";
+                const rating = 4.8 + (prod.id % 3) * 0.1; // stable attractive mock rating
+                
+                const tag = prod.visibility?.includes('AFFILIATE') 
+                  ? 'عمولة ممتازة 💸' 
+                  : prod.visibility?.includes('INFLUENCER') 
+                  ? 'خاص بالمؤثرين 👑' 
+                  : 'الأكثر مبيعا 🔥';
 
-                <div className="space-y-4 mt-6">
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">{prod.category}</span>
-                    <h3 className="text-base font-black text-slate-950 mt-1 leading-tight">{prod.name}</h3>
-                  </div>
-
-                  <div className="flex gap-1 items-center justify-start text-xs font-bold text-amber-500">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <Star key={i} size={12} className="fill-current" />
-                    ))}
-                    <span className="text-slate-400 text-[10px] mr-1">({prod.rating.toFixed(1)})</span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 py-3 border-t border-slate-150/60 text-xs">
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">سعر المورد</span>
-                      <span className="font-mono text-slate-700 font-bold">{prod.costPrice}</span>
+                return (
+                  <motion.div
+                    key={prod.id || idx}
+                    whileHover={{ y: -6 }}
+                    className="shrink-0 w-[85vw] sm:w-[320px] snap-center bg-slate-50 border border-slate-100 hover:border-slate-200 rounded-[2.5rem] p-6 text-right flex flex-col justify-between shadow-sm relative overflow-hidden transition-all duration-300"
+                  >
+                    <div className="absolute top-4 left-4 z-10">
+                      <span className="px-3 py-1.5 bg-[#2e315e] text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-md">
+                        {tag}
+                      </span>
                     </div>
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">البيع الموصى به</span>
-                      <span className="font-mono text-slate-900 font-bold">{prod.sellPrice}</span>
+
+                    <div className="relative aspect-square w-full rounded-2xl overflow-hidden bg-slate-100 flex items-center justify-center">
+                      <img src={productImage} alt={prod.nameAr || prod.nameFr} className="object-cover w-full h-full hover:scale-105 transition-transform duration-300" />
                     </div>
-                  </div>
 
-                  <div className="p-3 bg-emerald-50 rounded-xl flex items-center justify-between text-xs font-bold text-emerald-800">
-                    <span>ربحك الصافي المتوقع:</span>
-                    <span className="font-mono text-base font-black">{prod.profit}</span>
-                  </div>
-                </div>
+                    <div className="space-y-4 mt-6">
+                      <div>
+                        <h3 className="text-base font-black text-slate-950 mt-1 leading-tight" dir="auto">
+                          {prod.nameAr || prod.nameFr}
+                        </h3>
+                        {prod.nameFr && prod.nameAr && prod.nameFr !== prod.nameAr && (
+                          <p className="text-[10px] text-slate-500 font-bold mt-1 tracking-wide" dir="auto">
+                            {prod.nameFr}
+                          </p>
+                        )}
+                        {prod.description && (
+                          <p className="text-xs text-slate-500 mt-2 line-clamp-2 leading-relaxed" dir="auto">
+                            {prod.description}
+                          </p>
+                        )}
+                      </div>
 
-                <Link to="/register" className="mt-5 block text-center py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold active:scale-[0.98] transition-all">
-                  أطلب كميتك وابدأ البيع الآن
-                </Link>
-              </motion.div>
-            ))}
+                      <div className="py-4 border-t border-slate-150/60 flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">سعر الجملة</span>
+                        <span className="font-mono text-slate-900 font-black text-2xl">{prod.baseCostMad} Dh</span>
+                      </div>
+                    </div>
+
+                    <Link to="/register" className="mt-5 block text-center py-3 bg-[#ff5722] hover:bg-[#e04a1b] text-white rounded-xl text-xs font-bold active:scale-[0.98] transition-all">
+                      أطلب كميتك وابدأ البيع الآن
+                    </Link>
+                  </motion.div>
+                );
+              })
+            )}
+          </div>
           </div>
 
           {/* Interactive branding engine preview */}
@@ -962,151 +869,146 @@ export default function HomePage() {
       </section>
 
       {/* ── FOR SUPPLIERS (للموردين: حوّل مخزونك إلى مبيعات مستمرة) ── */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-slate-50/50 border-t border-slate-150/60 font-['29LT_Kaff',Cairo,sans-serif]">
-        <div className="max-w-6xl mx-auto bg-white border border-slate-100 rounded-[3.5rem] p-8 sm:p-14 shadow-2xl relative overflow-hidden">
+      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-white border-t border-slate-100 font-['29LT_Kaff',Cairo,sans-serif]">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-12 text-right">
           
-          <div className="absolute top-0 right-0 w-80 h-80 bg-primary-100/30 rounded-full blur-[80px] pointer-events-none" />
-          
-          <div className="grid lg:grid-cols-12 gap-12 items-center relative z-10 text-right">
+          {/* Visual (Left) */}
+          <div className="w-full md:w-1/2 overflow-hidden rounded-[2.5rem]">
+            <img src="/home page silacod copy/images/iStock-173258309.jpg" alt="Supplier Logistics Warehousing" className="w-full h-auto object-cover" />
+          </div>
+
+          {/* Text details (Right) */}
+          <div className="w-full md:w-1/2 space-y-6">
+            <span className="inline-block text-[#ff5722] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">للموردين المحليين</span>
+            <h2 className="text-3xl sm:text-4xl font-black text-[#2e315e] leading-tight">للموردين: حوّل مخزونك الساكن إلى مبيعات مستمرة</h2>
+            <p className="text-slate-500 font-bold text-sm sm:text-base leading-relaxed max-w-lg">
+              هل أنت مورد ولديك سلع أو مخزون بالمغرب؟ اعرض منتجاتك الآن داخل منصة SILACOD وامنح لآلاف البائعين والمسوقين النشطين إمكانية بيع وتصريف بضاعتك فوراً وبدون تكاليف تسويقية.
+            </p>
             
-            {/* Text details (Right) */}
-            <div className="lg:col-span-7 space-y-6">
-              <span className="inline-flex items-center gap-2 px-3 py-1 bg-primary-50 text-primary-600 border border-primary-100 rounded-full text-[10px] font-bold uppercase tracking-widest">
-                <Users size={12} /> للموردين المحليين
-              </span>
-              <h2 className="text-3xl sm:text-4xl font-black text-slate-950">للموردين: حوّل مخزونك الساكن إلى مبيعات مستمرة</h2>
-              <p className="text-slate-500 text-sm sm:text-base leading-relaxed">
-                هل أنت مورد ولديك سلع أو مخزون بالمغرب؟ اعرض منتجاتك الآن داخل منصة SILACOD وامنح لآلاف البائعين والمسوقين النشطين إمكانية بيع وتصريف بضاعتك فوراً. نحن نربطك بطلب حقيقي ونهائي من السوق بدون حاجتك لبناء فريق تسويق أو صرف ميزانيات على الإعلانات.
-              </p>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 text-xs font-bold text-slate-700">
-                <div className="flex items-center gap-2">✓ عرض منتجاتك بماركت بليس ضخم</div>
-                <div className="flex items-center gap-2">✓ تصريف فوري وأسرع للمخازن</div>
-                <div className="flex items-center gap-2">✓ نحن نضمن توفير الطلب النهائي</div>
-              </div>
+            <ul className="space-y-3 text-sm font-bold text-slate-700 py-4">
+              <li className="flex items-center gap-2 text-[#2e315e]">✓ عرض منتجاتك بماركت بليس ضخم</li>
+              <li className="flex items-center gap-2 text-[#2e315e]">✓ تصريف فوري وأسرع للمخازن</li>
+              <li className="flex items-center gap-2 text-[#2e315e]">✓ ضمان التوصيل وتوفير الطلب النهائي</li>
+            </ul>
 
-              <div className="pt-4">
-                <a href="mailto:contact@silacod.com" className="inline-flex items-center gap-2 px-8 py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold active:scale-[0.98] transition-all">
-                  <MessageCircle size={14} />
-                  <span>تواصل معنا الآن للإنضمام كمورد</span>
-                </a>
-              </div>
-            </div>
-
-            {/* Visual (Left) */}
-            <div className="lg:col-span-5 overflow-hidden rounded-[2.5rem] border border-slate-100 shadow-xl max-h-[300px]">
-              <img src="/home page silacod copy/images/iStock-173258309.jpg" alt="Supplier Logistics Warehousing" className="w-full h-auto object-cover" />
-            </div>
-
+            <a href="mailto:contact@silacod.com" className="inline-block py-3 px-8 bg-[#ff5722] hover:bg-[#e64a19] text-white rounded-[12px] text-sm font-black transition-colors shadow-md shadow-[#ff5722]/20">
+              تواصل معنا الآن للإنضمام كمورد
+            </a>
           </div>
 
         </div>
       </section>
 
-      {/* ── SIMULATOR SECTION ── */}
-      <ProfitSimulator />
-
-      {/* ── SUCCESS STORIES SECTION ── */}
+      {/* ── SUCCESS STORIES ── */}
       <SuccessStories />
-
-      {/* ── ZERO RISK CALL TO ACTION ── */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-white relative">
-        <div className="max-w-5xl mx-auto">
-          <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-primary-950 border border-slate-800 rounded-[3rem] p-8 sm:p-16 text-center space-y-8 relative overflow-hidden shadow-2xl">
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-primary-500/10 rounded-full blur-[110px] pointer-events-none" />
-            
-            <div className="relative z-10 space-y-6">
-              <span className="text-5xl block animate-bounce duration-3000">🇲🇦</span>
-              <h2 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white leading-none">
-                بدون اشتراكات شهرية. <br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-400 to-accent-400">
-                  وبدون أي مخاطرة مالية.
-                </span>
-              </h2>
-              <p className="text-sm sm:text-base text-slate-300 max-w-xl mx-auto leading-relaxed">
-                التسجيل والبدء مجاني بالكامل 100%. نقتطع فقط رسوماً تشغيلية شفافة وبسيطة للغاية عن كل طلبية يتم تسليمها وقبض ثمنها بنجاح. نجاحنا مرتبط بنجاحك ونمو تجارتك!
-              </p>
-              
-              <div className="flex flex-col sm:flex-row justify-center gap-4 pt-4">
-                <Link
-                  to="/register"
-                  className="px-10 py-5 bg-white text-slate-950 rounded-2xl text-xs font-black uppercase tracking-wider shadow-xl hover:bg-slate-100 active:scale-95 transition-all"
-                >
-                  أنشئ حسابك المجاني فوراً
-                </Link>
-                <a
-                  href="#marketplace"
-                  className="px-10 py-5 border border-slate-700 bg-white/5 hover:bg-white/10 rounded-2xl text-xs font-black uppercase tracking-wider text-slate-300"
-                >
-                  تصفح المنتجات المتوفرة
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* ── FAQ SECTION ── */}
       <FAQ />
 
       {/* ── FOOTER ── */}
-      <footer className="bg-slate-950 border-t border-slate-900 pt-20 pb-10 px-4 sm:px-6 lg:px-8 text-white font-['29LT_Kaff',Cairo,sans-serif]">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-16 text-right">
+      <footer className="bg-white pt-10">
+        <div className="w-full bg-gradient-to-br from-[#1a1c3d] to-[#141530] text-white rounded-t-[3rem] shadow-2xl">
+          <div className="max-w-7xl mx-auto px-6 py-12 sm:p-16 font-['29LT_Kaff',Cairo,sans-serif]">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-12 mb-12 text-right">
             
-            {/* Brand details */}
-            <div className="space-y-6">
+            {/* Right side: Brand details & CTA */}
+            <div className="md:col-span-2 space-y-8">
               <div className="flex items-center justify-start gap-3">
-                <img src="/new logo/logo filess-25.svg" alt="SILACOD" className="w-10 h-10 object-contain" />
-                <img src="/new logo/logo filess-24.svg" alt="SILACOD" className="h-9 brightness-200 object-contain" />
+                <img src="/new logo/logo filess-24.svg" alt="SILACOD" className="h-7 object-contain brightness-0 invert" />
+                <img src="/new logo/logo filess-25.svg" alt="SILACOD" className="w-12 h-12 object-contain brightness-0 invert mt-[-0.5rem]" />
               </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                SILACOD هي منصة متكاملة للتجارة الإلكترونية واللوجستيك في المغرب، تربط بين البائعين، المؤثرين، والمسوقين بالعمولة داخل نظام واحد ليسهل العمل ويتحقق العائد الممتاز.
+              <p className="text-xs sm:text-[13px] text-slate-300 font-bold leading-relaxed max-w-sm">
+                SILACOD هي منصة متكاملة للتجارة الإلكترونية واللوجستيك في المغرب، تربط بين البائعين، المؤثرين، والمسوقين بالعمولة داخل نظام واحد.
+                نوفر لك كل ما تحتاجه لبدء وتنمية تجارتك: منتجات جاهزة، إدارة الطلبات، تأكيد احترافي، توصيل، وتحصيل — لتتفرغ أنت للبيع وتحقيق الأرباح.
               </p>
-            </div>
-
-            {/* Platform links */}
-            <div className="space-y-4">
-              <h4 className="text-xs font-black uppercase tracking-widest text-slate-500">المنصة</h4>
-              <div className="space-y-2.5 text-xs text-slate-400 font-bold">
-                <Link to="/register" className="block hover:text-white transition-colors">بوابة التجار والبائعين</Link>
-                <Link to="/influencer/register" className="block hover:text-white transition-colors">برنامج المؤثرين VIP</Link>
-                <a href="#marketplace" className="block hover:text-white transition-colors">متجر المنتجات</a>
-                <Link to="/login" className="block hover:text-white transition-colors">تسجيل الدخول للنظام</Link>
+              
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <button className="h-12 px-4 rounded-xl bg-white text-slate-900 flex items-center justify-center hover:bg-slate-100 transition-colors gap-2 font-black text-sm">
+                  <Globe size={18} />
+                  <span>ع</span>
+                </button>
+                <Link to="/login" className="h-12 px-6 bg-[#2a2d5c] hover:bg-[#343875] text-white rounded-xl text-sm font-bold transition-colors flex items-center gap-2 shadow-lg">
+                  <LogIn size={18} />
+                  تسجيل الدخول
+                </Link>
+                <Link to="/register" className="h-12 px-6 bg-[#ff5722] hover:bg-[#e64a19] text-white rounded-xl text-sm font-bold transition-colors flex items-center shadow-lg shadow-[#ff5722]/20">
+                  إبدأ الآن مجانا
+                </Link>
               </div>
             </div>
 
-            {/* Resource links */}
-            <div className="space-y-4">
-              <h4 className="text-xs font-black uppercase tracking-widest text-slate-500">المعلومات</h4>
-              <div className="space-y-2.5 text-xs text-slate-400 font-bold">
-                <a href="#how-it-works" className="block hover:text-white transition-colors">كيف نعمل بالتفصيل</a>
-                <a href="#marketplace" className="block hover:text-white transition-colors">المنتجات الأكثر طلباً</a>
-                <a href="#faq" className="block hover:text-white transition-colors">الأسئلة الشائعة والتحصيل</a>
+            {/* Links 1: المنصة */}
+            <div className="space-y-6">
+              <h4 className="text-lg font-black text-white">المنصة</h4>
+              <div className="space-y-4 text-sm text-slate-300 font-bold">
+                <Link to="/" className="block hover:text-[#ff5722] transition-colors">الرئيسية</Link>
+                <a href="#how-it-works" className="block hover:text-[#ff5722] transition-colors">كيف تعمل</a>
+                <a href="#marketplace" className="flex items-center justify-start gap-2 hover:text-[#ff5722] transition-colors">
+                  المنتجات
+                  <span className="bg-[#ff5722] text-white text-[9px] px-2 py-0.5 rounded-full">جديد</span>
+                </a>
+                <Link to="/pricing" className="block hover:text-[#ff5722] transition-colors">الأسعار</Link>
+                <Link to="/success-stories" className="block hover:text-[#ff5722] transition-colors">قصص النجاح</Link>
               </div>
             </div>
 
-            {/* Contact details */}
-            <div className="space-y-4">
-              <h4 className="text-xs font-black uppercase tracking-widest text-slate-500">تواصل معنا</h4>
-              <div className="space-y-2.5 text-xs text-slate-400 font-bold">
-                <a href="mailto:contact@silacod.com" className="block hover:text-white transition-colors">contact@silacod.com</a>
-                <div className="text-[10px] text-slate-500 mt-1">الدعم متوفر على مدار 24/7 للإجابة عن استفساراتكم.</div>
+            {/* Links 2: ابدأ الآن */}
+            <div className="space-y-6">
+              <h4 className="text-lg font-black text-white">ابدأ الآن</h4>
+              <div className="space-y-4 text-sm text-slate-300 font-bold">
+                <Link to="/register" className="block hover:text-[#ff5722] transition-colors">للبائعين</Link>
+                <Link to="/influencer/register" className="flex items-center justify-start gap-2 hover:text-[#ff5722] transition-colors">
+                  للمؤثرين
+                  <span className="bg-[#ff5722] text-white text-[9px] px-2 py-0.5 rounded-full">جديد</span>
+                </Link>
+                <Link to="/register" className="block hover:text-[#ff5722] transition-colors">للمسوقين بالعمولة</Link>
+                <Link to="/register" className="block hover:text-[#ff5722] transition-colors">إنشاء حساب</Link>
               </div>
             </div>
 
+            {/* Links 3: عن SILACOD & Social */}
+            <div className="flex flex-col sm:flex-row justify-between gap-6 sm:pr-4">
+              <div className="space-y-6">
+                <h4 className="text-lg font-black text-white">عن SILACOD</h4>
+                <div className="space-y-4 text-sm text-slate-300 font-bold">
+                  <Link to="/about" className="block hover:text-[#ff5722] transition-colors">من نحن</Link>
+                  <a href="mailto:contact@silacod.com" className="block hover:text-[#ff5722] transition-colors">تواصل معنا</a>
+                  <Link to="/blog" className="block hover:text-[#ff5722] transition-colors">المدونة</Link>
+                  <Link to="/careers" className="block hover:text-[#ff5722] transition-colors">الوظائف</Link>
+                </div>
+              </div>
+              
+              {/* Social Icons Stack */}
+              <div className="flex sm:flex-col items-center justify-start gap-4 pt-2">
+                <a href="#" className="w-11 h-11 bg-white text-[#ff5722] rounded-xl flex items-center justify-center hover:scale-110 transition-transform shadow-lg"><Instagram size={22} /></a>
+                <a href="#" className="w-11 h-11 bg-white text-[#ff5722] rounded-xl flex items-center justify-center hover:scale-110 transition-transform shadow-lg">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4l11.733 16h4.267l-11.733 -16z" /><path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772" /></svg>
+                </a>
+                <a href="#" className="w-11 h-11 bg-white text-[#ff5722] rounded-xl flex items-center justify-center hover:scale-110 transition-transform shadow-lg"><MessageCircle size={22} /></a>
+                <a href="#" className="w-11 h-11 bg-white text-[#ff5722] rounded-xl flex items-center justify-center hover:scale-110 transition-transform shadow-lg">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5"/></svg>
+                </a>
+              </div>
+            </div>
+            
           </div>
 
-          <div className="pt-8 border-t border-slate-900 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="text-xs text-slate-500">
-              © 2026 SILACOD — جميع الحقوق محفوظة للمنصة. صنع بكل شغف لمساندة رواد الأعمال المغاربة.
+          <div className="pt-8 border-t border-slate-700/50 flex flex-col lg:flex-row items-center justify-between gap-6 text-sm text-slate-300 font-bold">
+            <div className="flex items-center gap-2 order-3 lg:order-1">
+              <span>تواصل معنا</span>
+              <a href="mailto:contact@silacod.com" className="hover:text-white transition-colors">contact@silacod.com</a>
+              <span dir="ltr" className="ml-2">+212 XXX XXX XXX</span>
             </div>
-            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-              <span>كافة الأنظمة والخدمات اللوجستية نشطة الآن</span>
+            <div className="flex flex-wrap items-center justify-center gap-6 order-2">
+              <Link to="/privacy" className="hover:text-white transition-colors">سياسة الخصوصية</Link>
+              <Link to="/faq" className="hover:text-white transition-colors">الأسئلة الشائعة</Link>
+              <Link to="/shipping" className="hover:text-white transition-colors">سياسة الدفع والتوصيل</Link>
+            </div>
+            <div className="order-1 lg:order-3">
+              © 2026 SILACOD — جميع الحقوق محفوظة
+            </div>
             </div>
           </div>
-
         </div>
       </footer>
 
