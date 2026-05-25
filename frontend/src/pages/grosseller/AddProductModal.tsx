@@ -670,7 +670,9 @@ export default function AddProductModal({ isOpen, onClose, onSuccess, isAdmin = 
                           >
                             <option value="">L'administrateur (SILACOD)</option>
                             {vendors.map((vendor: any) => (
-                              <option key={vendor.id} value={vendor.id}>{vendor.fullName}</option>
+                              <option key={vendor.id} value={vendor.id}>
+                                {vendor.fullName} {vendor.role ? `(${vendor.role === 'VENDOR' ? 'Vendeur' : vendor.role === 'INFLUENCER' ? 'Influenceur' : vendor.role})` : ''}
+                              </option>
                             ))}
                           </select>
                         </div>

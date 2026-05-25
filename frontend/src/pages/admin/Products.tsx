@@ -53,8 +53,18 @@ export default function AdminProducts() {
 
   const { data: vendorsData } = useQuery({
     queryKey: ['vendors'],
-    queryFn: () => adminApi.users({ role: 'VENDOR' }),
+    queryFn: () => adminApi.users({ role: 'VENDOR', limit: 1000 }),
   });
+
+  const { data: influencersData } = useQuery({
+    queryKey: ['influencers'],
+    queryFn: () => adminApi.users({ role: 'INFLUENCER', limit: 1000 }),
+  });
+
+  const productOwners = [
+    ...(vendorsData?.data?.data?.users || []),
+    ...(influencersData?.data?.data?.users || []),
+  ];
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['products', { category: selectedCategory, status: statusFilter, page, search }],
@@ -397,7 +407,7 @@ export default function AdminProducts() {
         onClose={() => { setIsAddProductModalOpen(false); setEditingProduct(null); }} 
         onSuccess={() => refetch()} 
         isAdmin={true} 
-        vendors={vendorsData?.data?.data?.users || []}
+        vendors={productOwners}
         editProduct={editingProduct}
       />
     </div>

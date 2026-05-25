@@ -189,18 +189,12 @@ export default function HomePage() {
         className="fixed top-0 left-0 right-0 z-50 flex flex-col"
       >
         <LiveTicker />
-        <div className={`transition-all duration-300 ${scrolled ? 'bg-white/95 backdrop-blur-xl shadow-lg shadow-slate-100/50 border-b border-slate-100/80' : 'bg-transparent'}`}>
+        <div className={`transition-all duration-300 ${scrolled || mobileMenuOpen ? 'bg-white/95 backdrop-blur-xl shadow-lg shadow-slate-100/50 border-b border-slate-100/80' : 'bg-transparent'}`}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-[90px] relative">
             
-            {/* Left side actions (Language selector, Login, Register) */}
+            {/* Left side actions (Login, Register) */}
             <div className="hidden lg:flex items-center gap-3 relative z-10">
-              {/* Language Selector */}
-              <div className="flex items-center gap-1.5 text-sm font-black text-[#2e315e] ml-2">
-                <span>ع</span>
-                <Globe className="w-[18px] h-[18px]" />
-              </div>
-
               {/* Login Button (Dark Blue Square Icon Wrapper) */}
               <Link to="/login" className="w-[42px] h-[42px] bg-[#2e315e] hover:bg-[#1e2142] text-white rounded-[10px] flex items-center justify-center transition-colors">
                 <LogIn className="w-[20px] h-[20px]" />
@@ -224,8 +218,8 @@ export default function HomePage() {
             {/* Right side Logo */}
             <div className="flex items-center relative z-10">
               <Link to="/" className="flex items-center gap-2.5 group">
-                <img src="/new logo/logo filess-24.svg" alt="SILACOD" className="h-[26px] hidden sm:block object-contain" />
-                <motion.img whileHover={{ rotateY: 15, scale: 1.05 }} src="/new logo/logo filess-25.svg" alt="SILACOD" className="w-10 h-[3rem] origin-center object-contain mt-[-0.5rem]" />
+                <img src="/new logo/logo filess-24.svg" alt="SILACOD" className="h-[20px] sm:h-[26px] object-contain" />
+                <motion.img whileHover={{ rotateY: 15, scale: 1.05 }} src="/new logo/logo filess-25.svg" alt="SILACOD" className="w-8 h-8 sm:w-10 sm:h-[3rem] origin-center object-contain mt-[-0.5rem]" />
               </Link>
             </div>
 
@@ -239,10 +233,10 @@ export default function HomePage() {
         <AnimatePresence>
           {mobileMenuOpen && (
             <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="lg:hidden bg-white border-t border-slate-100 shadow-xl"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="lg:hidden absolute top-[90px] left-0 right-0 bg-white border-b border-slate-100 shadow-xl z-40"
             >
               <div className="px-4 py-6 space-y-4 text-right">
                 <Link to="/influencer/register" onClick={() => setMobileMenuOpen(false)} className="block font-bold text-[#2e315e] py-2">المؤثرين</Link>
@@ -250,7 +244,7 @@ export default function HomePage() {
                 <a href="#morocco-network" onClick={() => setMobileMenuOpen(false)} className="block font-bold text-[#2e315e] py-2">تواصل معنا</a>
                 <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block font-bold text-[#2e315e] py-2">تسجيل الدخول</Link>
                 <Link to="/register" onClick={() => setMobileMenuOpen(false)} className="block w-full text-center bg-[#ff5722] text-white font-bold py-3.5 rounded-xl">
-                  إبدأ الآن مجاناً
+                  <span className="block -translate-y-[1px]">إبدأ الآن مجاناً</span>
                 </Link>
               </div>
             </motion.div>
@@ -269,10 +263,10 @@ export default function HomePage() {
           <div className="grid lg:grid-cols-12 gap-8 items-center">
             
             {/* Right Side: Arabic Title and Text */}
-            <div className="lg:col-span-6 space-y-7 text-right">
+            <div className="order-last lg:order-first lg:col-span-6 space-y-7 text-right">
               
               {/* Title */}
-              <h1 className="text-4xl sm:text-5xl lg:text-[3.25rem] font-black leading-[1.25] tracking-tight text-[#2e315e] font-['29LT_Kaff',Cairo,sans-serif]">
+              <h1 className="text-3xl sm:text-5xl lg:text-[3.25rem] font-black leading-[1.25] tracking-tight text-[#2e315e] font-['29LT_Kaff',Cairo,sans-serif]">
                 ابدأ تجارتك الإلكترونية بدون تعقيد...<br />
                 ونحن ندير الباقي
               </h1>
@@ -303,13 +297,13 @@ export default function HomePage() {
               </div>
 
               {/* CTA Buttons - Aligned to the left under text block */}
-              <div className="flex flex-col sm:flex-row gap-4 pt-8 justify-end w-[90%]">
+              <div className="flex flex-col sm:flex-row gap-4 pt-8 justify-end w-full sm:w-[90%]">
                 {/* Left button: hollow outline button with dark/blue border */}
-                <Link to="/influencer/register" className="rounded-[12px] border-[1.5px] border-[#2e315e] hover:bg-slate-100 transition-all px-8 py-[14px] flex items-center justify-center gap-2 text-[16px] font-black text-[#2e315e]">
+                <Link to="/influencer/register" className="w-full sm:w-auto rounded-[12px] border-[1.5px] border-[#2e315e] hover:bg-slate-100 transition-all px-8 py-[14px] flex items-center justify-center gap-2 text-[16px] font-black text-[#2e315e]">
                   <span>إبدأ الآن كمؤثر</span>
                 </Link>
                 {/* Right button: solid orange/coral color with a white arrow pointing left inside it */}
-                <Link to="/register" className="rounded-[12px] bg-[#ff5722] hover:bg-[#e64a19] transition-all px-8 py-[14px] flex items-center justify-center gap-3 text-[16px] font-black text-white">
+                <Link to="/register" className="w-full sm:w-auto rounded-[12px] bg-[#ff5722] hover:bg-[#e64a19] transition-all px-8 py-[14px] flex items-center justify-center gap-3 text-[16px] font-black text-white">
                   <span>إبدأ البيع الآن</span>
                   <ArrowLeft size={18} />
                 </Link>
@@ -318,7 +312,7 @@ export default function HomePage() {
             </div>
 
             {/* Left Side: Static Hero Image Block matching screenshot */}
-            <div className="lg:col-span-6 relative w-full flex items-center justify-center lg:justify-start">
+            <div className="order-first lg:order-last lg:col-span-6 relative w-full flex items-center justify-center lg:justify-start mb-8 lg:mb-0">
               <motion.div
                 initial={{ opacity: 0, x: -30 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -328,8 +322,7 @@ export default function HomePage() {
                 <img
                   src="/home page silacod copy/images/hero.png"
                   alt="SILACOD Dashboard Preview"
-                  className="w-full h-auto object-contain scale-[1.15] origin-left"
-                  style={{ transform: 'scale(1.2) translateX(-5%)' }}
+                  className="w-full h-auto object-contain origin-left scale-100 lg:scale-[1.15] lg:-translate-x-[5%]"
                 />
               </motion.div>
             </div>
@@ -414,7 +407,7 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-16 items-start max-w-4xl mx-auto">
+          <div className="grid md:grid-cols-2 gap-12 md:gap-16 items-start max-w-4xl mx-auto">
             
             {/* With Silacod (العمل مع SILACOD) */}
             <motion.div
@@ -519,7 +512,7 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8">
+          <div className="grid md:grid-cols-2 gap-8 md:gap-12">
             
             {/* Card 1 */}
             <motion.div whileHover={{ y: -5 }} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm flex flex-col items-center pt-10 px-6 gap-8 text-center">
@@ -717,13 +710,13 @@ export default function HomePage() {
               <>
                 <button 
                   onClick={() => scrollSlider('right')}
-                  className="absolute top-1/2 -right-4 md:-right-6 z-10 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.15)] border border-slate-100 flex items-center justify-center text-slate-700 hover:text-[#ff5722] hover:scale-110 transition-all active:scale-95 opacity-0 group-hover:opacity-100"
+                  className="hidden md:flex absolute top-1/2 -right-4 md:-right-6 z-10 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.15)] border border-slate-100 items-center justify-center text-slate-700 hover:text-[#ff5722] hover:scale-110 transition-all active:scale-95 opacity-0 group-hover:opacity-100"
                 >
                   <ChevronRight size={24} />
                 </button>
                 <button 
                   onClick={() => scrollSlider('left')}
-                  className="absolute top-1/2 -left-4 md:-left-6 z-10 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.15)] border border-slate-100 flex items-center justify-center text-slate-700 hover:text-[#ff5722] hover:scale-110 transition-all active:scale-95 opacity-0 group-hover:opacity-100"
+                  className="hidden md:flex absolute top-1/2 -left-4 md:-left-6 z-10 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.15)] border border-slate-100 items-center justify-center text-slate-700 hover:text-[#ff5722] hover:scale-110 transition-all active:scale-95 opacity-0 group-hover:opacity-100"
                 >
                   <ChevronLeft size={24} />
                 </button>
@@ -820,7 +813,7 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="flex-shrink-0 flex items-center gap-4 relative z-10">
+            <div className="flex-shrink-0 flex flex-col sm:flex-row items-center gap-4 relative z-10 w-full sm:w-auto">
               <input
                 type="file"
                 id="brand-logo-upload"
@@ -830,14 +823,14 @@ export default function HomePage() {
               />
               <label
                 htmlFor="brand-logo-upload"
-                className="cursor-pointer px-6 py-4 bg-white text-slate-950 hover:bg-slate-100 transition-all rounded-xl text-xs font-black uppercase tracking-wider shadow-lg active:scale-95"
+                className="cursor-pointer w-full sm:w-auto text-center px-6 py-4 bg-white text-slate-950 hover:bg-slate-100 transition-all rounded-xl text-xs font-black uppercase tracking-wider shadow-lg active:scale-95"
               >
                 {customLogoSelected ? "تغيير الشعار المرفوع" : "ارفع شعارك الافتراضي (.png)"}
               </label>
               {customLogoSelected && (
                 <button
                   onClick={() => { setUploadedLogo(null); setCustomLogoSelected(false); }}
-                  className="px-4 py-4 border border-slate-700 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold text-slate-300"
+                  className="w-full sm:w-auto px-4 py-4 border border-slate-700 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold text-slate-300"
                 >
                   إلغاء
                 </button>
