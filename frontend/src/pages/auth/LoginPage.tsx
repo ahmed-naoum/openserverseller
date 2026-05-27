@@ -1,10 +1,17 @@
-import { useState } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { settingsApi } from '../../lib/api';
-import { Eye, EyeOff, ShieldCheck, Mail, Lock, TrendingUp, ShoppingCart, Store, Globe, Package } from 'lucide-react';
+import { Eye, EyeOff, ShieldCheck, Mail, Lock } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
 import toast from 'react-hot-toast';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const SLIDER_IMAGES = [
+  '/home page silacod copy/images/08bb1c52a445cbe7c3723025e483b81a86e1011f.png',
+  '/home page silacod copy/images/photo-1622151834677-70f982c9adef.png',
+  '/home page silacod copy/images/9b7eeea5895229f0b36694c175ab30ed89bceca4.png'
+];
 
 export default function LoginPage() {
   const [formData, setFormData] = useState({
@@ -13,7 +20,6 @@ export default function LoginPage() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   
   // 2FA states
   const [requires2FA, setRequires2FA] = useState(false);
@@ -25,8 +31,17 @@ export default function LoginPage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
+  const [currentSlide, setCurrentSlide] = useState(0);
+
   const { login, login2FA, googleAuth, forcePasswordChange } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % SLIDER_IMAGES.length);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,7 +112,6 @@ export default function LoginPage() {
       const user = await login2FA({ twoFactorToken, code: twoFactorCode });
       toast.success('Connexion réussie!');
       
-      // If user is not active, check if manual approval is required
       if (!user.isActive) {
         try {
           const statusRes = await settingsApi.getMaintenanceStatus();
@@ -111,7 +125,6 @@ export default function LoginPage() {
         } catch {}
       }
 
-      // Redirect based on role
       if (user.role === 'SUPER_ADMIN' || user.role === 'FINANCE_ADMIN' || user.role === 'SYSTEM_SUPPORT') {
         navigate('/admin');
       } else if (user.role === 'CALL_CENTER_AGENT') {
@@ -144,7 +157,6 @@ export default function LoginPage() {
       const user = await forcePasswordChange({ tempToken, newPassword });
       toast.success('Mot de passe mis à jour et connexion réussie!');
       
-      // Redirect based on role
       if (user.role === 'SUPER_ADMIN' || user.role === 'FINANCE_ADMIN' || user.role === 'SYSTEM_SUPPORT') {
         navigate('/admin');
       } else if (user.role === 'CALL_CENTER_AGENT') {
@@ -182,7 +194,6 @@ export default function LoginPage() {
       const user = res.user!;
       toast.success('Connexion avec Google réussie!');
       
-      // If user is not active, check if manual approval is required
       if (!user.isActive) {
         try {
           const statusRes = await settingsApi.getMaintenanceStatus();
@@ -196,7 +207,6 @@ export default function LoginPage() {
         } catch {}
       }
 
-      // Redirect based on role
       if (user.role === 'SUPER_ADMIN' || user.role === 'FINANCE_ADMIN' || user.role === 'SYSTEM_SUPPORT') {
         navigate('/admin');
       } else if (user.role === 'CALL_CENTER_AGENT') {
@@ -218,107 +228,73 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center bg-[#F8FAFC] p-4 overflow-hidden font-['Inter'] bg-noise">
-      {/* Decorative Background Icons */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-30">
-        <div className="absolute top-[15%] left-[10%] animate-float [animation-delay:0s] text-primary-200">
-           <ShoppingCart size={64} strokeWidth={1} />
-        </div>
-        <div className="absolute bottom-[20%] left-[5%] animate-float [animation-delay:2s] text-accent-200">
-           <Package size={80} strokeWidth={1} />
-        </div>
-        <div className="absolute top-[30%] right-[10%] animate-float [animation-delay:4s] text-indigo-200">
-           <TrendingUp size={70} strokeWidth={1} />
-        </div>
-        <div className="absolute bottom-[10%] right-[15%] animate-float [animation-delay:6s] text-emerald-200">
-           <Store size={90} strokeWidth={1} />
-        </div>
-        <div className="absolute top-[10%] right-[30%] animate-float [animation-delay:1s] text-slate-200">
-           <Globe size={40} strokeWidth={1} />
-        </div>
-      </div>
-
-      {/* Dynamic Mesh Background Glows */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-primary-400/10 rounded-full blur-[120px] animate-mesh-light" />
-        <div className="absolute bottom-[-20%] right-[-10%] w-[70%] h-[70%] bg-accent-400/10 rounded-full blur-[150px] animate-mesh-light [animation-delay:3s]" />
-      </div>
-
-      <div className="relative z-10 w-full max-w-md space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-1000">
-        {/* Branding */}
-        <div className="text-center space-y-6">
-          <Link to="/" className="inline-flex flex-col items-center gap-4 group">
-            <div className="w-16 h-16 bg-white rounded-full shadow-xl shadow-slate-200/50 flex items-center justify-center group-hover:scale-110 transition-transform duration-500 relative overflow-hidden">
-               <div className="absolute inset-0 bg-gradient-to-tr from-primary-500/10 to-transparent animate-pulse" />
-               <img src="/new logo/logo filess-25.svg" alt="SILACOD" className="w-10 h-10 relative z-10 object-contain" />
-            </div>
-            <img src="/new logo/logo filess-24.svg" alt="SILACOD" className="h-7 object-contain" />
+    <div className="min-h-screen flex flex-col lg:flex-row font-['Inter'] bg-white overflow-hidden">
+      {/* Left Column: Form Area */}
+      <div className="w-full lg:w-[45%] xl:w-[40%] flex flex-col justify-center items-center p-6 bg-[#f8f9fa] relative z-10 min-h-screen lg:min-h-0">
+        
+        {/* Mobile Logo (Visible only on small screens) */}
+        <div className="lg:hidden absolute top-8 left-8">
+          <Link to="/" className="flex items-center gap-2">
+            <img src="/new logo/logo filess-25.svg" alt="SILACOD" className="w-8 h-8 object-contain" />
+            <img src="/new logo/logo filess-24.svg" alt="SILACOD" className="h-5 object-contain" />
           </Link>
-          <div className="space-y-1">
-            <h1 className="text-4xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-[#2c2f74] to-primary-600">
-              C'est reparti
-            </h1>
-            <p className="text-slate-500 font-semibold tracking-wide uppercase text-[10px]">Propulsez votre business aujourd'hui</p>
-          </div>
         </div>
 
-        {/* Form Card */}
-        <div className="soft-card rounded-[2.5rem] p-8 sm:p-10 relative overflow-hidden group/card shadow-2xl">
-          {/* Card sparkle effect */}
-          <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-transparent via-primary-400/50 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-700" />
-          
-          <div className="relative z-10 max-w-[400px] mx-auto w-full">
+        <div className="w-full max-w-[360px]">
+          <div className="bg-white rounded-[2rem] p-8 sm:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+            
             {requiresPasswordChange ? (
               <form onSubmit={handleForcePasswordSubmit} className="space-y-6">
-                <div className="text-center space-y-3 animate-in fade-in zoom-in duration-500">
-                  <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto text-rose-600 shadow-inner">
-                    <Lock size={32} />
-                  </div>
-                  <h3 className="text-xl font-bold text-slate-900">Nouveau Mot de Passe</h3>
-                  <p className="text-sm text-slate-500 leading-relaxed">
-                    Vous utilisez un mot de passe temporaire. Veuillez le changer pour continuer.
-                  </p>
+                <div className="text-center space-y-2 mb-8">
+                  <h1 className="text-[28px] font-bold text-[#2e315e]">New Password</h1>
+                  <p className="text-[13px] font-medium text-[#ff5722]">Please set a new password</p>
                 </div>
 
                 <div className="space-y-4">
-                  <div className="relative group/input">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/input:text-primary-600 transition-colors">
-                      <Lock size={18} />
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 ml-1">New Password</label>
+                    <div className="relative group/input">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                        <Lock size={18} />
+                      </div>
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        className="w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-4 pl-11 pr-11 transition-all outline-none border text-[13px] text-slate-700 font-medium placeholder:text-slate-400"
+                        placeholder="••••••••"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        required
+                        minLength={6}
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
                     </div>
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      className="w-full bg-slate-50/80 border-slate-100 focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 rounded-full py-4 px-5 pl-12 pr-12 transition-all outline-none border hover:border-slate-300 shadow-sm"
-                      placeholder="Nouveau mot de passe"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      required
-                      minLength={6}
-                    />
-                    <button
-                      type="button"
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
-                      onClick={() => setShowPassword(!showPassword)}
-                    >
-                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
                   </div>
                   
-                  <div className="relative group/input">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/input:text-primary-600 transition-colors">
-                      <Lock size={18} />
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 ml-1">Confirm Password</label>
+                    <div className="relative group/input">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                        <Lock size={18} />
+                      </div>
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        className="w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-4 pl-11 pr-11 transition-all outline-none border text-[13px] text-slate-700 font-medium placeholder:text-slate-400"
+                        placeholder="••••••••"
+                        value={confirmNewPassword}
+                        onChange={(e) => setConfirmNewPassword(e.target.value)}
+                        required
+                        minLength={6}
+                      />
                     </div>
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      className="w-full bg-slate-50/80 border-slate-100 focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 rounded-full py-4 px-5 pl-12 pr-12 transition-all outline-none border hover:border-slate-300 shadow-sm"
-                      placeholder="Confirmer le mot de passe"
-                      value={confirmNewPassword}
-                      onChange={(e) => setConfirmNewPassword(e.target.value)}
-                      required
-                      minLength={6}
-                    />
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-3 mt-6">
+                  <div className="grid grid-cols-2 gap-3 pt-2">
                     <button
                       type="button"
                       onClick={() => {
@@ -327,30 +303,25 @@ export default function LoginPage() {
                         setConfirmNewPassword('');
                         setTempToken('');
                       }}
-                      className="w-full bg-slate-50 text-slate-600 font-bold py-3.5 rounded-full hover:bg-slate-100 transition-all active:scale-[0.98]"
+                      className="w-full bg-slate-100 text-slate-600 font-bold py-2.5 rounded-xl hover:bg-slate-200 transition-all text-[13px]"
                     >
-                      Retour
+                      Back
                     </button>
                     <button
                       type="submit"
-                      className="w-full bg-rose-600 text-white font-bold py-3.5 rounded-full shadow-lg shadow-rose-600/20 hover:bg-rose-700 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                      className="w-full bg-[#ff5722] text-white font-bold py-2.5 rounded-xl hover:bg-[#e64a19] transition-all text-[13px]"
                       disabled={isLoading || newPassword.length < 6}
                     >
-                      {isLoading ? '...' : 'Valider'}
+                      {isLoading ? '...' : 'Confirm'}
                     </button>
                   </div>
                 </div>
               </form>
             ) : requires2FA ? (
               <form onSubmit={handle2FASubmit} className="space-y-6">
-                <div className="text-center space-y-3 animate-in fade-in zoom-in duration-500">
-                  <div className="w-16 h-16 bg-primary-50 rounded-full flex items-center justify-center mx-auto text-primary-600 shadow-inner">
-                    <ShieldCheck size={32} />
-                  </div>
-                  <h3 className="text-xl font-bold text-slate-900">Vérification</h3>
-                  <p className="text-sm text-slate-500 leading-relaxed">
-                    Saisissez le code de validation 2FA.
-                  </p>
+                <div className="text-center space-y-2 mb-8">
+                  <h1 className="text-[28px] font-bold text-[#2e315e]">Verification</h1>
+                  <p className="text-[13px] font-medium text-[#ff5722]">Please enter your 2FA code</p>
                 </div>
 
                 <div className="space-y-4">
@@ -360,11 +331,11 @@ export default function LoginPage() {
                     maxLength={6}
                     value={twoFactorCode}
                     onChange={(e) => setTwoFactorCode(e.target.value.replace(/[^0-9]/g, ''))}
-                    className="w-full bg-slate-50/50 border-transparent focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 rounded-full py-4 text-center text-3xl font-mono tracking-[0.4em] transition-all outline-none"
+                    className="w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-4 text-center text-3xl font-mono tracking-[0.4em] transition-all outline-none border text-slate-700 font-bold"
                     required
                   />
                   
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3 pt-2">
                     <button
                       type="button"
                       onClick={() => {
@@ -372,33 +343,38 @@ export default function LoginPage() {
                         setTwoFactorCode('');
                         setTwoFactorToken('');
                       }}
-                      className="w-full bg-slate-50 text-slate-600 font-bold py-3.5 rounded-full hover:bg-slate-100 transition-all active:scale-[0.98]"
+                      className="w-full bg-slate-100 text-slate-600 font-bold py-2.5 rounded-xl hover:bg-slate-200 transition-all text-[13px]"
                     >
-                      Retour
+                      Back
                     </button>
                     <button
                       type="submit"
-                      className="w-full bg-primary-600 text-white font-bold py-3.5 rounded-full shadow-lg shadow-primary-600/20 hover:bg-primary-700 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                      className="w-full bg-[#ff5722] text-white font-bold py-2.5 rounded-xl hover:bg-[#e64a19] transition-all text-[13px]"
                       disabled={isLoading || twoFactorCode.length !== 6}
                     >
-                      {isLoading ? '...' : 'Valider'}
+                      {isLoading ? '...' : 'Verify'}
                     </button>
                   </div>
                 </div>
               </form>
             ) : (
               <>
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  <div className="space-y-2 animate-in fade-in slide-in-from-left-1 duration-500 stagger-1">
-                    <label className="text-[11px] font-black text-slate-400 ml-1 uppercase tracking-[0.2em]">Email Professionnel</label>
+                <div className="text-center space-y-2 mb-8">
+                  <h1 className="text-[28px] font-bold text-[#2e315e] tracking-tight">Welcome Back</h1>
+                  <p className="text-[13px] font-medium text-[#ff5722]">Please sign in to continue</p>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-5">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 ml-1">Email</label>
                     <div className="relative group/input">
-                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/input:text-primary-600 transition-colors">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
                         <Mail size={18} />
                       </div>
                       <input
                         type="email"
-                        className="w-full bg-slate-50/80 border-slate-100 focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 rounded-full py-4 px-5 pl-12 transition-all outline-none border hover:border-slate-300 shadow-sm"
-                        placeholder="nom@exemple.com"
+                        className="w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-4 pl-11 transition-all outline-none border text-[13px] text-slate-700 font-medium placeholder:text-slate-400"
+                        placeholder="Email"
                         value={formData.email}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                         required
@@ -406,74 +382,51 @@ export default function LoginPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-2 animate-in fade-in slide-in-from-left-4 duration-500 stagger-2">
-                    <div className="flex justify-between items-center ml-1">
-                      <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Mot de passe</label>
-                      <Link to="/forgot-password" title="Mot de passe oublié ?" className="text-[11px] font-black text-primary-600 hover:text-primary-700 focus:outline-none tracking-wider">
-                        OUBLIÉ ?
-                      </Link>
-                    </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 ml-1">Password</label>
                     <div className="relative group/input">
-                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/input:text-primary-600 transition-colors">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
                         <Lock size={18} />
                       </div>
                       <input
                         type={showPassword ? 'text' : 'password'}
-                        className="w-full bg-slate-50/80 border-slate-100 focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 rounded-full py-4 px-5 pl-12 pr-12 transition-all outline-none border hover:border-slate-300 shadow-sm"
-                        placeholder="••••••••"
+                        className="w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-4 pl-11 pr-11 transition-all outline-none border text-[13px] text-slate-700 font-medium placeholder:text-slate-400"
+                        placeholder="Password"
                         value={formData.password}
                         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                         required
                       />
                       <button
                         type="button"
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
                         onClick={() => setShowPassword(!showPassword)}
                       >
                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
                     </div>
+                    <div className="flex justify-end pt-1">
+                      <Link to="/forgot-password" title="Forgot password?" className="text-[12px] font-medium text-[#ff5722] hover:text-[#e64a19] transition-colors underline decoration-transparent hover:decoration-[#ff5722] underline-offset-4">
+                        I forgot my password
+                      </Link>
+                    </div>
                   </div>
 
-                  <div className="flex items-center justify-between py-1 animate-in fade-in slide-in-from-bottom-2 duration-500 stagger-3">
-                    <label className="flex items-center gap-3 group cursor-pointer" onClick={() => setRememberMe(!rememberMe)}>
-                      <div className="relative flex items-center justify-center">
-                        <div className={`w-5 h-5 rounded-lg border transition-all flex items-center justify-center ${rememberMe ? 'border-primary-500 bg-white' : 'border-slate-200 bg-slate-50'}`}>
-                           <svg 
-                             className={`w-3.5 h-3.5 text-primary-600 transition-all duration-300 ${rememberMe ? 'opacity-100 scale-100' : 'opacity-0 scale-50'}`} 
-                             fill="none" 
-                             viewBox="0 0 24 24" 
-                             stroke="currentColor" 
-                             strokeWidth="4"
-                           >
-                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                           </svg>
-                        </div>
-                      </div>
-                      <span className="text-[13px] font-bold text-slate-500 group-hover:text-slate-900 transition-colors">Rester connecté</span>
-                    </label>
+                  <div className="pt-3">
+                    <button
+                      type="submit"
+                      className="w-full bg-[#ff5722] text-white font-bold py-2.5 rounded-xl hover:bg-[#e64a19] transition-all text-sm shadow-[0_4px_14px_0_rgba(255,87,34,0.39)]"
+                      disabled={isLoading}
+                    >
+                      {isLoading ? 'Signing in...' : 'Sign In'}
+                    </button>
                   </div>
-
-                  <button
-                    type="submit"
-                    className="btn-premium w-full py-4.5 rounded-full text-lg font-black hover:translate-y-[-2px] shadow-[0_10px_30px_rgba(44,47,116,0.15)] animate-in fade-in slide-in-from-bottom-2 duration-500 stagger-4"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? 'Connexion en cours...' : 'Se connecter'}
-                  </button>
                 </form>
 
-                <div className="mt-8 flex items-center gap-4 animate-in fade-in duration-1000 stagger-4">
-                  <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-200 to-transparent"></div>
-                  <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">OU</span>
-                  <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-200 to-transparent"></div>
-                </div>
-
-                <div className="mt-6 animate-in fade-in slide-in-from-bottom-2 duration-500 stagger-4">
-                  <div className="transition-transform hover:scale-[1.02] active:scale-[0.98] flex justify-center w-full">
+                <div className="mt-8 flex flex-col items-center gap-4">
+                  <div className="w-full flex justify-center">
                     <GoogleLogin 
                       onSuccess={handleGoogleSuccess} 
-                      onError={() => toast.error('Échec Google')}
+                      onError={() => toast.error('Google login failed')}
                       useOneTap
                       theme="outline"
                       shape="pill"
@@ -481,22 +434,89 @@ export default function LoginPage() {
                       width="100%"
                     />
                   </div>
+                  <p className="text-[13px] font-semibold text-slate-500 mt-2">
+                    I Don't have an account?{' '}
+                    <Link to="/register" className="text-[#ff5722] hover:text-[#e64a19] transition-colors font-bold">
+                      Sign Up
+                    </Link>
+                  </p>
+                </div>
+
+                <div className="mt-10 text-center">
+                  <p className="text-[11px] font-semibold text-slate-400">
+                    <a href="/privacy" className="hover:text-[#ff5722] transition-colors">Privacy Notice</a>
+                    {' | '}
+                    <a href="/terms" className="hover:text-[#ff5722] transition-colors">Term of service</a>
+                  </p>
                 </div>
               </>
             )}
           </div>
         </div>
+      </div>
 
-        {/* Footer */}
-        <div className="text-center animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-500 pb-4">
-          <p className="text-sm font-bold text-slate-400">
-            Nouveau sur SILACOD ?{' '}
-            <Link to="/register" className="text-primary-600 hover:text-primary-700 font-black transition-all hover:underline underline-offset-4 decoration-2">
-              Ouvrez votre boutique
-            </Link>
-          </p>
+      {/* Right Column: Image Slider */}
+      <div className="hidden lg:flex lg:w-[55%] xl:w-[60%] relative overflow-hidden bg-white items-center justify-center">
+        {/* Desktop Logo */}
+        <div className="absolute top-10 right-12 z-20">
+          <Link to="/" className="flex items-center gap-2.5">
+            <img src="/new logo/logo filess-25.svg" alt="SILACOD" className="w-10 h-10 object-contain" />
+            <img src="/new logo/logo filess-24.svg" alt="SILACOD" className="h-7 object-contain" />
+          </Link>
+        </div>
+
+        {/* 3D Coverflow Carousel */}
+        <div className="relative w-full h-full flex items-center justify-center">
+          {SLIDER_IMAGES.map((src, idx) => {
+            const isActive = idx === currentSlide;
+            const isPrev = idx === (currentSlide - 1 + SLIDER_IMAGES.length) % SLIDER_IMAGES.length;
+            const isNext = idx === (currentSlide + 1) % SLIDER_IMAGES.length;
+
+            let x = 0;
+            let scale = 1;
+            let zIndex = 0;
+            let opacity = 0;
+
+            if (isActive) {
+              x = 0; scale = 1; zIndex = 30; opacity = 1;
+            } else if (isPrev) {
+              x = -280; scale = 0.85; zIndex = 10; opacity = 1;
+            } else if (isNext) {
+              x = 280; scale = 0.85; zIndex = 10; opacity = 1;
+            }
+
+            return (
+              <motion.div
+                key={src}
+                className="absolute w-[320px] xl:w-[380px] aspect-[4/5] rounded-[2rem] overflow-hidden shadow-2xl cursor-pointer"
+                animate={{ x, scale, zIndex, opacity }}
+                transition={{ duration: 0.7, ease: [0.32, 0.72, 0, 1] }}
+                onClick={() => setCurrentSlide(idx)}
+                style={{ originX: 0.5, originY: 0.5 }}
+              >
+                <img src={src} alt="Showcase" className="w-full h-full object-cover" />
+                {!isActive && <div className="absolute inset-0 bg-white/20" />}
+              </motion.div>
+            );
+          })}
+          
+          {/* Slider Indicators */}
+          <div className="absolute bottom-12 left-0 right-0 flex justify-center gap-3 z-40">
+            {SLIDER_IMAGES.map((_, idx) => (
+              <button
+                key={idx}
+                onClick={() => setCurrentSlide(idx)}
+                className={`transition-all duration-300 rounded-full ${
+                  currentSlide === idx ? 'w-10 h-2 bg-[#ff5722]' : 'w-2 h-2 bg-slate-300 hover:bg-slate-400'
+                }`}
+                aria-label={`Go to slide ${idx + 1}`}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
+

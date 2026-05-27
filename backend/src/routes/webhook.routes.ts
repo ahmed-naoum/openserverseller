@@ -16,7 +16,6 @@ const COLIATY_TO_INTERNAL: Record<string, string> = {
   'WAITING_PREPARATION': 'WAITING_PREPARATION',
   'PREPARED': 'PREPARED',
   'ENCORE_PREPARED': 'ENCORE_PREPARED',
-
   // --- En transit ---
   'PICKED_UP': 'PICKED_UP',
   'SENT': 'SENT',
@@ -120,7 +119,7 @@ router.post(
                   oldStatus: orderMatched.status,
                   newStatus: internalStatus,
                   changedBy: orderMatched.vendorId,
-                  notes: `Coliaty PARCEL_SITUATION_CHANGED: ${situation} — ${comment} (Invoice: ${invoiceRef})`
+                  notes: `PARCEL_SITUATION_CHANGED: ${situation} — ${comment} (Invoice: ${invoiceRef})`
                 }
               });
             }
@@ -145,7 +144,7 @@ router.post(
                   oldStatus: orderMatched.lead?.status || orderMatched.status,
                   newStatus: internalStatus || orderMatched.status,
                   changedBy: orderMatched.vendorId,
-                  notes: `Coliaty Situation ${situation} (Mapped to ${internalPaymentSituation}) — Invoice: ${invoiceRef}, Prix: ${price} MAD, Frais: ${fees} MAD, Net: ${net} MAD`
+                  notes: `Situation ${situation} (Mapped to ${internalPaymentSituation}) — Invoice: ${invoiceRef}, Prix: ${price} MAD, Frais: ${fees} MAD, Net: ${net} MAD`
                 }
               });
             }
@@ -220,7 +219,7 @@ router.post(
                     oldStatus: orderMatched.status,
                     newStatus: internalStatus,
                     changedBy: orderMatched.vendorId, 
-                    notes: `Automated status update via Coliaty Webhook (${normalizedColiatyStatus})`
+                    notes: `Automated status update Webhook (${normalizedColiatyStatus})`
                   }
                 });
 
