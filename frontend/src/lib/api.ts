@@ -517,6 +517,8 @@ export const settingsApi = {
   verifyMaintenanceBypass: (password: string) => api.post('/settings/maintenance/verify', { password }),
   getAdminMaintenanceSettings: () => api.get('/settings/maintenance/admin'),
   updateMaintenanceSettings: (data: { enabled: boolean; secret: string; registrationBlocked: boolean; influencerRegistrationBlocked: boolean }) => api.put('/settings/maintenance', data),
+  getCacheVersion: () => api.get('/public/version'),
+  refreshCache: () => api.post('/admin/cache-refresh'),
 };
 
 export const webhooksApi = {

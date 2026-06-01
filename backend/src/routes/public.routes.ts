@@ -3,9 +3,32 @@ import { PrismaClient } from '@prisma/client';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { optionalAuth } from '../middleware/auth.js';
 import rateLimit from 'express-rate-limit';
+import fs from 'fs';
+import path from 'path';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+router.get(
+  '/version',
+  asyncHandler(async (_req: Request, res: Response) => {
+    let version = '1.0.0';
+    try {
+      const versionFilePath = path.join(process.cwd(), 'cache_version.json');
+      if (fs.existsSync(versionFilePath)) {
+        const data = JSON.parse(fs.readFileSync(versionFilePath, 'utf8'));
+        version = data.version || '1.0.0';
+      }
+    } catch (err) {
+      console.error('Error reading cache version:', err);
+    }
+
+    res.json({
+      status: 'success',
+      data: { version },
+    });
+  })
+);
 
 router.get(
   '/cities',

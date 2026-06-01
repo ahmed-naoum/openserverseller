@@ -17,12 +17,25 @@ import { motion } from 'framer-motion';
 export default function PlatformSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [refreshingCache, setRefreshingCache] = useState(false);
   const [settings, setSettings] = useState({
     enabled: false,
     secret: 'silacod-admin',
     registrationBlocked: false,
     influencerRegistrationBlocked: false
   });
+
+  const handleCacheRefresh = async () => {
+    try {
+      setRefreshingCache(true);
+      const res = await settingsApi.refreshCache();
+      toast.success(res.data?.message || 'Recachement forcé avec succès !');
+    } catch (error) {
+      toast.error('Erreur lors de la réactualisation générale');
+    } finally {
+      setRefreshingCache(false);
+    }
+  };
 
   useEffect(() => {
     fetchSettings();
@@ -189,6 +202,36 @@ export default function PlatformSettings() {
                    </ul>
                 </div>
              </div>
+          </div>
+
+          {/* Cache Refresh Card */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xl shadow-slate-200/40 relative overflow-hidden">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2.5 bg-violet-50 text-violet-600 rounded-xl">
+                <RefreshCw size={20} className={refreshingCache ? 'animate-spin' : ''} />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-900 leading-none">Forcer l'Actualisation</h3>
+                <p className="text-[10px] text-slate-400 mt-1 uppercase font-bold tracking-widest leading-none">Recachement des clients</p>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-500 leading-relaxed mb-4">
+              Cliquez pour vider instantanément le cache navigateur de tous les utilisateurs connectés ou visitant la plateforme. Ils recevront immédiatement la nouvelle version du site.
+            </p>
+
+            <button
+              onClick={handleCacheRefresh}
+              disabled={refreshingCache}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition-all shadow-md active:scale-[0.98] disabled:opacity-50 text-xs"
+            >
+              {refreshingCache ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <RefreshCw size={14} />
+              )}
+              Vider le cache général
+            </button>
           </div>
         </div>
 

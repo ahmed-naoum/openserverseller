@@ -102,9 +102,55 @@ import { SocketProvider } from './contexts/SocketContext';
 
 // Guards
 import RoleGuard from './components/auth/RoleGuard';
+import { settingsApi } from './lib/api';
 
 function App() {
   const [loading, setLoading] = useState(true);
+
+  // Automatic cache version checking and updating
+  useEffect(() => {
+    settingsApi.getCacheVersion()
+      .then((res) => {
+        const serverVersion = res.data?.data?.version;
+        if (serverVersion) {
+          const localVersion = localStorage.getItem('cache_version');
+          if (localVersion && localVersion !== serverVersion) {
+            console.log('New update detected. Clearing cache and reloading...');
+            
+            // Clear Cache Storage
+            if ('caches' in window) {
+              caches.keys().then((names) => {
+                for (const name of names) {
+                  caches.delete(name);
+                }
+              }).catch(err => console.error('Error clearing cache storage:', err));
+            }
+            
+            // Unregister Service Workers
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then((registrations) => {
+                for (const r of registrations) {
+                  r.unregister();
+                }
+              }).catch(err => console.error('Error unregistering service workers:', err));
+            }
+
+            // Save new version
+            localStorage.setItem('cache_version', serverVersion);
+            
+            // Reload page after a tiny delay
+            setTimeout(() => {
+              window.location.reload();
+            }, 500);
+          } else if (!localVersion) {
+            localStorage.setItem('cache_version', serverVersion);
+          }
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to verify app version:', err);
+      });
+  }, []);
 
   return (
     <>

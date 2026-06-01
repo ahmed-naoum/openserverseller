@@ -5,9 +5,37 @@ import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { checkAndActivateUser } from '../utils/verification.js';
 import { decrypt } from '../utils/crypto.js';
 import { getBlockedIPsList, unblockIP } from '../middleware/security.js';
+import fs from 'fs';
+import path from 'path';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+router.post(
+  '/cache-refresh',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (_req: Request, res: Response) => {
+    const newVersion = Date.now().toString();
+    try {
+      const versionFilePath = path.join(process.cwd(), 'cache_version.json');
+      fs.writeFileSync(
+        versionFilePath,
+        JSON.stringify({ version: newVersion, updatedAt: new Date().toISOString() }),
+        'utf8'
+      );
+    } catch (err) {
+      console.error('Error writing cache version:', err);
+      throw new AppException(500, 'Impossible de mettre à jour la version du cache');
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Cache vidé avec succès pour tous les utilisateurs',
+      data: { version: newVersion },
+    });
+  })
+);
 
 router.get(
   '/dashboard',
