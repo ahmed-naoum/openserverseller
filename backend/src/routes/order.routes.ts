@@ -666,7 +666,13 @@ router.post(
       else if (normalizedColiatyPhone.startsWith('212')) normalizedColiatyPhone = '0' + normalizedColiatyPhone.slice(3);
       else if (!normalizedColiatyPhone.startsWith('0')) normalizedColiatyPhone = '0' + normalizedColiatyPhone;
 
-      const baseContent = product?.nameFr || product?.nameAr || 'Marchandise';
+      let baseContent = product?.nameFr || product?.nameAr || 'Marchandise';
+      if (baseContent.trim().length < 5) {
+        baseContent = `${baseContent} - Colis`;
+      }
+      if (baseContent.trim().length < 5) {
+        baseContent = 'Marchandise';
+      }
 
       return {
         package_reciever: order.customerName,
