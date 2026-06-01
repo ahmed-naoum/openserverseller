@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { leadsApi, ordersApi } from '../../lib/api';
 import toast from 'react-hot-toast';
-import { Truck, Search, Loader2, CheckCircle2, Store } from 'lucide-react';
+import { Truck, Search, Loader2, CheckCircle2, Store, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function ColiatyDispatch() {
@@ -10,10 +10,12 @@ export default function ColiatyDispatch() {
   const [selectedLeadIds, setSelectedLeadIds] = useState<number[]>([]);
   const [search, setSearch] = useState('');
 
-  // Fetch pending dispatch leads (ORDERED status)
-  const { data: leadsData, isLoading, refetch } = useQuery({
+  // Fetch pending dispatch leads (ORDERED status) - Force refetch on mount with staleTime: 0
+  const { data: leadsData, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['agent-pending-dispatch', search],
     queryFn: () => leadsApi.list({ status: 'ORDERED', search, limit: 100 }), // Using list with ORDERED status
+    refetchOnMount: 'always',
+    staleTime: 0,
   });
 
   const leads = leadsData?.data?.data?.leads || [];
@@ -84,15 +86,28 @@ export default function ColiatyDispatch() {
       {/* Main Content */}
       <div className="bg-white rounded-3xl border border-gray-100 shadow-xl overflow-hidden">
         <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Rechercher par nom, téléphone..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-gray-50 border-none rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-100 transition-all"
-            />
+          <div className="flex items-center gap-2 flex-1 max-w-md w-full">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Rechercher par nom, téléphone..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border-none rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-100 transition-all animate-in fade-in"
+              />
+            </div>
+            <button
+              onClick={() => {
+                refetch();
+                toast.success('Données actualisées');
+              }}
+              disabled={isLoading || isFetching}
+              className="p-2.5 bg-gray-50 text-gray-500 rounded-xl hover:bg-gray-100 hover:text-indigo-600 transition-all border-none focus:outline-none flex items-center justify-center shrink-0 active:scale-95 disabled:opacity-50"
+              title="Actualiser la liste"
+            >
+              <RotateCcw className={`w-5 h-5 ${isLoading || isFetching ? 'animate-spin' : ''}`} />
+            </button>
           </div>
 
           <div className="flex items-center gap-3">
