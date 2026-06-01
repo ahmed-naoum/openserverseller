@@ -22,7 +22,8 @@ import {
   Plus,
   FileText,
   ShieldAlert,
-  Box
+  Box,
+  QrCode
 } from 'lucide-react';
 
 interface Parcel {
@@ -163,6 +164,7 @@ export default function HelperColis() {
       </div>
     );
   }
+  const [activeTab, setActiveTab] = useState<'all' | 'uninvoiced_returns'>('all');
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -322,14 +324,21 @@ export default function HelperColis() {
 
 // Read-only so removed edit submit handler
 
-  const filtered = parcels.filter(p =>
-    !search ||
-    p.customerName.toLowerCase().includes(search.toLowerCase()) ||
-    p.customerPhone.includes(search) ||
-    p.customerCity.toLowerCase().includes(search.toLowerCase()) ||
-    (p.coliatyPackageCode || '').toLowerCase().includes(search.toLowerCase()) ||
-    p.orderNumber.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = parcels.filter(p => {
+    if (activeTab === 'uninvoiced_returns') {
+      if (p.status !== 'RETURNED' || p.paymentSituation === 'FACTURED') {
+        return false;
+      }
+    }
+    return (
+      !search ||
+      p.customerName.toLowerCase().includes(search.toLowerCase()) ||
+      p.customerPhone.includes(search) ||
+      p.customerCity.toLowerCase().includes(search.toLowerCase()) ||
+      (p.coliatyPackageCode || '').toLowerCase().includes(search.toLowerCase()) ||
+      p.orderNumber.toLowerCase().includes(search.toLowerCase())
+    );
+  });
 
   const stats = {
     total: parcels.length,
@@ -374,6 +383,13 @@ export default function HelperColis() {
             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
             Actualiser
           </button>
+          <Link
+            to="/helper/scanner"
+            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-95 shadow-indigo-100"
+          >
+            <QrCode className="w-4 h-4" />
+            Scanner de Retours
+          </Link>
         </div>
       </div>
 
@@ -393,6 +409,32 @@ export default function HelperColis() {
             <p className="text-xs text-gray-500 font-medium mt-0.5">{stat.label}</p>
           </div>
         ))}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border border-gray-100 bg-white p-1.5 rounded-2xl shadow-sm gap-1">
+        <button
+          onClick={() => setActiveTab('all')}
+          className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-xs font-black transition-all ${
+            activeTab === 'all'
+              ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/10'
+              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+          }`}
+        >
+          <Package className="w-4 h-4" />
+          Tous les Colis ({parcels.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('uninvoiced_returns')}
+          className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-xs font-black transition-all ${
+            activeTab === 'uninvoiced_returns'
+              ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/10'
+              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+          }`}
+        >
+          <Box className="w-4 h-4" />
+          Retours Non Facturés ({parcels.filter(p => p.status === 'RETURNED' && p.paymentSituation !== 'FACTURED').length})
+        </button>
       </div>
 
       {/* Search */}

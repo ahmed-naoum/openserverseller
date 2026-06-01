@@ -40,3 +40,5 @@ coverage/
 .cache/
 tmp/
 backend/backups/
+backend/cache_version.json
+backend/*.dump
