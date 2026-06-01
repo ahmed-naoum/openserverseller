@@ -249,8 +249,8 @@ export default function InsertLead() {
       setPackName('');
       setFormErrors({});
       
-      // Redirect to claimed leads pool
-      navigate('/agent/leads');
+      // Redirect to dispatch pool
+      navigate('/agent/dispatch');
     } catch (err: any) {
       console.error('Failed to create lead:', err);
       toast.error(err.response?.data?.message || 'Erreur lors de la création et de l\'envoi du lead');
