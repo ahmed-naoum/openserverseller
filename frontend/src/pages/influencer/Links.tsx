@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { influencerApi } from '../../lib/api';
 import { ReferralLink } from '../../types';
-import { Search, Plus, MousePointerClick, Zap, Target, DollarSign, Copy, QrCode, RefreshCw, AlertCircle, Link as LinkIcon, Power, Eye, TrendingUp, Activity, Calendar } from 'lucide-react';
+import { Search, Plus, MousePointerClick, Zap, Target, DollarSign, Copy, QrCode, RefreshCw, AlertCircle, Link as LinkIcon, Power, Eye, TrendingUp, Activity, Calendar, MessageCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { 
   ResponsiveContainer, ComposedChart, Line, Area, Bar, XAxis, YAxis, CartesianGrid, 
@@ -197,6 +197,7 @@ export default function InfluencerLinks() {
 
   const totalClicks = links.reduce((sum, l) => sum + l.clicks, 0);
   const totalRawClicks = links.reduce((sum, l) => sum + (l.rawClicks || l.clicks), 0);
+  const totalWhatsappClicks = links.reduce((sum, l) => sum + (l.whatsappClicks || 0), 0);
   const totalConversions = links.reduce((sum, l) => sum + l.conversions, 0);
   const totalEarnings = links.reduce((sum, l) => sum + l.earnings, 0);
   
@@ -262,7 +263,7 @@ export default function InfluencerLinks() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-7 lg:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Vues Totales</p>
           <div className="flex items-center justify-between">
@@ -282,6 +283,13 @@ export default function InfluencerLinks() {
           <div className="flex items-center justify-between">
             <h3 className="text-2xl font-black text-slate-900">{totalConversions.toLocaleString()}</h3>
             <div className="p-2 bg-purple-50 text-purple-600 rounded-xl"><Zap className="w-4 h-4" /></div>
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Clics WhatsApp</p>
+          <div className="flex items-center justify-between">
+            <h3 className="text-2xl font-black text-slate-900">{totalWhatsappClicks.toLocaleString()}</h3>
+            <div className="p-2 bg-green-50 text-green-600 rounded-xl"><MessageCircle className="w-4 h-4" /></div>
           </div>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
@@ -401,6 +409,7 @@ export default function InfluencerLinks() {
             <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest">
               <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-blue-500 rounded-full" /> Visiteurs Uniques</div>
               <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-violet-500 rounded-full" /> Vues Totales</div>
+              <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-green-500 rounded-full" /> Clics WhatsApp</div>
             </div>
           </div>
         </div>
@@ -477,6 +486,16 @@ export default function InfluencerLinks() {
                 activeDot={{ r: 5, strokeWidth: 0, fill: '#3b82f6' }}
                 fill="url(#colorViews)" 
                 name="Visiteurs Uniques"
+              />
+              <Line 
+                yAxisId="left"
+                type="monotone" 
+                dataKey="whatsappClicks" 
+                stroke="#10b981" 
+                strokeWidth={3}
+                dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }}
+                activeDot={{ r: 6, strokeWidth: 0, fill: '#10b981' }}
+                name="Clics WhatsApp"
               />
             </ComposedChart>
           </ResponsiveContainer>
@@ -585,6 +604,13 @@ export default function InfluencerLinks() {
                               <div className="flex items-center justify-center gap-1">
                                 <Zap size={10} className="text-purple-500" />
                                 <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">Ventes</p>
+                              </div>
+                            </div>
+                            <div className="text-center group-hover:transform group-hover:scale-110 transition-all duration-300 delay-125">
+                              <p className="text-xs font-black text-slate-900 mb-0.5">{link.whatsappClicks || 0}</p>
+                              <div className="flex items-center justify-center gap-1">
+                                <MessageCircle size={10} className="text-green-500" />
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">WhatsApp</p>
                               </div>
                             </div>
                             <div className="text-center group-hover:transform group-hover:scale-110 transition-all duration-300 delay-150">

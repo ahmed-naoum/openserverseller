@@ -113,10 +113,23 @@ export const generateInvoicePDF = (invoiceDetails: any) => {
   let finalY = (doc as any).lastAutoTable.finalY || 150;
   
   const numLeads = invoiceDetails.leads?.length || 0;
-  const grossAmount = (invoiceDetails.leads || []).reduce((sum: number, lead: any) => sum + (lead.order?.totalAmountMad || 0), 0);
-  const deliveryCost = 57 * numLeads;
-  const profit = grossAmount - deliveryCost;
-  const platformFee = profit > 0 ? profit * 0.13 : 0;
+  let grossAmount = 0;
+  let deliveryCost = 0;
+  let platformFee = 0;
+
+  if (invoiceDetails.leads) {
+    invoiceDetails.leads.forEach((lead: any) => {
+      const gross = Number(lead.order?.totalAmountMad) || 0;
+      const shipping = lead.customShippingFee ?? 57;
+      const rate = lead.customPlatformFeeRate ?? invoiceDetails.user?.platformFeeRate ?? 0.13;
+      const profit = gross - shipping;
+      const fee = profit > 0 ? profit * rate : 0;
+
+      grossAmount += gross;
+      deliveryCost += shipping;
+      platformFee += fee;
+    });
+  }
 
   doc.setDrawColor(229, 231, 235); // Gray 200
   doc.line(pageWidth - 90, finalY + 10, pageWidth - 14, finalY + 10);
@@ -139,7 +152,8 @@ export const generateInvoicePDF = (invoiceDetails: any) => {
 
     finalY += 8;
     doc.setTextColor(...lightGray);
-    doc.text(`Frais de plateforme (13%):`, pageWidth - 90, finalY);
+    const avgRate = (grossAmount - deliveryCost) > 0 ? (platformFee / (grossAmount - deliveryCost)) * 100 : 13;
+    doc.text(`Frais de plateforme (${avgRate.toFixed(1)}%):`, pageWidth - 90, finalY);
     doc.setTextColor(239, 68, 68); // Red
     doc.text(`-${platformFee.toFixed(2)} MAD`, pageWidth - 14, finalY, { align: 'right' });
 

@@ -451,6 +451,38 @@ export default function SecurityFirewall() {
               </div>
             )}
           </div>
+
+          {/* Rate Limit Blocked IPs */}
+          <div>
+            <h2 className="text-sm font-black text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <Clock size={14} className="text-red-500" />
+              IPs bloquées temporairement par limite de débit ({threats.rateLimitBlockedIPs?.length || 0})
+            </h2>
+            {(threats.rateLimitBlockedIPs?.length || 0) === 0 ? (
+              <div className="text-center py-8 bg-slate-50 rounded-2xl border border-slate-100">
+                <p className="text-slate-400 text-sm">Aucune IP temporairement bloquée</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {threats.rateLimitBlockedIPs.map((entry: any) => (
+                  <div key={entry.ip} className="flex items-center justify-between p-3 bg-red-50 border border-red-100 rounded-xl">
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <WifiOff size={14} className="text-red-500" />
+                        <span className="font-mono text-sm font-bold text-slate-700">{entry.ip}</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-semibold">
+                        Bloquée jusqu'à: {new Date(entry.blockedUntil).toLocaleTimeString('fr-FR')}
+                      </span>
+                    </div>
+                    <button onClick={() => handleUnblock(entry.ip)} className="text-xs text-slate-400 hover:text-emerald-600 font-bold transition-colors flex items-center gap-1">
+                      <Wifi size={11} /> Débloquer
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

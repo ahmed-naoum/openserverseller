@@ -4,6 +4,7 @@ import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { checkAndActivateUser } from '../utils/verification.js';
 import { decrypt } from '../utils/crypto.js';
+import { getBlockedIPsList, unblockIP } from '../middleware/security.js';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -1305,36 +1306,49 @@ router.get(
     // Combine and format
     const influencers = influencersWithPaidLeads.map(user => {
       const paidLeads = user.referralLinks.flatMap(link => (link as any).leads);
-      const grossAmount = paidLeads.reduce((sum, lead) => sum + (Number(lead.order?.totalAmountMad) || 0), 0);
-      const deliveryCost = 57 * paidLeads.length;
-      const profit = grossAmount - deliveryCost;
-      const platformFee = profit > 0 ? profit * 0.13 : 0;
-      const totalPaidAmount = grossAmount - deliveryCost - platformFee;
+      
+      let totalPaidAmount = 0;
+      paidLeads.forEach(lead => {
+        const gross = Number(lead.order?.totalAmountMad) || 0;
+        const shipping = lead.customShippingFee ?? 57;
+        const rate = lead.customPlatformFeeRate ?? user.platformFeeRate ?? 0.13;
+        const profit = gross - shipping;
+        const platformFee = profit > 0 ? profit * rate : 0;
+        totalPaidAmount += (gross - shipping - platformFee);
+      });
       
       return {
         id: user.id,
+        uuid: user.uuid,
         fullName: user.profile?.fullName || user.email,
         email: user.email,
         role: 'INFLUENCER',
         paidCount: paidLeads.length,
-        totalPaidAmount
+        totalPaidAmount,
+        platformFeeRate: user.platformFeeRate ?? 0.13
       };
     });
 
     const sellers = sellersWithPaidLeads.map(user => {
-      const grossAmount = user.leads.reduce((sum, lead) => sum + (Number(lead.order?.totalAmountMad) || 0), 0);
-      const deliveryCost = 57 * user.leads.length;
-      const profit = grossAmount - deliveryCost;
-      const platformFee = profit > 0 ? profit * 0.13 : 0;
-      const totalPaidAmount = grossAmount - deliveryCost - platformFee;
+      let totalPaidAmount = 0;
+      user.leads.forEach(lead => {
+        const gross = Number(lead.order?.totalAmountMad) || 0;
+        const shipping = lead.customShippingFee ?? 57;
+        const rate = lead.customPlatformFeeRate ?? user.platformFeeRate ?? 0.13;
+        const profit = gross - shipping;
+        const platformFee = profit > 0 ? profit * rate : 0;
+        totalPaidAmount += (gross - shipping - platformFee);
+      });
       
       return {
         id: user.id,
+        uuid: user.uuid,
         fullName: user.profile?.fullName || user.email,
         email: user.email,
         role: 'SELLER',
         paidCount: user.leads.length,
-        totalPaidAmount
+        totalPaidAmount,
+        platformFeeRate: user.platformFeeRate ?? 0.13
       };
     });
 
@@ -1384,6 +1398,47 @@ router.get(
   })
 );
 
+// Update specific lead's customPlatformFeeRate and customShippingFee overrides
+router.patch(
+  '/payment-monitoring/lead/:id',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const leadId = Number(req.params.id);
+    const { customPlatformFeeRate, customShippingFee } = req.body;
+
+    const updateData: any = {};
+    if (customPlatformFeeRate !== undefined) {
+      updateData.customPlatformFeeRate = customPlatformFeeRate === null ? null : Number(customPlatformFeeRate);
+    }
+    if (customShippingFee !== undefined) {
+      updateData.customShippingFee = customShippingFee === null ? null : Number(customShippingFee);
+    }
+
+    const updatedLead = await prisma.lead.update({
+      where: { id: leadId },
+      data: updateData,
+      include: {
+        order: {
+          include: {
+            items: {
+              include: { product: true }
+            }
+          }
+        },
+        referralLink: {
+          include: { product: true }
+        }
+      }
+    });
+
+    res.json({
+      status: 'success',
+      data: updatedLead
+    });
+  })
+);
+
 // Bulk update lead payment situation
 router.patch(
   '/payment-monitoring/bulk-update',
@@ -1410,6 +1465,13 @@ router.patch(
         // Assume all leads belong to the same user as they are selected from a user's page
         let userId = leads[0].referralLink?.influencerId || leads[0].vendorId;
         
+        // Fetch user's custom platform fee rate
+        const userObj = userId ? await prisma.user.findUnique({
+          where: { id: userId },
+          select: { platformFeeRate: true }
+        }) : null;
+        const platformFeeRate = userObj?.platformFeeRate ?? 0.13;
+        
         let totalAmount = 0;
         for (const lead of leads) {
            totalAmount += Number(lead.order?.totalAmountMad) || 0;
@@ -1419,11 +1481,15 @@ router.patch(
         const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
         const invoiceNumber = `INV-${dateStr}-${randomStr}`;
 
-        const deliveryCost = 57 * leads.length;
-        const profitAfterDelivery = totalAmount - deliveryCost;
-        const platformFee = profitAfterDelivery > 0 ? profitAfterDelivery * 0.13 : 0;
-        const totalCosts = deliveryCost + platformFee;
-        const netAmount = totalAmount - totalCosts;
+        let netAmount = 0;
+        for (const lead of leads) {
+          const gross = Number(lead.order?.totalAmountMad) || 0;
+          const shipping = lead.customShippingFee ?? 57;
+          const rate = lead.customPlatformFeeRate ?? platformFeeRate ?? 0.13;
+          const profit = gross - shipping;
+          const fee = profit > 0 ? profit * rate : 0;
+          netAmount += (gross - shipping - fee);
+        }
 
         const invoice = await prisma.invoice.create({
           data: {
@@ -1683,6 +1749,36 @@ router.patch(
     res.json({
       status: 'success',
       data: invoice
+    });
+  })
+);
+
+router.get(
+  '/security/blocked-ips',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const list = getBlockedIPsList();
+    res.json({
+      status: 'success',
+      data: list
+    });
+  })
+);
+
+router.post(
+  '/security/unblock-ip',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { ip } = req.body;
+    if (!ip) {
+      throw new AppException(400, 'IP structure is required');
+    }
+    const success = unblockIP(ip);
+    res.json({
+      status: 'success',
+      data: { success, ip }
     });
   })
 );

@@ -300,6 +300,16 @@ const shouldSkipRateLimit = async (req: Request): Promise<boolean> => {
     const settings = await fetchSecuritySettings();
     const clientIP = req.ip || req.socket.remoteAddress || 'unknown';
     
+    // 0. Skip if localhost (very useful for development & local admin testing)
+    if (
+      clientIP === '::1' || 
+      clientIP === '127.0.0.1' || 
+      clientIP === '::ffff:127.0.0.1' || 
+      clientIP.includes('127.0.0.1')
+    ) {
+      return true;
+    }
+
     // 1. Skip if IP is whitelisted
     if (settings.whitelistedIPs.includes(clientIP)) {
       return true;
@@ -431,3 +441,21 @@ export const payoutRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false
 });
+
+export const getBlockedIPsList = () => {
+  const list: { ip: string; blockedUntil: string }[] = [];
+  const now = Date.now();
+  for (const [ip, blockedUntil] of rateLimitBlockedIPs.entries()) {
+    if (blockedUntil > now) {
+      list.push({
+        ip,
+        blockedUntil: new Date(blockedUntil).toISOString()
+      });
+    }
+  }
+  return list;
+};
+
+export const unblockIP = (ip: string) => {
+  return rateLimitBlockedIPs.delete(ip);
+};

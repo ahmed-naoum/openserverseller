@@ -43,6 +43,24 @@ export default function AdminInvoices() {
   }, { totalDelivery: 0, totalCodFee: 0, totalAdminProfite: 0, totalFacture: 0, totalColis: 0 });
 
   if (selectedInvoice && details) {
+    let subTotalBrut = 0;
+    let totalShipping = 0;
+    let totalPlatformFee = 0;
+
+    if (details.leads) {
+      details.leads.forEach((lead: any) => {
+        const gross = Number(lead.order?.totalAmountMad) || 0;
+        const shipping = lead.customShippingFee ?? 57;
+        const rate = lead.customPlatformFeeRate ?? details.user?.platformFeeRate ?? 0.13;
+        const profit = gross - shipping;
+        const fee = profit > 0 ? profit * rate : 0;
+
+        subTotalBrut += gross;
+        totalShipping += shipping;
+        totalPlatformFee += fee;
+      });
+    }
+
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -180,21 +198,23 @@ export default function AdminInvoices() {
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-500 font-medium">Sous-total brut</span>
                       <span className="text-sm font-bold text-gray-900">
-                        {(details.leads?.reduce((acc: number, l: any) => acc + (l.order?.totalAmountMad || 0), 0)).toLocaleString()} MAD
+                        {subTotalBrut.toLocaleString()} MAD
                       </span>
                     </div>
 
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-500 font-medium">Frais de livraison ({details.leads?.length || 0})</span>
                       <span className="text-sm font-bold text-red-500">
-                        -{((details.leads?.length || 0) * 57).toLocaleString()} MAD
+                        -{totalShipping.toLocaleString()} MAD
                       </span>
                     </div>
 
                     <div className="flex justify-between items-center pb-4 border-b border-gray-50">
-                      <span className="text-sm text-gray-500 font-medium">Frais de plateforme (13%)</span>
+                      <span className="text-sm text-gray-500 font-medium">
+                        Frais de plateforme {subTotalBrut - totalShipping > 0 ? `(${((totalPlatformFee / (subTotalBrut - totalShipping)) * 100).toFixed(1)}%)` : ''}
+                      </span>
                       <span className="text-sm font-bold text-red-500">
-                        -{((details.totalAmountMad / 0.87) * 0.13).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MAD
+                        -{totalPlatformFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MAD
                       </span>
                     </div>
                   </>

@@ -345,7 +345,7 @@ router.get(
       }
     }
 
-    // We only return public-safe data
+// We only return public-safe data
     res.json({
       status: 'success',
       data: {
@@ -365,6 +365,41 @@ router.get(
         landingPage: link.landingPage
       }
     });
+  })
+);
+
+router.post(
+  '/links/:code/track-whatsapp',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { code } = req.params;
+
+    const link = await (prisma as any).referralLink.findUnique({
+      where: { code: code as string },
+      select: { id: true }
+    });
+
+    if (!link) {
+      throw new AppException(404, 'Referral link not found');
+    }
+
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const clickType = 'whatsapp_click';
+
+    // Insert a click record to be tracked in the time-series chart
+    await (prisma as any).referralLinkClick.create({
+      data: {
+        referralLinkId: link.id,
+        ipAddress: ip,
+        userAgent: clickType
+      }
+    });
+
+    await (prisma as any).referralLink.update({
+      where: { id: link.id },
+      data: { whatsappClicks: { increment: 1 } }
+    });
+
+    res.json({ success: true });
   })
 );
 
@@ -509,11 +544,16 @@ router.get(
 
     const clicksByDate: Record<string, Set<string>> = {};
     const rawClicksByDate: Record<string, number> = {};
+    const whatsappClicksByDate: Record<string, number> = {};
     clicks.forEach((c: any) => {
       const key = getKey(c.createdAt);
-      if (!clicksByDate[key]) clicksByDate[key] = new Set();
-      clicksByDate[key].add(`${c.ipAddress}-${c.userAgent || 'unknown'}`);
-      rawClicksByDate[key] = (rawClicksByDate[key] || 0) + 1;
+      if (c.userAgent === 'whatsapp_click') {
+        whatsappClicksByDate[key] = (whatsappClicksByDate[key] || 0) + 1;
+      } else {
+        if (!clicksByDate[key]) clicksByDate[key] = new Set();
+        clicksByDate[key].add(`${c.ipAddress}-${c.userAgent || 'unknown'}`);
+        rawClicksByDate[key] = (rawClicksByDate[key] || 0) + 1;
+      }
     });
 
     const uniqueClicksByDate: Record<string, number> = {};
@@ -534,11 +574,13 @@ router.get(
       const key = getKey(curr);
       const views = uniqueClicksByDate[key] || 0;
       const rawViews = rawClicksByDate[key] || 0;
+      const whatsappClicks = whatsappClicksByDate[key] || 0;
       const sales = salesByDate[key] || 0;
       stats.push({
         date: curr.toISOString(),
         views,
         rawViews,
+        whatsappClicks,
         sales,
         convRate: views > 0 ? Number(((sales / views) * 100).toFixed(1)) : 0
       });

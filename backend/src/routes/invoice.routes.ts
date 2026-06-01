@@ -139,6 +139,9 @@ router.get(
     const invoice = await prisma.invoice.findFirst({
       where: { id: invoiceId, userId },
       include: {
+        user: {
+          include: { profile: true }
+        },
         leads: {
           include: {
             order: {

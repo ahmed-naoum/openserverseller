@@ -18,8 +18,11 @@ export const listBackups = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const triggerBackup = asyncHandler(async (req: Request, res: Response) => {
-  const filename = await BackupService.createBackup();
-  res.json({ status: 'success', message: 'Backup created successfully', data: { filename } });
+  // Fire and forget to avoid hanging the HTTP request
+  BackupService.createBackup().catch(err => {
+    console.error('Background manual backup failed:', err);
+  });
+  res.json({ status: 'success', message: 'La sauvegarde manuelle a démarré en arrière-plan.' });
 });
 
 export const downloadBackup = asyncHandler(async (req: Request, res: Response) => {

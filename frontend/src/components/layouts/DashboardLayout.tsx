@@ -117,6 +117,8 @@ const navigation = {
   agent: [
     { name: 'Tableau de bord', href: '/agent', icon: Home },
     { name: 'Réclamer Leads', href: '/agent/leads', icon: Zap },
+    { name: 'Insérer Lead', href: '/agent/insert-lead', icon: Plus },
+    { name: 'Expédition Coliaty', href: '/agent/dispatch', icon: Truck },
     { name: 'Livraison', href: '/agent/livraison', icon: Truck },
     { name: 'Paramètres', href: '/agent/settings', icon: Settings },
   ],

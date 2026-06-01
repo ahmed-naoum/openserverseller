@@ -33,6 +33,24 @@ export default function UserInvoices() {
   const details = invoiceDetails?.data?.data;
 
   if (selectedInvoice && details) {
+    let subTotalBrut = 0;
+    let totalShipping = 0;
+    let totalPlatformFee = 0;
+
+    if (details.leads) {
+      details.leads.forEach((lead: any) => {
+        const gross = Number(lead.order?.totalAmountMad) || 0;
+        const shipping = lead.customShippingFee ?? 57;
+        const rate = lead.customPlatformFeeRate ?? details.user?.platformFeeRate ?? 0.13;
+        const profit = gross - shipping;
+        const fee = profit > 0 ? profit * rate : 0;
+
+        subTotalBrut += gross;
+        totalShipping += shipping;
+        totalPlatformFee += fee;
+      });
+    }
+
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -168,23 +186,21 @@ export default function UserInvoices() {
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-500 font-medium">Sous-total brut</span>
                         <span className="font-bold text-gray-900">
-                          {details.leads?.reduce((sum: number, lead: any) => sum + (lead.order?.totalAmountMad || 0), 0).toLocaleString()} MAD
+                          {subTotalBrut.toLocaleString()} MAD
                         </span>
                       </div>
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-500 font-medium">Frais de livraison ({details.leads?.length || 0})</span>
                         <span className="font-bold text-red-500">
-                          -{ (57 * (details.leads?.length || 0)).toLocaleString() } MAD
+                          -{totalShipping.toLocaleString()} MAD
                         </span>
                       </div>
                       <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-500 font-medium">Frais de plateforme (13%)</span>
+                        <span className="text-gray-500 font-medium">
+                          Frais de plateforme {subTotalBrut - totalShipping > 0 ? `(${((totalPlatformFee / (subTotalBrut - totalShipping)) * 100).toFixed(1)}%)` : ''}
+                        </span>
                         <span className="font-bold text-red-500">
-                          -{ (() => {
-                            const gross = details.leads?.reduce((sum: number, lead: any) => sum + (lead.order?.totalAmountMad || 0), 0) || 0;
-                            const profit = gross - (57 * (details.leads?.length || 0));
-                            return profit > 0 ? (profit * 0.13).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0";
-                          })() } MAD
+                          -{totalPlatformFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MAD
                         </span>
                       </div>
                     </>

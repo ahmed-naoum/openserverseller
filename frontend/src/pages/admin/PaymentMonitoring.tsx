@@ -19,7 +19,9 @@ import {
   RefreshCw,
   TrendingUp,
   Truck,
-  Activity
+  Activity,
+  Percent,
+  Edit2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
@@ -34,6 +36,11 @@ export default function PaymentMonitoring() {
   const [viewingUserLeads, setViewingUserLeads] = useState(false);
   const [roleFilter, setRoleFilter] = useState('ALL');
   const [leadSearchTerm, setLeadSearchTerm] = useState('');
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const [newFeePercentage, setNewFeePercentage] = useState('');
+  const [editingLeadFees, setEditingLeadFees] = useState<any>(null);
+  const [customShippingFeeVal, setCustomShippingFeeVal] = useState('');
+  const [customPlatformFeeRateVal, setCustomPlatformFeeRateVal] = useState('');
 
   // 1. Fetch Users Summary
   const { data: summaryData, isLoading: isLoadingSummary } = useQuery({
@@ -67,6 +74,42 @@ export default function PaymentMonitoring() {
     onError: () => toast.error('Erreur lors de la mise à jour'),
   });
 
+  // 4. Update Platform Fee Mutation
+  const updateFeeMutation = useMutation({
+    mutationFn: ({ uuid, platformFeeRate }: { uuid: string; platformFeeRate: number }) => 
+      adminApi.updateUser(uuid, { platformFeeRate }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-payment-summary'] });
+      toast.success('Frais de plateforme mis à jour avec succès');
+      setEditingUser(null);
+      // If we are currently viewing leads for this user, let's update selectedUser's rate
+      if (selectedUser && selectedUser.uuid === editingUser?.uuid) {
+        setSelectedUser((prev: any) => ({
+          ...prev,
+          platformFeeRate: variables.platformFeeRate
+        }));
+      }
+    },
+    onError: () => {
+      toast.error('Erreur lors de la mise à jour des frais');
+    }
+  });
+
+  // 5. Update Lead Fees Mutation
+  const updateLeadFeesMutation = useMutation({
+    mutationFn: ({ leadId, customPlatformFeeRate, customShippingFee }: { leadId: number; customPlatformFeeRate: number | null; customShippingFee: number | null }) => 
+      adminApi.updateLeadPaymentFees(leadId, { customPlatformFeeRate, customShippingFee }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-user-paid-leads'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-payment-summary'] });
+      toast.success('Frais du lead mis à jour avec succès');
+      setEditingLeadFees(null);
+    },
+    onError: () => {
+      toast.error('Erreur lors de la mise à jour des frais');
+    }
+  });
+
   const filteredUsers = users.filter((u: any) => {
     const matchesSearch = u.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          u.email?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -79,9 +122,10 @@ export default function PaymentMonitoring() {
     acc.totalMoney += u.totalPaidAmount || 0;
     
     // Admin Profit calculation:
-    // The summary provides the Net Amount (after 57 MAD delivery and 13% platform fee).
-    // Formula to recover the fee: (Net Amount / 0.87) * 0.13
-    const userAdminProfit = (u.totalPaidAmount / 0.87) * 0.13;
+    // The summary provides the Net Amount (after 57 MAD delivery and platform fee).
+    // Formula to recover the fee dynamically: (Net Amount / (1 - platformFeeRate)) * platformFeeRate
+    const rate = u.platformFeeRate ?? 0.13;
+    const userAdminProfit = rate < 1 ? (u.totalPaidAmount / (1 - rate)) * rate : 0;
     acc.totalAdminProfit += userAdminProfit;
     
     acc.totalDeliveryCost += (u.paidCount || 0) * 57;
@@ -159,6 +203,23 @@ export default function PaymentMonitoring() {
               <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">{selectedUser.role}</p>
               <h2 className="text-xl font-black text-gray-900">{selectedUser.fullName}</h2>
               <p className="text-xs text-gray-400 font-medium">{selectedUser.email}</p>
+              
+              {/* Dynamic and customizable platform fee rate field */}
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-xs font-bold text-gray-500 bg-gray-50 px-2.5 py-1 rounded-xl flex items-center gap-1.5 border border-gray-100">
+                  Frais Plateforme: <span className="text-violet-600 font-black">{((selectedUser.platformFeeRate ?? 0.13) * 100).toFixed(1)}%</span>
+                </span>
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingUser(selectedUser);
+                    setNewFeePercentage(String(Math.round((selectedUser.platformFeeRate ?? 0.13) * 1000) / 10));
+                  }}
+                  className="px-3 py-1 bg-violet-50 hover:bg-violet-100 text-violet-600 hover:text-violet-700 text-[10px] font-black rounded-xl transition-all border border-violet-100/50 flex items-center gap-1"
+                >
+                  <Edit2 size={10} /> Modifier
+                </button>
+              </div>
             </div>
           </div>
           <div className="text-right">
@@ -244,21 +305,32 @@ export default function PaymentMonitoring() {
                     <td className="px-6 py-4 text-center">
                       {(() => {
                         const grossAmount = Number(lead.order?.totalAmountMad) || 0;
-                        const deliveryCost = 57;
+                        const deliveryCost = lead.customShippingFee ?? 57;
                         const profit = grossAmount - deliveryCost;
-                        const platformFee = profit > 0 ? profit * 0.13 : 0;
+                        const rate = lead.customPlatformFeeRate ?? selectedUser?.platformFeeRate ?? 0.13;
+                        const platformFee = profit > 0 ? profit * rate : 0;
                         const netAmount = grossAmount - deliveryCost - platformFee;
                         return (
-                          <div className="flex flex-col items-center">
+                          <div 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingLeadFees(lead);
+                              setCustomShippingFeeVal(String(deliveryCost));
+                              setCustomPlatformFeeRateVal(String(Math.round(rate * 1000) / 10));
+                            }}
+                            className="flex flex-col items-center cursor-pointer group/cell hover:bg-violet-50/50 p-2 rounded-xl transition-all border border-transparent hover:border-violet-100/50 relative"
+                            title="Cliquer pour modifier les frais de livraison et de plateforme"
+                          >
                             <div className="text-sm font-black text-gray-900" title="Montant Brut">{grossAmount} MAD</div>
-                            <div className="text-[10px] text-red-500 font-medium mt-0.5">
-                              -57 DH <span className="text-gray-400 font-normal">(Liv.)</span>
+                            <div className="text-[10px] text-red-500 font-medium mt-0.5 flex items-center gap-1 group-hover/cell:text-violet-600 transition-colors">
+                              -{deliveryCost} DH <span className="text-gray-400 font-normal">(Liv.)</span>
                             </div>
-                            <div className="text-[10px] text-red-500 font-medium">
-                              -{platformFee.toFixed(2)} MAD <span className="text-gray-400 font-normal">(13%)</span>
+                            <div className="text-[10px] text-red-500 font-medium mt-0.5 flex items-center gap-1 group-hover/cell:text-violet-600 transition-colors">
+                              -{platformFee.toFixed(2)} MAD <span className="text-gray-400 font-normal">({(rate * 100).toFixed(1)}%)</span>
                             </div>
-                            <div className="text-xs font-bold text-green-600 mt-1 bg-green-50 px-2 py-0.5 rounded-md border border-green-100">
+                            <div className="text-xs font-bold text-green-600 mt-1 bg-green-50 px-2 py-0.5 rounded-md border border-green-100 flex items-center gap-1 group-hover/cell:bg-violet-100 group-hover/cell:text-violet-700 transition-all">
                               Net: {netAmount.toFixed(2)} MAD
+                              <Edit2 size={8} className="opacity-0 group-hover/cell:opacity-100 transition-opacity text-violet-500 ml-0.5" />
                             </div>
                           </div>
                         );
@@ -283,6 +355,183 @@ export default function PaymentMonitoring() {
             </table>
           </div>
         </div>
+
+        {/* Edit User Platform Fee Modal */}
+        <AnimatePresence>
+          {editingUser && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="bg-white rounded-[2rem] max-w-md w-full p-6 shadow-2xl border border-gray-100 overflow-hidden relative"
+              >
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                    <Percent className="text-violet-600 w-5 h-5" /> Frais Plateforme
+                  </h3>
+                  <button 
+                    onClick={() => setEditingUser(null)}
+                    className="w-8 h-8 rounded-full bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">Partenaire</label>
+                    <div className="bg-gray-50 px-4 py-3 rounded-2xl border border-gray-100">
+                      <p className="font-bold text-gray-800">{editingUser.fullName}</p>
+                      <p className="text-xs text-gray-400 font-medium">{editingUser.email}</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">Taux de frais de plateforme (%)</label>
+                    <div className="relative">
+                      <input 
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="100"
+                        value={newFeePercentage}
+                        onChange={(e) => setNewFeePercentage(e.target.value)}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm font-bold focus:bg-white focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 outline-none transition-all pr-12"
+                        placeholder="Ex: 13"
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400">%</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 mt-8">
+                  <button 
+                    onClick={() => setEditingUser(null)}
+                    className="flex-1 py-3 border border-gray-200 hover:bg-gray-50 text-gray-600 font-bold rounded-2xl text-xs transition-colors"
+                  >
+                    Annuler
+                  </button>
+                  <button 
+                    onClick={() => {
+                      const rate = parseFloat(newFeePercentage) / 100;
+                      if (isNaN(rate) || rate < 0 || rate > 1) {
+                        toast.error('Veuillez entrer un pourcentage valide entre 0% et 100%');
+                        return;
+                      }
+                      updateFeeMutation.mutate({ uuid: editingUser.uuid, platformFeeRate: rate });
+                    }}
+                    disabled={updateFeeMutation.isPending}
+                    className="flex-1 py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-2xl text-xs transition-colors shadow-lg shadow-violet-200 flex items-center justify-center gap-2"
+                  >
+                    {updateFeeMutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Edit Single Lead Fees Modal */}
+        <AnimatePresence>
+          {editingLeadFees && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="bg-white rounded-[2rem] max-w-md w-full p-6 shadow-2xl border border-gray-100 overflow-hidden relative"
+              >
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                    <Edit2 className="text-violet-600 w-5 h-5" /> Ajuster les Frais du Lead
+                  </h3>
+                  <button 
+                    onClick={() => setEditingLeadFees(null)}
+                    className="w-8 h-8 rounded-full bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">Client</label>
+                    <div className="bg-gray-50 px-4 py-3 rounded-2xl border border-gray-100">
+                      <p className="font-bold text-gray-800">{editingLeadFees.fullName}</p>
+                      <p className="text-xs text-gray-400 font-medium">{editingLeadFees.phone}</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">Frais de Livraison (MAD)</label>
+                    <div className="relative">
+                      <input 
+                        type="number"
+                        step="1"
+                        min="0"
+                        value={customShippingFeeVal}
+                        onChange={(e) => setCustomShippingFeeVal(e.target.value)}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm font-bold focus:bg-white focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 outline-none transition-all pr-12"
+                        placeholder="Ex: 57"
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400">DH</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">Frais de Plateforme (%)</label>
+                    <div className="relative">
+                      <input 
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="100"
+                        value={customPlatformFeeRateVal}
+                        onChange={(e) => setCustomPlatformFeeRateVal(e.target.value)}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm font-bold focus:bg-white focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 outline-none transition-all pr-12"
+                        placeholder="Ex: 13"
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400">%</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 mt-8">
+                  <button 
+                    onClick={() => setEditingLeadFees(null)}
+                    className="flex-1 py-3 border border-gray-200 hover:bg-gray-50 text-gray-600 font-bold rounded-2xl text-xs transition-colors"
+                  >
+                    Annuler
+                  </button>
+                  <button 
+                    onClick={() => {
+                      const shipping = parseFloat(customShippingFeeVal);
+                      const rate = parseFloat(customPlatformFeeRateVal) / 100;
+                      if (isNaN(shipping) || shipping < 0) {
+                        toast.error('Veuillez entrer des frais de livraison valides');
+                        return;
+                      }
+                      if (isNaN(rate) || rate < 0 || rate > 1) {
+                        toast.error('Veuillez entrer un pourcentage de frais valide (0-100)');
+                        return;
+                      }
+                      updateLeadFeesMutation.mutate({ 
+                        leadId: editingLeadFees.id, 
+                        customShippingFee: shipping, 
+                        customPlatformFeeRate: rate 
+                      });
+                    }}
+                    disabled={updateLeadFeesMutation.isPending}
+                    className="flex-1 py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-2xl text-xs transition-colors shadow-lg shadow-violet-200 flex items-center justify-center gap-2"
+                  >
+                    {updateLeadFeesMutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
@@ -427,7 +676,23 @@ export default function PaymentMonitoring() {
                 <h3 className="text-lg font-black text-gray-900 group-hover:text-violet-600 transition-colors truncate">
                   {user.fullName || 'Sans nom'}
                 </h3>
-                <p className="text-xs text-gray-400 font-medium truncate mb-4">{user.email}</p>
+                <p className="text-xs text-gray-400 font-medium truncate mb-2">{user.email}</p>
+
+                {/* Platform Fee Row */}
+                <div 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingUser(user);
+                    setNewFeePercentage(String(Math.round((user.platformFeeRate ?? 0.13) * 1000) / 10));
+                  }}
+                  className="flex items-center justify-between mb-4 bg-violet-50/50 hover:bg-violet-50 px-3 py-1.5 rounded-xl border border-violet-100/50 group/fee transition-all"
+                >
+                  <span className="text-[10px] font-black text-violet-600 uppercase tracking-wider">Frais Plateforme</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-black text-gray-700">{((user.platformFeeRate ?? 0.13) * 100).toFixed(1)}%</span>
+                    <Edit2 size={11} className="text-violet-400 group-hover/fee:text-violet-600 transition-colors" />
+                  </div>
+                </div>
                 
                 <div className="flex items-center justify-between pt-4 border-t border-gray-50">
                   <div>
@@ -459,6 +724,183 @@ export default function PaymentMonitoring() {
           </div>
         )}
       </div>
+
+      {/* Edit User Platform Fee Modal */}
+      <AnimatePresence>
+        {editingUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-[2rem] max-w-md w-full p-6 shadow-2xl border border-gray-100 overflow-hidden relative"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                  <Percent className="text-violet-600 w-5 h-5" /> Frais Plateforme
+                </h3>
+                <button 
+                  onClick={() => setEditingUser(null)}
+                  className="w-8 h-8 rounded-full bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">Partenaire</label>
+                  <div className="bg-gray-50 px-4 py-3 rounded-2xl border border-gray-100">
+                    <p className="font-bold text-gray-800">{editingUser.fullName}</p>
+                    <p className="text-xs text-gray-400 font-medium">{editingUser.email}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">Taux de frais de plateforme (%)</label>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      value={newFeePercentage}
+                      onChange={(e) => setNewFeePercentage(e.target.value)}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm font-bold focus:bg-white focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 outline-none transition-all pr-12"
+                      placeholder="Ex: 13"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400">%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 mt-8">
+                <button 
+                  onClick={() => setEditingUser(null)}
+                  className="flex-1 py-3 border border-gray-200 hover:bg-gray-50 text-gray-600 font-bold rounded-2xl text-xs transition-colors"
+                >
+                  Annuler
+                </button>
+                <button 
+                  onClick={() => {
+                    const rate = parseFloat(newFeePercentage) / 100;
+                    if (isNaN(rate) || rate < 0 || rate > 1) {
+                      toast.error('Veuillez entrer un pourcentage valide entre 0% et 100%');
+                      return;
+                    }
+                    updateFeeMutation.mutate({ uuid: editingUser.uuid, platformFeeRate: rate });
+                  }}
+                  disabled={updateFeeMutation.isPending}
+                  className="flex-1 py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-2xl text-xs transition-colors shadow-lg shadow-violet-200 flex items-center justify-center gap-2"
+                >
+                  {updateFeeMutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Single Lead Fees Modal */}
+      <AnimatePresence>
+        {editingLeadFees && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-[2rem] max-w-md w-full p-6 shadow-2xl border border-gray-100 overflow-hidden relative"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                  <Edit2 className="text-violet-600 w-5 h-5" /> Ajuster les Frais du Lead
+                </h3>
+                <button 
+                  onClick={() => setEditingLeadFees(null)}
+                  className="w-8 h-8 rounded-full bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">Client</label>
+                  <div className="bg-gray-50 px-4 py-3 rounded-2xl border border-gray-100">
+                    <p className="font-bold text-gray-800">{editingLeadFees.fullName}</p>
+                    <p className="text-xs text-gray-400 font-medium">{editingLeadFees.phone}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">Frais de Livraison (MAD)</label>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      step="1"
+                      min="0"
+                      value={customShippingFeeVal}
+                      onChange={(e) => setCustomShippingFeeVal(e.target.value)}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm font-bold focus:bg-white focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 outline-none transition-all pr-12"
+                      placeholder="Ex: 57"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400">DH</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">Frais de Plateforme (%)</label>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      value={customPlatformFeeRateVal}
+                      onChange={(e) => setCustomPlatformFeeRateVal(e.target.value)}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm font-bold focus:bg-white focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 outline-none transition-all pr-12"
+                      placeholder="Ex: 13"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400">%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 mt-8">
+                <button 
+                  onClick={() => setEditingLeadFees(null)}
+                  className="flex-1 py-3 border border-gray-200 hover:bg-gray-50 text-gray-600 font-bold rounded-2xl text-xs transition-colors"
+                >
+                  Annuler
+                </button>
+                <button 
+                  onClick={() => {
+                    const shipping = parseFloat(customShippingFeeVal);
+                    const rate = parseFloat(customPlatformFeeRateVal) / 100;
+                    if (isNaN(shipping) || shipping < 0) {
+                      toast.error('Veuillez entrer des frais de livraison valides');
+                      return;
+                    }
+                    if (isNaN(rate) || rate < 0 || rate > 1) {
+                      toast.error('Veuillez entrer un pourcentage de frais valide (0-100)');
+                      return;
+                    }
+                    updateLeadFeesMutation.mutate({ 
+                      leadId: editingLeadFees.id, 
+                      customShippingFee: shipping, 
+                      customPlatformFeeRate: rate 
+                    });
+                  }}
+                  disabled={updateLeadFeesMutation.isPending}
+                  className="flex-1 py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-2xl text-xs transition-colors shadow-lg shadow-violet-200 flex items-center justify-center gap-2"
+                >
+                  {updateLeadFeesMutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

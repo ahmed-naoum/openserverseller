@@ -22,6 +22,8 @@ import AgentMyLeads from './pages/agent/MyLeads';
 import AgentLeadDetail from './pages/agent/LeadDetail';
 import AgentOrders from './pages/agent/Orders';
 import AgentLivraison from './pages/agent/Livraison';
+import InsertLead from './pages/agent/InsertLead';
+import ColiatyDispatch from './pages/agent/ColiatyDispatch';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminUsers from './pages/admin/Users';
 import AdminProducts from './pages/admin/Products';
@@ -227,6 +229,8 @@ function App() {
         }>
           <Route index element={<AgentDashboard />} />
           <Route path="leads" element={<AgentLeads />} />
+          <Route path="insert-lead" element={<InsertLead />} />
+          <Route path="dispatch" element={<ColiatyDispatch />} />
           <Route path="my-leads" element={<AgentMyLeads />} />
           <Route path="leads/:id" element={<AgentLeadDetail />} />
           <Route path="orders" element={<AgentOrders />} />

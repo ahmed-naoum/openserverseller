@@ -76,6 +76,8 @@ router.get(
           kycStatus: u.kycStatus,
           walletBalance: u.wallet?.balanceMad || 0,
           canImpersonate: u.canImpersonate,
+          platformFeeRate: u.platformFeeRate,
+          saisieFeeMad: u.saisieFeeMad,
           autoAssignInfluencers: u.autoAssignInfluencers,
           autoAssignHelperUsers: u.autoAssignHelperUsers,
           canManageProducts: u.canManageProducts,
@@ -217,7 +219,7 @@ router.patch(
       canImpersonate, canManageProducts, canManageLeads, canManageOrders, canManageInfluencerLinks, canManageTickets,
       city, address, cinNumber, birthDate, language, avatarUrl,
       instagramUsername, tiktokUsername, facebookUsername, xUsername, youtubeUsername, snapchatUsername,
-      ribAccount, bankName, iceNumber, bankStatus
+      ribAccount, bankName, iceNumber, bankStatus, platformFeeRate, saisieFeeMad
     } = req.body;
 
     const user = await prisma.user.findUnique({
@@ -307,6 +309,8 @@ router.patch(
         canManageOrders: typeof canManageOrders === 'boolean' ? canManageOrders : undefined,
         canManageInfluencerLinks: typeof canManageInfluencerLinks === 'boolean' ? canManageInfluencerLinks : undefined,
         canManageTickets: typeof canManageTickets === 'boolean' ? canManageTickets : undefined,
+        platformFeeRate: platformFeeRate !== undefined ? Number(platformFeeRate) : undefined,
+        saisieFeeMad: saisieFeeMad !== undefined ? Number(saisieFeeMad) : undefined,
       },
       include: {
         profile: true,
@@ -386,6 +390,8 @@ router.get(
             ribAccount: decrypt(account.ribAccount)
           })),
           autoAssignInfluencers: user.autoAssignInfluencers,
+          platformFeeRate: user.platformFeeRate,
+          saisieFeeMad: user.saisieFeeMad,
           createdAt: user.createdAt,
         },
       },

@@ -787,137 +787,149 @@ export default function AgentLeadDetail() {
                 <p className="text-sm font-bold text-gray-400 animate-pulse uppercase tracking-widest">Analyse en cours...</p>
               </div>
             ) : historyData ? (
-              <div className="overflow-y-auto p-6 space-y-8">
-                {/* Score Summary */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 text-center">
-                    <span className="text-[10px] font-black text-gray-400 uppercase block mb-1">Total Leads</span>
-                    <span className="text-xl font-black text-gray-900">{historyData.summary.totalLeads}</span>
+              (!historyData.rawHistory?.leads?.length && !historyData.rawHistory?.orders?.length) ? (
+                <div className="p-20 flex flex-col items-center justify-center text-center">
+                  <div className="w-20 h-20 bg-gray-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border-2 border-gray-100 shadow-sm">
+                    <Info className="w-8 h-8 text-gray-400" />
                   </div>
-                  <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 text-center">
-                    <span className="text-[10px] font-black text-emerald-500 uppercase block mb-1">Total Livrés</span>
-                    <span className="text-xl font-black text-emerald-700">{historyData.summary.orderStats['DELIVERED'] || 0}</span>
-                  </div>
-                  <div className="bg-red-50 p-4 rounded-2xl border border-red-100 text-center">
-                    <span className="text-[10px] font-black text-red-500 uppercase block mb-1">Annulés</span>
-                    <span className="text-xl font-black text-red-700">{historyData.summary.leadStats['CANCEL_ORDER'] || 0}</span>
-                  </div>
-                  <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 text-center">
-                    <span className="text-[10px] font-black text-amber-500 uppercase block mb-1">Retours</span>
-                    <span className="text-xl font-black text-amber-700">{historyData.summary.orderStats['RETURNED'] || 0}</span>
-                  </div>
+                  <h3 className="text-2xl font-black text-gray-900 mb-2">Nouveau Client</h3>
+                  <p className="text-gray-500 font-medium max-w-sm mx-auto">
+                    Ce numéro de téléphone n'a aucun historique ni ancienne commande enregistrée dans le système.
+                  </p>
                 </div>
+              ) : (
+                <div className="overflow-y-auto p-6 space-y-8">
+                  {/* Score Summary */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 text-center">
+                      <span className="text-[10px] font-black text-gray-400 uppercase block mb-1">Total Leads</span>
+                      <span className="text-xl font-black text-gray-900">{historyData.summary.totalLeads}</span>
+                    </div>
+                    <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 text-center">
+                      <span className="text-[10px] font-black text-emerald-500 uppercase block mb-1">Total Livrés</span>
+                      <span className="text-xl font-black text-emerald-700">{historyData.summary.orderStats['DELIVERED'] || 0}</span>
+                    </div>
+                    <div className="bg-red-50 p-4 rounded-2xl border border-red-100 text-center">
+                      <span className="text-[10px] font-black text-red-500 uppercase block mb-1">Annulés</span>
+                      <span className="text-xl font-black text-red-700">{historyData.summary.leadStats['CANCEL_ORDER'] || 0}</span>
+                    </div>
+                    <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 text-center">
+                      <span className="text-[10px] font-black text-amber-500 uppercase block mb-1">Retours</span>
+                      <span className="text-xl font-black text-amber-700">{historyData.summary.orderStats['RETURNED'] || 0}</span>
+                    </div>
+                  </div>
 
-                {/* Trust Score indicator */}
-                {(() => {
-                  const delivered = historyData.summary.orderStats['DELIVERED'] || 0;
-                  const cancelled = historyData.summary.leadStats['CANCEL_ORDER'] || 0;
-                  const returns = historyData.summary.orderStats['RETURNED'] || 0;
-                  
-                  let score = 50;
-                  if (delivered > 0) score += (delivered * 20);
-                  if (cancelled > 0) score -= (cancelled * 15);
-                  if (returns > 0) score -= (returns * 25);
-                  score = Math.max(0, Math.min(100, score));
+                  {/* Trust Score indicator */}
+                  {(() => {
+                    const delivered = historyData.summary.orderStats['DELIVERED'] || 0;
+                    const cancelled = historyData.summary.leadStats['CANCEL_ORDER'] || 0;
+                    const returns = historyData.summary.orderStats['RETURNED'] || 0;
+                    
+                    let score = 50;
+                    if (delivered > 0) score += (delivered * 20);
+                    if (cancelled > 0) score -= (cancelled * 15);
+                    if (returns > 0) score -= (returns * 25);
+                    score = Math.max(0, Math.min(100, score));
 
-                  return (
-                    <div className={`p-4 rounded-2xl border flex items-center gap-4 ${
-                      score > 70 ? 'bg-emerald-50 border-emerald-100' :
-                      score < 40 ? 'bg-rose-50 border-rose-100' :
-                      'bg-amber-50 border-amber-100'
-                    }`}>
-                      <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-sm ${
-                        score > 70 ? 'bg-emerald-500 text-white' :
-                        score < 40 ? 'bg-rose-500 text-white' :
-                        'bg-amber-500 text-white'
+                    return (
+                      <div className={`p-4 rounded-2xl border flex items-center gap-4 ${
+                        score > 70 ? 'bg-emerald-50 border-emerald-100' :
+                        score < 40 ? 'bg-rose-50 border-rose-100' :
+                        'bg-amber-50 border-amber-100'
                       }`}>
-                        <ShieldAlert className="w-6 h-6" />
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-sm ${
+                          score > 70 ? 'bg-emerald-500 text-white' :
+                          score < 40 ? 'bg-rose-500 text-white' :
+                          'bg-amber-500 text-white'
+                        }`}>
+                          <ShieldAlert className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h4 className="font-black text-gray-900">Score de Confiance: {score}%</h4>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {score > 70 ? 'Client très fiable. Priorité haute.' :
+                             score < 40 ? 'Attention : Historique d\'annulations ou de retours élevé.' :
+                             'Client avec un historique modéré.'}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="font-black text-gray-900">Score de Confiance: {score}%</h4>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          {score > 70 ? 'Client très fiable. Priorité haute.' :
-                           score < 40 ? 'Attention : Historique d\'annulations ou de retours élevé.' :
-                           'Client avec un historique modéré.'}
-                        </p>
+                    );
+                  })()}
+
+                  {/* Detailed History Sections */}
+                  <div className="space-y-6">
+                    {/* Leads History */}
+                    <div>
+                      <h4 className="text-sm font-black text-gray-900 mb-3 flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-indigo-500" />
+                        Détails des Leads Passés
+                      </h4>
+                      <div className="space-y-2">
+                        {historyData.rawHistory.leads.length === 0 ? (
+                          <p className="text-xs text-gray-400 italic">Aucun autre lead trouvé.</p>
+                        ) : (
+                          historyData.rawHistory.leads.map((h: any, i: number) => (
+                            <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                              <div className="flex items-center gap-3">
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                                  h.status === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-700' :
+                                  h.status === 'CANCEL_ORDER' ? 'bg-rose-100 text-rose-700' :
+                                  'bg-gray-200 text-gray-600'
+                                }`}>
+                                  {h.status}
+                                </span>
+                                <div className="flex flex-col">
+                                  <span className="text-[10px] font-bold text-gray-700 flex items-center gap-1">
+                                    <Store className="w-2.5 h-2.5 opacity-50" /> {h.vendorName}
+                                  </span>
+                                </div>
+                              </div>
+                              <span className="text-[10px] text-gray-400 font-medium">
+                                {format(new Date(h.createdAt), 'dd/MM/yyyy')}
+                              </span>
+                            </div>
+                          ))
+                        )}
                       </div>
                     </div>
-                  );
-                })()}
 
-                {/* Detailed History Sections */}
-                <div className="space-y-6">
-                  {/* Leads History */}
-                  <div>
-                    <h4 className="text-sm font-black text-gray-900 mb-3 flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-indigo-500" />
-                      Détails des Leads Passés
-                    </h4>
-                    <div className="space-y-2">
-                      {historyData.rawHistory.leads.length === 0 ? (
-                        <p className="text-xs text-gray-400 italic">Aucun autre lead trouvé.</p>
-                      ) : (
-                        historyData.rawHistory.leads.map((h: any, i: number) => (
-                          <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
-                            <div className="flex items-center gap-3">
-                              <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
-                                h.status === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-700' :
-                                h.status === 'CANCEL_ORDER' ? 'bg-rose-100 text-rose-700' :
-                                'bg-gray-200 text-gray-600'
-                              }`}>
-                                {h.status}
-                              </span>
-                              <div className="flex flex-col">
-                                <span className="text-[10px] font-bold text-gray-700 flex items-center gap-1">
-                                  <Store className="w-2.5 h-2.5 opacity-50" /> {h.vendorName}
+                    {/* Orders History */}
+                    <div>
+                      <h4 className="text-sm font-black text-gray-900 mb-3 flex items-center gap-2">
+                        <Package className="w-4 h-4 text-emerald-500" />
+                        Détails des Expéditions
+                      </h4>
+                      <div className="space-y-2">
+                        {historyData.rawHistory.orders.length === 0 ? (
+                          <p className="text-xs text-gray-400 italic">Aucune expédition trouvée.</p>
+                        ) : (
+                          historyData.rawHistory.orders.map((h: any, i: number) => (
+                            <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                              <div className="flex items-center gap-3">
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                                  h.status === 'DELIVERED' ? 'bg-emerald-500 text-white' :
+                                  h.status === 'RETURNED' ? 'bg-rose-500 text-white' :
+                                  'bg-blue-500 text-white'
+                                }`}>
+                                  {h.status}
                                 </span>
+                                <div className="flex flex-col">
+                                  <span className="text-[10px] font-bold text-gray-700 flex items-center gap-1">
+                                    <Store className="w-2.5 h-2.5 opacity-50" /> {h.vendorName}
+                                  </span>
+                                </div>
                               </div>
-                            </div>
-                            <span className="text-[10px] text-gray-400 font-medium">
-                              {format(new Date(h.createdAt), 'dd/MM/yyyy')}
-                            </span>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Orders History */}
-                  <div>
-                    <h4 className="text-sm font-black text-gray-900 mb-3 flex items-center gap-2">
-                      <Package className="w-4 h-4 text-emerald-500" />
-                      Détails des Expéditions
-                    </h4>
-                    <div className="space-y-2">
-                      {historyData.rawHistory.orders.length === 0 ? (
-                        <p className="text-xs text-gray-400 italic">Aucune expédition trouvée.</p>
-                      ) : (
-                        historyData.rawHistory.orders.map((h: any, i: number) => (
-                          <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
-                            <div className="flex items-center gap-3">
-                              <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
-                                h.status === 'DELIVERED' ? 'bg-emerald-500 text-white' :
-                                h.status === 'RETURNED' ? 'bg-rose-500 text-white' :
-                                'bg-blue-500 text-white'
-                              }`}>
-                                {h.status}
+                              <span className="text-[10px] text-gray-400 font-medium">
+                                {format(new Date(h.createdAt), 'dd/MM/yyyy')}
                               </span>
-                              <div className="flex flex-col">
-                                <span className="text-[10px] font-bold text-gray-700 flex items-center gap-1">
-                                  <Store className="w-2.5 h-2.5 opacity-50" /> {h.vendorName}
-                                </span>
-                              </div>
                             </div>
-                            <span className="text-[10px] text-gray-400 font-medium">
-                              {format(new Date(h.createdAt), 'dd/MM/yyyy')}
-                            </span>
-                          </div>
-                        ))
-                      )}
+                          ))
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )
             ) : (
               <div className="p-20 text-center">
                 <Info className="w-12 h-12 text-gray-200 mx-auto mb-4" />

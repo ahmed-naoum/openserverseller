@@ -15,6 +15,65 @@ const generateOrderNumber = (): string => {
   return `OS-${dateStr}-${random}`;
 };
 
+// Helper to call Coliaty API
+const callColiatyCreateParcel = async (parcelData: {
+  package_reciever: string;
+  package_phone: string;
+  package_price: number;
+  package_addresse: string;
+  package_city: string;
+  package_content?: string;
+  package_code?: string;
+  package_no_open?: boolean;
+  package_replacement?: boolean;
+  package_old_tracking?: string;
+  package_note?: string;
+}): Promise<{ package_code: string; package_id: number }> => {
+  const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
+  const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
+  const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
+
+  if (!COLIATY_PUBLIC_KEY || !COLIATY_SECRET_KEY || COLIATY_PUBLIC_KEY === 'your_coliaty_public_key') {
+    throw new AppException(400, '[Coliaty] Clés API non configurées.');
+  }
+
+  try {
+    const response = await axios.post(
+      `${COLIATY_BASE_URL}/parcel/normal`,
+      {
+        package_content: parcelData.package_content || "Marchandise",
+        package_no_open: false,
+        package_replacement: false,
+        package_old_tracking: '',
+        ...parcelData,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${COLIATY_PUBLIC_KEY}:${COLIATY_SECRET_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 10000,
+      }
+    );
+
+    if (response.data?.success) {
+      return {
+        package_code: response.data.data.package_code,
+        package_id: response.data.data.package_id,
+      };
+    }
+    
+    const errorMessage = response.data?.message || JSON.stringify(response.data?.errors) || 'Erreur inconnue (Coliaty)';
+    throw new AppException(400, `Coliaty API: ${errorMessage}`);
+  } catch (error: any) {
+    if (error instanceof AppException) throw error;
+    const detail = error.response?.data?.errors 
+      ? JSON.stringify(error.response.data.errors) 
+      : (error.response?.data?.message || error.message);
+    throw new AppException(400, `Coliaty Network/API Error: ${detail}`);
+  }
+};
+
 router.get(
   '/',
   authenticate,
@@ -554,6 +613,198 @@ router.patch(
       status: 'success',
       message: 'Order status updated',
       data: { order: updatedOrder },
+    });
+  })
+);
+
+router.post(
+  '/bulk-dispatch',
+  authenticate,
+  authorize('CALL_CENTER_AGENT', 'SUPER_ADMIN'),
+  asyncHandler(async (req, res) => {
+    const { leadIds } = req.body;
+
+    if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
+      throw new AppException(400, 'leadIds array is required');
+    }
+
+    const agent = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { id: true, role: { select: { name: true } }, saisieFeeMad: true }
+    });
+
+    const feePerLead = agent?.saisieFeeMad ?? 8.0;
+
+    const leads = await prisma.lead.findMany({
+      where: { 
+        id: { in: leadIds.map(Number) },
+        status: 'ORDERED', // queued leads
+        order: { isNot: null }
+      },
+      include: {
+        order: {
+          include: { items: { include: { product: true } } }
+        },
+        vendor: true
+      }
+    });
+
+    if (leads.length === 0) {
+      throw new AppException(404, 'Aucun lead valide trouvé pour l\'expédition.');
+    }
+
+    const results: any[] = [];
+    const successfulLeadIdsByVendor: Record<number, number[]> = {};
+
+    // 1. Prepare parcels array
+    const parcels = leads.map((lead) => {
+      const order = lead.order!;
+      const product = order.items[0]?.product;
+      
+      let normalizedColiatyPhone = order.customerPhone.replace(/\s+/g, '').replace(/[^0-9+]/g, '');
+      if (normalizedColiatyPhone.startsWith('+212')) normalizedColiatyPhone = '0' + normalizedColiatyPhone.slice(4);
+      else if (normalizedColiatyPhone.startsWith('212')) normalizedColiatyPhone = '0' + normalizedColiatyPhone.slice(3);
+      else if (!normalizedColiatyPhone.startsWith('0')) normalizedColiatyPhone = '0' + normalizedColiatyPhone;
+
+      const baseContent = product?.nameFr || product?.nameAr || 'Marchandise';
+
+      return {
+        package_reciever: order.customerName,
+        package_phone: normalizedColiatyPhone,
+        package_price: Number(order.totalAmountMad),
+        package_addresse: order.customerAddress,
+        package_city: order.customerCity,
+        package_content: baseContent.substring(0, 100),
+        package_no_open: false,
+        package_replacement: false,
+        package_note: '',
+        package_old_tracking: '',
+      };
+    });
+
+    const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
+    const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
+    const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
+
+    let successParcels: Record<string, string> = {};
+    let errorParcels: Record<string, any> = {};
+
+    try {
+      const response = await axios.post(`${COLIATY_BASE_URL.replace(/\/$/, '')}/parcel/normal/mass`, {
+        parcels
+      }, {
+        headers: {
+          Authorization: `Bearer ${COLIATY_PUBLIC_KEY}:${COLIATY_SECRET_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 30000, // Batch may take longer
+      });
+
+      if (response.data?.success || response.data?.code === 200) {
+        successParcels = response.data.data?.success_parcels || {};
+        errorParcels = response.data.data?.error_parcels || {};
+      } else {
+        throw new Error(response.data?.message || 'Erreur lors de la création en lot (Coliaty)');
+      }
+    } catch (err: any) {
+      if (err.response?.data) {
+        const errorData = err.response.data;
+        const msg = typeof errorData === 'string' ? errorData.substring(0, 100) : (errorData.message || 'Erreur API Coliaty');
+        const details = errorData.errors ? JSON.stringify(errorData.errors) : '';
+        throw new AppException(400, `Erreur Coliaty: ${msg} ${details}`);
+      }
+      throw new AppException(500, `Erreur réseau avec Coliaty: ${err.message}`);
+    }
+
+    // 2. Process results
+    for (let i = 0; i < leads.length; i++) {
+      const lead = leads[i];
+      const parcelKey = `parcel_${i}`;
+
+      if (successParcels[parcelKey]) {
+        const coliatyCode = successParcels[parcelKey];
+        
+        await prisma.$transaction(async (tx) => {
+          await tx.order.update({
+            where: { id: lead.order!.id },
+            data: { coliatyPackageCode: coliatyCode }
+          });
+          await tx.lead.update({
+            where: { id: lead.id },
+            data: { status: 'PUSHED_TO_DELIVERY' }
+          });
+          await tx.leadStatusHistory.create({
+            data: {
+              leadId: lead.id,
+              oldStatus: 'ORDERED',
+              newStatus: 'PUSHED_TO_DELIVERY',
+              changedBy: req.user!.id,
+              notes: 'Lead expédié en lot via Coliaty',
+            }
+          });
+        });
+
+        if (!successfulLeadIdsByVendor[lead.vendorId]) successfulLeadIdsByVendor[lead.vendorId] = [];
+        successfulLeadIdsByVendor[lead.vendorId].push(lead.id);
+
+        results.push({ leadId: lead.id, status: 'success', coliatyCode });
+      } else if (errorParcels[parcelKey]) {
+        results.push({ leadId: lead.id, status: 'error', error: JSON.stringify(errorParcels[parcelKey]) });
+      } else {
+        results.push({ leadId: lead.id, status: 'error', error: 'Le colis n\'a pas été traité par Coliaty.' });
+      }
+    }
+
+    const generateInvoiceNumber = () => `INV-FEE-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+    // 3. Charge vendors and create Invoice
+    const vendorFees: Record<number, number> = {};
+    for (const [vendorIdStr, vendorLeadIds] of Object.entries(successfulLeadIdsByVendor)) {
+      const vendorId = Number(vendorIdStr);
+      const count = vendorLeadIds.length;
+      const fee = count * feePerLead;
+      vendorFees[vendorId] = fee;
+
+      if (fee > 0) {
+        await prisma.$transaction(async (tx) => {
+          const wallet = await tx.wallet.findUnique({ where: { userId: vendorId } });
+          if (!wallet) return;
+
+          const balanceAfterMad = wallet.balanceMad - fee;
+          await tx.wallet.update({
+            where: { id: wallet.id },
+            data: { balanceMad: balanceAfterMad }
+          });
+
+          await tx.walletTransaction.create({
+            data: {
+              walletId: wallet.id,
+              amountMad: -fee,
+              type: 'DEBIT',
+              balanceAfterMad,
+              description: `Frais de saisie & expédition pour ${count} lead(s) par l'agent`,
+            }
+          });
+
+          await tx.invoice.create({
+            data: {
+              invoiceNumber: generateInvoiceNumber(),
+              userId: vendorId,
+              totalAmountMad: fee,
+              status: 'PAID', // Direct deduction
+              leads: {
+                connect: vendorLeadIds.map(id => ({ id }))
+              }
+            }
+          });
+        });
+      }
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Expédition en lot terminée',
+      data: { results, vendorFees }
     });
   })
 );

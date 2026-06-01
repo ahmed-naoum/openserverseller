@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Package, ShieldCheck, Truck, Clock, CheckCircle2, UserCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import BlockRenderer from '../../components/helper/sitebuilder/BlockRenderer';
+import WhatsAppWidget from '../../components/public/WhatsAppWidget';
 
 export default function ReferralForm() {
   const { code } = useParams<{ code: string }>();
@@ -342,6 +343,17 @@ export default function ReferralForm() {
   const structure = landingPage?.customStructure;
   const blocks = Array.isArray(structure) ? structure : (structure?.blocks || []);
   const pageSettings = Array.isArray(structure) ? { backgroundColor: '#f9fafb' } : (structure?.settings || { backgroundColor: '#f9fafb' });
+  const whatsappBlock = blocks.find((b: any) => b.type === 'whatsapp');
+  const whatsappSettings = whatsappBlock && whatsappBlock.content.enableWidget !== false ? {
+    enabled: true,
+    nickname: influencerName || 'Nitso',
+    profileImage: influencerAvatar || '',
+    ...whatsappBlock.content
+  } : (pageSettings?.whatsappWidget?.enabled ? {
+    nickname: influencerName || 'Nitso',
+    profileImage: influencerAvatar || '',
+    ...pageSettings.whatsappWidget
+  } : undefined);
 
   if (blocks.length > 0) {
     return (
@@ -349,8 +361,10 @@ export default function ReferralForm() {
         className="w-full min-h-screen font-sans pb-20 transition-colors duration-300"
         style={{ backgroundColor: pageSettings.backgroundColor }}
       >
-        
         <BlockRenderer blocks={blocks} renderCheckout={renderCheckoutForm} />
+        {whatsappSettings?.enabled && (
+          <WhatsAppWidget settings={whatsappSettings} />
+        )}
       </div>
     );
   }
@@ -440,6 +454,9 @@ export default function ReferralForm() {
           {renderCheckoutForm()}
         </motion.div>
       </div>
+      {whatsappSettings?.enabled && (
+        <WhatsAppWidget settings={whatsappSettings} />
+      )}
     </div>
   );
 }

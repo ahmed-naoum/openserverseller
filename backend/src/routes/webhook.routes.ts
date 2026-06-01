@@ -31,6 +31,7 @@ const COLIATY_TO_INTERNAL: Record<string, string> = {
   // --- Livraison terminée ---
   'DELIVERED': 'DELIVERED',
   'RETURNED': 'RETURNED',
+  'PAID': 'DELIVERED', // Coliaty Facture payée -> Livré + Payé
 
   // --- Annulations ---
   'CANCELED_BY_SELLER': 'CANCELED_BY_SELLER',

@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
-import { fetchSecuritySettings, clearSecurityCache, DynamicSecuritySettings } from '../middleware/security.js';
+import { fetchSecuritySettings, clearSecurityCache, DynamicSecuritySettings, getBlockedIPsList, unblockIP } from '../middleware/security.js';
 import os from 'os';
 
 const router = Router();
@@ -190,6 +190,7 @@ router.get(
           active: activeThreats.slice(0, 20),
           suspicious: suspiciousIPs.slice(0, 20),
           blockedIPs: allBlocked,
+          rateLimitBlockedIPs: getBlockedIPsList(),
           failedLoginsLast24h: failedLogins,
         },
         system: {
@@ -259,6 +260,7 @@ router.delete(
     blockedIPs.delete(cleanIp);
     loginFailures.delete(cleanIp);
     suspiciousRequests.delete(cleanIp);
+    unblockIP(cleanIp);
 
     // Remove from database settings
     const settings = await fetchSecuritySettings();

@@ -16,6 +16,8 @@ const callColiatyCreateParcel = async (parcelData: {
   package_code?: string;
   package_no_open?: boolean;
   package_replacement?: boolean;
+  package_old_tracking?: string;
+  package_note?: string;
 }): Promise<{ package_code: string; package_id: number }> => {
   const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
   const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
@@ -572,9 +574,26 @@ router.get(
   asyncHandler(async (req, res) => {
     const { phone } = req.params;
     
-    // Normalize input phone: remove non-digits
-    const searchPhone = phone.replace(/\D/g, '');
-    if (searchPhone.length < 8) {
+    // Validate Moroccan phone prefix strictly (0 or +212)
+    const rawClean = phone.replace(/\s+/g, '');
+    let corePhone = '';
+
+    if (rawClean.startsWith('+212') || rawClean.startsWith('00212')) {
+      corePhone = rawClean.replace(/\D/g, '').slice(-9);
+    } else if (rawClean.startsWith('0') && rawClean.replace(/\D/g, '').length === 10) {
+      corePhone = rawClean.replace(/\D/g, '').slice(-9);
+    } else {
+      // Invalid prefix (e.g., started with 8, 7 without +212), return empty history
+      return res.json({
+        status: 'success',
+        data: {
+          summary: { totalLeads: 0, totalOrders: 0, leadStats: {}, orderStats: {} },
+          rawHistory: { leads: [], orders: [] }
+        }
+      });
+    }
+
+    if (corePhone.length < 9) {
       throw new AppException(400, 'Numéro de téléphone invalide pour la recherche');
     }
 
@@ -582,8 +601,8 @@ router.get(
     const leads = await prisma.lead.findMany({
       where: {
         OR: [
-          { phone: { contains: searchPhone } },
-          { whatsapp: { contains: searchPhone } }
+          { phone: { contains: corePhone } },
+          { whatsapp: { contains: corePhone } }
         ]
       },
       select: {
@@ -596,7 +615,7 @@ router.get(
     // Find all orders with this phone number
     const orders = await prisma.order.findMany({
       where: {
-        customerPhone: { contains: searchPhone }
+        customerPhone: { contains: corePhone }
       },
       select: {
         status: true,
@@ -917,10 +936,91 @@ router.post(
   })
 );
 
+router.get(
+  '/vendors',
+  authenticate,
+  authorize('CALL_CENTER_AGENT', 'SUPER_ADMIN', 'HELPER'),
+  asyncHandler(async (req, res) => {
+    const vendors = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        role: {
+          name: { in: ['VENDOR', 'INFLUENCER'] }
+        }
+      },
+      select: {
+        id: true,
+        email: true,
+        phone: true,
+        profile: {
+          select: {
+            fullName: true,
+          }
+        }
+      },
+      orderBy: {
+        profile: {
+          fullName: 'asc'
+        }
+      }
+    });
+
+    res.json({
+      status: 'success',
+      data: vendors.map(v => ({
+        id: v.id,
+        email: v.email,
+        phone: v.phone,
+        fullName: v.profile?.fullName || v.email || `Vendeur #${v.id}`
+      }))
+    });
+  })
+);
+
+router.get(
+  '/products-by-vendor/:vendorId',
+  authenticate,
+  authorize('CALL_CENTER_AGENT', 'SUPER_ADMIN', 'HELPER'),
+  asyncHandler(async (req, res) => {
+    const { vendorId } = req.params;
+
+    const products = await prisma.product.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { ownerId: Number(vendorId) },
+          { inventories: { some: { userId: Number(vendorId) } } },
+          { claims: { some: { userId: Number(vendorId), status: { in: ['APPROVED', 'ACTIVE'] } } } }
+        ]
+      },
+      include: {
+        images: {
+          where: { isPrimary: true },
+          take: 1,
+        }
+      },
+      orderBy: {
+        nameFr: 'asc'
+      }
+    });
+
+    res.json({
+      status: 'success',
+      data: products.map(p => ({
+        id: p.id,
+        sku: p.sku,
+        name: p.nameFr || p.nameAr,
+        retailPriceMad: p.retailPriceMad,
+        image: p.images[0]?.imageUrl || null,
+      }))
+    });
+  })
+);
+
 router.post(
   '/',
   authenticate,
-  authorize('VENDOR', 'HELPER'),
+  authorize('VENDOR', 'HELPER', 'CALL_CENTER_AGENT', 'SUPER_ADMIN'),
   [
     body('fullName').notEmpty().trim(),
     body('phone').matches(/^(\+212|0)[0-9]{9}$/),
@@ -931,58 +1031,192 @@ router.post(
       throw new AppException(400, 'Validation failed');
     }
 
-    const { fullName, phone, whatsapp, city, address, productId, notes, vendorId: bodyVendorId, sourceMode } = req.body;
+    const { fullName, phone, whatsapp, city, address, productId, notes, vendorId: bodyVendorId, sourceMode, package_replacement, package_old_tracking, package_note, customPrice, packName, skipColiaty } = req.body;
 
-    // HELPER must supply a vendorId in the request body
-    const effectiveVendorId = req.user!.roleName === 'HELPER' ? Number(bodyVendorId) : req.user!.id;
-    if (req.user!.roleName === 'HELPER' && !bodyVendorId) {
-      throw new AppException(400, 'HELPER must provide a vendorId');
+    // HELPER, CALL_CENTER_AGENT, and SUPER_ADMIN must supply a vendorId in the request body
+    const needsVendorId = ['HELPER', 'CALL_CENTER_AGENT', 'SUPER_ADMIN'].includes(req.user!.roleName);
+    const effectiveVendorId = needsVendorId ? Number(bodyVendorId) : req.user!.id;
+    if (needsVendorId && !bodyVendorId) {
+      throw new AppException(400, 'Must provide a vendorId');
     }
 
-    // If productId is provided, find or create a referral link to connect the lead to the product
-    let resolvedReferralLinkId: number | null = null;
-    if (productId) {
-      const product = await prisma.product.findUnique({ where: { id: Number(productId) } });
-      if (product) {
-        let refLink = await prisma.referralLink.findFirst({
-          where: { influencerId: effectiveVendorId, productId: product.id },
-        });
-        if (!refLink) {
-          const code = `V${effectiveVendorId}-P${product.id}-${Date.now().toString(36)}`;
-          refLink = await prisma.referralLink.create({
-            data: {
-              influencerId: effectiveVendorId,
-              productId: product.id,
-              code,
-              isActive: true,
-            },
-          });
-        }
-        resolvedReferralLinkId = refLink.id;
-      }
+    if (!productId) {
+      throw new AppException(400, 'Must provide a productId');
     }
+
+    const product = await prisma.product.findUnique({ where: { id: Number(productId) } });
+    if (!product) {
+      throw new AppException(404, 'Product not found');
+    }
+
+    if (product.stockQuantity < 1) {
+      throw new AppException(400, `Stock insuffisant pour ce produit. (Disponible: ${product.stockQuantity})`);
+    }
+
+    // Pricing calculation (override with customPrice if provided)
+    const totalAmountMad = customPrice !== undefined && customPrice !== null && Number(customPrice) > 0 
+      ? Number(customPrice) 
+      : product.retailPriceMad;
+    const commissionPercentage = parseFloat(process.env.PLATFORM_COMMISSION_PERCENTAGE || '15');
+    const platformFeeMad = totalAmountMad * (commissionPercentage / 100);
+    const vendorEarningMad = totalAmountMad - platformFeeMad;
+
+    const generateOrderNumber = (): string => {
+      const date = new Date();
+      const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
+      const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+      return `OS-${dateStr}-${random}`;
+    };
 
     const normalizedPhone = phone.replace(/^0/, '+212');
 
-    const lead = await prisma.lead.create({
-      data: {
-        vendorId: effectiveVendorId,
-        referralLinkId: resolvedReferralLinkId,
-        fullName,
-        phone: normalizedPhone,
-        whatsapp: whatsapp || normalizedPhone,
-        city,
-        address,
-        status: 'NEW',
-        notes,
-        sourceMode: sourceMode || 'SELLER',
-      },
+    // Normalize phone for Coliaty: must start with 05, 06 or 07 followed by 8 digits (10 total)
+    let normalizedColiatyPhone = normalizedPhone.replace(/\s+/g, '').replace(/[^0-9+]/g, '');
+    if (normalizedColiatyPhone.startsWith('+212')) normalizedColiatyPhone = '0' + normalizedColiatyPhone.slice(4);
+    else if (normalizedColiatyPhone.startsWith('212')) normalizedColiatyPhone = '0' + normalizedColiatyPhone.slice(3);
+    else if (!normalizedColiatyPhone.startsWith('0')) normalizedColiatyPhone = '0' + normalizedColiatyPhone;
+
+    // Coliaty requires package_content between 5 and 100 characters
+    let baseContent = packName ? String(packName) : (product.nameFr || product.nameAr || 'Marchandise');
+    let contentValue = baseContent;
+    const details = [];
+    if (product.sku) details.push(`SKU:${product.sku}`);
+    if (details.length > 0) {
+      contentValue = `${baseContent} (${details.join(' ')})`;
+    }
+    if (contentValue.length < 5) contentValue = contentValue.padEnd(5, ' ');
+    if (contentValue.length > 100) contentValue = contentValue.substring(0, 100);
+
+    // Call Coliaty parcel creation API (if not skipped)
+    let coliatyResult: { package_code: string; package_id: number } | null = null;
+    
+    if (!skipColiaty) {
+      try {
+        coliatyResult = await callColiatyCreateParcel({
+          package_reciever: fullName,
+          package_phone: normalizedColiatyPhone,
+          package_price: Number(totalAmountMad),
+          package_addresse: address || city || 'Unknown',
+          package_city: city || 'Casablanca',
+          package_content: contentValue,
+          package_no_open: false,
+          package_replacement: package_replacement === true || package_replacement === 'true',
+          package_old_tracking: package_old_tracking || '',
+          package_note: package_note || '',
+        });
+      } catch (coliatyError: any) {
+        console.error('[Coliaty] Error during parcel creation:', coliatyError);
+        if (coliatyError instanceof AppException) throw coliatyError;
+        throw new AppException(500, 'Erreur lors de la communication avec le service Coliaty.');
+      }
+    }
+
+    // Referral link resolution
+    let resolvedReferralLinkId: number | null = null;
+    let refLink = await prisma.referralLink.findFirst({
+      where: { influencerId: effectiveVendorId, productId: product.id },
+    });
+    if (!refLink) {
+      const code = `V${effectiveVendorId}-P${product.id}-${Date.now().toString(36)}`;
+      refLink = await prisma.referralLink.create({
+        data: {
+          influencerId: effectiveVendorId,
+          productId: product.id,
+          code,
+          isActive: true,
+        },
+      });
+    }
+    resolvedReferralLinkId = refLink.id;
+
+    // Transaction execution
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Create Lead in PUSHED_TO_DELIVERY or ORDERED status
+      const newLeadStatus = skipColiaty ? 'ORDERED' : 'PUSHED_TO_DELIVERY';
+      const lead = await tx.lead.create({
+        data: {
+          vendorId: effectiveVendorId,
+          referralLinkId: resolvedReferralLinkId,
+          fullName,
+          phone: normalizedPhone,
+          whatsapp: whatsapp || normalizedPhone,
+          city,
+          address,
+          status: newLeadStatus,
+          notes: notes || `Lead inséré ${skipColiaty ? '(en attente d\'expédition)' : 'et poussé à Coliaty manuellement'} par l'agent.${package_note ? ` (Note Coliaty: ${package_note})` : ''}${package_replacement === true || package_replacement === 'true' ? ` [Replacement de: ${package_old_tracking}]` : ''}${packName ? ` [Nom du Pack: ${packName}]` : ''}${customPrice ? ` [Prix Custom: ${customPrice} MAD]` : ''}`,
+          sourceMode: sourceMode || 'VENDOR',
+          assignedAgentId: req.user!.roleName === 'CALL_CENTER_AGENT' ? req.user!.id : null,
+        },
+      });
+
+      // 2. Create Order linked to lead and Coliaty parcel
+      const order = await (tx.order as any).create({
+        data: {
+          orderNumber: generateOrderNumber(),
+          vendorId: effectiveVendorId,
+          leadId: lead.id,
+          customerName: fullName,
+          customerPhone: normalizedPhone,
+          customerCity: city || 'Casablanca',
+          customerAddress: address || city || 'Unknown',
+          totalAmountMad,
+          vendorEarningMad,
+          platformFeeMad,
+          paymentMethod: 'COD',
+          status: 'PENDING',
+          packageContent: product.nameFr || product.nameAr || 'Produit',
+          packageNoOpen: false,
+          coliatyPackageCode: coliatyResult?.package_code || null,
+          coliatyPackageId: coliatyResult?.package_id || null,
+          items: {
+            create: [
+              {
+                productId: product.id,
+                quantity: 1,
+                unitPriceMad: product.retailPriceMad,
+                totalPriceMad: totalAmountMad,
+              },
+            ],
+          },
+        },
+      });
+
+      // 3. Decrement Product Stock
+      await tx.product.update({
+        where: { id: product.id },
+        data: { stockQuantity: { decrement: 1 } },
+      });
+
+      // 4. Record history logs
+      if (req.user!.roleName === 'CALL_CENTER_AGENT') {
+        await tx.leadAssignment.create({
+          data: {
+            leadId: lead.id,
+            agentId: req.user!.id,
+          }
+        });
+      }
+
+      await tx.leadStatusHistory.create({
+        data: {
+          leadId: lead.id,
+          oldStatus: 'NEW',
+          newStatus: newLeadStatus,
+          changedBy: req.user!.id,
+          notes: skipColiaty ? 'Lead inséré (en attente d\'expédition)' : 'Lead inséré et poussé à Coliaty manuellement',
+        }
+      });
+
+      return { lead, order };
     });
 
     res.status(201).json({
       status: 'success',
-      message: 'Lead created successfully',
-      data: { lead },
+      message: skipColiaty ? 'Lead created and queued for dispatch' : 'Lead created and pushed to Coliaty delivery successfully',
+      data: { 
+        lead: result.lead,
+        order: result.order
+      },
     });
   })
 );

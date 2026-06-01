@@ -33,7 +33,8 @@ import {
   MapPin,
   Camera,
   Calendar,
-  Link
+  Link,
+  Percent
 } from 'lucide-react';
 
 function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; onClose: () => void; agent: any }) {
@@ -620,6 +621,8 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
     bankName: '',
     iceNumber: '',
     bankStatus: 'PENDING',
+    platformFeeRate: 0.13,
+    saisieFeeMad: 8.0,
   });
 
   const { data: fullUserData, isLoading: isUserLoading } = useQuery({
@@ -661,6 +664,8 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
         bankName: fullUser.bankAccounts?.[0]?.bankName || '',
         iceNumber: fullUser.bankAccounts?.[0]?.iceNumber || '',
         bankStatus: fullUser.bankAccounts?.[0]?.status || 'PENDING',
+        platformFeeRate: fullUser.platformFeeRate ?? 0.13,
+        saisieFeeMad: fullUser.saisieFeeMad ?? 8.0,
       });
     }
   }, [fullUser]);
@@ -964,6 +969,25 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
                         </button>
                       </div>
                     )}
+
+                    {formData.role === 'CALL_CENTER_AGENT' && (
+                      <div className="mt-4 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50">
+                        <label className="block text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-2 flex items-center gap-2">
+                          <CreditCard size={14} />
+                          Frais de Saisie par Lead (MAD)
+                        </label>
+                        <p className="text-[10px] text-indigo-400 font-bold mb-3">Ce montant sera facturé au vendeur à chaque fois que cet agent saisit un de ses leads.</p>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          required
+                          className="input border-indigo-200 focus:border-indigo-400 bg-white"
+                          value={formData.saisieFeeMad}
+                          onChange={(e) => setFormData({ ...formData, saisieFeeMad: parseFloat(e.target.value) || 0 })}
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1178,6 +1202,26 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
                             onChange={(e) => setFormData({ ...formData, iceNumber: e.target.value })}
                           />
                           <FileText size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                        </div>
+                      </div>
+
+                      <div className="col-span-2">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Frais de Plateforme (%)</label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="100"
+                            className="input pl-11 font-bold text-slate-800"
+                            placeholder="Par défaut: 13%"
+                            value={formData.platformFeeRate !== undefined ? Math.round(formData.platformFeeRate * 1000) / 10 : ''}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              setFormData({ ...formData, platformFeeRate: isNaN(val) ? 0.13 : val / 100 });
+                            }}
+                          />
+                          <Percent size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
                         </div>
                       </div>
                     </div>

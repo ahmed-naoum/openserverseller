@@ -282,6 +282,7 @@ export interface ReferralLink {
   code: string;
   clicks: number;
   rawClicks?: number;
+  whatsappClicks?: number;
   conversions: number;
   earnings: number;
   isActive: boolean;

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BACKEND_URL } from '../../../lib/api';
 import { motion } from 'framer-motion';
 
-export type BlockType = 'header' | 'hero' | 'image' | 'text' | 'button' | 'express_checkout' | 'spacer' | 'countdown';
+export type BlockType = 'header' | 'hero' | 'image' | 'text' | 'button' | 'express_checkout' | 'spacer' | 'countdown' | 'whatsapp';
 
 export interface EditorBlock {
   id: string;
@@ -214,6 +214,36 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
                 </motion.button>
               </div>
             );
+
+          case 'whatsapp':
+            if (isEditor) {
+              return (
+                <div key={id} className="w-full max-w-4xl mx-auto px-6 py-4">
+                  <div className="bg-emerald-50 hover:bg-emerald-100/80 border-2 border-dashed border-emerald-300 rounded-3xl p-6 transition-all duration-300 flex items-center justify-between shadow-sm group">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center text-white shadow-md shadow-emerald-200">
+                        <svg className="w-7 h-7 fill-current text-white" viewBox="0 0 24 24">
+                          <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.73-1.45L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.42 9.864-9.852.002-2.63-1.023-5.101-2.883-6.963C16.593 1.928 14.122.904 11.492.904 6.056.904 1.63 5.324 1.626 10.757c-.001 1.701.446 3.362 1.3 4.8l-.949 3.466 3.549-.931.131.078zm11.233-5.267c-.27-.135-1.597-.788-1.846-.878-.249-.09-.43-.135-.61.135-.18.27-.697.878-.854 1.058-.158.18-.316.202-.586.067-.27-.135-1.14-.42-2.172-1.341-.803-.715-1.344-1.602-1.502-1.872-.158-.27-.017-.417.118-.552.122-.122.27-.316.405-.473.135-.158.18-.27.27-.45.09-.18.045-.338-.022-.473-.068-.135-.61-1.472-.836-2.015-.22-.53-.442-.458-.61-.466-.157-.008-.338-.009-.52-.009-.18 0-.473.067-.72.338-.248.27-.947.923-.947 2.25s.968 2.613 1.103 2.793c.135.18 1.905 2.909 4.614 4.081.645.278 1.148.444 1.54.568.647.206 1.237.177 1.703.107.519-.078 1.597-.653 1.823-1.283.226-.63.226-1.17.158-1.283-.068-.112-.248-.18-.518-.315z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h4 className="font-extrabold text-emerald-950 text-sm flex items-center gap-1.5">
+                          Widget Chat WhatsApp
+                          <span className="text-[9px] bg-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Flottant</span>
+                        </h4>
+                        <p className="text-xs text-emerald-700/80 font-medium mt-0.5">
+                          {content.phoneNumber ? `Destinataire : ${content.phoneNumber}` : "Aucun numéro configuré"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-[10px] text-emerald-600 font-bold bg-white px-3 py-1.5 rounded-xl border border-emerald-100 group-hover:border-emerald-300 transition-all select-none">
+                      Paramètres dans la barre latérale droite
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            return null;
 
           case 'countdown':
             return (

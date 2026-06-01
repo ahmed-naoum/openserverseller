@@ -217,6 +217,8 @@ export const leadsApi = {
     api.patch(`/leads/${id}/payment-situation`, data),
   delete: (id: string) => api.delete(`/leads/${id}`),
   getHistoryByPhone: (phone: string) => api.get(`/leads/history-by-phone/${phone}`),
+  getVendors: () => api.get('/leads/vendors'),
+  getProductsByVendor: (vendorId: number) => api.get(`/leads/products-by-vendor/${vendorId}`),
 };
 
 export const ordersApi = {
@@ -248,6 +250,8 @@ export const ordersApi = {
     api.post('/orders/pickup-note/remove-parcels', data),
   generatePickupLabels: (reference: string) =>
     api.get(`/orders/pickup-note/${reference}/generate-labels`),
+  bulkDispatch: (data: { leadIds: number[] }) =>
+    api.post('/orders/bulk-dispatch', data),
 };
 
 export const walletApi = {
@@ -279,6 +283,7 @@ export const publicApi = {
   featuredProducts: () => api.get('/public/products/featured'),
   stats: () => api.get('/public/stats'),
   getReferralLinkData: (code: string) => api.get(`/influencer/links/${code}/public`),
+  trackWhatsappClick: (code: string) => api.post(`/influencer/links/${code}/track-whatsapp`),
   submitReferralLead: (data: { referralCode: string; fullName: string; phone: string; city: string; address: string; productVariant?: string }) => api.post('/public/leads', data),
 };
 
@@ -356,6 +361,8 @@ export const adminApi = {
   getUserPaymentMonitoring: (id: number) => api.get(`/admin/payment-monitoring/user/${id}`),
   bulkUpdatePaymentSituation: (data: { leadIds: number[]; situation: string }) => 
     api.patch('/admin/payment-monitoring/bulk-update', data),
+  updateLeadPaymentFees: (id: number, data: { customPlatformFeeRate?: number | null; customShippingFee?: number | null }) => 
+    api.patch(`/admin/payment-monitoring/lead/${id}`, data),
   getInvoices: (params?: { page?: number; limit?: number; search?: string }) =>
     api.get('/admin/invoices', { params }),
   getInvoice: (id: number) => api.get(`/admin/invoices/${id}`),

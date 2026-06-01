@@ -46,6 +46,7 @@ model User {
   referralCode  String? @unique
   isInfluencer  Boolean @default(false)
   totalEarnings Float   @default(0)
+  platformFeeRate Float @default(0.13)
 
   isActive        Boolean   @default(false)
   kycStatus       String    @default("PENDING")
@@ -62,6 +63,7 @@ model User {
   requiresPasswordChange Boolean @default(false)
   autoAssignInfluencers Boolean @default(false)
   autoAssignHelperUsers Boolean @default(false)
+  saisieFeeMad          Float   @default(8.0)
   canManageProducts     Boolean @default(false)
   canManageLeads        Boolean @default(false)
   canManageOrders       Boolean @default(false)
@@ -341,6 +343,8 @@ model Lead {
   callbackAt      DateTime?
   requestedPriceMad Float?
   requestedPriceStatus String? @default("PENDING") // PENDING, APPROVED, REJECTED
+  customPlatformFeeRate Float?
+  customShippingFee     Float?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
@@ -822,6 +826,7 @@ model ReferralLink {
   product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   code         String   @unique
   clicks       Int      @default(0)
+  whatsappClicks Int    @default(0)
   conversions  Int      @default(0)
   earnings     Float    @default(0)
   isActive     Boolean  @default(true)

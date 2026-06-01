@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { settingsApi } from '../../lib/api';
@@ -148,7 +148,7 @@ export default function RegisterPage() {
     let processedValue = value;
     if (name === 'phone') {
         processedValue = normalizePhone(value);
-    } else if (['instagramUsername', 'tiktokUsername', 'facebookUsername', 'xUsername', 'youtubeUsername', 'snapchatUsername'].includes(name)) {
+    } else if (['instagramUsername', 'tiktokUsername', 'facebookUsername', 'youtubeUsername', 'snapchatUsername'].includes(name)) {
         processedValue = value.replace('@', '');
     }
 
@@ -165,7 +165,7 @@ export default function RegisterPage() {
     let processedValue = value;
     if (name === 'phone') {
         processedValue = normalizePhone(value);
-    } else if (['instagramUsername', 'tiktokUsername', 'facebookUsername', 'xUsername', 'youtubeUsername', 'snapchatUsername'].includes(name)) {
+    } else if (['instagramUsername', 'tiktokUsername', 'facebookUsername', 'youtubeUsername', 'snapchatUsername'].includes(name)) {
         processedValue = value.replace('@', '');
     }
 
@@ -181,7 +181,7 @@ export default function RegisterPage() {
     
     const fieldsToValidate = ['fullName', 'email', 'phone', 'password', 'confirmPassword'];
     if (formData.role === 'INFLUENCER') {
-        fieldsToValidate.push('instagramUsername', 'tiktokUsername', 'facebookUsername', 'xUsername', 'youtubeUsername', 'snapchatUsername');
+        fieldsToValidate.push('instagramUsername', 'tiktokUsername', 'facebookUsername', 'youtubeUsername', 'snapchatUsername');
     }
 
     fieldsToValidate.forEach(field => {
@@ -198,7 +198,7 @@ export default function RegisterPage() {
         isValid = false;
     }
 
-    if (formData.role === 'INFLUENCER' && !formData.instagramUsername && !formData.tiktokUsername && !formData.facebookUsername && !formData.xUsername && !formData.youtubeUsername && !formData.snapchatUsername) {
+    if (formData.role === 'INFLUENCER' && !formData.instagramUsername && !formData.tiktokUsername && !formData.facebookUsername && !formData.youtubeUsername && !formData.snapchatUsername) {
         toast.error('Veuillez fournir au moins un réseau social');
         isValid = false;
     }
@@ -207,7 +207,7 @@ export default function RegisterPage() {
     
     const fieldsToTouch: Record<string, boolean> = { fullName: true, email: true, phone: true, password: true, confirmPassword: true };
     if (formData.role === 'INFLUENCER') {
-        Object.assign(fieldsToTouch, { instagramUsername: true, tiktokUsername: true, facebookUsername: true, xUsername: true, youtubeUsername: true, snapchatUsername: true });
+        Object.assign(fieldsToTouch, { instagramUsername: true, tiktokUsername: true, facebookUsername: true, youtubeUsername: true, snapchatUsername: true });
     }
     setTouched(fieldsToTouch);
     
@@ -230,7 +230,7 @@ export default function RegisterPage() {
         newErrors.email = 'Requis'; newErrors.phone = 'Requis'; isValid = false;
       }
     } else if (step === 2) {
-      if (!formData.instagramUsername && !formData.tiktokUsername && !formData.facebookUsername && !formData.xUsername && !formData.youtubeUsername && !formData.snapchatUsername) {
+      if (!formData.instagramUsername && !formData.tiktokUsername && !formData.facebookUsername && !formData.youtubeUsername && !formData.snapchatUsername) {
         toast.error('Veuillez fournir au moins un réseau social');
         isValid = false;
       }
@@ -259,7 +259,6 @@ export default function RegisterPage() {
             instagramUsername: formData.instagramUsername || undefined,
             tiktokUsername: formData.tiktokUsername || undefined,
             facebookUsername: formData.facebookUsername || undefined,
-            xUsername: formData.xUsername || undefined,
             youtubeUsername: formData.youtubeUsername || undefined,
             snapchatUsername: formData.snapchatUsername || undefined,
         });

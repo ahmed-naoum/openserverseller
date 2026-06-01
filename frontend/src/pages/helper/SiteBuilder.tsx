@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { helperApi, publicApi, uploadApi } from '../../lib/api';
 import BlockRenderer, { EditorBlock, BlockType } from '../../components/helper/sitebuilder/BlockRenderer';
+import WhatsAppWidget, { IconRenderer } from '../../components/public/WhatsAppWidget';
 import { 
   Type, Image as ImageIcon, Heading, LayoutTemplate, Link as LinkIcon, 
   ShoppingCart, ArrowUp, ArrowDown, Trash2, Save, ChevronLeft, Loader2,
-  Clock, Space, Upload, ShieldCheck, Plus, ExternalLink, Code, Copy, Download
+  Clock, Space, Upload, ShieldCheck, Plus, ExternalLink, Code, Copy, Download, MessageSquare
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -16,7 +17,26 @@ export default function SiteBuilder() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [blocks, setBlocks] = useState<EditorBlock[]>([]);
-  const [pageSettings, setPageSettings] = useState({ backgroundColor: '#ffffff' });
+  const [pageSettings, setPageSettings] = useState<any>({ 
+    backgroundColor: '#ffffff',
+    whatsappWidget: {
+      enabled: false,
+      phoneNumber: '',
+      showOnDesktop: true,
+      showOnMobile: true,
+      iconColor: '#25D366',
+      iconStyle: 'bubble',
+      hoverText: 'WhatsApp',
+      preSetMessage: '',
+      useWhatsappWebOnDesktop: true,
+      welcomeMessage: 'How can I help you? 😊',
+      openOnLoad: false,
+      headline: "Let's chat on WhatsApp",
+      headerBg: '#25D366',
+      nickname: 'Nitso',
+      profileImage: ''
+    }
+  });
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [productData, setProductData] = useState<any>(null);
@@ -82,7 +102,28 @@ export default function SiteBuilder() {
         } else if (landingPage.customStructure.blocks) {
           setBlocks(landingPage.customStructure.blocks);
           if (landingPage.customStructure.settings) {
-            setPageSettings(landingPage.customStructure.settings);
+            setPageSettings({
+              backgroundColor: '#ffffff',
+              ...landingPage.customStructure.settings,
+              whatsappWidget: {
+                enabled: false,
+                phoneNumber: '',
+                showOnDesktop: true,
+                showOnMobile: true,
+                iconColor: '#25D366',
+                iconStyle: 'bubble',
+                hoverText: 'WhatsApp',
+                preSetMessage: '',
+                useWhatsappWebOnDesktop: true,
+                welcomeMessage: 'How can I help you? 😊',
+                openOnLoad: false,
+                headline: "Let's chat on WhatsApp",
+                headerBg: '#25D366',
+                nickname: 'Nitso',
+                profileImage: '',
+                ...(landingPage.customStructure.settings.whatsappWidget || {})
+              }
+            });
           }
         }
       } else {
@@ -208,6 +249,22 @@ export default function SiteBuilder() {
         paddingTop: 24, paddingBottom: 24, marginTop: 0, marginBottom: 0 
       };
       case 'countdown': return { text: "L'offre expire bientôt !", paddingTop: 24, paddingBottom: 24, marginTop: 0, marginBottom: 0 };
+      case 'whatsapp': return {
+        enableWidget: true,
+        phoneNumber: '',
+        headline: "Let's chat on WhatsApp",
+        nickname: 'Nitso',
+        welcomeMessage: 'How can I help you? 😊',
+        headerBg: '#25D366',
+        iconStyle: 'bubble',
+        hoverText: 'WhatsApp',
+        preSetMessage: '',
+        profileImage: '',
+        showOnDesktop: true,
+        showOnMobile: true,
+        openOnLoad: false,
+        useWhatsappWebOnDesktop: true
+      };
       case 'spacer': return { height: 32 };
       case 'express_checkout': return { 
         title: 'Commander Maintenant', 
@@ -308,6 +365,7 @@ export default function SiteBuilder() {
             <div className="grid grid-cols-2 gap-2">
               <ToolButton icon={<LinkIcon className="w-4 h-4" />} label="Button" onClick={() => addBlock('button')} />
               <ToolButton icon={<Clock className="w-4 h-4" />} label="Countdown" onClick={() => addBlock('countdown')} />
+              <ToolButton icon={<MessageSquare className="w-4 h-4 text-emerald-500" />} label="WhatsApp" onClick={() => addBlock('whatsapp')} />
             </div>
             <div className="mt-2">
               <ToolButton fullWidth icon={<ShoppingCart className="w-4 h-4" />} label="Express Checkout" onClick={() => addBlock('express_checkout')} />
@@ -368,6 +426,22 @@ export default function SiteBuilder() {
                 </div>
               ))
             )}
+
+            {(() => {
+              const whatsappBlock = blocks.find(b => b.type === 'whatsapp');
+              if (whatsappBlock) {
+                if (whatsappBlock.content.enableWidget !== false) {
+                  const widgetSettings = {
+                    enabled: true,
+                    ...whatsappBlock.content
+                  };
+                  return <WhatsAppWidget settings={widgetSettings} isEditorPreview={true} />;
+                }
+              } else if (pageSettings.whatsappWidget?.enabled) {
+                return <WhatsAppWidget settings={pageSettings.whatsappWidget} isEditorPreview={true} />;
+              }
+              return null;
+            })()}
 
           </div>
         </div>
@@ -534,6 +608,278 @@ export default function SiteBuilder() {
                     </div>
 
                     <SpacingControls content={activeBlock.content} onChange={updateBlockContent} noLeftRight />
+                  </div>
+                )}
+                
+                 {activeBlock.type === 'whatsapp' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-2xl border border-emerald-100 mb-2">
+                      <span className="font-bold text-emerald-950 text-xs">Activer le Widget Flottant</span>
+                      <Field 
+                        type="switch" 
+                        value={activeBlock.content.enableWidget !== false} 
+                        onChange={(v: boolean) => updateBlockContent('enableWidget', v)} 
+                      />
+                    </div>
+                    
+                    {activeBlock.content.enableWidget !== false && (
+                      <div className="space-y-4 bg-gray-50/50 p-3 rounded-2xl border border-gray-100">
+                        <div className="flex gap-2 items-end">
+                          <div className="flex-1">
+                            <Field 
+                              label="Numéro WhatsApp" 
+                              type="text" 
+                              placeholder="Ex: 212600000000"
+                              value={activeBlock.content.phoneNumber} 
+                              onChange={(v: string) => updateBlockContent('phoneNumber', v)} 
+                            />
+                          </div>
+                          {activeBlock.content.phoneNumber && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const clean = (activeBlock.content.phoneNumber || '').replace(/\D/g, '');
+                                if (clean) window.open(`https://wa.me/${clean}`, '_blank');
+                              }}
+                              className="bg-white border hover:bg-gray-50 text-gray-600 px-3 py-2 text-xs font-bold rounded-lg transition-all"
+                            >
+                              Test
+                            </button>
+                          )}
+                        </div>
+
+                        <Field 
+                          label="Titre principal" 
+                          type="text" 
+                          placeholder="Ex: Let's chat on WhatsApp"
+                          value={activeBlock.content.headline} 
+                          onChange={(v: string) => updateBlockContent('headline', v)} 
+                        />
+
+                        <Field 
+                          label="Sous-titre (Sous l'en-tête)" 
+                          type="text" 
+                          placeholder="Ex: Répond généralement instantanément"
+                          value={activeBlock.content.subHeadline} 
+                          onChange={(v: string) => updateBlockContent('subHeadline', v)} 
+                        />
+
+                        <Field 
+                          label="Nom de l'agent (Nickname)" 
+                          type="text" 
+                          placeholder="Ex: Nitso"
+                          value={activeBlock.content.nickname} 
+                          onChange={(v: string) => updateBlockContent('nickname', v)} 
+                        />
+
+                        <Field 
+                          label="Message de bienvenue (Bulle)" 
+                          type="textarea" 
+                          placeholder="Ex: How can I help you? :)"
+                          value={activeBlock.content.welcomeMessage} 
+                          onChange={(v: string) => updateBlockContent('welcomeMessage', v)} 
+                        />
+
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-2">
+                            <Field 
+                              label="Couleur En-tête" 
+                              type="color" 
+                              value={activeBlock.content.headerBg} 
+                              onChange={(v: string) => updateBlockContent('headerBg', v)} 
+                            />
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Style Icône</label>
+                              <select 
+                                value={activeBlock.content.iconStyle || 'bubble'} 
+                                onChange={(e) => updateBlockContent('iconStyle', e.target.value)} 
+                                className="w-full text-xs border p-2 bg-white rounded-lg focus:border-orange-500 outline-none"
+                              >
+                                <option value="bubble">Bulle (Ronde)</option>
+                                <option value="pill">Pill (Texte)</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Icône du Widget</label>
+                            <div className="grid grid-cols-5 gap-2">
+                              {['whatsapp', 'message-circle', 'message-square', 'headset', 'bot'].map(icon => {
+                                const isSelected = activeBlock.content.iconType === icon || (!activeBlock.content.iconType && icon === 'whatsapp');
+                                return (
+                                  <button
+                                    key={icon}
+                                    type="button"
+                                    onClick={() => updateBlockContent('iconType', icon)}
+                                    className={`flex items-center justify-center p-2 rounded-xl border-2 transition-all ${isSelected ? 'border-emerald-500 bg-emerald-50 text-emerald-600' : 'border-gray-100 hover:border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                                    title={icon}
+                                  >
+                                    <IconRenderer type={icon} className="w-5 h-5" />
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Position du Widget</label>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {([
+                              { value: 'top-left', label: '↖ Haut-Gauche' },
+                              { value: 'top-right', label: '↗ Haut-Droite' },
+                              { value: 'bottom-left', label: '↙ Bas-Gauche' },
+                              { value: 'bottom-right', label: '↘ Bas-Droite' },
+                            ] as const).map(pos => {
+                              const isSelected = (activeBlock.content.position || 'bottom-right') === pos.value;
+                              return (
+                                <button
+                                  key={pos.value}
+                                  type="button"
+                                  onClick={() => updateBlockContent('position', pos.value)}
+                                  className={`text-[10px] font-bold py-1.5 px-2 rounded-lg border-2 transition-all ${isSelected ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-gray-100 hover:border-gray-200 text-gray-500 bg-white'}`}
+                                >
+                                  {pos.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Décalage X ({activeBlock.content.offsetX ?? 24}px)</label>
+                            <input 
+                              type="range" min="0" max="120" step="4"
+                              value={activeBlock.content.offsetX ?? 24}
+                              onChange={(e) => updateBlockContent('offsetX', Number(e.target.value))}
+                              className="w-full accent-emerald-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Décalage Y ({activeBlock.content.offsetY ?? 24}px)</label>
+                            <input 
+                              type="range" min="0" max="120" step="4"
+                              value={activeBlock.content.offsetY ?? 24}
+                              onChange={(e) => updateBlockContent('offsetY', Number(e.target.value))}
+                              className="w-full accent-emerald-500"
+                            />
+                          </div>
+                        </div>
+
+                        <Field 
+                          label="Texte survol / Libellé" 
+                          type="text" 
+                          placeholder="Ex: WhatsApp"
+                          value={activeBlock.content.hoverText} 
+                          onChange={(v: string) => updateBlockContent('hoverText', v)} 
+                        />
+
+                        <Field 
+                          label="Message pré-rempli (Template)" 
+                          type="textarea" 
+                          placeholder="Ex: Bonjour, je souhaite..."
+                          value={activeBlock.content.preSetMessage} 
+                          onChange={(v: string) => updateBlockContent('preSetMessage', v)} 
+                        />
+
+                        <Field 
+                          label="URL Image de profil" 
+                          type="text" 
+                          placeholder="https://..."
+                          value={activeBlock.content.profileImage} 
+                          onChange={(v: string) => updateBlockContent('profileImage', v)} 
+                        />
+
+                        <div className="pt-2 border-t border-gray-100 space-y-2">
+                          <h5 className="text-[10px] font-bold text-gray-400 uppercase">Affichage & Comportement</h5>
+                          <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={activeBlock.content.showOnDesktop !== false} 
+                              onChange={(e) => updateBlockContent('showOnDesktop', e.target.checked)} 
+                            />
+                            Afficher sur Ordinateur
+                          </label>
+                          <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={activeBlock.content.showOnMobile !== false} 
+                              onChange={(e) => updateBlockContent('showOnMobile', e.target.checked)} 
+                            />
+                            Afficher sur Mobile
+                          </label>
+                          <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={!!activeBlock.content.openOnLoad} 
+                              onChange={(e) => updateBlockContent('openOnLoad', e.target.checked)} 
+                            />
+                            Ouvrir au chargement de la page
+                          </label>
+                          <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={activeBlock.content.useWhatsappWebOnDesktop !== false} 
+                              onChange={(e) => updateBlockContent('useWhatsappWebOnDesktop', e.target.checked)} 
+                            />
+                            Utiliser WhatsApp Web sur PC
+                          </label>
+
+                          <div className="pt-2 mt-2 border-t border-gray-100 space-y-2">
+                            <div>
+                              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Animation du Bouton</label>
+                              <div className="grid grid-cols-5 gap-1">
+                                {['none', 'pulse', 'bounce', 'shake', 'rubberBand'].map(anim => {
+                                  const labels: Record<string, string> = { none: '—', pulse: '💓', bounce: '⬆', shake: '🔔', rubberBand: '🫧' };
+                                  const isSelected = (activeBlock.content.animation || 'none') === anim;
+                                  return (
+                                    <button
+                                      key={anim}
+                                      type="button"
+                                      onClick={() => updateBlockContent('animation', anim)}
+                                      className={`text-center py-1.5 rounded-lg border-2 transition-all text-xs ${isSelected ? 'border-emerald-500 bg-emerald-50' : 'border-gray-100 hover:border-gray-200 bg-white'}`}
+                                      title={anim}
+                                    >
+                                      {labels[anim]}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <div className="text-[9px] text-gray-400 mt-0.5 text-center font-medium">
+                                {activeBlock.content.animation === 'pulse' ? 'Pulse' : activeBlock.content.animation === 'bounce' ? 'Bounce' : activeBlock.content.animation === 'shake' ? 'Shake' : activeBlock.content.animation === 'rubberBand' ? 'Rubber Band' : 'Aucune'}
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Badge Notifications ({activeBlock.content.badgeCount ?? 0})</label>
+                              <input 
+                                type="range" min="0" max="10" step="1"
+                                value={activeBlock.content.badgeCount ?? 0}
+                                onChange={(e) => updateBlockContent('badgeCount', Number(e.target.value))}
+                                className="w-full accent-red-500"
+                              />
+                              <div className="text-[9px] text-gray-400 mt-0.5 text-center font-medium">
+                                {(activeBlock.content.badgeCount ?? 0) === 0 ? 'Pas de badge' : `${activeBlock.content.badgeCount} message${(activeBlock.content.badgeCount ?? 0) > 1 ? 's' : ''}`}
+                              </div>
+                            </div>
+
+                            <div>
+                              <Field 
+                                label="Message Notification (Bulle)" 
+                                type="textarea" 
+                                placeholder="Ex: 👋 Besoin d'aide ? Contactez-nous !"
+                                value={activeBlock.content.badgeMessage} 
+                                onChange={(v: string) => updateBlockContent('badgeMessage', v)} 
+                              />
+                              <div className="text-[9px] text-gray-400 mt-0.5 font-medium">
+                                {activeBlock.content.badgeMessage ? '✓ La bulle apparaîtra à côté du bouton' : 'Laissez vide pour désactiver'}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 
@@ -732,9 +1078,8 @@ export default function SiteBuilder() {
                   label="Couleur de fond de page" 
                   type="color" 
                   value={pageSettings.backgroundColor} 
-                  onChange={(v: string) => setPageSettings(prev => ({ ...prev, backgroundColor: v }))} 
+                  onChange={(v: string) => setPageSettings((prev: any) => ({ ...prev, backgroundColor: v }))} 
                 />
-
                 <div className="pt-6 border-t border-gray-100">
                   <div className="flex items-center gap-2 mb-2">
                     <Code className="w-4 h-4 text-purple-500" />

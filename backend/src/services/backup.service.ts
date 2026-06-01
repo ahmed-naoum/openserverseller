@@ -101,6 +101,9 @@ export class BackupService {
   static async createBackup(): Promise<string> {
     await this.init();
 
+    // Run cleanup BEFORE creating a new backup to ensure we have disk space if at maximum capacity
+    await this.cleanup();
+
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `backup-${timestamp}.dump`;
     const filePath = path.join(finalBackupDir, filename);
@@ -132,7 +135,6 @@ export class BackupService {
       dumpProcess.on('close', async (code) => {
         if (code === 0) {
           console.log(`Backup created successfully: ${filename}`);
-          await this.cleanup();
           resolve(filename);
         } else {
           reject(new Error(`pg_dump failed with code ${code}`));
@@ -152,7 +154,7 @@ export class BackupService {
       const files = await readdir(finalBackupDir);
       const backupFiles = files.filter(f => (f.startsWith('backup-')) && (f.endsWith('.sql') || f.endsWith('.dump')));
 
-      if (backupFiles.length > maxBackups) {
+      if (backupFiles.length >= maxBackups) {
         // Get file stats to sort by creation time
         const fileStats = await Promise.all(
           backupFiles.map(async (f) => {
@@ -165,7 +167,8 @@ export class BackupService {
         // Sort by time (oldest first)
         fileStats.sort((a, b) => a.time - b.time);
 
-        const filesToDelete = fileStats.slice(0, backupFiles.length - maxBackups);
+        // Delete enough old backups to make room for 1 new backup
+        const filesToDelete = fileStats.slice(0, backupFiles.length - maxBackups + 1);
         
         for (const file of filesToDelete) {
           await unlink(path.join(finalBackupDir, file.filename));
