@@ -72,6 +72,9 @@ const callColiatyCreateParcel = async (parcelData: {
 };
 
 const getPackPrice = (lead: any) => {
+  if (lead.order?.totalAmountMad) {
+    return Number(lead.order.totalAmountMad);
+  }
   if (lead.productVariant && lead.referralLink?.landingPage?.customStructure) {
     try {
       let structure = lead.referralLink.landingPage.customStructure;
@@ -310,6 +313,7 @@ router.get(
             image: l.referralLink.product.images[0]?.imageUrl || null,
           } : null,
           coliatyPackageCode: l.order?.coliatyPackageCode || null,
+          source: l.source,
           createdAt: l.createdAt,
         })),
         pagination: {
@@ -1031,7 +1035,7 @@ router.post(
       throw new AppException(400, 'Validation failed');
     }
 
-    const { fullName, phone, whatsapp, city, address, productId, notes, vendorId: bodyVendorId, sourceMode, package_replacement, package_old_tracking, package_note, customPrice, packName, skipColiaty } = req.body;
+    const { fullName, phone, whatsapp, city, address, productId, notes, vendorId: bodyVendorId, sourceMode, package_replacement, package_old_tracking, package_note, customPrice, packName, skipColiaty, source } = req.body;
 
     // HELPER, CALL_CENTER_AGENT, and SUPER_ADMIN must supply a vendorId in the request body
     const needsVendorId = ['HELPER', 'CALL_CENTER_AGENT', 'SUPER_ADMIN'].includes(req.user!.roleName);
@@ -1143,8 +1147,10 @@ router.post(
           city,
           address,
           status: newLeadStatus,
+          productVariant: packName || null,
           notes: notes || `Lead inséré ${skipColiaty ? '(en attente d\'expédition)' : 'et poussé à Coliaty manuellement'} par l'agent.${package_note ? ` (Note Coliaty: ${package_note})` : ''}${package_replacement === true || package_replacement === 'true' ? ` [Replacement de: ${package_old_tracking}]` : ''}${packName ? ` [Nom du Pack: ${packName}]` : ''}${customPrice ? ` [Prix Custom: ${customPrice} MAD]` : ''}`,
           sourceMode: sourceMode || 'VENDOR',
+          source: source || 'MANUAL',
           assignedAgentId: req.user!.roleName === 'CALL_CENTER_AGENT' ? req.user!.id : null,
         },
       });
@@ -1166,6 +1172,7 @@ router.post(
           status: 'PENDING',
           packageContent: product.nameFr || product.nameAr || 'Produit',
           packageNoOpen: false,
+          productVariant: packName || null,
           coliatyPackageCode: coliatyResult?.package_code || null,
           coliatyPackageId: coliatyResult?.package_id || null,
           items: {

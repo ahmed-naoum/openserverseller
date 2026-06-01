@@ -1043,6 +1043,7 @@ router.get(
           statusHistory: (lead as any).statusHistory || [],
           requestedPriceMad: lead.requestedPriceMad,
           requestedPriceStatus: lead.requestedPriceStatus,
+          source: lead.source,
         }
       }
     }));

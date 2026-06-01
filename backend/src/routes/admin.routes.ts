@@ -1064,7 +1064,10 @@ router.get(
           leads: leads.map((l) => {
             // Calculate price from variant or product
             let productPrice = 0;
-            if (l.productVariant && l.referralLink?.landingPage?.customStructure) {
+            if (l.order?.totalAmountMad) {
+              productPrice = Number(l.order.totalAmountMad);
+            }
+            if (!productPrice && l.productVariant && l.referralLink?.landingPage?.customStructure) {
               try {
                 let structure = l.referralLink.landingPage.customStructure;
                 if (typeof structure === 'string') structure = JSON.parse(structure as string);
@@ -1101,6 +1104,7 @@ router.get(
                 image: l.referralLink.product.images[0]?.imageUrl || null,
               } : null,
               coliatyPackageCode: l.order?.coliatyPackageCode || null,
+              source: l.source,
               createdAt: l.createdAt,
               updatedAt: l.updatedAt,
             };
