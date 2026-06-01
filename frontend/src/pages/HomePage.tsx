@@ -320,7 +320,7 @@ export default function HomePage() {
                 className="relative w-full"
               >
                 <img
-                  src="/home page silacod copy/images/hero.png"
+                  src="/home page silacod copy/images/hero.webp"
                   alt="SILACOD Dashboard Preview"
                   className="w-full h-auto object-contain origin-left scale-100 lg:scale-[1.15] lg:-translate-x-[5%]"
                 />
@@ -417,7 +417,7 @@ export default function HomePage() {
               <div className="w-full max-w-[320px] mx-auto bg-white relative">
                 {/* Background Grid Pattern */}
                 <div className="absolute inset-0 bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:3rem_3rem] opacity-70" />
-                <img src="/home page silacod copy/images/After.png" alt="Success with Silacod" className="w-full h-auto object-cover max-h-[260px] relative z-10 p-6" />
+                <img src="/home page silacod copy/images/After.webp" alt="Success with Silacod" className="w-full h-auto object-cover max-h-[260px] relative z-10 p-6" />
               </div>
 
               <h3 className="text-2xl sm:text-3xl font-black text-[#ff5722]">العمل مع SILACOD</h3>
@@ -460,7 +460,7 @@ export default function HomePage() {
               <div className="w-full max-w-[320px] mx-auto bg-white relative">
                 {/* Background Grid Pattern */}
                 <div className="absolute inset-0 bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:3rem_3rem] opacity-70" />
-                <img src="/home page silacod copy/images/Before.png" alt="Struggle Working Alone" className="w-full h-auto object-cover max-h-[260px] relative z-10 p-6" />
+                <img src="/home page silacod copy/images/Before.webp" alt="Struggle Working Alone" className="w-full h-auto object-cover max-h-[260px] relative z-10 p-6" />
               </div>
 
               <h3 className="text-2xl sm:text-3xl font-black text-slate-500">العمل لوحدك</h3>
@@ -523,7 +523,7 @@ export default function HomePage() {
                   فريق متكامل لرفع نسب التوصيل وتقليل الإلغاءات. تواصل مباشر مع الزبائن لتأكيد طلباتك بدقة فائقة.
                 </p>
               </div>
-              <img src="/home page silacod copy/images/call-center-customer-service.jpg" alt="Call Center" className="w-[85%] max-w-[400px] h-auto object-cover rounded-t-[1.5rem] mt-auto" />
+              <img src="/home page silacod copy/images/call-center-customer-service.webp" alt="Call Center" className="w-[85%] max-w-[400px] h-auto object-cover rounded-t-[1.5rem] mt-auto" />
             </motion.div>
 
             {/* Card 2 */}
@@ -535,7 +535,7 @@ export default function HomePage() {
                   تصفح واختر من بين تشكيلة واسعة من المنتجات الرائجة والمختارة بعناية فائقة. ابدأ البيع فوراً بنقرة واحدة.
                 </p>
               </div>
-              <img src="/home page silacod copy/images/cards-4-1.png" alt="Products" className="w-[85%] max-w-[400px] h-auto object-contain mt-auto" />
+              <img src="/home page silacod copy/images/cards-4-1.webp" alt="Products" className="w-[85%] max-w-[400px] h-auto object-contain mt-auto" />
             </motion.div>
 
             {/* Card 3 */}
@@ -559,7 +559,7 @@ export default function HomePage() {
                   لوحة تحكم ذكية واضحة لعرض أرباحك الصافية الحقيقية وسحب أموالك بكل أمان وسهولة من المنصة.
                 </p>
               </div>
-              <img src="/home page silacod copy/images/s2.png" alt="Profits" className="w-[85%] max-w-[400px] h-auto object-contain mt-auto" />
+              <img src="/home page silacod copy/images/s2.webp" alt="Profits" className="w-[85%] max-w-[400px] h-auto object-contain mt-auto" />
             </motion.div>
 
           </div>
@@ -588,7 +588,7 @@ export default function HomePage() {
               <p className="text-slate-500 text-sm font-bold leading-relaxed mb-6">
                 تصفح الكتالوج واختر من بين منتجات مدروسة ومضمونة الجودة لتسويقها لزبائنك.
               </p>
-              <img src="/home page silacod copy/images/branddd.png" alt="Select Products" className="w-full h-auto object-contain max-h-[180px] mt-auto rounded-xl" />
+              <img src="/home page silacod copy/images/branddd.webp" alt="Select Products" className="w-full h-auto object-contain max-h-[180px] mt-auto rounded-xl" />
             </motion.div>
 
             {/* Step 2 */}
@@ -598,7 +598,7 @@ export default function HomePage() {
               <p className="text-slate-500 text-sm font-bold leading-relaxed mb-6">
                 سوّق لمنتجاتك عبر منصات السوشيال ميديا وحقق مبيعات سريعة فورية بدون حدود.
               </p>
-              <img src="/home page silacod copy/images/www.png" alt="Marketing" className="w-full h-auto object-contain max-h-[180px] mt-auto rounded-xl" />
+              <img src="/home page silacod copy/images/www.webp" alt="Marketing" className="w-full h-auto object-contain max-h-[180px] mt-auto rounded-xl" />
             </motion.div>
 
             {/* Step 3 */}
@@ -608,7 +608,7 @@ export default function HomePage() {
               <p className="text-slate-500 text-sm font-bold leading-relaxed mb-6">
                 نحن نتكفل بالتأكيد والتغليف والشحن إلى العميل، لنضيف أرباحك الصافية لمحفظتك مباشرة.
               </p>
-              <img src="/home page silacod copy/images/Untitled-2.png" alt="Fulfillment" className="w-full h-auto object-contain max-h-[180px] mt-auto rounded-xl" />
+              <img src="/home page silacod copy/images/Untitled-2.webp" alt="Fulfillment" className="w-full h-auto object-contain max-h-[180px] mt-auto rounded-xl" />
             </motion.div>
 
           </div>
@@ -640,7 +640,7 @@ export default function HomePage() {
                 </Link>
               </div>
               <div className="w-full md:w-[45%] h-64 md:h-auto self-stretch">
-                <img src="/home page silacod copy/images/Untitled-221.png" alt="Sellers" className="w-full h-full object-cover" />
+                <img src="/home page silacod copy/images/Untitled-221.webp" alt="Sellers" className="w-full h-full object-cover" />
               </div>
             </motion.div>
 
@@ -658,7 +658,7 @@ export default function HomePage() {
               </div>
               <div className="w-full md:w-[45%] h-64 md:h-auto self-stretch relative">
                 <div className="absolute inset-0 bg-gradient-to-l from-[#1e2142]/80 to-transparent md:hidden" />
-                <img src="/home page silacod copy/images/photo-1622151834677-70f982c9adef.png" alt="Influencers" className="w-full h-full object-cover object-left" />
+                <img src="/home page silacod copy/images/photo-1622151834677-70f982c9adef.webp" alt="Influencers" className="w-full h-full object-cover object-left" />
               </div>
             </motion.div>
 
@@ -675,7 +675,7 @@ export default function HomePage() {
                 </Link>
               </div>
               <div className="w-full md:w-[45%] h-64 md:h-auto self-stretch">
-                <img src="/home page silacod copy/images/handsome-stylish-bearded-guy-posing-against-white-wall.png" alt="Affiliates" className="w-full h-full object-cover" />
+                <img src="/home page silacod copy/images/handsome-stylish-bearded-guy-posing-against-white-wall.webp" alt="Affiliates" className="w-full h-full object-cover" />
               </div>
             </motion.div>
 
@@ -847,7 +847,7 @@ export default function HomePage() {
             >
               <span className="text-xs font-bold text-emerald-600">✓ تم تطبيق الشعار بنجاح على التشكيلة النموذجية!</span>
               <div className="relative aspect-video max-w-xs mx-auto rounded-xl overflow-hidden bg-slate-50 border border-slate-100 flex items-center justify-center p-4">
-                <img src="/home page silacod copy/images/branddd.png" alt="Cosmetic Base" className="object-cover h-full opacity-90" />
+                <img src="/home page silacod copy/images/branddd.webp" alt="Cosmetic Base" className="object-cover h-full opacity-90" />
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="bg-white/90 backdrop-blur-sm border border-slate-200 p-2.5 rounded-lg shadow-xl text-center max-w-[120px] transform -rotate-3 animate-pulse">
                     <img src={uploadedLogo} alt="Custom Logo" className="h-6 mx-auto object-contain brightness-0" />
@@ -867,7 +867,7 @@ export default function HomePage() {
           
           {/* Visual (Left) */}
           <div className="w-full md:w-1/2 overflow-hidden rounded-[2.5rem]">
-            <img src="/home page silacod copy/images/iStock-173258309.jpg" alt="Supplier Logistics Warehousing" className="w-full h-auto object-cover" />
+            <img src="/home page silacod copy/images/iStock-173258309.webp" alt="Supplier Logistics Warehousing" className="w-full h-auto object-cover" />
           </div>
 
           {/* Text details (Right) */}

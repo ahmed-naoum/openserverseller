@@ -324,8 +324,8 @@ export default function RegisterPage() {
   };
 
   const currentImage = formData.role === 'VENDOR' 
-    ? '/home page silacod copy/images/photo-1622151834677-70f982c9adef.png' 
-    : '/home page silacod copy/images/9b7eeea5895229f0b36694c175ab30ed89bceca4.png';
+    ? '/home page silacod copy/images/photo-1622151834677-70f982c9adef.webp' 
+    : '/home page silacod copy/images/9b7eeea5895229f0b36694c175ab30ed89bceca4.webp';
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row font-['Inter'] bg-white overflow-x-hidden">

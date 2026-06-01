@@ -8,9 +8,9 @@ import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const SLIDER_IMAGES = [
-  '/home page silacod copy/images/08bb1c52a445cbe7c3723025e483b81a86e1011f.png',
-  '/home page silacod copy/images/photo-1622151834677-70f982c9adef.png',
-  '/home page silacod copy/images/9b7eeea5895229f0b36694c175ab30ed89bceca4.png'
+  '/home page silacod copy/images/08bb1c52a445cbe7c3723025e483b81a86e1011f.webp',
+  '/home page silacod copy/images/photo-1622151834677-70f982c9adef.webp',
+  '/home page silacod copy/images/9b7eeea5895229f0b36694c175ab30ed89bceca4.webp'
 ];
 
 export default function LoginPage() {

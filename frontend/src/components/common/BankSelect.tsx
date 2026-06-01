@@ -2,20 +2,20 @@ import React, { useState } from 'react';
 import { Landmark, X, Search, ChevronDown, Check } from 'lucide-react';
 
 export const MOROCCAN_BANKS = [
-  { id: 'cih', name: 'CIH BANK', logo: '/banks/cih.png' },
-  { id: 'attijari', name: 'ATTIJARIWAFA BANK', logo: '/banks/attijari.png' },
-  { id: 'barid', name: 'AL BARID BANK', logo: '/banks/albarid-bank.png' },
-  { id: 'boa', name: 'BANK OF AFRICA', logo: '/banks/boa_nouveau_logo.png' },
-  { id: 'bp', name: 'BANQUE POPULAIRE', logo: '/banks/bcp_logo.png' },
-  { id: 'bmci', name: 'BMCI', logo: '/banks/bmci.png' },
-  { id: 'cam', name: 'CREDIT AGRICOLE', logo: '/banks/ca.png' },
-  { id: 'cfg', name: 'CFG BANK', logo: '/banks/cfg.png' },
-  { id: 'cdg', name: 'CDG CAPITAL', logo: '/banks/cdg_capital_logo.png' },
-  { id: 'cdm', name: 'CREDIT DU MAROC', logo: '/banks/cdm.png' },
-  { id: 'sg', name: 'SOCIETE GENERALE', logo: '/banks/logo-societe-generale.png' },
-  { id: 'assafa', name: 'BANK ASSAFA', logo: '/banks/bank_assafa.png' },
-  { id: 'alyousr', name: 'BANK AL YOUSR', logo: '/banks/Bank_Al_Yousr.png' },
-  { id: 'umnia', name: 'UMNIA BANK', logo: '/banks/Umnia_Bank.png' },
+  { id: 'cih', name: 'CIH BANK', logo: '/banks/cih.webp' },
+  { id: 'attijari', name: 'ATTIJARIWAFA BANK', logo: '/banks/attijari.webp' },
+  { id: 'barid', name: 'AL BARID BANK', logo: '/banks/albarid-bank.webp' },
+  { id: 'boa', name: 'BANK OF AFRICA', logo: '/banks/boa_nouveau_logo.webp' },
+  { id: 'bp', name: 'BANQUE POPULAIRE', logo: '/banks/bcp_logo.webp' },
+  { id: 'bmci', name: 'BMCI', logo: '/banks/bmci.webp' },
+  { id: 'cam', name: 'CREDIT AGRICOLE', logo: '/banks/ca.webp' },
+  { id: 'cfg', name: 'CFG BANK', logo: '/banks/cfg.webp' },
+  { id: 'cdg', name: 'CDG CAPITAL', logo: '/banks/cdg_capital_logo.webp' },
+  { id: 'cdm', name: 'CREDIT DU MAROC', logo: '/banks/cdm.webp' },
+  { id: 'sg', name: 'SOCIETE GENERALE', logo: '/banks/logo-societe-generale.webp' },
+  { id: 'assafa', name: 'BANK ASSAFA', logo: '/banks/bank_assafa.webp' },
+  { id: 'alyousr', name: 'BANK AL YOUSR', logo: '/banks/Bank_Al_Yousr.webp' },
+  { id: 'umnia', name: 'UMNIA BANK', logo: '/banks/Umnia_Bank.webp' },
 ];
 
 interface BankSelectProps {
