@@ -51,11 +51,21 @@ export default function HelperTickets() {
   const { user } = useAuth();
   const [products, setProducts] = useState<ProductGroup[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'pending' | 'created'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'created' | 'collected'>('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedProductId, setExpandedProductId] = useState<number | null>(null);
   const [downloadingCode, setDownloadingCode] = useState<string | null>(null);
   const [bulkDownloading, setBulkDownloading] = useState<number | null>(null);
+  
+  // Track downloaded bons for glow removal and new badge
+  const [downloadedBons, setDownloadedBons] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('downloaded_bons');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
   
   // Automated Pickup State
   const [productPickups, setProductPickups] = useState<Record<number, string>>({});
@@ -155,12 +165,33 @@ export default function HelperTickets() {
       
       // Populate existing pickups from data
       const existingPickups: Record<number, string> = {};
+      const uniqueRefs = new Set<string>();
       data.forEach((prod: ProductGroup) => {
-        // If any parcel has a pickup ref, assume the group belongs to it
-        const ref = prod.pendingParcels.find(p => p.coliatyPickupRef)?.coliatyPickupRef;
-        if (ref) existingPickups[prod.id] = ref;
+        prod.pendingParcels.forEach((p) => {
+          if (p.coliatyPickupRef) {
+            uniqueRefs.add(p.coliatyPickupRef);
+            existingPickups[prod.id] = p.coliatyPickupRef;
+          }
+        });
       });
       setProductPickups(existingPickups);
+
+      // Pre-fetch details for all unique refs in the background to separate collected/created tabs
+      if (uniqueRefs.size > 0) {
+        Promise.all(
+          Array.from(uniqueRefs).map(async (ref) => {
+            try {
+              const detailRes = await ordersApi.getPickupNoteDetail(ref);
+              const detail = detailRes.data?.data || detailRes.data;
+              if (detail) {
+                setBonDetails(prev => ({ ...prev, [ref]: detail }));
+              }
+            } catch (err) {
+              console.error(`Failed background fetch for pickup note ${ref}:`, err);
+            }
+          })
+        );
+      }
     } catch (err: any) {
       toast.error('Erreur lors de la récupération des tickets');
     } finally {
@@ -260,6 +291,14 @@ export default function HelperTickets() {
       document.body.removeChild(a);
       
       toast.success('Bon de ramassage téléchargé !');
+
+      // Update downloaded list in state and localStorage to remove glow
+      setDownloadedBons(prev => {
+        if (prev.includes(reference)) return prev;
+        const updated = [...prev, reference];
+        localStorage.setItem('downloaded_bons', JSON.stringify(updated));
+        return updated;
+      });
     } catch (err: any) {
       console.error('PDF Generation Error:', err);
       const errorMsg = err.response?.data?.message || err.message || 'Erreur lors de la génération du PDF';
@@ -479,14 +518,6 @@ export default function HelperTickets() {
             </button>
 
             <button
-              onClick={() => handleDownloadAll(product)}
-              disabled={bulkDownloading === product.id}
-              className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-2xl text-sm font-black hover:bg-primary-700 transition-all shadow-lg shadow-primary-200 active:scale-95 disabled:opacity-50"
-            >
-              <Download className={`w-4 h-4 ${bulkDownloading === product.id ? 'animate-bounce' : ''}`} />
-              {bulkDownloading === product.id ? 'Téléchargement...' : 'Tout télécharger'}
-            </button>
-            <button
               onClick={() => setExpandedProductId(expandedProductId === product.id ? null : product.id)}
               className={`p-3 rounded-2xl transition-all ${
                 expandedProductId === product.id ? 'bg-primary-50 text-primary-600 rotate-180' : 'bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600'
@@ -600,237 +631,315 @@ export default function HelperTickets() {
     </div>
   );
 
-  const filteredCreated = createdBons.filter(bon => 
-    bon.ref.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    bon.products.some(p => 
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      p.sku.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-  );
+  // Split into Created and Collected Bons
+  const activeCreatedBons = createdBons.filter(bon => {
+    const detail = bonDetails[bon.ref];
+    const pickupNote = detail?.pickup_note;
+    const isCollected = pickupNote?.is_complete || (pickupNote && pickupNote.picked_up_parcels > 0 && pickupNote.picked_up_parcels === pickupNote.total_parcels);
+    return !isCollected;
+  });
 
-  const createdContent = filteredCreated.length > 0 ? (
-    <div className="space-y-6">
-      {filteredCreated.map((bon) => {
-        const detail = bonDetails[bon.ref];
-        const pickupNote = detail?.pickup_note;
-        const parcels = detail?.parcels || [];
-        const isExpanded = expandedBonRef === bon.ref;
-        const isLoading = loadingBonDetail === bon.ref;
+  const collectedBons = createdBons.filter(bon => {
+    const detail = bonDetails[bon.ref];
+    const pickupNote = detail?.pickup_note;
+    const isCollected = pickupNote?.is_complete || (pickupNote && pickupNote.picked_up_parcels > 0 && pickupNote.picked_up_parcels === pickupNote.total_parcels);
+    return isCollected;
+  });
 
-        return (
-          <div key={bon.ref} className={`bg-white rounded-[2.5rem] border transition-all duration-500 ${
-            isExpanded 
-              ? 'border-emerald-200 shadow-[0_30px_60px_rgba(0,0,0,0.08)] ring-1 ring-emerald-100' 
-              : 'border-slate-100 shadow-sm hover:shadow-xl hover:border-emerald-100'
-          }`}>
-            {/* Bon Header */}
+  const renderBonsList = (bonsList: typeof createdBons, isCollectedTab: boolean) => {
+    const filtered = bonsList.filter(bon => 
+      bon.ref.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      bon.products.some(p => 
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        p.sku.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    );
+
+    return filtered.length > 0 ? (
+      <div className="space-y-6">
+        {filtered.map((bon) => {
+          const detail = bonDetails[bon.ref];
+          const pickupNote = detail?.pickup_note;
+          const parcels = detail?.parcels || [];
+          const isExpanded = expandedBonRef === bon.ref;
+          const isLoading = loadingBonDetail === bon.ref;
+          const isNew = !downloadedBons.includes(bon.ref);
+
+          return (
             <div 
-              className="p-6 flex flex-col sm:flex-row items-center gap-6 cursor-pointer"
-              onClick={() => handleToggleBon(bon.ref)}
+              key={bon.ref} 
+              className={`bg-white rounded-[2.5rem] border transition-all duration-500 ${
+                isExpanded 
+                  ? `${isCollectedTab ? 'border-blue-200 ring-blue-100' : 'border-emerald-200 ring-emerald-100'} shadow-[0_30px_60px_rgba(0,0,0,0.08)] ring-1` 
+                  : isNew && !isCollectedTab
+                    ? 'border-violet-400 shadow-[0_0_18px_rgba(139,92,246,0.15)] ring-2 ring-violet-500/20'
+                    : 'border-slate-100 shadow-sm hover:shadow-xl hover:border-slate-200'
+              }`}
             >
-              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-sm transition-all ${
-                pickupNote?.is_complete 
-                  ? 'bg-emerald-500 text-white' 
-                  : pickupNote?.is_closed 
-                    ? 'bg-slate-400 text-white' 
-                    : 'bg-emerald-50 text-emerald-600'
-              }`}>
-                <FileText size={28} />
-              </div>
-
-              <div className="flex-1 text-center sm:text-left">
-                <h3 className="text-lg font-mono font-black text-slate-900 mb-1">{bon.ref}</h3>
-                <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
-                  <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black uppercase tracking-wider border border-emerald-100">
-                    {pickupNote ? `${pickupNote.total_parcels} Colis` : `${bon.count} Colis`}
-                  </span>
-                  {pickupNote && (
-                    <>
-                      <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-wider border border-blue-100">
-                        {pickupNote.picked_up_parcels}/{pickupNote.total_parcels} Collectés
-                      </span>
-                      {pickupNote.total_amount > 0 && (
-                        <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-full text-[10px] font-black uppercase tracking-wider border border-amber-100">
-                          {pickupNote.total_amount} MAD
-                        </span>
-                      )}
-                      {pickupNote.is_complete && (
-                        <span className="px-3 py-1 bg-emerald-500 text-white rounded-full text-[10px] font-black uppercase tracking-wider">
-                          ✓ Complet
-                        </span>
-                      )}
-                      {pickupNote.is_closed && !pickupNote.is_complete && (
-                        <span className="px-3 py-1 bg-slate-500 text-white rounded-full text-[10px] font-black uppercase tracking-wider">
-                          Fermé
-                        </span>
-                      )}
-                    </>
+              {/* Bon Header */}
+              <div 
+                className="p-6 flex flex-col sm:flex-row items-center gap-6 cursor-pointer"
+                onClick={() => handleToggleBon(bon.ref)}
+              >
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-sm transition-all relative ${
+                  pickupNote?.is_complete 
+                    ? 'bg-emerald-500 text-white' 
+                    : pickupNote?.is_closed 
+                      ? 'bg-slate-400 text-white' 
+                      : isCollectedTab 
+                        ? 'bg-blue-50 text-blue-600'
+                        : 'bg-emerald-50 text-emerald-600'
+                }`}>
+                  <FileText size={28} />
+                  {/* Glowing notification badge on icon for new bons */}
+                  {isNew && !isCollectedTab && (
+                    <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-4 w-4 bg-violet-500 border-2 border-white"></span>
+                    </span>
                   )}
+                </div>
+
+                <div className="flex-1 text-center sm:text-left">
+                  <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
+                    <h3 className="text-lg font-mono font-black text-slate-900 leading-none">{bon.ref}</h3>
+                    {isNew && !isCollectedTab && (
+                      <span className="px-2.5 py-0.5 bg-violet-600 text-white rounded-full text-[9px] font-black uppercase tracking-wider animate-pulse shadow-sm shadow-violet-500/20">
+                        Nouveau
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
+                    <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black uppercase tracking-wider border border-emerald-100">
+                      {pickupNote ? `${pickupNote.total_parcels} Colis` : `${bon.count} Colis`}
+                    </span>
+                    {bon.date && (
+                      <span className="px-3 py-1 bg-slate-50 text-slate-500 rounded-full text-[10px] font-black uppercase tracking-wider border border-slate-100 flex items-center gap-1">
+                        <Clock size={11} />
+                        {new Date(bon.date).toLocaleString('fr-FR', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </span>
+                    )}
+                    {pickupNote && (
+                      <>
+                        <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-wider border border-blue-100">
+                          {pickupNote.picked_up_parcels}/{pickupNote.total_parcels} Collectés
+                        </span>
+                        {pickupNote.total_amount > 0 && (
+                          <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-full text-[10px] font-black uppercase tracking-wider border border-amber-100">
+                            {pickupNote.total_amount} MAD
+                          </span>
+                        )}
+                        {pickupNote.is_complete && (
+                          <span className="px-3 py-1 bg-emerald-500 text-white rounded-full text-[10px] font-black uppercase tracking-wider">
+                            ✓ Complet
+                          </span>
+                        )}
+                        {pickupNote.is_closed && !pickupNote.is_complete && (
+                          <span className="px-3 py-1 bg-slate-500 text-white rounded-full text-[10px] font-black uppercase tracking-wider">
+                            Fermé
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => fetchBonDetail(bon.ref)}
+                    disabled={isLoading}
+                    className="p-3 bg-white text-slate-400 rounded-2xl border border-slate-100 shadow-sm hover:text-emerald-600 hover:border-emerald-100 transition-all active:scale-90 disabled:opacity-50"
+                    title="Rafraîchir"
+                  >
+                    <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
+                  </button>
+                  <button
+                    onClick={() => handleDownloadPickupLabels(bon.ref)}
+                    disabled={generatingLabelsFor === bon.ref}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-black transition-all shadow-lg active:scale-95 disabled:opacity-50 ${
+                      isNew && !isCollectedTab
+                        ? 'bg-violet-600 hover:bg-violet-700 text-white shadow-violet-200'
+                        : 'bg-slate-900 hover:bg-emerald-600 text-white shadow-slate-200'
+                    }`}
+                  >
+                    <Download className={`w-4 h-4 ${generatingLabelsFor === bon.ref ? 'animate-bounce' : ''}`} />
+                    {generatingLabelsFor === bon.ref ? 'Génération...' : 'Télécharger'}
+                  </button>
+                  <button
+                    onClick={() => handleToggleBon(bon.ref)}
+                    className={`p-3 rounded-2xl transition-all ${
+                      isExpanded 
+                        ? isCollectedTab ? 'bg-blue-50 text-blue-600 rotate-180' : 'bg-emerald-50 text-emerald-600 rotate-180'
+                        : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+                    }`}
+                  >
+                    <ChevronDown size={24} />
+                  </button>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
-                <button
-                  onClick={() => fetchBonDetail(bon.ref)}
-                  disabled={isLoading}
-                  className="p-3 bg-white text-slate-400 rounded-2xl border border-slate-100 shadow-sm hover:text-emerald-600 hover:border-emerald-100 transition-all active:scale-90 disabled:opacity-50"
-                  title="Rafraîchir"
-                >
-                  <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
-                </button>
-                <button
-                  onClick={() => handleDownloadPickupLabels(bon.ref)}
-                  disabled={generatingLabelsFor === bon.ref}
-                  className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl text-sm font-black hover:bg-emerald-600 transition-all shadow-lg shadow-slate-200 hover:shadow-emerald-200 active:scale-95 disabled:opacity-50"
-                >
-                  <Download className={`w-4 h-4 ${generatingLabelsFor === bon.ref ? 'animate-bounce' : ''}`} />
-                  {generatingLabelsFor === bon.ref ? 'Génération...' : 'Télécharger'}
-                </button>
-                <button
-                  onClick={() => handleToggleBon(bon.ref)}
-                  className={`p-3 rounded-2xl transition-all ${
-                    isExpanded ? 'bg-emerald-50 text-emerald-600 rotate-180' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
-                  }`}
-                >
-                  <ChevronDown size={24} />
-                </button>
-              </div>
-            </div>
+              {/* Expanded Detail */}
+              {isExpanded && (
+                <div className="px-6 pb-8 animate-in slide-in-from-top-4 duration-500">
+                  <div className="h-px bg-slate-100 mb-6 mx-6" />
 
-            {/* Expanded Detail */}
-            {isExpanded && (
-              <div className="px-6 pb-8 animate-in slide-in-from-top-4 duration-500">
-                <div className="h-px bg-slate-100 mb-6 mx-6" />
-
-                {isLoading && !detail ? (
-                  <div className="flex items-center justify-center py-12 gap-3">
-                    <Loader2 className="animate-spin text-emerald-500" size={24} />
-                    <span className="text-sm font-bold text-slate-400">Chargement depuis Coliaty...</span>
-                  </div>
-                ) : parcels.length > 0 ? (
-                  <>
-                    {/* Progress Bar */}
-                    {pickupNote && pickupNote.total_parcels > 0 && (
-                      <div className="mx-6 mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Progression Collecte</span>
-                          <span className="text-xs font-black text-slate-700">
-                            {pickupNote.picked_up_parcels}/{pickupNote.total_parcels}
-                          </span>
+                  {isLoading && !detail ? (
+                    <div className="flex items-center justify-center py-12 gap-3">
+                      <Loader2 className={`animate-spin ${isCollectedTab ? 'text-blue-500' : 'text-emerald-500'}`} size={24} />
+                      <span className="text-sm font-bold text-slate-400">Chargement depuis Coliaty...</span>
+                    </div>
+                  ) : parcels.length > 0 ? (
+                    <>
+                      {/* Progress Bar */}
+                      {pickupNote && pickupNote.total_parcels > 0 && (
+                        <div className="mx-6 mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Progression Collecte</span>
+                            <span className="text-xs font-black text-slate-700">
+                              {pickupNote.picked_up_parcels}/{pickupNote.total_parcels}
+                            </span>
+                          </div>
+                          <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full rounded-full transition-all duration-700 ${isCollectedTab ? 'bg-blue-500' : 'bg-emerald-500'}`}
+                              style={{ width: `${(pickupNote.picked_up_parcels / pickupNote.total_parcels) * 100}%` }}
+                            />
+                          </div>
                         </div>
-                        <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-emerald-500 rounded-full transition-all duration-700"
-                            style={{ width: `${(pickupNote.picked_up_parcels / pickupNote.total_parcels) * 100}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
+                      )}
 
-                    {/* Parcels Grid */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 px-6">
-                      {parcels.map((parcel: any) => {
-                        const badge = getParcelStatusBadge(parcel.parcel_status);
-                        return (
-                          <div key={parcel.parcel_code} className="rounded-2xl p-5 border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-lg hover:border-emerald-100 transition-all group/card">
-                            <div className="flex items-start justify-between mb-3">
-                              <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border ${badge.color}`}>
-                                {badge.label}
-                              </span>
-                              <button
-                                onClick={() => handleRemoveParcel(bon.ref, parcel.parcel_code)}
-                                disabled={removingParcel === parcel.parcel_code}
-                                className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover/card:opacity-100 disabled:opacity-50"
-                                title="Retirer du bon"
-                              >
-                                {removingParcel === parcel.parcel_code ? (
-                                  <Loader2 size={14} className="animate-spin" />
-                                ) : (
-                                  <Trash2 size={14} />
-                                )}
-                              </button>
-                            </div>
-
-                            <div className="space-y-2">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-emerald-500 border border-slate-100">
-                                  <User size={18} />
+                      {/* Parcels Grid */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 px-6">
+                        {parcels.map((parcel: any) => {
+                          const badge = getParcelStatusBadge(parcel.parcel_status);
+                          return (
+                            <div key={parcel.parcel_code} className={`rounded-2xl p-5 border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-lg transition-all group/card ${isCollectedTab ? 'hover:border-blue-100' : 'hover:border-emerald-100'}`}>
+                              <div className="flex items-start justify-between mb-3">
+                                <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border ${badge.color}`}>
+                                  {badge.label}
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    onClick={() => handleDownloadLabel(parcel.parcel_code)}
+                                    disabled={downloadingCode === parcel.parcel_code}
+                                    className={`p-1.5 rounded-lg transition-all ${
+                                      downloadingCode === parcel.parcel_code
+                                        ? 'text-primary-600 bg-primary-50'
+                                        : isCollectedTab 
+                                          ? 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'
+                                          : 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50'
+                                    }`}
+                                    title="Télécharger le ticket"
+                                  >
+                                    <Download size={14} className={downloadingCode === parcel.parcel_code ? 'animate-bounce' : ''} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleRemoveParcel(bon.ref, parcel.parcel_code)}
+                                    disabled={removingParcel === parcel.parcel_code}
+                                    className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover/card:opacity-100 disabled:opacity-50"
+                                    title="Retirer du bon"
+                                  >
+                                    {removingParcel === parcel.parcel_code ? (
+                                      <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                      <Trash2 size={14} />
+                                    )}
+                                  </button>
                                 </div>
-                                <div>
-                                  <p className="text-sm font-black text-slate-900 leading-none">{parcel.receiver}</p>
-                                  <div className="flex items-center gap-1.5 text-slate-400 mt-0.5">
-                                    <Phone size={10} />
-                                    <span className="text-[10px] font-bold">{parcel.phone}</span>
+                              </div>
+
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-slate-100 ${isCollectedTab ? 'text-blue-500' : 'text-emerald-500'}`}>
+                                    <User size={18} />
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-black text-slate-900 leading-none">{parcel.receiver}</p>
+                                    <div className="flex items-center gap-1.5 text-slate-400 mt-0.5">
+                                      <Phone size={10} />
+                                      <span className="text-[10px] font-bold">{parcel.phone}</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 text-slate-500">
+                                  <MapPin size={12} className="text-slate-300" />
+                                  <span className="text-[11px] font-bold">{parcel.city_name}</span>
+                                </div>
+
+                                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                                  <div>
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Code</p>
+                                    <p className="text-xs font-mono font-bold text-slate-700">{parcel.parcel_code}</p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Prix</p>
+                                    <p className={`text-sm font-black ${isCollectedTab ? 'text-blue-600' : 'text-emerald-600'}`}>{parcel.price} MAD</p>
                                   </div>
                                 </div>
                               </div>
-
-                              <div className="flex items-center gap-2 text-slate-500">
-                                <MapPin size={12} className="text-slate-300" />
-                                <span className="text-[11px] font-bold">{parcel.city_name}</span>
-                              </div>
-
-                              <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                                <div>
-                                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Code</p>
-                                  <p className="text-xs font-mono font-bold text-slate-700">{parcel.parcel_code}</p>
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Prix</p>
-                                  <p className="text-sm font-black text-emerald-600">{parcel.price} MAD</p>
-                                </div>
-                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-12 text-slate-300">
+                      <Package size={40} className="mb-3 opacity-30" />
+                      <p className="text-sm font-bold">Aucun colis dans ce bon</p>
+                      <p className="text-xs text-slate-400 mt-1">Les données détaillées ne sont pas disponibles depuis Coliaty.</p>
                     </div>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-12 text-slate-300">
-                    <Package size={40} className="mb-3 opacity-30" />
-                    <p className="text-sm font-bold">Aucun colis dans ce bon</p>
-                    <p className="text-xs text-slate-400 mt-1">Les données détaillées ne sont pas disponibles depuis Coliaty.</p>
-                  </div>
-                )}
+                  )}
 
-                {/* Local products info fallback when no Coliaty detail */}
-                {!detail && !isLoading && (
-                  <div className="px-6 pt-4">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Produits inclus (données locales)</p>
-                    <div className="flex gap-3 flex-wrap">
-                      {bon.products.map((p: any) => (
-                        <div key={p.sku} className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
-                          {p.image ? (
-                            <img src={p.image} alt={p.name} className="w-8 h-8 rounded-lg object-cover" />
-                          ) : (
-                            <Package size={16} className="text-slate-300" />
-                          )}
-                          <span className="text-xs font-bold text-slate-700">{p.name}</span>
-                        </div>
-                      ))}
+                  {/* Local products info fallback when no Coliaty detail */}
+                  {!detail && !isLoading && (
+                    <div className="px-6 pt-4">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Produits inclus (données locales)</p>
+                      <div className="flex gap-3 flex-wrap">
+                        {bon.products.map((p: any) => (
+                          <div key={p.sku} className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
+                            {p.image ? (
+                              <img src={p.image} alt={p.name} className="w-8 h-8 rounded-lg object-cover" />
+                            ) : (
+                              <Package size={16} className="text-slate-300" />
+                            )}
+                            <span className="text-xs font-bold text-slate-700">{p.name}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  ) : (
-    <div className="bg-white rounded-[3rem] p-20 text-center border-2 border-dashed border-slate-200 w-full">
-      <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-300">
-        <CheckCircle size={48} />
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
-      <h2 className="text-2xl font-black text-slate-900 mb-2">Aucun bon trouvé</h2>
-      <p className="text-slate-400 max-w-md mx-auto">
-        {searchQuery 
-          ? `Aucun bon ne contient de produit correspondant à "${searchQuery}".` 
-          : "Vous n'avez pas encore généré de bons de ramassage pour cette session."}
-      </p>
-    </div>
-  );
+    ) : (
+      <div className="bg-white rounded-[3rem] p-20 text-center border-2 border-dashed border-slate-200 w-full">
+        <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-300">
+          <CheckCircle size={48} />
+        </div>
+        <h2 className="text-2xl font-black text-slate-900 mb-2">Aucun bon trouvé</h2>
+        <p className="text-slate-400 max-w-md mx-auto">
+          {searchQuery 
+            ? `Aucun bon ne contient de produit correspondant à "${searchQuery}".` 
+            : isCollectedTab 
+              ? "Aucun bon n'a encore été marqué comme entièrement collecté."
+              : "Vous n'avez pas encore généré de bons de ramassage pour cette session."}
+        </p>
+      </div>
+    );
+  };
+
+  const createdContent = renderBonsList(activeCreatedBons, false);
+  const collectedContent = renderBonsList(collectedBons, true);
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-700">
@@ -874,25 +983,36 @@ export default function HelperTickets() {
             <div className="flex bg-slate-50 p-1.5 rounded-[1.5rem]">
               <button
                 onClick={() => setActiveTab('pending')}
-                className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-black transition-all ${
+                className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-xs font-black transition-all ${
                   activeTab === 'pending' 
                     ? 'bg-white text-primary-600 shadow-md' 
                     : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                <Package size={18} />
+                <Package size={16} />
                 En attente ({pendingProducts.length})
               </button>
               <button
                 onClick={() => setActiveTab('created')}
-                className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-black transition-all ${
+                className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-xs font-black transition-all ${
                   activeTab === 'created' 
+                    ? 'bg-white text-violet-600 shadow-md' 
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <CheckCircle size={16} />
+                Bons créés ({activeCreatedBons.length})
+              </button>
+              <button
+                onClick={() => setActiveTab('collected')}
+                className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-xs font-black transition-all ${
+                  activeTab === 'collected' 
                     ? 'bg-white text-emerald-600 shadow-md' 
                     : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                <CheckCircle size={18} />
-                Bons créés ({createdBons.length})
+                <CheckCircle2 size={16} />
+                Bons collectés ({collectedBons.length})
               </button>
             </div>
           </div>
@@ -901,7 +1021,11 @@ export default function HelperTickets() {
 
        {/* Main Content */}
       <div className="grid grid-cols-1 gap-6">
-        {activeTab === 'pending' ? pendingContent : createdContent}
+        {activeTab === 'pending' 
+          ? pendingContent 
+          : activeTab === 'collected' 
+            ? collectedContent 
+            : createdContent}
       </div>
 
       {/* Stats/Info Footer */}

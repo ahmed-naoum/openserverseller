@@ -165,38 +165,52 @@ router.get(
       throw new AppException(500, '[Coliaty] Clés API non configurées.');
     }
 
-    try {
-      const response = await axios.get(`${COLIATY_BASE_URL.replace(/\/$/, '')}/parcel/generate-label/${code}`, {
-        headers: {
-          Authorization: `Bearer ${COLIATY_PUBLIC_KEY}:${COLIATY_SECRET_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        timeout: 15000,
-        responseType: 'arraybuffer'
-      });
+    let retries = 4;
+    let delay = 1000;
 
-      const contentType = response.headers['content-type'] || '';
-      if (contentType.includes('application/pdf')) {
-        const base64 = Buffer.from(response.data).toString('base64');
-        return res.status(200).json({ status: 'success', data: { pdf: base64 } });
-      }
-
+    while (retries > 0) {
       try {
-        const jsonStr = Buffer.from(response.data).toString('utf-8');
-        const jsonData = JSON.parse(jsonStr);
-        res.status(200).json({ status: 'success', data: jsonData?.data || jsonData });
-      } catch (e) {
-        const base64 = Buffer.from(response.data).toString('base64');
-        res.status(200).json({ status: 'success', data: { pdf: base64 } });
+        const response = await axios.get(`${COLIATY_BASE_URL.replace(/\/$/, '')}/parcel/generate-label/${code}`, {
+          headers: {
+            Authorization: `Bearer ${COLIATY_PUBLIC_KEY}:${COLIATY_SECRET_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 15000,
+          responseType: 'arraybuffer'
+        });
+
+        const contentType = response.headers['content-type'] || '';
+        if (contentType.includes('application/pdf')) {
+          const base64 = Buffer.from(response.data).toString('base64');
+          return res.status(200).json({ status: 'success', data: { pdf: base64 } });
+        }
+
+        try {
+          const jsonStr = Buffer.from(response.data).toString('utf-8');
+          const jsonData = JSON.parse(jsonStr);
+          return res.status(200).json({ status: 'success', data: jsonData?.data || jsonData });
+        } catch (e) {
+          const base64 = Buffer.from(response.data).toString('base64');
+          return res.status(200).json({ status: 'success', data: { pdf: base64 } });
+        }
+      } catch (error: any) {
+        const status = error.response?.status;
+        if (status === 429 && retries > 1) {
+          console.warn(`[Coliaty] 429 Rate Limit on parcel label. Retrying in ${delay}ms... (${retries - 1} retries left)`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          retries--;
+          delay *= 2;
+          continue;
+        }
+
+        console.error('[Coliaty] Label Generation Error:', error.response?.data || error.message);
+        let data = error.response?.data;
+        if (data instanceof Buffer) {
+          try { data = JSON.parse(data.toString('utf-8')); } catch (e) {}
+        }
+        const finalStatus = status || 500;
+        throw new AppException(finalStatus, data?.message || 'Erreur lors de la génération de l\'étiquette');
       }
-    } catch (error: any) {
-      console.error('[Coliaty] Label Generation Error:', error.response?.data || error.message);
-      let data = error.response?.data;
-      if (data instanceof Buffer) {
-        try { data = JSON.parse(data.toString('utf-8')); } catch (e) {}
-      }
-      const status = error.response?.status || 500;
-      throw new AppException(status, data?.message || 'Erreur lors de la génération de l\'étiquette');
     }
   })
 );
@@ -1265,33 +1279,48 @@ router.get(
   asyncHandler(async (req, res) => {
     const { reference } = req.params;
     const cfg = getColiatyConfig();
-    try {
-      const response = await axios.get(`${cfg.base}/pickup-note/${reference}/generate-labels`, { 
-        headers: cfg.headers, 
-        timeout: 30000,
-        responseType: 'arraybuffer' // Handle both JSON and PDF binary
-      });
+    
+    let retries = 4;
+    let delay = 1000; // start with 1s
 
-      const contentType = response.headers['content-type'] || '';
-      
-      if (contentType.includes('application/pdf')) {
-        // Direct PDF binary -> Convert to base64 for the frontend
-        const base64 = Buffer.from(response.data).toString('base64');
-        return res.json({ status: 'success', data: { pdf: base64 } });
-      }
-
-      // If it's JSON, parse the arraybuffer back to JSON
+    while (retries > 0) {
       try {
-        const jsonStr = Buffer.from(response.data).toString('utf-8');
-        const jsonData = JSON.parse(jsonStr);
-        res.json({ status: 'success', data: jsonData?.data || jsonData });
-      } catch (e) {
-        // Fallback: maybe it's just a base64 string?
-        const base64 = Buffer.from(response.data).toString('base64');
-        res.json({ status: 'success', data: { pdf: base64 } });
+        const response = await axios.get(`${cfg.base}/pickup-note/${reference}/generate-labels`, { 
+          headers: cfg.headers, 
+          timeout: 30000,
+          responseType: 'arraybuffer' // Handle both JSON and PDF binary
+        });
+
+        const contentType = response.headers['content-type'] || '';
+        
+        if (contentType.includes('application/pdf')) {
+          // Direct PDF binary -> Convert to base64 for the frontend
+          const base64 = Buffer.from(response.data).toString('base64');
+          return res.json({ status: 'success', data: { pdf: base64 } });
+        }
+
+        // If it's JSON, parse the arraybuffer back to JSON
+        try {
+          const jsonStr = Buffer.from(response.data).toString('utf-8');
+          const jsonData = JSON.parse(jsonStr);
+          return res.json({ status: 'success', data: jsonData?.data || jsonData });
+        } catch (e) {
+          // Fallback: maybe it's just a base64 string?
+          const base64 = Buffer.from(response.data).toString('base64');
+          return res.json({ status: 'success', data: { pdf: base64 } });
+        }
+      } catch (error: any) {
+        const status = error.response?.status;
+        if (status === 429 && retries > 1) {
+          console.warn(`[Coliaty] 429 Rate Limit on pickup-note labels. Retrying in ${delay}ms... (${retries - 1} retries left)`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          retries--;
+          delay *= 2; // Exponential backoff
+          continue;
+        }
+        handleColiatyError(error, 'Génération PDF Bon');
+        return;
       }
-    } catch (error: any) {
-      handleColiatyError(error, 'Génération PDF Bon');
     }
   })
 );
