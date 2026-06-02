@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { settingsApi } from '../../lib/api';
 import { Eye, EyeOff, User, Mail, Phone, Lock, Sparkles, Store, Link as LinkIcon } from 'lucide-react';
@@ -58,13 +58,16 @@ const validateField = (name: string, value: string, allValues?: FormDataType): s
   switch (name) {
     case 'fullName':
       if (!value.trim()) return 'Le nom complet est requis';
-      if (value.trim().length < 2) return 'Le nom doit contenir au moins 2 caractères';
+      if (value.trim().length < 4) return 'Le nom doit contenir au moins 4 caractères';
+      if (value.trim().length > 20) return 'Le nom ne doit pas dépasser 20 caractères';
       return undefined;
     case 'email':
-      if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Format d\'email invalide';
+      if (!value) return 'L\'adresse email est requise';
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Format d\'email invalide';
       return undefined;
     case 'phone':
-      if (value && !/^\+212[5678][0-9]{8}$/.test(value)) return 'Format: +212 6XX-XXXXXX (ex: +212667619014)';
+      if (!value) return 'Le numéro de téléphone est requis';
+      if (!/^\+212[5678][0-9]{8}$/.test(value)) return 'Format: +212 6XX-XXXXXX (ex: +212667619014)';
       return undefined;
     case 'instagramUsername':
     case 'tiktokUsername':
@@ -87,13 +90,16 @@ const validateField = (name: string, value: string, allValues?: FormDataType): s
 };
 
 export default function RegisterPage() {
+  const { pathname } = useLocation();
+  const defaultRole = pathname.includes('/influencer') ? 'INFLUENCER' : 'VENDOR';
+
   const [formData, setFormData] = useState<FormDataType>({
     fullName: '',
     email: '',
     phone: '',
     password: '',
     confirmPassword: '',
-    role: 'VENDOR',
+    role: defaultRole,
     instagramUsername: '',
     tiktokUsername: '',
     facebookUsername: '',
@@ -192,9 +198,12 @@ export default function RegisterPage() {
       }
     });
 
-    if (!formData.email && !formData.phone) {
-        newErrors.email = 'Requis';
-        newErrors.phone = 'Requis';
+    if (!formData.email) {
+        newErrors.email = 'L\'adresse email est requise';
+        isValid = false;
+    }
+    if (!formData.phone) {
+        newErrors.phone = 'Le numéro de téléphone est requis';
         isValid = false;
     }
 
@@ -226,8 +235,11 @@ export default function RegisterPage() {
         if (err) { newErrors[field as keyof FormErrors] = err; isValid = false; }
         newTouched[field] = true;
       });
-      if (!formData.email && !formData.phone) {
-        newErrors.email = 'Requis'; newErrors.phone = 'Requis'; isValid = false;
+      if (!formData.email) {
+        newErrors.email = 'L\'adresse email est requise'; isValid = false;
+      }
+      if (!formData.phone) {
+        newErrors.phone = 'Le numéro de téléphone est requis'; isValid = false;
       }
     } else if (step === 2) {
       if (!formData.instagramUsername && !formData.tiktokUsername && !formData.facebookUsername && !formData.youtubeUsername && !formData.snapchatUsername) {
@@ -419,10 +431,10 @@ export default function RegisterPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-4">
                       <div className="space-y-1.5">
                         <label className="text-xs font-bold text-slate-700 ml-1 flex justify-between">
-                            <span>Email</span>
+                            <span>Email <span className="text-[#ff5722]">*</span></span>
                             {touched.email && errors.email && <span className="text-red-500 text-[10px] font-bold">Invalide</span>}
                         </label>
                         <div className="relative group/input">
@@ -437,7 +449,7 @@ export default function RegisterPage() {
                             value={formData.email}
                             onChange={handleChange}
                             onBlur={handleBlur}
-                            required={!formData.phone}
+                            required
                           />
                         </div>
                         {touched.email && errors.email && (
@@ -447,7 +459,7 @@ export default function RegisterPage() {
 
                       <div className="space-y-1.5">
                         <label className="text-xs font-bold text-slate-700 ml-1 flex justify-between">
-                            <span>Numéro de téléphone</span>
+                            <span>Numéro de téléphone <span className="text-[#ff5722]">*</span></span>
                             {touched.phone && errors.phone && <span className="text-red-500 text-[10px] font-bold">Invalide</span>}
                         </label>
                         <div className="relative group/input">
@@ -462,6 +474,7 @@ export default function RegisterPage() {
                             value={formData.phone}
                             onChange={handleChange}
                             onBlur={handleBlur}
+                            required
                           />
                         </div>
                         {touched.phone && errors.phone && (

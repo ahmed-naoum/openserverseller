@@ -106,8 +106,8 @@ router.post(
   '/register',
   authLimiter,
   [
-    body('email').optional().isEmail().normalizeEmail({ gmail_remove_dots: false, gmail_remove_subaddress: false, outlookdotcom_remove_subaddress: false, yahoo_remove_subaddress: false, icloud_remove_subaddress: false }),
-    body('phone').optional().custom((value) => {
+    body('email').notEmpty().withMessage('Email is required').isEmail().normalizeEmail({ gmail_remove_dots: false, gmail_remove_subaddress: false, outlookdotcom_remove_subaddress: false, yahoo_remove_subaddress: false, icloud_remove_subaddress: false }),
+    body('phone').notEmpty().withMessage('Phone number is required').custom((value) => {
       const normalized = normalizePhoneNumber(value);
       if (!normalized) {
         throw new Error('Invalid Moroccan phone number format');
@@ -115,7 +115,7 @@ router.post(
       return true;
     }),
     body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
-    body('fullName').trim().isLength({ min: 2 }),
+    body('fullName').trim().isLength({ min: 4, max: 20 }).withMessage('Le nom complet doit contenir entre 4 et 20 caractères'),
     body('role').optional().isIn(['VENDOR', 'CALL_CENTER_AGENT', 'GROSSELLER', 'INFLUENCER', 'CONFIRMATION_AGENT']),
   ],
   asyncHandler(async (req: Request, res: Response) => {
@@ -127,8 +127,11 @@ router.post(
     const { email, phone, password, fullName, role = 'VENDOR' } = req.body;
     const normalizedPhone = phone ? normalizePhoneNumber(phone) : undefined;
 
-    if (!email && !phone) {
-      throw new AppException(400, 'Email or phone is required');
+    if (!email) {
+      throw new AppException(400, 'Email is required');
+    }
+    if (!phone) {
+      throw new AppException(400, 'Phone is required');
     }
 
     const existingUser = await prisma.user.findFirst({
@@ -274,9 +277,8 @@ router.post(
   '/register-influencer',
   authLimiter,
   [
-    body('email').optional().isEmail().normalizeEmail({ gmail_remove_dots: false, gmail_remove_subaddress: false, outlookdotcom_remove_subaddress: false, yahoo_remove_subaddress: false, icloud_remove_subaddress: false }),
-    body('phone').optional().custom((value, { req }) => {
-      if (!value) return true;
+    body('email').notEmpty().withMessage('Email is required').isEmail().normalizeEmail({ gmail_remove_dots: false, gmail_remove_subaddress: false, outlookdotcom_remove_subaddress: false, yahoo_remove_subaddress: false, icloud_remove_subaddress: false }),
+    body('phone').notEmpty().withMessage('Phone is required').custom((value, { req }) => {
       const normalized = normalizePhoneNumber(value);
       if (!normalized) {
         throw new Error('Invalid Moroccan phone number format');
@@ -284,7 +286,7 @@ router.post(
       return true;
     }),
     body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
-    body('fullName').trim().isLength({ min: 2 }),
+    body('fullName').trim().isLength({ min: 4, max: 20 }).withMessage('Le nom complet doit contenir entre 4 et 20 caractères'),
     body('instagramUsername').optional().trim(),
     body('tiktokUsername').optional().trim(),
     body('facebookUsername').optional().trim(),
@@ -300,6 +302,13 @@ router.post(
 
     const { email, phone, password, fullName, instagramUsername, tiktokUsername, facebookUsername, xUsername, youtubeUsername, snapchatUsername } = req.body;
     const normalizedPhone = phone ? normalizePhoneNumber(phone) : undefined;
+
+    if (!email) {
+      throw new AppException(400, 'Email is required');
+    }
+    if (!phone) {
+      throw new AppException(400, 'Phone is required');
+    }
 
     // We will do a basic existence check
     const existingUser = await prisma.user.findFirst({
