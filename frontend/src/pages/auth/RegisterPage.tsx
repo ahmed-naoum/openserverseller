@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { settingsApi } from '../../lib/api';
@@ -116,6 +116,16 @@ export default function RegisterPage() {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState(1);
+
+  // Update role dynamically if URL changes without remounting the component
+  useEffect(() => {
+    const newRole = pathname.includes('/influencer') ? 'INFLUENCER' : 'VENDOR';
+    if (formData.role !== newRole) {
+      setFormData(prev => ({ ...prev, role: newRole }));
+      setStep(1);
+    }
+  }, [pathname]);
+
   
   // Influencer specific states
   const [activeSocial, setActiveSocial] = useState<'instagram' | 'tiktok' | 'facebook' | 'youtube' | 'snapchat'>('instagram');
@@ -273,6 +283,11 @@ export default function RegisterPage() {
             facebookUsername: formData.facebookUsername || undefined,
             youtubeUsername: formData.youtubeUsername || undefined,
             snapchatUsername: formData.snapchatUsername || undefined,
+            instagramUrl: formData.instagramUrl || undefined,
+            tiktokUrl: formData.tiktokUrl || undefined,
+            facebookUrl: formData.facebookUrl || undefined,
+            youtubeUrl: formData.youtubeUrl || undefined,
+            snapchatUrl: formData.snapchatUrl || undefined,
         });
         toast.success('Compte créateur créé avec succès ! Bienvenue 🎉');
         
@@ -336,7 +351,7 @@ export default function RegisterPage() {
   };
 
   const currentImage = formData.role === 'VENDOR' 
-    ? '/home page silacod copy/images/photo-1622151834677-70f982c9adef.webp' 
+    ? '/home page silacod copy/images/Bali.webp' 
     : '/home page silacod copy/images/9b7eeea5895229f0b36694c175ab30ed89bceca4.webp';
 
   return (
@@ -610,13 +625,13 @@ export default function RegisterPage() {
                     <div className="space-y-1.5">
                       <label className="text-sm font-bold text-slate-700 ml-1">Password</label>
                       <div className="relative group/input">
-                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-green-500">
+                        <div className={`absolute left-4 top-1/2 -translate-y-1/2 ${formData.password.length > 0 && isPasswordStrong ? 'text-green-500' : 'text-slate-400'}`}>
                           <Lock size={20} />
                         </div>
                         <input
                           type={showPassword ? 'text' : 'password'}
                           name="password"
-                          className={`w-full bg-transparent focus:bg-transparent border border-green-500 focus:ring-4 focus:ring-green-500/10 rounded-xl py-2.5 px-4 pl-12 pr-11 transition-all outline-none text-[13px] text-green-500 font-medium placeholder:text-green-500/60 ${touched.password && errors.password ? '!border-red-300 !ring-red-500/10 !text-red-500 placeholder:!text-red-400' : ''}`}
+                          className={`w-full bg-transparent focus:bg-transparent border focus:ring-4 rounded-xl py-2.5 px-4 pl-12 pr-11 transition-all outline-none text-[13px] font-medium ${formData.password.length > 0 && isPasswordStrong ? 'border-green-500 focus:ring-green-500/10 text-green-500' : 'border-slate-200 focus:border-[#ff5722] focus:ring-[#ff5722]/10 text-slate-700'} placeholder:text-slate-400 ${touched.password && errors.password ? '!border-red-300 !ring-red-500/10 !text-red-500 placeholder:!text-red-400' : ''}`}
                           placeholder="Password"
                           value={formData.password}
                           onChange={handleChange}
@@ -626,7 +641,7 @@ export default function RegisterPage() {
                         />
                         <button
                           type="button"
-                          className="absolute right-4 top-1/2 -translate-y-1/2 text-green-500/60 hover:text-green-500 transition-colors"
+                          className={`absolute right-4 top-1/2 -translate-y-1/2 transition-colors ${formData.password.length > 0 && isPasswordStrong ? 'text-green-500/60 hover:text-green-500' : 'text-slate-400 hover:text-slate-600'}`}
                           onClick={() => setShowPassword(!showPassword)}
                         >
                           {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -668,13 +683,13 @@ export default function RegisterPage() {
                     <div className="space-y-1.5">
                       <label className="text-sm font-bold text-slate-700 ml-1">Repeat Password</label>
                       <div className="relative group/input">
-                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-green-500">
+                        <div className={`absolute left-4 top-1/2 -translate-y-1/2 ${formData.confirmPassword.length > 0 && formData.confirmPassword === formData.password ? 'text-green-500' : 'text-slate-400'}`}>
                           <Lock size={20} />
                         </div>
                         <input
                           type={showConfirmPassword ? 'text' : 'password'}
                           name="confirmPassword"
-                          className={`w-full bg-transparent focus:bg-transparent border border-green-500 focus:ring-4 focus:ring-green-500/10 rounded-xl py-2.5 px-4 pl-12 pr-11 transition-all outline-none text-[13px] text-green-500 font-medium placeholder:text-green-500/60 ${touched.confirmPassword && errors.confirmPassword ? '!border-red-300 !ring-red-500/10 !text-red-500 placeholder:!text-red-400' : ''}`}
+                          className={`w-full bg-transparent focus:bg-transparent border focus:ring-4 rounded-xl py-2.5 px-4 pl-12 pr-11 transition-all outline-none text-[13px] font-medium ${formData.confirmPassword.length > 0 && formData.confirmPassword === formData.password ? 'border-green-500 focus:ring-green-500/10 text-green-500' : 'border-slate-200 focus:border-[#ff5722] focus:ring-[#ff5722]/10 text-slate-700'} placeholder:text-slate-400 ${touched.confirmPassword && errors.confirmPassword ? '!border-red-300 !ring-red-500/10 !text-red-500 placeholder:!text-red-400' : ''}`}
                           placeholder="Password"
                           value={formData.confirmPassword}
                           onChange={handleChange}
@@ -683,7 +698,7 @@ export default function RegisterPage() {
                         />
                         <button
                           type="button"
-                          className="absolute right-4 top-1/2 -translate-y-1/2 text-green-500/60 hover:text-green-500 transition-colors"
+                          className={`absolute right-4 top-1/2 -translate-y-1/2 transition-colors ${formData.confirmPassword.length > 0 && formData.confirmPassword === formData.password ? 'text-green-500/60 hover:text-green-500' : 'text-slate-400 hover:text-slate-600'}`}
                           onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                         >
                           {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -759,7 +774,7 @@ export default function RegisterPage() {
       </div>
 
       {/* Right Column: Visual Area */}
-      <div className="hidden lg:flex lg:w-[50%] xl:w-[55%] relative overflow-hidden bg-[#f4f6fa] items-center justify-center">
+      <div className="hidden lg:flex lg:w-[50%] xl:w-[55%] relative overflow-hidden bg-white items-center justify-center">
         {/* Desktop Logo */}
         <div className="absolute top-10 right-12 z-20">
           <Link to="/" className="flex items-center gap-2.5 group">
@@ -770,18 +785,23 @@ export default function RegisterPage() {
 
         {/* Dynamic Image */}
         <div className="relative w-full h-full p-12 flex items-center justify-center">
-            <AnimatePresence mode="wait">
-                <motion.img
-                    key={formData.role}
-                    src={currentImage}
-                    initial={{ opacity: 0, scale: 1.05, filter: 'blur(10px)' }}
-                    animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-                    exit={{ opacity: 0, scale: 0.95, filter: 'blur(10px)' }}
-                    transition={{ duration: 0.5, ease: "easeInOut" }}
-                    className="w-full max-w-[600px] max-h-[80vh] object-contain rounded-[2rem] shadow-2xl drop-shadow-[0_20px_50px_rgba(0,0,0,0.15)]"
-                    alt={formData.role === 'VENDOR' ? 'Seller Preview' : 'Influencer Preview'}
-                />
-            </AnimatePresence>
+            <div className="relative w-full max-w-[600px] flex items-center justify-center">
+                <AnimatePresence mode="wait">
+                    <motion.img
+                        key={formData.role}
+                        src={currentImage}
+                        initial={{ opacity: 0, scale: 1.05, filter: 'blur(10px)' }}
+                        animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+                        exit={{ opacity: 0, scale: 0.95, filter: 'blur(10px)' }}
+                        transition={{ duration: 0.5, ease: "easeInOut" }}
+                        className="w-full h-auto max-h-[80vh] object-contain"
+                        alt={formData.role === 'VENDOR' ? 'Seller Preview' : 'Influencer Preview'}
+                    />
+                </AnimatePresence>
+                
+                {/* Soft premium gradient fading shadow from bottom to top */}
+                <div className="absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-white via-white/40 to-transparent pointer-events-none z-10" />
+            </div>
 
             {/* Decorative background circle */}
             <motion.div 

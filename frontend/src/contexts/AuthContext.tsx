@@ -38,7 +38,7 @@ interface AuthContextType {
   forcePasswordChange: (data: { tempToken: string; newPassword: string }) => Promise<AuthUser>;
   googleAuth: (data: { credential: string; role?: string }) => Promise<{ user?: AuthUser; requiresTwoFactor?: boolean; twoFactorToken?: string; requiresPasswordChange?: boolean; tempToken?: string; message?: string }>;
   register: (data: { email?: string; phone?: string; password: string; fullName: string; role?: string }) => Promise<AuthUser>;
-  registerInfluencer: (data: { email?: string; phone?: string; password: string; fullName: string; instagramUsername?: string; tiktokUsername?: string; facebookUsername?: string; xUsername?: string; youtubeUsername?: string; snapchatUsername?: string; }) => Promise<AuthUser>;
+  registerInfluencer: (data: any) => Promise<AuthUser>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   impersonate: (userId: number) => Promise<void>;
@@ -163,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user;
   };
 
-  const registerInfluencer = async (data: { email?: string; phone?: string; password: string; fullName: string; instagramUsername?: string; tiktokUsername?: string; facebookUsername?: string; xUsername?: string; youtubeUsername?: string; snapchatUsername?: string; }) => {
+  const registerInfluencer = async (data: any) => {
     const response = await authApi.registerInfluencer(data);
     const { user, tokens } = response.data.data;
     

@@ -300,7 +300,7 @@ router.post(
       throw new AppException(400, 'Validation failed');
     }
 
-    const { email, phone, password, fullName, instagramUsername, tiktokUsername, facebookUsername, xUsername, youtubeUsername, snapchatUsername } = req.body;
+    const { email, phone, password, fullName, instagramUsername, tiktokUsername, facebookUsername, xUsername, youtubeUsername, snapchatUsername, instagramUrl, tiktokUrl, facebookUrl, youtubeUrl, snapchatUrl } = req.body;
     const normalizedPhone = phone ? normalizePhoneNumber(phone) : undefined;
 
     if (!email) {
@@ -382,6 +382,13 @@ router.post(
             xUsername: actualX,
             youtubeUsername: actualYoutube,
             snapchatUsername: actualSnapchat,
+            metadata: {
+              instagramUrl: instagramUrl || null,
+              tiktokUrl: tiktokUrl || null,
+              facebookUrl: facebookUrl || null,
+              youtubeUrl: youtubeUrl || null,
+              snapchatUrl: snapchatUrl || null,
+            }
           },
         },
       },

@@ -121,7 +121,7 @@ export default function PendingVerificationPage() {
       </div>
 
       {/* Right Column: Visual Area */}
-      <div className="hidden lg:flex lg:w-[50%] xl:w-[55%] relative overflow-hidden bg-[#f4f6fa] items-center justify-center">
+      <div className="hidden lg:flex lg:w-[50%] xl:w-[55%] relative overflow-hidden bg-white items-center justify-center">
         {/* Desktop Logo */}
         <div className="absolute top-10 right-12 z-20">
           <Link to="/" className="flex items-center gap-2.5 group">
@@ -131,12 +131,17 @@ export default function PendingVerificationPage() {
         </div>
 
         {/* Dynamic Image */}
-        <div className="relative w-full h-full p-12 flex items-center justify-center">
-          <img
-            src="/home page silacod copy/images/photo-1622151834677-70f982c9adef.webp"
-            className="w-full max-w-[600px] max-h-[80vh] object-contain rounded-[2rem] shadow-2xl drop-shadow-[0_20px_50px_rgba(0,0,0,0.15)]"
-            alt="Seller Preview"
-          />
+        <div className="relative w-full h-full p-4 flex flex-col items-center justify-center">
+          <div className="relative w-full max-w-[780px] xl:max-w-[880px] flex items-center justify-center">
+            <img
+              src="/images/pending-1.webp"
+              className="w-full h-auto max-h-[85vh] object-contain select-none"
+              alt="Seller Preview"
+            />
+
+            {/* Soft premium gradient fading shadow from bottom to top */}
+            <div className="absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-white via-white/40 to-transparent pointer-events-none z-10" />
+          </div>
 
           {/* Decorative background circle */}
           <div className="absolute inset-0 z-[-1] flex items-center justify-center pointer-events-none">

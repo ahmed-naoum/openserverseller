@@ -104,7 +104,7 @@ export const authApi = {
     api.post('/auth/login', data),
   register: (data: { email?: string; phone?: string; password: string; fullName: string; role?: string }) =>
     api.post('/auth/register', data),
-  registerInfluencer: (data: { email?: string; phone?: string; password: string; fullName: string; instagramUsername?: string; tiktokUsername?: string; facebookUsername?: string; }) =>
+  registerInfluencer: (data: any) =>
     api.post('/auth/register-influencer', data),
   logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),

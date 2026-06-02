@@ -34,6 +34,79 @@ import { FaXTwitter } from 'react-icons/fa6';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
+export function parseSocialInput(val: string, platform: 'instagram' | 'tiktok' | 'facebook' | 'youtube' | 'x' | 'snapchat') {
+  if (!val) return { username: '', url: '' };
+  
+  const trimmed = val.trim();
+  
+  // If it's already a full URL
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    let url = trimmed;
+    let username = trimmed;
+    try {
+      const urlObj = new URL(trimmed);
+      let path = urlObj.pathname;
+      if (path.startsWith('/')) path = path.slice(1);
+      if (path.endsWith('/')) path = path.slice(0, -1);
+      if (path.startsWith('@')) path = path.slice(1);
+      
+      const segments = path.split('/');
+      if (segments[0]) {
+        username = segments[0];
+      }
+    } catch (e) {
+      const parts = trimmed.split('/');
+      const lastPart = parts[parts.length - 1] || parts[parts.length - 2];
+      if (lastPart) {
+        username = lastPart.split('?')[0].replace('@', '');
+      }
+    }
+    
+    return { username, url };
+  }
+  
+  const cleanUsername = trimmed.startsWith('@') ? trimmed.slice(1) : trimmed;
+  
+  let baseUrl = '';
+  switch (platform) {
+    case 'instagram': baseUrl = 'https://instagram.com/'; break;
+    case 'tiktok': baseUrl = 'https://tiktok.com/@'; break;
+    case 'facebook': baseUrl = 'https://facebook.com/'; break;
+    case 'youtube': baseUrl = 'https://youtube.com/@'; break;
+    case 'x': baseUrl = 'https://x.com/'; break;
+    case 'snapchat': baseUrl = 'https://snapchat.com/add/'; break;
+  }
+  
+  return {
+    username: cleanUsername,
+    url: `${baseUrl}${cleanUsername}`
+  };
+}
+
+export function resolveSocialPlatform(
+  usernameVal: string | null | undefined,
+  metadataUrlVal: string | null | undefined,
+  platform: 'instagram' | 'tiktok' | 'facebook' | 'youtube' | 'x' | 'snapchat'
+) {
+  if (!usernameVal && !metadataUrlVal) return null;
+  
+  let parsedFromUsername = parseSocialInput(usernameVal || '', platform);
+  let parsedFromMeta = parseSocialInput(metadataUrlVal || '', platform);
+  
+  let username = parsedFromUsername.username || parsedFromMeta.username || '';
+  let url = parsedFromMeta.url || parsedFromUsername.url || '';
+  
+  let hasBoth = !!(usernameVal && metadataUrlVal && usernameVal !== metadataUrlVal);
+  
+  return {
+    username,
+    url,
+    originalUsername: usernameVal || '',
+    originalUrl: metadataUrlVal || '',
+    hasBoth
+  };
+}
+
 export default function AdminVerifications() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
@@ -330,53 +403,142 @@ export default function AdminVerifications() {
                     </div>
 
                     {/* Social Media Accounts */}
-                    {(user.profile?.instagramUsername || user.profile?.tiktokUsername || user.profile?.facebookUsername || user.profile?.youtubeUsername || user.profile?.xUsername || user.profile?.snapchatUsername) && (
-                      <div className="p-5 rounded-3xl bg-white border border-slate-100 shadow-sm space-y-3">
-                        <div className="flex items-center gap-2 text-slate-400">
-                          <Globe size={14} />
-                          <span className="text-[10px] font-black uppercase tracking-widest">Réseaux Sociaux</span>
+                    {(user.profile?.instagramUsername || user.profile?.tiktokUsername || user.profile?.facebookUsername || user.profile?.youtubeUsername || user.profile?.xUsername || user.profile?.snapchatUsername || user.profile?.metadata) && (() => {
+                      const meta = user.profile?.metadata || {};
+                      
+                      const instagram = resolveSocialPlatform(user.profile?.instagramUsername, meta.instagramUrl, 'instagram');
+                      const tiktok = resolveSocialPlatform(user.profile?.tiktokUsername, meta.tiktokUrl, 'tiktok');
+                      const facebook = resolveSocialPlatform(user.profile?.facebookUsername, meta.facebookUrl, 'facebook');
+                      const youtube = resolveSocialPlatform(user.profile?.youtubeUsername, meta.youtubeUrl, 'youtube');
+                      const x = resolveSocialPlatform(user.profile?.xUsername, meta.xUrl, 'x');
+                      const snapchat = resolveSocialPlatform(user.profile?.snapchatUsername, meta.snapchatUrl, 'snapchat');
+                      
+                      if (!instagram && !tiktok && !facebook && !youtube && !x && !snapchat) return null;
+                      
+                      return (
+                        <div className="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm space-y-4">
+                          <div className="flex items-center gap-2 text-slate-400">
+                            <Globe size={14} />
+                            <span className="text-[10px] font-black uppercase tracking-widest">Réseaux Sociaux</span>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Instagram */}
+                            {instagram && (
+                              <div className="flex flex-col gap-2 p-3 bg-gradient-to-r from-pink-50/30 to-purple-50/20 border border-pink-100/50 rounded-2xl">
+                                <div className="flex items-center justify-between">
+                                  <a href={instagram.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-pink-700 hover:text-pink-900 transition-all font-bold text-xs group">
+                                    <FaInstagram className="text-pink-500" size={16} />
+                                    <span>@{instagram.username}</span>
+                                    <ExternalLink size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </a>
+                                  {user.profile?.instagramFollowers && (
+                                    <span className="text-[9px] font-black text-pink-500 bg-pink-100/50 px-2 py-0.5 rounded-full">
+                                      {user.profile.instagramFollowers?.toLocaleString()} abonnés
+                                    </span>
+                                  )}
+                                </div>
+                                {instagram.hasBoth && (
+                                  <div className="text-[9px] font-bold text-slate-400 break-all select-all flex items-center gap-1 bg-white/60 p-1.5 rounded-lg border border-pink-50">
+                                    <span className="text-pink-400">Lien:</span> {instagram.originalUrl}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* TikTok */}
+                            {tiktok && (
+                              <div className="flex flex-col gap-2 p-3 bg-slate-50 border border-slate-200/50 rounded-2xl">
+                                <div className="flex items-center justify-between">
+                                  <a href={tiktok.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-slate-700 hover:text-slate-900 transition-all font-bold text-xs group">
+                                    <FaTiktok className="text-slate-800" size={14} />
+                                    <span>@{tiktok.username}</span>
+                                    <ExternalLink size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </a>
+                                </div>
+                                {tiktok.hasBoth && (
+                                  <div className="text-[9px] font-bold text-slate-400 break-all select-all flex items-center gap-1 bg-white/60 p-1.5 rounded-lg border border-slate-100">
+                                    <span className="text-slate-500">Lien:</span> {tiktok.originalUrl}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Facebook */}
+                            {facebook && (
+                              <div className="flex flex-col gap-2 p-3 bg-blue-50/30 border border-blue-100/50 rounded-2xl">
+                                <div className="flex items-center justify-between">
+                                  <a href={facebook.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-blue-700 hover:text-blue-900 transition-all font-bold text-xs group">
+                                    <FaFacebook className="text-blue-600" size={15} />
+                                    <span>{facebook.username}</span>
+                                    <ExternalLink size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </a>
+                                </div>
+                                {facebook.hasBoth && (
+                                  <div className="text-[9px] font-bold text-slate-400 break-all select-all flex items-center gap-1 bg-white/60 p-1.5 rounded-lg border border-blue-100">
+                                    <span className="text-blue-500">Lien:</span> {facebook.originalUrl}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* YouTube */}
+                            {youtube && (
+                              <div className="flex flex-col gap-2 p-3 bg-red-50/30 border border-red-100/50 rounded-2xl">
+                                <div className="flex items-center justify-between">
+                                  <a href={youtube.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-red-700 hover:text-red-900 transition-all font-bold text-xs group">
+                                    <FaYoutube className="text-red-600" size={16} />
+                                    <span>@{youtube.username}</span>
+                                    <ExternalLink size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </a>
+                                </div>
+                                {youtube.hasBoth && (
+                                  <div className="text-[9px] font-bold text-slate-400 break-all select-all flex items-center gap-1 bg-white/60 p-1.5 rounded-lg border border-red-100">
+                                    <span className="text-red-500">Lien:</span> {youtube.originalUrl}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* X / Twitter */}
+                            {x && (
+                              <div className="flex flex-col gap-2 p-3 bg-slate-50 border border-slate-200/50 rounded-2xl">
+                                <div className="flex items-center justify-between">
+                                  <a href={x.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-slate-700 hover:text-slate-900 transition-all font-bold text-xs group">
+                                    <FaXTwitter className="text-slate-800" size={14} />
+                                    <span>@{x.username}</span>
+                                    <ExternalLink size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </a>
+                                </div>
+                                {x.hasBoth && (
+                                  <div className="text-[9px] font-bold text-slate-400 break-all select-all flex items-center gap-1 bg-white/60 p-1.5 rounded-lg border border-slate-100">
+                                    <span className="text-slate-500">Lien:</span> {x.originalUrl}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Snapchat */}
+                            {snapchat && (
+                              <div className="flex flex-col gap-2 p-3 bg-yellow-50/30 border border-yellow-100/50 rounded-2xl">
+                                <div className="flex items-center justify-between">
+                                  <a href={snapchat.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-yellow-700 hover:text-yellow-900 transition-all font-bold text-xs group">
+                                    <FaSnapchat className="text-yellow-500" size={15} />
+                                    <span>@{snapchat.username}</span>
+                                    <ExternalLink size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </a>
+                                </div>
+                                {snapchat.hasBoth && (
+                                  <div className="text-[9px] font-bold text-slate-400 break-all select-all flex items-center gap-1 bg-white/60 p-1.5 rounded-lg border border-yellow-100">
+                                    <span className="text-yellow-500">Lien:</span> {snapchat.originalUrl}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex flex-wrap gap-3">
-                          {user.profile?.instagramUsername && (
-                            <a href={`https://instagram.com/${user.profile.instagramUsername}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-pink-50 to-purple-50 border border-pink-100 hover:border-pink-300 transition-all group">
-                              <FaInstagram className="text-pink-500" size={16} />
-                              <span className="text-xs font-bold text-pink-700 group-hover:text-pink-900">@{user.profile.instagramUsername}</span>
-                              {user.profile?.instagramFollowers && <span className="text-[9px] font-black text-pink-400 bg-pink-100 px-1.5 py-0.5 rounded-full">{user.profile.instagramFollowers?.toLocaleString()}</span>}
-                            </a>
-                          )}
-                          {user.profile?.tiktokUsername && (
-                            <a href={`https://tiktok.com/@${user.profile.tiktokUsername}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-slate-400 transition-all group">
-                              <FaTiktok className="text-slate-800" size={14} />
-                              <span className="text-xs font-bold text-slate-700 group-hover:text-slate-900">@{user.profile.tiktokUsername}</span>
-                            </a>
-                          )}
-                          {user.profile?.facebookUsername && (
-                            <a href={`https://facebook.com/${user.profile.facebookUsername}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-blue-50 border border-blue-100 hover:border-blue-300 transition-all group">
-                              <FaFacebook className="text-blue-600" size={15} />
-                              <span className="text-xs font-bold text-blue-700 group-hover:text-blue-900">{user.profile.facebookUsername}</span>
-                            </a>
-                          )}
-                          {user.profile?.youtubeUsername && (
-                            <a href={`https://youtube.com/@${user.profile.youtubeUsername}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-red-50 border border-red-100 hover:border-red-300 transition-all group">
-                              <FaYoutube className="text-red-600" size={16} />
-                              <span className="text-xs font-bold text-red-700 group-hover:text-red-900">@{user.profile.youtubeUsername}</span>
-                            </a>
-                          )}
-                          {user.profile?.xUsername && (
-                            <a href={`https://x.com/${user.profile.xUsername}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-slate-400 transition-all group">
-                              <FaXTwitter className="text-slate-800" size={14} />
-                              <span className="text-xs font-bold text-slate-700 group-hover:text-slate-900">@{user.profile.xUsername}</span>
-                            </a>
-                          )}
-                          {user.profile?.snapchatUsername && (
-                            <a href={`https://snapchat.com/add/${user.profile.snapchatUsername}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-yellow-50 border border-yellow-100 hover:border-yellow-300 transition-all group">
-                              <FaSnapchat className="text-yellow-500" size={15} />
-                              <span className="text-xs font-bold text-yellow-700 group-hover:text-yellow-900">@{user.profile.snapchatUsername}</span>
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Action Sections */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

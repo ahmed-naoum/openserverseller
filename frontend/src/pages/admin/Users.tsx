@@ -37,6 +37,55 @@ import {
   Percent
 } from 'lucide-react';
 
+export function parseSocialInput(val: string, platform: 'instagram' | 'tiktok' | 'facebook' | 'youtube' | 'x' | 'snapchat') {
+  if (!val) return { username: '', url: '' };
+  
+  const trimmed = val.trim();
+  
+  // If it's already a full URL
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    let url = trimmed;
+    let username = trimmed;
+    try {
+      const urlObj = new URL(trimmed);
+      let path = urlObj.pathname;
+      if (path.startsWith('/')) path = path.slice(1);
+      if (path.endsWith('/')) path = path.slice(0, -1);
+      if (path.startsWith('@')) path = path.slice(1);
+      
+      const segments = path.split('/');
+      if (segments[0]) {
+        username = segments[0];
+      }
+    } catch (e) {
+      const parts = trimmed.split('/');
+      const lastPart = parts[parts.length - 1] || parts[parts.length - 2];
+      if (lastPart) {
+        username = lastPart.split('?')[0].replace('@', '');
+      }
+    }
+    
+    return { username, url };
+  }
+  
+  const cleanUsername = trimmed.startsWith('@') ? trimmed.slice(1) : trimmed;
+  
+  let baseUrl = '';
+  switch (platform) {
+    case 'instagram': baseUrl = 'https://instagram.com/'; break;
+    case 'tiktok': baseUrl = 'https://tiktok.com/@'; break;
+    case 'facebook': baseUrl = 'https://facebook.com/'; break;
+    case 'youtube': baseUrl = 'https://youtube.com/@'; break;
+    case 'x': baseUrl = 'https://x.com/'; break;
+    case 'snapchat': baseUrl = 'https://snapchat.com/add/'; break;
+  }
+  
+  return {
+    username: cleanUsername,
+    url: `${baseUrl}${cleanUsername}`
+  };
+}
+
 function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; onClose: () => void; agent: any }) {
   const queryClient = useQueryClient();
   const [selectedInfluencers, setSelectedInfluencers] = useState<number[]>([]);
@@ -618,6 +667,11 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
     xUsername: '',
     youtubeUsername: '',
     snapchatUsername: '',
+    instagramUrl: '',
+    tiktokUrl: '',
+    facebookUrl: '',
+    youtubeUrl: '',
+    snapchatUrl: '',
     ribAccount: '',
     bankName: '',
     iceNumber: '',
@@ -661,6 +715,11 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
         xUsername: fullUser.xUsername || '',
         youtubeUsername: fullUser.youtubeUsername || '',
         snapchatUsername: fullUser.snapchatUsername || '',
+        instagramUrl: fullUser.metadata?.instagramUrl || '',
+        tiktokUrl: fullUser.metadata?.tiktokUrl || '',
+        facebookUrl: fullUser.metadata?.facebookUrl || '',
+        youtubeUrl: fullUser.metadata?.youtubeUrl || '',
+        snapchatUrl: fullUser.metadata?.snapchatUrl || '',
         ribAccount: fullUser.bankAccounts?.[0]?.ribAccount || '',
         bankName: fullUser.bankAccounts?.[0]?.bankName || '',
         iceNumber: fullUser.bankAccounts?.[0]?.iceNumber || '',
@@ -1234,88 +1293,197 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
                 {activeTab === 'social' && (
                   <div className="space-y-6 animate-in fade-in duration-300">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Comptes sur les Réseaux Sociaux (Généralement pour les Influenceurs)</p>
-                    <div className="grid grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-[10px] font-black text-pink-600 uppercase tracking-widest mb-2">Instagram @</label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            className="input pl-11 border-pink-100 focus:border-pink-400"
-                            placeholder="Nom d'utilisateur"
-                            value={formData.instagramUsername}
-                            onChange={(e) => setFormData({ ...formData, instagramUsername: e.target.value })}
-                          />
-                          <Link size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-pink-300" />
+                    
+                    <div className="space-y-6">
+                      {/* Instagram */}
+                      <div className="p-4 rounded-3xl bg-pink-50/20 border border-pink-100/50 space-y-4">
+                        <div className="flex items-center gap-2 text-pink-600 font-extrabold text-xs">
+                          <span className="w-2 h-2 rounded-full bg-pink-500 animate-pulse" />
+                          Instagram
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nom d'utilisateur / @</label>
+                            <div className="relative">
+                              <input
+                                type="text"
+                                className="input pl-11 border-pink-100 focus:border-pink-400 font-bold"
+                                placeholder="velora_maison1"
+                                value={formData.instagramUsername}
+                                onChange={(e) => setFormData({ ...formData, instagramUsername: e.target.value })}
+                              />
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-pink-400 font-black text-sm">@</span>
+                            </div>
+                            {formData.instagramUsername && (formData.instagramUsername.startsWith('http://') || formData.instagramUsername.startsWith('https://')) && (
+                              <div className="mt-1.5 text-[9px] text-pink-600 font-black bg-white/80 p-1.5 rounded-lg border border-pink-100 flex flex-col gap-0.5">
+                                <span>⚠️ Lien détecté au lieu du username !</span>
+                                <span>Username extrait: <strong className="font-extrabold text-pink-700">@{parseSocialInput(formData.instagramUsername, 'instagram').username}</strong></span>
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Lien Direct / URL (Optionnel)</label>
+                            <div className="relative">
+                              <input
+                                type="url"
+                                className="input pl-11 border-pink-100 focus:border-pink-400 text-xs font-semibold"
+                                placeholder="https://instagram.com/velora_maison1"
+                                value={formData.instagramUrl}
+                                onChange={(e) => setFormData({ ...formData, instagramUrl: e.target.value })}
+                              />
+                              <Link size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-pink-300" />
+                            </div>
+                          </div>
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-800 uppercase tracking-widest mb-2">TikTok @</label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            className="input pl-11 border-slate-200 focus:border-slate-800"
-                            placeholder="Nom d'utilisateur"
-                            value={formData.tiktokUsername}
-                            onChange={(e) => setFormData({ ...formData, tiktokUsername: e.target.value })}
-                          />
-                          <Link size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                      {/* TikTok */}
+                      <div className="p-4 rounded-3xl bg-slate-50 border border-slate-200/60 space-y-4">
+                        <div className="flex items-center gap-2 text-slate-800 font-extrabold text-xs">
+                          <span className="w-2 h-2 rounded-full bg-slate-800 animate-pulse" />
+                          TikTok
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nom d'utilisateur / @</label>
+                            <div className="relative">
+                              <input
+                                type="text"
+                                className="input pl-11 border-slate-200 focus:border-slate-800 font-bold"
+                                placeholder="username"
+                                value={formData.tiktokUsername}
+                                onChange={(e) => setFormData({ ...formData, tiktokUsername: e.target.value })}
+                              />
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-black text-sm">@</span>
+                            </div>
+                            {formData.tiktokUsername && (formData.tiktokUsername.startsWith('http://') || formData.tiktokUsername.startsWith('https://')) && (
+                              <div className="mt-1.5 text-[9px] text-slate-600 font-black bg-white/80 p-1.5 rounded-lg border border-slate-200 flex flex-col gap-0.5">
+                                <span>⚠️ Lien détecté au lieu du username !</span>
+                                <span>Username extrait: <strong className="font-extrabold text-slate-800">@{parseSocialInput(formData.tiktokUsername, 'tiktok').username}</strong></span>
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Lien Direct / URL (Optionnel)</label>
+                            <div className="relative">
+                              <input
+                                type="url"
+                                className="input pl-11 border-slate-200 focus:border-slate-800 text-xs font-semibold"
+                                placeholder="https://tiktok.com/@username"
+                                value={formData.tiktokUrl}
+                                onChange={(e) => setFormData({ ...formData, tiktokUrl: e.target.value })}
+                              />
+                              <Link size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                            </div>
+                          </div>
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2">Facebook</label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            className="input pl-11 border-blue-100 focus:border-blue-500"
-                            placeholder="Nom d'utilisateur"
-                            value={formData.facebookUsername}
-                            onChange={(e) => setFormData({ ...formData, facebookUsername: e.target.value })}
-                          />
-                          <Link size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-300" />
+                      {/* Facebook */}
+                      <div className="p-4 rounded-3xl bg-blue-50/20 border border-blue-100/50 space-y-4">
+                        <div className="flex items-center gap-2 text-blue-600 font-extrabold text-xs">
+                          <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                          Facebook
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nom d'utilisateur / Page</label>
+                            <div className="relative">
+                              <input
+                                type="text"
+                                className="input pl-11 border-blue-100 focus:border-blue-500 font-bold"
+                                placeholder="page_name"
+                                value={formData.facebookUsername}
+                                onChange={(e) => setFormData({ ...formData, facebookUsername: e.target.value })}
+                              />
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-400 font-black text-sm">f</span>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Lien Direct / URL (Optionnel)</label>
+                            <div className="relative">
+                              <input
+                                type="url"
+                                className="input pl-11 border-blue-100 focus:border-blue-500 text-xs font-semibold"
+                                placeholder="https://facebook.com/username"
+                                value={formData.facebookUrl}
+                                onChange={(e) => setFormData({ ...formData, facebookUrl: e.target.value })}
+                              />
+                              <Link size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-300" />
+                            </div>
+                          </div>
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-[10px] font-black text-sky-600 uppercase tracking-widest mb-2">X / Twitter</label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            className="input pl-11 border-sky-100 focus:border-sky-400"
-                            placeholder="Nom d'utilisateur"
-                            value={formData.xUsername}
-                            onChange={(e) => setFormData({ ...formData, xUsername: e.target.value })}
-                          />
-                          <Link size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-sky-300" />
+                      {/* YouTube */}
+                      <div className="p-4 rounded-3xl bg-rose-50/20 border border-rose-100/50 space-y-4">
+                        <div className="flex items-center gap-2 text-rose-600 font-extrabold text-xs">
+                          <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                          YouTube
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nom d'utilisateur / Chaîne</label>
+                            <div className="relative">
+                              <input
+                                type="text"
+                                className="input pl-11 border-rose-100 focus:border-rose-400 font-bold"
+                                placeholder="@channel"
+                                value={formData.youtubeUsername}
+                                onChange={(e) => setFormData({ ...formData, youtubeUsername: e.target.value })}
+                              />
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-rose-400 font-black text-sm">@</span>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Lien Direct / URL (Optionnel)</label>
+                            <div className="relative">
+                              <input
+                                type="url"
+                                className="input pl-11 border-rose-100 focus:border-rose-400 text-xs font-semibold"
+                                placeholder="https://youtube.com/@channel"
+                                value={formData.youtubeUrl}
+                                onChange={(e) => setFormData({ ...formData, youtubeUrl: e.target.value })}
+                              />
+                              <Link size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-rose-300" />
+                            </div>
+                          </div>
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-[10px] font-black text-rose-600 uppercase tracking-widest mb-2">YouTube</label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            className="input pl-11 border-rose-100 focus:border-rose-400"
-                            placeholder="Nom de chaine / @ handle"
-                            value={formData.youtubeUsername}
-                            onChange={(e) => setFormData({ ...formData, youtubeUsername: e.target.value })}
-                          />
-                          <Link size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-rose-300" />
+                      {/* Snapchat */}
+                      <div className="p-4 rounded-3xl bg-yellow-50/20 border border-yellow-100/50 space-y-4">
+                        <div className="flex items-center gap-2 text-yellow-600 font-extrabold text-xs">
+                          <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+                          Snapchat
                         </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-black text-yellow-600 uppercase tracking-widest mb-2">Snapchat</label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            className="input pl-11 border-yellow-100 focus:border-yellow-400"
-                            placeholder="Nom d'utilisateur"
-                            value={formData.snapchatUsername}
-                            onChange={(e) => setFormData({ ...formData, snapchatUsername: e.target.value })}
-                          />
-                          <Link size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-yellow-400" />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nom d'utilisateur</label>
+                            <div className="relative">
+                              <input
+                                type="text"
+                                className="input pl-11 border-yellow-100 focus:border-yellow-400 font-bold"
+                                placeholder="username"
+                                value={formData.snapchatUsername}
+                                onChange={(e) => setFormData({ ...formData, snapchatUsername: e.target.value })}
+                              />
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-yellow-500 font-black text-sm">👻</span>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Lien Direct / URL (Optionnel)</label>
+                            <div className="relative">
+                              <input
+                                type="url"
+                                className="input pl-11 border-yellow-100 focus:border-yellow-400 text-xs font-semibold"
+                                placeholder="https://snapchat.com/add/username"
+                                value={formData.snapchatUrl}
+                                onChange={(e) => setFormData({ ...formData, snapchatUrl: e.target.value })}
+                              />
+                              <Link size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-yellow-300" />
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>

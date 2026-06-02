@@ -263,6 +263,7 @@ router.patch(
       canImpersonate, canManageProducts, canManageLeads, canManageOrders, canManageInfluencerLinks, canManageTickets,
       city, address, cinNumber, birthDate, language, avatarUrl,
       instagramUsername, tiktokUsername, facebookUsername, xUsername, youtubeUsername, snapchatUsername,
+      instagramUrl, tiktokUrl, facebookUrl, youtubeUrl, snapchatUrl,
       ribAccount, bankName, iceNumber, bankStatus, platformFeeRate, saisieFeeMad
     } = req.body;
 
@@ -326,6 +327,17 @@ router.patch(
     if (xUsername !== undefined) profileData.xUsername = xUsername;
     if (youtubeUsername !== undefined) profileData.youtubeUsername = youtubeUsername;
     if (snapchatUsername !== undefined) profileData.snapchatUsername = snapchatUsername;
+
+    const existingMeta = user.profile?.metadata ? (user.profile.metadata as any) : {};
+    const updatedMeta = {
+      ...existingMeta,
+      ...(instagramUrl !== undefined ? { instagramUrl: instagramUrl || null } : {}),
+      ...(tiktokUrl !== undefined ? { tiktokUrl: tiktokUrl || null } : {}),
+      ...(facebookUrl !== undefined ? { facebookUrl: facebookUrl || null } : {}),
+      ...(youtubeUrl !== undefined ? { youtubeUrl: youtubeUrl || null } : {}),
+      ...(snapchatUrl !== undefined ? { snapchatUrl: snapchatUrl || null } : {}),
+    };
+    profileData.metadata = updatedMeta;
 
     if (Object.keys(profileData).length > 0) {
       await prisma.userProfile.upsert({

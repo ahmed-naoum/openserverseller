@@ -806,57 +806,27 @@ export default function HomePage() {
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-primary-500/10 rounded-full blur-[90px] pointer-events-none" />
             
             <div className="text-right space-y-3 relative z-10">
-              <span className="px-3 py-1 bg-primary-500/20 border border-primary-500/30 rounded-lg text-[9px] font-black text-primary-400 uppercase tracking-widest">محاكاة علامتك الخاصة</span>
+              <div className="flex items-center justify-start gap-2">
+                <span className="px-3 py-1 bg-primary-500/20 border border-primary-500/30 rounded-lg text-[9px] font-black text-primary-400 uppercase tracking-widest">محاكاة علامتك الخاصة</span>
+                <span className="px-3 py-1 bg-amber-500/20 border border-amber-500/30 rounded-lg text-[9px] font-black text-amber-400 uppercase tracking-widest animate-pulse">قريباً جداً</span>
+              </div>
               <h4 className="text-2xl font-black">شاهد علامتك التجارية على المنتجات فوراً!</h4>
               <p className="text-slate-400 text-xs sm:text-sm leading-relaxed max-w-lg">
                 قم برفع شعار ماركتك أو اسمك (بصيغة PNG شفافة)، وسيقوم نظامنا بتجربة لصقه وطبعه افتراضياً على علب وزجاجات التجميل والإكسسوارات لتراها فوراً بلمسة احترافية!
               </p>
             </div>
 
-            <div className="flex-shrink-0 flex flex-col sm:flex-row items-center gap-4 relative z-10 w-full sm:w-auto">
-              <input
-                type="file"
-                id="brand-logo-upload"
-                className="hidden"
-                accept="image/*"
-                onChange={handleLogoUpload}
-              />
-              <label
-                htmlFor="brand-logo-upload"
-                className="cursor-pointer w-full sm:w-auto text-center px-6 py-4 bg-white text-slate-950 hover:bg-slate-100 transition-all rounded-xl text-xs font-black uppercase tracking-wider shadow-lg active:scale-95"
+            <div className="flex-shrink-0 flex items-center gap-4 relative z-10 w-full sm:w-auto">
+              <div
+                className="w-full sm:w-auto text-center px-8 py-4 bg-slate-800/80 border border-slate-700/50 text-slate-300 rounded-xl text-xs font-black uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 cursor-not-allowed select-none"
               >
-                {customLogoSelected ? "تغيير الشعار المرفوع" : "ارفع شعارك الافتراضي (.png)"}
-              </label>
-              {customLogoSelected && (
-                <button
-                  onClick={() => { setUploadedLogo(null); setCustomLogoSelected(false); }}
-                  className="w-full sm:w-auto px-4 py-4 border border-slate-700 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold text-slate-300"
-                >
-                  إلغاء
-                </button>
-              )}
+                <Lock className="w-4 h-4 text-slate-400" />
+                <span>قريباً جداً</span>
+              </div>
             </div>
           </div>
 
-          {/* Real-time rendering output */}
-          {customLogoSelected && uploadedLogo && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="p-8 bg-white border border-slate-150 rounded-[2.5rem] max-w-lg mx-auto text-center shadow-xl space-y-4"
-            >
-              <span className="text-xs font-bold text-emerald-600">✓ تم تطبيق الشعار بنجاح على التشكيلة النموذجية!</span>
-              <div className="relative aspect-video max-w-xs mx-auto rounded-xl overflow-hidden bg-slate-50 border border-slate-100 flex items-center justify-center p-4">
-                <img src="/home page silacod copy/images/branddd.webp" alt="Cosmetic Base" className="object-cover h-full opacity-90" />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="bg-white/90 backdrop-blur-sm border border-slate-200 p-2.5 rounded-lg shadow-xl text-center max-w-[120px] transform -rotate-3 animate-pulse">
-                    <img src={uploadedLogo} alt="Custom Logo" className="h-6 mx-auto object-contain brightness-0" />
-                    <span className="text-[7px] font-black uppercase text-slate-800 tracking-wider block mt-1">BRANDED BY SILACOD</span>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
+
 
         </div>
       </section>
