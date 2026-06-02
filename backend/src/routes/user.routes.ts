@@ -433,6 +433,12 @@ router.get(
             ...account,
             ribAccount: decrypt(account.ribAccount)
           })),
+          instagramUsername: user.profile?.instagramUsername,
+          tiktokUsername: user.profile?.tiktokUsername,
+          facebookUsername: user.profile?.facebookUsername,
+          xUsername: user.profile?.xUsername,
+          youtubeUsername: user.profile?.youtubeUsername,
+          snapchatUsername: user.profile?.snapchatUsername,
           autoAssignInfluencers: user.autoAssignInfluencers,
           platformFeeRate: user.platformFeeRate,
           saisieFeeMad: user.saisieFeeMad,
