@@ -448,6 +448,7 @@ function AddUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
     onSuccess: () => {
       toast.success('Utilisateur créé avec succès');
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['userRoleCounts'] });
       onClose();
       setFormData({ fullName: '', email: '', phone: '', password: '', role: 'VENDOR' });
     },
@@ -675,6 +676,7 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
     onSuccess: () => {
       toast.success('Utilisateur mis à jour avec succès');
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['userRoleCounts'] });
       queryClient.invalidateQueries({ queryKey: ['admin-user-detail', user.uuid] });
       onClose();
     },
@@ -1361,6 +1363,8 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
 export default function AdminUsers() {
   const [roleFilter, setRoleFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [assigningAgent, setAssigningAgent] = useState<any>(null);
@@ -1369,18 +1373,37 @@ export default function AdminUsers() {
   const [generatedPasswordData, setGeneratedPasswordData] = useState<{password: string, user: any} | null>(null);
   const queryClient = useQueryClient();
 
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [roleFilter, search]);
+
   const { data, isLoading } = useQuery({
-    queryKey: ['users', { role: roleFilter, search }],
-    queryFn: () => adminApi.users({ role: roleFilter || undefined, search: search || undefined }),
+    queryKey: ['users', { role: roleFilter, search, page, limit }],
+    queryFn: () => adminApi.users({ 
+      role: roleFilter || undefined, 
+      search: search || undefined,
+      page,
+      limit
+    }),
   });
 
   const users = data?.data?.data?.users || [];
+  const pagination = data?.data?.data?.pagination || { page: 1, limit: 20, total: 0, totalPages: 1 };
+
+  const { data: countsData } = useQuery({
+    queryKey: ['userRoleCounts'],
+    queryFn: () => adminApi.getRoleCounts(),
+  });
+
+  const roleCounts = countsData?.data?.data || {};
 
   const activateMutation = useMutation({
     mutationFn: (uuid: string) => adminApi.activateUser(uuid),
     onSuccess: () => {
       toast.success('Utilisateur activé!');
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['userRoleCounts'] });
     },
   });
 
@@ -1389,6 +1412,7 @@ export default function AdminUsers() {
     onSuccess: () => {
       toast.success('Utilisateur désactivé!');
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['userRoleCounts'] });
     },
   });
 
@@ -1397,6 +1421,7 @@ export default function AdminUsers() {
     onSuccess: (res) => {
       toast.success(res.data?.message || '2FA réinitialisée avec succès!');
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['userRoleCounts'] });
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.message || 'Erreur lors de la réinitialisation de la 2FA');
@@ -1441,10 +1466,10 @@ export default function AdminUsers() {
           <div className="flex gap-4">
             <div className="px-6 py-4 bg-white/10 backdrop-blur-md rounded-3xl border border-white/10 flex flex-col items-center">
               <span className="text-xs font-black uppercase tracking-widest opacity-60">Total</span>
-              <span className="text-2xl font-black">{users.length}</span>
+              <span className="text-2xl font-black">{pagination.total}</span>
             </div>
             <div className="px-6 py-4 bg-emerald-500/20 backdrop-blur-md rounded-3xl border border-emerald-500/20 flex flex-col items-center">
-              <span className="text-xs font-black uppercase tracking-widest text-emerald-300">Actifs</span>
+              <span className="text-xs font-black uppercase tracking-widest text-emerald-300">Actifs (Page)</span>
               <span className="text-2xl font-black text-emerald-400">{users.filter((u: any) => u.isActive).length}</span>
             </div>
             <button
@@ -1459,66 +1484,120 @@ export default function AdminUsers() {
         
         {/* Background Particles Decoration */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-primary-400/10 rounded-full blur-3xl -mr-20 -mt-20" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl -ml-10 -mb-10" />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
-        {/* Advanced Filters Sidebar */}
-        <div className="xl:col-span-1 space-y-6">
-          <div className="bento-card border-none bg-white p-8 space-y-8">
-            <div className="space-y-4">
+      <div className="space-y-8">
+        {/* Top Demandes Alert banner */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 bg-[#2c2f74]/5 border border-[#2c2f74]/10 rounded-[2rem] gap-4 shadow-sm">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-[#2c2f74]/10 text-[#2c2f74] flex items-center justify-center shrink-0">
+              <Clock size={24} className="text-[#2c2f74]" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-[#2c2f74] uppercase tracking-widest">Statistiques & Alertes</h4>
+              <p className="text-sm font-bold text-slate-600 mt-0.5 leading-relaxed">
+                Des demandes de KYC sont actuellement en attente de vérification par un administrateur.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setRoleFilter('')}
+            className="text-xs font-black text-[#2c2f74] uppercase tracking-widest hover:underline px-5 py-3 bg-[#2c2f74]/5 hover:bg-[#2c2f74]/10 rounded-2xl transition-all whitespace-nowrap"
+          >
+            Voir les demandes
+          </button>
+        </div>
+
+        {/* Premium Horizontal Filter Panel on Top */}
+        <div className="bento-card border-none bg-white p-8 space-y-6 shadow-sm">
+          
+          {/* Top Line: Search & Page Limit */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            
+            {/* Search Input */}
+            <div className="flex-1 space-y-2">
               <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
                 <Search size={14} />
                 Filtre de recherche
               </h3>
-              <div className="relative group">
+              <div className="relative group max-w-xl">
                 <input
                   type="text"
-                  className="input pl-11 h-14 bg-slate-50 border-slate-100 group-focus-within:bg-white transition-all shadow-inner"
-                  placeholder="Nom, Email, ID..."
+                  className="input pl-11 h-14 bg-slate-50 border-slate-100 group-focus-within:bg-white transition-all shadow-inner w-full"
+                  placeholder="Nom, Email, ID, Rôle..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
-                <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-primary-500 transition-colors" />
+                <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#2c2f74] transition-colors" />
               </div>
             </div>
 
-            <div className="space-y-4">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                <Filter size={14} />
-                Filtrer par rôle
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {['', 'VENDOR', 'CALL_CENTER_AGENT', 'CONFIRMATION_AGENT', 'INFLUENCER', 'HELPER', 'SYSTEM_SUPPORT', 'FINANCE_ADMIN', 'SUPER_ADMIN'].map((role) => (
+            {/* Elements Per Page limit dropdown */}
+            <div className="flex items-center gap-3 self-start md:self-end bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 shadow-inner">
+              <span className="text-xs font-black text-[#2c2f74] uppercase tracking-widest">AFFICHER :</span>
+              <select
+                value={limit}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="bg-transparent text-sm font-black text-[#2c2f74] focus:outline-none cursor-pointer pr-4"
+              >
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+
+          </div>
+
+          {/* Bottom Line: Roles Category with Counts (Numbers of account type) */}
+          <div className="space-y-3 pt-6 border-t border-slate-100">
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+              <Filter size={14} />
+              Filtrer par rôle & Nombre d'utilisateurs
+            </h3>
+            <div className="flex flex-wrap gap-2.5">
+              {[
+                { key: '', label: 'TOUS LES ACCÈS', countKey: 'TOTAL' },
+                { key: 'VENDOR', label: 'VENDOR', countKey: 'VENDOR' },
+                { key: 'CALL_CENTER_AGENT', label: 'CALL CENTER AGENT', countKey: 'CALL_CENTER_AGENT' },
+                { key: 'CONFIRMATION_AGENT', label: 'CONFIRMATION AGENT', countKey: 'CONFIRMATION_AGENT' },
+                { key: 'INFLUENCER', label: 'INFLUENCER', countKey: 'INFLUENCER' },
+                { key: 'HELPER', label: 'HELPER', countKey: 'HELPER' },
+                { key: 'SYSTEM_SUPPORT', label: 'SYSTEM SUPPORT', countKey: 'SYSTEM_SUPPORT' },
+                { key: 'FINANCE_ADMIN', label: 'FINANCE ADMIN', countKey: 'FINANCE_ADMIN' },
+                { key: 'SUPER_ADMIN', label: 'SUPER ADMIN', countKey: 'SUPER_ADMIN' },
+              ].map((role) => {
+                const count = roleCounts[role.countKey] || 0;
+                return (
                   <button
-                    key={role}
-                    onClick={() => setRoleFilter(role)}
-                    className={`px-3 py-2.5 rounded-[1rem] text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap flex-grow text-center ${
-                      roleFilter === role 
-                        ? 'bg-primary-600 text-white shadow-lg shadow-primary-200/50 scale-105 z-10' 
+                    key={role.key}
+                    onClick={() => setRoleFilter(role.key)}
+                    className={`px-4 py-2.5 rounded-[1.2rem] text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2.5 shadow-sm border border-transparent ${
+                      roleFilter === role.key 
+                        ? 'bg-[#2c2f74] text-white shadow-lg shadow-[#2c2f74]/25 scale-105 z-10' 
                         : 'bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600'
                     }`}
                   >
-                    {role ? role.replace(/_/g, ' ') : 'TOUS LES ACCÈS'}
+                    <span>{role.label}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black tracking-tight ${
+                      roleFilter === role.key
+                        ? 'bg-white text-[#2c2f74]'
+                        : 'bg-slate-200/60 text-slate-500'
+                    }`}>
+                      {count}
+                    </span>
                   </button>
-                ))}
-              </div>
+                );
+              })}
             </div>
           </div>
 
-          <div className="bento-card bg-primary-50 border-primary-100 p-8">
-             <div className="flex items-center gap-3 mb-4">
-                <Clock size={24} className="text-primary-600" />
-                <h4 className="font-black text-primary-900 uppercase tracking-widest text-[10px]">Statistiques</h4>
-             </div>
-             <p className="text-sm font-bold text-primary-900/70 leading-relaxed">
-               <span className="text-primary-600 underline">8 demandes de KYC</span> sont actuellement en attente de vérification par un administrateur.
-             </p>
-          </div>
         </div>
 
         {/* Users Table Area */}
-        <div className="xl:col-span-3">
+        <div className="w-full">
           {isLoading ? (
             <div className="flex items-center justify-center py-40">
                 <div className="flex flex-col items-center gap-4">
@@ -1678,6 +1757,78 @@ export default function AdminUsers() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination */}
+              {pagination.total > 0 && (
+                <div className="p-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/50">
+                  <div className="flex items-center gap-3">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      Affichage de <span className="font-extrabold text-slate-800">{users.length}</span> sur <span className="font-extrabold text-slate-800">{pagination.total}</span> utilisateur(s)
+                    </p>
+                    <div className="h-4 w-px bg-slate-200" />
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Afficher :</span>
+                      <select
+                        value={limit}
+                        onChange={(e) => {
+                          setLimit(Number(e.target.value));
+                          setPage(1);
+                        }}
+                        className="bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer"
+                      >
+                        <option value={20}>20</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      disabled={page === 1}
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      className="px-4 py-2.5 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-700 bg-white border border-slate-100 rounded-xl transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                    >
+                      Précédent
+                    </button>
+                    <div className="flex items-center gap-1.5">
+                      {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((p) => {
+                        const isFirst = p === 1;
+                        const isLast = p === pagination.totalPages;
+                        const isNear = Math.abs(p - page) <= 1;
+
+                        if (pagination.totalPages > 6 && !isFirst && !isLast && !isNear) {
+                          if (p === 2 || p === pagination.totalPages - 1) {
+                            return <span key={p} className="text-slate-400 font-bold px-1">...</span>;
+                          }
+                          return null;
+                        }
+
+                        return (
+                          <button
+                            key={p}
+                            onClick={() => setPage(p)}
+                            className={`w-9 h-9 rounded-xl text-xs font-black transition-all flex items-center justify-center ${
+                              page === p
+                                ? 'bg-[#2c2f74] text-white shadow-md shadow-primary-200 scale-105'
+                                : 'bg-white border border-slate-100 text-slate-500 hover:bg-slate-50'
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button
+                      disabled={page === pagination.totalPages}
+                      onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
+                      className="px-4 py-2.5 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-700 bg-white border border-slate-100 rounded-xl transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                    >
+                      Suivant
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

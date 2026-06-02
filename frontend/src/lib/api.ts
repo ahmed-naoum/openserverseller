@@ -313,6 +313,7 @@ export const adminApi = {
   verifyUser: (uuid: string, isActive: boolean) => api.patch(`/admin/users/${uuid}/active`, { isActive }),
   users: (params?: { role?: string; status?: string; page?: number; limit?: number; search?: string }) =>
     api.get('/users', { params }),
+  getRoleCounts: () => api.get('/users/role-counts'),
   getUser: (uuid: string) => api.get(`/users/${uuid}`),
   createUser: (data: any) => api.post('/users', data),
   updateUser: (uuid: string, data: any) => api.patch(`/users/${uuid}/admin-edit`, data),

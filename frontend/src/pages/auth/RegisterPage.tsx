@@ -421,7 +421,10 @@ export default function RegisterPage() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-slate-700 ml-1">Email</label>
+                        <label className="text-xs font-bold text-slate-700 ml-1 flex justify-between">
+                            <span>Email</span>
+                            {touched.email && errors.email && <span className="text-red-500 text-[10px] font-bold">Invalide</span>}
+                        </label>
                         <div className="relative group/input">
                           <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
                             <Mail size={18} />
@@ -437,10 +440,16 @@ export default function RegisterPage() {
                             required={!formData.phone}
                           />
                         </div>
+                        {touched.email && errors.email && (
+                          <p className="text-red-500 text-[10px] font-bold mt-1 ml-1">{errors.email}</p>
+                        )}
                       </div>
 
                       <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-slate-700 ml-1">WhatsApp</label>
+                        <label className="text-xs font-bold text-slate-700 ml-1 flex justify-between">
+                            <span>Numéro de téléphone</span>
+                            {touched.phone && errors.phone && <span className="text-red-500 text-[10px] font-bold">Invalide</span>}
+                        </label>
                         <div className="relative group/input">
                           <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
                             <Phone size={18} />
@@ -455,6 +464,9 @@ export default function RegisterPage() {
                             onBlur={handleBlur}
                           />
                         </div>
+                        {touched.phone && errors.phone && (
+                          <p className="text-red-500 text-[10px] font-bold mt-1 ml-1">{errors.phone}</p>
+                        )}
                       </div>
                   </div>
                 </>
@@ -607,7 +619,10 @@ export default function RegisterPage() {
                           {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                         </button>
                       </div>
-
+                      {touched.password && errors.password && (
+                        <p className="text-red-500 text-[10px] font-bold mt-1 ml-1">{errors.password}</p>
+                      )}
+ 
                       <div className="bg-[#f8f9fa] rounded-xl p-4 mt-2">
                         <div className="flex flex-wrap items-center gap-2 text-xs font-bold mb-2">
                           <span className={hasLength ? 'text-green-500' : 'text-slate-400'}>+8 Characters</span>
@@ -628,15 +643,15 @@ export default function RegisterPage() {
                         <div className="flex h-1.5 bg-slate-200 rounded-full overflow-hidden">
                           <div className={`h-full transition-all duration-300 ${isPasswordStrong ? 'bg-[#51a729]' : (formData.password.length > 0 ? 'bg-[#ff9800]' : 'bg-transparent')}`} style={{ width: `${getStrengthPercentage()}%` }}></div>
                         </div>
-
+ 
                         {isPasswordStrong && (
                           <div className="text-xs text-slate-600 mt-3 flex items-center gap-1">
-                            Good job! ðŸ” This password is strong and secure
+                            Good job! This password is strong and secure
                           </div>
                         )}
                       </div>
                     </div>
-
+ 
                     <div className="space-y-1.5">
                       <label className="text-sm font-bold text-slate-700 ml-1">Repeat Password</label>
                       <div className="relative group/input">
@@ -661,6 +676,9 @@ export default function RegisterPage() {
                           {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                         </button>
                       </div>
+                      {touched.confirmPassword && errors.confirmPassword && (
+                        <p className="text-red-500 text-[10px] font-bold mt-1 ml-1">{errors.confirmPassword}</p>
+                      )}
                     </div>
                 </div>
               )}

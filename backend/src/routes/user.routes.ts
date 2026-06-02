@@ -97,6 +97,50 @@ router.get(
   })
 );
 
+router.get(
+  '/role-counts',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN', 'HELPER'),
+  asyncHandler(async (req, res) => {
+    const where: any = {};
+    if (req.user!.roleName === 'HELPER') {
+      const assignments = await (prisma as any).helperUserAssignment.findMany({
+        where: { helperId: req.user!.id }
+      });
+      const assignedUserIds = assignments.map((a: any) => a.targetUserId);
+      where.id = { in: assignedUserIds };
+    }
+
+    const counts = await prisma.user.groupBy({
+      by: ['roleId'],
+      where,
+      _count: { id: true },
+    });
+
+    const roles = await prisma.role.findMany();
+    const roleMap = roles.reduce((acc: any, r) => {
+      acc[r.id] = r.name;
+      return acc;
+    }, {});
+
+    const statistics: Record<string, number> = {
+      TOTAL: await prisma.user.count({ where }),
+    };
+
+    counts.forEach((c) => {
+      const roleName = roleMap[c.roleId];
+      if (roleName) {
+        statistics[roleName] = c._count.id;
+      }
+    });
+
+    res.json({
+      status: 'success',
+      data: statistics,
+    });
+  })
+);
+
 router.post(
   '/',
   authenticate,
