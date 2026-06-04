@@ -1,4 +1,5 @@
-import 'dotenv/config'; // v1.0.1
+import * as dotenv from 'dotenv';
+dotenv.config({ override: true });
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -196,3 +197,6 @@ server.listen(PORT, () => {
 });
 
 export default app;
+// Hot-reload trigger: Coliaty API credentials updated & /livraison permission updated & helper user edit permissions fix
+
+
