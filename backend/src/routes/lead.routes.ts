@@ -1935,7 +1935,17 @@ router.post(
       }
     });
 
-    if (!order) throw new AppException(404, 'Colis non trouvé');
+    if (!order) {
+      throw new AppException(404, 'Colis non trouvé');
+    }
+
+    if (order.status !== 'RETURNED') {
+      throw new AppException(400, "Le statut du colis doit être RETOURNÉ pour être traité.");
+    }
+
+    if (order.lead?.paymentSituation === 'FACTURED') {
+      throw new AppException(400, "Ce colis a déjà été retourné et facturé.");
+    }
 
     const owner = order.lead?.referralLink?.influencer || order.vendor;
     const ownerName = owner?.profile?.fullName || 'Utilisateur inconnu';
@@ -1950,7 +1960,7 @@ router.post(
         customerName: order.customerName,
         ownerName,
         ownerId,
-        alreadyReturned: order.status === 'RETURNED' && order.lead?.paymentSituation === 'FACTURED'
+        alreadyReturned: false // Since we explicitly throw above if already returned
       }
     });
   })
@@ -1982,7 +1992,11 @@ router.post(
 
       for (const order of orders) {
         if (!order.lead) continue;
-        if (order.status === 'RETURNED' && order.lead.paymentSituation === 'FACTURED') {
+        if (order.status !== 'RETURNED') {
+          errors.push({ orderId: order.id, message: "Le statut du colis doit être RETOURNÉ" });
+          continue;
+        }
+        if (order.lead.paymentSituation === 'FACTURED') {
           errors.push({ orderId: order.id, message: 'Déjà retourné et facturé' });
           continue;
         }
@@ -2106,7 +2120,10 @@ router.post(
       throw new AppException(404, 'Order or Lead not found for this code');
     }
 
-    if (order.status === 'RETURNED' && order.lead.paymentSituation === 'FACTURED') {
+    if (order.status !== 'RETURNED') {
+      throw new AppException(400, "Le statut du colis doit être RETOURNÉ pour être traité.");
+    }
+    if (order.lead.paymentSituation === 'FACTURED') {
       throw new AppException(400, 'Ce colis a déjà été retourné et facturé.');
     }
 

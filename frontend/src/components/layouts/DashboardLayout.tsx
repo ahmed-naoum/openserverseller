@@ -550,6 +550,9 @@ export default function DashboardLayout() {
     if (user?.role === 'HELPER' && (item.href === '/helper/links' || item.name === 'Liens de Parrainage')) {
       return user?.canManageInfluencerLinks;
     }
+    if (item.href === '/admin/backups' && user?.role !== 'SUPER_ADMIN') {
+      return false;
+    }
     // Filter by mode for vendor dashboard
     if (isVendorDashboard) {
       if (item.name === 'Gestion Vendeur') return currentMode === 'SELLER';

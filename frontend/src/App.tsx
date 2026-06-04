@@ -341,7 +341,11 @@ function App() {
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
           <Route path="activity-logs" element={<ActivityLogs />} />
-          <Route path="backups" element={<BackupManager />} />
+          <Route path="backups" element={
+            <RoleGuard allowedRoles={['SUPER_ADMIN']}>
+              <BackupManager />
+            </RoleGuard>
+          } />
           <Route path="call-center-inspector" element={<CallCenterInspector />} />
           <Route path="scanner" element={<HelperScanner />} />
           <Route path="settings" element={<SettingsPage />} />

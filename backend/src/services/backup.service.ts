@@ -14,8 +14,9 @@ const BACKUP_DIR = path.join(process.cwd(), 'backups');
 const finalBackupDir = fs.existsSync(path.join(process.cwd(), 'backend')) 
   ? path.join(process.cwd(), 'backend', 'backups')
   : BACKUP_DIR;
-const PG_DUMP_PATH = 'C:\\Program Files\\PostgreSQL\\18\\bin\\pg_dump.exe';
-const PG_RESTORE_PATH = 'C:\\Program Files\\PostgreSQL\\18\\bin\\pg_restore.exe';
+const isWindows = process.platform === 'win32';
+const PG_DUMP_PATH = process.env.PG_DUMP_PATH || (isWindows ? 'C:\\Program Files\\PostgreSQL\\18\\bin\\pg_dump.exe' : 'pg_dump');
+const PG_RESTORE_PATH = process.env.PG_RESTORE_PATH || (isWindows ? 'C:\\Program Files\\PostgreSQL\\18\\bin\\pg_restore.exe' : 'pg_restore');
 
 export class BackupService {
   static activeInterval: NodeJS.Timeout | null = null;
@@ -109,16 +110,20 @@ export class BackupService {
     const filePath = path.join(finalBackupDir, filename);
 
     const dbUrl = process.env.DATABASE_URL || '';
-    // Parse connection string for pg_dump
-    // postgresql://user:pass@host:port/db
-    const urlPattern = /postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/;
-    const match = dbUrl.match(urlPattern);
-
-    if (!match) {
-      throw new Error('Invalid DATABASE_URL format');
+    let host: string, port: string, user: string, password: string, dbname: string;
+    try {
+      const parsedUrl = new URL(dbUrl);
+      host = parsedUrl.hostname;
+      port = parsedUrl.port || '5432';
+      user = parsedUrl.username;
+      password = decodeURIComponent(parsedUrl.password);
+      dbname = parsedUrl.pathname.replace(/^\//, '');
+      if (!host || !user || !dbname) {
+        throw new Error('Missing database connection fields');
+      }
+    } catch (err) {
+      throw new Error('Invalid DATABASE_URL format: ' + (err instanceof Error ? err.message : String(err)));
     }
-
-    const [_, user, password, host, port, dbname] = match;
 
     return new Promise((resolve, reject) => {
       const dumpProcess = spawn(PG_DUMP_PATH, [
@@ -289,14 +294,20 @@ export class BackupService {
     }
 
     const dbUrl = process.env.DATABASE_URL || '';
-    const urlPattern = /postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/;
-    const match = dbUrl.match(urlPattern);
-
-    if (!match) {
-      throw new Error('Invalid DATABASE_URL format');
+    let host: string, port: string, user: string, password: string, dbname: string;
+    try {
+      const parsedUrl = new URL(dbUrl);
+      host = parsedUrl.hostname;
+      port = parsedUrl.port || '5432';
+      user = parsedUrl.username;
+      password = decodeURIComponent(parsedUrl.password);
+      dbname = parsedUrl.pathname.replace(/^\//, '');
+      if (!host || !user || !dbname) {
+        throw new Error('Missing database connection fields');
+      }
+    } catch (err) {
+      throw new Error('Invalid DATABASE_URL format: ' + (err instanceof Error ? err.message : String(err)));
     }
-
-    const [_, user, password, host, port, dbname] = match;
 
     return new Promise((resolve, reject) => {
       // Use pg_restore -c (clean) to drop objects before recreating them
