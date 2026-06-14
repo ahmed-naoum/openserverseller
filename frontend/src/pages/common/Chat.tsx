@@ -5,12 +5,13 @@ import {
   Send, Search, Plus, MessageSquare, CheckCheck,
   ChevronLeft, Headphones, MoreVertical, Smile, Paperclip, Clock,
   FileText, Download, Image as ImageIcon,
-  CheckCircle, UserPlus, X, RotateCcw
+  CheckCircle, UserPlus, X, RotateCcw, Ticket
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSocket } from '../../contexts/SocketContext';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -18,22 +19,22 @@ function formatTime(date: string | Date) {
   return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatDate(date: string | Date) {
+function formatDate(date: string | Date, language: string, t: any) {
   const d = new Date(date);
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const diff = (today.getTime() - msgDay.getTime()) / 86400000;
-  if (diff === 0) return 'Today';
-  if (diff === 1) return 'Yesterday';
-  return d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+  if (diff === 0) return t('today', 'chat');
+  if (diff === 1) return t('yesterday', 'chat');
+  return d.toLocaleDateString(language === 'ar' ? 'ar-EG' : language, { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
-function groupMessagesByDate(messages: any[]) {
+function groupMessagesByDate(messages: any[], language: string, t: any) {
   const groups: { label: string; messages: any[] }[] = [];
   let lastDate = '';
   for (const msg of messages) {
-    const label = formatDate(msg.createdAt);
+    const label = formatDate(msg.createdAt, language, t);
     if (label !== lastDate) {
       groups.push({ label, messages: [] });
       lastDate = label;
@@ -48,13 +49,13 @@ function getInitials(name?: string) {
   return name.split(' ').slice(0, 2).map((n) => n[0]).join('').toUpperCase();
 }
 
-function getConvTitle(conv: any, myId?: number) {
+function getConvTitle(conv: any, myId?: number, t?: any) {
   if (conv.title) return conv.title;
   const other = conv.participants?.find((p: any) => p.userId !== myId);
   if (other?.fullName) return other.fullName;
   if (conv.metadata?.subject) return conv.metadata.subject;
-  if (conv.type === 'SUPPORT' && conv.id) return `Ticket #${conv.id}`;
-  return 'Unknown';
+  if (conv.type === 'SUPPORT' && conv.id) return t ? t('ticket_ref', 'chat', { id: conv.id }).replace('{id}', conv.id.toString()) : `Ticket #${conv.id}`;
+  return t ? t('unknown', 'chat') : 'Unknown';
 }
 
 function getConvAvatar(conv: any, myId?: number) {
@@ -79,9 +80,11 @@ function Avatar({ name, size = 'md' }: { name?: string; size?: 'sm' | 'md' | 'lg
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function Chat() {
+  const { t, language } = useLanguage();
   const { user } = useAuth();
   const { socket } = useSocket();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedConvId, setSelectedConvId] = useState<string | null>(
     searchParams.get('convId')
@@ -97,6 +100,19 @@ export default function Chat() {
   const [showActionMenu, setShowActionMenu] = useState(false);
   const actionMenuRef = useRef<HTMLDivElement>(null);
   const [showLogsModal, setShowLogsModal] = useState(false);
+
+  const getSupportRoute = () => {
+    const role = user?.role || user?.roleName;
+    switch (role) {
+      case 'SUPER_ADMIN':
+      case 'FINANCE_ADMIN':
+      case 'SYSTEM_SUPPORT': return '/admin/support';
+      case 'VENDOR': return '/dashboard/support';
+      case 'GROSSELLER': return '/grosseller/support';
+      case 'INFLUENCER': return '/influencer/support';
+      default: return '/admin/support';
+    }
+  };
 
   const { data: logsData, isLoading: isLoadingLogs } = useQuery({
     queryKey: ['conversation-logs', selectedConvId],
@@ -120,11 +136,11 @@ export default function Chat() {
     if (!selectedConvId) return;
     try {
       await chatApi.claimConversation(selectedConvId);
-      toast.success('Conversation prise en charge');
+      toast.success(t('toast_claimed', 'chat'));
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       setShowActionMenu(false);
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Erreur lors de la prise en charge');
+      toast.error(err.response?.data?.message || t('toast_error_claim', 'chat'));
     }
   };
 
@@ -132,12 +148,12 @@ export default function Chat() {
     if (!selectedConvId) return;
     try {
       await chatApi.closeConversation(selectedConvId);
-      toast.success('Ticket terminé');
+      toast.success(t('toast_closed', 'chat'));
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       queryClient.invalidateQueries({ queryKey: ['conversation-detail', selectedConvId] });
       setShowActionMenu(false);
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Erreur lors de la fermeture');
+      toast.error(err.response?.data?.message || t('toast_error_close', 'chat'));
     }
   };
 
@@ -145,12 +161,12 @@ export default function Chat() {
     if (!selectedConvId) return;
     try {
       await chatApi.openConversation(selectedConvId);
-      toast.success('Ticket ré-ouvert');
+      toast.success(t('toast_reopened', 'chat'));
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       queryClient.invalidateQueries({ queryKey: ['conversation-detail', selectedConvId] });
       setShowActionMenu(false);
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Erreur lors de la ré-ouverture');
+      toast.error(err.response?.data?.message || t('toast_error_reopen', 'chat'));
     }
   };
 
@@ -504,7 +520,7 @@ export default function Chat() {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       scrollToBottom();
     },
-    onError: () => toast.error('Failed to send message'),
+    onError: () => toast.error(t('toast_error_send', 'chat')),
   });
 
   const createConvMutation = useMutation({
@@ -516,7 +532,7 @@ export default function Chat() {
       setShowMobileList(false);
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
-    onError: () => toast.error('Failed to create conversation'),
+    onError: () => toast.error(t('toast_error_create', 'chat')),
   });
 
   const handleSend = (e: React.FormEvent) => {
@@ -539,19 +555,19 @@ export default function Chat() {
     // Validation
     const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'application/pdf'];
     if (!allowedTypes.includes(file.type)) {
-      toast.error('Seuls les fichiers PNG, JPG, JPEG, WEBP et PDF sont autorisés');
+      toast.error(t('toast_error_file_type', 'chat'));
       return;
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      toast.error('Le fichier est trop volumineux (max 10 Mo)');
+      toast.error(t('toast_error_file_size', 'chat'));
       return;
     }
 
     const formData = new FormData();
     formData.append('file', file);
 
-    const toastId = toast.loading('Téléchargement du fichier...');
+    const toastId = toast.loading(t('toast_uploading', 'chat'));
 
     try {
       const res = await uploadApi.image(formData);
@@ -559,21 +575,21 @@ export default function Chat() {
       const type = file.type.startsWith('image/') ? 'IMAGE' : 'FILE';
       
       sendMessageMutation.mutate({
-        content: `📁 Fichier envoyé: ${file.name}`,
+        content: t('file_sent', 'chat').replace('{name}', file.name),
         messageType: type,
         attachmentUrl: url
       });
-      toast.success('Fichier envoyé avec succès', { id: toastId });
+      toast.success(t('toast_success_upload', 'chat'), { id: toastId });
     } catch (err) {
       console.error('Upload failed:', err);
-      toast.error('Échec du téléchargement', { id: toastId });
+      toast.error(t('toast_error_upload', 'chat'), { id: toastId });
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
   const filteredConvs = conversations.filter((c: any) =>
-    getConvTitle(c, user?.id).toLowerCase().includes(searchQuery.toLowerCase())
+    getConvTitle(c, user?.id, t).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const selectedConv = conversations.find((c: any) => c.id.toString() === selectedConvId) || singleConvData?.data?.data?.conversation;
@@ -585,7 +601,7 @@ export default function Chat() {
     setShowMobileList(false);
   };
 
-  const messageGroups = groupMessagesByDate(messages);
+  const messageGroups = groupMessagesByDate(messages, language, t);
 
   return (
     <div
@@ -599,7 +615,14 @@ export default function Chat() {
         {/* Sidebar Header */}
         <div className="px-5 pt-5 pb-4 border-b border-slate-50">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-black text-slate-900 tracking-tight">Messages</h2>
+            <h2 className="text-xl font-black text-slate-900 tracking-tight">{t('messages', 'chat')}</h2>
+            <button
+              onClick={() => navigate(getSupportRoute())}
+              className="flex items-center gap-2 px-3 py-1.5 h-8 rounded-xl bg-violet-50 text-violet-600 hover:bg-violet-100 transition-colors text-xs font-bold"
+              title={t('tickets', 'chat')}
+            >
+              {t('tickets', 'chat')} <Ticket size={14} />
+            </button>
           </div>
 
           {/* Search */}
@@ -607,7 +630,7 @@ export default function Chat() {
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search conversations…"
+              placeholder={t('search_placeholder', 'chat')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-slate-50 border border-slate-100 rounded-xl pl-9 pr-4 py-2.5 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 transition-all"
@@ -634,14 +657,14 @@ export default function Chat() {
               <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center mb-3">
                 <MessageSquare size={24} className="text-slate-300" />
               </div>
-              <p className="text-sm font-semibold text-slate-500">No conversations yet</p>
-              <p className="text-xs text-slate-400 mt-1">Vos conversations d'achat s'afficheront ici.</p>
+              <p className="text-sm font-semibold text-slate-500">{t('no_conversations', 'chat')}</p>
+              <p className="text-xs text-slate-400 mt-1">{t('no_conversations_desc', 'chat')}</p>
             </div>
           ) : (
             <div className="py-2">
               {filteredConvs.map((conv: any) => {
                 const isActive = selectedConvId === conv.id.toString();
-                const title = getConvTitle(conv, user?.id);
+                const title = getConvTitle(conv, user?.id, t);
                 const avatarName = getConvAvatar(conv, user?.id);
                 const isSupport = conv.type === 'SUPPORT';
                 return (
@@ -725,7 +748,7 @@ export default function Chat() {
 
               <div className="flex-1 min-w-0">
                 <h3 className="font-bold text-slate-900 text-sm leading-none mb-1 truncate">
-                  {getConvTitle(selectedConv, user?.id)}
+                  {getConvTitle(selectedConv, user?.id, t)}
                 </h3>
                 <div className="flex items-center gap-1.5">
                   <span className={`w-1.5 h-1.5 rounded-full ${
@@ -734,9 +757,9 @@ export default function Chat() {
                     'bg-amber-400'
                   }`} />
                   <span className="text-xs text-slate-400">
-                    {selectedConv?.status === 'ACTIVE' ? 'En ligne' : 
-                     selectedConv?.status === 'CLOSED' ? 'Clôturé' : 
-                     'En attente'}
+                    {selectedConv?.status === 'ACTIVE' ? t('online', 'chat') : 
+                     selectedConv?.status === 'CLOSED' ? t('closed_status', 'chat') : 
+                     t('pending_status', 'chat')}
                   </span>
                 </div>
               </div>
@@ -751,10 +774,10 @@ export default function Chat() {
                   <MoreVertical size={16} />
                 </button>
 
-                {showActionMenu && (
+                 {showActionMenu && (
                   <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-[60] animate-in fade-in zoom-in-95 duration-200 origin-top-right">
                     <div className="px-3 py-2 border-b border-slate-50 mb-1">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Actions Ticket</p>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('actions_ticket', 'chat')}</p>
                     </div>
 
                     {(user?.role === 'SYSTEM_SUPPORT' || user?.role === 'SUPER_ADMIN') && selectedConv?.status === 'PENDING_CLAIM' && (
@@ -766,8 +789,8 @@ export default function Chat() {
                           <UserPlus size={16} />
                         </div>
                         <div>
-                          <p className="leading-none">Pris en charge</p>
-                          <p className="text-[10px] font-medium text-emerald-600/60 mt-1">Assigner à moi</p>
+                          <p className="leading-none">{t('claim', 'chat')}</p>
+                          <p className="text-[10px] font-medium text-emerald-600/60 mt-1">{t('claim_desc', 'chat')}</p>
                         </div>
                       </button>
                     )}
@@ -781,8 +804,8 @@ export default function Chat() {
                           <CheckCircle size={16} />
                         </div>
                         <div>
-                          <p className="leading-none">Terminé les tickets</p>
-                          <p className="text-[10px] font-medium text-rose-600/60 mt-1">Clôturer la demande</p>
+                          <p className="leading-none">{t('close', 'chat')}</p>
+                          <p className="text-[10px] font-medium text-rose-600/60 mt-1">{t('close_desc', 'chat')}</p>
                         </div>
                       </button>
                     )}
@@ -796,8 +819,8 @@ export default function Chat() {
                           <RotateCcw size={16} />
                         </div>
                         <div>
-                          <p className="leading-none">Ré-ouvrir le ticket</p>
-                          <p className="text-[10px] font-medium text-emerald-600/60 mt-1">Reprendre la discussion</p>
+                          <p className="leading-none">{t('reopen', 'chat')}</p>
+                          <p className="text-[10px] font-medium text-emerald-600/60 mt-1">{t('reopen_desc', 'chat')}</p>
                         </div>
                       </button>
                     )}
@@ -810,8 +833,8 @@ export default function Chat() {
                         <Clock size={16} />
                       </div>
                       <div>
-                        <p className="leading-none">Historique</p>
-                        <p className="text-[10px] font-medium text-slate-400 mt-1">Voir les logs</p>
+                        <p className="leading-none">{t('history', 'chat')}</p>
+                        <p className="text-[10px] font-medium text-slate-400 mt-1">{t('history_desc', 'chat')}</p>
                       </div>
                     </button>
                   </div>
@@ -826,8 +849,8 @@ export default function Chat() {
                   <Clock size={16} className="animate-pulse" />
                 </div>
                 <div>
-                  <p className="text-xs font-black text-amber-900 leading-tight">En attente d'un assistant</p>
-                  <p className="text-[10px] font-bold text-amber-700">Votre demande a été envoyée. Vous pouvez commencer à écrire ici.</p>
+                  <p className="text-xs font-black text-amber-900 leading-tight">{t('waiting_assistant', 'chat')}</p>
+                  <p className="text-[10px] font-bold text-amber-700">{t('waiting_assistant_desc', 'chat')}</p>
                 </div>
               </div>
             )}
@@ -842,7 +865,7 @@ export default function Chat() {
                          🛒
                        </div>
                        <div>
-                         <p className="text-xs font-black text-slate-900">{selectedConv.metadata.productName || 'Produit'}</p>
+                         <p className="text-xs font-black text-slate-900">{selectedConv.metadata.productName || t('product', 'chat')}</p>
                          <p className="text-[10px] font-bold text-slate-400">SKU: {selectedConv.metadata.productSku} • Cmd: #{selectedConv.metadata.orderNumber}</p>
                        </div>
                     </div>
@@ -859,7 +882,7 @@ export default function Chat() {
                              👤
                            </div>
                            <div>
-                             <p className="text-xs font-black text-slate-900">{customer.fullName || 'Utilisateur'}</p>
+                             <p className="text-xs font-black text-slate-900">{customer.fullName || t('default_user', 'chat')}</p>
                              <p className="text-[10px] font-bold text-slate-400">
                                {customer.email} {customer.phone && `• ${customer.phone}`}
                              </p>
@@ -870,15 +893,15 @@ export default function Chat() {
                    </div>
                   <div className="flex flex-wrap gap-2 md:gap-6 text-sm">
                      <div className="flex flex-col">
-                       <span className="text-[10px] uppercase font-bold text-slate-400">Marque</span>
+                       <span className="text-[10px] uppercase font-bold text-slate-400">{t('brand', 'chat')}</span>
                        <span className="font-black text-slate-900">{selectedConv.metadata.brandName || 'N/A'}</span>
                      </div>
                      <div className="flex flex-col">
-                       <span className="text-[10px] uppercase font-bold text-slate-400">Quantité</span>
+                       <span className="text-[10px] uppercase font-bold text-slate-400">{t('quantity', 'chat')}</span>
                        <span className="font-black text-slate-900">{selectedConv.metadata.requestedQty || 0}</span>
                      </div>
                      <div className="flex flex-col">
-                       <span className="text-[10px] uppercase font-bold text-slate-400">CA Attendu</span>
+                       <span className="text-[10px] uppercase font-bold text-slate-400">{t('expected_revenue', 'chat')}</span>
                        <span className="font-black text-emerald-600">{(selectedConv.metadata.requestedQty || 0) * (selectedConv.metadata.retailPriceMad || 0)} MAD</span>
                      </div>
                   </div>
@@ -911,8 +934,8 @@ export default function Chat() {
                   <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mb-4">
                     <MessageSquare size={28} className="text-slate-300" />
                   </div>
-                  <p className="text-sm font-semibold text-slate-500">No messages yet</p>
-                  <p className="text-xs text-slate-400 mt-1">Say hello to start the conversation!</p>
+                  <p className="text-sm font-semibold text-slate-500">{t('no_messages', 'chat')}</p>
+                  <p className="text-xs text-slate-400 mt-1">{t('no_messages_desc', 'chat')}</p>
                 </div>
               ) : (
                 messageGroups.map((group) => (
@@ -982,8 +1005,8 @@ export default function Chat() {
                                     <FileText size={16} />
                                   </div>
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-bold truncate">Document PDF</p>
-                                    <p className="text-[10px] opacity-60">Cliquez pour voir/télécharger</p>
+                                    <p className="text-xs font-bold truncate">{t('pdf_document', 'chat')}</p>
+                                    <p className="text-[10px] opacity-60">{t('pdf_desc', 'chat')}</p>
                                   </div>
                                   <Download size={14} className="opacity-40" />
                                 </a>
@@ -1015,7 +1038,7 @@ export default function Chat() {
                   <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" />
                 </div>
                 <span className="text-xs font-bold text-violet-500">
-                  En train d'écrire...
+                  {t('typing', 'chat')}
                 </span>
               </div>
             )}
@@ -1028,8 +1051,8 @@ export default function Chat() {
                     <CheckCircle size={20} />
                   </div>
                   <div>
-                    <p className="text-xs font-black text-slate-900 uppercase tracking-widest">Cette conversation est terminée</p>
-                    <p className="text-[10px] font-bold text-slate-400">Ce ticket a été clôturé par un agent de support. Vous pouvez toujours consulter l'historique.</p>
+                    <p className="text-xs font-black text-slate-900 uppercase tracking-widest">{t('chat_ended', 'chat')}</p>
+                    <p className="text-[10px] font-bold text-slate-400">{t('chat_ended_desc', 'chat')}</p>
                   </div>
                 </div>
               ) : (
@@ -1060,7 +1083,7 @@ export default function Chat() {
                         handleTyping();
                       }}
                       onKeyDown={handleKeyDown}
-                      placeholder="Write a message… (Enter to send)"
+                      placeholder={t('input_placeholder', 'chat')}
                       className="flex-1 bg-transparent resize-none focus:outline-none text-sm text-slate-800 placeholder-slate-400 py-1.5 max-h-28 leading-relaxed"
                       rows={1}
                     />
@@ -1082,7 +1105,7 @@ export default function Chat() {
                     </button>
                   </div>
                   <p className="text-[9px] text-slate-400 text-center mt-2 tracking-wide">
-                    ↵ Send · Shift+↵ New line
+                    {t('input_help', 'chat')}
                   </p>
                 </form>
               )}
@@ -1094,8 +1117,8 @@ export default function Chat() {
             <div className="w-16 h-16 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center mb-4">
               <span className="w-8 h-8 border-4 border-violet-100 border-t-violet-600 rounded-full animate-spin" />
             </div>
-            <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Ouverture du chat...</h3>
-            <p className="text-xs text-slate-500 mt-1">Veuillez patienter un instant</p>
+            <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">{t('opening_chat', 'chat')}</h3>
+            <p className="text-xs text-slate-500 mt-1">{t('please_wait', 'chat')}</p>
           </div>
         ) : (
           /* Empty state */
@@ -1103,9 +1126,9 @@ export default function Chat() {
             <div className="w-20 h-20 bg-gradient-to-br from-violet-100 to-purple-100 rounded-[2rem] flex items-center justify-center mb-5 shadow-inner">
               <MessageSquare size={36} className="text-violet-400" />
             </div>
-            <h3 className="text-lg font-black text-slate-800 mb-2">Your Messages</h3>
+            <h3 className="text-lg font-black text-slate-800 mb-2">{t('your_messages', 'chat')}</h3>
             <p className="text-sm text-slate-500 mb-6 max-w-xs">
-              Start a new conversation with our support team and wait for a support member to join the chat by claiming it from their dashboard.
+              {t('your_messages_desc', 'chat')}
             </p>
           </div>
         )}
@@ -1121,8 +1144,8 @@ export default function Chat() {
           <div className="relative w-full max-w-lg bg-white rounded-[2rem] shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
             <div className="flex-shrink-0 p-6 border-b border-slate-100 flex items-center justify-between">
               <div>
-                <h3 className="text-xl font-black text-slate-900">Historique du Ticket</h3>
-                <p className="text-sm text-slate-500 font-medium mt-1">Traçabilité des actions</p>
+                <h3 className="text-xl font-black text-slate-900">{t('ticket_history', 'chat')}</h3>
+                <p className="text-sm text-slate-500 font-medium mt-1">{t('action_trace', 'chat')}</p>
               </div>
               <button 
                 onClick={() => setShowLogsModal(false)}
@@ -1142,8 +1165,8 @@ export default function Chat() {
                   <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Clock size={24} className="text-slate-400" />
                   </div>
-                  <p className="text-sm font-bold text-slate-900">Aucun historique</p>
-                  <p className="text-xs text-slate-500 mt-1">Les actions seront affichées ici</p>
+                  <p className="text-sm font-bold text-slate-900">{t('no_logs', 'chat')}</p>
+                  <p className="text-xs text-slate-500 mt-1">{t('no_logs_desc', 'chat')}</p>
                 </div>
               ) : (
                 <div className="space-y-6">
@@ -1167,13 +1190,13 @@ export default function Chat() {
                       <div className="bg-slate-50 rounded-2xl p-4 ml-2">
                         <div className="flex items-start justify-between gap-4 mb-2">
                           <p className="text-sm font-bold text-slate-900">
-                            {log.action === 'CREATED' ? 'Création' :
-                             log.action === 'CLAIMED' ? 'Prise en charge' :
-                             log.action === 'CLOSED' ? 'Clôture' :
+                            {log.action === 'CREATED' ? t('log_created', 'chat') :
+                             log.action === 'CLAIMED' ? t('log_claimed', 'chat') :
+                             log.action === 'CLOSED' ? t('log_closed', 'chat') :
                              log.action}
                           </p>
                           <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">
-                            {new Date(log.createdAt).toLocaleString('fr-FR', {
+                            {new Date(log.createdAt).toLocaleString(language === 'ar' ? 'ar-EG' : language === 'fr' ? 'fr-FR' : 'en-US', {
                               day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
                             })}
                           </span>
@@ -1185,7 +1208,7 @@ export default function Chat() {
                           <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-200/60">
                             <Avatar name={log.user.profile?.fullName || log.user.email} size="sm" />
                             <div>
-                              <p className="text-[10px] font-bold text-slate-700">{log.user.profile?.fullName || 'Utilisateur'}</p>
+                              <p className="text-[10px] font-bold text-slate-700">{log.user.profile?.fullName || t('default_user', 'chat')}</p>
                               <p className="text-[9px] text-slate-400 font-medium">{log.user.role?.name}</p>
                             </div>
                           </div>

@@ -388,7 +388,7 @@ export default function ProductDetail() {
   const actionText = (isInfluencerClaimable || isAffiliateClaimable) ? 'Add to My Product' : 'Buy Product';
 
   return (
-    <div className="min-h-screen bg-[#FDFDFD] font-['Inter'] pb-20">
+    <div className="min-h-screen bg-[#FDFDFD] font-['29LT_Kaff',_Cairo,_Inter,_sans-serif] pb-20">
       {/* Header Bar */}
       <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-slate-100 px-6 py-4 shadow-sm mb-8">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">

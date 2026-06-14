@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { categoriesApi, publicApi } from '../../lib/api';
 import toast from 'react-hot-toast';
-import { Trash2, Pencil, Image as ImageIcon } from 'lucide-react';
+import { Trash2, Pencil, Image as ImageIcon, Package, List as ListIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Link } from 'react-router-dom';
 
 export default function AdminCategories() {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -36,6 +37,24 @@ export default function AdminCategories() {
 
   return (
     <div className="space-y-6">
+      {/* Sub Navigation */}
+      <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm w-fit">
+        <Link 
+          to="/admin/products" 
+          className="px-6 py-2.5 text-slate-500 hover:text-slate-900 hover:bg-slate-50 rounded-xl font-bold text-sm transition-all flex items-center gap-2"
+        >
+          <Package size={16} />
+          Produits
+        </Link>
+        <Link 
+          to="/admin/categories" 
+          className="px-6 py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm shadow-md flex items-center gap-2"
+        >
+          <ListIcon size={16} />
+          Catégories
+        </Link>
+      </div>
+
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-gray-900">Catégories</h1>

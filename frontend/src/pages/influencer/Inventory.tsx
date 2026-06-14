@@ -7,15 +7,16 @@ import {
   XCircle,
   ExternalLink,
   Search,
-  Filter,
   RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 type ClaimStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'BUILDING';
 
 export default function InfluencerInventory() {
+  const { t } = useLanguage();
   const [claims, setClaims] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ClaimStatus | 'ALL'>('ALL');
@@ -33,7 +34,7 @@ export default function InfluencerInventory() {
       const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
       setClaims(data);
     } catch (error) {
-      toast.error('Impossible de charger vos produits');
+      toast.error(t('error_loading', 'inventory', 'Impossible de charger vos produits'));
       console.error(error);
     } finally {
       setIsLoading(false);
@@ -76,9 +77,9 @@ export default function InfluencerInventory() {
         return c;
       }));
       
-      toast.success('Lien généré avec succès !');
+      toast.success(t('link_success', 'inventory', 'Lien généré avec succès !'));
     } catch (error) {
-      toast.error('Erreur lors de la génération du lien');
+      toast.error(t('link_error', 'inventory', 'Erreur lors de la génération du lien'));
       console.error(error);
     }
   };
@@ -86,7 +87,7 @@ export default function InfluencerInventory() {
   const handleCopyLink = (code: string) => {
     const link = `${window.location.origin}/r/${code}`;
     navigator.clipboard.writeText(link);
-    toast.success('Lien copié dans le presse-papiers !');
+    toast.success(t('copied_success', 'inventory', 'Lien copié dans le presse-papiers !'));
   };
 
   if (isLoading) {
@@ -101,15 +102,15 @@ export default function InfluencerInventory() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Mes Produits</h1>
-          <p className="text-gray-500 text-sm mt-1">Gérez vos produits réclamés et suivez vos approbations.</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('title', 'inventory', 'Mes Produits')}</h1>
+          <p className="text-gray-500 text-sm mt-1">{t('subtitle', 'inventory', 'Gérez vos produits réclamés et suivez vos approbations.')}</p>
         </div>
 
         <div className="flex items-center gap-3">
           <button 
             onClick={fetchClaims}
             className="p-2.5 bg-white border border-gray-200 rounded-xl text-gray-500 hover:text-influencer-600 hover:border-influencer-200 hover:bg-influencer-50 transition-all shadow-sm group"
-            title="Actualiser"
+            title={t('refresh', 'inventory', 'Actualiser')}
           >
             <RefreshCw className="w-4 h-4 group-active:animate-spin" />
           </button>
@@ -117,7 +118,7 @@ export default function InfluencerInventory() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input 
               type="text"
-              placeholder="Rechercher un produit..."
+              placeholder={t('search_placeholder', 'inventory', 'Rechercher un produit...')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-influencer-500 outline-none transition-all w-full md:w-64"
@@ -133,7 +134,7 @@ export default function InfluencerInventory() {
             <Clock className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">En attente</p>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">{t('pending', 'inventory', 'En attente')}</p>
             <p className="text-xl font-black text-gray-900">{stats.pending}</p>
           </div>
         </div>
@@ -142,7 +143,7 @@ export default function InfluencerInventory() {
             <Package className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">En construction</p>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">{t('building', 'inventory', 'En construction')}</p>
             <p className="text-xl font-black text-gray-900">{stats.building}</p>
           </div>
         </div>
@@ -151,7 +152,7 @@ export default function InfluencerInventory() {
             <CheckCircle2 className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Approuvés</p>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">{t('approved', 'inventory', 'Approuvés')}</p>
             <p className="text-xl font-black text-gray-900">{stats.approved}</p>
           </div>
         </div>
@@ -160,7 +161,7 @@ export default function InfluencerInventory() {
             <XCircle className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Refusés</p>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">{t('rejected', 'inventory', 'Refusés')}</p>
             <p className="text-xl font-black text-gray-900">{stats.rejected}</p>
           </div>
         </div>
@@ -178,7 +179,7 @@ export default function InfluencerInventory() {
                 : 'text-gray-500 hover:bg-gray-50'
             }`}
           >
-            {tab === 'ALL' ? 'Tous' : tab === 'PENDING' ? 'En attente' : tab === 'BUILDING' ? 'En construction' : tab === 'APPROVED' ? 'Approuvés' : 'Refusés'}
+            {tab === 'ALL' ? t('all', 'inventory', 'Tous') : tab === 'PENDING' ? t('pending', 'inventory', 'En attente') : tab === 'BUILDING' ? t('building', 'inventory', 'En construction') : tab === 'APPROVED' ? t('approved', 'inventory', 'Approuvés') : t('rejected', 'inventory', 'Refusés')}
           </button>
         ))}
       </div>
@@ -217,7 +218,7 @@ export default function InfluencerInventory() {
                     {claim.status === 'APPROVED' && <CheckCircle2 className="w-3 h-3" />}
                     {claim.status === 'REJECTED' && <XCircle className="w-3 h-3" />}
                     {claim.status === 'PENDING' && <Clock className="w-3 h-3" />}
-                    {claim.status === 'APPROVED' ? 'Approuvé' : claim.status === 'REJECTED' ? 'Refusé' : 'En attente'}
+                    {claim.status === 'APPROVED' ? t('approved_single', 'inventory', 'Approuvé') : claim.status === 'REJECTED' ? t('rejected_single', 'inventory', 'Refusé') : t('pending', 'inventory', 'En attente')}
                   </div>
                 </div>
               </div>
@@ -228,12 +229,12 @@ export default function InfluencerInventory() {
                 
                 <div className="mt-auto pt-4 border-t border-gray-50 flex items-center justify-between">
                   <div className="flex flex-col gap-1">
-                    <div className="text-[10px] font-bold text-gray-400 uppercase leading-none">Prix Influencer</div>
+                    <div className="text-[10px] font-bold text-gray-400 uppercase leading-none">{t('influencer_price', 'inventory', 'Prix Influencer')}</div>
                     <div className="text-influencer-600 font-black text-sm leading-none">
                       {claim.product.influencerPriceMad || claim.product.retailPriceMad} <span className="text-[10px]">MAD</span>
                     </div>
-                    <div className="text-[10px] font-bold text-influencer-500">
-                      Qte: {claim.product.stockQuantity || 0}
+                    <div className="text-[10px] font-bold text-influencer-50">
+                      {t('qty', 'inventory', 'Qte')}: {claim.product.stockQuantity || 0}
                     </div>
                   </div>
                   
@@ -243,10 +244,10 @@ export default function InfluencerInventory() {
                         <div className="flex flex-col items-end gap-1">
                           <span className="px-2 py-1 bg-amber-50 text-amber-600 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                            En construction
+                            {t('building', 'inventory', 'En construction')}
                           </span>
                           <span className="text-[8px] text-gray-400 italic text-right max-w-[120px]">
-                            Lien en préparation par l'équipe...
+                            {t('link_preparation', 'inventory', "Lien en préparation par l'équipe...")}
                           </span>
                         </div>
                       ) : (
@@ -255,7 +256,7 @@ export default function InfluencerInventory() {
                           className="flex items-center gap-2 px-3 py-1.5 bg-influencer-50 text-influencer-600 rounded-lg hover:bg-influencer-100 transition-colors text-xs font-bold"
                         >
                           <ExternalLink className="w-3 h-3" />
-                          Copier
+                          {t('copy', 'inventory', 'Copier')}
                         </button>
                       )
                     ) : (
@@ -264,12 +265,12 @@ export default function InfluencerInventory() {
                         className="flex items-center gap-2 px-3 py-1.5 bg-influencer-600 text-white rounded-lg hover:bg-influencer-700 transition-colors text-xs font-bold shadow-sm"
                       >
                         <Package className="w-3 h-3" />
-                        Générer
+                        {t('generate', 'inventory', 'Générer')}
                       </button>
                     )
                   ) : (
                     <div className="text-[10px] font-bold text-gray-400 italic">
-                      {claim.status === 'REJECTED' ? 'Non éligible' : 'Vérification...'}
+                      {claim.status === 'REJECTED' ? t('not_eligible', 'inventory', 'Non éligible') : t('verifying', 'inventory', 'Vérification...')}
                     </div>
                   )}
                 </div>
@@ -281,8 +282,8 @@ export default function InfluencerInventory() {
         {filteredClaims.length === 0 && (
           <div className="col-span-full py-20 flex flex-col items-center justify-center text-gray-400 bg-white rounded-2xl border-2 border-dashed border-gray-100">
             <Package className="w-16 h-16 mb-4 opacity-20" />
-            <p className="font-bold">Aucun produit trouvé</p>
-            <p className="text-sm">Essayez de modifier vos filtres ou de réclamer des produits au marché.</p>
+            <p className="font-bold">{t('no_product_found', 'inventory', 'Aucun produit trouvé')}</p>
+            <p className="text-sm">{t('no_product_desc', 'inventory', 'Essayez de modifier vos filtres ou de réclamer des produits au marché.')}</p>
           </div>
         )}
       </div>

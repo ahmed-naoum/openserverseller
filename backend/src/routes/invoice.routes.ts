@@ -1,10 +1,9 @@
+import { prisma } from '../lib/prisma.js';
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Get invoice stats for the authenticated user
 router.get(

@@ -20,6 +20,7 @@ export interface User {
 
 export const api = axios.create({
   baseURL: API_URL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -118,7 +119,7 @@ export const authApi = {
     api.get(`/auth/verify-reset-token/${token}`),
   verifyOtp: (data: { email?: string; phone?: string; otp: string }) =>
     api.post('/auth/verify-otp', data),
-  googleAuth: (data: { credential: string; role?: string }) =>
+  googleAuth: (data: { credential: string; role?: string; language?: string }) =>
     api.post('/auth/google', data),
   login2FA: (data: { twoFactorToken: string; code: string }) =>
     api.post('/auth/login/2fa', data),
@@ -126,6 +127,7 @@ export const authApi = {
   verify2FA: (data: { code: string; secret?: string }) =>
     api.post('/auth/2fa/verify', data),
   disable2FA: () => api.post('/auth/2fa/disable'),
+  updateLanguageSetting: (language: string) => api.put('/user/settings', { language }),
   impersonate: (data: { targetUserId: number }) =>
     api.post('/auth/impersonate', data),
   sendBankOtp: (data: { bankName: string; ribAccount: string; iceNumber?: string }) =>
@@ -174,7 +176,7 @@ export const productsApi = {
 };
 
 export const leadsApi = {
-  list: (params?: { status?: string; page?: number; limit?: number; search?: string; viewMode?: string; mode?: string }) =>
+  list: (params?: { status?: string; page?: number; limit?: number; search?: string; viewMode?: string; mode?: string; vendorId?: string; productId?: string; isSuspicious?: boolean; city?: string; coliatyPackageCode?: string; accountId?: string; agentId?: string }) =>
     api.get('/leads', { params }),
   create: (data: any) => api.post('/leads', data),
   import: (data: { leads: any[]; sourceMode?: string }) => api.post('/leads/import', data),
@@ -285,6 +287,7 @@ export const publicApi = {
   getReferralLinkData: (code: string) => api.get(`/influencer/links/${code}/public`),
   trackWhatsappClick: (code: string) => api.post(`/influencer/links/${code}/track-whatsapp`),
   submitReferralLead: (data: { referralCode: string; fullName: string; phone: string; city: string; address: string; productVariant?: string }) => api.post('/public/leads', data),
+  submitContact: (data: { name: string; email: string; subject: string; message: string }) => api.post('/public/contact', data),
 };
 
 export const uploadApi = {
@@ -305,12 +308,13 @@ export const uploadApi = {
 export const adminApi = {
   dashboard: () => api.get('/admin/dashboard'),
   getVerifications: (filter?: string) => api.get('/admin/verifications', { params: { filter: filter || 'all' } }),
-  verifyEmail: (uuid: string) => api.patch(`/admin/users/${uuid}/verify-email`),
-  verifyKyc: (uuid: string, status: 'APPROVED' | 'REJECTED') =>
+  verifyEmail: (uuid: string, verified?: boolean) => api.patch(`/admin/users/${uuid}/verify-email`, { verified }),
+  verifyKyc: (uuid: string, status: 'APPROVED' | 'REJECTED' | 'PENDING') =>
     api.patch(`/admin/users/${uuid}/verify-kyc`, { status }),
-  verifyBank: (id: number, status: 'APPROVED' | 'REJECTED') =>
+  verifyBank: (id: number, status: 'APPROVED' | 'REJECTED' | 'PENDING') =>
     api.patch(`/admin/bank-accounts/${id}/status`, { status }),
   verifyUser: (uuid: string, isActive: boolean) => api.patch(`/admin/users/${uuid}/active`, { isActive }),
+  verifyContract: (uuid: string, accepted?: boolean) => api.patch(`/admin/users/${uuid}/verify-contract`, { accepted }),
   users: (params?: { role?: string; status?: string; page?: number; limit?: number; search?: string }) =>
     api.get('/users', { params }),
   getRoleCounts: () => api.get('/users/role-counts'),
@@ -380,6 +384,7 @@ export const adminApi = {
   // Activity Logs
   getActivityLogs: (params?: { page?: number; limit?: number; userId?: number; action?: string }) => 
     api.get('/admin/audit-logs', { params }),
+  clearActivityLogs: () => api.delete('/admin/audit-logs'),
   // Call Center Inspector
   getCallCenterAgents: (params?: { startDate?: string; endDate?: string }) => api.get('/admin/call-center-agents', { params }),
   getCallCenterAgentLeads: (agentId: number, params?: { status?: string; search?: string; page?: number; limit?: number; startDate?: string; endDate?: string }) =>
@@ -387,6 +392,17 @@ export const adminApi = {
   getFinanceUsers: () => api.get('/admin/finance/users'),
   adjustWallet: (data: { userId: number; amount: number; type: 'CREDIT' | 'DEBIT'; description?: string }) => 
     api.post('/admin/wallet/adjust', data),
+  // Influencer Inspector
+  getInfluencerInspector: () => api.get('/admin/influencer-inspector'),
+  getSupportInspector: () => api.get('/admin/support-inspector'),
+  getReferralLinks: () => api.get('/admin/referral-links'),
+  deleteReferralLink: (id: number) => api.delete(`/admin/referral-links/${id}`),
+  getContactMessages: (params?: { page?: number; limit?: number; search?: string; status?: string }) =>
+    api.get('/admin/contact-messages', { params }),
+  updateContactMessageStatus: (id: number, status: string) =>
+    api.patch(`/admin/contact-messages/${id}/status`, { status }),
+  deleteContactMessage: (id: number) =>
+    api.delete(`/admin/contact-messages/${id}`),
 };
 
 export const chatApi = {
@@ -447,7 +463,8 @@ export const dashboardApi = {
 
 export const influencerApi = {
   enable: () => api.post('/influencer/enable'),
-  createLink: (productId: number) => api.post('/influencer/links', { productId }),
+  createLink: (productId: number, customName?: string) => api.post('/influencer/links', { productId, customName }),
+  checkLinkNameUnique: (name: string) => api.get('/influencer/links/check-unique', { params: { name } }),
   getLinks: (params?: { start?: string; end?: string }) => api.get('/influencer/links', { params }),
   getLinkStats: (code: string) => api.get(`/influencer/links/${code}/stats`),
   trackConversion: (code: string, orderId: number) => api.post('/influencer/track-conversion', { code, orderId }),
@@ -465,7 +482,7 @@ export const influencerApi = {
     requestedQty?: number; 
     requestedLandingPageUrl?: string; 
   }) => api.post('/influencer/claims', data),
-  getCustomers: (params?: { page?: number; limit?: number; search?: string }) =>
+  getCustomers: (params?: { page?: number; limit?: number; search?: string; all?: boolean }) =>
     api.get('/influencer/customers', { params }),
   getCampaigns: () => api.get('/influencer/campaigns'),
   createCampaign: (data: any) => api.post('/influencer/campaigns', data),

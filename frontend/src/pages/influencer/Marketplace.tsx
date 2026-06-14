@@ -14,8 +14,10 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export default function InfluencerMarketplace() {
+  const { t } = useLanguage();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -68,7 +70,7 @@ export default function InfluencerMarketplace() {
       setTotal(productsRes.data?.data?.total || 0);
       setClaims(Array.isArray(claimsRes.data) ? claimsRes.data : (claimsRes.data?.data || []));
     } catch (error) {
-      toast.error('Impossible de charger les données');
+      toast.error(t('error_load_data', 'marketplace'));
     } finally {
       setIsLoading(false);
     }
@@ -77,7 +79,7 @@ export default function InfluencerMarketplace() {
   const handleClaimProduct = async (productId: number) => {
     const { percentage } = getVerificationStatus(user);
     if (percentage < 100) {
-      toast.error('Vous devez compléter votre profil à 100% pour réclamer un produit.');
+      toast.error(t('error_profile_100', 'marketplace'));
       navigate('/influencer/verification');
       return;
     }
@@ -85,10 +87,10 @@ export default function InfluencerMarketplace() {
     try {
       setClaimingFor(productId);
       await influencerApi.claimProduct({ productId });
-      toast.success('Produit réclamé ! En attente d\'approbation.');
+      toast.success(t('success_claimed', 'marketplace'));
       await fetchData(); // Refresh to show pending status
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Erreur lors de la réclamation');
+      toast.error(error.response?.data?.message || t('error_claimed', 'marketplace'));
     } finally {
       setClaimingFor(null);
     }
@@ -106,10 +108,10 @@ export default function InfluencerMarketplace() {
       
       // Auto copy
       navigator.clipboard.writeText(url);
-      toast.success('Lien généré et copié !');
+      toast.success(t('success_link_generated', 'marketplace'));
       
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Erreur lors de la génération du lien');
+      toast.error(error.response?.data?.message || t('error_link_generated', 'marketplace'));
     } finally {
       setGeneratingFor(null);
     }
@@ -117,7 +119,7 @@ export default function InfluencerMarketplace() {
 
   const copyToClipboard = (url: string) => {
     navigator.clipboard.writeText(url);
-    toast.success('Lien copié !');
+    toast.success(t('success_copied', 'marketplace'));
   };
 
 
@@ -126,8 +128,8 @@ export default function InfluencerMarketplace() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Marketplace Affiliation</h1>
-          <p className="text-sm text-gray-500 mt-1">Découvrez les produits disponibles et générez vos liens de parrainage.</p>
+          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">{t('title', 'marketplace')}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t('subtitle', 'marketplace')}</p>
         </div>
       </div>
 
@@ -138,7 +140,7 @@ export default function InfluencerMarketplace() {
         </div>
         <input
           type="text"
-          placeholder="Rechercher par nom de produit, SKU..."
+          placeholder={t('search_placeholder', 'marketplace')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="block w-full pl-11 pr-4 py-3 bg-white border border-gray-200 shadow-sm rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:border-influencer-500 focus:ring-influencer-500 transition-all font-medium"
@@ -197,7 +199,7 @@ export default function InfluencerMarketplace() {
                     <button
                       onClick={(e) => { e.preventDefault(); navigate(`/influencer/product/${product.id}`); }}
                       className="w-8 h-8 flex items-center justify-center bg-white/90 backdrop-blur-sm rounded-lg shadow-sm hover:bg-white hover:shadow-md hover:scale-110 transition-all text-gray-600 hover:text-influencer-600"
-                      title="Voir la page produit"
+                      title={t('view_product_page', 'marketplace')}
                     >
                       <Eye className="w-4 h-4" />
                     </button>
@@ -217,7 +219,7 @@ export default function InfluencerMarketplace() {
                   <div className="mt-auto border-t border-gray-50 pt-4 space-y-3">
                      <div className="flex justify-between items-end">
                        <div>
-                         <div className="text-[10px] font-bold text-gray-400 uppercase">Prix Influenceur</div>
+                         <div className="text-[10px] font-bold text-gray-400 uppercase">{t('influencer_price', 'marketplace')}</div>
                          <div className="text-xl font-black text-gray-900 leading-none">
                            {product.influencerPriceMad || product.retailPriceMad} <span className="text-xs font-bold">MAD</span>
                          </div>
@@ -235,7 +237,7 @@ export default function InfluencerMarketplace() {
                               className="w-full flex items-center justify-center gap-2 py-2.5 bg-influencer-600 text-white rounded-xl text-sm font-bold hover:bg-influencer-700 transition-colors shadow-lg shadow-influencer-500/10 active:scale-95"
                             >
                               <Eye className="w-4 h-4" />
-                              Voir Détails
+                              {t('view_details', 'marketplace')}
                             </button>
                           );
                         }
@@ -243,7 +245,7 @@ export default function InfluencerMarketplace() {
                         if (claim.status === 'PENDING') {
                           return (
                             <div className="w-full py-2.5 bg-amber-50 text-amber-600 rounded-xl text-sm font-bold text-center border border-amber-100 italic">
-                              En attente d'approbation...
+                              {t('pending_approval', 'marketplace')}
                             </div>
                           );
                         }
@@ -251,7 +253,7 @@ export default function InfluencerMarketplace() {
                         if (claim.status === 'REJECTED') {
                           return (
                             <div className="w-full py-2.5 bg-red-50 text-red-600 rounded-xl text-sm font-bold text-center border border-red-100">
-                              Demande refusée
+                              {t('request_rejected', 'marketplace')}
                             </div>
                           );
                         }
@@ -261,7 +263,7 @@ export default function InfluencerMarketplace() {
                             return (
                               <div className="p-3 bg-influencer-50 border border-influencer-100 rounded-xl space-y-2">
                                 <div className="flex items-center gap-1.5 text-influencer-700 text-xs font-bold">
-                                  <CheckCircle2 className="w-3.5 h-3.5" /> Lien prêt !
+                                  <CheckCircle2 className="w-3.5 h-3.5" /> {t('link_ready', 'marketplace')}
                                 </div>
                                 <div className="flex gap-2">
                                   <input 
@@ -292,7 +294,7 @@ export default function InfluencerMarketplace() {
                               ) : (
                                 <>
                                   <LinkIcon className="w-4 h-4" />
-                                  Générer le lien
+                                  {t('generate_link', 'marketplace')}
                                 </>
                               )}
                             </button>
@@ -315,8 +317,8 @@ export default function InfluencerMarketplace() {
             <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Package className="w-8 h-8 text-gray-400" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-1">Aucun produit Affilié</h3>
-            <p className="text-sm text-gray-500 max-w-sm mx-auto">Aucun produit n'est actuellement disponible pour l'affiliation.</p>
+            <h3 className="text-xl font-bold text-gray-900 mb-1">{t('no_products', 'marketplace')}</h3>
+            <p className="text-sm text-gray-500 max-w-sm mx-auto">{t('no_products_desc', 'marketplace')}</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -329,7 +331,7 @@ export default function InfluencerMarketplace() {
               onClick={() => setPage(p => p + 1)}
               className="flex items-center gap-2 bg-white border border-gray-200 px-6 py-3 rounded-xl font-bold text-sm text-gray-700 hover:shadow-md hover:border-gray-300 transition-all disabled:opacity-50"
             >
-              Charger plus
+              {t('load_more', 'marketplace')}
               <ArrowRight className="w-4 h-4" />
             </button>
          </div>

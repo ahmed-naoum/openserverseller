@@ -1,7 +1,6 @@
+import { prisma } from '../lib/prisma.js';
 import { Queue } from 'bullmq';
-import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
 
 const redisConnection = {
   host: process.env.REDIS_URL?.split(':')[0] || 'localhost',

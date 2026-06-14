@@ -1,9 +1,10 @@
+import { prisma } from '../lib/prisma.js';
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
+import xss from 'xss';
+import { streamLogToExternalTransport } from '../services/logger.service.js';
 
-const prisma = new PrismaClient();
 
 export interface DynamicSecuritySettings {
   enableIPBlocking: boolean;
@@ -111,7 +112,6 @@ export const ipFilter = async (
 
   next();
 };
-
 export const auditLog = async (
   req: Request,
   res: Response,
@@ -124,29 +124,99 @@ export const auditLog = async (
   }
 
   const startTime = Date.now();
+  const modelType = extractModelType(req.originalUrl);
+  const modelId = extractModelId(req.originalUrl);
+  const modelUuid = extractModelUuid(req.originalUrl);
+  
+  let preFetchState: any = null;
+  const modelMapping: Record<string, string> = {
+    users: 'user',
+    products: 'product',
+    orders: 'order',
+    leads: 'lead',
+    categories: 'category',
+    wallets: 'wallet',
+    invoices: 'invoice',
+    payouts: 'payoutRequest',
+    support: 'supportRequest',
+    fulfillment: 'supportRequest',
+    'bank-accounts': 'userBankAccount',
+    announcements: 'announcement',
+    settings: 'platformSettings',
+  };
+
+  const prismaModelName = modelType ? modelMapping[modelType] : null;
+
+  let whereClause: any = null;
+  if (modelId) {
+    whereClause = { id: modelId };
+  } else if (modelUuid && prismaModelName === 'user') {
+    whereClause = { uuid: modelUuid };
+  }
+
+  if (req.method !== 'GET' && prismaModelName && whereClause && (prisma as any)[prismaModelName]) {
+    try {
+      preFetchState = await (prisma as any)[prismaModelName].findUnique({
+        where: whereClause
+      });
+    } catch (err) {
+      console.error('Failed to pre-fetch model state:', err);
+    }
+  }
 
   res.on('finish', async () => {
     try {
       const duration = Date.now() - startTime;
       const userId = (req as any).user?.id || null;
 
+      let postFetchState: any = null;
+      if (req.method !== 'GET' && prismaModelName && whereClause && (prisma as any)[prismaModelName] && preFetchState) {
+        try {
+          postFetchState = await (prisma as any)[prismaModelName].findUnique({
+            where: whereClause
+          });
+        } catch (err) {
+          console.error('Failed to post-fetch model state:', err);
+        }
+      }
+
+      const dbChanges = (req as any).dbChanges || (preFetchState ? {
+        before: preFetchState,
+        after: postFetchState
+      } : null);
+
+      const changesPayload = {
+        method: req.method,
+        path: req.originalUrl,
+        query: req.query,
+        body: sensitiveDataMasking(req.body),
+        statusCode: res.statusCode,
+        duration,
+        ip: req.ip,
+        userAgent: req.get('user-agent'),
+        dbChanges: sensitiveDataMasking(dbChanges),
+      };
+
+      const changesString = JSON.stringify(changesPayload, (key, value) => typeof value === 'bigint' ? value.toString() : value);
+
       await prisma.activityLog.create({
         data: {
           userId,
-          action: `${req.method} ${req.path}`,
-          modelType: extractModelType(req.path),
-          modelId: extractModelId(req.path),
-          changes: JSON.stringify({
-            method: req.method,
-            path: req.path,
-            query: req.query,
-            body: sensitiveDataMasking(req.body),
-            statusCode: res.statusCode,
-            duration,
-            ip: req.ip,
-            userAgent: req.get('user-agent'),
-          }),
+          action: `${req.method} ${req.originalUrl}`,
+          modelType: modelType,
+          modelId: modelId || (preFetchState?.id) || null,
+          changes: changesString,
         },
+      });
+
+      // Stream to secure external logging provider
+      await streamLogToExternalTransport({
+        userId,
+        action: `${req.method} ${req.originalUrl}`,
+        modelType: modelType,
+        modelId: modelId || (preFetchState?.id) || null,
+        changes: changesPayload,
+        timestamp: new Date().toISOString(),
       });
     } catch (error) {
       console.error('Audit log error:', error);
@@ -160,7 +230,8 @@ function extractModelType(path: string): string | null {
   const models = [
     'users', 'products', 'orders', 'leads', 'categories', 
     'wallets', 'backups', 'invoices', 'payouts', 'support',
-    'announcements', 'settings', 'campaigns'
+    'fulfillment', 'bank-accounts',
+    'announcements', 'settings', 'campaigns', 'webhooks'
   ];
   for (const model of models) {
     if (path.includes(model)) {
@@ -170,8 +241,16 @@ function extractModelType(path: string): string | null {
   return null;
 }
 
+function extractModelUuid(path: string): string | null {
+  const match = path.match(/\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/|\?|$)/i);
+  return match ? match[1] : null;
+}
+
 function extractModelId(path: string): number | null {
-  const match = path.match(/\/(\d+)/);
+  if (extractModelUuid(path)) {
+    return null;
+  }
+  const match = path.match(/\/(\d+)(?:\/|\?|$)/);
   return match ? parseInt(match[1], 10) : null;
 }
 
@@ -217,12 +296,7 @@ export const sanitizeInput = async (
 };
 
 function sanitizeString(str: string): string {
-  return str
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/javascript:/gi, '')
-    .replace(/on\w+\s*=/gi, '')
-    .replace(/data:/gi, '')
-    .trim();
+  return xss(str).trim();
 }
 
 export const generateCSRFToken = (): string => {
@@ -259,14 +333,16 @@ export const validateRequestSize = (maxSize: number = 1024 * 1024) => {
     }
     next();
   };
-};
-
-export const sensitiveDataMasking = (data: any): any => {
+};export const sensitiveDataMasking = (data: any): any => {
   const sensitiveFields = [
     'password', 'passwordhash', 'token', 'secret', 
     'creditcard', 'rib', 'otp', 'bankname', 
     'ribaccount', 'icenumber', 'bank_name', 'bank'
   ];
+
+  if (data instanceof Date) {
+    return data;
+  }
   
   if (typeof data === 'string') {
     return sensitiveFields.some(field => data.toLowerCase().includes(field)) 

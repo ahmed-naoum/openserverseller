@@ -17,17 +17,28 @@ const AssignedTimer = ({ lead, onTimeout, isGirly, isPrincess }: { lead: any; on
     if (!isAssigned && !isWrongOrder && !isCancelOrder) return;
 
     const storageKey = `lead_cooldown_${lead.id}`;
-    const savedStart = sessionStorage.getItem(storageKey);
-    const startTime = savedStart 
-      ? parseInt(savedStart, 10) 
-      : new Date(lead.updatedAt).getTime();
+    let savedStart = sessionStorage.getItem(storageKey);
+    let parsedStartVal = savedStart ? parseInt(savedStart, 10) : NaN;
+    
+    // If it's NaN, delete it from storage
+    if (savedStart && isNaN(parsedStartVal)) {
+      sessionStorage.removeItem(storageKey);
+      savedStart = null;
+      parsedStartVal = NaN;
+    }
+
+    const leadUpdatedTime = lead.updatedAt ? new Date(lead.updatedAt).getTime() : Date.now();
+    const startTime = !isNaN(parsedStartVal) 
+      ? parsedStartVal 
+      : (!isNaN(leadUpdatedTime) ? leadUpdatedTime : Date.now());
 
     const isShortTimeout = isWrongOrder || isCancelOrder;
     const totalCooldownSeconds = isShortTimeout ? 120 : 420; // 2 mins for short timeouts, 7 mins for ASSIGNED
 
     const calculateGlobal = () => {
       const elapsed = (Date.now() - startTime) / 1000;
-      return Math.max(0, totalCooldownSeconds - elapsed);
+      const val = Math.max(0, totalCooldownSeconds - elapsed);
+      return isNaN(val) ? 0 : val;
     };
 
     setGlobalCooldown(calculateGlobal());
@@ -47,7 +58,7 @@ const AssignedTimer = ({ lead, onTimeout, isGirly, isPrincess }: { lead: any; on
   const isAssigned = lead.status === 'ASSIGNED';
   const isWrongOrder = lead.status === 'WRONG_ORDER';
   const isCancelOrder = lead.status === 'CANCEL_ORDER';
-  if ((!isAssigned && !isWrongOrder && !isCancelOrder) || globalCooldown <= 0) return null;
+  if ((!isAssigned && !isWrongOrder && !isCancelOrder) || isNaN(globalCooldown) || globalCooldown <= 0) return null;
 
   const isShortTimeout = isWrongOrder || isCancelOrder;
 

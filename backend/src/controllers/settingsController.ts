@@ -1,9 +1,8 @@
+import { prisma } from '../lib/prisma.js';
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { fetchMaintenanceSettings, clearMaintenanceCache } from '../middleware/maintenance.js';
 import jwt from 'jsonwebtoken';
 
-const prisma = new PrismaClient();
 
 // Public: GET /api/v1/settings/maintenance
 export const getMaintenanceStatus = async (req: Request, res: Response) => {

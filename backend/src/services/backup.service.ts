@@ -1,13 +1,12 @@
+import { prisma } from '../lib/prisma.js';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { promisify } from 'util';
-import { PrismaClient } from '@prisma/client';
 
 const readdir = promisify(fs.readdir);
 const stat = promisify(fs.stat);
 const unlink = promisify(fs.unlink);
-const prisma = new PrismaClient();
 
 const BACKUP_DIR = path.join(process.cwd(), 'backups');
 // Ensure we are in the backend directory if running from root

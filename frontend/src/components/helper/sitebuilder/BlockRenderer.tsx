@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { BACKEND_URL } from '../../../lib/api';
 import { motion } from 'framer-motion';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-export type BlockType = 'header' | 'hero' | 'image' | 'text' | 'button' | 'express_checkout' | 'spacer' | 'countdown' | 'whatsapp';
+export type BlockType = 'header' | 'hero' | 'image' | 'text' | 'button' | 'express_checkout' | 'spacer' | 'countdown' | 'whatsapp' | 'slider';
 
 export interface EditorBlock {
   id: string;
@@ -269,6 +270,11 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
               <div key={id} style={{ height: `${content.height || 32}px`, width: '100%' }} />
             );
 
+          case 'slider':
+            return (
+              <SliderBlock key={id} id={id} content={content} isEditor={isEditor} resolveUrl={resolveUrl} />
+            );
+
           case 'express_checkout':
             return (
               <div 
@@ -308,3 +314,510 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
     </div>
   );
 }
+
+
+// --------------- Slider Block Component ---------------
+interface SliderBlockProps {
+  id: string;
+  content: any;
+  isEditor: boolean;
+  resolveUrl: (url?: string) => string;
+}
+
+function SliderBlock({ id, content, isEditor, resolveUrl }: SliderBlockProps) {
+  const slides: any[] = content.slides || [];
+  const total = slides.length;
+
+  const autoPlay = content.autoPlay !== false;
+  const autoPlaySpeed = content.autoPlaySpeed || 4000;
+  const showArrows = content.showArrows !== false;
+  const showDots = content.showDots !== false;
+  const cardBg = content.cardBg || '#ffffff';
+  const cardRadius = content.cardRadius ?? 20;
+  const cardsPerView = content.cardsPerView || 1;
+  const cardGap = content.cardGap ?? 16;
+  const cardBorderWidth = content.cardBorderWidth ?? 0;
+  const cardBorderColor = content.cardBorderColor || '#e5e7eb';
+  const cardShadow = content.cardShadow ?? 'md';
+  const textAlign = content.textAlign || 'left';
+  const mediaHeight100 = content.mediaHeight100 === true;
+  const mediaHeightStyle = mediaHeight100 ? '100%' : `${content.mediaHeight || 280}px`;
+
+  // New features
+  const autoplayMode = content.autoplayMode || 'slide'; // 'slide' | 'marquee'
+  const slideBy = content.slideBy || 'card'; // 'card' | 'page'
+  const marqueeSpeed = content.marqueeSpeed ?? 20; // seconds for full cycle
+  const pauseOnHover = content.pauseOnHover !== false;
+
+  // Premium Animations
+  const hoverEffect = content.hoverEffect || 'none'; // 'lift' | 'scale' | 'glow' | 'grayscale' | 'none'
+  const entranceAnimation = content.entranceAnimation || 'none'; // 'fade-up' | 'fade-in' | 'zoom-in' | 'none'
+  const transitionEffect = content.transitionEffect || 'slide'; // 'slide' | 'fade' | 'zoom'
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isInView, setIsInView] = useState(false);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (isEditor) {
+      setIsInView(true);
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setIsInView(true);
+        observer.disconnect();
+      }
+    }, { threshold: 0.1 });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isEditor]);
+
+  // Compute pagination and start indices
+  const startIndices: number[] = [];
+  if (slideBy === 'page') {
+    for (let i = 0; i < total; i += cardsPerView) {
+      const idx = Math.min(i, Math.max(0, total - cardsPerView));
+      if (!startIndices.includes(idx)) {
+        startIndices.push(idx);
+      }
+    }
+  } else {
+    for (let i = 0; i <= total - cardsPerView; i++) {
+      startIndices.push(i);
+    }
+  }
+
+  if (startIndices.length === 0) {
+    startIndices.push(0);
+  }
+
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const current = startIndices[currentIndex] ?? 0;
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const goTo = useCallback((idx: number) => {
+    setCurrentIndex(((idx % startIndices.length) + startIndices.length) % startIndices.length);
+  }, [startIndices.length]);
+
+  const next = useCallback(() => goTo(currentIndex + 1), [currentIndex, goTo]);
+  const prev = useCallback(() => goTo(currentIndex - 1), [currentIndex, goTo]);
+
+  // Autoplay handler for standard sliding
+  useEffect(() => {
+    if (!autoPlay || autoplayMode !== 'slide' || startIndices.length <= 1 || isEditor) return;
+    intervalRef.current = setInterval(next, autoPlaySpeed);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [autoPlay, autoplayMode, autoPlaySpeed, startIndices.length, next, isEditor]);
+
+
+  if (total === 0) {
+    return (
+      <div
+        key={id}
+        className="w-full max-w-4xl mx-auto px-6 py-12"
+        style={{
+          paddingTop: `${content.paddingTop ?? 24}px`,
+          paddingBottom: `${content.paddingBottom ?? 24}px`,
+          marginTop: `${content.marginTop ?? 0}px`,
+          marginBottom: `${content.marginBottom ?? 0}px`,
+        }}
+      >
+        <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl p-12 flex flex-col items-center justify-center text-gray-400">
+          <svg className="w-10 h-10 mb-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25a2.25 2.25 0 0 1-2.25-2.25v-2.25Z" />
+          </svg>
+          <p className="font-bold text-sm">Slider — Aucune carte</p>
+          <p className="text-xs mt-1">Ajoutez des cartes dans les propriétés</p>
+        </div>
+      </div>
+    );
+  }
+
+  const renderMedia = (slide: any) => {
+    const url = resolveUrl(slide.mediaUrl);
+    if (!url) return null;
+
+    const isVideo = /\.(mp4|webm|ogg)$/i.test(url);
+    const fitClass = content.mediaFit === 'contain' ? 'object-contain' : 'object-cover';
+
+    if (isVideo) {
+      return (
+        <video
+          src={url}
+          autoPlay
+          loop
+          muted
+          playsInline
+          className={`w-full h-full ${fitClass}`}
+        />
+      );
+    }
+
+    return (
+      <img
+        src={url}
+        alt={slide.title || ''}
+        className={`w-full h-full ${fitClass}`}
+      />
+    );
+  };
+
+  const shadowClass = cardShadow === 'none' ? '' : cardShadow === 'sm' ? 'shadow-sm' : cardShadow === 'lg' ? 'shadow-xl' : cardShadow === 'xl' ? 'shadow-2xl' : 'shadow-lg';
+
+  const cardStyle = {
+    backgroundColor: cardBg,
+    borderRadius: `${cardRadius}px`,
+    border: cardBorderWidth > 0 ? `${cardBorderWidth}px solid ${cardBorderColor}` : 'none',
+  };
+
+  const hoverClass = hoverEffect === 'lift' 
+    ? 'hover-lift' 
+    : hoverEffect === 'scale' 
+      ? 'hover-scale' 
+      : hoverEffect === 'glow' 
+        ? 'hover-glow' 
+        : hoverEffect === 'grayscale' 
+          ? 'hover-grayscale' 
+          : '';
+
+  const animateClass = entranceAnimation !== 'none' ? `card-animate-${id}` : '';
+  const isFadeMode = transitionEffect === 'fade' && cardsPerView === 1;
+
+  // ---------------- Render Option A: Infinite Continuous Marquee ----------------
+  if (autoplayMode === 'marquee') {
+    // Duplicate slides 3 times for a seamless infinite loop scrolling experience
+    const duplicatedSlides = [...slides, ...slides, ...slides];
+
+    return (
+      <div
+        key={id}
+        ref={containerRef}
+        className={`w-full relative select-none overflow-hidden slider-container-${id} ${isInView ? 'in-view' : ''}`}
+        style={{
+          paddingTop: `${content.paddingTop ?? 24}px`,
+          paddingBottom: `${content.paddingBottom ?? 24}px`,
+          marginTop: `${content.marginTop ?? 0}px`,
+          marginBottom: `${content.marginBottom ?? 0}px`,
+        }}
+      >
+        <style dangerouslySetInnerHTML={{ __html: `
+          @keyframes marquee-${id} {
+            0% { transform: translate3d(0, 0, 0); }
+            100% { transform: translate3d(-33.3333%, 0, 0); }
+          }
+          .marquee-track-${id} {
+            display: flex;
+            width: max-content;
+            gap: ${cardGap}px;
+            animation: marquee-${id} ${marqueeSpeed}s linear infinite;
+          }
+          .marquee-track-${id}:hover {
+            animation-play-state: ${pauseOnHover ? 'paused' : 'running'};
+          }
+
+          /* Entrance animations */
+          @keyframes fadeUp-${id} {
+            from { opacity: 0; transform: translate3d(0, 35px, 0); }
+            to { opacity: 1; transform: translate3d(0, 0, 0); }
+          }
+          @keyframes fadeIn-${id} {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+          @keyframes zoomIn-${id} {
+            from { opacity: 0; transform: scale3d(0.94, 0.94, 0.94); }
+            to { opacity: 1; transform: scale3d(1, 1, 1); }
+          }
+          
+          .card-animate-${id} {
+            opacity: 1;
+          }
+          
+          ${entranceAnimation !== 'none' ? `
+            .slider-container-${id} .card-animate-${id} {
+              opacity: 0;
+            }
+            .slider-container-${id}.in-view .card-animate-${id} {
+              animation-name: ${entranceAnimation === 'fade-up' ? `fadeUp-${id}` : entranceAnimation === 'fade-in' ? `fadeIn-${id}` : `zoomIn-${id}`};
+              animation-duration: 0.75s;
+              animation-fill-mode: forwards;
+              animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+            }
+          ` : ''}
+
+          /* Hover effect styles */
+          .slider-card-${id} {
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+          }
+          .slider-card-${id}.hover-lift:hover {
+            transform: translateY(-8px) translateZ(0);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.05) !important;
+          }
+          .slider-card-${id}.hover-scale:hover {
+            transform: scale(1.03) translateZ(0);
+          }
+          .slider-card-${id}.hover-glow:hover {
+            box-shadow: 0 0 25px 3px ${content.dotColor || '#f97316'}66 !important;
+          }
+          .slider-card-${id}.hover-grayscale {
+            filter: grayscale(85%);
+          }
+          .slider-card-${id}.hover-grayscale:hover {
+            filter: grayscale(0%);
+          }
+        `}} />
+
+        <div className="w-full px-4 sm:px-6 overflow-hidden">
+          <div className={`marquee-track-${id}`}>
+            {duplicatedSlides.map((slide, idx) => (
+              <div
+                key={idx}
+                style={{
+                  width: `calc((100vw - 32px) / ${cardsPerView} - ${(cardGap * (cardsPerView - 1)) / cardsPerView}px)`,
+                  maxWidth: `calc(900px / ${cardsPerView} - ${(cardGap * (cardsPerView - 1)) / cardsPerView}px)`,
+                  flexShrink: 0,
+                }}
+              >
+                <div 
+                  className={`slider-card-${id} ${hoverClass} ${animateClass} overflow-hidden ${shadowClass} h-full flex flex-col`} 
+                  style={{
+                    ...cardStyle,
+                    animationDelay: entranceAnimation !== 'none' ? `${idx * 0.1}s` : undefined
+                  }}
+                >
+                  {/* Media */}
+                  {slide.mediaUrl && (
+                    <div
+                      className={`w-full bg-gray-100 overflow-hidden relative ${mediaHeight100 ? 'flex-1' : 'flex-shrink-0'}`}
+                      style={{ height: mediaHeightStyle }}
+                    >
+                      {renderMedia(slide)}
+                    </div>
+                  )}
+
+                  {/* Content */}
+                  <div className="p-5 flex-1 flex flex-col justify-center" style={{ textAlign: textAlign as any }}>
+                    {slide.title && (
+                      <h3
+                        className={`font-black mb-1.5 leading-tight ${cardsPerView > 2 ? 'text-sm' : 'text-lg'}`}
+                        style={{ color: content.titleColor || '#111827' }}
+                      >
+                        {slide.title}
+                      </h3>
+                    )}
+                    {slide.description && (
+                      <p
+                        className={`leading-relaxed ${cardsPerView > 2 ? 'text-[11px]' : 'text-xs'}`}
+                        style={{ color: content.descColor || '#6b7280' }}
+                      >
+                        {slide.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------------- Render Option B: Standard Sliding Page / Card Step ----------------
+  return (
+    <div
+      key={id}
+      ref={containerRef}
+      className={`w-full max-w-4xl mx-auto relative select-none slider-container-${id} ${isInView ? 'in-view' : ''}`}
+      style={{
+        paddingTop: `${content.paddingTop ?? 24}px`,
+        paddingBottom: `${content.paddingBottom ?? 24}px`,
+        marginTop: `${content.marginTop ?? 0}px`,
+        marginBottom: `${content.marginBottom ?? 0}px`,
+      }}
+    >
+      <style dangerouslySetInnerHTML={{ __html: `
+        /* Entrance animations */
+        @keyframes fadeUp-${id} {
+          from { opacity: 0; transform: translate3d(0, 35px, 0); }
+          to { opacity: 1; transform: translate3d(0, 0, 0); }
+        }
+        @keyframes fadeIn-${id} {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes zoomIn-${id} {
+          from { opacity: 0; transform: scale3d(0.94, 0.94, 0.94); }
+          to { opacity: 1; transform: scale3d(1, 1, 1); }
+        }
+        
+        .card-animate-${id} {
+          opacity: 1;
+        }
+        
+        ${entranceAnimation !== 'none' ? `
+          .slider-container-${id} .card-animate-${id} {
+            opacity: 0;
+          }
+          .slider-container-${id}.in-view .card-animate-${id} {
+            animation-name: ${entranceAnimation === 'fade-up' ? `fadeUp-${id}` : entranceAnimation === 'fade-in' ? `fadeIn-${id}` : `zoomIn-${id}`};
+            animation-duration: 0.75s;
+            animation-fill-mode: forwards;
+            animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+          }
+        ` : ''}
+
+        /* Hover effect styles */
+        .slider-card-${id} {
+          transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .slider-card-${id}.hover-lift:hover {
+          transform: translateY(-8px) translateZ(0);
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.05) !important;
+        }
+        .slider-card-${id}.hover-scale:hover {
+          transform: scale(1.03) translateZ(0);
+        }
+        .slider-card-${id}.hover-glow:hover {
+          box-shadow: 0 0 25px 3px ${content.dotColor || '#f97316'}66 !important;
+        }
+        .slider-card-${id}.hover-grayscale {
+          filter: grayscale(85%);
+        }
+        .slider-card-${id}.hover-grayscale:hover {
+          filter: grayscale(0%);
+        }
+      `}} />
+
+      {/* Slides Container */}
+      <div className="overflow-hidden px-4 sm:px-6">
+        <div
+          className={isFadeMode ? "relative w-full" : "flex transition-transform duration-500 ease-in-out"}
+          style={isFadeMode ? {
+            position: 'relative',
+            width: '100%',
+          } : {
+            gap: `${cardGap}px`,
+            transform: `translate3d(calc(-${current} * (100% + ${cardGap}px) / ${cardsPerView}), 0, 0)`,
+          }}
+        >
+          {slides.map((slide: any, idx: number) => {
+            const isVisible = idx >= current && idx < current + cardsPerView;
+            
+            const itemStyle = isFadeMode ? {
+              position: idx === current ? ('relative' as const) : ('absolute' as const),
+              top: 0,
+              left: 0,
+              width: '100%',
+              opacity: idx === current ? 1 : 0,
+              transition: 'opacity 0.6s ease-in-out',
+              pointerEvents: idx === current ? ('auto' as const) : ('none' as const),
+              zIndex: idx === current ? 1 : 0,
+              flexShrink: 0,
+            } : {
+              flex: `0 0 calc(100% / ${cardsPerView} - ${(cardGap * (cardsPerView - 1)) / cardsPerView}px)`,
+              minWidth: 0,
+              transform: transitionEffect === 'zoom' ? (isVisible ? 'scale(1)' : 'scale(0.93)') : undefined,
+              opacity: transitionEffect === 'zoom' ? (isVisible ? 1 : 0.5) : undefined,
+              transition: transitionEffect === 'zoom' ? 'transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1)' : undefined,
+            };
+
+            return (
+              <div key={idx} style={itemStyle}>
+                <div 
+                  className={`slider-card-${id} ${hoverClass} ${animateClass} overflow-hidden ${shadowClass} flex flex-col h-full`}
+                  style={{
+                    ...cardStyle,
+                    animationDelay: entranceAnimation !== 'none' ? `${idx * 0.12}s` : undefined
+                  }}
+                >
+                  {/* Media */}
+                  {slide.mediaUrl && (
+                    <div
+                      className={`w-full bg-gray-100 overflow-hidden relative ${mediaHeight100 ? 'flex-1' : 'flex-shrink-0'}`}
+                      style={{ height: mediaHeightStyle }}
+                    >
+                      {renderMedia(slide)}
+                    </div>
+                  )}
+
+                  {/* Content */}
+                  <div className="p-5 sm:p-6 flex-1 flex flex-col justify-center" style={{ textAlign: textAlign as any }}>
+                    {slide.title && (
+                      <h3
+                        className={`font-black mb-2 leading-tight ${cardsPerView > 2 ? 'text-base' : 'text-xl'}`}
+                        style={{ color: content.titleColor || '#111827' }}
+                      >
+                        {slide.title}
+                      </h3>
+                    )}
+                    {slide.description && (
+                      <p
+                        className={`leading-relaxed ${cardsPerView > 2 ? 'text-xs' : 'text-sm'}`}
+                        style={{ color: content.descColor || '#6b7280' }}
+                      >
+                        {slide.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+
+      {/* Navigation Arrows */}
+      {showArrows && startIndices.length > 1 && (
+        <>
+          <button
+            onClick={(e) => { e.stopPropagation(); prev(); }}
+            className="absolute left-0 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full shadow-lg flex items-center justify-center text-gray-700 hover:bg-white hover:scale-110 transition-all z-10"
+            style={{ pointerEvents: isEditor ? 'none' : 'auto' }}
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); next(); }}
+            className="absolute right-0 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full shadow-lg flex items-center justify-center text-gray-700 hover:bg-white hover:scale-110 transition-all z-10"
+            style={{ pointerEvents: isEditor ? 'none' : 'auto' }}
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </>
+      )}
+
+      {/* Dot Indicators */}
+      {showDots && startIndices.length > 1 && (
+        <div className="flex items-center justify-center gap-2 mt-5">
+          {startIndices.map((_: any, idx: number) => (
+            <button
+              key={idx}
+              onClick={(e) => { e.stopPropagation(); goTo(idx); }}
+              className={`rounded-full transition-all duration-300 ${
+                idx === currentIndex
+                  ? 'w-7 h-2.5'
+                  : 'w-2.5 h-2.5 opacity-40 hover:opacity-70'
+              }`}
+              style={{
+                backgroundColor: content.dotColor || '#f97316',
+                pointerEvents: isEditor ? 'none' : 'auto',
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Page Counter */}
+      {startIndices.length > 1 && (
+        <div className="text-center mt-2">
+          <span className="text-[10px] font-bold text-gray-400">{currentIndex + 1} / {startIndices.length}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+

@@ -1,8 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma.js';
 import fs from 'fs';
 import path from 'path';
 
-const prisma = new PrismaClient();
 
 async function main() {
   console.log('Loading dataspace.json...');

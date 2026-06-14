@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../lib/api';
 import toast from 'react-hot-toast';
+import { useAuth } from '../../contexts/AuthContext';
 import { 
   X, 
   KeyIcon, 
@@ -34,7 +35,10 @@ import {
   Camera,
   Calendar,
   Link,
-  Percent
+  Percent,
+  ScanLine,
+  LogIn,
+  Loader2
 } from 'lucide-react';
 
 export function parseSocialInput(val: string, platform: 'instagram' | 'tiktok' | 'facebook' | 'youtube' | 'x' | 'snapchat') {
@@ -655,6 +659,7 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
     canManageOrders: false,
     canManageInfluencerLinks: false,
     canManageTickets: false,
+    canScanReturns: false,
     city: '',
     address: '',
     cinNumber: '',
@@ -703,6 +708,7 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
         canManageOrders: fullUser.canManageOrders || false,
         canManageInfluencerLinks: fullUser.canManageInfluencerLinks || false,
         canManageTickets: fullUser.canManageTickets || false,
+        canScanReturns: fullUser.canScanReturns || false,
         city: fullUser.city || '',
         address: fullUser.address || '',
         cinNumber: fullUser.cinNumber || '',
@@ -927,7 +933,7 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
                               onClick={() => setFormData({ ...formData, canManageProducts: !formData.canManageProducts })}
                               className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageProducts ? 'bg-orange-500' : 'bg-slate-200'}`}
                             >
-                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageProducts ? 'left-5.5' : 'left-0.5'}`} />
+                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageProducts ? 'left-[22px]' : 'left-0.5'}`} />
                             </button>
                           </div>
 
@@ -946,7 +952,7 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
                               onClick={() => setFormData({ ...formData, canManageLeads: !formData.canManageLeads })}
                               className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageLeads ? 'bg-blue-500' : 'bg-slate-200'}`}
                             >
-                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageLeads ? 'left-5.5' : 'left-0.5'}`} />
+                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageLeads ? 'left-[22px]' : 'left-0.5'}`} />
                             </button>
                           </div>
 
@@ -965,7 +971,7 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
                               onClick={() => setFormData({ ...formData, canManageOrders: !formData.canManageOrders })}
                               className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageOrders ? 'bg-green-500' : 'bg-slate-200'}`}
                             >
-                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageOrders ? 'left-5.5' : 'left-0.5'}`} />
+                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageOrders ? 'left-[22px]' : 'left-0.5'}`} />
                             </button>
                           </div>
 
@@ -984,11 +990,11 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
                               onClick={() => setFormData({ ...formData, canManageInfluencerLinks: !formData.canManageInfluencerLinks })}
                               className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageInfluencerLinks ? 'bg-purple-500' : 'bg-slate-200'}`}
                             >
-                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageInfluencerLinks ? 'left-5.5' : 'left-0.5'}`} />
+                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageInfluencerLinks ? 'left-[22px]' : 'left-0.5'}`} />
                             </button>
                           </div>
 
-                          <div className="flex items-center justify-between p-3 bg-teal-50/50 rounded-2xl border border-teal-100/50 col-span-2">
+                          <div className="flex items-center justify-between p-3 bg-teal-50/50 rounded-2xl border border-teal-100/50">
                             <div className="flex items-center gap-2.5">
                               <div className="p-2 bg-white rounded-xl text-teal-600 shadow-sm">
                                 <FileText size={16} />
@@ -1003,7 +1009,26 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
                               onClick={() => setFormData({ ...formData, canManageTickets: !formData.canManageTickets })}
                               className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageTickets ? 'bg-teal-500' : 'bg-slate-200'}`}
                             >
-                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageTickets ? 'left-5.5' : 'left-0.5'}`} />
+                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageTickets ? 'left-[22px]' : 'left-0.5'}`} />
+                            </button>
+                          </div>
+
+                          <div className="flex items-center justify-between p-3 bg-indigo-50/50 rounded-2xl border border-indigo-100/50">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-2 bg-white rounded-xl text-indigo-600 shadow-sm">
+                                <ScanLine size={16} />
+                              </div>
+                              <div>
+                                <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Scanner Retour</h4>
+                                <p className="text-[8px] font-bold text-indigo-400 uppercase tracking-tighter">Scanner les colis retournés</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setFormData({ ...formData, canScanReturns: !formData.canScanReturns })}
+                              className={`w-10 h-5 rounded-full transition-all relative ${formData.canScanReturns ? 'bg-indigo-500' : 'bg-slate-200'}`}
+                            >
+                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canScanReturns ? 'left-[22px]' : 'left-0.5'}`} />
                             </button>
                           </div>
                         </div>
@@ -1026,7 +1051,7 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
                           onClick={() => setFormData({ ...formData, canImpersonate: !formData.canImpersonate })}
                           className={`w-10 h-5 rounded-full transition-all relative ${formData.canImpersonate ? 'bg-rose-500' : 'bg-slate-200'}`}
                         >
-                          <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canImpersonate ? 'left-5.5' : 'left-0.5'}`} />
+                          <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canImpersonate ? 'left-[22px]' : 'left-0.5'}`} />
                         </button>
                       </div>
                     )}
@@ -1540,6 +1565,24 @@ export default function AdminUsers() {
   const [tempUserForReset, setTempUserForReset] = useState<any>(null);
   const [generatedPasswordData, setGeneratedPasswordData] = useState<{password: string, user: any} | null>(null);
   const queryClient = useQueryClient();
+  const { impersonate } = useAuth();
+  const [impersonatingId, setImpersonatingId] = useState<number | null>(null);
+
+  const handleImpersonate = async (userId: number, roleName: string) => {
+    if (roleName === 'SUPER_ADMIN') {
+      toast.error("Vous ne pouvez pas vous connecter en tant que Super Admin.");
+      return;
+    }
+    
+    setImpersonatingId(userId);
+    try {
+      await impersonate(userId);
+      toast.success("Connexion réussie en mode assistance.");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Erreur lors de la connexion');
+      setImpersonatingId(null);
+    }
+  };
 
   // Reset page when filters change
   useEffect(() => {
@@ -1620,32 +1663,32 @@ export default function AdminUsers() {
   };
 
   return (
-    <div className="space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-1000 ease-out">
+    <div className="space-y-4 sm:space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-1000 ease-out overflow-x-hidden">
       {/* Premium Header Banner */}
-      <div className="relative overflow-hidden rounded-[2.5rem] bg-[#2c2f74] p-10 text-white shadow-2xl shadow-primary-200/50">
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+      <div className="relative overflow-hidden rounded-2xl sm:rounded-[2.5rem] bg-[#2c2f74] p-5 sm:p-10 text-white shadow-2xl shadow-primary-200/50">
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6 sm:gap-8">
           <div>
-            <h1 className="text-4xl font-black tracking-tight">Gestion des Profils <span className="text-primary-400">🛡️</span></h1>
-            <p className="text-primary-100/70 font-medium text-lg mt-2 max-w-xl">
-              Supervisez les accès, gérez les permissions et assurez la sécurité de l'écosystème SILACOD.
+            <h1 className="text-2xl sm:text-4xl font-black tracking-tight">Gestion des Profils <span className="text-primary-400">🛡️</span></h1>
+            <p className="text-primary-100/70 font-medium text-sm sm:text-lg mt-2 max-w-xl">
+              Supervisez les accès, gérez les permissions et assurez la sécurité de l'écosystème SILACOD. Connectez-vous à n'importe quel compte pour l'assister.
             </p>
           </div>
           
-          <div className="flex gap-4">
-            <div className="px-6 py-4 bg-white/10 backdrop-blur-md rounded-3xl border border-white/10 flex flex-col items-center">
-              <span className="text-xs font-black uppercase tracking-widest opacity-60">Total</span>
-              <span className="text-2xl font-black">{pagination.total}</span>
+          <div className="flex flex-wrap gap-3 sm:gap-4">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 bg-white/10 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-white/10 flex flex-col items-center">
+              <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest opacity-60">Total</span>
+              <span className="text-xl sm:text-2xl font-black">{pagination.total}</span>
             </div>
-            <div className="px-6 py-4 bg-emerald-500/20 backdrop-blur-md rounded-3xl border border-emerald-500/20 flex flex-col items-center">
-              <span className="text-xs font-black uppercase tracking-widest text-emerald-300">Actifs (Page)</span>
-              <span className="text-2xl font-black text-emerald-400">{users.filter((u: any) => u.isActive).length}</span>
+            <div className="px-4 sm:px-6 py-3 sm:py-4 bg-emerald-500/20 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-emerald-500/20 flex flex-col items-center">
+              <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-emerald-300">Actifs</span>
+              <span className="text-xl sm:text-2xl font-black text-emerald-400">{users.filter((u: any) => u.isActive).length}</span>
             </div>
             <button
                onClick={() => setIsAddModalOpen(true)}
-               className="bg-white text-primary-900 group py-4 px-8 rounded-3xl font-black text-sm uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-black/20 flex items-center justify-center gap-3 whitespace-nowrap"
+               className="bg-white text-primary-900 group py-3 sm:py-4 px-5 sm:px-8 rounded-2xl sm:rounded-3xl font-black text-xs sm:text-sm uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-black/20 flex items-center justify-center gap-2 sm:gap-3 whitespace-nowrap"
             >
-              <UserPlus size={20} className="group-hover:rotate-12 transition-transform" />
-              Ajouter Agent
+              <UserPlus size={18} className="group-hover:rotate-12 transition-transform" />
+              Ajouter
             </button>
           </div>
         </div>
@@ -1656,7 +1699,7 @@ export default function AdminUsers() {
 
       <div className="space-y-8">
         {/* Top Demandes Alert banner */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 bg-[#2c2f74]/5 border border-[#2c2f74]/10 rounded-[2rem] gap-4 shadow-sm">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 sm:p-5 bg-[#2c2f74]/5 border border-[#2c2f74]/10 rounded-2xl sm:rounded-[2rem] gap-4 shadow-sm">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-[#2c2f74]/10 text-[#2c2f74] flex items-center justify-center shrink-0">
               <Clock size={24} className="text-[#2c2f74]" />
@@ -1676,96 +1719,98 @@ export default function AdminUsers() {
           </button>
         </div>
 
-        {/* Premium Horizontal Filter Panel on Top */}
-        <div className="bento-card border-none bg-white p-8 space-y-6 shadow-sm">
+        {/* Main Content Area: Sidebar + Table */}
+        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 items-start">
           
-          {/* Top Line: Search & Page Limit */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-            
-            {/* Search Input */}
-            <div className="flex-1 space-y-2">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                <Search size={14} />
-                Filtre de recherche
-              </h3>
-              <div className="relative group max-w-xl">
-                <input
-                  type="text"
-                  className="input pl-11 h-14 bg-slate-50 border-slate-100 group-focus-within:bg-white transition-all shadow-inner w-full"
-                  placeholder="Nom, Email, ID, Rôle..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#2c2f74] transition-colors" />
+          {/* Left Sidebar Filter Panel */}
+          <div className="w-full lg:w-72 xl:w-80 flex-shrink-0">
+            <div className="bento-card border-none bg-white p-4 sm:p-6 space-y-6 lg:space-y-8 shadow-sm lg:sticky lg:top-8">
+              
+              {/* Search */}
+              <div className="space-y-3">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                  <Search size={14} />
+                  Filtre de recherche
+                </h3>
+                <div className="relative group">
+                  <input
+                    type="text"
+                    className="input pl-11 h-12 bg-slate-50 border-slate-100 group-focus-within:bg-white transition-all shadow-inner w-full text-sm"
+                    placeholder="Nom, Email, ID, Rôle..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                  <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#2c2f74] transition-colors" />
+                </div>
               </div>
-            </div>
 
-            {/* Elements Per Page limit dropdown */}
-            <div className="flex items-center gap-3 self-start md:self-end bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 shadow-inner">
-              <span className="text-xs font-black text-[#2c2f74] uppercase tracking-widest">AFFICHER :</span>
-              <select
-                value={limit}
-                onChange={(e) => {
-                  setLimit(Number(e.target.value));
-                  setPage(1);
-                }}
-                className="bg-transparent text-sm font-black text-[#2c2f74] focus:outline-none cursor-pointer pr-4"
-              >
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-            </div>
-
-          </div>
-
-          {/* Bottom Line: Roles Category with Counts (Numbers of account type) */}
-          <div className="space-y-3 pt-6 border-t border-slate-100">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-              <Filter size={14} />
-              Filtrer par rôle & Nombre d'utilisateurs
-            </h3>
-            <div className="flex flex-wrap gap-2.5">
-              {[
-                { key: '', label: 'TOUS LES ACCÈS', countKey: 'TOTAL' },
-                { key: 'VENDOR', label: 'VENDOR', countKey: 'VENDOR' },
-                { key: 'CALL_CENTER_AGENT', label: 'CALL CENTER AGENT', countKey: 'CALL_CENTER_AGENT' },
-                { key: 'CONFIRMATION_AGENT', label: 'CONFIRMATION AGENT', countKey: 'CONFIRMATION_AGENT' },
-                { key: 'INFLUENCER', label: 'INFLUENCER', countKey: 'INFLUENCER' },
-                { key: 'HELPER', label: 'HELPER', countKey: 'HELPER' },
-                { key: 'SYSTEM_SUPPORT', label: 'SYSTEM SUPPORT', countKey: 'SYSTEM_SUPPORT' },
-                { key: 'FINANCE_ADMIN', label: 'FINANCE ADMIN', countKey: 'FINANCE_ADMIN' },
-                { key: 'SUPER_ADMIN', label: 'SUPER ADMIN', countKey: 'SUPER_ADMIN' },
-              ].map((role) => {
-                const count = roleCounts[role.countKey] || 0;
-                return (
-                  <button
-                    key={role.key}
-                    onClick={() => setRoleFilter(role.key)}
-                    className={`px-4 py-2.5 rounded-[1.2rem] text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2.5 shadow-sm border border-transparent ${
-                      roleFilter === role.key 
-                        ? 'bg-[#2c2f74] text-white shadow-lg shadow-[#2c2f74]/25 scale-105 z-10' 
-                        : 'bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600'
-                    }`}
+              {/* Elements Per Page */}
+              <div className="space-y-3">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Affichage</h3>
+                <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 shadow-inner">
+                  <span className="text-xs font-black text-[#2c2f74] uppercase tracking-widest">AFFICHER :</span>
+                  <select
+                    value={limit}
+                    onChange={(e) => {
+                      setLimit(Number(e.target.value));
+                      setPage(1);
+                    }}
+                    className="bg-transparent text-sm font-black text-[#2c2f74] focus:outline-none cursor-pointer flex-1 text-right pr-4"
                   >
-                    <span>{role.label}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black tracking-tight ${
-                      roleFilter === role.key
-                        ? 'bg-white text-[#2c2f74]'
-                        : 'bg-slate-200/60 text-slate-500'
-                    }`}>
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Roles Category */}
+              <div className="space-y-3 pt-6 border-t border-slate-100">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2 mb-4">
+                  <Filter size={14} />
+                  Rôles d'utilisateurs
+                </h3>
+                <div className="flex flex-row overflow-x-auto lg:overflow-visible lg:flex-col gap-2 pb-4 lg:pb-0 snap-x [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                  {[
+                    { key: '', label: 'TOUS LES ACCÈS', countKey: 'TOTAL' },
+                    { key: 'VENDOR', label: 'Vendeur', countKey: 'VENDOR' },
+                    { key: 'CALL_CENTER_AGENT', label: 'Call Center', countKey: 'CALL_CENTER_AGENT' },
+                    { key: 'CONFIRMATION_AGENT', label: 'Confirmation', countKey: 'CONFIRMATION_AGENT' },
+                    { key: 'INFLUENCER', label: 'Influenceur', countKey: 'INFLUENCER' },
+                    { key: 'HELPER', label: 'Helper', countKey: 'HELPER' },
+                    { key: 'SYSTEM_SUPPORT', label: 'Support', countKey: 'SYSTEM_SUPPORT' },
+                    { key: 'SUPER_ADMIN', label: 'Admin', countKey: 'SUPER_ADMIN' },
+                  ].map((role) => {
+                    const count = roleCounts[role.countKey] || 0;
+                    return (
+                      <button
+                        key={role.key}
+                        onClick={() => setRoleFilter(role.key)}
+                        className={`flex-shrink-0 snap-start lg:w-full px-4 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-4 justify-between border ${
+                          roleFilter === role.key 
+                            ? 'bg-[#2c2f74] text-white border-[#2c2f74] shadow-md shadow-[#2c2f74]/25 scale-[1.02] z-10' 
+                            : 'bg-transparent border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+                        }`}
+                      >
+                        <span className="truncate whitespace-nowrap">{role.label}</span>
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black tracking-tight shrink-0 ${
+                          roleFilter === role.key
+                            ? 'bg-white/20 text-white'
+                            : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
             </div>
           </div>
-
-        </div>
 
         {/* Users Table Area */}
-        <div className="w-full">
+        <div className="flex-1 min-w-0 overflow-hidden">
           {isLoading ? (
             <div className="flex items-center justify-center py-40">
                 <div className="flex flex-col items-center gap-4">
@@ -1774,10 +1819,130 @@ export default function AdminUsers() {
                 </div>
             </div>
           ) : (
-            <div className="bento-card bg-white overflow-hidden p-0 border-none shadow-xl">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-slate-50/80 backdrop-blur-sm border-b border-slate-100">
+            <div className="bg-white rounded-2xl sm:rounded-3xl border-none shadow-xl overflow-hidden flex flex-col" style={{ maxHeight: 'calc(100vh - 14rem)' }}>
+              <div className="overflow-auto flex-1 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-slate-50 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+                
+                {/* ── Mobile Card View ── */}
+                <div className="block lg:hidden divide-y divide-slate-100">
+                  {users.map((user: any) => (
+                    <div key={user.uuid} className="p-4 space-y-3 hover:bg-slate-50/50 transition-colors">
+                      {/* Top: Avatar + Name + Status */}
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-11 h-11 bg-slate-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                            <span className="text-slate-500 font-black text-sm uppercase">{user.fullName?.charAt(0) || '?'}</span>
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-black text-slate-900 text-sm tracking-tight uppercase truncate">{user.fullName || 'N/A'}</p>
+                              {user.autoAssignInfluencers && (
+                                <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-600 text-[7px] font-black uppercase rounded-full border border-indigo-200 shrink-0">✨</span>
+                              )}
+                            </div>
+                            <p className="text-[10px] font-bold text-slate-400 truncate">{user.email || 'Pas d\'email'}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <div className={`w-2 h-2 rounded-full ${
+                            user.isActive 
+                              ? 'bg-emerald-500' 
+                              : (user.kycStatus === 'PENDING' || user.kycStatus === 'UNDER_REVIEW' ? 'bg-amber-400' : 'bg-rose-400')
+                          }`} />
+                          <span className={`text-[10px] font-black uppercase ${
+                            user.isActive 
+                              ? 'text-emerald-600' 
+                              : (user.kycStatus === 'PENDING' || user.kycStatus === 'UNDER_REVIEW' ? 'text-amber-500' : 'text-rose-500')
+                          }`}>
+                            {user.isActive 
+                              ? 'Actif' 
+                              : (user.kycStatus === 'PENDING' || user.kycStatus === 'UNDER_REVIEW' ? 'En attente' : 'Off')}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {/* Middle: Badges */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`px-3 py-1 rounded-lg text-[10px] font-black tracking-wider uppercase border ${
+                          user.kycStatus === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
+                          user.kycStatus === 'PENDING' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                          user.kycStatus === 'REJECTED' ? 'bg-rose-50 text-rose-600 border-rose-100' :
+                          'bg-indigo-50 text-indigo-600 border-indigo-100'
+                        }`}>
+                          {user.kycStatus}
+                        </span>
+                        <span className={`px-3 py-1 rounded-lg text-[10px] font-black tracking-wider uppercase border ${
+                          user.cguAccepted ? 'bg-green-50 text-green-600 border-green-100' : 'bg-rose-50 text-rose-600 border-rose-100'
+                        }`}>
+                          CGU: {user.cguAccepted ? 'ACCEPTÉ' : 'NON'}
+                        </span>
+                        {user.phone && (
+                          <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400">
+                            <Smartphone size={10} /> {user.phone}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Bottom: Actions */}
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          onClick={() => setEditingUser(user)}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-slate-50 border border-slate-100 text-slate-500 hover:text-primary-600 hover:bg-primary-50 text-[10px] font-black uppercase tracking-wider transition-all"
+                        >
+                          <Edit2 size={13} /> Modifier
+                        </button>
+                        {user.role !== 'SUPER_ADMIN' && (
+                          <button
+                            onClick={() => handleImpersonate(user.id, user.role)}
+                            disabled={impersonatingId === user.id}
+                            className="py-2 px-3 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 hover:bg-indigo-600 hover:text-white text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1"
+                            title="Se connecter"
+                          >
+                            {impersonatingId === user.id ? <Loader2 size={13} className="animate-spin" /> : <LogIn size={13} />}
+                            Assister
+                          </button>
+                        )}
+                        <button
+                          onClick={() => user.isActive ? deactivateMutation.mutate(user.uuid) : activateMutation.mutate(user.uuid)}
+                          className={`py-2 px-3 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                            user.isActive 
+                              ? 'bg-rose-50 border-rose-100 text-rose-500' 
+                              : 'bg-emerald-50 border-emerald-100 text-emerald-500'
+                          }`}
+                        >
+                          <Power size={13} /> {user.isActive ? 'Off' : 'On'}
+                        </button>
+                        {user.role === 'CALL_CENTER_AGENT' && (
+                          <button onClick={() => setAssigningAgent(user)} className="py-2 px-3 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 text-[10px] font-black uppercase" title="Assigner">
+                            <Users size={13} />
+                          </button>
+                        )}
+                        {user.role === 'HELPER' && (
+                          <button onClick={() => setAssigningHelper(user)} className="py-2 px-3 rounded-xl bg-orange-50 border border-orange-100 text-orange-500 text-[10px] font-black uppercase" title="Assigner">
+                            <Users size={13} />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => { if (window.confirm('Réinitialiser la 2FA ?')) reset2FAMutation.mutate(user.uuid); }}
+                          className="py-2 px-3 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-amber-600 transition-all"
+                          title="Reset 2FA"
+                        >
+                          <ShieldOff size={13} />
+                        </button>
+                        <button
+                          onClick={() => { if (window.confirm('Générer un mot de passe ?')) { setTempUserForReset(user); sendPwResetMutation.mutate(user.uuid); } }}
+                          className="py-2 px-3 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-indigo-600 transition-all"
+                          title="Reset password"
+                        >
+                          <KeyIcon size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* ── Desktop Table View ── */}
+                <table className="w-full hidden lg:table">
+                  <thead className="bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 sticky top-0 z-10">
                     <tr>
                       <th className="text-left py-6 px-8 text-[10px] font-black text-slate-400 uppercase tracking-widest">Identité</th>
                       <th className="text-left py-6 px-8 text-[10px] font-black text-slate-400 uppercase tracking-widest">Contact</th>
@@ -1832,20 +1997,37 @@ export default function AdminUsers() {
                           </span>
                         </td>
                         <td className="py-6 px-8">
-                          <span className={`inline-block px-4 py-1.5 rounded-xl text-[10px] font-black tracking-[0.1em] uppercase border ${
-                            user.kycStatus === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
-                            user.kycStatus === 'PENDING' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                            user.kycStatus === 'REJECTED' ? 'bg-rose-50 text-rose-600 border-rose-100' :
-                            'bg-indigo-50 text-indigo-600 border-indigo-100'
-                          }`}>
-                            {user.kycStatus}
-                          </span>
+                          <div className="flex flex-col gap-1.5">
+                            <span className={`inline-block text-center px-3 py-1.5 rounded-xl text-[10px] font-black tracking-[0.1em] uppercase border ${
+                              user.kycStatus === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
+                              user.kycStatus === 'PENDING' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                              user.kycStatus === 'REJECTED' ? 'bg-rose-50 text-rose-600 border-rose-100' :
+                              'bg-indigo-50 text-indigo-600 border-indigo-100'
+                            }`}>
+                              KYC: {user.kycStatus}
+                            </span>
+                            <span className={`inline-block text-center px-3 py-1.5 rounded-xl text-[10px] font-black tracking-[0.1em] uppercase border ${
+                              user.cguAccepted ? 'bg-green-50 text-green-700 border-green-100' : 'bg-rose-50 text-rose-600 border-rose-100'
+                            }`}>
+                              CGU: {user.cguAccepted ? 'ACCEPTÉ' : 'NON'}
+                            </span>
+                          </div>
                         </td>
                         <td className="py-6 px-8">
                           <div className="flex items-center gap-2">
-                             <div className={`w-2 h-2 rounded-full animate-pulse ${user.isActive ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-rose-400'}`} />
-                             <span className={`text-[11px] font-black uppercase tracking-widest ${user.isActive ? 'text-emerald-600' : 'text-rose-500'}`}>
-                                {user.isActive ? 'Opérationnel' : 'Suspendu'}
+                             <div className={`w-2 h-2 rounded-full animate-pulse ${
+                               user.isActive 
+                                 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' 
+                                 : (user.kycStatus === 'PENDING' || user.kycStatus === 'UNDER_REVIEW' ? 'bg-amber-400' : 'bg-rose-400')
+                             }`} />
+                             <span className={`text-[11px] font-black uppercase tracking-widest ${
+                               user.isActive 
+                                 ? 'text-emerald-600' 
+                                 : (user.kycStatus === 'PENDING' || user.kycStatus === 'UNDER_REVIEW' ? 'text-amber-500' : 'text-rose-500')
+                             }`}>
+                                {user.isActive 
+                                  ? 'Opérationnel' 
+                                  : (user.kycStatus === 'PENDING' || user.kycStatus === 'UNDER_REVIEW' ? 'En attente' : 'Suspendu')}
                              </span>
                           </div>
                         </td>
@@ -1858,6 +2040,17 @@ export default function AdminUsers() {
                             >
                               <Edit2 size={18} />
                             </button>
+
+                            {user.role !== 'SUPER_ADMIN' && (
+                              <button
+                                onClick={() => handleImpersonate(user.id, user.role)}
+                                disabled={impersonatingId === user.id}
+                                className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-500 hover:bg-indigo-600 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center"
+                                title="Se connecter"
+                              >
+                                {impersonatingId === user.id ? <Loader2 size={18} className="animate-spin" /> : <LogIn size={18} />}
+                              </button>
+                            )}
                             
                             {user.role === 'CALL_CENTER_AGENT' && (
                               <button
@@ -1928,7 +2121,7 @@ export default function AdminUsers() {
 
               {/* Pagination */}
               {pagination.total > 0 && (
-                <div className="p-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/50">
+                <div className="p-4 sm:p-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/50">
                   <div className="flex items-center gap-3">
                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                       Affichage de <span className="font-extrabold text-slate-800">{users.length}</span> sur <span className="font-extrabold text-slate-800">{pagination.total}</span> utilisateur(s)
@@ -2000,6 +2193,9 @@ export default function AdminUsers() {
             </div>
           )}
         </div>
+        {/* End of Main Content Area */}
+        </div>
+
       </div>
 
       <AddUserModal 

@@ -35,7 +35,6 @@ import AdminAffiliateClaims from './pages/admin/AffiliateClaims';
 import AdminCampaigns from './pages/admin/Campaigns';
 import AdminCustomers from './pages/admin/Customers';
 import AdminAnnouncements from './pages/admin/Announcements';
-import AdminLeadHistory from './pages/admin/LeadHistory';
 import AdminVerifications from './pages/admin/AdminVerifications';
 import AdminSupport from './pages/admin/Support';
 import AdminLeads from './pages/admin/Leads';
@@ -44,6 +43,10 @@ import AdminInvoices from './pages/admin/Invoices';
 import ActivityLogs from './pages/admin/ActivityLogs';
 import BackupManager from './pages/admin/BackupManager';
 import CallCenterInspector from './pages/admin/CallCenterInspector';
+import InfluencerInspector from './pages/admin/InfluencerInspector';
+import SupportInspector from './pages/admin/SupportInspector';
+import ContactMessages from './pages/admin/ContactMessages';
+import AdminLinks from './pages/admin/Links';
 
 import YouCanCallback from './pages/vendor/YouCanCallback';
 import YouCanLeads from './pages/vendor/YouCanLeads';
@@ -95,13 +98,23 @@ import ProfileVerification from './pages/common/ProfileVerification';
 import MaintenancePage from './pages/common/MaintenancePage';
 import SupportTickets from './pages/common/SupportTickets';
 import UserWallet from './pages/common/UserWallet';
+import TermsPage from './pages/TermsPage';
+import PrivacyPage from './pages/PrivacyPage';
+import ContactPage from './pages/ContactPage';
+import AboutPage from './pages/AboutPage';
+import CareersPage from './pages/CareersPage';
+import BlogPage from './pages/BlogPage';
+import PricingPage from './pages/PricingPage';
+import ScrollToTop from './components/common/ScrollToTop';
 
 // Context
 import { AuthProvider } from './contexts/AuthContext';
 import { SocketProvider } from './contexts/SocketContext';
+import { LanguageProvider } from './contexts/LanguageContext';
 
 // Guards
 import RoleGuard from './components/auth/RoleGuard';
+import UnauthGuard from './components/auth/UnauthGuard';
 import { settingsApi } from './lib/api';
 
 function App() {
@@ -154,25 +167,34 @@ function App() {
 
   return (
     <>
+      <ScrollToTop />
       {loading && <PageLoader onComplete={() => setLoading(false)} />}
     <AuthProvider>
+      <LanguageProvider>
       <SocketProvider>
         <MaintenanceGuard>
         <Routes>
           {/* Public Routes */}
           <Route path="/maintenance" element={<MaintenancePage />} />
           <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/influencer/register" element={<RegisterPage />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/login" element={<UnauthGuard><LoginPage /></UnauthGuard>} />
+          <Route path="/register" element={<UnauthGuard><RegisterPage /></UnauthGuard>} />
+          <Route path="/influencer/register" element={<UnauthGuard><RegisterPage /></UnauthGuard>} />
+          <Route path="/forgot-password" element={<UnauthGuard><ForgotPassword /></UnauthGuard>} />
+          <Route path="/reset-password" element={<UnauthGuard><ResetPassword /></UnauthGuard>} />
           <Route path="/marketplace" element={<PublicMarketplace />} />
           <Route path="/marketplace/:view" element={<PublicMarketplace />} />
           <Route path="/product/:id" element={<ProductDetail />} />
           <Route path="/r/:code" element={<ReferralForm />} />
           <Route path="/thank-you" element={<ThankYouPage />} />
           <Route path="/pending-verification" element={<PendingVerificationPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/contact" element={<ContactPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/careers" element={<CareersPage />} />
+          <Route path="/blog" element={<BlogPage />} />
+          <Route path="/pricing" element={<PricingPage />} />
 
         {/* Verification Route */}
         <Route path="/verify" element={
@@ -296,6 +318,12 @@ function App() {
           </RoleGuard>
         } />
 
+        <Route path="/admin/links/:id/builder" element={
+          <RoleGuard allowedRoles={['SUPER_ADMIN']}>
+            <SiteBuilder />
+          </RoleGuard>
+        } />
+
         {/* Helper Routes */}
         <Route path="/helper" element={<RoleGuard allowedRoles={['SUPER_ADMIN', 'HELPER']}><DashboardLayout /></RoleGuard>}>
           <Route index element={<HelperDashboard />} />
@@ -323,14 +351,12 @@ function App() {
           <Route path="users" element={<AdminUsers />} />
           <Route path="categories" element={<AdminCategories />} />
           <Route path="products" element={<AdminProducts />} />
-          <Route path="orders" element={<AdminOrders />} />
           <Route path="finance" element={<AdminFinance />} />
-          <Route path="support" element={<AdminSupport />} />
+          <Route path="support" element={<SupportTickets />} />
           <Route path="invoices" element={<AdminInvoices />} />
           <Route path="affiliate-claims" element={<AdminAffiliateClaims />} />
           <Route path="announcements" element={<AdminAnnouncements />} />
           <Route path="campaigns" element={<AdminCampaigns />} />
-          <Route path="lead-history" element={<AdminLeadHistory />} />
           <Route path="verifications" element={<AdminVerifications />} />
           <Route path="platform-settings" element={<PlatformSettings />} />
           <Route path="security" element={<SecurityFirewall />} />
@@ -347,6 +373,10 @@ function App() {
             </RoleGuard>
           } />
           <Route path="call-center-inspector" element={<CallCenterInspector />} />
+          <Route path="influencer-inspector" element={<InfluencerInspector />} />
+          <Route path="support-inspector" element={<SupportInspector />} />
+          <Route path="contact-messages" element={<ContactMessages />} />
+          <Route path="links" element={<AdminLinks />} />
           <Route path="scanner" element={<HelperScanner />} />
           <Route path="settings" element={<SettingsPage />} />
 
@@ -511,6 +541,7 @@ function App() {
           );
         }}
       </Toaster>
+      </LanguageProvider>
     </AuthProvider>
     </>
   );

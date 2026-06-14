@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, authApi, BACKEND_URL } from '../../lib/api';
 import { 
@@ -25,6 +26,8 @@ import BankSelect from '../../components/common/BankSelect';
 
 export default function SettingsPage() {
   const { user, refreshUser } = useAuth();
+  const { t, language } = useLanguage();
+  const isRtl = language === 'ar';
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'profile');
@@ -404,9 +407,9 @@ export default function SettingsPage() {
   };
 
   const tabs = [
-    { id: 'profile', label: 'Profil', icon: User, desc: 'Informations personnelles' },
-    { id: 'payment', label: 'Paiement', icon: CreditCard, desc: 'Configurez comment vous recevez vos commissions.' },
-    { id: 'password', label: 'Sécurité', icon: ShieldCheck, desc: 'Mots de passe et 2FA' }
+    { id: 'profile', label: t('settings_tab_profile', 'dashboard'), icon: User, desc: t('settings_tab_profile_desc', 'dashboard') },
+    { id: 'payment', label: t('settings_tab_payment', 'dashboard'), icon: CreditCard, desc: t('settings_tab_payment_desc', 'dashboard') },
+    { id: 'password', label: t('settings_tab_security', 'dashboard'), icon: ShieldCheck, desc: t('settings_tab_security_desc', 'dashboard') }
   ];
 
   return (
@@ -444,12 +447,12 @@ export default function SettingsPage() {
               {uploadingAvatar ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
             </button>
           </div>
-          <div className="text-center md:text-left">
+          <div className={`text-center ${isRtl ? 'md:text-right' : 'md:text-left'}`}>
             <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mb-2">
-              Paramètres du Compte
+              {t('settings_title', 'dashboard')}
             </h1>
             <p className="text-xl text-primary-100 font-medium opacity-90">
-              Gérez vos préférences et sécurisez votre espace
+              {t('settings_subtitle', 'dashboard')}
             </p>
           </div>
         </div>
@@ -467,7 +470,7 @@ export default function SettingsPage() {
                   <button
                     key={tab.id}
                     onClick={() => handleTabChange(tab.id)}
-                    className={`w-full group flex items-start gap-4 p-4 rounded-xl text-left transition-all duration-300 ${
+                    className={`w-full group flex items-start gap-4 p-4 rounded-xl transition-all duration-300 ${isRtl ? 'text-right' : 'text-left'} ${
                       isActive
                         ? (isPrincess ? 'bg-gradient-to-br from-amber-50 to-amber-100/50 shadow-sm border border-amber-100/50' : isGirly ? 'bg-gradient-to-br from-pink-50 to-pink-100/50 shadow-sm border border-pink-100/50' : 'bg-gradient-to-br from-primary-50 to-primary-100/50 shadow-sm border border-primary-100/50')
                         : 'hover:bg-gray-50/80 border border-transparent'
@@ -497,7 +500,7 @@ export default function SettingsPage() {
                       </div>
                     </div>
                     {isActive && (
-                      <ChevronRight size={16} className={`ml-auto mt-2 ${isPrincess ? 'text-amber-500' : isGirly ? 'text-pink-500' : 'text-primary-500'}`} />
+                      <ChevronRight size={16} className={`mt-2 ${isRtl ? 'mr-auto rotate-180' : 'ml-auto'} ${isPrincess ? 'text-amber-500' : isGirly ? 'text-pink-500' : 'text-primary-500'}`} />
                     )}
                   </button>
                 );
@@ -516,9 +519,9 @@ export default function SettingsPage() {
                 <div className="p-5 border-b border-gray-100 bg-gray-50/50">
                   <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
                     <User className={isPrincess ? 'text-amber-500' : isGirly ? 'text-pink-500' : 'text-primary-500'} size={28} />
-                    Informations du profil
+                    {t('profile_info_title', 'dashboard')}
                   </h2>
-                  <p className="text-gray-500 mt-1">Mettez à jour vos informations publiques et de contact.</p>
+                  <p className="text-gray-500 mt-1">{t('profile_info_desc', 'dashboard')}</p>
                 </div>
                 
                 <form onSubmit={handleProfileSubmit} className="p-6 space-y-6">
@@ -526,7 +529,7 @@ export default function SettingsPage() {
                   <div className="grid md:grid-cols-2 gap-8">
                     <div className="space-y-2">
                       <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-2">
-                        <User size={16} className="text-gray-400" /> Nom complet
+                        <User size={16} className="text-gray-400" /> {t('full_name', 'dashboard')}
                       </label>
                       <input
                         type="text"
@@ -539,7 +542,7 @@ export default function SettingsPage() {
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-2">
-                        <Mail size={16} className="text-gray-400" /> Email
+                        <Mail size={16} className="text-gray-400" /> {t('email', 'dashboard')}
                       </label>
                       <input
                         type="email"
@@ -552,7 +555,7 @@ export default function SettingsPage() {
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-2">
-                        <Phone size={16} className="text-gray-400" /> Téléphone
+                        <Phone size={16} className="text-gray-400" /> {t('phone', 'dashboard')}
                       </label>
                       <input
                         type="tel"
@@ -565,7 +568,7 @@ export default function SettingsPage() {
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-2">
-                        <MapPin size={16} className="text-gray-400" /> Ville
+                        <MapPin size={16} className="text-gray-400" /> {t('city', 'dashboard')}
                       </label>
                       <input
                         type="text"
@@ -578,7 +581,7 @@ export default function SettingsPage() {
 
                   <div className="space-y-2">
                     <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-2">
-                      <MapPin size={16} className="text-gray-400" /> Adresse Complète
+                      <MapPin size={16} className="text-gray-400" /> {t('address', 'dashboard')}
                     </label>
                     <textarea
                       className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all duration-200 text-gray-900 font-medium resize-none"
@@ -596,8 +599,8 @@ export default function SettingsPage() {
                             <Globe className="text-purple-600" size={22} />
                           </div>
                           <div>
-                            <h3 className="text-lg font-bold text-gray-900">Réseaux Sociaux</h3>
-                            <p className="text-sm text-gray-500">Gérez vos plateformes d'influence connectées.</p>
+                            <h3 className="text-lg font-bold text-gray-900">{t('social_networks', 'dashboard')}</h3>
+                            <p className="text-sm text-gray-500">{t('social_networks_desc', 'dashboard')}</p>
                           </div>
                         </div>
                       </div>
@@ -622,13 +625,13 @@ export default function SettingsPage() {
                                     {platform.connected && !isEditingThis && (
                                       <span className="flex items-center gap-0.5 text-[8px] font-black text-green-600 bg-green-100 px-1.5 py-0.5 rounded-full uppercase tracking-widest">
                                         <CheckCircle className="w-2.5 h-2.5" />
-                                        Vérifié
+                                        {t('verified', 'dashboard')}
                                       </span>
                                     )}
                                   </div>
                                   {!isEditingThis && (
                                     <p className="text-sm font-bold text-gray-500 truncate">
-                                      {username || 'Non configuré'}
+                                      {username || t('not_configured', 'dashboard')}
                                     </p>
                                   )}
                                 </div>
@@ -676,7 +679,7 @@ export default function SettingsPage() {
                         })}
                       </div>
                       <p className="text-[10px] text-gray-400 mt-6 font-bold italic opacity-60">
-                        * Tout changement de plateforme nécessite une nouvelle vérification manuelle par nos administrateurs.
+                        {t('social_warn', 'dashboard')}
                       </p>
                     </div>
                   )}
@@ -687,7 +690,7 @@ export default function SettingsPage() {
                       className="px-8 py-3.5 bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-semibold shadow-lg shadow-gray-900/20 transition-all duration-200 flex items-center gap-2"
                       disabled={updateProfileMutation.isPending}
                     >
-                      {updateProfileMutation.isPending ? 'Sauvegarde en cours...' : 'Enregistrer les modifications'}
+                      {updateProfileMutation.isPending ? t('saving', 'dashboard') : t('save_changes', 'dashboard')}
                     </button>
                   </div>
                 </form>
@@ -702,9 +705,9 @@ export default function SettingsPage() {
                     <div>
                       <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
                         <CreditCard className="text-primary-500" size={28} />
-                        Préférences de Paiement
+                        {t('payout_title', 'dashboard')}
                       </h2>
-                      <p className="text-gray-500 mt-1">Gérez vos méthodes de réception de commissions.</p>
+                      <p className="text-gray-500 mt-1">{t('payout_subtitle', 'dashboard')}</p>
                     </div>
                   </div>
                 </div>
@@ -714,10 +717,10 @@ export default function SettingsPage() {
                   <div className="space-y-6">
                     <div className="flex items-center justify-between">
                       <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                        <Landmark size={20} className="text-gray-400" /> Vos comptes bancaires
+                        <Landmark size={20} className="text-gray-400" /> {t('bank_accounts', 'dashboard')}
                       </h3>
                       <span className="text-xs font-bold text-gray-400 uppercase tracking-widest bg-gray-50 px-3 py-1 rounded-full border border-gray-100">
-                        {user?.bankAccounts?.length || 0} Méthodes
+                        {t('methods_count', 'dashboard').replace('{count}', String(user?.bankAccounts?.length || 0))}
                       </span>
                     </div>
 
@@ -747,7 +750,7 @@ export default function SettingsPage() {
                                       <h4 className="font-black text-gray-900 tracking-tight">{ba.bankName}</h4>
                                       {isDefault && (
                                         <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary-600 text-white text-[9px] font-black uppercase tracking-tighter">
-                                          <Star size={10} fill="currentColor" /> Par défaut
+                                          <Star size={10} fill="currentColor" /> {t('default_method', 'dashboard')}
                                         </span>
                                       )}
                                       {!isDefault && isApproved && (
@@ -755,7 +758,7 @@ export default function SettingsPage() {
                                           onClick={() => handleSetDefaultBank(ba.id)}
                                           className="text-[10px] font-bold text-primary-600 hover:underline"
                                         >
-                                          Utiliser par défaut
+                                          {t('use_default', 'dashboard')}
                                         </button>
                                       )}
                                     </div>
@@ -769,7 +772,7 @@ export default function SettingsPage() {
                                         'bg-rose-50 text-rose-700 border-rose-100'
                                       }`}>
                                         {isApproved ? <CheckCircle2 size={12} /> : isPending ? <Clock size={12} /> : <AlertTriangle size={12} />}
-                                        {isApproved ? 'Approuvé' : isPending ? 'En attente' : 'Rejeté'}
+                                        {isApproved ? t('approved', 'dashboard') : isPending ? t('pending', 'dashboard') : t('rejected', 'dashboard')}
                                       </div>
                                     </div>
                                   </div>
@@ -793,7 +796,7 @@ export default function SettingsPage() {
                       ) : (
                         <div className="text-center p-10 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
                           <CreditCard className="mx-auto text-gray-300 mb-4" size={48} />
-                          <p className="text-gray-500 font-bold">Aucune méthode de paiement configurée</p>
+                          <p className="text-gray-500 font-bold">{t('no_payment_configured', 'dashboard')}</p>
                         </div>
                       )}
                     </div>
@@ -803,9 +806,9 @@ export default function SettingsPage() {
                   <div className="pt-10 border-t border-gray-100 space-y-6">
                     <div>
                       <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                        <Plus size={20} className="text-primary-500" /> Ajouter un nouveau compte
+                        <Plus size={20} className="text-primary-500" /> {t('add_bank_account', 'dashboard')}
                       </h3>
-                      <p className="text-sm text-gray-500 mt-1">Toutes les nouvelles méthodes sont soumises à une vérification manuelle.</p>
+                      <p className="text-sm text-gray-500 mt-1">{t('bank_manual_warn', 'dashboard')}</p>
                     </div>
 
                     <form onSubmit={handleBankSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50/50 p-6 sm:p-8 rounded-2xl border border-gray-100">
@@ -817,12 +820,12 @@ export default function SettingsPage() {
                       </div>
                       <div className="md:col-span-2 space-y-2">
                         <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-2">
-                          RIB Bancaire (24 chiffres)
+                          {t('rib_label', 'dashboard')}
                         </label>
                         <input
                           type="text"
                           maxLength={24}
-                          placeholder="RIB à 24 chiffres"
+                          placeholder={t('rib_placeholder', 'dashboard')}
                           className="w-full px-4 py-3.5 rounded-xl border border-gray-200 bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all font-mono font-bold"
                           value={bankForm.ribAccount}
                           onChange={(e) => setBankForm({ ...bankForm, ribAccount: e.target.value.replace(/\D/g, '').slice(0, 24) })}
@@ -835,7 +838,7 @@ export default function SettingsPage() {
                           className="px-8 py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold shadow-lg shadow-primary-600/20 transition-all flex items-center gap-2 disabled:opacity-50"
                         >
                           {bankOtpLoading && bankOtpStep === 'sending' ? <Loader2 size={18} className="animate-spin" /> : <Mail size={18} />}
-                          Envoyer le code de vérification
+                          {t('send_verification_code', 'dashboard')}
                         </button>
                       </div>
                     </form>
@@ -847,9 +850,9 @@ export default function SettingsPage() {
                           <div className="w-16 h-16 bg-blue-100 rounded-full mx-auto mb-4 flex items-center justify-center">
                             <Mail size={28} className="text-blue-600" />
                           </div>
-                          <h3 className="text-lg font-black text-gray-900">Vérification par Email</h3>
+                          <h3 className="text-lg font-black text-gray-900">{t('email_verification', 'dashboard')}</h3>
                           <p className="text-sm text-gray-500 mt-1">
-                            Un code à 6 chiffres a été envoyé à <strong>{bankOtpMaskedEmail}</strong>
+                            {t('otp_sent_to', 'dashboard').replace('{email}', bankOtpMaskedEmail)}
                           </p>
                         </div>
 
@@ -893,7 +896,7 @@ export default function SettingsPage() {
                         </div>
 
                         <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest text-center mb-6">
-                          ⏱ Le code expire dans 10 minutes
+                          {t('otp_expire', 'dashboard')}
                         </p>
 
                         <div className="flex gap-3 justify-center">
@@ -901,7 +904,7 @@ export default function SettingsPage() {
                             onClick={() => { setBankOtpStep('idle'); setBankOtpValue(''); }}
                             className="px-6 py-3 bg-white border border-gray-200 text-gray-500 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all"
                           >
-                            Annuler
+                            {t('cancel', 'dashboard')}
                           </button>
                           <button
                             onClick={handleBankOtpVerify}
@@ -909,7 +912,7 @@ export default function SettingsPage() {
                             className="px-8 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold shadow-lg shadow-primary-600/20 transition-all flex items-center gap-2 disabled:opacity-50"
                           >
                             {bankOtpLoading ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-                            Confirmer et Ajouter
+                            {t('confirm_add', 'dashboard')}
                           </button>
                         </div>
                       </div>
@@ -925,20 +928,20 @@ export default function SettingsPage() {
                 <div className="p-5 border-b border-gray-100 bg-gray-50/50">
                   <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
                     <ShieldCheck className="text-primary-500" size={28} />
-                    Sécurité et Connexion
+                    {t('security_conn', 'dashboard')}
                   </h2>
-                  <p className="text-gray-500 mt-1">Gérez votre mot de passe et l'authentification à deux facteurs.</p>
+                  <p className="text-gray-500 mt-1">{t('security_desc', 'dashboard')}</p>
                 </div>
 
                 <div className="p-6 space-y-6">
                   {/* Password Section */}
                   <form onSubmit={handlePasswordSubmit} className="space-y-6">
                     <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
-                      <Lock className="text-gray-400" size={20} /> Changer le mot de passe
+                      <Lock className="text-gray-400" size={20} /> {t('change_pwd', 'dashboard')}
                     </h3>
                     <div className="space-y-6 max-w-2xl">
                       <div className="space-y-2">
-                        <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Mot de passe actuel</label>
+                        <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider">{t('current_pwd', 'dashboard')}</label>
                         <div className="relative group">
                           <input
                             type={showCurrentPassword ? 'text' : 'password'}
@@ -958,7 +961,7 @@ export default function SettingsPage() {
                       </div>
                       <div className="grid md:grid-cols-2 gap-6">
                         <div className="space-y-2">
-                          <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Nouveau mot de passe</label>
+                          <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider">{t('new_pwd', 'dashboard')}</label>
                           <div className="relative group">
                             <input
                               type={showNewPassword ? 'text' : 'password'}
@@ -978,7 +981,7 @@ export default function SettingsPage() {
                           </div>
                         </div>
                         <div className="space-y-2">
-                          <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Confirmer le mot de passe</label>
+                          <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider">{t('confirm_pwd', 'dashboard')}</label>
                           <div className="relative group">
                             <input
                               type={showConfirmPassword ? 'text' : 'password'}
@@ -1003,7 +1006,7 @@ export default function SettingsPage() {
                           className="px-6 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-semibold shadow-md shadow-gray-900/10 transition-all duration-200"
                           disabled={changePasswordMutation.isPending}
                         >
-                          {changePasswordMutation.isPending ? 'Mise à jour...' : 'Mettre à jour le mot de passe'}
+                          {changePasswordMutation.isPending ? t('updating', 'dashboard') : t('update_pwd', 'dashboard')}
                         </button>
                       </div>
                     </div>
@@ -1014,18 +1017,18 @@ export default function SettingsPage() {
                     <div className="flex items-center justify-between mb-8">
                       <div>
                         <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                          Authentification à deux facteurs (2FA)
+                          {t('two_factor', 'dashboard')}
                           {user?.isTwoFactorEnabled ? (
                             <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-emerald-500 text-white text-[11px] font-black uppercase tracking-widest shadow-lg shadow-emerald-500/30 animate-pulse-slow">
-                              <CheckCircle2 size={14} /> ACTIVÉ
+                              <CheckCircle2 size={14} /> {t('two_factor_enabled', 'dashboard')}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-red-500 text-white text-[11px] font-black uppercase tracking-widest shadow-lg shadow-red-500/30">
-                              <ShieldCheck size={14} /> DÉSACTIVÉ
+                              <ShieldCheck size={14} /> {t('two_factor_disabled', 'dashboard')}
                             </span>
                           )}
                         </h3>
-                        <p className="text-sm text-gray-500 mt-1">Ajoute une sécurité supplémentaire à votre compte.</p>
+                        <p className="text-sm text-gray-500 mt-1">{t('two_factor_desc', 'dashboard')}</p>
                       </div>
                     </div>
                     
@@ -1038,21 +1041,21 @@ export default function SettingsPage() {
                             <ShieldCheck size={32} />
                           </div>
                           <div>
-                            <p className="font-black text-gray-900 text-xl tracking-tight">Sécurité maximale active</p>
+                            <p className="font-black text-gray-900 text-xl tracking-tight">{t('max_security_active', 'dashboard')}</p>
                             <p className="text-sm text-gray-500 mt-1 max-w-md leading-relaxed">
-                              Votre compte est protégé par l'authentification à deux facteurs. Votre espace est entièrement sécurisé.
+                              {t('max_security_desc', 'dashboard')}
                             </p>
                           </div>
                         </div>
                         
                         <div className="flex items-center gap-4 relative z-10">
-                            <span className="text-xs font-bold text-emerald-600 uppercase tracking-widest">Protection Active</span>
+                            <span className="text-xs font-bold text-emerald-600 uppercase tracking-widest">{t('active_protection', 'dashboard')}</span>
                             <label className="relative inline-flex items-center cursor-pointer">
                                 <input
                                     type="checkbox"
                                     checked={true}
                                     onChange={() => {
-                                        if (confirm('Voulez-vous vraiment désactiver l\'authentification à deux facteurs ? Cela réduira la sécurité de votre compte.')) {
+                                        if (confirm(t('disable_2fa_confirm', 'dashboard'))) {
                                             disable2FAMutation.mutate();
                                         }
                                     }}
@@ -1072,9 +1075,9 @@ export default function SettingsPage() {
                             <ShieldCheck size={24} />
                           </div>
                           <div>
-                            <p className="font-semibold text-gray-900 text-base">Protéger votre espace</p>
+                            <p className="font-semibold text-gray-900 text-base">{t('protect_space', 'dashboard')}</p>
                             <p className="text-sm text-gray-500 mt-0.5">
-                              Utilisez Google Authenticator pour générer un code unique à chaque connexion.
+                              {t('protect_space_desc', 'dashboard')}
                             </p>
                           </div>
                         </div>
@@ -1083,7 +1086,7 @@ export default function SettingsPage() {
                           disabled={setup2FAMutation.isPending}
                           className="px-6 py-2.5 bg-white border-2 border-primary-600 text-primary-600 hover:bg-primary-50 rounded-xl font-bold transition-colors whitespace-nowrap shrink-0"
                         >
-                          {setup2FAMutation.isPending ? 'Chargement...' : 'Configurer 2FA'}
+                          {setup2FAMutation.isPending ? t('loading', 'dashboard') : t('configure_2fa', 'dashboard')}
                         </button>
                       </div>
                     )}
@@ -1094,16 +1097,16 @@ export default function SettingsPage() {
                           <div className="space-y-6">
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 rounded-full bg-primary-600 text-white font-bold flex items-center justify-center">1</div>
-                              <h4 className="text-lg font-bold text-gray-900">Scanner le QR Code</h4>
+                              <h4 className="text-lg font-bold text-gray-900">{t('scan_qr', 'dashboard')}</h4>
                             </div>
                             <p className="text-gray-600">
-                              Ouvrez votre application d'authentification (comme Google Authenticator ou Authy) et scannez ce code.
+                              {t('scan_qr_desc', 'dashboard')}
                             </p>
                             <div className="bg-white p-4 rounded-2xl inline-block border border-gray-100 shadow-sm mx-auto">
                               <img src={twoFactorData.qrCodeUrl} alt="2FA QR Code" className="w-40 h-40" />
                             </div>
                             <div className="bg-white/60 p-4 rounded-xl border border-gray-100">
-                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Code secret manuel</p>
+                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t('manual_code', 'dashboard')}</p>
                               <code className="text-sm font-mono text-gray-900 bg-gray-100/80 px-2 py-1 rounded">
                                 {twoFactorData.secret}
                               </code>
@@ -1113,10 +1116,10 @@ export default function SettingsPage() {
                           <div className="space-y-6">
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 rounded-full bg-primary-600 text-white font-bold flex items-center justify-center">2</div>
-                              <h4 className="text-lg font-bold text-gray-900">Vérifier et Activer</h4>
+                              <h4 className="text-lg font-bold text-gray-900">{t('verify_activate', 'dashboard')}</h4>
                             </div>
                             <p className="text-gray-600">
-                              Entrez le code à 6 chiffres généré par l'application pour confirmer l'association.
+                              {t('verify_activate_desc', 'dashboard')}
                             </p>
                             <div className="space-y-4 pt-4">
                               <input
@@ -1132,7 +1135,7 @@ export default function SettingsPage() {
                                 disabled={twoFactorCode.length !== 6 || verify2FAMutation.isPending}
                                 className="w-full px-8 py-4 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold shadow-lg shadow-primary-600/30 transition-all duration-200 disabled:opacity-50 disabled:shadow-none text-lg"
                               >
-                                {verify2FAMutation.isPending ? 'Vérification en cours...' : 'Activer la double authentification'}
+                                {verify2FAMutation.isPending ? t('verifying', 'dashboard') : t('activate_2fa', 'dashboard')}
                               </button>
                             </div>
                           </div>
@@ -1144,7 +1147,7 @@ export default function SettingsPage() {
                   {/* Sessions */}
                   <div className="pt-10 border-t border-gray-100">
                     <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
-                      <MonitorSmartphone className="text-gray-400" size={20} /> Appareils connectés
+                      <MonitorSmartphone className="text-gray-400" size={20} /> {t('connected_devices', 'dashboard')}
                     </h3>
                     <div className="space-y-3">
                       <div className="flex items-center justify-between p-5 bg-white border border-gray-200 rounded-2xl shadow-sm">
@@ -1153,12 +1156,12 @@ export default function SettingsPage() {
                             <MonitorSmartphone size={24} />
                           </div>
                           <div>
-                            <div className="font-bold text-gray-900">Cette session</div>
-                            <div className="text-sm text-gray-500 font-medium mt-0.5">Dernière activité à l'instant • Rabat, Maroc</div>
+                            <div className="font-bold text-gray-900">{t('this_session', 'dashboard')}</div>
+                            <div className="text-sm text-gray-500 font-medium mt-0.5">{t('last_active_now', 'dashboard')}</div>
                           </div>
                         </div>
                         <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold uppercase tracking-wide">
-                          Active
+                          {t('active', 'dashboard')}
                         </span>
                       </div>
                     </div>
@@ -1208,9 +1211,9 @@ export default function SettingsPage() {
                   <AlertCircle size={22} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-base font-black text-slate-900 tracking-tight">Supprimer la méthode de paiement</h3>
+                  <h3 className="text-base font-black text-slate-900 tracking-tight">{t('delete_payment_method', 'dashboard')}</h3>
                   <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                    Pour des raisons de sécurité, veuillez saisir votre mot de passe pour confirmer la suppression de ce compte bancaire.
+                    {t('delete_payment_desc', 'dashboard')}
                   </p>
                 </div>
               </div>
@@ -1218,12 +1221,12 @@ export default function SettingsPage() {
               <div className="mt-5 space-y-4">
                 <div>
                   <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">
-                    Mot de passe
+                    {t('password', 'dashboard')}
                   </label>
                   <div className="relative">
                     <input
                       type="password"
-                      placeholder="Saisissez votre mot de passe actuel..."
+                      placeholder={t('enter_password_placeholder', 'dashboard')}
                       className="w-full bg-slate-50 border border-slate-200/60 rounded-xl pl-4 pr-10 py-3 text-xs font-semibold focus:outline-none focus:border-rose-500/50 focus:bg-white focus:ring-2 focus:ring-rose-500/5 transition-all text-slate-700"
                       value={deleteBankConfirm.password}
                       onChange={(e) => setDeleteBankConfirm(prev => ({ ...prev, password: e.target.value }))}
@@ -1246,7 +1249,7 @@ export default function SettingsPage() {
                   onClick={() => setDeleteBankConfirm({ isOpen: false, bankAccountId: null, password: '', loading: false })}
                   className="flex-1 px-4 py-3 bg-slate-50 text-slate-500 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-100 hover:text-slate-900 transition-all active:scale-95"
                 >
-                  Annuler
+                  {t('cancel', 'dashboard')}
                 </button>
                 <button
                   type="button"
@@ -1257,10 +1260,10 @@ export default function SettingsPage() {
                   {deleteBankConfirm.loading ? (
                     <>
                       <Loader2 size={14} className="animate-spin" />
-                      Suppression...
+                      {t('deleting', 'dashboard')}
                     </>
                   ) : (
-                    'Confirmer la suppression'
+                    t('confirm_delete', 'dashboard')
                   )}
                 </button>
               </div>

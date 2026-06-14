@@ -221,7 +221,7 @@ export default function AdminAffiliateClaims() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Demandes d'Affiliation & Stock</h1>
+          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Demande Produit & Stock</h1>
           <p className="text-sm text-gray-500 mt-1">Approuvez ou refusez les demandes des partenaires pour promouvoir ou stocker des produits.</p>
         </div>
       </div>
@@ -483,7 +483,7 @@ export default function AdminAffiliateClaims() {
                         <Filter className="w-6 h-6 text-gray-300" />
                       </div>
                       <p className="font-bold">Aucune demande trouvée</p>
-                      <p className="text-xs">Les demandes d'affiliation des partenaires s'afficheront ici.</p>
+                      <p className="text-xs">Les demandes produit des partenaires s'afficheront ici.</p>
                     </td>
                   </tr>
                 )}

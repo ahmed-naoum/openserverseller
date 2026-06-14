@@ -5,11 +5,19 @@ import { walletApi, payoutsApi } from '../../lib/api';
 import { Wallet, ArrowUpRight, ArrowDownRight, Clock, CheckCircle2, XCircle, Building2, Banknote, CreditCard, ChevronRight, RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { fr, ar, enUS } from 'date-fns/locale';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export default function UserWallet() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { t, language } = useLanguage();
+
+  const getLocale = () => {
+    if (language === 'ar') return ar;
+    if (language === 'en') return enUS;
+    return fr;
+  };
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [selectedBankId, setSelectedBankId] = useState<string>('');
   
@@ -26,10 +34,18 @@ export default function UserWallet() {
   const [filterYear, setFilterYear] = useState<string>(new Date().getFullYear().toString());
 
   const months = [
-    { value: '0', label: 'Janvier' }, { value: '1', label: 'Février' }, { value: '2', label: 'Mars' },
-    { value: '3', label: 'Avril' }, { value: '4', label: 'Mai' }, { value: '5', label: 'Juin' },
-    { value: '6', label: 'Juillet' }, { value: '7', label: 'Août' }, { value: '8', label: 'Septembre' },
-    { value: '9', label: 'Octobre' }, { value: '10', label: 'Novembre' }, { value: '11', label: 'Décembre' }
+    { value: '0', label: language === 'ar' ? 'يناير' : language === 'en' ? 'January' : 'Janvier' },
+    { value: '1', label: language === 'ar' ? 'فبراير' : language === 'en' ? 'February' : 'Février' },
+    { value: '2', label: language === 'ar' ? 'مارس' : language === 'en' ? 'March' : 'Mars' },
+    { value: '3', label: language === 'ar' ? 'أبريل' : language === 'en' ? 'April' : 'Avril' },
+    { value: '4', label: language === 'ar' ? 'ماي' : language === 'en' ? 'May' : 'Mai' },
+    { value: '5', label: language === 'ar' ? 'يونيو' : language === 'en' ? 'June' : 'Juin' },
+    { value: '6', label: language === 'ar' ? 'يوليوز' : language === 'en' ? 'July' : 'Juillet' },
+    { value: '7', label: language === 'ar' ? 'غشت' : language === 'en' ? 'August' : 'Août' },
+    { value: '8', label: language === 'ar' ? 'شتنبر' : language === 'en' ? 'September' : 'Septembre' },
+    { value: '9', label: language === 'ar' ? 'أكتوبر' : language === 'en' ? 'October' : 'Octobre' },
+    { value: '10', label: language === 'ar' ? 'نونبر' : language === 'en' ? 'November' : 'Novembre' },
+    { value: '11', label: language === 'ar' ? 'دجنبر' : language === 'en' ? 'December' : 'Décembre' }
   ];
 
   const years = Array.from({ length: 5 }, (_, i) => (new Date().getFullYear() - i).toString());
@@ -66,7 +82,7 @@ export default function UserWallet() {
   const withdrawMutation = useMutation({
     mutationFn: (data: any) => payoutsApi.create(data),
     onSuccess: () => {
-      toast.success('Demande de retrait soumise avec succès');
+      toast.success(t('toast_success', 'wallet'));
       setIsWithdrawModalOpen(false);
       setWithdrawForm({ amountMad: '', bankName: '', ribAccount: '', iceNumber: '' });
       queryClient.invalidateQueries({ queryKey: ['wallet'] });
@@ -74,18 +90,18 @@ export default function UserWallet() {
       queryClient.invalidateQueries({ queryKey: ['payouts'] });
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Erreur lors de la demande');
+      toast.error(error.response?.data?.message || t('toast_failed', 'wallet', 'Erreur lors de la demande'));
     }
   });
 
   const handleWithdrawSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!wallet || wallet.balanceMad < Number(withdrawForm.amountMad)) {
-      toast.error('Solde insuffisant');
+      toast.error(t('toast_insufficient', 'wallet'));
       return;
     }
     if (Number(withdrawForm.amountMad) < 200) {
-      toast.error('Le montant minimum est de 200 MAD');
+      toast.error(t('toast_min_amount', 'wallet'));
       return;
     }
     withdrawMutation.mutate({
@@ -97,13 +113,13 @@ export default function UserWallet() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'PENDING':
-        return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-yellow-50 text-yellow-700 border border-yellow-100"><Clock size={12}/> En attente</span>;
+        return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-yellow-50 text-yellow-700 border border-yellow-100"><Clock size={12}/> {t('status_pending', 'wallet')}</span>;
       case 'COMPLETED':
-        return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-green-50 text-green-700 border border-green-100"><CheckCircle2 size={12}/> Complété</span>;
+        return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-green-50 text-green-700 border border-green-100"><CheckCircle2 size={12}/> {t('status_completed', 'wallet')}</span>;
       case 'RECEIVED':
-        return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-violet-50 text-violet-700 border border-violet-100"><CheckCircle2 size={12}/> Réçu</span>;
+        return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-violet-50 text-violet-700 border border-violet-100"><CheckCircle2 size={12}/> {t('status_received', 'wallet')}</span>;
       case 'REJECTED':
-        return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-red-50 text-red-700 border border-red-100"><XCircle size={12}/> Rejeté</span>;
+        return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-red-50 text-red-700 border border-red-100"><XCircle size={12}/> {t('status_rejected', 'wallet')}</span>;
       default:
         return <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-gray-100 text-gray-700 border border-gray-200">{status}</span>;
     }
@@ -117,8 +133,8 @@ export default function UserWallet() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">Mon Portefeuille</h1>
-          <p className="text-sm text-gray-500 font-medium">Gérez vos gains et effectuez des retraits</p>
+          <h1 className="text-2xl font-black text-gray-900 tracking-tight">{t('title', 'wallet')}</h1>
+          <p className="text-sm text-gray-500 font-medium">{t('subtitle', 'wallet')}</p>
         </div>
         <div className="flex items-center gap-2">
           <button 
@@ -126,10 +142,10 @@ export default function UserWallet() {
               queryClient.invalidateQueries({ queryKey: ['wallet'] });
               queryClient.invalidateQueries({ queryKey: ['wallet-transactions'] });
               queryClient.invalidateQueries({ queryKey: ['payouts'] });
-              toast.success('Données actualisées');
+              toast.success(t('toast_refreshed', 'wallet'));
             }}
             className="p-2.5 bg-white border border-gray-200 text-gray-500 rounded-xl hover:text-violet-600 hover:border-violet-100 transition-all shadow-sm"
-            title="Actualiser"
+            title={t('refresh', 'wallet')}
           >
             <RotateCcw size={18} />
           </button>
@@ -153,7 +169,7 @@ export default function UserWallet() {
             disabled={!wallet || wallet.balanceMad < 200}
             className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg active:scale-[0.98]"
           >
-            <Banknote size={18} /> Demander un retrait
+            <Banknote size={18} /> {t('request_withdrawal', 'wallet')}
           </button>
         </div>
       </div>
@@ -165,9 +181,9 @@ export default function UserWallet() {
             <Wallet size={120} className="-mr-8 -mt-8" />
           </div>
           <div className="relative z-10">
-            <p className="text-violet-100 text-sm font-medium mb-1">Solde Disponible</p>
+            <p className="text-violet-100 text-sm font-medium mb-1">{t('approved', 'wallet')}</p>
             <h3 className="text-4xl font-black tracking-tight">{wallet?.balanceMad?.toLocaleString() || 0} <span className="text-lg text-violet-200">MAD</span></h3>
-            <p className="text-[10px] text-violet-200 mt-2 font-medium opacity-80">Uniquement alimenté par les commandes facturées.</p>
+            <p className="text-[10px] text-violet-200 mt-2 font-medium opacity-80">{t('available_desc', 'wallet')}</p>
           </div>
         </div>
 
@@ -176,7 +192,7 @@ export default function UserWallet() {
             <div className="w-10 h-10 rounded-xl bg-green-50 text-green-600 flex items-center justify-center shrink-0">
               <ArrowDownRight size={20} />
             </div>
-            <p className="text-gray-500 text-sm font-medium">Gains (Factures)</p>
+            <p className="text-gray-500 text-sm font-medium">{t('gains_invoices', 'wallet')}</p>
           </div>
           <h3 className="text-2xl font-black text-gray-900 ml-13 pl-1">{wallet?.totalEarnedMad?.toLocaleString() || 0} <span className="text-sm text-gray-400">MAD</span></h3>
         </div>
@@ -186,7 +202,7 @@ export default function UserWallet() {
             <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
               <ArrowUpRight size={20} />
             </div>
-            <p className="text-gray-500 text-sm font-medium">Total Retiré</p>
+            <p className="text-gray-500 text-sm font-medium">{t('total_withdrawn', 'wallet')}</p>
           </div>
           <h3 className="text-2xl font-black text-gray-900 ml-13 pl-1">{wallet?.totalWithdrawnMad?.toLocaleString() || 0} <span className="text-sm text-gray-400">MAD</span></h3>
         </div>
@@ -197,9 +213,9 @@ export default function UserWallet() {
         <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
           <div className="p-6 border-b border-gray-50 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900">Historique (Factures, Retraits & Frais)</h2>
+              <h2 className="text-lg font-bold text-gray-900">{t('history_title', 'wallet')}</h2>
               <div className="text-xs font-bold text-violet-600 bg-violet-50 px-2 py-1 rounded-md">
-                {transactions.length} Transactions
+                {transactions.length} {t('transactions', 'wallet')}
               </div>
             </div>
             
@@ -210,7 +226,7 @@ export default function UserWallet() {
                 onChange={(e) => setFilterDay(e.target.value)}
                 className="text-xs font-bold border-gray-200 rounded-lg focus:ring-violet-500 focus:border-violet-500 bg-gray-50/50"
               >
-                <option value="ALL">Tous les jours</option>
+                <option value="ALL">{t('all_days', 'wallet')}</option>
                 {days.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
               
@@ -219,7 +235,7 @@ export default function UserWallet() {
                 onChange={(e) => setFilterMonth(e.target.value)}
                 className="text-xs font-bold border-gray-200 rounded-lg focus:ring-violet-500 focus:border-violet-500 bg-gray-50/50"
               >
-                <option value="ALL">Tous les mois</option>
+                <option value="ALL">{t('all_months', 'wallet')}</option>
                 {months.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
               
@@ -228,7 +244,7 @@ export default function UserWallet() {
                 onChange={(e) => setFilterYear(e.target.value)}
                 className="text-xs font-bold border-gray-200 rounded-lg focus:ring-violet-500 focus:border-violet-500 bg-gray-50/50"
               >
-                <option value="ALL">Toutes les années</option>
+                <option value="ALL">{t('all_years', 'wallet')}</option>
                 {years.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
 
@@ -237,7 +253,7 @@ export default function UserWallet() {
                   onClick={() => { setFilterDay('ALL'); setFilterMonth('ALL'); }}
                   className="text-[10px] font-black uppercase text-gray-400 hover:text-red-500"
                 >
-                  Réinitialiser
+                  {t('reset', 'wallet')}
                 </button>
               )}
             </div>
@@ -246,7 +262,7 @@ export default function UserWallet() {
             {isLoadingTransactions ? (
                <div className="flex justify-center p-8"><div className="w-6 h-6 border-2 border-violet-600 border-t-transparent rounded-full animate-spin"></div></div>
             ) : transactions.length === 0 ? (
-              <div className="text-center py-8 text-gray-500 font-medium">Aucune transaction trouvée.</div>
+              <div className="text-center py-8 text-gray-500 font-medium">{t('no_transactions', 'wallet')}</div>
             ) : (
               <div className="space-y-3">
                 {transactions.map((tx: any) => (
@@ -259,7 +275,7 @@ export default function UserWallet() {
                       </div>
                       <div>
                         <p className="text-sm font-bold text-gray-900">{tx.description || tx.type}</p>
-                        <p className="text-xs text-gray-500 font-medium">{format(new Date(tx.createdAt), 'dd MMM yyyy HH:mm', { locale: fr })}</p>
+                        <p className="text-xs text-gray-500 font-medium">{format(new Date(tx.createdAt), 'dd MMM yyyy HH:mm', { locale: getLocale() })}</p>
                       </div>
                     </div>
                     <div className="text-right">
@@ -278,11 +294,11 @@ export default function UserWallet() {
         {/* Payouts List */}
         <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
           <div className="p-6 border-b border-gray-50 flex items-center justify-between">
-            <h2 className="text-lg font-bold text-gray-900">Mes retraits</h2>
+            <h2 className="text-lg font-bold text-gray-900">{t('my_withdrawals', 'wallet')}</h2>
           </div>
           <div className="p-4 flex-1 overflow-y-auto max-h-[500px]">
             {payouts.length === 0 ? (
-              <div className="text-center py-8 text-gray-500 font-medium">Aucune demande de retrait.</div>
+              <div className="text-center py-8 text-gray-500 font-medium">{t('no_withdrawals', 'wallet')}</div>
             ) : (
               <div className="space-y-3">
                 {payouts.map((payout: any) => (
@@ -294,7 +310,7 @@ export default function UserWallet() {
                         </div>
                         <div>
                           <p className="text-sm font-bold text-gray-900">{payout.bankName}</p>
-                          <p className="text-xs text-gray-500 font-medium mt-0.5">RIB: {'•'.repeat(20)}{payout.ribAccount.slice(-4)}</p>
+                          <p className="text-xs text-gray-500 font-medium mt-0.5">{t('rib', 'wallet')}: {'•'.repeat(20)}{payout.ribAccount.slice(-4)}</p>
                         </div>
                       </div>
                       <div className="text-right flex flex-col items-end">
@@ -303,9 +319,9 @@ export default function UserWallet() {
                       </div>
                     </div>
                     <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                      <p className="text-xs text-gray-400 font-medium">Demandé le {format(new Date(payout.createdAt), 'dd MMM yyyy', { locale: fr })}</p>
+                      <p className="text-xs text-gray-400 font-medium">{t('requested_on', 'wallet').replace('{date}', format(new Date(payout.createdAt), 'dd MMM yyyy', { locale: getLocale() }))}</p>
                       {payout.processedAt && (
-                        <p className="text-xs text-gray-400 font-medium">Traité le {format(new Date(payout.processedAt), 'dd MMM yyyy', { locale: fr })}</p>
+                        <p className="text-xs text-gray-400 font-medium">{t('processed_on', 'wallet').replace('{date}', format(new Date(payout.processedAt), 'dd MMM yyyy', { locale: getLocale() }))}</p>
                       )}
                     </div>
                   </div>
@@ -322,8 +338,8 @@ export default function UserWallet() {
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-gray-50 flex justify-between items-center">
               <div>
-                <h3 className="text-xl font-black text-gray-900 tracking-tight">Demander un retrait</h3>
-                <p className="text-sm text-gray-500 font-medium mt-1">Solde dispo: <span className="font-bold text-gray-900">{wallet?.balanceMad?.toLocaleString()} MAD</span></p>
+                <h3 className="text-xl font-black text-gray-900 tracking-tight">{t('request_withdrawal', 'wallet')}</h3>
+                <p className="text-sm text-gray-500 font-medium mt-1">{t('available_balance', 'wallet').replace('{balance}', wallet?.balanceMad?.toLocaleString() || '0')}</p>
               </div>
               <button onClick={() => setIsWithdrawModalOpen(false)} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-xl transition-colors">
                 <XCircle size={24} />
@@ -332,7 +348,7 @@ export default function UserWallet() {
             <form onSubmit={handleWithdrawSubmit} className="p-6 space-y-4">
               {user?.bankAccounts && user.bankAccounts.filter((b: any) => b.status === 'APPROVED').length > 0 && (
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Choisir un compte existant</label>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">{t('choose_existing', 'wallet')}</label>
                   <select
                     value={selectedBankId}
                     onChange={e => {
@@ -349,16 +365,16 @@ export default function UserWallet() {
                     }}
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all outline-none"
                   >
-                    <option value="">-- Nouveau compte bancaire --</option>
+                    <option value="">{t('new_bank_account', 'wallet')}</option>
                     {user.bankAccounts.filter((b: any) => b.status === 'APPROVED').map((b: any) => (
-                      <option key={b.id} value={b.id}>{b.bankName} - {b.ribAccount.slice(0, 8)}...{b.ribAccount.slice(-4)} {b.isDefault ? '(Par défaut)' : ''}</option>
+                      <option key={b.id} value={b.id}>{b.bankName} - {b.ribAccount.slice(0, 8)}...{b.ribAccount.slice(-4)} {b.isDefault ? t('default_account', 'wallet') : ''}</option>
                     ))}
                   </select>
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Montant (MAD)</label>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">{t('amount_mad', 'wallet')}</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Banknote size={16} className="text-gray-400" />
@@ -371,14 +387,14 @@ export default function UserWallet() {
                     value={withdrawForm.amountMad}
                     onChange={e => setWithdrawForm({...withdrawForm, amountMad: e.target.value})}
                     className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all outline-none"
-                    placeholder="Min. 200 MAD"
+                    placeholder={t('min_amount_placeholder', 'wallet')}
                   />
                 </div>
               </div>
               {!selectedBankId && (
                 <>
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Nom de la Banque</label>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">{t('bank_name', 'wallet')}</label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <Building2 size={16} className="text-gray-400" />
@@ -389,12 +405,12 @@ export default function UserWallet() {
                         value={withdrawForm.bankName}
                         onChange={e => setWithdrawForm({...withdrawForm, bankName: e.target.value})}
                         className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all outline-none"
-                        placeholder="ex: CIH, Attijariwafa"
+                        placeholder={t('bank_name_placeholder', 'wallet')}
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">RIB (24 chiffres)</label>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">{t('rib_field', 'wallet')}</label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <CreditCard size={16} className="text-gray-400" />
@@ -406,7 +422,7 @@ export default function UserWallet() {
                         value={withdrawForm.ribAccount}
                         onChange={e => setWithdrawForm({...withdrawForm, ribAccount: e.target.value})}
                         className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all outline-none"
-                        placeholder="24 chiffres"
+                        placeholder={t('rib_placeholder', 'wallet')}
                       />
                     </div>
                   </div>
@@ -418,7 +434,7 @@ export default function UserWallet() {
                   disabled={withdrawMutation.isPending}
                   className="w-full py-3 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-gray-800 disabled:opacity-50 transition-all shadow-md"
                 >
-                  {withdrawMutation.isPending ? 'Traitement...' : 'Confirmer le retrait'}
+                  {withdrawMutation.isPending ? t('processing', 'wallet') : t('confirm_withdrawal', 'wallet')}
                 </button>
               </div>
             </form>

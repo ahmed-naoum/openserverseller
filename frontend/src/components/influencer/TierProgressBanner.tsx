@@ -2,13 +2,16 @@ import React from 'react';
 import { Crown, Star, Shield, Medal, Flame, Plus, ShoppingBag, Package } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export const TierProgressBanner = ({ totalEarned }: { totalEarned: number }) => {
+  const { t, language } = useLanguage();
+  const isRtl = language === 'ar';
   const tiers = [
-    { id: 0, name: 'Débutant', min: 0, max: 100000, color: 'text-orange-700', bg: 'bg-orange-700', badgeFrom: 'from-orange-500', badgeTo: 'to-orange-800', icon: Shield },
-    { id: 1, name: 'Silver', min: 100000, max: 1000000, color: 'text-gray-400', bg: 'bg-gray-400', badgeFrom: 'from-gray-300', badgeTo: 'to-gray-500', icon: Medal },
-    { id: 2, name: 'Gold', min: 1000000, max: 10000000, color: 'text-yellow-500', bg: 'bg-yellow-500', badgeFrom: 'from-yellow-400', badgeTo: 'to-amber-500', icon: Star },
-    { id: 3, name: 'Platine', min: 10000000, max: 20000000, color: 'text-indigo-500', bg: 'bg-indigo-500', badgeFrom: 'from-indigo-400', badgeTo: 'to-indigo-600', icon: Crown }
+    { id: 0, name: 'tier_beginner', min: 0, max: 100000, color: 'text-orange-700', bg: 'bg-orange-700', badgeFrom: 'from-orange-500', badgeTo: 'to-orange-800', icon: Shield },
+    { id: 1, name: 'tier_silver', min: 100000, max: 1000000, color: 'text-gray-400', bg: 'bg-gray-400', badgeFrom: 'from-gray-300', badgeTo: 'to-gray-500', icon: Medal },
+    { id: 2, name: 'tier_gold', min: 1000000, max: 10000000, color: 'text-yellow-500', bg: 'bg-yellow-500', badgeFrom: 'from-yellow-400', badgeTo: 'to-amber-500', icon: Star },
+    { id: 3, name: 'tier_platine', min: 10000000, max: 20000000, color: 'text-indigo-500', bg: 'bg-indigo-500', badgeFrom: 'from-indigo-400', badgeTo: 'to-indigo-600', icon: Crown }
   ];
 
   // Calculate overall percentage for the runner (0 to 100%)
@@ -49,16 +52,16 @@ export const TierProgressBanner = ({ totalEarned }: { totalEarned: number }) => 
           <div className="space-y-4">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/10">
               <span className="text-xl">🚀</span>
-              <span className="text-xs font-black uppercase tracking-widest text-white">Tableau de Bord Influenceur</span>
+              <span className="text-xs font-black uppercase tracking-widest text-white">{t('tier_banner_title', 'dashboard')}</span>
             </div>
-            <h2 className="text-white text-3xl font-black uppercase tracking-tight">Évolution de votre rang</h2>
+            <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('tier_banner_evolution', 'dashboard')}</h2>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Link to="/influencer/inventory" className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-2xl text-xs font-black text-white transition-all">
-              <Package className="w-3.5 h-3.5" /> My Products
+              <Package className="w-3.5 h-3.5" /> {t('nav_my_products', 'dashboard')}
             </Link>
             <Link to="/influencer/marketplace" className="flex items-center gap-2 px-6 py-3 bg-white text-slate-900 rounded-2xl text-xs font-black hover:shadow-2xl transition-all">
-              <ShoppingBag className="w-3.5 h-3.5" /> Marketplace
+              <ShoppingBag className="w-3.5 h-3.5" /> {t('nav_public_market', 'dashboard')}
             </Link>
           </div>
         </div>
@@ -75,7 +78,7 @@ export const TierProgressBanner = ({ totalEarned }: { totalEarned: number }) => 
             return (
               <div key={tier.id} className="flex flex-col items-center relative w-1/4">
                 <motion.div 
-                  initial={{ scale: 0.8, opacity: 0 }}
+                   initial={{ scale: 0.8, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ delay: index * 0.1 }}
                   className={`relative z-10 flex flex-col items-center transition-all duration-500 ${isUnlocked ? 'scale-110' : 'scale-90 opacity-50 grayscale'}`}
@@ -83,7 +86,7 @@ export const TierProgressBanner = ({ totalEarned }: { totalEarned: number }) => 
                   {/* Badge shape */}
                   <div className={`w-16 h-20 md:w-20 md:h-24 bg-gradient-to-br ${tier.badgeFrom} ${tier.badgeTo} rounded-t-full rounded-b-xl flex flex-col items-center justify-center shadow-lg border border-white/10 ring-2 ring-white/20`}>
                     <Icon className="w-6 h-6 md:w-8 md:h-8 text-white drop-shadow-md mb-1" />
-                    <span className="text-[10px] md:text-xs font-black text-white uppercase tracking-wider drop-shadow-md">{tier.name}</span>
+                    <span className="text-[10px] md:text-xs font-black text-white uppercase tracking-wider drop-shadow-md">{t(tier.name, 'dashboard')}</span>
                     <span className="text-[8px] md:text-[10px] font-bold text-white/80">{tier.min === 0 ? '0' : tier.min >= 1000000 ? `${(tier.min / 1000000).toFixed(0)}M` : `${(tier.min / 1000).toFixed(0)}K`}</span>
                   </div>
                   {/* Ribbon tails */}
@@ -96,7 +99,7 @@ export const TierProgressBanner = ({ totalEarned }: { totalEarned: number }) => 
                 {isActuallyCurrent && (
                   <div className="absolute -bottom-10 md:-bottom-12">
                     <span className="px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-white text-[10px] font-bold border border-white/20 whitespace-nowrap animate-pulse">
-                      Vous êtes ici
+                      {t('tier_banner_current_position', 'dashboard')}
                     </span>
                   </div>
                 )}
@@ -115,7 +118,7 @@ export const TierProgressBanner = ({ totalEarned }: { totalEarned: number }) => 
           </div>
 
           {/* Filled track */}
-          <div className="absolute top-0 left-4 right-4 md:left-8 md:right-8 h-4 rounded-full overflow-hidden pointer-events-none">
+          <div className={`absolute top-0 left-4 right-4 md:left-8 md:right-8 h-4 rounded-full overflow-hidden pointer-events-none flex ${isRtl ? 'justify-end' : 'justify-start'}`}>
             <motion.div 
               initial={{ width: 0 }}
               animate={{ width: `${overallPercentage}%` }}
@@ -134,10 +137,10 @@ export const TierProgressBanner = ({ totalEarned }: { totalEarned: number }) => 
 
           {/* Runner Icon */}
           <motion.div 
-            initial={{ left: '0%' }}
-            animate={{ left: `${overallPercentage}%` }}
+            initial={isRtl ? { right: '0%' } : { left: '0%' }}
+            animate={isRtl ? { right: `${overallPercentage}%` } : { left: `${overallPercentage}%` }}
             transition={{ duration: 1.5, ease: "easeOut" }}
-            className="absolute top-1/2 -translate-y-1/2 -ml-3 md:-ml-4 z-20 group cursor-pointer"
+            className={`absolute top-1/2 -translate-y-1/2 z-20 group cursor-pointer ${isRtl ? '-mr-3 md:-mr-4' : '-ml-3 md:-ml-4'}`}
           >
             <div className="w-6 h-6 md:w-8 md:h-8 bg-white rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(255,255,255,0.3)] border-[3px] border-slate-900">
               <Flame className="w-3 h-3 md:w-4 md:h-4 text-orange-500" />

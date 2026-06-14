@@ -142,7 +142,7 @@ export default function AdminSupportQueue() {
           onClick={() => navigate('/admin/chat')}
           className="px-6 py-3 text-sm font-black border-b-2 border-transparent text-slate-400 hover:text-slate-600 hover:border-slate-300 flex items-center gap-2"
         >
-          Mes Chats Actifs <ChevronRight size={14} />
+          Chat <ChevronRight size={14} />
         </button>
       </div>
 

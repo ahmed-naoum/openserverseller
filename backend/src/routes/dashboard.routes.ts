@@ -1,10 +1,9 @@
+import { prisma } from '../lib/prisma.js';
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.get(
   '/seller-affiliate',
@@ -296,7 +295,8 @@ router.get(
       notifications,
       wallet,
       periodStats,
-      periodLeadCounts
+      periodLeadCounts,
+      periodClicks
     ] = await Promise.all([
       prisma.userProfile.findUnique({ where: { userId } }),
       prisma.referralLink.findMany({
@@ -331,16 +331,25 @@ router.get(
           }
         }
       }),
-      // Aggregate stats for the period
-      prisma.lead.groupBy({
-        by: ['status'],
+      // Fetch all leads for the period to aggregate stats in memory (due to Lead/Order status sync delay)
+      prisma.lead.findMany({
         where: {
           referralLink: {
             influencerId: userId
           },
-          createdAt: { gte: dateLimitStart, lte: dateLimitEnd }
+          createdAt: dateLimitStart || dateLimitEnd ? {
+            ...(dateLimitStart ? { gte: dateLimitStart } : {}),
+            ...(dateLimitEnd ? { lte: dateLimitEnd } : {})
+          } : undefined
         },
-        _count: true
+        select: {
+          status: true,
+          order: {
+            select: {
+              status: true
+            }
+          }
+        }
       }),
       // New: Aggregate lead counts by referral link for the period
       prisma.lead.groupBy({
@@ -352,20 +361,66 @@ router.get(
           createdAt: { gte: dateLimitStart, lte: dateLimitEnd }
         },
         _count: true
+      }),
+      // New: Fetch all clicks for the period
+      (prisma as any).referralLinkClick.findMany({
+        where: {
+          referralLink: {
+            influencerId: userId
+          },
+          createdAt: dateLimitStart || dateLimitEnd ? {
+            ...(dateLimitStart ? { gte: dateLimitStart } : {}),
+            ...(dateLimitEnd ? { lte: dateLimitEnd } : {})
+          } : undefined
+        },
+        select: {
+          ipAddress: true,
+          userAgent: true
+        }
       })
     ]);
 
     const leadCountsByLink = periodLeadCounts || [];
+    const periodClicksData = periodClicks || [];
 
-    // Calculate funnel counts from grouped leads (sync with influencer/Leads.tsx logic)
-    const deliveryStatuses = ['PENDING', 'PUSHED_TO_DELIVERY', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED', 'CONFIRMED_DELIVERY'];
-    
+    let totalViews = 0;
+    const uniqueIPUAs = new Set<string>();
+    let whatsappClicks = 0;
+
+    periodClicksData.forEach((c: any) => {
+      if (c.userAgent === 'whatsapp_click') {
+        whatsappClicks++;
+      } else {
+        totalViews++;
+        uniqueIPUAs.add(`${c.ipAddress}-${c.userAgent || 'unknown'}`);
+      }
+    });
+
+    const uniqueVisitors = uniqueIPUAs.size;
+
+    // Calculate funnel counts from retrieved leads (sync with influencer/Leads.tsx logic)
+    const deliveryStatuses = [
+      'PENDING', 'PUSHED_TO_DELIVERY', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED', 'CONFIRMED_DELIVERY',
+      'NEW_PARCEL', 'WAITING_PICKUP', 'PICKED_UP', 'SENT', 'RECEIVED', 'DISTRIBUTION', 'PROGRAMMER_AUTO', 'POSTPONED',
+      'WAITING_PREPARATION', 'PREPARED', 'ENCORE_PREPARED', 'CANCELED_BY_SELLER', 'CANCELED_BY_SYSTEM', 'REFUSE',
+      'NOANSWER', 'CANCELED', 'ERR', 'PROGRAMMER', 'INCORRECT_ADDRESS'
+    ];
+
+    const periodLeads = (periodStats || []) as any[];
+    const conversions = periodLeads.length;
+    const confirmed = periodLeads.filter(l => {
+      const s = (l.order?.status || l.status || 'UNKNOWN').toUpperCase();
+      return s === 'CONFIRMED' || deliveryStatuses.includes(s);
+    }).length;
+    const delivered = periodLeads.filter(l => (l.order?.status || '').toUpperCase() === 'DELIVERED').length;
+
     const stats = {
-      conversions: periodStats.reduce((sum, s) => sum + s._count, 0),
-      confirmed: periodStats.filter(s => 
-        s.status === 'CONFIRMED' || deliveryStatuses.includes(s.status)
-      ).reduce((sum, s) => sum + s._count, 0),
-      delivered: periodStats.filter(s => s.status === 'DELIVERED').reduce((sum, s) => sum + s._count, 0),
+      conversions,
+      confirmed,
+      delivered,
+      totalViews,
+      uniqueVisitors,
+      whatsappClicks
     };
 
     const totalEarnings = await prisma.influencerCommission.aggregate({

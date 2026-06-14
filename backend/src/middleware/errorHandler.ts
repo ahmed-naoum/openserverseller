@@ -1,7 +1,6 @@
+import { prisma } from '../lib/prisma.js';
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
 
 export interface AppError extends Error {
   statusCode?: number;

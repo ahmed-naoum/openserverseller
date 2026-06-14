@@ -1,19 +1,46 @@
+import { prisma } from '../lib/prisma.js';
 import { Server as SocketServer, Socket } from 'socket.io';
-import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
   userRole?: string;
 }
 
+function broadcastActiveUsersCount(io: any) {
+  const sockets = Array.from(io.sockets.sockets.values()) as AuthenticatedSocket[];
+  
+  let anonymousCount = 0;
+  const activeRoles: Record<string, number> = {
+    SUPER_ADMIN: 0,
+    FINANCE_ADMIN: 0,
+    CALL_CENTER_AGENT: 0,
+    VENDOR: 0,
+    INFLUENCER: 0,
+    HELPER: 0
+  };
+
+  sockets.forEach((s) => {
+    if (s.userId && s.userRole) {
+      activeRoles[s.userRole] = (activeRoles[s.userRole] || 0) + 1;
+    } else {
+      anonymousCount++;
+    }
+  });
+
+  io.to('role:SUPER_ADMIN').emit('realtime:active-users', {
+    anonymousCount,
+    activeRoles,
+    totalActive: sockets.length
+  });
+}
+
 export const setupSocketHandlers = (io: SocketServer) => {
   io.use(async (socket: AuthenticatedSocket, next) => {
-    const token = socket.handshake.auth.token;
+    const token = socket.handshake.auth?.token;
     
     if (!token) {
-      return next(new Error('Authentication required'));
+      return next();
     }
 
     try {
@@ -25,20 +52,18 @@ export const setupSocketHandlers = (io: SocketServer) => {
         include: { role: true },
       });
 
-      if (!user || !user.isActive) {
-        return next(new Error('User not found or inactive'));
+      if (user && user.isActive) {
+        socket.userId = user.uuid;
+        socket.userRole = user.role.name;
       }
-
-      socket.userId = user.uuid;
-      socket.userRole = user.role.name;
       next();
     } catch (error) {
-      next(new Error('Invalid token'));
+      next();
     }
   });
 
   io.on('connection', (socket: AuthenticatedSocket) => {
-    console.log(`User connected: ${socket.userId} (${socket.userRole})`);
+    console.log(`User connected: ${socket.userId || 'Anonymous'} (${socket.userRole || 'Guest'})`);
 
     // Join user-specific room
     if (socket.userId) {
@@ -49,6 +74,12 @@ export const setupSocketHandlers = (io: SocketServer) => {
     if (socket.userRole) {
       socket.join(`role:${socket.userRole}`);
     }
+
+    broadcastActiveUsersCount(io);
+
+    socket.on('realtime:request-counts', () => {
+      broadcastActiveUsersCount(io);
+    });
 
     // Handle lead assignment
     socket.on('lead:assigned', async (data: { leadId: string; agentId: string }) => {
@@ -138,7 +169,8 @@ export const setupSocketHandlers = (io: SocketServer) => {
 
     // Handle disconnection
     socket.on('disconnect', () => {
-      console.log(`User disconnected: ${socket.userId}`);
+      console.log(`User disconnected: ${socket.userId || 'Anonymous'}`);
+      broadcastActiveUsersCount(io);
     });
   });
 };

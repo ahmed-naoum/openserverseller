@@ -1,5 +1,12 @@
+import { prisma } from './lib/prisma.js';
 import * as dotenv from 'dotenv';
 dotenv.config({ override: true });
+
+// Enable BigInt serialization to JSON
+(BigInt.prototype as any).toJSON = function () {
+  return Number(this);
+};
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -107,17 +114,140 @@ app.use(`${API_PREFIX}`, rateLimitCheckMiddleware, globalRateLimiter, routes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
+const broadcastActiveUsersCount = async (io: any) => {
+  const sockets = Array.from(io.sockets.sockets.values()) as any[];
+  
+  const userUuids = Array.from(new Set(sockets.map(s => s.userUuid).filter(Boolean))) as string[];
+  
+  let usersInfo: any[] = [];
+  if (userUuids.length > 0) {
+    try {
+      usersInfo = await prisma.user.findMany({
+        where: { uuid: { in: userUuids } },
+        include: { 
+          role: true,
+          profile: true
+        }
+      });
+    } catch (err) {
+      console.error('Failed to fetch user profiles for active tracking:', err);
+    }
+  }
+
+  const groupedUsers: Record<string, {
+    key: string;
+    type: 'AUTHENTICATED' | 'ANONYMOUS';
+    userUuid?: string;
+    email?: string | null;
+    phone?: string | null;
+    fullName?: string | null;
+    avatarUrl?: string | null;
+    role?: string;
+    ip: string;
+    userAgent: string;
+    tabsCount: number;
+    pages: { path: string; count: number }[];
+    lastActive: number;
+  }> = {};
+
+  sockets.forEach((s) => {
+    const ip = s.handshake.headers['x-forwarded-for']?.split(',')[0].trim() || s.handshake.address || 'unknown';
+    const userAgent = s.handshake.headers['user-agent'] || 'unknown';
+    const deviceKey = `${ip}::${userAgent}`;
+    const page = s.currentPage || '/';
+
+    if (s.userUuid) {
+      const uuid = s.userUuid;
+      const dbUser = usersInfo.find(u => u.uuid === uuid);
+      const roleName = s.userRole || dbUser?.role?.name || 'Guest';
+
+      if (!groupedUsers[uuid]) {
+        groupedUsers[uuid] = {
+          key: uuid,
+          type: 'AUTHENTICATED',
+          userUuid: uuid,
+          email: dbUser?.email,
+          phone: dbUser?.phone,
+          fullName: dbUser?.profile?.fullName || dbUser?.email || 'Utilisateur',
+          avatarUrl: dbUser?.profile?.avatarUrl,
+          role: roleName,
+          ip,
+          userAgent,
+          tabsCount: 0,
+          pages: [],
+          lastActive: Date.now()
+        };
+      }
+      
+      groupedUsers[uuid].tabsCount++;
+      const existingPage = groupedUsers[uuid].pages.find(p => p.path === page);
+      if (existingPage) {
+        existingPage.count++;
+      } else {
+        groupedUsers[uuid].pages.push({ path: page, count: 1 });
+      }
+    } else {
+      if (!groupedUsers[deviceKey]) {
+        groupedUsers[deviceKey] = {
+          key: deviceKey,
+          type: 'ANONYMOUS',
+          ip,
+          userAgent,
+          tabsCount: 0,
+          pages: [],
+          lastActive: Date.now()
+        };
+      }
+      
+      groupedUsers[deviceKey].tabsCount++;
+      const existingPage = groupedUsers[deviceKey].pages.find(p => p.path === page);
+      if (existingPage) {
+        existingPage.count++;
+      } else {
+        groupedUsers[deviceKey].pages.push({ path: page, count: 1 });
+      }
+    }
+  });
+
+  const activeList = Object.values(groupedUsers);
+
+  let anonymousCount = 0;
+  const activeRoles: Record<string, number> = {
+    SUPER_ADMIN: 0,
+    FINANCE_ADMIN: 0,
+    CALL_CENTER_AGENT: 0,
+    VENDOR: 0,
+    INFLUENCER: 0,
+    HELPER: 0
+  };
+
+  activeList.forEach((item) => {
+    if (item.type === 'AUTHENTICATED') {
+      if (item.role) {
+        activeRoles[item.role] = (activeRoles[item.role] || 0) + 1;
+      }
+    } else {
+      anonymousCount++;
+    }
+  });
+
+  io.to('role:SUPER_ADMIN').emit('realtime:active-users', {
+    anonymousCount,
+    activeRoles,
+    totalActive: activeList.length,
+    activeUsersList: activeList
+  });
+};
+
 const setupChatSocket = () => {
   const jwt = require('jsonwebtoken');
-  const { PrismaClient } = require('@prisma/client');
-  const prismaSocket = new PrismaClient();
 
   io.use(async (socket: any, next: any) => {
     const token = socket.handshake.auth?.token;
     if (!token) return next(); // allow unauthenticated (will just not join user room)
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
-      const user = await prismaSocket.user.findUnique({
+      const user = await prisma.user.findUnique({
         where: { uuid: decoded.userId },
         include: { role: true },
       });
@@ -136,6 +266,17 @@ const setupChatSocket = () => {
       socket.join(`user:${socket.userUuid}`);
       socket.join(`role:${socket.userRole}`);
     }
+
+    broadcastActiveUsersCount(io);
+
+    socket.on('realtime:request-counts', () => {
+      broadcastActiveUsersCount(io);
+    });
+
+    socket.on('page-view', (data: { path: string }) => {
+      socket.currentPage = data?.path || '/';
+      broadcastActiveUsersCount(io);
+    });
 
     socket.on('join-conversation', (conversationId: string) => {
       socket.join(`conversation:${conversationId}`);
@@ -169,6 +310,7 @@ const setupChatSocket = () => {
 
     socket.on('disconnect', () => {
       console.log(`Client disconnected: ${socket.id}`);
+      broadcastActiveUsersCount(io);
     });
   });
 };

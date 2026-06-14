@@ -1,35 +1,37 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export default function FAQ() {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
+  const { t, language } = useLanguage();
 
   const faqs = [
     {
-      q: "هل أحتاج رأس مال للبدء؟",
-      a: "لا، لا تحتاج إلى رأس مال كبير لشراء المخزون. مع نظام SILACOD، يمكنك البدء مجاناً كمسوق بالعمولة والترويج للمنتجات الجاهزة، أو استخدام خيار المنتجات ذات العلامة الخاصة والبدء بالبيع الفوري والدفع عند الاستلام."
+      q: t('faq_q1'),
+      a: t('faq_a1')
     },
     {
-      q: "متى وكيف أستلم أرباحي؟",
-      a: "بمجرد توصيل الطلب للزبون وتحصيل المبلغ، تضاف الأرباح مباشرة لمحفظتك الإلكترونية على SILACOD. يمكنك طلب سحب أرباحك في أي وقت لتصلك عبر حسابك البنكي أو وكالات تحويل الأموال المعتمدة بالمغرب بشكل سريع وبدون تأخير."
+      q: t('faq_q2'),
+      a: t('faq_a2')
     },
     {
-      q: "هل المنتجات مضمونة وذات جودة عالية؟",
-      a: "نعم، جميع الموردين المتواجدين بالمنصة موثوقون ويمرون بعملية فحص جودة صارمة لضمان رضا الزبائن وتقليل نسب المرتجعات لأدنى حد ممكن."
+      q: t('faq_q3'),
+      a: t('faq_a3')
     },
     {
-      q: "كيف أبدأ العمل مع SILACOD خطوة بخطوة؟",
-      a: "البدء سهل للغاية: قم بإنشاء حسابك مجاناً بالمنصة، تصفح الماركت بليس واختر المنتجات التي تناسبك، وابدأ التسويق واستقبال الطلبات فوراً بينما نتولى نحن كافة العمليات من تأكيد، تغليف وتوصيل."
+      q: t('faq_q4'),
+      a: t('faq_a4')
     }
   ];
 
   return (
-    <section dir="rtl" className="py-24 px-4 sm:px-6 lg:px-8 bg-slate-50 border-y border-slate-100/80 text-right font-['29LT_Kaff',Cairo,sans-serif]">
+    <section dir={language === 'ar' ? 'rtl' : 'ltr'} className={`py-24 px-4 sm:px-6 lg:px-8 bg-slate-50 border-y border-slate-100/80 font-['29LT_Kaff',Cairo,sans-serif] ${language === 'ar' ? 'text-right' : 'text-left'}`}>
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-16">
-          <h2 className="text-4xl lg:text-5xl font-black text-[#2e315e] mb-6">الأسئلة الشائعة</h2>
-          <p className="text-lg text-slate-500 font-bold">كل ما تحتاج معرفته لبدء تجارتك الإلكترونية بثقة وسهولة.</p>
+          <h2 className="text-4xl lg:text-5xl font-black text-[#2e315e] mb-6">{t('faq_title')}</h2>
+          <p className="text-lg text-slate-500 font-bold">{t('faq_subtitle')}</p>
         </div>
 
         <div className="space-y-4">
@@ -44,9 +46,9 @@ export default function FAQ() {
             >
               <button
                 onClick={() => setOpenIndex(openIndex === i ? null : i)}
-                className="w-full flex items-center justify-between p-6 text-right focus:outline-none"
+                className={`w-full flex items-center justify-between p-6 focus:outline-none ${language === 'ar' ? 'text-right' : 'text-left'}`}
               >
-                <span className="font-bold text-lg text-[#2e315e] pl-8">{faq.q}</span>
+                <span className={`font-bold text-lg text-[#2e315e] ${language === 'ar' ? 'pl-8' : 'pr-8'}`}>{faq.q}</span>
                 <ChevronDown 
                   className={`w-6 h-6 text-[#ff5722] transition-transform duration-300 ${openIndex === i ? 'rotate-180' : ''}`}
                 />
@@ -59,7 +61,7 @@ export default function FAQ() {
                     exit={{ height: 0, opacity: 0 }}
                     transition={{ duration: 0.3 }}
                   >
-                    <div className="p-6 pt-0 text-slate-600 font-bold leading-relaxed border-t border-slate-50 mt-2">
+                    <div className={`p-6 pt-0 text-slate-600 font-bold leading-relaxed border-t border-slate-50 mt-2 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
                       {faq.a}
                     </div>
                   </motion.div>

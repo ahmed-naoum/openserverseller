@@ -1,5 +1,5 @@
+import { prisma } from '../lib/prisma.js';
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
 import multer from 'multer';
 import sharp from 'sharp';
 import path from 'path';
@@ -11,12 +11,21 @@ import { io } from '../index.js';
 import { uploadRateLimiter } from '../middleware/security.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 
-// Ensure uploads/products directory exists
-const productsUploadDir = path.join(process.cwd(), 'uploads', 'products');
+// Ensure upload directories exist
+const uploadsDir = path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const productsUploadDir = path.join(uploadsDir, 'products');
 if (!fs.existsSync(productsUploadDir)) {
   fs.mkdirSync(productsUploadDir, { recursive: true });
+}
+
+const avatarsUploadDir = path.join(uploadsDir, 'avatars');
+if (!fs.existsSync(avatarsUploadDir)) {
+  fs.mkdirSync(avatarsUploadDir, { recursive: true });
 }
 
 const storage = multer.diskStorage({
@@ -61,6 +70,59 @@ const productImageUpload = multer({
   },
 });
 
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedTypes.includes(file.mimetype) && allowedExtensions.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Seuls les formats PNG, JPG et WEBP sont acceptés'));
+    }
+  },
+});
+
+// Helper to compress and convert images to WebP
+const optimizeAndConvertImage = async (
+  filePath: string
+): Promise<{ filename: string; size: number; mimetype: string }> => {
+  const ext = path.extname(filePath).toLowerCase();
+  const dir = path.dirname(filePath);
+  
+  if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
+    const baseName = path.basename(filePath, ext);
+    const webpFilename = `${baseName}-optimized.webp`;
+    const outputPath = path.join(dir, webpFilename);
+
+    // Sharp strips EXIF metadata automatically unless withMetadata() is explicitly called
+    const info = await sharp(filePath)
+      .resize({ width: 1200, withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toFile(outputPath);
+
+    // Delete the original uncompressed file to save space
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    return {
+      filename: webpFilename,
+      size: info.size,
+      mimetype: 'image/webp',
+    };
+  }
+
+  const stat = fs.statSync(filePath);
+  return {
+    filename: path.basename(filePath),
+    size: stat.size,
+    mimetype: ext === '.pdf' ? 'application/pdf' : 'application/octet-stream',
+  };
+};
+
 // ─── Product Images Upload (PNG/JPG → WebP) ─────────────────────────
 router.post(
   '/product-images',
@@ -82,7 +144,6 @@ router.post(
       const webpFilename = `${Date.now()}-${Math.round(Math.random() * 1e6)}.webp`;
       const outputPath = path.join(productsUploadDir, webpFilename);
 
-      // Convert to WebP
       const info = await sharp(file.buffer)
         .resize({ width: 1200, withoutEnlargement: true })
         .webp({ quality: 82 })
@@ -96,7 +157,6 @@ router.post(
         size: info.size,
       });
 
-      // Emit progress via Socket.IO
       if (socketId) {
         io.to(socketId).emit('upload-progress', {
           current: i + 1,
@@ -114,7 +174,7 @@ router.post(
   })
 );
 
-// ─── Generic image upload ─────────────────────────────────────────────
+// ─── Generic Image Upload (Compress + WebP) ─────────────────────────
 router.post(
   '/image',
   authenticate,
@@ -125,49 +185,22 @@ router.post(
       throw new AppException(400, 'No file uploaded');
     }
 
-    const ext = path.extname(req.file.filename).toLowerCase();
-    let finalFilename = req.file.filename;
-    let finalSize = req.file.size;
-    let finalMimetype = req.file.mimetype;
-
-    // Automatically compress and resize static images (JPG, JPEG, PNG, WEBP) to highly optimized 1200px WebP formats to save major storage space
-    if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
-      try {
-        const webpFilename = `${path.basename(req.file.filename, ext)}-optimized.webp`;
-        const outputPath = path.join(process.cwd(), 'uploads', webpFilename);
-
-        const info = await sharp(req.file.path)
-          .resize({ width: 1200, withoutEnlargement: true })
-          .webp({ quality: 80 })
-          .toFile(outputPath);
-
-        // Delete the original uncompressed file to save space
-        if (fs.existsSync(req.file.path)) {
-          fs.unlinkSync(req.file.path);
-        }
-
-        finalFilename = webpFilename;
-        finalSize = info.size;
-        finalMimetype = 'image/webp';
-      } catch (err) {
-        console.error('Image compression failed, falling back to original:', err);
-      }
-    }
-
-    const fileUrl = `/uploads/${finalFilename}`;
+    const result = await optimizeAndConvertImage(req.file.path);
+    const fileUrl = `/uploads/${result.filename}`;
 
     res.json({
       status: 'success',
       data: {
         url: fileUrl,
-        filename: finalFilename,
-        size: finalSize,
-        mimetype: finalMimetype,
+        filename: result.filename,
+        size: result.size,
+        mimetype: result.mimetype,
       },
     });
   })
 );
 
+// ─── KYC Document Upload (Camera & Gallery, Image → WebP) ───────────
 router.post(
   '/kyc',
   authenticate,
@@ -178,11 +211,15 @@ router.post(
       throw new AppException(400, 'Vous devez envoyer exactement 2 fichiers: Document Recto et Document Verso');
     }
 
-    const files = (req.files as Express.Multer.File[]).map((file) => ({
-      url: `/uploads/${file.filename}`,
-      filename: file.filename,
-      size: file.size,
-    }));
+    const files: { url: string; filename: string; size: number }[] = [];
+    for (const file of req.files as Express.Multer.File[]) {
+      const result = await optimizeAndConvertImage(file.path);
+      files.push({
+        url: `/uploads/${result.filename}`,
+        filename: result.filename,
+        size: result.size,
+      });
+    }
 
     res.json({
       status: 'success',
@@ -191,6 +228,7 @@ router.post(
   })
 );
 
+// ─── Store Logo Upload (Compress + WebP) ────────────────────────────
 router.post(
   '/logo',
   authenticate,
@@ -201,18 +239,21 @@ router.post(
       throw new AppException(400, 'No file uploaded');
     }
 
-    const fileUrl = `/uploads/${req.file.filename}`;
+    const result = await optimizeAndConvertImage(req.file.path);
+    const fileUrl = `/uploads/${result.filename}`;
 
     res.json({
       status: 'success',
       data: {
         url: fileUrl,
-        filename: req.file.filename,
+        filename: result.filename,
+        size: result.size,
       },
     });
   })
 );
 
+// ─── Bulk Upload (Compress + WebP) ───────────────────────────────────
 router.post(
   '/bulk',
   authenticate,
@@ -224,11 +265,15 @@ router.post(
       throw new AppException(400, 'No files uploaded');
     }
 
-    const files = (req.files as Express.Multer.File[]).map((file) => ({
-      url: `/uploads/${file.filename}`,
-      filename: file.filename,
-      size: file.size,
-    }));
+    const files: { url: string; filename: string; size: number }[] = [];
+    for (const file of req.files as Express.Multer.File[]) {
+      const result = await optimizeAndConvertImage(file.path);
+      files.push({
+        url: `/uploads/${result.filename}`,
+        filename: result.filename,
+        size: result.size,
+      });
+    }
 
     res.json({
       status: 'success',
@@ -238,26 +283,6 @@ router.post(
 );
 
 // ─── Avatar Upload (Crop + WebP) ──────────────────────────────────────
-const avatarsUploadDir = path.join(process.cwd(), 'uploads', 'avatars');
-if (!fs.existsSync(avatarsUploadDir)) {
-  fs.mkdirSync(avatarsUploadDir, { recursive: true });
-}
-
-const avatarUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
-    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (allowedTypes.includes(file.mimetype) && allowedExtensions.includes(ext)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Seuls les formats PNG, JPG et WEBP sont acceptés'));
-    }
-  },
-});
-
 router.post(
   '/avatar',
   authenticate,
@@ -271,7 +296,6 @@ router.post(
     const webpFilename = `avatar-${req.user!.id}-${Date.now()}.webp`;
     const outputPath = path.join(avatarsUploadDir, webpFilename);
 
-    // Resize to 400x400 square and convert to WebP
     await sharp(req.file.buffer)
       .resize(400, 400, { fit: 'cover', position: 'center' })
       .webp({ quality: 85 })
@@ -279,7 +303,6 @@ router.post(
 
     const avatarUrl = `/uploads/avatars/${webpFilename}`;
 
-    // Update user profile
     await prisma.userProfile.upsert({
       where: { userId: req.user!.id },
       create: {
@@ -291,7 +314,6 @@ router.post(
       },
     });
 
-    // Delete old avatar file if it exists
     try {
       const oldProfile = await prisma.userProfile.findUnique({ where: { userId: req.user!.id } });
       if (oldProfile?.avatarUrl && oldProfile.avatarUrl !== avatarUrl) {

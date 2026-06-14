@@ -7,8 +7,10 @@ import {
   ResponsiveContainer, ComposedChart, Line, Area, Bar, XAxis, YAxis, CartesianGrid, 
   Tooltip as RechartsTooltip, Legend 
 } from 'recharts';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export default function InfluencerLinks() {
+  const { t } = useLanguage();
   const [links, setLinks] = useState<ReferralLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -23,6 +25,16 @@ export default function InfluencerLinks() {
   // Modal states
   const [selectedLink, setSelectedLink] = useState<ReferralLink | null>(null);
   const [showQrModal, setShowQrModal] = useState(false);
+  
+  // Link Creation Modal States
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [claims, setClaims] = useState<any[]>([]);
+  const [claimsLoading, setClaimsLoading] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+  const [customName, setCustomName] = useState('');
+  const [customNameError, setCustomNameError] = useState('');
+  const [isCheckingName, setIsCheckingName] = useState(false);
+  const [isCreatingLink, setIsCreatingLink] = useState(false);
   const [confirmInputValue, setConfirmInputValue] = useState('');
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -122,7 +134,7 @@ export default function InfluencerLinks() {
   const copyLink = (code: string) => {
     const link = `${window.location.origin}/r/${code}`;
     navigator.clipboard.writeText(link);
-    toast.success('Lien copié!');
+    toast.success(t('toast_copied', 'links'));
   };
 
   const handleToggleStatus = async (link: ReferralLink) => {
@@ -130,9 +142,9 @@ export default function InfluencerLinks() {
     try {
       const res = await influencerApi.updateLinkStatus(link.id, !link.isActive);
       setLinks(prev => prev.map(l => l.id === link.id ? { ...l, isActive: res.data.isActive } : l));
-      toast.success(link.isActive ? 'Lien désactivé' : 'Lien activé');
+      toast.success(link.isActive ? t('toast_deactivated', 'links') : t('toast_activated', 'links'));
     } catch (err: any) {
-      toast.error('Erreur lors du changement de statut');
+      toast.error(t('toast_status_error', 'links'));
     } finally {
       setIsToggling(null);
     }
@@ -143,10 +155,10 @@ export default function InfluencerLinks() {
     setConfirmInputValue('');
     setConfirmModal({
       isOpen: true,
-      title: '🔐 Vérification par Email',
-      message: `Un code de vérification va être envoyé à l'email de l'influenceur pour confirmer la régénération du code.`,
+      title: t('otp_modal_title', 'links'),
+      message: t('otp_modal_message', 'links'),
       icon: <AlertCircle size={32} className="text-amber-500" />,
-      confirmText: 'Envoyer le code',
+      confirmText: t('btn_send_code', 'links'),
       variant: 'primary',
       isLoading: false,
       step: 'send',
@@ -163,10 +175,10 @@ export default function InfluencerLinks() {
             ...prev,
             isLoading: false,
             step: 'verify',
-            title: '🔐 Entrer le code de vérification',
-            message: `Un code à 6 chiffres a été envoyé à ${maskedEmail}. Veuillez le saisir ci-dessous.`,
+            title: t('otp_verify_title', 'links'),
+            message: t('otp_verify_message', 'links').replace('{email}', maskedEmail),
             icon: <AlertCircle size={32} className="text-blue-500" />,
-            confirmText: 'Confirmer',
+            confirmText: t('btn_confirm', 'links'),
             variant: 'danger',
             maskedEmail,
             onConfirm: async () => {
@@ -174,7 +186,7 @@ export default function InfluencerLinks() {
             }
           }));
         } catch (err: any) {
-          toast.error(err?.response?.data?.message || 'Erreur lors de l\'envoi du code');
+          toast.error(err?.response?.data?.message || t('toast_send_code_error', 'links'));
           setConfirmModal(prev => ({ ...prev, isLoading: false }));
         }
       }
@@ -187,11 +199,90 @@ export default function InfluencerLinks() {
     try {
       const res = await influencerApi.verifyRegenOtp(confirmModal.linkId, confirmInputValue);
       setLinks(prev => prev.map(l => l.id === confirmModal.linkId ? { ...l, code: res.data.code } : l));
-      toast.success('Code régénéré avec succès !');
+      toast.success(t('toast_regen_success', 'links'));
       setConfirmModal(prev => ({ ...prev, isOpen: false }));
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Code incorrect ou expiré');
+      toast.error(err?.response?.data?.message || t('toast_incorrect_otp', 'links'));
       setConfirmModal(prev => ({ ...prev, isLoading: false }));
+    }
+  };
+
+  const fetchApprovedClaims = async () => {
+    setClaimsLoading(true);
+    try {
+      const res = await influencerApi.getClaims();
+      const claimsList = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      setClaims(claimsList.filter((c: any) => c.status === 'APPROVED'));
+    } catch (err) {
+      toast.error(t('toast_load_claims_error', 'links'));
+    } finally {
+      setClaimsLoading(false);
+    }
+  };
+
+  const handleNameChange = (val: string) => {
+    let clean = val.replace(/\s+/g, '-');
+    setCustomName(clean);
+
+    if (!clean) {
+      setCustomNameError('');
+      return;
+    }
+    if (clean.length < 3) {
+      setCustomNameError(t('err_name_short', 'links'));
+      return;
+    }
+    if (clean.length > 20) {
+      setCustomNameError(t('err_name_long', 'links'));
+      return;
+    }
+    const regex = /^[a-zA-Z0-9-_]+$/;
+    if (!regex.test(clean)) {
+      setCustomNameError(t('err_name_invalid_chars', 'links'));
+      return;
+    }
+    setCustomNameError('');
+  };
+
+  useEffect(() => {
+    if (!customName || customName.length < 3 || customName.length > 20 || !/^[a-zA-Z0-9-_]+$/.test(customName)) {
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setIsCheckingName(true);
+      try {
+        const res = await influencerApi.checkLinkNameUnique(customName);
+        if (!res.data.unique) {
+          setCustomNameError(t('err_name_taken', 'links'));
+        } else {
+          setCustomNameError('');
+        }
+      } catch (err) {
+        console.error('Error checking name uniqueness', err);
+      } finally {
+        setIsCheckingName(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [customName]);
+
+  const handleCreateLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProductId || !customName || customNameError) return;
+
+    setIsCreatingLink(true);
+    try {
+      await influencerApi.createLink(selectedProductId, customName);
+      toast.success(t('toast_create_success', 'links'));
+      setShowCreateModal(false);
+      setCustomName('');
+      setSelectedProductId(null);
+      loadLinks();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || t('toast_create_failed', 'links'));
+    } finally {
+      setIsCreatingLink(false);
     }
   };
 
@@ -232,8 +323,8 @@ export default function InfluencerLinks() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight">Performance des Liens</h1>
-          <p className="text-slate-500 font-medium mt-1">Analysez la rentabilité de vos parrainages en temps réel.</p>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight">{t('title', 'links')}</h1>
+          <p className="text-slate-500 font-medium mt-1">{t('subtitle', 'links')}</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -241,73 +332,76 @@ export default function InfluencerLinks() {
               setLoading(true);
               try {
                 await Promise.all([loadLinks(), loadDailyStats()]);
-                toast.success('Données actualisées');
+                toast.success(t('toast_refresh_success', 'links'));
               } catch (err) {
-                toast.error('Échec de l\'actualisation');
+                toast.error(t('toast_refresh_failed', 'links'));
               } finally {
                 setLoading(false);
               }
             }}
             disabled={loading || isStatsLoading}
             className="flex items-center justify-center p-3.5 bg-white border border-slate-100 text-slate-600 rounded-2xl hover:bg-slate-50 transition-all shadow-sm disabled:opacity-50"
-            title="Actualiser les données"
+            title={t('tooltip_refresh', 'links')}
           >
             <RefreshCw className={`w-5 h-5 ${(loading || isStatsLoading) ? 'animate-spin' : ''}`} />
           </button>
-          <a
-            href="/influencer/marketplace"
+          <button
+            onClick={() => {
+              setShowCreateModal(true);
+              fetchApprovedClaims();
+            }}
             className="flex items-center gap-2 px-8 py-3.5 bg-slate-900 text-white rounded-2xl text-sm font-black hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
           >
-            <Plus className="w-4 h-4" /> Créer un Lien
-          </a>
+            <Plus className="w-4 h-4" /> {t('btn_create_link', 'links')}
+          </button>
         </div>
       </div>
 
       <div className="grid grid-cols-2 xl:grid-cols-7 lg:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Vues Totales</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('stat_total_views', 'links')}</p>
           <div className="flex items-center justify-between">
             <h3 className="text-2xl font-black text-slate-900">{totalRawClicks.toLocaleString()}</h3>
             <div className="p-2 bg-violet-50 text-violet-600 rounded-xl"><Eye className="w-4 h-4" /></div>
           </div>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Visiteurs Uniques</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('stat_unique_visitors', 'links')}</p>
           <div className="flex items-center justify-between">
             <h3 className="text-2xl font-black text-slate-900">{totalClicks.toLocaleString()}</h3>
             <div className="p-2 bg-blue-50 text-blue-600 rounded-xl"><MousePointerClick className="w-4 h-4" /></div>
           </div>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Ventes Totales</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('stat_total_sales', 'links')}</p>
           <div className="flex items-center justify-between">
             <h3 className="text-2xl font-black text-slate-900">{totalConversions.toLocaleString()}</h3>
             <div className="p-2 bg-purple-50 text-purple-600 rounded-xl"><Zap className="w-4 h-4" /></div>
           </div>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Clics WhatsApp</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('stat_whatsapp_clicks', 'links')}</p>
           <div className="flex items-center justify-between">
             <h3 className="text-2xl font-black text-slate-900">{totalWhatsappClicks.toLocaleString()}</h3>
             <div className="p-2 bg-green-50 text-green-600 rounded-xl"><MessageCircle className="w-4 h-4" /></div>
           </div>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Taux de Conv.</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('stat_conv_rate', 'links')}</p>
           <div className="flex items-center justify-between">
             <h3 className="text-2xl font-black text-indigo-600">{globalCTR.toFixed(1)}%</h3>
             <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><Target className="w-4 h-4" /></div>
           </div>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Liens Actifs</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('stat_active_links', 'links')}</p>
           <div className="flex items-center justify-between">
             <h3 className="text-2xl font-black text-emerald-600">{activeLinksCount}</h3>
             <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl"><Power className="w-4 h-4" /></div>
           </div>
         </div>
         <div className="bg-slate-900 p-4 rounded-xl shadow-md">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Total Liens</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('stat_total_links', 'links')}</p>
           <div className="flex items-center justify-between">
             <h3 className="text-2xl font-black text-white">{totalLinksCount}</h3>
             <div className="p-2 bg-white/10 text-white rounded-xl"><LinkIcon className="w-4 h-4" /></div>
@@ -321,12 +415,12 @@ export default function InfluencerLinks() {
           <div className="flex items-center gap-4">
             <div>
               <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                <Activity className="w-5 h-5 text-influencer-500" /> Performance Temporelle ({dateRange === 'custom' ? 'Personnalisé' : dateRange === 'all' ? 'Tous' : `${dateRange}j`})
+                <Activity className="w-5 h-5 text-influencer-500" /> {t('chart_title', 'links')} ({dateRange === 'custom' ? t('range_custom', 'links') : dateRange === 'all' ? t('range_all', 'links') : `${dateRange}j`})
               </h3>
               <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">
                 {selectedLinkIdForChart 
-                  ? `Analyse du produit: ${links.find(l => l.id === selectedLinkIdForChart)?.product?.nameFr}` 
-                  : 'Évolution globale des parrainages'}
+                  ? `${t('chart_single_prefix', 'links')}: ${links.find(l => l.id === selectedLinkIdForChart)?.product?.nameFr}` 
+                  : t('chart_global_desc', 'links')}
               </p>
             </div>
             {selectedLinkIdForChart && (
@@ -334,7 +428,7 @@ export default function InfluencerLinks() {
                 onClick={() => setSelectedLinkIdForChart(null)}
                 className="px-3 py-1 bg-red-50 text-red-500 text-[10px] font-black rounded-lg border border-red-100 hover:bg-red-100 transition-all flex items-center gap-2"
               >
-                <AlertCircle size={12} /> EFFACER FILTRE
+                <AlertCircle size={12} /> {t('btn_clear_filter', 'links')}
               </button>
             )}
           </div>
@@ -345,7 +439,7 @@ export default function InfluencerLinks() {
                 onChange={(e) => setSelectedLinkIdForChart(e.target.value ? Number(e.target.value) : null)}
                 className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-1.5 text-[10px] font-bold outline-none focus:border-slate-900 transition-all"
               >
-                <option value="">Tous les liens</option>
+                <option value="">{t('option_all_links', 'links')}</option>
                 {links.map(l => (
                   <option key={l.id} value={l.id}>{l.product?.nameFr || l.code}</option>
                 ))}
@@ -360,7 +454,7 @@ export default function InfluencerLinks() {
                       : 'text-slate-400 hover:text-slate-600'
                   }`}
                 >
-                  Tous
+                  {t('range_all', 'links')}
                 </button>
                 {[1, 7, 15, 30, 90].map((days) => (
                   <button
@@ -370,9 +464,9 @@ export default function InfluencerLinks() {
                       dateRange === days
                         ? 'bg-white text-slate-900 shadow-sm'
                         : 'text-slate-400 hover:text-slate-600'
-                    }`}
+                  }`}
                   >
-                    {days === 1 ? 'Aujourd\'hui' : `${days}j`}
+                    {days === 1 ? t('range_today', 'links') : `${days}j`}
                   </button>
                 ))}
                 <button
@@ -383,7 +477,7 @@ export default function InfluencerLinks() {
                       : 'text-slate-400 hover:text-slate-600'
                   }`}
                 >
-                  Personnalisé
+                  {t('range_custom', 'links')}
                 </button>
               </div>
 
@@ -395,7 +489,7 @@ export default function InfluencerLinks() {
                     onChange={(e) => setStartDate(e.target.value)}
                     className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-1.5 text-[10px] font-bold outline-none focus:border-slate-900 transition-all"
                   />
-                  <span className="text-[10px] font-black text-slate-300">AU</span>
+                  <span className="text-[10px] font-black text-slate-300">{t('date_separator', 'links')}</span>
                   <input 
                     type="date" 
                     value={endDate}
@@ -406,10 +500,9 @@ export default function InfluencerLinks() {
               )}
             </div>
             <div className="hidden lg:block h-8 w-[1px] bg-slate-100" />
-            <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest">
-              <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-blue-500 rounded-full" /> Visiteurs Uniques</div>
-              <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-violet-500 rounded-full" /> Vues Totales</div>
-              <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-green-500 rounded-full" /> Clics WhatsApp</div>
+            <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+              <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-blue-500 rounded-full" /> {t('views_visitors', 'links')}</div>
+              <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-violet-500 rounded-full" /> {t('views_total', 'links')}</div>
             </div>
           </div>
         </div>
@@ -473,7 +566,7 @@ export default function InfluencerLinks() {
                 dot={{ r: 4, fill: '#8b5cf6', strokeWidth: 2, stroke: '#fff' }}
                 activeDot={{ r: 6, strokeWidth: 0, fill: '#8b5cf6' }}
                 fill="url(#colorRawViews)" 
-                name="Vues Totales"
+                name={t('views_total', 'links')}
               />
               <Area 
                 yAxisId="left"
@@ -485,18 +578,9 @@ export default function InfluencerLinks() {
                 dot={{ r: 3, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }}
                 activeDot={{ r: 5, strokeWidth: 0, fill: '#3b82f6' }}
                 fill="url(#colorViews)" 
-                name="Visiteurs Uniques"
+                name={t('views_visitors', 'links')}
               />
-              <Line 
-                yAxisId="left"
-                type="monotone" 
-                dataKey="whatsappClicks" 
-                stroke="#10b981" 
-                strokeWidth={3}
-                dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }}
-                activeDot={{ r: 6, strokeWidth: 0, fill: '#10b981' }}
-                name="Clics WhatsApp"
-              />
+
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -510,7 +594,7 @@ export default function InfluencerLinks() {
           <input
             type="text"
             className="w-full pl-12 pr-4 py-3.5 bg-white rounded-2xl border border-slate-100 shadow-sm focus:ring-2 focus:ring-slate-900/5 focus:border-slate-900 outline-none transition-all font-medium text-sm"
-            placeholder="Rechercher un produit ou un code..."
+            placeholder={t('search_placeholder', 'links')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -526,7 +610,7 @@ export default function InfluencerLinks() {
                   : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
               }`}
             >
-              {s === 'date' ? 'Date' : s === 'earnings' ? 'Revenus' : s === 'clicks' ? 'Visiteurs' : 'Ventes'}
+              {s === 'date' ? t('sort_date', 'links') : s === 'earnings' ? t('sort_earnings', 'links') : s === 'clicks' ? t('sort_visitors', 'links') : t('sort_sales', 'links')}
             </button>
           ))}
         </div>
@@ -539,11 +623,11 @@ export default function InfluencerLinks() {
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-slate-50">
-                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Produit</th>
-                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Code</th>
-                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Performance</th>
-                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Statut</th>
-                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
+                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('th_product', 'links')}</th>
+                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('th_code', 'links')}</th>
+                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">{t('th_performance', 'links')}</th>
+                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('th_status', 'links')}</th>
+                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{t('th_actions', 'links')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -572,8 +656,8 @@ export default function InfluencerLinks() {
                             )}
                           </div>
                           <div>
-                            <p className="text-sm font-black text-slate-900 truncate max-w-[200px]">{link.product?.nameFr || 'Produit'}</p>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase">Généré le {new Date(link.createdAt).toLocaleDateString()}</p>
+                            <p className="text-sm font-black text-slate-900 truncate max-w-[200px]">{link.product?.nameFr || t('default_product', 'links')}</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">{t('generated_at', 'links').replace('{date}', new Date(link.createdAt).toLocaleDateString())}</p>
                           </div>
                         </div>
                       </td>
@@ -589,35 +673,35 @@ export default function InfluencerLinks() {
                               <p className="text-xs font-black text-slate-900 mb-0.5">{(link.rawClicks || link.clicks).toLocaleString()}</p>
                               <div className="flex items-center justify-center gap-1">
                                 <Eye size={10} className="text-violet-500" />
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">Vues</p>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_views', 'links')}</p>
                               </div>
                             </div>
                             <div className="text-center group-hover:transform group-hover:scale-110 transition-all duration-300 delay-75">
                               <p className="text-xs font-black text-slate-900 mb-0.5">{link.clicks.toLocaleString()}</p>
                               <div className="flex items-center justify-center gap-1">
                                 <MousePointerClick size={10} className="text-blue-500" />
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">Visiteurs</p>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_visitors', 'links')}</p>
                               </div>
                             </div>
                             <div className="text-center group-hover:transform group-hover:scale-110 transition-all duration-300 delay-100">
                               <p className="text-xs font-black text-slate-900 mb-0.5">{link.conversions.toLocaleString()}</p>
                               <div className="flex items-center justify-center gap-1">
                                 <Zap size={10} className="text-purple-500" />
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">Ventes</p>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_sales', 'links')}</p>
                               </div>
                             </div>
                             <div className="text-center group-hover:transform group-hover:scale-110 transition-all duration-300 delay-125">
                               <p className="text-xs font-black text-slate-900 mb-0.5">{link.whatsappClicks || 0}</p>
                               <div className="flex items-center justify-center gap-1">
                                 <MessageCircle size={10} className="text-green-500" />
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">WhatsApp</p>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_whatsapp', 'links')}</p>
                               </div>
                             </div>
                             <div className="text-center group-hover:transform group-hover:scale-110 transition-all duration-300 delay-150">
                               <p className="text-xs font-black text-indigo-600 mb-0.5">{link.clicks > 0 ? ((link.conversions / link.clicks) * 100).toFixed(1) : '0.0'}%</p>
                               <div className="flex items-center justify-center gap-1">
                                 <Target size={10} className="text-indigo-500" />
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">Conversion</p>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_ctr', 'links')}</p>
                               </div>
                             </div>
                           </div>
@@ -627,7 +711,7 @@ export default function InfluencerLinks() {
                         {link.status === 'BUILDING' ? (
                           <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 text-amber-600 rounded-xl w-fit">
                             <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                            <span className="text-[10px] font-black uppercase tracking-wider">En construction</span>
+                            <span className="text-[10px] font-black uppercase tracking-wider">{t('status_building', 'links')}</span>
                           </div>
                         ) : (
                           <button
@@ -638,7 +722,7 @@ export default function InfluencerLinks() {
                             }`}
                           >
                             <Power className={`w-3 h-3 ${link.isActive ? 'text-emerald-500' : 'text-slate-400'}`} />
-                            <span className="text-[10px] font-black uppercase tracking-wider">{link.isActive ? 'Actif' : 'Pause'}</span>
+                            <span className="text-[10px] font-black uppercase tracking-wider">{link.isActive ? t('status_active', 'links') : t('status_paused', 'links')}</span>
                           </button>
                         )}
                       </td>
@@ -646,8 +730,8 @@ export default function InfluencerLinks() {
                         <div className="flex items-center justify-end gap-3">
                           {/* Safe Actions */}
                           <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all">
-                            <button onClick={(e) => { e.stopPropagation(); copyLink(link.code); }} className="p-2.5 bg-slate-50 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all" title="Copier"><Copy size={16} /></button>
-                            <button onClick={(e) => { e.stopPropagation(); setSelectedLink(link); setShowQrModal(true); }} className="p-2.5 bg-slate-50 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-all" title="QR Code"><QrCode size={16} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); copyLink(link.code); }} className="p-2.5 bg-slate-50 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all" title={t('btn_copy', 'links')}><Copy size={16} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); setSelectedLink(link); setShowQrModal(true); }} className="p-2.5 bg-slate-50 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-all" title={t('btn_qr', 'links')}><QrCode size={16} /></button>
                           </div>
                           
                           {/* Danger Zone Separator */}
@@ -658,7 +742,7 @@ export default function InfluencerLinks() {
                             <button 
                               onClick={(e) => { e.stopPropagation(); handleRegenerateCode(link); }} 
                               className="p-2.5 bg-red-50/30 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all" 
-                              title="Régénérer le code (Attention: rend l'ancien lien obsolète)"
+                              title={t('tooltip_regenerate', 'links')}
                             >
                               <RefreshCw size={16} />
                             </button>
@@ -674,7 +758,7 @@ export default function InfluencerLinks() {
         ) : (
           <div className="p-20 text-center bg-slate-50/50">
             <LinkIcon className="w-16 h-16 mx-auto text-slate-200 mb-4" />
-            <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Aucun lien trouvé</p>
+            <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">{t('no_links_found', 'links')}</p>
           </div>
         )}
       </div>
@@ -737,7 +821,7 @@ export default function InfluencerLinks() {
                     ))}
                   </div>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-                    ⏱ Le code expire dans 10 minutes
+                    {t('otp_expiry_desc', 'links')}
                   </p>
                 </div>
               )}
@@ -748,7 +832,7 @@ export default function InfluencerLinks() {
                 disabled={confirmModal.isLoading}
                 className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-400 bg-white border border-slate-100 rounded-2xl transition-all disabled:opacity-50"
               >
-                Annuler
+                {t('btn_cancel', 'links')}
               </button>
               <button
                 onClick={confirmModal.step === 'verify' ? handleVerifyOtp : confirmModal.onConfirm}
@@ -771,8 +855,8 @@ export default function InfluencerLinks() {
       {showQrModal && selectedLink && (
         <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-10 text-center animate-in zoom-in-95 duration-300">
-            <h2 className="text-2xl font-black text-slate-900 mb-2">QR Code Pro</h2>
-            <p className="text-sm text-slate-400 font-medium mb-8">Partagez visuellement votre lien.</p>
+            <h2 className="text-2xl font-black text-slate-900 mb-2">{t('qr_title', 'links')}</h2>
+            <p className="text-sm text-slate-400 font-medium mb-8">{t('qr_subtitle', 'links')}</p>
             <div className="bg-white p-6 rounded-2xl border-4 border-dashed border-slate-100 inline-block mb-8">
               <img 
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(`${window.location.origin}/r/${selectedLink?.code}`)}`}
@@ -789,13 +873,144 @@ export default function InfluencerLinks() {
                   document.body.appendChild(link);
                   link.click();
                   document.body.removeChild(link);
-                  toast.success('QR Code prêt!');
+                  toast.success(t('toast_qr_ready', 'links'));
                 }}
                 className="w-full py-4 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl"
               >
-                Télécharger HD
+                {t('btn_download_hd', 'links')}
               </button>
-              <button onClick={() => setShowQrModal(false)} className="w-full py-4 bg-slate-50 text-slate-400 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-100 transition-all">Fermer</button>
+              <button onClick={() => setShowQrModal(false)} className="w-full py-4 bg-slate-50 text-slate-400 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-100 transition-all">{t('btn_close', 'links')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Create Link Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">{t('create_modal_title', 'links')}</h2>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">{t('create_modal_subtitle', 'links')}</p>
+                </div>
+                <button 
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setCustomName('');
+                    setCustomNameError('');
+                    setSelectedProductId(null);
+                  }}
+                  className="text-slate-400 hover:text-slate-600 transition-colors text-sm font-black p-2 hover:bg-slate-50 rounded-xl"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateLink} className="space-y-6">
+                {/* Product Dropdown */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">{t('label_select_product', 'links')}</label>
+                  {claimsLoading ? (
+                    <div className="h-12 bg-slate-50 rounded-2xl animate-pulse flex items-center px-4 text-xs font-bold text-slate-400">
+                      {t('claims_loading', 'links')}
+                    </div>
+                  ) : claims.length === 0 ? (
+                    <div className="p-4 bg-amber-50 border border-amber-100 text-amber-600 rounded-2xl text-xs font-bold text-center">
+                      {t('claims_empty_warning', 'links')}
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedProductId || ''}
+                      onChange={(e) => setSelectedProductId(Number(e.target.value) || null)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold text-slate-700 focus:outline-none focus:border-slate-900 transition-all"
+                      required
+                    >
+                      <option value="">{t('option_choose_product', 'links')}</option>
+                      {claims.map((claim) => {
+                        const productLinksCount = links.filter((l) => l.productId === claim.productId).length;
+                        const isLimitReached = productLinksCount >= 5;
+                        return (
+                          <option 
+                            key={claim.productId} 
+                            value={claim.productId}
+                            disabled={isLimitReached}
+                          >
+                            {claim.product?.nameFr} {isLimitReached ? t('limit_reached_label', 'links') : `(${productLinksCount}/5 ${t('links_label', 'links')})`}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  )}
+                </div>
+
+                {/* Custom Name input */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">{t('label_custom_name', 'links')}</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder={t('custom_name_placeholder', 'links')}
+                      value={customName}
+                      onChange={(e) => handleNameChange(e.target.value)}
+                      className={`w-full px-4 py-3 bg-slate-50 border rounded-2xl text-sm font-mono font-bold text-slate-700 focus:outline-none transition-all ${
+                        customNameError 
+                          ? 'border-red-300 focus:border-red-500' 
+                          : customName && !isCheckingName 
+                            ? 'border-emerald-300 focus:border-emerald-500' 
+                            : 'border-slate-100 focus:border-slate-900'
+                      }`}
+                      required
+                      minLength={3}
+                      maxLength={20}
+                    />
+                    {isCheckingName && (
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                        <RefreshCw size={14} className="animate-spin text-slate-400" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex justify-between items-center px-1">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">
+                      {t('final_url_prefix', 'links')}: {window.location.origin}/r/{customName || t('name_placeholder', 'links')}
+                    </span>
+                    <span className={`text-[10px] font-black uppercase ${customName.length >= 3 && customName.length <= 20 ? 'text-slate-400' : 'text-amber-500'}`}>
+                      {customName.length}/20 chars
+                    </span>
+                  </div>
+                  {customNameError && (
+                    <p className="text-xs font-bold text-red-500 flex items-center gap-1.5 mt-1">
+                      <AlertCircle size={12} /> {customNameError}
+                    </p>
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-4 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCreateModal(false);
+                      setCustomName('');
+                      setCustomNameError('');
+                      setSelectedProductId(null);
+                    }}
+                    className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-400 bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all"
+                  >
+                    {t('btn_cancel', 'links')}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isCreatingLink || claimsLoading || !selectedProductId || !customName || !!customNameError || isCheckingName}
+                    className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-white bg-slate-900 hover:bg-slate-800 rounded-2xl shadow-lg shadow-slate-200 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isCreatingLink && (
+                      <RefreshCw size={14} className="animate-spin" />
+                    )}
+                    {t('btn_generate', 'links')}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>

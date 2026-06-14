@@ -1,11 +1,10 @@
+import { prisma } from '../lib/prisma.js';
 import { Router, Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
-import { PrismaClient } from '@prisma/client';
 import { authenticate, authorize, optionalAuth } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 const checkProductPermission = asyncHandler(async (req: Request, _res: Response, next: any) => {
   const user = req.user;

@@ -31,6 +31,7 @@ export interface User {
   canManageOrders?: boolean;
   canManageInfluencerLinks?: boolean;
   canManageTickets?: boolean;
+  canScanReturns?: boolean;
 }
 
 export type UserRole =

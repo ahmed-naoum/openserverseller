@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { adminApi } from '../../lib/api';
+import { adminApi, BACKEND_URL } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { 
   ShieldCheck, 
@@ -27,7 +27,8 @@ import {
   X,
   ZoomIn,
   Globe,
-  Navigation
+  Navigation,
+  RefreshCw
 } from 'lucide-react';
 import { FaInstagram, FaTiktok, FaFacebook, FaYoutube, FaSnapchat } from 'react-icons/fa';
 import { FaXTwitter } from 'react-icons/fa6';
@@ -110,28 +111,38 @@ export function resolveSocialPlatform(
 export default function AdminVerifications() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'PENDING' | 'ALL'>('PENDING');
+  const [activeTab, setActiveTab] = useState<'ALL' | 'PENDING' | 'PENDING_EMAIL' | 'PENDING_KYC' | 'PENDING_BANK' | 'PENDING_CONTRACT'>('PENDING');
+  const [roleFilter, setRoleFilter] = useState<'ALL' | 'SELLER' | 'INFLUENCER' | 'VENDOR'>('ALL');
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [imageModal, setImageModal] = useState<{ url: string; title: string } | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin-verifications', activeTab],
-    queryFn: () => adminApi.getVerifications(activeTab === 'PENDING' ? 'pending' : 'all'),
+    queryKey: ['admin-verifications'],
+    queryFn: () => adminApi.getVerifications('all'),
   });
 
   const verifications = data?.data?.data || [];
 
   const verifyEmailMutation = useMutation({
-    mutationFn: (uuid: string) => adminApi.verifyEmail(uuid),
-    onSuccess: () => {
+    mutationFn: ({ uuid, verified }: { uuid: string; verified?: boolean }) => adminApi.verifyEmail(uuid, verified),
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['admin-verifications'] });
-      toast.success('E-mail vérifié avec succès');
+      toast.success(variables.verified === false ? 'Vérification e-mail annulée' : 'E-mail vérifié avec succès');
     },
-    onError: () => toast.error('Erreur lors de la vérification'),
+    onError: () => toast.error('Erreur lors de la mise à jour de l\'e-mail'),
+  });
+
+  const verifyContractMutation = useMutation({
+    mutationFn: ({ uuid, accepted }: { uuid: string; accepted?: boolean }) => adminApi.verifyContract(uuid, accepted),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-verifications'] });
+      toast.success(variables.accepted === false ? 'Signature du contrat réinitialisée' : 'Contrat validé et signé manuellement');
+    },
+    onError: () => toast.error('Erreur lors de la validation du contrat'),
   });
 
   const verifyKycMutation = useMutation({
-    mutationFn: ({ uuid, status }: { uuid: string; status: 'APPROVED' | 'REJECTED' }) => 
+    mutationFn: ({ uuid, status }: { uuid: string; status: 'APPROVED' | 'REJECTED' | 'PENDING' }) => 
       adminApi.verifyKyc(uuid, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-verifications'] });
@@ -141,7 +152,7 @@ export default function AdminVerifications() {
   });
 
   const verifyBankMutation = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: 'APPROVED' | 'REJECTED' }) => 
+    mutationFn: ({ id, status }: { id: number; status: 'APPROVED' | 'REJECTED' | 'PENDING' }) => 
       adminApi.verifyBank(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-verifications'] });
@@ -160,14 +171,77 @@ export default function AdminVerifications() {
     onError: () => toast.error('Erreur lors de la mise à jour du statut utilisateur'),
   });
 
+  const stats = {
+    total: verifications.length,
+    pending: verifications.filter((u: any) => 
+      !u.emailVerifiedAt || 
+      ['PENDING', 'UNDER_REVIEW'].includes(u.kycStatus) || 
+      u.bankAccounts?.some((ba: any) => ba.status === 'PENDING') || 
+      !u.contractAccepted
+    ).length,
+    pendingEmail: verifications.filter((u: any) => !u.emailVerifiedAt).length,
+    pendingKyc: verifications.filter((u: any) => ['PENDING', 'UNDER_REVIEW'].includes(u.kycStatus)).length,
+    pendingBank: verifications.filter((u: any) => u.bankAccounts?.some((ba: any) => ba.status === 'PENDING')).length,
+    pendingContract: verifications.filter((u: any) => !u.contractAccepted).length,
+  };
+
   const filteredVerifications = verifications.filter((user: any) => {
+    if (roleFilter !== 'ALL') {
+      if (user.role?.name !== roleFilter) return false;
+    }
+
+    if (activeTab === 'PENDING') {
+      const isPending = !user.emailVerifiedAt || 
+                        ['PENDING', 'UNDER_REVIEW'].includes(user.kycStatus) || 
+                        user.bankAccounts?.some((ba: any) => ba.status === 'PENDING') || 
+                        !user.contractAccepted;
+      if (!isPending) return false;
+    } else if (activeTab === 'PENDING_EMAIL') {
+      if (user.emailVerifiedAt) return false;
+    } else if (activeTab === 'PENDING_KYC') {
+      if (!['PENDING', 'UNDER_REVIEW'].includes(user.kycStatus)) return false;
+    } else if (activeTab === 'PENDING_BANK') {
+      if (!user.bankAccounts?.some((ba: any) => ba.status === 'PENDING')) return false;
+    } else if (activeTab === 'PENDING_CONTRACT') {
+      if (user.contractAccepted) return false;
+    }
+
     if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
     return (
-      user.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.phone?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.profile?.fullName?.toLowerCase().includes(searchQuery.toLowerCase())
+      user.email?.toLowerCase().includes(q) ||
+      user.phone?.toLowerCase().includes(q) ||
+      user.profile?.fullName?.toLowerCase().includes(q)
     );
   });
+
+  const handleExportCSV = () => {
+    const headers = ['Nom Complet', 'Role', 'E-mail', 'Telephone', 'Verif. Email', 'Verif. KYC', 'Verif. Banque', 'Contrat Signe', 'Compte Actif', 'Date Inscription'];
+    const rows = filteredVerifications.map((u: any) => [
+      u.profile?.fullName || '—',
+      u.role?.name || '—',
+      u.email || '—',
+      u.phone || '—',
+      u.emailVerifiedAt ? 'Verifie' : 'Non verifie',
+      u.kycStatus,
+      u.bankAccounts?.some((ba: any) => ba.status === 'APPROVED') ? 'Approuve' : (u.bankAccounts?.some((ba: any) => ba.status === 'PENDING') ? 'En attente' : 'Aucun'),
+      u.contractAccepted ? 'Signe' : 'Non signe',
+      u.isActive ? 'Actif' : 'Inactif',
+      u.createdAt ? format(new Date(u.createdAt), 'dd/MM/yyyy') : '—'
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+      + [headers.join(','), ...rows.map((e: string[]) => e.map((val: string) => `"${val.replace(/"/g, '""')}"`).join(','))].join('\n');
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `verifications_export_${format(new Date(), 'yyyy-MM-dd')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Fichier CSV téléchargé avec succès');
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -234,47 +308,86 @@ export default function AdminVerifications() {
               Gérez les étapes de validation pour vos utilisateurs et sécurisez votre plateforme.
             </p>
           </div>
-          
-          <div className="flex bg-white/10 p-1.5 rounded-2xl backdrop-blur-md border border-white/10">
-            <button
-              onClick={() => setActiveTab('PENDING')}
-              className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                activeTab === 'PENDING' ? 'bg-white text-[#2c2f74] shadow-lg' : 'text-white hover:bg-white/10'
-              }`}
-            >
-              En attente
-            </button>
-            <button
-              onClick={() => setActiveTab('ALL')}
-              className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                activeTab === 'ALL' ? 'bg-white text-[#2c2f74] shadow-lg' : 'text-white hover:bg-white/10'
-              }`}
-            >
-              Tous
-            </button>
-          </div>
         </div>
-        
         <div className="absolute top-0 right-0 w-64 h-64 bg-primary-400/10 rounded-full blur-3xl -mr-20 -mt-20" />
       </div>
 
-      {/* Filters & Search */}
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-        <div className="relative w-full md:w-96 group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={18} />
-          <input
-            type="text"
-            placeholder="Rechercher par nom, email ou téléphone..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-4 rounded-3xl bg-white border border-slate-200 outline-none focus:ring-4 focus:ring-primary-50 focus:border-primary-400 transition-all font-medium text-slate-800"
-          />
+      {/* Stats Dashboard & Tab Filters */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        {[
+          { key: 'ALL', label: 'Tous', count: stats.total, color: 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100', icon: Users },
+          { key: 'PENDING', label: 'À Traiter', count: stats.pending, color: 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100/70', icon: Shield },
+          { key: 'PENDING_EMAIL', label: 'Emails', count: stats.pendingEmail, color: 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100/70', icon: Mail },
+          { key: 'PENDING_KYC', label: 'KYC', count: stats.pendingKyc, color: 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100/70', icon: ShieldCheck },
+          { key: 'PENDING_BANK', label: 'RIB Banque', count: stats.pendingBank, color: 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100/70', icon: Landmark },
+          { key: 'PENDING_CONTRACT', label: 'Contrats', count: stats.pendingContract, color: 'bg-teal-50 border-teal-200 text-teal-700 hover:bg-teal-100/70', icon: FileText },
+        ].map((item) => {
+          const Icon = item.icon;
+          const isSelected = activeTab === item.key;
+          return (
+            <button
+              key={item.key}
+              onClick={() => setActiveTab(item.key as any)}
+              className={`flex flex-col items-center justify-center p-4 rounded-3xl border transition-all hover:scale-[1.02] text-center shadow-sm ${item.color} ${
+                isSelected ? 'ring-4 ring-[#2c2f74]/20 border-[#2c2f74] font-extrabold shadow-md bg-white' : 'font-semibold'
+              }`}
+            >
+              <div className="p-2 rounded-xl bg-white border border-slate-100 shadow-sm mb-2">
+                <Icon size={16} />
+              </div>
+              <span className="text-[10px] uppercase tracking-wider block opacity-80">{item.label}</span>
+              <span className="text-xl font-black mt-1">{item.count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Filters & Search Row */}
+      <div className="flex flex-col xl:flex-row gap-4 items-center justify-between">
+        <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto items-center">
+          <div className="relative w-full sm:w-80 group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={18} />
+            <input
+              type="text"
+              placeholder="Rechercher par nom, email..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-white border border-slate-200 outline-none focus:ring-4 focus:ring-primary-50 focus:border-[#2c2f74] transition-all font-medium text-slate-800 text-sm"
+            />
+          </div>
+
+          {/* Role Filter */}
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/50 w-full sm:w-auto justify-around">
+            {[
+              { key: 'ALL', label: 'Tous' },
+              { key: 'SELLER', label: 'Sellers' },
+              { key: 'INFLUENCER', label: 'Influencers' },
+              { key: 'VENDOR', label: 'Wholesalers' },
+            ].map((role) => (
+              <button
+                key={role.key}
+                onClick={() => setRoleFilter(role.key as any)}
+                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                  roleFilter === role.key ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                {role.label}
+              </button>
+            ))}
+          </div>
         </div>
-        
-        <div className="flex items-center gap-3">
-          <div className="px-5 py-3 rounded-2xl bg-white border border-slate-200 flex items-center gap-3 shadow-sm">
-            <Users size={18} className="text-slate-400" />
-            <span className="text-sm font-black text-slate-700 uppercase tracking-widest">{filteredVerifications.length} Résultats</span>
+
+        <div className="flex items-center gap-3 w-full xl:w-auto justify-end">
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-2 px-5 py-3.5 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-sm active:scale-95"
+          >
+            <Globe size={14} className="text-slate-400" />
+            Exporter CSV
+          </button>
+          <div className="px-5 py-3.5 rounded-2xl bg-slate-900 text-white flex items-center gap-3 shadow-md">
+            <Users size={16} className="text-slate-400" />
+            <span className="text-xs font-black uppercase tracking-widest">{filteredVerifications.length} Résultats</span>
           </div>
         </div>
       </div>
@@ -353,6 +466,36 @@ export default function AdminVerifications() {
               {isExpanded && (
                 <div className="border-t border-slate-100 bg-slate-50/30 animate-in slide-in-from-top-2 fade-in duration-300">
                   <div className="p-8 space-y-8">
+                    {/* Progress Checklist/Timeline */}
+                    <div className="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm space-y-4">
+                      <div className="flex items-center gap-2 text-slate-400">
+                        <ShieldCheck size={14} />
+                        <span className="text-[10px] font-black uppercase tracking-widest">Séquence de Vérification</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                        {[
+                          { label: 'Compte Créé', desc: format(new Date(user.createdAt), 'dd/MM/yyyy'), done: true, pending: false },
+                          { label: 'Email Vérifié', desc: user.emailVerifiedAt ? format(new Date(user.emailVerifiedAt), 'dd/MM/yyyy') : 'En attente', done: !!user.emailVerifiedAt, pending: !user.emailVerifiedAt },
+                          { label: 'KYC Approuvé', desc: user.kycStatus === 'APPROVED' ? 'Approuvé' : (user.kycStatus === 'UNDER_REVIEW' ? 'En cours de revue' : 'Non approuvé'), done: user.kycStatus === 'APPROVED', pending: ['PENDING', 'UNDER_REVIEW'].includes(user.kycStatus) },
+                          { label: 'Banque Approuvée', desc: hasApprovedBank ? 'RIB Validé' : (hasPendingBank ? 'RIB En attente' : 'Non configuré'), done: hasApprovedBank, pending: hasPendingBank },
+                          { label: 'Contrat Signé', desc: user.contractAccepted ? 'Signé ✓' : 'En attente', done: user.contractAccepted, pending: !user.contractAccepted && hasApprovedBank && user.kycStatus === 'APPROVED' },
+                        ].map((step, idx) => {
+                          return (
+                            <div key={idx} className={`flex flex-col p-4 rounded-2xl border transition-all ${
+                              step.done ? 'bg-emerald-50/40 border-emerald-100 text-emerald-800' 
+                              : step.pending ? 'bg-amber-50/40 border-amber-100 text-amber-800' 
+                              : 'bg-slate-50 border-slate-100 text-slate-400'
+                            }`}>
+                              <span className="text-[9px] uppercase font-black tracking-widest opacity-60">Étape {idx + 1}</span>
+                              <span className="text-xs font-black mt-1">{step.label}</span>
+                              <span className="text-[10px] font-semibold mt-0.5">{step.desc}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
                     {/* Info Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div className="p-5 rounded-3xl bg-white border border-slate-100 shadow-sm space-y-2">
@@ -541,7 +684,7 @@ export default function AdminVerifications() {
                     })()}
 
                     {/* Action Sections */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                       
                       {/* Email Verification */}
                       <div className="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm space-y-4">
@@ -562,13 +705,22 @@ export default function AdminVerifications() {
                           </div>
                         </div>
                         {user.emailVerifiedAt ? (
-                          <div className="flex items-center gap-2 p-3 rounded-2xl bg-emerald-50 border border-emerald-100">
-                            <CheckCircle2 size={16} className="text-emerald-600" />
-                            <span className="text-xs font-black text-emerald-700 uppercase tracking-widest">Vérifié</span>
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2 p-3 rounded-2xl bg-emerald-50 border border-emerald-100">
+                              <CheckCircle2 size={16} className="text-emerald-600" />
+                              <span className="text-xs font-black text-emerald-700 uppercase tracking-widest">Vérifié</span>
+                            </div>
+                            <button
+                              onClick={() => verifyEmailMutation.mutate({ uuid: user.uuid, verified: false })}
+                              disabled={verifyEmailMutation.isPending}
+                              className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 border border-rose-100 disabled:opacity-50"
+                            >
+                              Annuler / Réinitialiser
+                            </button>
                           </div>
                         ) : (
                           <button 
-                            onClick={() => verifyEmailMutation.mutate(user.uuid)}
+                            onClick={() => verifyEmailMutation.mutate({ uuid: user.uuid, verified: true })}
                             disabled={verifyEmailMutation.isPending}
                             className="w-full py-3 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-rose-200 active:scale-95 disabled:opacity-50"
                           >
@@ -733,9 +885,18 @@ export default function AdminVerifications() {
                           </div>
                         )}
                         {user.kycStatus === 'APPROVED' && (
-                          <div className="flex items-center gap-2 p-3 rounded-2xl bg-emerald-50 border border-emerald-100">
-                            <CheckCircle2 size={16} className="text-emerald-600" />
-                            <span className="text-xs font-black text-emerald-700 uppercase tracking-widest">Approuvé</span>
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2 p-3 rounded-2xl bg-emerald-50 border border-emerald-100">
+                              <CheckCircle2 size={16} className="text-emerald-600" />
+                              <span className="text-xs font-black text-emerald-700 uppercase tracking-widest">Approuvé</span>
+                            </div>
+                            <button
+                              onClick={() => verifyKycMutation.mutate({ uuid: user.uuid, status: 'PENDING' })}
+                              disabled={verifyKycMutation.isPending}
+                              className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 border border-rose-100 disabled:opacity-50"
+                            >
+                              Annuler / Réinitialiser
+                            </button>
                           </div>
                         )}
                       </div>
@@ -763,9 +924,21 @@ export default function AdminVerifications() {
                                     <Building2 size={14} className="text-slate-400" />
                                     <span className="text-sm font-black text-slate-800">{ba.bankName}</span>
                                   </div>
-                                  <span className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border ${getStatusColor(ba.status)}`}>
-                                    {getStatusLabel(ba.status)}
-                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border ${getStatusColor(ba.status)}`}>
+                                      {getStatusLabel(ba.status)}
+                                    </span>
+                                    {ba.status !== 'PENDING' && (
+                                      <button
+                                        onClick={() => verifyBankMutation.mutate({ id: ba.id, status: 'PENDING' })}
+                                        disabled={verifyBankMutation.isPending}
+                                        title="Remettre en attente"
+                                        className="p-1 bg-white hover:bg-rose-50 border border-slate-100 hover:border-rose-200 text-slate-400 hover:text-rose-600 rounded-lg transition-all active:scale-90"
+                                      >
+                                        <RefreshCw size={10} />
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                                 <div className="grid grid-cols-1 gap-2">
                                   <div className="flex items-center gap-2">
@@ -808,6 +981,67 @@ export default function AdminVerifications() {
                             <span className="text-xs font-medium text-slate-400">Aucun compte bancaire enregistré</span>
                           </div>
                         )}
+                      </div>
+
+                      {/* Contract & Engagement */}
+                      <div className="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm space-y-4 flex flex-col justify-between">
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2.5 rounded-xl ${user.contractAccepted ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
+                              <FileText size={18} />
+                            </div>
+                            <div>
+                              <h4 className="text-sm font-black text-slate-800 uppercase tracking-wider">Contrat & Engagement</h4>
+                              <p className="text-[11px] font-medium text-slate-400 mt-0.5">
+                                {user.contractAccepted 
+                                  ? `Signé le ${user.contractSignedAt ? format(new Date(user.contractSignedAt), 'dd/MM/yyyy', { locale: fr }) : '—'}`
+                                  : 'Non signé'
+                                }
+                              </p>
+                            </div>
+                          </div>
+
+                          {user.contractAccepted ? (
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2 p-3 rounded-2xl bg-blue-50 border border-blue-100">
+                                <CheckCircle2 size={16} className="text-blue-600" />
+                                <span className="text-xs font-black text-blue-700 uppercase tracking-widest">Signé via DamaneSign</span>
+                              </div>
+                              {user.damanesignSignedFileUrl && (
+                                <a
+                                  href={user.damanesignSignedFileUrl.startsWith('http') ? user.damanesignSignedFileUrl : `${BACKEND_URL}${user.damanesignSignedFileUrl}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-200 active:scale-95 group"
+                                >
+                                  <FileText size={14} className="group-hover:scale-110 transition-transform" />
+                                  Voir le Contrat PDF
+                                </a>
+                              )}
+                              <button
+                                onClick={() => verifyContractMutation.mutate({ uuid: user.uuid, accepted: false })}
+                                disabled={verifyContractMutation.isPending}
+                                className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 border border-rose-100 disabled:opacity-50"
+                              >
+                                Annuler / Réinitialiser
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-2 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                                <AlertCircle size={14} className="text-slate-400" />
+                                <span className="text-xs font-medium text-slate-400">En attente de signature</span>
+                              </div>
+                              <button
+                                onClick={() => verifyContractMutation.mutate({ uuid: user.uuid, accepted: true })}
+                                disabled={verifyContractMutation.isPending}
+                                className="w-full py-3 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-md shadow-blue-200 active:scale-95 disabled:opacity-50"
+                              >
+                                {verifyContractMutation.isPending ? 'Validation...' : 'Valider manuellement'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
 

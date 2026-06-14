@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { dashboardApi, chatApi, notificationsApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { useSocket } from '../../contexts/SocketContext';
 import AnnouncementBanner from '../common/AnnouncementBanner';
 import ProfileProgressBanner from '../common/ProfileProgressBanner';
+import LanguageSwitcherWidget from '../common/LanguageSwitcherWidget';
 import ConfirmationModal from '../ui/ConfirmationModal';
 import { 
   Home, 
@@ -52,7 +54,10 @@ import {
   ScanLine,
   Headphones,
   Trash,
-  Check
+  Check,
+  Crown,
+  Link2,
+  Mail
 } from 'lucide-react';
 
 const navigation = {
@@ -81,38 +86,80 @@ const navigation = {
     { name: 'Portefeuille', href: '/dashboard/wallet', icon: CreditCard },
     { name: 'Factures', href: '/dashboard/invoices', icon: FileText },
     { name: 'Marché Public', href: '/dashboard/marketplace', icon: ShoppingCart },
-    { name: 'Support & Tickets', href: '/dashboard/support', icon: MessageSquare },
-    { name: 'Messages', href: '/dashboard/chat', icon: MessageSquare },
+    { 
+      name: 'Support & Messages', 
+      icon: MessageSquare,
+      children: [
+        { name: 'Support & Tickets', href: '/dashboard/support', icon: MessageSquare },
+        { name: 'Messages', href: '/dashboard/chat', icon: MessageSquare },
+      ]
+    },
     { name: 'Paramètres', href: '/dashboard/settings', icon: Settings },
   ],
   grosseller: [
     { name: 'Vue d\'ensemble', href: '/grosseller', icon: Home },
     { name: 'Mon Profil', href: '/grosseller/profile', icon: Users },
-    { name: 'Inventaire Acheté', href: '/grosseller/inventory', icon: Package },
-    { name: 'Ajouter un Produit', href: '/grosseller/add-product', icon: Tag },
-    { name: 'En Vente', href: '/grosseller/selling', icon: ShoppingCart },
-    { name: 'En Attente', href: '/grosseller/pending', icon: Clock },
-    { name: 'Approuvés', href: '/grosseller/approved', icon: Package },
-    { name: 'Portefeuille', href: '/grosseller/wallet', icon: CreditCard },
-    { name: 'Factures', href: '/grosseller/invoices', icon: FileText },
+    { 
+      name: 'Catalogue & Inventaire',
+      icon: Package,
+      children: [
+        { name: 'Inventaire Acheté', href: '/grosseller/inventory', icon: Package },
+        { name: 'Ajouter un Produit', href: '/grosseller/add-product', icon: Tag },
+        { name: 'En Vente', href: '/grosseller/selling', icon: ShoppingCart },
+        { name: 'En Attente', href: '/grosseller/pending', icon: Clock },
+        { name: 'Approuvés', href: '/grosseller/approved', icon: Package },
+      ]
+    },
     { name: 'Commandes', href: '/grosseller/orders', icon: ShoppingCart },
-    { name: 'Analytique', href: '/grosseller/analytics', icon: CreditCard },
-    { name: 'Support & Tickets', href: '/grosseller/support', icon: MessageSquare },
+    { 
+      name: 'Finance & Analytique', 
+      icon: CreditCard,
+      children: [
+        { name: 'Portefeuille', href: '/grosseller/wallet', icon: CreditCard },
+        { name: 'Factures', href: '/grosseller/invoices', icon: FileText },
+        { name: 'Analytique', href: '/grosseller/analytics', icon: CreditCard },
+      ]
+    },
     { name: 'Marché Public', href: '/grosseller/marketplace', icon: ShoppingCart },
-    { name: 'Messages', href: '/grosseller/chat', icon: MessageSquare },
+    { 
+      name: 'Support & Messages', 
+      icon: MessageSquare,
+      children: [
+        { name: 'Support & Tickets', href: '/grosseller/support', icon: MessageSquare },
+        { name: 'Messages', href: '/grosseller/chat', icon: MessageSquare },
+      ]
+    },
     { name: 'Paramètres', href: '/grosseller/settings', icon: Settings },
   ],
   influencer: [
-    { name: 'Accueil', href: '/influencer', icon: Home },
-    { name: 'Mes Produits', href: '/influencer/inventory', icon: Package },
-    { name: 'Mes Liens', href: '/influencer/links', icon: Tag },
-    { name: 'Portefeuille', href: '/influencer/wallet', icon: DollarSign },
-    { name: 'Leads', href: '/influencer/leads', icon: Users },
-    { name: 'Factures', href: '/influencer/invoices', icon: FileText },
-    { name: 'Marché Public', href: '/influencer/marketplace', icon: ShoppingCart },
-    { name: 'Support & Tickets', href: '/influencer/support', icon: MessageSquare },
-    { name: 'Messages', href: '/influencer/chat', icon: MessageSquare },
-    { name: 'Paramètres', href: '/influencer/settings', icon: Settings },
+    { name: 'nav_home', href: '/influencer', icon: Home },
+    { 
+      name: 'nav_my_catalog',
+      icon: Package,
+      children: [
+        { name: 'nav_my_products', href: '/influencer/inventory', icon: Package },
+        { name: 'nav_my_links', href: '/influencer/links', icon: Tag },
+      ]
+    },
+    { name: 'nav_leads', href: '/influencer/leads', icon: Users },
+    { 
+      name: 'nav_finance_payments', 
+      icon: DollarSign,
+      children: [
+        { name: 'nav_wallet', href: '/influencer/wallet', icon: DollarSign },
+        { name: 'nav_invoices', href: '/influencer/invoices', icon: FileText },
+      ]
+    },
+    { name: 'nav_public_market', href: '/influencer/marketplace', icon: ShoppingCart },
+    { 
+      name: 'nav_support_messages', 
+      icon: MessageSquare,
+      children: [
+        { name: 'nav_support_tickets', href: '/influencer/support', icon: MessageSquare },
+        { name: 'nav_messages', href: '/influencer/chat', icon: MessageSquare },
+      ]
+    },
+    { name: 'nav_settings', href: '/influencer/settings', icon: Settings },
   ],
   agent: [
     { name: 'Tableau de bord', href: '/agent', icon: Home },
@@ -125,34 +172,77 @@ const navigation = {
   admin: [
     { name: 'Tableau de bord', href: '/admin', icon: Home },
     { name: 'Tous les Leads', href: '/admin/leads', icon: Users },
-    { name: 'Vérifications', href: '/admin/verifications', icon: ShieldCheck },
-    { name: 'Utilisateurs', href: '/admin/users', icon: Users },
-    { name: 'Inspect Call Center', href: '/admin/call-center-inspector', icon: Headphones },
-    { name: 'Catégories', href: '/admin/categories', icon: Tag },
-    { name: 'Produits', href: '/admin/products', icon: Package },
-    { name: 'Demandes Affiliation', href: '/admin/affiliate-claims', icon: UserCheck },
-    { name: 'Annonces', href: '/admin/announcements', icon: Bell },
-    { name: 'Gestion Campagnes', href: '/admin/campaigns', icon: Zap },
-    { name: 'Commandes', href: '/admin/orders', icon: ShoppingCart },
-    { name: 'Finance', href: '/admin/finance', icon: DollarSign },
-    { name: 'Support & Tickets', href: '/admin/support', icon: MessageSquare },
-    { name: 'Historique Leads', href: '/admin/lead-history', icon: Eye },
+    { name: 'Gestion des Liens', href: '/admin/links', icon: Link2 },
+    { 
+      name: 'Gestion Utilisateurs', 
+      icon: Users,
+      children: [
+        { name: 'Utilisateurs', href: '/admin/users', icon: Users },
+        { name: 'Vérifications', href: '/admin/verifications', icon: ShieldCheck },
+        { name: 'Inspect Call Center', href: '/admin/call-center-inspector', icon: Headphones },
+        { name: 'Inspecteur Comptes', href: '/admin/influencer-inspector', icon: Crown },
+        { name: 'Inspecteur Support', href: '/admin/support-inspector', icon: MessageSquare },
+      ]
+    },
+    { 
+      name: 'Catalogue Produits', 
+      icon: Package,
+      children: [
+        { name: 'Produits', href: '/admin/products', icon: Package },
+        { name: 'Catégories', href: '/admin/categories', icon: Tag },
+        { name: 'Demande Produit', href: '/admin/affiliate-claims', icon: UserCheck },
+      ]
+    },
+    { 
+      name: 'Finance & Paiements', 
+      icon: DollarSign,
+      children: [
+        { name: 'Finance', href: '/admin/finance', icon: DollarSign },
+        { name: 'Suivi Paiements', href: '/admin/payment-monitoring', icon: CreditCard },
+        { name: 'Factures', href: '/admin/invoices', icon: FileText },
+      ]
+    },
     { name: 'Marché Public', href: '/admin/marketplace', icon: ShoppingCart },
-    { name: 'Messages', href: '/admin/chat', icon: MessageSquare },
-    { name: 'Paramètres Plateforme', href: '/admin/platform-settings', icon: Shield },
-    { name: 'Sécurité & Firewall', href: '/admin/security', icon: ShieldAlert },
-    { name: 'Webhooks Coliaty', href: '/admin/webhook-logs', icon: Webhook },
-    { name: 'Suivi Paiements', href: '/admin/payment-monitoring', icon: CreditCard },
-    { name: 'Factures', href: '/admin/invoices', icon: FileText },
-    { name: 'Journaux d\'Activité', href: '/admin/activity-logs', icon: History },
-    { name: 'Sauvegardes DB', href: '/admin/backups', icon: Database },
-    { name: 'Scanner Retour', href: '/admin/scanner', icon: ScanLine },
+    { 
+      name: 'Support & Messages', 
+      icon: MessageSquare,
+      children: [
+        { name: 'Support & Tickets', href: '/admin/support', icon: MessageSquare },
+        { name: 'Messages', href: '/admin/chat', icon: MessageSquare },
+        { name: 'Messages de Contact', href: '/admin/contact-messages', icon: Mail },
+      ]
+    },
+    { 
+      name: 'Outils & Système',
+      icon: Shield,
+      children: [
+        { name: 'Annonces', href: '/admin/announcements', icon: Bell },
+        { name: 'Scanner Retour', href: '/admin/scanner', icon: ScanLine },
+        { name: 'Webhooks Coliaty', href: '/admin/webhook-logs', icon: Webhook },
+        { name: 'Journaux d\'Activité', href: '/admin/activity-logs', icon: History },
+        { name: 'Sauvegardes DB', href: '/admin/backups', icon: Database },
+      ]
+    },
+    { 
+      name: 'Sécurité', 
+      icon: ShieldAlert,
+      children: [
+        { name: 'Paramètres Plateforme', href: '/admin/platform-settings', icon: Shield },
+        { name: 'Sécurité & Firewall', href: '/admin/security', icon: ShieldAlert },
+      ]
+    },
     { name: 'Paramètres', href: '/admin/settings', icon: Settings },
   ],
   system_support: [
     { name: 'Tableau de bord', href: '/admin', icon: Home },
-    { name: 'Support & Tickets', href: '/admin/support', icon: MessageSquare },
-    { name: 'Messages', href: '/admin/chat', icon: MessageSquare },
+    { 
+      name: 'Support & Messages', 
+      icon: MessageSquare,
+      children: [
+        { name: 'Support & Tickets', href: '/admin/support', icon: MessageSquare },
+        { name: 'Messages', href: '/admin/chat', icon: MessageSquare },
+      ]
+    },
     { name: 'Paramètres', href: '/admin/settings', icon: Settings },
   ],
   confirmation: [
@@ -163,20 +253,40 @@ const navigation = {
   ],
   helper: [
     { name: 'Tableau de bord', href: '/helper', icon: Home },
-    { name: 'Utilisateurs', href: '/helper/users', icon: Users },
-    { name: 'Tous les Leads', href: '/helper/leads', icon: Users },
-    { name: 'Liens de Parrainage', href: '/helper/links', icon: Tag },
-    { name: 'Colis', href: '/helper/colis', icon: Package },
-    { name: 'Scanner Retour', href: '/helper/scanner', icon: ScanLine },
-    { name: 'Tickets & Ramassage', href: '/helper/tickets', icon: FileText },
-    { name: 'Marketplace', href: '/helper/marketplace', icon: ShoppingCart },
-    { name: 'Produits', href: '/helper/products', icon: Tag },
+    { 
+      name: 'Gestion & Leads', 
+      icon: Users,
+      children: [
+        { name: 'Utilisateurs', href: '/helper/users', icon: Users },
+        { name: 'Tous les Leads', href: '/helper/leads', icon: Users },
+      ]
+    },
+    { 
+      name: 'Logistique & Colis', 
+      icon: Package,
+      children: [
+        { name: 'Colis', href: '/helper/colis', icon: Package },
+        { name: 'Scanner Retour', href: '/helper/scanner', icon: ScanLine },
+        { name: 'Tickets & Ramassage', href: '/helper/tickets', icon: FileText },
+      ]
+    },
+    { 
+      name: 'Catalogue', 
+      icon: Tag,
+      children: [
+        { name: 'Produits', href: '/helper/products', icon: Tag },
+        { name: 'Marketplace', href: '/helper/marketplace', icon: ShoppingCart },
+        { name: 'Liens de Parrainage', href: '/helper/links', icon: Tag },
+      ]
+    },
     { name: 'Paramètres', href: '/helper/settings', icon: Settings },
   ],
 };
 
 export default function DashboardLayout() {
   const { user, logout, refreshUser, revertImpersonation } = useAuth();
+  const { t, language } = useLanguage();
+  const isRtl = language === 'ar';
   const location = useLocation();
   const navigate = useNavigate();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -531,35 +641,41 @@ export default function DashboardLayout() {
   const isVendorDashboard = !location.pathname.startsWith('/admin') && !location.pathname.startsWith('/agent') && !location.pathname.startsWith('/grosseller') && !location.pathname.startsWith('/influencer') && !location.pathname.startsWith('/confirmation') && !location.pathname.startsWith('/helper');
   const currentMode = user?.mode || 'SELLER';
 
-  const navItems = getNavItems().filter(item => {
-    if (user?.role === 'HELPER' && item.href === '/helper/users') {
-      return user?.canImpersonate;
-    }
-    if (user?.role === 'HELPER' && (item.href === '/helper/products' || item.name === 'Produits')) {
-      return user?.canManageProducts;
-    }
-    if (user?.role === 'HELPER' && (item.href === '/helper/leads' || item.name === 'Tous les Leads')) {
-      return user?.canManageLeads;
-    }
-    if (user?.role === 'HELPER' && (item.href === '/helper/colis' || item.name === 'Colis')) {
-      return user?.canManageOrders;
-    }
-    if (user?.role === 'HELPER' && (item.href === '/helper/tickets' || item.name === 'Tickets')) {
-      return user?.canManageTickets;
-    }
-    if (user?.role === 'HELPER' && (item.href === '/helper/links' || item.name === 'Liens de Parrainage')) {
-      return user?.canManageInfluencerLinks;
-    }
-    if (item.href === '/admin/backups' && user?.role !== 'SUPER_ADMIN') {
-      return false;
-    }
-    // Filter by mode for vendor dashboard
-    if (isVendorDashboard) {
-      if (item.name === 'Gestion Vendeur') return currentMode === 'SELLER';
-      if (item.name === 'Gestion Affilié') return currentMode === 'AFFILIATE';
-    }
+  // Permission check for individual helper nav items (works on both top-level and children)
+  const isHelperItemAllowed = (item: any): boolean => {
+    if (user?.role !== 'HELPER') return true;
+    if (item.href === '/helper/users') return !!user?.canImpersonate;
+    if (item.href === '/helper/leads') return !!user?.canManageLeads;
+    if (item.href === '/helper/products') return !!user?.canManageProducts;
+    if (item.href === '/helper/colis') return !!user?.canManageOrders;
+    if (item.href === '/helper/scanner') return !!user?.canScanReturns;
+    if (item.href === '/helper/tickets') return !!user?.canManageTickets;
+    if (item.href === '/helper/links') return !!user?.canManageInfluencerLinks;
     return true;
-  });
+  };
+
+  const navItems = (getNavItems() as any[])
+    .map((item: any) => {
+      // For groups with children, filter the children first
+      if (item.children) {
+        const filteredChildren = item.children.filter((child: any) => isHelperItemAllowed(child));
+        if (user?.role === 'HELPER' && filteredChildren.length === 0) return null;
+        return { ...item, children: filteredChildren };
+      }
+      // For flat items, check directly
+      if (!isHelperItemAllowed(item)) return null;
+      return item;
+    })
+    .filter((item: any) => item !== null)
+    .filter((item: any) => {
+      if (item.href === '/admin/backups' && user?.role !== 'SUPER_ADMIN') return false;
+      // Filter by mode for vendor dashboard
+      if (isVendorDashboard) {
+        if (item.name === 'Gestion Vendeur') return currentMode === 'SELLER';
+        if (item.name === 'Gestion Affilié') return currentMode === 'AFFILIATE';
+      }
+      return true;
+    });
 
   // Get current page name for breadcrumb
   const currentPage = navItems.find((item) => item.href === location.pathname);
@@ -666,9 +782,15 @@ export default function DashboardLayout() {
   };
 
   const isImpersonating = !!localStorage.getItem('originalToken');
+  const originalUserRole = localStorage.getItem('originalUserRole');
+  const revertButtonLabel = originalUserRole === 'SUPER_ADMIN' || originalUserRole === 'FINANCE_ADMIN' || originalUserRole === 'SYSTEM_SUPPORT'
+    ? 'Retourner à mon compte Admin'
+    : originalUserRole === 'HELPER'
+    ? 'Retourner à mon compte Helper'
+    : 'Retourner à mon compte';
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] font-['Inter']">
+    <div className="min-h-screen bg-[#F8FAFC] font-['29LT_Kaff',_Cairo,_Inter,_sans-serif]">
       {/* Impersonation Banner */}
       {isImpersonating && (
         <div className="bg-gradient-to-r from-red-600 to-amber-600 text-white text-center py-2 px-4 shadow-md sticky top-0 z-[100] flex items-center justify-center gap-4 animate-pulse">
@@ -679,7 +801,7 @@ export default function DashboardLayout() {
             onClick={revertImpersonation}
             className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded-md text-sm font-semibold transition-colors"
           >
-            Retourner à mon compte Helper
+            {revertButtonLabel}
           </button>
         </div>
       )}
@@ -692,16 +814,16 @@ export default function DashboardLayout() {
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 glass-sidebar z-50 transition-all duration-300 ease-in-out
+      <aside className={`fixed inset-y-0 ${isRtl ? 'right-0 border-l border-slate-200/50' : 'left-0 border-r border-slate-200/50'} glass-sidebar z-50 transition-all duration-300 ease-in-out
         ${sidebarCollapsed ? 'lg:w-20' : 'lg:w-56'}
         w-56 lg:translate-x-0
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        ${sidebarOpen ? 'translate-x-0' : (isRtl ? 'translate-x-full' : '-translate-x-full')}
       `}>
         {/* Sidebar Header */}
         <div className={`flex items-center h-14 transition-all duration-300 relative z-20 ${
           sidebarCollapsed ? 'lg:justify-center lg:px-0 px-5 justify-between' : 'px-5 justify-between'
         }`}>
-          <div className={`flex items-center gap-2.5 transition-all duration-300 ${
+          <div dir="ltr" className={`flex items-center gap-2.5 transition-all duration-300 ${
             sidebarCollapsed ? 'lg:gap-0' : ''
           }`}>
             <div className="w-9 h-9 bg-white rounded-xl shadow-lg shadow-slate-200/50 flex items-center justify-center overflow-hidden flex-shrink-0 border border-slate-100">
@@ -733,8 +855,8 @@ export default function DashboardLayout() {
         <div className="bg-noise absolute inset-0 mix-blend-overlay opacity-[0.15] pointer-events-none z-10" />
 
         {/* Nav Items */}
-        <nav className={`space-y-0.5 overflow-y-auto max-h-[calc(100vh-120px)] scrollbar-hide transition-all duration-300 ${
-          sidebarCollapsed ? 'lg:p-2 p-3' : 'p-3'
+        <nav className={`space-y-0.5 scrollbar-hide transition-all duration-300 ${
+          sidebarCollapsed ? 'overflow-visible lg:p-2 p-3' : 'overflow-y-auto max-h-[calc(100vh-120px)] p-3'
         }`}>
           {navItems.map((item) => {
             // Render either as a Link (if no children) or a Button (if it has children)
@@ -763,15 +885,15 @@ export default function DashboardLayout() {
                 
                 {!sidebarCollapsed && (
                   <div className="flex-1 flex items-center justify-between min-w-0 animate-in fade-in duration-300">
-                    <span className="transition-all duration-300 whitespace-nowrap overflow-hidden text-ellipsis">{item.name}</span>
+                    <span className="transition-all duration-300 whitespace-nowrap overflow-hidden text-ellipsis">{t(item.name, 'dashboard')}</span>
                     
                     {/* Notification Badge */}
-                    {item.href?.includes('/chat') && totalUnread > 0 && (
+                    {(item.href?.includes('/chat') || item.children?.some((c: any) => c.href?.includes('/chat'))) && totalUnread > 0 && (
                       <span className="bg-rose-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-rose-200 animate-in zoom-in duration-300">
                         {totalUnread}
                       </span>
                     )}
-                    {item.href?.includes('/support') && queueCount > 0 && (
+                    {(item.href?.includes('/support') || item.children?.some((c: any) => c.href?.includes('/support'))) && queueCount > 0 && (
                       <span className="bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-amber-200 animate-in zoom-in duration-300">
                         {queueCount}
                       </span>
@@ -805,15 +927,15 @@ export default function DashboardLayout() {
                   </div>
                 )}
                 
-                {sidebarCollapsed && (
-                  <div className="hidden lg:block absolute left-full ml-3 px-4 py-2 bg-slate-900 text-white text-[10px] uppercase font-black tracking-widest rounded-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-300 translate-x-[-10px] group-hover:translate-x-0 whitespace-nowrap z-[100] shadow-2xl">
-                    {item.name}
-                    {item.href?.includes('/chat') && totalUnread > 0 && (
+                {sidebarCollapsed && !hasChildren && (
+                  <div className={`hidden lg:block absolute ${isRtl ? 'right-full mr-3 translate-x-[10px]' : 'left-full ml-3 translate-x-[-10px]'} px-4 py-2 bg-slate-900 text-white text-[10px] uppercase font-black tracking-widest rounded-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-300 group-hover:translate-x-0 whitespace-nowrap z-[100] shadow-2xl`}>
+                    {t(item.name, 'dashboard')}
+                    {(item.href?.includes('/chat') || item.children?.some((c: any) => c.href?.includes('/chat'))) && totalUnread > 0 && (
                       <span className="ml-2 bg-rose-500 text-white px-1.5 py-0.5 rounded-full text-[9px]">
                         {totalUnread}
                       </span>
                     )}
-                    {item.href?.includes('/support') && queueCount > 0 && (
+                    {(item.href?.includes('/support') || item.children?.some((c: any) => c.href?.includes('/support'))) && queueCount > 0 && (
                       <span className="ml-2 bg-amber-500 text-white px-1.5 py-0.5 rounded-full text-[9px]">
                         {queueCount}
                       </span>
@@ -844,13 +966,13 @@ export default function DashboardLayout() {
             );
 
             return (
-              <div key={item.name} className="space-y-1">
+              <div key={item.name} className="space-y-1 relative">
                 {hasChildren ? (
                   <button
                     onClick={() => toggleGroup(item.name)}
                     type="button"
-                    className={navClass}
-                    title={sidebarCollapsed ? item.name : undefined}
+                    className={`${navClass} peer`}
+                    title={sidebarCollapsed ? t(item.name, 'dashboard') : undefined}
                   >
                     {commonContent}
                   </button>
@@ -858,18 +980,15 @@ export default function DashboardLayout() {
                   <Link
                     to={item.href || '#'}
                     className={navClass}
-                    title={sidebarCollapsed ? item.name : undefined}
+                    title={sidebarCollapsed ? t(item.name, 'dashboard') : undefined}
                   >
                     {commonContent}
                   </Link>
                 )}
 
-                {/* Professional Sub-navigation with Connection Line */}
+                {/* Professional Sub-navigation */}
                 {hasChildren && isExpanded && !sidebarCollapsed && (
-                  <div className="relative ml-5 pl-3 space-y-0.5 mt-0.5 animate-in slide-in-from-top-2 fade-in duration-300">
-                    {/* Connection Line */}
-                    <div className="absolute left-0 top-0 bottom-4 w-px bg-gradient-to-b from-primary-200 via-primary-100 to-transparent" />
-                    
+                  <div className={`relative ${isRtl ? 'mr-5 pr-3 pl-0' : 'ml-5 pl-3 pr-0'} space-y-0.5 mt-0.5 animate-in slide-in-from-top-2 fade-in duration-300`}>
                     {it.children.map((child: any) => {
                       const isChildActive = location.pathname === child.href;
                       const ChildIcon = child.icon;
@@ -884,17 +1003,70 @@ export default function DashboardLayout() {
                           }`}
                         >
                           {/* Indicator dot */}
-                          <div className={`absolute left-[-16.5px] w-1 h-1 rounded-full transition-all ${
+                          <div className={`absolute ${isRtl ? 'right-[-16.5px]' : 'left-[-16.5px]'} w-1 h-1 rounded-full transition-all ${
                             isChildActive ? 'bg-primary-500 scale-125' : 'bg-slate-200 group-hover/item:bg-slate-400'
                           }`} />
                           
                           <div className={`p-0.5 rounded transition-colors ${isChildActive ? 'bg-white shadow-sm' : 'group-hover:bg-white'}`}>
                             <ChildIcon size={12} className={isChildActive ? 'text-primary-600' : 'text-slate-400 group-hover/item:text-slate-600'} />
                           </div>
-                          <span className="tracking-tight">{child.name}</span>
+                          <span className="tracking-tight">{t(child.name, 'dashboard')}</span>
+                          {child.href?.includes('/support') && queueCount > 0 && (
+                            <span className="ml-auto bg-amber-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-amber-200">
+                              {queueCount}
+                            </span>
+                          )}
+                          {child.href?.includes('/chat') && totalUnread > 0 && (
+                            <span className="ml-auto bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-rose-200">
+                              {totalUnread}
+                            </span>
+                          )}
                         </Link>
                       );
                     })}
+                  </div>
+                )}
+
+                {/* Floating Sub-navigation for Collapsed Sidebar */}
+                {hasChildren && sidebarCollapsed && (
+                  <div className={`absolute ${isRtl ? 'right-full pr-2 mr-0 pl-0' : 'left-full pl-2 ml-0 pr-0'} top-0 hidden peer-hover:block hover:block z-[100]`}>
+                    <div className={`w-48 bg-white rounded-xl shadow-xl border border-slate-100 p-2 animate-in fade-in ${isRtl ? 'slide-in-from-right-2' : 'slide-in-from-left-2'} duration-200`}>
+                      <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 pb-2 mb-1 border-b border-slate-50">
+                        {t(item.name, 'dashboard')}
+                      </div>
+                    <div className="space-y-0.5">
+                      {it.children.map((child: any) => {
+                        const isChildActive = location.pathname === child.href;
+                        const ChildIcon = child.icon;
+                        return (
+                          <Link
+                            key={child.name}
+                            to={child.href}
+                            className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                              isChildActive 
+                                ? 'text-primary-600 bg-primary-50' 
+                                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <ChildIcon size={14} className={isChildActive ? 'text-primary-600' : 'text-slate-400'} />
+                              {t(child.name, 'dashboard')}
+                            </div>
+                            {child.href?.includes('/support') && queueCount > 0 && (
+                              <span className="bg-amber-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-amber-200 animate-in zoom-in duration-300">
+                                {queueCount}
+                              </span>
+                            )}
+                            {child.href?.includes('/chat') && totalUnread > 0 && (
+                              <span className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-rose-200 animate-in zoom-in duration-300">
+                                {totalUnread}
+                              </span>
+                            )}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
                   </div>
                 )}
               </div>
@@ -906,11 +1078,11 @@ export default function DashboardLayout() {
         <button
           onClick={toggleSidebarCollapsed}
           className={`hidden lg:flex absolute bottom-16 bg-white border border-slate-200 rounded-full p-1.5 shadow-lg hover:shadow-xl hover:bg-slate-50 text-slate-400 hover:text-primary-600 transition-all duration-300 z-[60] ${
-            sidebarCollapsed ? 'right-[-14px]' : 'right-[-14px]'
+            isRtl ? 'left-[-14px] right-auto' : 'right-[-14px] left-auto'
           }`}
           title={sidebarCollapsed ? 'Développer le menu' : 'Réduire le menu'}
         >
-          {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          {sidebarCollapsed ? (isRtl ? <ChevronLeft size={16} /> : <ChevronRight size={16} />) : (isRtl ? <ChevronRight size={16} /> : <ChevronLeft size={16} />)}
         </button>
 
         {/* Mode Switcher for Vendors: Bento Element */}
@@ -1039,7 +1211,9 @@ export default function DashboardLayout() {
 
       {/* Main content */}
       <div className={`min-h-screen transition-all duration-300 ease-in-out ${
-        sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-56'
+        isRtl 
+          ? (sidebarCollapsed ? 'lg:pr-20 pl-0' : 'lg:pr-56 pl-0') 
+          : (sidebarCollapsed ? 'lg:pl-20 pr-0' : 'lg:pl-56 pr-0')
       }`}>
         {/* Header */}
         <header className="sticky top-0 h-14 bg-[#F8FAFC]/80 backdrop-blur-xl border-b border-slate-200/50 z-20">
@@ -1061,7 +1235,10 @@ export default function DashboardLayout() {
                 id="sidebar-toggle"
                 title={sidebarCollapsed ? 'Développer le menu' : 'Réduire le menu'}
               >
-                {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+                {sidebarCollapsed 
+                  ? (isRtl ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />) 
+                  : (isRtl ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />)
+                }
               </button>
 
               {/* Breadcrumb navigation */}
@@ -1071,11 +1248,11 @@ export default function DashboardLayout() {
                 </div>
                 {currentPage && (
                   <>
-                    <ChevronRight size={12} className="text-slate-300" />
+                    {isRtl ? <ChevronLeft size={12} className="text-slate-300" /> : <ChevronRight size={12} className="text-slate-300" />}
                     <div className="h-7 px-3 bg-white rounded-lg border border-slate-100 flex items-center gap-2 shadow-sm">
                       <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
                       <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest leading-none">
-                        {currentPage.name}
+                        {t(currentPage.name, 'dashboard')}
                       </span>
                     </div>
                   </>
@@ -1085,7 +1262,7 @@ export default function DashboardLayout() {
               {/* Mobile: page name only */}
               <div className="sm:hidden">
                 <span className="text-sm font-bold text-slate-700">
-                  {currentPage?.name || 'Tableau de bord'}
+                  {currentPage?.name ? t(currentPage.name, 'dashboard') : t('dashboard', 'dashboard')}
                 </span>
               </div>
             </div>
@@ -1114,7 +1291,8 @@ export default function DashboardLayout() {
                 {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
               </button>
 
-
+              {/* Language Switcher */}
+              <LanguageSwitcherWidget variant="header" />
 
               {/* Notifications */}
               <div className="relative">
@@ -1301,12 +1479,12 @@ export default function DashboardLayout() {
                       </div>
                       <div className="p-3">
                         {[
-                          { name: 'Mon Profil', tab: '', icon: User },
-                          { name: 'Paiement', tab: 'payment', icon: CreditCard },
-                          { name: 'Sécurité & 2FA', tab: 'password', icon: Shield },
+                          { name: t('menu_my_profile', 'dashboard'), tab: '', icon: User },
+                          { name: t('menu_payment', 'dashboard'), tab: 'payment', icon: CreditCard },
+                          { name: t('menu_security_2fa', 'dashboard'), tab: 'password', icon: Shield },
                         ].map((item) => (
                           <button
-                            key={item.name}
+                            key={item.tab}
                             onClick={() => {
                               setShowProfileMenu(false);
                               const base = location.pathname.startsWith('/admin') ? '/admin'
@@ -1335,7 +1513,7 @@ export default function DashboardLayout() {
                           className="w-full flex items-center gap-3 px-4 py-3 text-[13px] font-black text-rose-500 hover:bg-rose-50 rounded-2xl transition-all group"
                         >
                           <LogOut size={18} className="group-hover:translate-x-1 transition-transform" />
-                          Se déconnecter
+                          {t('menu_logout', 'dashboard')}
                         </button>
                       </div>
                     </div>

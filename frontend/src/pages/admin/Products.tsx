@@ -19,20 +19,19 @@ export default function AdminProducts() {
   // Permission Guard for Helpers
   if (user?.role === 'HELPER' && !user?.canManageProducts) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[70vh] text-center px-4">
-        <div className="w-24 h-24 bg-rose-50 text-rose-500 rounded-[2rem] flex items-center justify-center mb-8 shadow-xl shadow-rose-100 animate-in zoom-in duration-500">
-          <ShieldAlert size={48} />
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center px-4">
+        <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center mb-6 animate-bounce">
+          <ShieldAlert size={40} />
         </div>
-        <h2 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">Accès Restreint</h2>
-        <p className="text-slate-500 max-w-md mb-8 font-medium leading-relaxed">
-          Vous n'avez pas les habilitations nécessaires pour accéder au catalogue. Contactez votre superviseur.
+        <h2 className="text-2xl font-black text-slate-800 mb-2">Accès Non Autorisé</h2>
+        <p className="text-slate-500 max-w-md mb-8">
+          Vous n'avez pas la permission de gérer les produits. Veuillez contacter un administrateur pour obtenir l'accès.
         </p>
         <Link 
           to="/helper" 
-          className="group relative px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 shadow-2xl shadow-slate-200 overflow-hidden"
+          className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
         >
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-          <span className="relative">Retour au Tableau de Bord</span>
+          Retour au Tableau de Bord
         </Link>
       </div>
     );
@@ -105,6 +104,24 @@ export default function AdminProducts() {
 
   return (
     <div className="space-y-8 pb-12">
+      {/* Sub Navigation */}
+      <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm w-fit">
+        <Link 
+          to="/admin/products" 
+          className="px-6 py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm shadow-md flex items-center gap-2"
+        >
+          <Package size={16} />
+          Produits
+        </Link>
+        <Link 
+          to="/admin/categories" 
+          className="px-6 py-2.5 text-slate-500 hover:text-slate-900 hover:bg-slate-50 rounded-xl font-bold text-sm transition-all flex items-center gap-2"
+        >
+          <ListIcon size={16} />
+          Catégories
+        </Link>
+      </div>
+
       {/* Premium Header Area */}
       <div className="relative group">
         <div className="absolute -inset-1 bg-gradient-to-r from-primary-600 to-violet-600 rounded-3xl blur opacity-10 group-hover:opacity-20 transition duration-1000"></div>

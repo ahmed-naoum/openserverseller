@@ -1,13 +1,12 @@
+import { prisma } from '../lib/prisma.js';
 import { Router } from 'express';
 import { body, param, query, validationResult } from 'express-validator';
-import { PrismaClient } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { v4 as uuidv4 } from 'uuid';
 import { decrypt, encrypt } from '../utils/crypto.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.get(
   '/',
@@ -85,6 +84,9 @@ router.get(
           canManageOrders: u.canManageOrders,
           canManageInfluencerLinks: u.canManageInfluencerLinks,
           canManageTickets: u.canManageTickets,
+          canScanReturns: u.canScanReturns,
+          cguAccepted: u.cguAccepted,
+          cguAcceptedAt: u.cguAcceptedAt,
           createdAt: u.createdAt,
         })), pagination: {
           page: Number(page),
@@ -260,7 +262,7 @@ router.patch(
     const { uuid } = req.params;
     const {
       fullName, email, phone, role, isActive, kycStatus,
-      canImpersonate, canManageProducts, canManageLeads, canManageOrders, canManageInfluencerLinks, canManageTickets,
+      canImpersonate, canManageProducts, canManageLeads, canManageOrders, canManageInfluencerLinks, canManageTickets, canScanReturns,
       city, address, cinNumber, birthDate, language, avatarUrl,
       instagramUsername, tiktokUsername, facebookUsername, xUsername, youtubeUsername, snapchatUsername,
       instagramUrl, tiktokUrl, facebookUrl, youtubeUrl, snapchatUrl,
@@ -365,6 +367,7 @@ router.patch(
         canManageOrders: typeof canManageOrders === 'boolean' ? canManageOrders : undefined,
         canManageInfluencerLinks: typeof canManageInfluencerLinks === 'boolean' ? canManageInfluencerLinks : undefined,
         canManageTickets: typeof canManageTickets === 'boolean' ? canManageTickets : undefined,
+        canScanReturns: typeof canScanReturns === 'boolean' ? canScanReturns : undefined,
         platformFeeRate: platformFeeRate !== undefined ? Number(platformFeeRate) : undefined,
         saisieFeeMad: saisieFeeMad !== undefined ? Number(saisieFeeMad) : undefined,
       },
@@ -458,8 +461,11 @@ router.get(
           canManageOrders: user.canManageOrders,
           canManageInfluencerLinks: user.canManageInfluencerLinks,
           canManageTickets: user.canManageTickets,
+          canScanReturns: user.canScanReturns,
           platformFeeRate: user.platformFeeRate,
           saisieFeeMad: user.saisieFeeMad,
+          cguAccepted: user.cguAccepted,
+          cguAcceptedAt: user.cguAcceptedAt,
           createdAt: user.createdAt,
         },
       },

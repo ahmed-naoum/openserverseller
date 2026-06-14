@@ -1,9 +1,8 @@
+import { prisma } from '../lib/prisma.js';
 import passport from 'passport';
 import { Strategy as JwtStrategy, ExtractJwt } from 'passport-jwt';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
-import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
 
 export const setupPassport = () => {
   passport.use(

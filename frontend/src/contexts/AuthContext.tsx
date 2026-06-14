@@ -25,6 +25,7 @@ export interface AuthUser {
   canManageOrders?: boolean;
   canManageInfluencerLinks?: boolean;
   canManageTickets?: boolean;
+  canScanReturns?: boolean;
   avatarUrl?: string;
   [key: string]: any;
 }
@@ -37,7 +38,7 @@ interface AuthContextType {
   login2FA: (data: { twoFactorToken: string; code: string }) => Promise<AuthUser>;
   forcePasswordChange: (data: { tempToken: string; newPassword: string }) => Promise<AuthUser>;
   googleAuth: (data: { credential: string; role?: string }) => Promise<{ user?: AuthUser; requiresTwoFactor?: boolean; twoFactorToken?: string; requiresPasswordChange?: boolean; tempToken?: string; message?: string }>;
-  register: (data: { email?: string; phone?: string; password: string; fullName: string; role?: string }) => Promise<AuthUser>;
+  register: (data: { email?: string; phone?: string; password: string; fullName: string; role?: string; cguAccepted?: boolean }) => Promise<AuthUser>;
   registerInfluencer: (data: any) => Promise<AuthUser>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -123,7 +124,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const googleAuth = async (data: { credential: string; role?: string }) => {
-    const response = await authApi.googleAuth(data);
+    const guestLang = localStorage.getItem('guest_lang');
+    const response = await authApi.googleAuth({
+      ...data,
+      ...(guestLang ? { language: guestLang } : {})
+    });
     
     if (response.data.data?.requiresTwoFactor) {
       return { 
@@ -154,7 +159,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const register = async (data: { email?: string; phone?: string; password: string; fullName: string; role?: string }) => {
-    const response = await authApi.register(data);
+    const guestLang = localStorage.getItem('guest_lang');
+    const response = await authApi.register({
+      ...data,
+      ...(guestLang ? { language: guestLang } : {})
+    });
     const { user, tokens } = response.data.data;
     
     localStorage.setItem('accessToken', tokens.accessToken);
@@ -164,7 +173,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const registerInfluencer = async (data: any) => {
-    const response = await authApi.registerInfluencer(data);
+    const guestLang = localStorage.getItem('guest_lang');
+    const response = await authApi.registerInfluencer({
+      ...data,
+      ...(guestLang ? { language: guestLang } : {})
+    });
     const { user, tokens } = response.data.data;
     
     localStorage.setItem('accessToken', tokens.accessToken);
@@ -188,7 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const impersonate = async (userId: number) => {
     const response = await authApi.impersonate({ targetUserId: userId });
-    const { user, tokens } = response.data.data;
+    const { user: targetUser, tokens } = response.data.data;
     
     // Save current session before overriding
     const currentAccess = localStorage.getItem('accessToken');
@@ -196,11 +209,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (currentAccess && !localStorage.getItem('originalToken')) {
       localStorage.setItem('originalToken', currentAccess);
       if (currentRefresh) localStorage.setItem('originalRefreshToken', currentRefresh);
+      
+      // Save original user info so we can display custom back buttons/redirects
+      if (user) {
+        localStorage.setItem('originalUserRole', user.role || user.roleName || '');
+        localStorage.setItem('originalUserFullName', user.fullName || '');
+      }
     }
     
     localStorage.setItem('accessToken', tokens.accessToken);
     localStorage.setItem('refreshToken', tokens.refreshToken);
-    setUser(user);
+    setUser(targetUser);
 
     // Redirect to the appropriate dashboard based on role
     const dashboardRoutes: Record<string, string> = {
@@ -215,7 +234,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       'GROSSELLER': '/grosseller'
     };
 
-    const targetRoute = dashboardRoutes[user.role] || '/';
+    const targetRoute = dashboardRoutes[targetUser.role] || '/';
     
     // Reload to flush any cached state and initialize as the new user
     window.location.href = targetRoute;
@@ -224,6 +243,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const revertImpersonation = async () => {
     const originalToken = localStorage.getItem('originalToken');
     const originalRefreshToken = localStorage.getItem('originalRefreshToken');
+    const originalUserRole = localStorage.getItem('originalUserRole');
     
     if (originalToken) {
       localStorage.setItem('accessToken', originalToken);
@@ -231,8 +251,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       localStorage.removeItem('originalToken');
       localStorage.removeItem('originalRefreshToken');
-      // Reload to switch back fully
-      window.location.href = '/helper/users';
+      localStorage.removeItem('originalUserRole');
+      localStorage.removeItem('originalUserFullName');
+      
+      // Redirect back to the screen we impersonated from
+      if (originalUserRole === 'SUPER_ADMIN' || originalUserRole === 'FINANCE_ADMIN' || originalUserRole === 'SYSTEM_SUPPORT') {
+        window.location.href = '/admin/users';
+      } else if (originalUserRole === 'HELPER') {
+        window.location.href = '/helper/users';
+      } else {
+        window.location.href = '/';
+      }
     }
   };
 

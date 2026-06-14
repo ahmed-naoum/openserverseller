@@ -153,7 +153,7 @@ export default function IntegrationsPage() {
 
                   <div className="flex items-center gap-2 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100/50">
                     <Smartphone size={16} className="text-indigo-600" />
-                    <p className="text-xs text-indigo-700 font-medium font-['Inter'] tracking-tight">
+                    <p className="text-xs text-indigo-700 font-medium font-['29LT_Kaff',_Cairo,_Inter,_sans-serif] tracking-tight">
                       Domaine lié : <span className="font-black underline">{status.storeDomain || 'Chargement...'}</span>
                     </p>
                   </div>

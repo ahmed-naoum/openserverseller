@@ -1,7 +1,6 @@
+import { prisma } from '../lib/prisma.js';
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
 
 // Create an announcement (Admin Only)
 export const createAnnouncement = async (req: Request, res: Response) => {

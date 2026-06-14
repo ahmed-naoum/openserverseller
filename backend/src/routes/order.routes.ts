@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { body, validationResult } from 'express-validator';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import axios from 'axios';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
+import { prisma } from '../lib/prisma.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 const generateOrderNumber = (): string => {
   const date = new Date();
@@ -1343,6 +1343,9 @@ function handleColiatyError(error: any, context: string) {
   
   if (status && [400, 401, 403, 404, 422].includes(status)) {
     let msg = data?.message || "Erreur API Coliaty";
+    if (data?.details) {
+      msg += ` (${data.details})`;
+    }
     if (data?.errors) {
       const firstErr = Array.isArray(data.errors) ? data.errors[0] : Object.values(data.errors)[0];
       if (firstErr) msg = String(firstErr);

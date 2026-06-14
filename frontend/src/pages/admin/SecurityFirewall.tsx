@@ -32,10 +32,11 @@ interface SecuritySettingsState {
 export default function SecurityFirewall() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'overview' | 'threats' | 'activity' | 'settings' | 'tools'>('overview');
+  const [tab, setTab] = useState<'overview' | 'architecture' | 'threats' | 'activity' | 'settings' | 'tools'>('overview');
   const [blockIP, setBlockIP] = useState('');
   const [blocking, setBlocking] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedNode, setSelectedNode] = useState<any | null>(null);
 
   // Settings states
   const [settings, setSettings] = useState<SecuritySettingsState>({
@@ -83,7 +84,7 @@ export default function SecurityFirewall() {
   }, [load]);
 
   useEffect(() => {
-    if (tab === 'settings') {
+    if (tab === 'settings' || tab === 'architecture') {
       loadSettings();
     }
   }, [tab]);
@@ -91,7 +92,7 @@ export default function SecurityFirewall() {
   const handleRefresh = () => {
     setRefreshing(true);
     load();
-    if (tab === 'settings') {
+    if (tab === 'settings' || tab === 'architecture') {
       loadSettings();
     }
   };
@@ -104,7 +105,7 @@ export default function SecurityFirewall() {
       toast.success(`IP ${ip} bloquée`);
       setBlockIP('');
       load();
-      if (tab === 'settings') {
+      if (tab === 'settings' || tab === 'architecture') {
         loadSettings();
       }
     } catch {
@@ -119,7 +120,7 @@ export default function SecurityFirewall() {
       await securityApi.unblockIP(ip);
       toast.success(`IP ${ip} débloquée`);
       load();
-      if (tab === 'settings') {
+      if (tab === 'settings' || tab === 'architecture') {
         loadSettings();
       }
     } catch {
@@ -228,6 +229,7 @@ export default function SecurityFirewall() {
 
   const tabs = [
     { id: 'overview', label: 'Vue générale', icon: Shield },
+    { id: 'architecture', label: 'Architecture Zero Trust', icon: ShieldCheck },
     { id: 'threats', label: 'Menaces', icon: ShieldAlert },
     { id: 'activity', label: 'Activité', icon: Activity },
     { id: 'settings', label: 'Configuration', icon: Lock },
@@ -250,7 +252,7 @@ export default function SecurityFirewall() {
   const activity: ActivityEntry[] = data?.recentActivity || [];
 
   return (
-    <div className="space-y-6 p-1 font-['Inter']">
+    <div className="space-y-6 p-1 font-['29LT_Kaff',_Cairo,_Inter,_sans-serif]">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -351,6 +353,631 @@ export default function SecurityFirewall() {
           </button>
         ))}
       </div>
+
+      {/* ── ARCHITECTURE TAB ── */}
+      {tab === 'architecture' && (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-3xl p-8 text-center text-white border border-slate-700/30 relative overflow-hidden shadow-xl shadow-slate-950/20">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -z-10" />
+            <div className="absolute bottom-0 left-0 w-64 h-64 bg-red-500/5 rounded-full blur-3xl -z-10" />
+            
+            <h2 className="text-xl md:text-2xl font-black tracking-tight text-white flex items-center justify-center gap-2">
+              <ShieldCheck className="text-emerald-400 w-7 h-7" />
+              ARCHITECTURAL REFERENCE - ZERO TRUST HYBRID ENTERPRISE
+            </h2>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-2 flex flex-wrap gap-2 md:gap-4 justify-center items-center">
+              <span>Verify Explicitly</span>
+              <span className="text-slate-600">•</span>
+              <span>Use Least Privilege</span>
+              <span className="text-slate-600">•</span>
+              <span>Assume Breach</span>
+              <span className="text-slate-600">•</span>
+              <span>Monitor Everything</span>
+            </p>
+            
+            {/* Readiness score meter */}
+            <div className="mt-6 inline-flex items-center gap-3 px-4 py-2 bg-slate-800/50 backdrop-blur border border-slate-700/50 rounded-2xl">
+              <span className="text-xs text-slate-400 font-semibold">Indice de Maturité Zero Trust:</span>
+              <div className="flex items-center gap-2">
+                <div className="w-24 h-2 bg-slate-700 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-emerald-400 rounded-full transition-all duration-500"
+                    style={{ 
+                      width: `${
+                        ((settings.enableRequestSanitization ? 1 : 0) + 
+                         (settings.enableIPBlocking ? 1 : 0) + 
+                         (settings.enableAuditLog ? 1 : 0) + 
+                         (settings.globalRateLimitMax > 0 ? 1 : 0) + 
+                         (score >= 80 ? 1 : 0) + 1) / 6 * 100
+                      }%` 
+                    }}
+                  />
+                </div>
+                <span className="text-xs font-black text-emerald-400">
+                  {Math.round(((settings.enableRequestSanitization ? 1 : 0) + 
+                   (settings.enableIPBlocking ? 1 : 0) + 
+                   (settings.enableAuditLog ? 1 : 0) + 
+                   (settings.globalRateLimitMax > 0 ? 1 : 0) + 
+                   (score >= 80 ? 1 : 0) + 1) / 6 * 100)}%
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Reference Map Layout */}
+          <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+            
+            {/* COLUMN 1: PERIMETER GATEWAY & DMZ */}
+            <div className="xl:col-span-1 space-y-4">
+              <div className="p-4 bg-slate-100/50 border border-slate-200/50 rounded-2xl">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">1. Périmètre & DMZ</span>
+                <p className="text-[11px] text-slate-500 mt-0.5">Filtrage, routage et isolation des requêtes externes.</p>
+              </div>
+
+              {/* Internet node */}
+              <div className="p-4 bg-white border border-slate-100 shadow-sm rounded-2xl flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400">
+                    <Globe size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800">Trafic Internet Public</h4>
+                    <p className="text-[10px] text-slate-400 font-mono">Origine non-approuvée</p>
+                  </div>
+                </div>
+                <span className="text-[9px] font-black px-2 py-0.5 rounded bg-slate-100 text-slate-500">TRAFFIC</span>
+              </div>
+
+              {/* DDoS & NGFW */}
+              <button 
+                onClick={() => setSelectedNode({
+                  id: 'ngfw',
+                  name: 'Perimeter NGFW & DDoS Protection',
+                  desc: 'Pare-feu de nouvelle génération filtrant le trafic réseau en fonction de la liste noire d\'IPs et de la liste blanche d\'IPs autorisées.',
+                  status: settings.enableIPBlocking ? 'PASS' : 'WARN',
+                  control: 'enableIPBlocking',
+                  value: `${settings.blockedIPs.length} IP bloquées, ${settings.whitelistedIPs.length} IP blanches`,
+                  telemetry: `${threats.active?.length || 0} menaces de brute force actives détectées.`
+                })}
+                className="w-full text-left p-4 bg-white border border-slate-100 hover:border-primary-400 hover:shadow transition-all shadow-sm rounded-2xl flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${settings.enableIPBlocking ? 'bg-emerald-50 text-emerald-500' : 'bg-amber-50 text-amber-500'}`}>
+                    <Shield size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 group-hover:text-primary-600 transition-colors">NGFW / DDoS Filter</h4>
+                    <p className="text-[10px] text-slate-400 font-mono">IP Blocking: {settings.enableIPBlocking ? 'Active' : 'Inactive'}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${settings.enableIPBlocking ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                  <ChevronRight size={14} className="text-slate-300 group-hover:text-primary-500 transition-all" />
+                </div>
+              </button>
+
+              {/* WAF */}
+              <button 
+                onClick={() => setSelectedNode({
+                  id: 'waf',
+                  name: 'Web Application Firewall (WAF)',
+                  desc: 'Filtre les payloads HTML, Javascript et SQL malveillants à la volée. Bloque les attaques de type Cross-Site Scripting (XSS) et injections de requêtes.',
+                  status: settings.enableRequestSanitization ? 'PASS' : 'WARN',
+                  control: 'enableRequestSanitization',
+                  value: settings.enableRequestSanitization ? 'Anti-XSS & SQLi Actif' : 'Désactivé',
+                  telemetry: 'Règles OWASP Top 10 actives.'
+                })}
+                className="w-full text-left p-4 bg-white border border-slate-100 hover:border-primary-400 hover:shadow transition-all shadow-sm rounded-2xl flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${settings.enableRequestSanitization ? 'bg-emerald-50 text-emerald-500' : 'bg-amber-50 text-amber-500'}`}>
+                    <Lock size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 group-hover:text-primary-600 transition-colors">WAF (Request Sanitizer)</h4>
+                    <p className="text-[10px] text-slate-400 font-mono">Anti-XSS: {settings.enableRequestSanitization ? 'Enabled' : 'Disabled'}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${settings.enableRequestSanitization ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                  <ChevronRight size={14} className="text-slate-300 group-hover:text-primary-500 transition-all" />
+                </div>
+              </button>
+
+              {/* Rate Limiting */}
+              <button 
+                onClick={() => setSelectedNode({
+                  id: 'ratelimit',
+                  name: 'API Rate Limiting & Load Balancer',
+                  desc: 'Contrôle la fréquence des requêtes par IP pour éviter les saturations, dénis de service (DoS) ou spams de formulaires.',
+                  status: 'PASS',
+                  control: 'rateLimitSettings',
+                  value: `Global: ${settings.globalRateLimitMax} req/15m`,
+                  telemetry: `Limites actives: Upload (${settings.uploadRateLimitMax}/15m), Retrait (${settings.payoutRateLimitMax}/h)`
+                })}
+                className="w-full text-left p-4 bg-white border border-slate-100 hover:border-primary-400 hover:shadow transition-all shadow-sm rounded-2xl flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-500 flex items-center justify-center">
+                    <Zap size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 group-hover:text-primary-600 transition-colors">Load Balancer & Rate Limit</h4>
+                    <p className="text-[10px] text-slate-400 font-mono">{settings.globalRateLimitMax} req / 15 mins</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                  <ChevronRight size={14} className="text-slate-300 group-hover:text-primary-500 transition-all" />
+                </div>
+              </button>
+            </div>
+
+            {/* COLUMN 2: ENDPOINTS & ZTNA */}
+            <div className="xl:col-span-1 space-y-4">
+              <div className="p-4 bg-slate-100/50 border border-slate-200/50 rounded-2xl">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">2. Accès ZTNA</span>
+                <p className="text-[11px] text-slate-500 mt-0.5">Vérification de l'intégrité des appareils clients.</p>
+              </div>
+
+              {/* Endpoint health check */}
+              <div className="p-4 bg-white border border-slate-100 shadow-sm rounded-2xl space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-slate-50 text-slate-500 flex items-center justify-center">
+                    <MemoryStick size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 font-mono">User Device Endpoints</h4>
+                    <p className="text-[10px] text-slate-400">Navigateurs & Sessions</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-50 text-[10px] font-semibold text-slate-500">
+                  <div className="bg-slate-50 p-1.5 rounded flex items-center justify-between">
+                    <span>EDR Agent</span>
+                    <span className="text-emerald-500 font-bold">OK</span>
+                  </div>
+                  <div className="bg-slate-50 p-1.5 rounded flex items-center justify-between">
+                    <span>Host Firewall</span>
+                    <span className="text-emerald-500 font-bold">ON</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* ZTNA Gateway */}
+              <div className="p-4 bg-gradient-to-b from-indigo-50/50 to-indigo-100/20 border border-indigo-100/50 shadow-sm rounded-2xl">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-500 text-white flex items-center justify-center">
+                    <ShieldCheck size={16} />
+                  </div>
+                  <h4 className="text-xs font-black text-indigo-950">ZTNA Gateway</h4>
+                </div>
+                <p className="text-[10px] text-indigo-700 font-medium">Contrôle strict des accès au tableau de bord. Chiffrement de bout en bout forcé (TLS 1.3).</p>
+                <div className="mt-3 flex items-center gap-1.5 bg-indigo-50/80 px-2.5 py-1 rounded-lg text-[9px] font-black text-indigo-600 w-fit">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping" />
+                  TUNNEL CHIFFRÉ
+                </div>
+              </div>
+            </div>
+
+            {/* COLUMN 3: INTERNAL ZONES */}
+            <div className="xl:col-span-1 space-y-4">
+              <div className="p-4 bg-slate-100/50 border border-slate-200/50 rounded-2xl">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">3. Zones Internes</span>
+                <p className="text-[11px] text-slate-500 mt-0.5">Micro-segmentation et contrôles du moindre privilège.</p>
+              </div>
+
+              {/* Identity Zone */}
+              <button 
+                onClick={() => setSelectedNode({
+                  id: 'identity',
+                  name: 'Identity & Authentication Zone',
+                  desc: 'Vérifie l\'identité des utilisateurs et applique les règles de sécurité. Les comptes administratifs sont protégés par des jetons de session stricts.',
+                  status: 'PASS',
+                  control: 'identityControls',
+                  value: `${users.active || 0} utilisateurs actifs connectés`,
+                  telemetry: 'Contrôles de RoleGuard actifs sur les routes sensibles (Admin, Agent, Vendor, Influencer).'
+                })}
+                className="w-full text-left p-4 bg-white border border-slate-100 hover:border-primary-400 hover:shadow transition-all shadow-sm rounded-2xl flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-violet-50 text-violet-500 flex items-center justify-center">
+                    <Users size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 group-hover:text-primary-600 transition-colors">Identity (IdP & MFA)</h4>
+                    <p className="text-[10px] text-slate-400 font-mono">RoleGuards Active</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
+                  <ChevronRight size={14} className="text-slate-300 group-hover:text-primary-500 transition-all" />
+                </div>
+              </button>
+
+              {/* Privileged Access */}
+              <button 
+                onClick={() => setSelectedNode({
+                  id: 'privileged',
+                  name: 'Privileged Access Zone',
+                  desc: 'Restreint les rôles sensibles. Les assistants (Helpers) ne peuvent pas usurper de permissions d\'administration et sont limités à des portées pré-approuvées.',
+                  status: 'PASS',
+                  control: 'privilegedAccess',
+                  value: 'Helper Impersonation Restricted',
+                  telemetry: 'Persistent RBAC logic active on /api/admin/impersonate.'
+                })}
+                className="w-full text-left p-4 bg-white border border-slate-100 hover:border-primary-400 hover:shadow transition-all shadow-sm rounded-2xl flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-500 flex items-center justify-center">
+                    <Lock size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 group-hover:text-primary-600 transition-colors">Privileged Access (PAM)</h4>
+                    <p className="text-[10px] text-slate-400 font-mono">Helper Guard Active</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                  <ChevronRight size={14} className="text-slate-300 group-hover:text-primary-500 transition-all" />
+                </div>
+              </button>
+
+              {/* Data / Crown Jewel */}
+              <button 
+                onClick={() => setSelectedNode({
+                  id: 'data',
+                  name: 'Data & Crown Jewel Zone',
+                  desc: 'Le stockage de base de données le plus critique. Les paramètres sensibles (RIB/ICE) sont chiffrés ou expurgés des logs pour éviter la fuite de données.',
+                  status: 'PASS',
+                  control: 'dataProtection',
+                  value: 'Database Sanitization PASS',
+                  telemetry: 'Secrets log-masker et validations Prisma NaN actives.'
+                })}
+                className="w-full text-left p-4 bg-white border border-slate-100 hover:border-primary-400 hover:shadow transition-all shadow-sm rounded-2xl flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-500 flex items-center justify-center">
+                    <MemoryStick size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 group-hover:text-primary-600 transition-colors">Data / Crown Jewels</h4>
+                    <p className="text-[10px] text-slate-400 font-mono">RIB logs masked • SQL Protected</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <ChevronRight size={14} className="text-slate-300 group-hover:text-primary-500 transition-all" />
+                </div>
+              </button>
+            </div>
+
+            {/* COLUMN 4: SIEM / SOC MONITORING */}
+            <div className="xl:col-span-1 space-y-4">
+              <div className="p-4 bg-slate-100/50 border border-slate-200/50 rounded-2xl">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">4. SOC & Logs</span>
+                <p className="text-[11px] text-slate-500 mt-0.5">Surveillance continue et analyse comportementale.</p>
+              </div>
+
+              {/* SIEM / Audit log */}
+              <button 
+                onClick={() => setSelectedNode({
+                  id: 'siem',
+                  name: 'SIEM & Central Log Platform',
+                  desc: 'Collecte et analyse les journaux d\'activité en direct pour identifier des comportements suspects ou des accès non-autorisés.',
+                  status: settings.enableAuditLog ? 'PASS' : 'FAIL',
+                  control: 'enableAuditLog',
+                  value: settings.enableAuditLog ? 'Journaux d\'audit activés' : 'Désactivé',
+                  telemetry: `${activity.length} actions stockées dans le buffer récent.`
+                })}
+                className="w-full text-left p-4 bg-white border border-slate-100 hover:border-primary-400 hover:shadow transition-all shadow-sm rounded-2xl flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${settings.enableAuditLog ? 'bg-emerald-50 text-emerald-500' : 'bg-red-50 text-red-500'}`}>
+                    <Activity size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 group-hover:text-primary-600 transition-colors">SIEM Log Collector</h4>
+                    <p className="text-[10px] text-slate-400 font-mono">Audit Logging: {settings.enableAuditLog ? 'ON' : 'OFF'}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${settings.enableAuditLog ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+                  <ChevronRight size={14} className="text-slate-300 group-hover:text-primary-500 transition-all" />
+                </div>
+              </button>
+
+              {/* Intrusion detection NDR */}
+              <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-2">
+                <div className="flex items-center gap-2 text-slate-700">
+                  <ShieldAlert size={15} className="text-slate-400" />
+                  <span className="text-xs font-bold">NDR / IDS / IPS Agent</span>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-relaxed">
+                  Détection des scans de vulnérabilités et blocage automatique temporaire en cas de dépassement de limite de débit.
+                </p>
+                <div className="bg-white p-2 border border-slate-100 rounded-xl flex items-center justify-between text-[10px] font-mono">
+                  <span className="text-slate-400">Rate Limit block</span>
+                  <span className="text-red-500 font-bold">{threats.rateLimitBlockedIPs?.length || 0} active block</span>
+                </div>
+              </div>
+
+              {/* Cloud Info */}
+              <div className="p-4 bg-white border border-slate-100 rounded-2xl space-y-2">
+                <div className="flex items-center gap-2 text-slate-700">
+                  <Server size={15} className="text-slate-400" />
+                  <span className="text-xs font-bold">Cloud Infrastructure</span>
+                </div>
+                <div className="flex justify-between items-center text-[10px] font-mono bg-slate-50 p-2 rounded-xl">
+                  <span className="text-slate-400">Node Environment</span>
+                  <span className="text-emerald-500 font-black">{system.platform || 'Linux'}</span>
+                </div>
+                <div className="flex justify-between items-center text-[10px] font-mono bg-slate-50 p-2 rounded-xl">
+                  <span className="text-slate-400">RAM Heap Usage</span>
+                  <span className="text-indigo-500 font-black">{system.heapUsedMB || 0} MB</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Quick status footer */}
+          <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 flex flex-wrap gap-4 items-center justify-between text-xs text-slate-500">
+            <span className="font-semibold flex items-center gap-1.5">
+              <Info size={14} className="text-slate-400" />
+              Cliquez sur n'importe quel élément pour afficher sa configuration et modifier ses paramètres en direct.
+            </span>
+            <div className="flex gap-4">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                <span>Sécurisé (PASS)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                <span>Attention (WARN)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                <span>Recommandation critique (FAIL)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Node Details Slide-over Panel */}
+      {selectedNode && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex justify-end animate-in fade-in duration-300">
+          <div 
+            className="bg-white w-full max-w-md h-[calc(100vh-3.5rem)] mt-[3.5rem] shadow-2xl border-l border-slate-150 flex flex-col justify-between animate-in slide-in-from-right duration-300"
+          >
+            {/* Header */}
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-slate-900 text-lg leading-tight">{selectedNode.name}</h3>
+                <span className={`inline-block text-[9px] font-black uppercase px-2 py-0.5 rounded mt-1.5 ${
+                  selectedNode.status === 'PASS' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                }`}>
+                  {selectedNode.status === 'PASS' ? 'Sécurisé' : 'Attention Recommandée'}
+                </span>
+              </div>
+              <button 
+                onClick={() => setSelectedNode(null)}
+                className="text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-50 rounded-xl font-bold transition-all"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 flex-1 overflow-y-auto space-y-6">
+              {/* Description */}
+              <div className="space-y-1.5">
+                <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider">Description</h4>
+                <p className="text-sm text-slate-600 leading-relaxed font-semibold">{selectedNode.desc}</p>
+              </div>
+
+              {/* Status & Value */}
+              <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Valeur Actuelle</span>
+                  <p className="text-sm font-black text-slate-800 mt-0.5">{selectedNode.value || 'N/A'}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Télémétrie</span>
+                  <p className="text-xs font-semibold text-slate-600 mt-0.5">{selectedNode.telemetry || 'N/A'}</p>
+                </div>
+              </div>
+
+              {/* Dynamic Action controls */}
+              <div className="space-y-4 pt-4 border-t border-slate-100">
+                <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider">Contrôle de Sécurité Direct</h4>
+                
+                {/* Control toggle for WAF */}
+                {selectedNode.id === 'waf' && (
+                  <div className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                    <div>
+                      <p className="text-sm font-bold text-slate-700">WAF / Request Sanitization</p>
+                      <p className="text-[11px] text-slate-400">Activer le filtre anti-XSS et anti-injections SQL</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.enableRequestSanitization}
+                        onChange={async (e) => {
+                          const updated = { ...settings, enableRequestSanitization: e.target.checked };
+                          setSettings(updated);
+                          await handleSaveSettings(updated);
+                          setSelectedNode({
+                            ...selectedNode,
+                            status: e.target.checked ? 'PASS' : 'WARN',
+                            value: e.target.checked ? 'Anti-XSS & SQLi Actif' : 'Désactivé'
+                          });
+                        }}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500"></div>
+                    </label>
+                  </div>
+                )}
+
+                {/* Control toggle for NGFW */}
+                {selectedNode.id === 'ngfw' && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                      <div>
+                        <p className="text-sm font-bold text-slate-700">Filtrage IP de périmètre</p>
+                        <p className="text-[11px] text-slate-400">Rejeter les connexions des adresses IP bloquées</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={settings.enableIPBlocking}
+                          onChange={async (e) => {
+                            const updated = { ...settings, enableIPBlocking: e.target.checked };
+                            setSettings(updated);
+                            await handleSaveSettings(updated);
+                            setSelectedNode({
+                              ...selectedNode,
+                              status: e.target.checked ? 'PASS' : 'WARN',
+                              value: `${settings.blockedIPs.length} IP bloquées, ${settings.whitelistedIPs.length} IP blanches`
+                            });
+                          }}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500"></div>
+                      </label>
+                    </div>
+                    <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-2 text-xs font-semibold text-slate-600">
+                      <p>Adresses IP bloquées: <span className="font-mono text-slate-900 font-bold">{settings.blockedIPs.length}</span></p>
+                      <p>Adresses IP blanches: <span className="font-mono text-slate-900 font-bold">{settings.whitelistedIPs.length}</span></p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Control toggle for SIEM */}
+                {selectedNode.id === 'siem' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                      <div>
+                        <p className="text-sm font-bold text-slate-700">Audit Logging</p>
+                        <p className="text-[11px] text-slate-400">Enregistrer les actions critiques dans la base de données</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={settings.enableAuditLog}
+                          onChange={async (e) => {
+                            const updated = { ...settings, enableAuditLog: e.target.checked };
+                            setSettings(updated);
+                            await handleSaveSettings(updated);
+                            setSelectedNode({
+                              ...selectedNode,
+                              status: e.target.checked ? 'PASS' : 'FAIL',
+                              value: e.target.checked ? 'Journaux d\'audit activés' : 'Désactivé'
+                            });
+                          }}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500"></div>
+                      </label>
+                    </div>
+                    
+                    {/* Live log feed preview */}
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Flux d'audit récent</p>
+                      {activity.slice(0, 4).length === 0 ? (
+                        <p className="text-xs italic text-slate-400">Aucun log récent disponible</p>
+                      ) : (
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                          {activity.slice(0, 4).map((a, i) => (
+                            <div key={i} className="p-2.5 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-mono">
+                              <div className="flex justify-between items-center">
+                                <span className="font-bold text-slate-700">{a.action}</span>
+                                <span className="text-slate-400">{new Date(a.createdAt).toLocaleTimeString()}</span>
+                              </div>
+                              <p className="text-slate-500 text-[9px] mt-0.5 truncate">{a.user}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Control toggle for Rate Limiting */}
+                {selectedNode.id === 'ratelimit' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Requêtes globales (15 mins)</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          value={settings.globalRateLimitMax}
+                          onChange={(e) => setSettings({ ...settings, globalRateLimitMax: Number(e.target.value) })}
+                          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold focus:outline-none focus:border-primary-400"
+                        />
+                        <button
+                          onClick={async () => {
+                            await handleSaveSettings();
+                            setSelectedNode({
+                              ...selectedNode,
+                              value: `Global: ${settings.globalRateLimitMax} req/15m`
+                            });
+                          }}
+                          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition-all"
+                        >
+                          Sauver
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Téléversements (15 mins)</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          value={settings.uploadRateLimitMax}
+                          onChange={(e) => setSettings({ ...settings, uploadRateLimitMax: Number(e.target.value) })}
+                          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold focus:outline-none focus:border-primary-400"
+                        />
+                        <button
+                          onClick={async () => {
+                            await handleSaveSettings();
+                          }}
+                          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition-all"
+                        >
+                          Sauver
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Databases, Identity, Privileged nodes (Passive telemetry nodes) */}
+                {['identity', 'privileged', 'data'].includes(selectedNode.id) && (
+                  <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-start gap-3">
+                    <ShieldCheck className="text-emerald-500 mt-0.5 flex-shrink-0" size={16} />
+                    <p className="text-xs text-emerald-800 font-semibold leading-relaxed">
+                      Ce contrôle de sécurité est géré par la logique applicative persistée au niveau du serveur backend. Il est audité en continu et ne peut pas être désactivé manuellement.
+                    </p>
+                  </div>
+                )}
+
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
+              <button 
+                onClick={() => setSelectedNode(null)}
+                className="w-full py-3 bg-white border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-100/50 font-black uppercase text-xs tracking-widest rounded-xl transition-all"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── OVERVIEW TAB ── */}
       {tab === 'overview' && (

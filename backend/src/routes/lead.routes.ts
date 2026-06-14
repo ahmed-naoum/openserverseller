@@ -1,6 +1,6 @@
+import { prisma } from '../lib/prisma.js';
 import { Router } from 'express';
 import { body, query, validationResult } from 'express-validator';
-import { PrismaClient } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import axios from 'axios';
@@ -99,7 +99,6 @@ const getPackPrice = (lead: any) => {
 };
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Cache for Coliaty cities to prevent rate limits
 let coliatyCitiesCache: any = null;
@@ -160,7 +159,7 @@ router.get(
   '/',
   authenticate,
   asyncHandler(async (req, res) => {
-    const { page = 1, limit = 50, status, agentId, search, viewMode, excludeProcessed, mode } = req.query;
+    const { page = 1, limit = 50, status, agentId, search, viewMode, excludeProcessed, mode, vendorId, productId } = req.query;
 
     const conditions: any[] = [];
 
@@ -191,7 +190,7 @@ router.get(
         throw new AppException(403, 'Permission denied: Vous n\'avez pas le droit de gérer les leads');
       }
       
-      const queryVendorId = req.query.vendorId ? Number(req.query.vendorId) : null;
+      const queryVendorId = vendorId ? Number(vendorId) : null;
       const assignments = await (prisma as any).helperUserAssignment.findMany({
         where: { helperId: req.user!.id },
       });
@@ -201,11 +200,19 @@ router.get(
         if (assignedUserIds.includes(queryVendorId)) {
           conditions.push({ vendorId: queryVendorId });
         } else {
-          conditions.push({ vendorId: { in: [] } });
+          conditions.push({ vendorId: { in: [] } }); // No access to this vendor
         }
       } else {
         conditions.push({ vendorId: { in: assignedUserIds } });
       }
+    } else if (req.user!.roleName === 'SUPER_ADMIN') {
+      if (vendorId) {
+        conditions.push({ vendorId: Number(vendorId) });
+      }
+    }
+    
+    if (productId) {
+      conditions.push({ referralLink: { productId: Number(productId) } });
     }
     
     // Hide leads that already have a Coliaty code (stored in the associated Order) for Agents and Helpers
@@ -237,6 +244,7 @@ router.get(
           { fullName: { contains: search as string, mode: 'insensitive' } },
           { phone: { contains: search as string } },
           { city: { contains: search as string, mode: 'insensitive' } },
+          { order: { coliatyPackageCode: { contains: search as string, mode: 'insensitive' } } },
         ]
       });
     }
@@ -443,7 +451,7 @@ router.get(
 router.get(
   '/livraison',
   authenticate,
-  authorize('CALL_CENTER_AGENT', 'HELPER'),
+  authorize('CALL_CENTER_AGENT', 'HELPER', 'SUPER_ADMIN'),
   asyncHandler(async (req, res) => {
     const { page = 1, limit = 50 } = req.query;
 

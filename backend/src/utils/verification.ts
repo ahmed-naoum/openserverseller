@@ -1,6 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma.js';
 
-const prisma = new PrismaClient();
 
 export async function checkAndActivateUser(userId: number) {
   const user = await prisma.user.findUnique({
@@ -17,10 +16,10 @@ export async function checkAndActivateUser(userId: number) {
 
   const shouldBeActive = isEmailVerified && isKycApproved && hasApprovedBank && isContractSigned;
 
-  if (user.isActive !== shouldBeActive) {
+  if (shouldBeActive && !user.isActive) {
     await prisma.user.update({
       where: { id: userId },
-      data: { isActive: shouldBeActive }
+      data: { isActive: true }
     });
   }
 }

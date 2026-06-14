@@ -1,0 +1,22 @@
+{
+  "title": "Marketplace Affiliation",
+  "subtitle": "Découvrez les produits disponibles et générez vos liens de parrainage.",
+  "search_placeholder": "Rechercher par nom de produit, SKU...",
+  "view_product_page": "Voir la page produit",
+  "influencer_price": "Prix Influenceur",
+  "view_details": "Voir Détails",
+  "pending_approval": "En attente d'approbation...",
+  "request_rejected": "Demande refusée",
+  "link_ready": "Lien prêt !",
+  "generate_link": "Générer le lien",
+  "no_products": "Aucun produit Affilié",
+  "no_products_desc": "Aucun produit n'est actuellement disponible pour l'affiliation.",
+  "load_more": "Charger plus",
+  "error_load_data": "Impossible de charger les données",
+  "error_profile_100": "Vous devez compléter votre profil à 100% pour réclamer un produit.",
+  "success_claimed": "Produit réclamé ! En attente d'approbation.",
+  "error_claimed": "Erreur lors de la réclamation",
+  "success_link_generated": "Lien généré et copié !",
+  "error_link_generated": "Erreur lors de la génération du lien",
+  "success_copied": "Lien copié !"
+}

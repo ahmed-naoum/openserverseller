@@ -1,6 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma.js';
 
-const prisma = new PrismaClient();
 
 // Check interval: every 10 seconds
 const CHECK_INTERVAL_MS = 10 * 1000;

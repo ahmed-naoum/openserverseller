@@ -1,18 +1,21 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import { helperApi, publicApi, uploadApi } from '../../lib/api';
 import BlockRenderer, { EditorBlock, BlockType } from '../../components/helper/sitebuilder/BlockRenderer';
 import WhatsAppWidget, { IconRenderer } from '../../components/public/WhatsAppWidget';
 import { 
   Type, Image as ImageIcon, Heading, LayoutTemplate, Link as LinkIcon, 
   ShoppingCart, ArrowUp, ArrowDown, Trash2, Save, ChevronLeft, Loader2,
-  Clock, Space, Upload, ShieldCheck, Plus, ExternalLink, Code, Copy, Download, MessageSquare
+  Clock, Space, Upload, ShieldCheck, Plus, ExternalLink, Code, Copy, Download, MessageSquare,
+  Layers, GripVertical
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function SiteBuilder() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -129,7 +132,6 @@ export default function SiteBuilder() {
       } else {
         // Default starting blocks if none exist
         setBlocks([
-          { id: crypto.randomUUID(), type: 'hero', content: { title: 'Welcome to our offer!', titleColor: '#111827', subtitle: 'Find out more below.', subtitleColor: '#4b5563', bgColor: '#f9fafb' } },
           { id: crypto.randomUUID(), type: 'express_checkout', content: { title: 'Commander Maintenant', buttonText: 'Confirmer ma commande' } }
         ]);
       }
@@ -266,6 +268,29 @@ export default function SiteBuilder() {
         useWhatsappWebOnDesktop: true
       };
       case 'spacer': return { height: 32 };
+      case 'slider': return {
+        slides: [
+          { title: 'Carte 1', description: 'Description de la première carte.', mediaUrl: '' },
+          { title: 'Carte 2', description: 'Description de la deuxième carte.', mediaUrl: '' }
+        ],
+        cardsPerView: 1,
+        cardGap: 16,
+        autoPlay: true,
+        autoPlaySpeed: 4000,
+        showArrows: true,
+        showDots: true,
+        mediaHeight: 280,
+        titleColor: '#111827',
+        descColor: '#6b7280',
+        cardBg: '#ffffff',
+        cardRadius: 20,
+        cardBorderWidth: 0,
+        cardBorderColor: '#e5e7eb',
+        cardShadow: 'md',
+        textAlign: 'left',
+        dotColor: '#f97316',
+        paddingTop: 24, paddingBottom: 24, marginTop: 0, marginBottom: 0
+      };
       case 'express_checkout': return { 
         title: 'Commander Maintenant', 
         subtitle: 'Remplissez le formulaire ci-dessous pour réserver votre produit. Le paiement se fera à la livraison.',
@@ -314,7 +339,10 @@ export default function SiteBuilder() {
       {/* Top Navbar */}
       <div className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0 z-20">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/helper/links')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors">
+          <button 
+            onClick={() => navigate(user?.roleName === 'SUPER_ADMIN' || user?.role === 'SUPER_ADMIN' ? '/admin/links' : '/helper/links')} 
+            className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+          >
             <ChevronLeft className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2">
@@ -351,12 +379,9 @@ export default function SiteBuilder() {
         <div className="w-72 bg-white border-r border-gray-200 flex flex-col z-10 shrink-0">
           <div className="p-4 border-b border-gray-100">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Composants</h3>
-            <div className="grid grid-cols-2 gap-2">
-              <ToolButton icon={<Heading className="w-4 h-4" />} label="Header" onClick={() => addBlock('header')} />
-              <ToolButton icon={<LayoutTemplate className="w-4 h-4" />} label="Hero" onClick={() => addBlock('hero')} />
-              <ToolButton icon={<Type className="w-4 h-4" />} label="Texte" onClick={() => addBlock('text')} />
-              <ToolButton icon={<ImageIcon className="w-4 h-4" />} label="Image" onClick={() => addBlock('image')} />
-              <ToolButton icon={<Space className="w-4 h-4" />} label="Spacer" onClick={() => addBlock('spacer')} />
+            <div className="space-y-2">
+              <ToolButton fullWidth icon={<ImageIcon className="w-4 h-4" />} label="Image" onClick={() => addBlock('image')} />
+              <ToolButton fullWidth icon={<Layers className="w-4 h-4 text-purple-500" />} label="Slider / Carrousel" onClick={() => addBlock('slider')} />
             </div>
           </div>
           
@@ -364,7 +389,6 @@ export default function SiteBuilder() {
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Conversion</h3>
             <div className="grid grid-cols-2 gap-2">
               <ToolButton icon={<LinkIcon className="w-4 h-4" />} label="Button" onClick={() => addBlock('button')} />
-              <ToolButton icon={<Clock className="w-4 h-4" />} label="Countdown" onClick={() => addBlock('countdown')} />
               <ToolButton icon={<MessageSquare className="w-4 h-4 text-emerald-500" />} label="WhatsApp" onClick={() => addBlock('whatsapp')} />
             </div>
             <div className="mt-2">
@@ -893,6 +917,430 @@ export default function SiteBuilder() {
                 {activeBlock.type === 'spacer' && (
                   <div className="space-y-4">
                     <Field label="Hauteur (px)" type="number" value={activeBlock.content.height} onChange={(v: any) => updateBlockContent('height', v)} />
+                  </div>
+                )}
+
+                {activeBlock.type === 'slider' && (
+                  <div className="space-y-6">
+                    {/* Header */}
+                    <div className="p-4 bg-purple-50 rounded-2xl border border-purple-100">
+                      <div className="flex items-center gap-3 mb-2">
+                        <Layers className="w-5 h-5 text-purple-500" />
+                        <span className="font-black text-purple-900 text-sm">Slider / Carrousel</span>
+                      </div>
+                      <p className="text-xs text-purple-700 leading-relaxed">
+                        Ajoutez, modifiez et réorganisez vos cartes. Chaque carte peut contenir un titre, une description et une image/vidéo/GIF.
+                      </p>
+                    </div>
+
+                    {/* Cards List */}
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-[10px] font-bold text-gray-400 uppercase">Cartes ({(activeBlock.content.slides || []).length})</h4>
+                        <button
+                          onClick={() => {
+                            const newSlides = [...(activeBlock.content.slides || []), { title: '', description: '', mediaUrl: '' }];
+                            updateBlockContent('slides', newSlides);
+                          }}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-purple-100 hover:bg-purple-200 text-purple-700 text-[10px] font-bold rounded-lg transition-all"
+                        >
+                          <Plus className="w-3 h-3" /> Ajouter
+                        </button>
+                      </div>
+
+                      <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                        {(activeBlock.content.slides || []).map((slide: any, index: number) => (
+                          <div key={index} className="bg-white p-4 rounded-xl border border-gray-100 space-y-3 relative group">
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-2">
+                                <GripVertical className="w-3.5 h-3.5 text-gray-300" />
+                                <span className="text-[10px] font-bold text-gray-400 uppercase">Carte {index + 1}</span>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  const newSlides = activeBlock.content.slides.filter((_: any, i: number) => i !== index);
+                                  updateBlockContent('slides', newSlides);
+                                }}
+                                className="p-1 text-gray-300 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+
+                            <Field
+                              label="Titre"
+                              type="text"
+                              value={slide.title}
+                              placeholder="Titre de la carte"
+                              onChange={(v: string) => {
+                                const newSlides = [...activeBlock.content.slides];
+                                newSlides[index] = { ...newSlides[index], title: v };
+                                updateBlockContent('slides', newSlides);
+                              }}
+                            />
+                            <Field
+                              label="Description"
+                              type="textarea"
+                              value={slide.description}
+                              placeholder="Description..."
+                              onChange={(v: string) => {
+                                const newSlides = [...activeBlock.content.slides];
+                                newSlides[index] = { ...newSlides[index], description: v };
+                                updateBlockContent('slides', newSlides);
+                              }}
+                            />
+                            <Field
+                              label="URL Média (image, GIF, vidéo)"
+                              type="text"
+                              value={slide.mediaUrl}
+                              placeholder="https://... ou /uploads/..."
+                              onChange={(v: string) => {
+                                const newSlides = [...activeBlock.content.slides];
+                                newSlides[index] = { ...newSlides[index], mediaUrl: v };
+                                updateBlockContent('slides', newSlides);
+                              }}
+                            />
+
+                            {/* Upload button for this slide */}
+                            <div>
+                              <label className="flex items-center justify-center gap-2 p-3 border-2 border-dashed border-gray-200 rounded-xl hover:border-purple-400 hover:bg-purple-50 cursor-pointer transition-all">
+                                {isUploading ? (
+                                  <Loader2 className="w-4 h-4 animate-spin text-purple-500" />
+                                ) : (
+                                  <Upload className="w-4 h-4 text-gray-400" />
+                                )}
+                                <span className="text-xs font-bold text-gray-500">
+                                  {isUploading ? 'Téléchargement...' : 'Télécharger image/vidéo/GIF'}
+                                </span>
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  accept="image/*,video/*,.gif"
+                                  disabled={isUploading}
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    try {
+                                      setIsUploading(true);
+                                      const formData = new FormData();
+                                      formData.append('file', file);
+                                      const res = await uploadApi.image(formData);
+                                      const newSlides = [...activeBlock.content.slides];
+                                      newSlides[index] = { ...newSlides[index], mediaUrl: res.data.data.url };
+                                      updateBlockContent('slides', newSlides);
+                                      toast.success('Fichier téléchargé !');
+                                    } catch (err) {
+                                      toast.error('Erreur lors du téléchargement');
+                                    } finally {
+                                      setIsUploading(false);
+                                    }
+                                  }}
+                                />
+                              </label>
+                            </div>
+
+                            {/* Thumbnail preview */}
+                            {slide.mediaUrl && (
+                              <div className="rounded-xl overflow-hidden border border-gray-100 h-20 bg-gray-50">
+                                {/\.(mp4|webm|ogg)$/i.test(slide.mediaUrl) ? (
+                                  <video src={slide.mediaUrl.startsWith('http') ? slide.mediaUrl : `${window.location.origin}${slide.mediaUrl}`} muted className="w-full h-full object-cover" />
+                                ) : (
+                                  <img src={slide.mediaUrl.startsWith('http') ? slide.mediaUrl : `${window.location.origin}${slide.mediaUrl}`} alt="" className="w-full h-full object-cover" />
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Slider Settings */}
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-4">
+                      <h4 className="text-[10px] font-bold text-gray-400 uppercase">Paramètres du Slider</h4>
+
+                      {/* Cards Per View */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Cartes par vue</label>
+                        <div className="grid grid-cols-5 gap-1">
+                          {[1, 2, 3, 4, 5].map(n => {
+                            const isSelected = (activeBlock.content.cardsPerView || 1) === n;
+                            return (
+                              <button
+                                key={n}
+                                type="button"
+                                onClick={() => updateBlockContent('cardsPerView', n)}
+                                className={`text-center py-2 rounded-lg border-2 transition-all text-xs font-black ${isSelected ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-100 hover:border-gray-200 bg-white text-gray-500'}`}
+                              >
+                                {n}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="text-[9px] text-gray-400 mt-1 text-center font-medium">
+                          {(activeBlock.content.cardsPerView || 1) === 1 ? '1 carte pleine largeur' : `${activeBlock.content.cardsPerView} cartes côte à côte`}
+                        </div>
+                      </div>
+
+                      <Field label="Espacement entre cartes (px)" type="number" value={activeBlock.content.cardGap ?? 16} onChange={(v: number) => updateBlockContent('cardGap', v)} />
+
+                      {/* Autoplay Mode */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Mode de défilement automatique</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { value: 'slide', label: 'Pas à pas (Slide)' },
+                            { value: 'marquee', label: 'Continu (Marquee)' }
+                          ].map(opt => {
+                            const isSelected = (activeBlock.content.autoplayMode || 'slide') === opt.value;
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => updateBlockContent('autoplayMode', opt.value)}
+                                className={`text-center py-2 px-1 rounded-lg border-2 transition-all text-[11px] font-black ${isSelected ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-100 hover:border-gray-200 bg-white text-gray-500'}`}
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Options conditionally displayed based on Autoplay Mode */}
+                      {(activeBlock.content.autoplayMode || 'slide') === 'slide' ? (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-gray-600">Lecture Automatique</span>
+                            <Field type="switch" value={activeBlock.content.autoPlay !== false} onChange={(v: boolean) => updateBlockContent('autoPlay', v)} />
+                          </div>
+
+                          {activeBlock.content.autoPlay !== false && (
+                            <div>
+                              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Vitesse ({(activeBlock.content.autoPlaySpeed || 4000) / 1000}s)</label>
+                              <input
+                                type="range" min="1000" max="10000" step="500"
+                                value={activeBlock.content.autoPlaySpeed || 4000}
+                                onChange={(e) => updateBlockContent('autoPlaySpeed', Number(e.target.value))}
+                                className="w-full accent-purple-500"
+                              />
+                            </div>
+                          )}
+
+                          {/* Slide By */}
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Défilement par</label>
+                            <div className="grid grid-cols-2 gap-2">
+                              {[
+                                { value: 'card', label: 'Une carte' },
+                                { value: 'page', label: 'Toute la vue' }
+                              ].map(opt => {
+                                const isSelected = (activeBlock.content.slideBy || 'card') === opt.value;
+                                return (
+                                  <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() => updateBlockContent('slideBy', opt.value)}
+                                    className={`text-center py-2 rounded-lg border-2 transition-all text-[11px] font-black ${isSelected ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-100 hover:border-gray-200 bg-white text-gray-500'}`}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Transition type */}
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Type de transition</label>
+                            <div className="grid grid-cols-3 gap-1">
+                              {[
+                                { value: 'slide', label: 'Glissement' },
+                                { value: 'zoom', label: 'Zoom' },
+                                { value: 'fade', label: 'Fondu' }
+                              ].map(opt => {
+                                const isSelected = (activeBlock.content.transitionEffect || 'slide') === opt.value;
+                                return (
+                                  <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() => updateBlockContent('transitionEffect', opt.value)}
+                                    className={`text-center py-2 rounded-lg border-2 transition-all text-[10px] font-black ${isSelected ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-100 hover:border-gray-200 bg-white text-gray-500'}`}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            {activeBlock.content.transitionEffect === 'fade' && (activeBlock.content.cardsPerView || 1) > 1 && (
+                              <div className="text-[8px] text-red-500 mt-1 font-medium leading-normal">
+                                ⚠️ Note: Le fondu nécessite "1 carte par vue".
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          {/* Marquee Options */}
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Vitesse du défilement continu ({activeBlock.content.marqueeSpeed ?? 20}s)</label>
+                            <input
+                              type="range" min="5" max="60" step="1"
+                              value={activeBlock.content.marqueeSpeed ?? 20}
+                              onChange={(e) => updateBlockContent('marqueeSpeed', Number(e.target.value))}
+                              className="w-full accent-purple-500"
+                            />
+                            <div className="text-[8px] text-gray-400 mt-0.5">Plus la valeur est petite, plus ça défile vite.</div>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-gray-600">Pause au survol</span>
+                            <Field type="switch" value={activeBlock.content.pauseOnHover !== false} onChange={(v: boolean) => updateBlockContent('pauseOnHover', v)} />
+                          </div>
+                        </>
+                      )}
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-600">Flèches de navigation</span>
+                        <Field type="switch" value={activeBlock.content.showArrows !== false} onChange={(v: boolean) => updateBlockContent('showArrows', v)} />
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-600">Points indicateurs</span>
+                        <Field type="switch" value={activeBlock.content.showDots !== false} onChange={(v: boolean) => updateBlockContent('showDots', v)} />
+                      </div>
+
+                      <div className="flex items-center justify-between mt-2 mb-1">
+                        <span className="text-xs font-bold text-gray-600 font-medium">Hauteur média 100% (Remplir la carte)</span>
+                        <Field type="switch" value={activeBlock.content.mediaHeight100 === true} onChange={(v: boolean) => updateBlockContent('mediaHeight100', v)} />
+                      </div>
+
+                      {!activeBlock.content.mediaHeight100 && (
+                        <Field label="Hauteur média (px)" type="number" value={activeBlock.content.mediaHeight || 280} onChange={(v: number) => updateBlockContent('mediaHeight', v)} />
+                      )}
+
+                      {/* Ajustement média */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Ajustement du média</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { value: 'cover', label: 'Remplir (Cover)' },
+                            { value: 'contain', label: 'Entier (Contain)' }
+                          ].map(opt => {
+                            const isSelected = (activeBlock.content.mediaFit || 'cover') === opt.value;
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => updateBlockContent('mediaFit', opt.value)}
+                                className={`text-center py-2 rounded-lg border-2 transition-all text-[11px] font-black ${isSelected ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-100 hover:border-gray-200 bg-white text-gray-500'}`}
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card Style */}
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-4">
+                      <h4 className="text-[10px] font-bold text-gray-400 uppercase">Style des Cartes</h4>
+                      <Field label="Fond de carte" type="color" value={activeBlock.content.cardBg || '#ffffff'} onChange={(v: string) => updateBlockContent('cardBg', v)} />
+                      <Field label="Rayon de bordure (px)" type="number" value={activeBlock.content.cardRadius ?? 20} onChange={(v: number) => updateBlockContent('cardRadius', v)} />
+
+                      {/* Shadow selector */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Ombre</label>
+                        <div className="grid grid-cols-5 gap-1">
+                          {[
+                            { value: 'none', label: '—' },
+                            { value: 'sm', label: 'S' },
+                            { value: 'md', label: 'M' },
+                            { value: 'lg', label: 'L' },
+                            { value: 'xl', label: 'XL' },
+                          ].map(opt => {
+                            const isSelected = (activeBlock.content.cardShadow ?? 'md') === opt.value;
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => updateBlockContent('cardShadow', opt.value)}
+                                className={`text-center py-1.5 rounded-lg border-2 transition-all text-[10px] font-black ${isSelected ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-100 hover:border-gray-200 bg-white text-gray-500'}`}
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Border */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field label="Bordure (px)" type="number" value={activeBlock.content.cardBorderWidth ?? 0} onChange={(v: number) => updateBlockContent('cardBorderWidth', v)} />
+                        <Field label="Couleur bordure" type="color" value={activeBlock.content.cardBorderColor || '#e5e7eb'} onChange={(v: string) => updateBlockContent('cardBorderColor', v)} />
+                      </div>
+
+                      {/* Text Align */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Alignement texte</label>
+                        <div className="grid grid-cols-3 gap-1">
+                          {[
+                            { value: 'left', label: '◀' },
+                            { value: 'center', label: '◆' },
+                            { value: 'right', label: '▶' },
+                          ].map(opt => {
+                            const isSelected = (activeBlock.content.textAlign || 'left') === opt.value;
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => updateBlockContent('textAlign', opt.value)}
+                                className={`text-center py-1.5 rounded-lg border-2 transition-all text-xs ${isSelected ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-100 hover:border-gray-200 bg-white text-gray-400'}`}
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Effet de survol */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Effet de survol (Hover)</label>
+                        <select
+                          value={activeBlock.content.hoverEffect || 'none'}
+                          onChange={(e) => updateBlockContent('hoverEffect', e.target.value)}
+                          className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium"
+                        >
+                          <option value="none">Aucun (Ombre standard)</option>
+                          <option value="lift">Surélever (Lift Up)</option>
+                          <option value="scale">Agrandir (Zoom scale)</option>
+                          <option value="glow">Brillance colorée (Neon Glow)</option>
+                          <option value="grayscale">Noir & Blanc au survol</option>
+                        </select>
+                      </div>
+
+                      {/* Animation d'apparition */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Animation d'apparition</label>
+                        <select
+                          value={activeBlock.content.entranceAnimation || 'none'}
+                          onChange={(e) => updateBlockContent('entranceAnimation', e.target.value)}
+                          className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium"
+                        >
+                          <option value="none">Aucune (Immédiat)</option>
+                          <option value="fade-up">Glissement vers le haut (Staggered)</option>
+                          <option value="fade-in">Fondu (Fade In)</option>
+                          <option value="zoom-in">Zoom d'apparition (Zoom In)</option>
+                        </select>
+                      </div>
+
+                      <Field label="Couleur du titre" type="color" value={activeBlock.content.titleColor || '#111827'} onChange={(v: string) => updateBlockContent('titleColor', v)} />
+                      <Field label="Couleur de description" type="color" value={activeBlock.content.descColor || '#6b7280'} onChange={(v: string) => updateBlockContent('descColor', v)} />
+                      <Field label="Couleur des points" type="color" value={activeBlock.content.dotColor || '#f97316'} onChange={(v: string) => updateBlockContent('dotColor', v)} />
+                    </div>
+
+                    <SpacingControls content={activeBlock.content} onChange={updateBlockContent} noLeftRight />
                   </div>
                 )}
 

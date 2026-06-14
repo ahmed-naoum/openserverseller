@@ -69,6 +69,7 @@ model User {
   canManageOrders       Boolean @default(false)
   canManageInfluencerLinks Boolean @default(false)
   canManageTickets       Boolean @default(false)
+  canScanReturns         Boolean @default(false)
 
   // Tracking
   registrationIp String?
@@ -81,11 +82,19 @@ model User {
   // Contract Status
   contractAccepted Boolean   @default(false)
   contractSignedAt DateTime?
+  cguAccepted      Boolean   @default(false)
+  cguAcceptedAt    DateTime?
+  damanesignTransactionId String?
+  damanesignMemberId      String?
+  damanesignFileId         String?
+  damanesignSignedFileUrl  String?
 
   // YouCan Integration
   youcanAccessToken String?
   youcanStoreDomain String?
   youcanSyncActive  Boolean   @default(true)
+
+  language       String            @default("ar") @db.VarChar(5)
 
   profile        UserProfile?
   kycDocuments   KycDocument[]
@@ -839,7 +848,6 @@ model ReferralLink {
   landingPage   ReferralLinkLandingPage?
   clicksHistory ReferralLinkClick[]
 
-  @@unique([influencerId, productId])
   @@map("referral_links")
 }
 
@@ -968,4 +976,18 @@ model Invoice {
   leads          Lead[]
 
   @@map("invoices")
+}
+
+model ContactMessage {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String
+  subject   String
+  message   String
+  ip        String?
+  userAgent String?
+  status    String   @default("UNREAD")
+  createdAt DateTime @default(now())
+
+  @@map("contact_messages")
 }

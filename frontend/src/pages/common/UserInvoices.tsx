@@ -3,12 +3,20 @@ import { useQuery } from '@tanstack/react-query';
 import { invoiceApi } from '../../lib/api';
 import { FileText, ChevronRight, ArrowLeft, Download, Eye, Calendar, Package, User, Phone, MapPin, Tag, TrendingUp, TrendingDown, Wallet, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { fr, ar, enUS } from 'date-fns/locale';
 import { generateInvoicePDF } from '../../utils/pdfGenerator';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export default function UserInvoices() {
+  const { t, language } = useLanguage();
   const [page, setPage] = useState(1);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+
+  const getLocale = () => {
+    if (language === 'ar') return ar;
+    if (language === 'en') return enUS;
+    return fr;
+  };
 
   const { data: statsData } = useQuery({
     queryKey: ['user-invoices-stats'],
@@ -62,15 +70,15 @@ export default function UserInvoices() {
               <ArrowLeft className="w-5 h-5 text-gray-600" />
             </button>
             <div>
-              <h1 className="text-2xl font-black text-gray-900 tracking-tight">Facture {details.invoiceNumber}</h1>
-              <p className="text-sm text-gray-500 font-medium">Générée le {format(new Date(details.createdAt), 'dd MMM yyyy HH:mm', { locale: fr })}</p>
+              <h1 className="text-2xl font-black text-gray-900 tracking-tight">{t('invoice_title', 'invoices').replace('{number}', details.invoiceNumber)}</h1>
+              <p className="text-sm text-gray-500 font-medium">{t('generated_on', 'invoices').replace('{date}', format(new Date(details.createdAt), 'dd MMM yyyy HH:mm', { locale: getLocale() }))}</p>
             </div>
           </div>
           <button 
             onClick={() => generateInvoicePDF(details)}
             className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-gray-800 transition-all shadow-md"
           >
-            <Download size={16} /> Télécharger PDF
+            <Download size={16} /> {t('download_pdf', 'invoices')}
           </button>
         </div>
 
@@ -78,17 +86,17 @@ export default function UserInvoices() {
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
               <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <Package className="w-5 h-5 text-violet-500" /> Colis Facturés ({details.leads?.length || 0})
+                <Package className="w-5 h-5 text-violet-500" /> {t('billed_parcels', 'invoices').replace('{count}', (details.leads?.length || 0).toString())}
               </h2>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-gray-100">
-                      <th className="py-3 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Colis</th>
-                      <th className="py-3 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Client</th>
-                      <th className="py-3 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Destination</th>
-                      <th className="py-3 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Produit</th>
-                      <th className="py-3 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">Montant</th>
+                      <th className="py-3 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">{t('th_parcel', 'invoices')}</th>
+                      <th className="py-3 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">{t('th_customer', 'invoices')}</th>
+                      <th className="py-3 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">{t('th_destination', 'invoices')}</th>
+                      <th className="py-3 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">{t('th_product', 'invoices')}</th>
+                      <th className="py-3 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">{t('th_amount', 'invoices')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -106,7 +114,7 @@ export default function UserInvoices() {
                               <p className="text-sm font-black text-gray-900 font-mono tracking-tight">{lead.order?.coliatyPackageCode || lead.order?.orderNumber || 'N/A'}</p>
                               <div className="flex items-center gap-1.5 mt-1">
                                 <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                                <span className="text-xs font-medium text-gray-500">{format(new Date(lead.createdAt), 'dd MMM yyyy', { locale: fr })}</span>
+                                <span className="text-xs font-medium text-gray-500">{format(new Date(lead.createdAt), 'dd MMM yyyy', { locale: getLocale() })}</span>
                               </div>
                             </div>
                           </div>
@@ -178,26 +186,26 @@ export default function UserInvoices() {
               <div className="absolute top-0 right-0 w-32 h-32 bg-green-50 rounded-bl-full -z-10 opacity-50"></div>
               
               <div className="pt-2">
-                <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Détails du paiement</h2>
+                <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{t('payment_details', 'invoices')}</h2>
                 
                 <div className="space-y-3 mb-6">
                   {!details.invoiceNumber?.startsWith('RET-') && (
                     <>
                       <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-500 font-medium">Sous-total brut</span>
+                        <span className="text-gray-500 font-medium">{t('subtotal_gross', 'invoices')}</span>
                         <span className="font-bold text-gray-900">
                           {subTotalBrut.toLocaleString()} MAD
                         </span>
                       </div>
                       <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-500 font-medium">Frais de livraison ({details.leads?.length || 0})</span>
+                        <span className="text-gray-500 font-medium">{t('shipping_fees', 'invoices').replace('{count}', (details.leads?.length || 0).toString())}</span>
                         <span className="font-bold text-red-500">
                           -{totalShipping.toLocaleString()} MAD
                         </span>
                       </div>
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-500 font-medium">
-                          Frais de plateforme {subTotalBrut - totalShipping > 0 ? `(${((totalPlatformFee / (subTotalBrut - totalShipping)) * 100).toFixed(1)}%)` : ''}
+                          {t('platform_fees', 'invoices')} {subTotalBrut - totalShipping > 0 ? `(${((totalPlatformFee / (subTotalBrut - totalShipping)) * 100).toFixed(1)}%)` : ''}
                         </span>
                         <span className="font-bold text-red-500">
                           -{totalPlatformFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MAD
@@ -208,10 +216,10 @@ export default function UserInvoices() {
                 </div>
 
                 <div className="pt-4 border-t border-gray-100">
-                  <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Total Net Facturé</h2>
+                  <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{t('total_net_billed', 'invoices')}</h2>
                   <p className="text-3xl font-black text-gray-900">{details.totalAmountMad.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-lg">MAD</span></p>
                   <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 rounded-lg text-xs font-bold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span> Payé
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span> {t('status_paid', 'invoices')}
                   </div>
                 </div>
               </div>
@@ -226,20 +234,20 @@ export default function UserInvoices() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">Mes Factures</h1>
-          <p className="text-sm text-gray-500 font-medium">Historique de vos factures et paiements</p>
+          <h1 className="text-2xl font-black text-gray-900 tracking-tight">{t('title', 'invoices')}</h1>
+          <p className="text-sm text-gray-500 font-medium">{t('subtitle', 'invoices')}</p>
         </div>
       </div>
 
       {/* Stats Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
         {[  
-          { label: 'Gains Bruts', value: stats?.totalEarnings || 0, icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50', isPrice: true },
-          { label: 'Retours', value: (stats?.totalDeductions || 0) - (stats?.manualFees || 0), icon: RotateCcw, color: 'text-amber-600', bg: 'bg-amber-50', isPrice: true },
-          { label: 'Frais / Débits', value: stats?.manualFees || 0, icon: TrendingDown, color: 'text-rose-600', bg: 'bg-rose-50', isPrice: true },
-          { label: 'Solde Net', value: stats?.netBalance || 0, icon: Wallet, color: 'text-violet-600', bg: 'bg-violet-50', isPrice: true },
-          { label: 'Total Colis', value: stats?.totalColis || 0, icon: Package, color: 'text-blue-600', bg: 'bg-blue-50' },
-          { label: 'Factures (Qté)', value: stats?.totalFactures || 0, icon: FileText, color: 'text-slate-600', bg: 'bg-slate-50' },
+          { label: t('stat_gross_earnings', 'invoices'), value: stats?.totalEarnings || 0, icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50', isPrice: true },
+          { label: t('stat_returns', 'invoices'), value: (stats?.totalDeductions || 0) - (stats?.manualFees || 0), icon: RotateCcw, color: 'text-amber-600', bg: 'bg-amber-50', isPrice: true },
+          { label: t('stat_fees_debits', 'invoices'), value: stats?.manualFees || 0, icon: TrendingDown, color: 'text-rose-600', bg: 'bg-rose-50', isPrice: true },
+          { label: t('stat_net_balance', 'invoices'), value: stats?.netBalance || 0, icon: Wallet, color: 'text-violet-600', bg: 'bg-violet-50', isPrice: true },
+          { label: t('stat_total_parcels', 'invoices'), value: stats?.totalColis || 0, icon: Package, color: 'text-blue-600', bg: 'bg-blue-50' },
+          { label: t('stat_invoices_qty', 'invoices'), value: stats?.totalFactures || 0, icon: FileText, color: 'text-slate-600', bg: 'bg-slate-50' },
         ].map((stat, i) => (
           <div key={i} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-4">
             <div className={`w-12 h-12 ${stat.bg} rounded-xl flex items-center justify-center`}>
@@ -260,11 +268,11 @@ export default function UserInvoices() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
-                <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Facture</th>
-                <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Date</th>
-                <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Colis</th>
-                <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Montant</th>
-                <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">Action</th>
+                <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">{t('th_invoice', 'invoices')}</th>
+                <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">{t('th_date', 'invoices')}</th>
+                <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">{t('th_colis', 'invoices')}</th>
+                <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">{t('th_amount', 'invoices')}</th>
+                <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">{t('th_action', 'invoices')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -280,7 +288,7 @@ export default function UserInvoices() {
                     <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
                       <FileText className="w-8 h-8 text-gray-300" />
                     </div>
-                    <p className="text-gray-500 font-medium">Aucune facture disponible</p>
+                    <p className="text-gray-500 font-medium">{t('no_invoices', 'invoices')}</p>
                   </td>
                 </tr>
               ) : (
@@ -294,7 +302,7 @@ export default function UserInvoices() {
                         <div>
                           <p className="text-sm font-bold text-gray-900">{invoice.invoiceNumber}</p>
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-50 text-green-600 border border-green-100 mt-1">
-                            Payé
+                            {t('status_paid', 'invoices')}
                           </span>
                         </div>
                       </div>
@@ -302,7 +310,7 @@ export default function UserInvoices() {
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-2 text-gray-600">
                         <Calendar size={14} />
-                        <span className="text-sm font-medium">{format(new Date(invoice.createdAt), 'dd MMM yyyy', { locale: fr })}</span>
+                        <span className="text-sm font-medium">{format(new Date(invoice.createdAt), 'dd MMM yyyy', { locale: getLocale() })}</span>
                       </div>
                     </td>
                     <td className="py-4 px-6">
@@ -318,7 +326,7 @@ export default function UserInvoices() {
                         onClick={() => setSelectedInvoice(invoice)}
                         className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-xs font-bold hover:bg-gray-50 hover:border-gray-300 transition-all"
                       >
-                        <Eye size={14} /> Voir
+                        <Eye size={14} /> {t('btn_view', 'invoices')}
                       </button>
                     </td>
                   </tr>

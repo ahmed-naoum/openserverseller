@@ -22,6 +22,10 @@ export default function RoleGuard({ children, allowedRoles, fallbackPath }: Role
     return <Navigate to="/login" replace />;
   }
 
+  if (!user.isActive && user.role !== 'UNCONFIRMED') {
+    return <Navigate to="/pending-verification" replace />;
+  }
+
   if (!allowedRoles.includes(user.role)) {
     const defaultPath = getDefaultPath(user.role);
     return <Navigate to={fallbackPath || defaultPath} replace />;

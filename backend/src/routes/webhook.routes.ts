@@ -1,12 +1,11 @@
+import { prisma } from '../lib/prisma.js';
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import webhookEmitter from '../lib/webhookEmitter.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Exact status mapping from Coliaty API (shared by both event types)
 const COLIATY_TO_INTERNAL: Record<string, string> = {
@@ -89,7 +88,7 @@ router.post(
           // PARCEL_SITUATION_CHANGED — e.g. invoice paid
           // Fields: SITUATION, INVOICE_REF, STATUS, PRICE, FEES, NET, COMMENT, DATE
           // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          const situation = payload.SITUATION;
+          const situation = payload.SITUATION || '';
           const invoiceRef = payload.INVOICE_REF || '';
           const price = typeof payload.PRICE === 'number' ? payload.PRICE : parseFloat(payload.PRICE) || 0;
           const fees = typeof payload.FEES === 'number' ? payload.FEES : parseFloat(payload.FEES) || 0;
@@ -98,8 +97,8 @@ router.post(
           const normalizedStatus = coliatyStatus ? String(coliatyStatus).toUpperCase().trim() : '';
           internalStatus = normalizedStatus ? (COLIATY_TO_INTERNAL[normalizedStatus] || normalizedStatus) : '';
 
-          // User Request: PAID -> Payé, else -> no Payé
-          const internalPaymentSituation = situation === 'PAID' ? 'Payé' : 'no Payé';
+          // User Request: PAID -> Payé (PAID), else -> Non payé (NOT_PAID)
+          const internalPaymentSituation = situation === 'PAID' ? 'PAID' : 'NOT_PAID';
 
           await prisma.$transaction(async (tx) => {
             // 1. Update order status if provided and different
@@ -125,7 +124,7 @@ router.post(
               });
             }
 
-            // 2. Update linked Lead — mark payment situation
+            // 2. Update linked Lead — mark payment situation + save COMMENT
             if (orderMatched.leadId) {
               const leadUpdateData: any = {
                 paymentSituation: internalPaymentSituation,
@@ -133,11 +132,19 @@ router.post(
               if (internalStatus) {
                 leadUpdateData.status = internalStatus;
               }
+              // Save webhook COMMENT to lead notes
+              if (comment) {
+                leadUpdateData.notes = comment;
+              }
 
               await tx.lead.update({
                 where: { id: orderMatched.leadId },
                 data: leadUpdateData
               });
+
+              const historyNotes = comment
+                ? `Situation ${situation} — ${comment} (Invoice: ${invoiceRef}, Prix: ${price} MAD, Frais: ${fees} MAD, Net: ${net} MAD)`
+                : `Situation ${situation} (Mapped to ${internalPaymentSituation}) — Invoice: ${invoiceRef}, Prix: ${price} MAD, Frais: ${fees} MAD, Net: ${net} MAD`;
 
               await tx.leadStatusHistory.create({
                 data: {
@@ -145,7 +152,7 @@ router.post(
                   oldStatus: orderMatched.lead?.status || orderMatched.status,
                   newStatus: internalStatus || orderMatched.status,
                   changedBy: orderMatched.vendorId,
-                  notes: `Situation ${situation} (Mapped to ${internalPaymentSituation}) — Invoice: ${invoiceRef}, Prix: ${price} MAD, Frais: ${fees} MAD, Net: ${net} MAD`
+                  notes: historyNotes
                 }
               });
             }
@@ -178,6 +185,31 @@ router.post(
                 });
               }
             });
+
+            (req as any).dbChanges = {
+              order: {
+                id: orderMatched.id,
+                orderNumber: orderMatched.orderNumber,
+                packageCode: packageCode,
+                status: {
+                  from: orderMatched.status,
+                  to: internalStatus || orderMatched.status
+                }
+              },
+              lead: orderMatched.leadId ? {
+                id: orderMatched.leadId,
+                fullName: orderMatched.lead?.fullName,
+                status: {
+                  from: orderMatched.lead?.status,
+                  to: internalStatus || orderMatched.lead?.status
+                },
+                paymentSituation: {
+                  from: orderMatched.lead?.paymentSituation,
+                  to: internalPaymentSituation || orderMatched.lead?.paymentSituation
+                }
+              } : null
+            };
+
             processed = true;
 
             // 🔔 Broadcast real-time update
@@ -204,51 +236,94 @@ router.post(
           } else {
             let normalizedColiatyStatus = String(coliatyStatus).toUpperCase().trim();
             internalStatus = COLIATY_TO_INTERNAL[normalizedColiatyStatus] || '';
+            const statusComment = payload.COMMENT || '';
 
-            if (internalStatus && internalStatus !== orderMatched.status) {
+            // Calculate target payment situation
+            let targetPaymentSituation: string | undefined = undefined;
+            if (normalizedColiatyStatus === 'DELIVERED') {
+              targetPaymentSituation = 'NOT_PAID';
+            } else if (normalizedColiatyStatus === 'PAID') {
+              if (statusComment.toLowerCase().includes('facture')) {
+                targetPaymentSituation = 'PAID';
+              } else {
+                targetPaymentSituation = 'NOT_PAID';
+              }
+            }
+
+            const statusChanged = internalStatus && internalStatus !== orderMatched.status;
+            const currentLeadSituation = orderMatched.lead?.paymentSituation;
+            const situationChanged = targetPaymentSituation && targetPaymentSituation !== currentLeadSituation;
+
+            if (statusChanged || situationChanged) {
               await prisma.$transaction(async (tx) => {
-                // 1. Update order status
-                await tx.order.update({
-                  where: { id: orderMatched.id },
-                  data: { status: internalStatus }
-                });
+                // 1. Update order status if changed
+                if (statusChanged) {
+                  await tx.order.update({
+                    where: { id: orderMatched.id },
+                    data: { status: internalStatus }
+                  });
 
-                // 2. Create Order History
-                await tx.orderStatusHistory.create({
-                  data: {
-                    orderId: orderMatched.id,
-                    oldStatus: orderMatched.status,
-                    newStatus: internalStatus,
-                    changedBy: orderMatched.vendorId, 
-                    notes: `Automated status update Webhook (${normalizedColiatyStatus})`
-                  }
-                });
-
-                // 3. Keep linked Lead status in sync and create Lead History
-                if (orderMatched.leadId) {
-                  await tx.lead.update({
-                    where: { id: orderMatched.leadId },
-                    data: { 
-                      status: internalStatus,
-                      // Auto-mark as PAID for Payment Monitoring when delivered
-                      ...(internalStatus === 'DELIVERED' ? { paymentSituation: 'Payé' } : {})
+                  // Create Order History
+                  await tx.orderStatusHistory.create({
+                    data: {
+                      orderId: orderMatched.id,
+                      oldStatus: orderMatched.status,
+                      newStatus: internalStatus,
+                      changedBy: orderMatched.vendorId, 
+                      notes: statusComment
+                        ? `Webhook (${normalizedColiatyStatus}) — ${statusComment}`
+                        : `Automated status update Webhook (${normalizedColiatyStatus})`
                     }
                   });
+                }
+
+                // 2. Update linked Lead status/situation and create Lead History
+                if (orderMatched.leadId) {
+                  const leadUpdateData: any = {};
+                  if (statusChanged) {
+                    leadUpdateData.status = internalStatus;
+                  }
+                  if (situationChanged) {
+                    leadUpdateData.paymentSituation = targetPaymentSituation;
+                  }
+                  if (statusComment) {
+                    leadUpdateData.notes = statusComment;
+                  }
+
+                  await tx.lead.update({
+                    where: { id: orderMatched.leadId },
+                    data: leadUpdateData
+                  });
+
+                  // Create history notes representing what changed
+                  let historyNotes = '';
+                  if (statusChanged && situationChanged) {
+                    historyNotes = `Via Webhook: Statut ${normalizedColiatyStatus} & Situation ${targetPaymentSituation === 'PAID' ? 'Payé' : 'Non payé'}`;
+                  } else if (statusChanged) {
+                    historyNotes = statusComment
+                      ? `Via Livraison (${normalizedColiatyStatus}) — ${statusComment}`
+                      : `Mise à jour automatique via Livraison (${normalizedColiatyStatus})`;
+                  } else if (situationChanged) {
+                    historyNotes = `Situation mise à jour via Webhook (${normalizedColiatyStatus}) : ${targetPaymentSituation === 'PAID' ? 'Payé' : 'Non payé'}`;
+                  }
+                  if (statusComment && !historyNotes.includes(statusComment)) {
+                    historyNotes += ` — ${statusComment}`;
+                  }
 
                   await tx.leadStatusHistory.create({
                     data: {
                       leadId: orderMatched.leadId,
                       oldStatus: orderMatched.lead?.status || orderMatched.status,
-                      newStatus: internalStatus,
+                      newStatus: internalStatus || orderMatched.lead?.status || orderMatched.status,
                       changedBy: orderMatched.vendorId,
-                      notes: `Mise à jour automatique via Livraison (${normalizedColiatyStatus})`
+                      notes: historyNotes
                     }
                   });
                 }
 
-                // 4. Restore Stock if CANCELLED or RETURNED
+                // 3. Restore Stock if CANCELLED or RETURNED
                 const cancellationStatuses = ['CANCELED', 'CANCELED_BY_SELLER', 'CANCELED_BY_SYSTEM', 'REFUSE', 'RETURNED', 'CANCELLED'];
-                if (cancellationStatuses.includes(internalStatus)) {
+                if (statusChanged && cancellationStatuses.includes(internalStatus) && !cancellationStatuses.includes(orderMatched.status)) {
                   const orderWithItems = await tx.order.findUnique({
                     where: { id: orderMatched.id },
                     include: { items: true }
@@ -264,17 +339,51 @@ router.post(
                   }
                 }
 
-                // 5. Update Webhook Log
+                // 4. Update Webhook Log
                 if ((prisma as any).webhookLog && webhookLogId) {
+                  let logStatus = 'PROCESSED';
+                  if (statusChanged && situationChanged) {
+                    logStatus = `MAPPED_TO_${internalStatus}_AND_${targetPaymentSituation}`;
+                  } else if (statusChanged) {
+                    logStatus = `MAPPED_TO_${internalStatus}`;
+                  } else if (situationChanged) {
+                    logStatus = `SITUATION_${targetPaymentSituation}`;
+                  }
+
                   await (prisma as any).webhookLog.update({
                     where: { id: webhookLogId },
                     data: {
                       processed: true,
-                      status: `MAPPED_TO_${internalStatus}`
+                      status: logStatus
                     }
                   });
                 }
               });
+
+              (req as any).dbChanges = {
+                order: {
+                  id: orderMatched.id,
+                  orderNumber: orderMatched.orderNumber,
+                  packageCode: packageCode,
+                  status: {
+                    from: orderMatched.status,
+                    to: internalStatus || orderMatched.status
+                  }
+                },
+                lead: orderMatched.leadId ? {
+                  id: orderMatched.leadId,
+                  fullName: orderMatched.lead?.fullName,
+                  status: {
+                    from: orderMatched.lead?.status,
+                    to: internalStatus || orderMatched.lead?.status
+                  },
+                  paymentSituation: {
+                    from: orderMatched.lead?.paymentSituation,
+                    to: targetPaymentSituation || orderMatched.lead?.paymentSituation
+                  }
+                } : null
+              };
+
               processed = true;
 
               // 🔔 Broadcast real-time update to all connected SSE clients
@@ -283,13 +392,40 @@ router.post(
                 packageCode,
                 event: 'PARCEL_STATUS_CHANGED',
                 oldStatus: orderMatched.status,
-                newStatus: internalStatus,
+                newStatus: internalStatus || orderMatched.status,
                 vendorId: orderMatched.vendorId,
               });
             } else {
-              errorMessage = internalStatus
-                ? `Status '${coliatyStatus}' already set on the Order.`
-                : `Status '${coliatyStatus}' is unmapped.`;
+              if (internalStatus) {
+                (req as any).dbChanges = {
+                  message: "Aucun changement. La commande et le lead sont déjà dans l'état cible.",
+                  order: {
+                    id: orderMatched.id,
+                    orderNumber: orderMatched.orderNumber,
+                    status: orderMatched.status
+                  },
+                  lead: orderMatched.leadId ? {
+                    id: orderMatched.leadId,
+                    fullName: orderMatched.lead?.fullName,
+                    status: orderMatched.lead?.status,
+                    paymentSituation: orderMatched.lead?.paymentSituation
+                  } : null
+                };
+
+                // Status and situation are already set. Treat as success.
+                processed = true;
+                if ((prisma as any).webhookLog && webhookLogId) {
+                  await (prisma as any).webhookLog.update({
+                    where: { id: webhookLogId },
+                    data: {
+                      processed: true,
+                      status: `ALREADY_${internalStatus}`
+                    }
+                  });
+                }
+              } else {
+                errorMessage = `Status '${coliatyStatus}' is unmapped.`;
+              }
             }
           }
         }

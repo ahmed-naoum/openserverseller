@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { 
   Search, 
   Package, 
@@ -13,6 +14,7 @@ import {
   Clock,
   ArrowRight,
   AlertCircle,
+  ShieldAlert,
   Truck,
   Plus,
   Trash2,
@@ -140,14 +142,20 @@ export default function HelperTickets() {
 
   if (user?.role === 'HELPER' && !user?.canManageTickets) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-        <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mb-4">
-          <AlertCircle className="w-10 h-10 text-red-400" />
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center px-4">
+        <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center mb-6 animate-bounce">
+          <ShieldAlert size={40} />
         </div>
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Accès Non Autorisé</h2>
-        <p className="text-gray-500 text-sm max-w-md">
-          Vous n'avez pas la permission d'accéder à cette page. Contactez votre administrateur pour obtenir l'accès aux tickets.
+        <h2 className="text-2xl font-black text-slate-800 mb-2">Accès Non Autorisé</h2>
+        <p className="text-slate-500 max-w-md mb-8">
+          Vous n'avez pas la permission de gérer les tickets. Veuillez contacter un administrateur pour obtenir l'accès.
         </p>
+        <Link 
+          to="/helper" 
+          className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
+        >
+          Retour au Tableau de Bord
+        </Link>
       </div>
     );
   }

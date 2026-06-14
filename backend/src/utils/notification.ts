@@ -1,6 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma.js';
 
-const prisma = new PrismaClient();
 
 /**
  * Creates a notification in the database and broadcasts it to the target user via Socket.io.

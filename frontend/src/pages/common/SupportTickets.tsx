@@ -18,14 +18,17 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { fr, ar, enUS } from 'date-fns/locale';
 import { ProCard } from '../../components/common/ProCard';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useSocket } from '../../contexts/SocketContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 const CATEGORIES = ['General', 'Payment', 'Delivery', 'Product Issue', 'Bug', 'Account'];
 
 export default function SupportTickets() {
+  const { t, language } = useLanguage();
   const [tickets, setTickets] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -35,6 +38,18 @@ export default function SupportTickets() {
   const [isClaiming, setIsClaiming] = useState<number | null>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { socket } = useSocket();
+  const isAgent = ['SUPER_ADMIN', 'SYSTEM_SUPPORT'].includes(user?.role || '');
+
+  const getLocale = () => {
+    if (language === 'ar') return ar;
+    if (language === 'en') return enUS;
+    return fr;
+  };
+
+  const getCategoryLabel = (cat: string) => {
+    return t(`cat_${cat.toLowerCase().replace(' ', '_')}`, 'support', cat);
+  };
 
   const [newTicket, setNewTicket] = useState({
     subject: '',
@@ -46,16 +61,61 @@ export default function SupportTickets() {
     fetchTickets();
   }, [statusFilter]);
 
+  // Join the support-queue room to receive real-time ticket events
+  useEffect(() => {
+    if (!socket || !isAgent) return;
+
+    socket.emit('join-room', 'support-queue');
+
+    const handleNewTicket = (data: { conversation: any }) => {
+      fetchTickets();
+      toast.custom((tToast) => (
+        <div className={`${tToast.visible ? 'animate-enter' : 'animate-leave'} max-w-sm w-full bg-slate-900 text-white shadow-xl rounded-2xl pointer-events-auto flex ring-1 ring-black/5`}>
+          <div className="flex-1 w-0 p-4">
+            <div className="flex items-start">
+              <div className="ml-3 flex-1">
+                <p className="text-sm font-bold">{t('toast_new_ticket', 'support')}</p>
+                <p className="mt-1 text-xs text-slate-300">
+                  {data.conversation.metadata?.subject || data.conversation.metadata?.productName || t('toast_new_ticket_default', 'support')}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ));
+
+      try {
+        const audio = new Audio('/notification.mp3');
+        audio.play().catch(() => {});
+      } catch (e) {}
+    };
+
+    const handleClaimed = (data: { conversationId: number; participant: any }) => {
+      fetchTickets();
+      if (data.participant.userId !== user?.id) {
+        toast.success(t('toast_claimed_by', 'support').replace('{name}', data.participant.fullName || 'un agent'));
+      }
+    };
+
+    socket.on('new-support-ticket', handleNewTicket);
+    socket.on('conversation-claimed', handleClaimed);
+
+    return () => {
+      socket.emit('leave-room', 'support-queue');
+      socket.off('new-support-ticket', handleNewTicket);
+      socket.off('conversation-claimed', handleClaimed);
+    };
+  }, [socket, isAgent, user]);
+
   const fetchTickets = async () => {
     try {
       setIsLoading(true);
-      const isAgent = ['SUPER_ADMIN', 'SYSTEM_SUPPORT'].includes(user?.role || '');
       const res = isAgent 
         ? await adminApi.getSupportRequests({ status: getMappedStatus(statusFilter) })
         : await supportApi.list({ status: getMappedStatus(statusFilter) });
       setTickets(res.data.data);
     } catch (error) {
-      toast.error('Erreur lors du chargement des tickets');
+      toast.error(t('toast_error_loading', 'support'));
     } finally {
       setIsLoading(false);
     }
@@ -64,7 +124,7 @@ export default function SupportTickets() {
   const handleCreateTicket = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTicket.subject || !newTicket.description) {
-      toast.error('Veuillez remplir tous les champs');
+      toast.error(t('toast_error_fields', 'support'));
       return;
     }
 
@@ -75,12 +135,12 @@ export default function SupportTickets() {
         type: newTicket.category,
         description: newTicket.description
       });
-      toast.success('Ticket créé avec succès');
+      toast.success(t('toast_success_created', 'support'));
       setIsModalOpen(false);
       setNewTicket({ subject: '', category: 'General', description: '' });
       fetchTickets();
     } catch (error) {
-      toast.error('Erreur lors de la création du ticket');
+      toast.error(t('toast_error_creating', 'support'));
     } finally {
       setIsSubmitting(false);
     }
@@ -97,10 +157,10 @@ export default function SupportTickets() {
 
   const getDisplayStatus = (backendStatus: string) => {
     switch (backendStatus) {
-      case 'OPEN': return 'PENDING';
-      case 'IN_PROGRESS': return 'CLAIMED';
-      case 'RESOLVED': return 'CLOSED';
-      case 'CLOSED': return 'CLOSED';
+      case 'OPEN': return t('filter_pending', 'support');
+      case 'IN_PROGRESS': return t('filter_claimed', 'support');
+      case 'RESOLVED': return t('filter_closed', 'support');
+      case 'CLOSED': return t('filter_closed', 'support');
       default: return backendStatus;
     }
   };
@@ -127,18 +187,18 @@ export default function SupportTickets() {
             <div className="space-y-3">
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white shadow-sm border border-slate-200/50 mb-2">
                 <div className="w-2 h-2 rounded-full bg-primary-500 animate-pulse" />
-                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Support Center</span>
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t('support_center', 'support')}</span>
               </div>
-              <h1 className="text-5xl font-black text-slate-900 tracking-tight leading-none">Centre d'Assistance</h1>
-              <p className="text-base font-medium text-slate-500/80">Gérez vos demandes d'assistance et suivez leur progression en temps réel.</p>
+              <h1 className="text-5xl font-black text-slate-900 tracking-tight leading-none">{t('title', 'support')}</h1>
+              <p className="text-base font-medium text-slate-500/80">{t('subtitle', 'support')}</p>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
               {[
-                { id: 'ALL', label: 'Tout', icon: Filter },
-                { id: 'PENDING', label: 'En Attente', icon: Clock },
-                { id: 'CLAIMED', label: 'Pris en charge', icon: Headphones },
-                { id: 'CLOSED', label: 'Terminé', icon: CheckCircle2 }
+                { id: 'ALL', label: t('filter_all', 'support'), icon: Filter },
+                { id: 'PENDING', label: t('filter_pending', 'support'), icon: Clock },
+                { id: 'CLAIMED', label: t('filter_claimed', 'support'), icon: Headphones },
+                { id: 'CLOSED', label: t('filter_closed', 'support'), icon: CheckCircle2 }
               ].map((status) => (
                 <button
                   key={status.id}
@@ -161,7 +221,7 @@ export default function SupportTickets() {
               <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-primary-500 transition-colors" />
               <input
                 type="text"
-                placeholder="Rechercher par sujet..."
+                placeholder={t('search_placeholder', 'support')}
                 className="w-full bg-white border border-slate-200/60 rounded-xl py-3 pl-11 pr-4 text-xs font-bold focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/5 transition-all shadow-sm group-hover:shadow-md"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -173,7 +233,7 @@ export default function SupportTickets() {
               className="w-full sm:w-auto px-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 shadow-md hover:-translate-y-0.5 transition-all active:scale-95 flex items-center justify-center gap-2 shrink-0"
             >
               <Plus size={20} strokeWidth={3} />
-              Nouveau Ticket
+              {t('new_ticket', 'support')}
             </button>
           </div>
         </div>
@@ -205,7 +265,7 @@ export default function SupportTickets() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <div className="flex flex-col">
-                          <span className="text-slate-400 font-black text-[9px] uppercase tracking-wider mb-0.5">Ref: #{ticket.id}</span>
+                          <span className="text-slate-400 font-black text-[9px] uppercase tracking-wider mb-0.5">{t('ref', 'support').replace('{id}', ticket.id.toString())}</span>
                           <span className={`inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full ${
                             ticket.status === 'OPEN' ? 'text-amber-700 bg-amber-50 border border-amber-100' :
                             ticket.status === 'IN_PROGRESS' ? 'text-violet-700 bg-violet-50 border border-violet-100' :
@@ -217,11 +277,14 @@ export default function SupportTickets() {
                         </div>
                       </div>
                       
-                      <div className={`w-10 h-10 rounded-2xl border flex items-center justify-center transition-all duration-500 ${
-                        ticket.type === 'Bug' || ticket.type === 'Account' 
-                          ? 'text-rose-500 border-rose-100 bg-rose-50/50 group-hover:bg-rose-500 group-hover:text-white group-hover:rotate-12' 
-                          : 'text-slate-400 border-slate-200 bg-slate-50/50 group-hover:bg-slate-900 group-hover:text-white group-hover:-rotate-12'
-                      }`}>
+                      <div 
+                        className={`w-10 h-10 rounded-2xl border flex items-center justify-center transition-all duration-500 ${
+                          ticket.type === 'Bug' || ticket.type === 'Account' 
+                            ? 'text-rose-500 border-rose-100 bg-rose-50/50 group-hover:bg-rose-500 group-hover:text-white group-hover:rotate-12' 
+                            : 'text-slate-400 border-slate-200 bg-slate-50/50 group-hover:bg-slate-900 group-hover:text-white group-hover:-rotate-12'
+                        }`}
+                        title={getCategoryLabel(ticket.type)}
+                      >
                         <AlertCircle size={18} />
                       </div>
                     </div>
@@ -273,7 +336,7 @@ export default function SupportTickets() {
                                 className="inline-flex items-center gap-3 px-5 py-2.5 bg-white text-slate-900 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-slate-900 hover:text-white transition-all border border-slate-200/60 shadow-sm hover:shadow-lg active:scale-95"
                               >
                                 <Eye size={14} className="group-hover:animate-pulse" />
-                                Voir Document PDF
+                                {t('view_pdf', 'support')}
                               </a>
                             );
                           })()}
@@ -288,41 +351,63 @@ export default function SupportTickets() {
                         </div>
                         <div className="flex flex-col">
                           <span className="text-[10px] font-black text-slate-900 leading-none mb-1 capitalize">
-                            {ticket.user?.profile?.fullName || 'Utilisateur'}
+                            {ticket.user?.profile?.fullName || t('default_user', 'support')}
                           </span>
                           <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
-                            {format(new Date(ticket.createdAt), 'dd MMMM yyyy', { locale: fr })}
+                            {format(new Date(ticket.createdAt), 'dd MMMM yyyy', { locale: getLocale() })}
                           </span>
                         </div>
                       </div>
                       
-                      {ticket.conversationId ? (
-                        <button
-                          onClick={() => {
-                            const isAgent = ['SUPER_ADMIN', 'SYSTEM_SUPPORT'].includes(user?.role || '');
-                            const prefix = isAgent ? '/admin' : (user?.role === 'VENDOR' ? '/dashboard' : `/${user?.role?.toLowerCase()}`);
-                            navigate(`${prefix}/chat?convId=${ticket.conversationId}`);
-                          }}
-                          className="px-6 py-2.5 bg-primary-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 shadow-[0_10px_20px_-5px_rgba(59,130,246,0.4)] hover:shadow-slate-900/30 transition-all active:scale-95 flex items-center gap-2 group/btn"
-                        >
-                          <MessageSquare size={14} className="group-hover/btn:rotate-12 transition-transform" />
-                          Ouvrir Chat
-                        </button>
-                      ) : (
-                        ['SUPER_ADMIN', 'SYSTEM_SUPPORT'].includes(user?.role || '') && (
+                      {isAgent ? (
+                        ticket.status === 'OPEN' ? (
                           <button
+                            disabled={isClaiming === ticket.id}
                             onClick={async () => {
+                              if (!ticket.conversationId) {
+                                toast.error(t('toast_error_old_chat', 'support'));
+                                return;
+                              }
                               try {
                                 setIsClaiming(ticket.id);
-                                toast.error('Chat non disponible pour ce ticket ancien');
+                                await chatApi.claimConversation(ticket.conversationId.toString());
+                                toast.success(t('toast_success_claimed', 'support'));
+                                navigate(`/admin/chat?convId=${ticket.conversationId}`);
+                              } catch (err: any) {
+                                toast.error(err.response?.data?.message || t('toast_error_claiming', 'support'));
                               } finally {
                                 setIsClaiming(null);
                               }
                             }}
-                            className="px-6 py-2.5 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-primary-600 shadow-xl shadow-slate-900/20 transition-all flex items-center gap-2"
+                            className="px-6 py-2.5 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-violet-600 shadow-xl shadow-slate-900/20 transition-all flex items-center gap-2 disabled:opacity-50"
                           >
                             <Headphones size={14} />
-                            Claim & Chat
+                            {isClaiming === ticket.id ? 'Claiming...' : 'Claim & Chat'}
+                          </button>
+                        ) : (
+                          ticket.conversationId && (
+                            <button
+                              onClick={() => {
+                                navigate(`/admin/chat?convId=${ticket.conversationId}`);
+                              }}
+                              className="px-6 py-2.5 bg-primary-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 shadow-[0_10px_20px_-5px_rgba(59,130,246,0.4)] hover:shadow-slate-900/30 transition-all active:scale-95 flex items-center gap-2 group/btn"
+                            >
+                              <MessageSquare size={14} className="group-hover/btn:rotate-12 transition-transform" />
+                              {t('open_chat', 'support')}
+                            </button>
+                          )
+                        )
+                      ) : (
+                        ticket.conversationId && (
+                          <button
+                            onClick={() => {
+                              const prefix = user?.role === 'VENDOR' ? '/dashboard' : `/${user?.role?.toLowerCase()}`;
+                              navigate(`${prefix}/chat?convId=${ticket.conversationId}`);
+                            }}
+                            className="px-6 py-2.5 bg-primary-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 shadow-[0_10px_20px_-5px_rgba(59,130,246,0.4)] hover:shadow-slate-900/30 transition-all active:scale-95 flex items-center gap-2 group/btn"
+                          >
+                            <MessageSquare size={14} className="group-hover/btn:rotate-12 transition-transform" />
+                            {t('open_chat', 'support')}
                           </button>
                         )
                       )}
@@ -339,16 +424,16 @@ export default function SupportTickets() {
                   </div>
                 </div>
                 <div className="space-y-3 max-w-xs mx-auto">
-                  <h3 className="text-2xl font-black text-slate-900 tracking-tight">C'est bien calme ici...</h3>
+                  <h3 className="text-2xl font-black text-slate-900 tracking-tight">{t('empty_title', 'support')}</h3>
                   <p className="text-sm font-medium text-slate-500 leading-relaxed">
-                    Vous n'avez pas encore de tickets d'assistance. Si vous avez besoin d'aide, n'hésitez pas à en créer un.
+                    {t('empty_desc', 'support')}
                   </p>
                 </div>
                 <button
                   onClick={() => setIsModalOpen(true)}
                   className="px-8 py-4 bg-white text-slate-900 border border-slate-200 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all shadow-sm"
                 >
-                  Ouvrir un ticket maintenant
+                  {t('empty_btn', 'support')}
                 </button>
               </div>
             )}
@@ -381,9 +466,9 @@ export default function SupportTickets() {
                   <div className="space-y-2">
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-50 border border-slate-100 mb-1">
                       <Plus className="w-3 h-3 text-slate-500" />
-                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Nouvelle Demande</span>
+                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{t('modal_new_request', 'support')}</span>
                     </div>
-                    <h2 className="text-3xl font-black tracking-tight text-slate-900 leading-none">Comment pouvons-nous vous aider ?</h2>
+                    <h2 className="text-3xl font-black tracking-tight text-slate-900 leading-none">{t('modal_title', 'support')}</h2>
                   </div>
                   <button 
                     onClick={() => setIsModalOpen(false)} 
@@ -396,11 +481,11 @@ export default function SupportTickets() {
                 <form onSubmit={handleCreateTicket} className="space-y-8">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Sujet du ticket</label>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">{t('modal_subject', 'support')}</label>
                       <div className="relative group">
                         <input
                           type="text"
-                          placeholder="Ex: Problème de livraison..."
+                          placeholder={t('modal_subject_placeholder', 'support')}
                           required
                           className="w-full bg-slate-50/50 border border-slate-200/60 rounded-2xl py-4 px-6 text-sm font-bold focus:outline-none focus:border-primary-500 focus:bg-white focus:ring-4 focus:ring-primary-500/5 transition-all"
                           value={newTicket.subject}
@@ -410,14 +495,14 @@ export default function SupportTickets() {
                     </div>
 
                     <div className="space-y-2.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Catégorie</label>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">{t('modal_category', 'support')}</label>
                       <div className="relative group">
                         <select
                           className="w-full bg-slate-50/50 border border-slate-200/60 rounded-2xl py-4 px-6 text-sm font-bold focus:outline-none focus:border-primary-500 focus:bg-white focus:ring-4 focus:ring-primary-500/5 transition-all appearance-none cursor-pointer"
                           value={newTicket.category}
                           onChange={(e) => setNewTicket({ ...newTicket, category: e.target.value })}
                         >
-                          {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                          {CATEGORIES.map(c => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
                         </select>
                         <ChevronDown size={16} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-focus-within:text-primary-500 transition-colors" />
                       </div>
@@ -425,9 +510,9 @@ export default function SupportTickets() {
                   </div>
 
                   <div className="space-y-2.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Détails de votre demande</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">{t('modal_details', 'support')}</label>
                     <textarea
-                      placeholder="Décrivez votre situation avec le plus de précisions possible..."
+                      placeholder={t('modal_details_placeholder', 'support')}
                       required
                       rows={5}
                       className="w-full bg-slate-50/50 border border-slate-200/60 rounded-2xl py-4 px-6 text-sm font-medium focus:outline-none focus:border-primary-500/50 focus:bg-white focus:ring-2 focus:ring-primary-500/5 transition-all resize-none text-slate-600 leading-relaxed"
@@ -442,14 +527,14 @@ export default function SupportTickets() {
                       onClick={() => setIsModalOpen(false)}
                       className="flex-1 px-6 py-4 bg-slate-50 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-100 hover:text-slate-900 transition-all active:scale-95"
                     >
-                      Annuler
+                      {t('modal_cancel', 'support')}
                     </button>
                     <button
                       type="submit"
                       disabled={isSubmitting}
                       className="flex-[2] bg-slate-900 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-primary-600 shadow-md hover:-translate-y-0.5 active:scale-95 transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
                     >
-                      {isSubmitting ? 'Création en cours...' : 'Envoyer ma demande'}
+                      {isSubmitting ? t('modal_submitting', 'support') : t('modal_submit', 'support')}
                       <ChevronRight size={18} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" />
                     </button>
                   </div>

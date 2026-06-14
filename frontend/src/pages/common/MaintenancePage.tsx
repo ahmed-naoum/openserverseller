@@ -58,7 +58,7 @@ export default function MaintenancePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 relative overflow-hidden font-['Inter']">
+    <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 relative overflow-hidden font-['29LT_Kaff',_Cairo,_Inter,_sans-serif]">
       
       {/* Background Decorations */}
       <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-primary-600/10 rounded-full blur-[120px] animate-pulse"></div>

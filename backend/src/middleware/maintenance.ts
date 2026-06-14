@@ -1,8 +1,7 @@
+import { prisma } from '../lib/prisma.js';
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 
-const prisma = new PrismaClient();
 
 // In-memory cache for performance
 let maintenanceCache: { enabled: boolean; secret: string; registrationBlocked: boolean; influencerRegistrationBlocked: boolean; expiresAt: number } | null = null;
@@ -23,7 +22,7 @@ export const fetchMaintenanceSettings = async () => {
       const data = setting.value as { enabled: boolean; secret: string; registrationBlocked?: boolean; influencerRegistrationBlocked?: boolean };
       maintenanceCache = {
         enabled: data.enabled || false,
-        secret: data.secret || 'silacod-admin',
+        secret: data.secret || process.env.JWT_SECRET || '',
         registrationBlocked: data.registrationBlocked || false,
         influencerRegistrationBlocked: data.influencerRegistrationBlocked || false,
         expiresAt: now + CACHE_TTL
@@ -35,7 +34,7 @@ export const fetchMaintenanceSettings = async () => {
   }
 
   // Default if not set
-  return { enabled: false, secret: 'silacod-admin', registrationBlocked: false, influencerRegistrationBlocked: false };
+  return { enabled: false, secret: process.env.JWT_SECRET || '', registrationBlocked: false, influencerRegistrationBlocked: false };
 };
 
 export const clearMaintenanceCache = () => {

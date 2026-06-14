@@ -1,0 +1,22 @@
+{
+  "title": "سوق التسويق بالعمولة",
+  "subtitle": "اكتشف المنتجات المتاحة وأنشئ روابط الإحالة الخاصة بك.",
+  "search_placeholder": "البحث باسم المنتج، SKU...",
+  "view_product_page": "عرض صفحة المنتج",
+  "influencer_price": "سعر المؤثر",
+  "view_details": "عرض التفاصيل",
+  "pending_approval": "في انتظار الموافقة...",
+  "request_rejected": "تم رفض الطلب",
+  "link_ready": "الرابط جاهز!",
+  "generate_link": "إنشاء رابط",
+  "no_products": "لا توجد منتجات تابعة",
+  "no_products_desc": "لا توجد منتجات متاحة للتسويق بالعمولة حالياً.",
+  "load_more": "تحميل المزيد",
+  "error_load_data": "تعذر تحميل البيانات",
+  "error_profile_100": "يجب إكمال ملفك الشخصي بنسبة 100٪ للمطالبة بمنتج.",
+  "success_claimed": "تم تقديم طلب المنتج! في انتظار الموافقة.",
+  "error_claimed": "خطأ أثناء المطالبة بالمنتج",
+  "success_link_generated": "تم إنشاء الرابط ونسخه!",
+  "error_link_generated": "حدث خطأ أثناء إنشاء الرابط",
+  "success_copied": "تم نسخ الرابط!"
+}

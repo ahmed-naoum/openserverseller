@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { settingsApi } from '../../lib/api';
@@ -6,6 +6,9 @@ import { Eye, EyeOff, ShieldCheck, Mail, Lock } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useLanguage } from '../../contexts/LanguageContext';
+import LanguageSwitcherWidget from '../../components/common/LanguageSwitcherWidget';
+
 
 const SLIDER_IMAGES = [
   '/home page silacod copy/images/08bb1c52a445cbe7c3723025e483b81a86e1011f.webp',
@@ -14,6 +17,8 @@ const SLIDER_IMAGES = [
 ];
 
 export default function LoginPage() {
+  const { language, t: tRaw } = useLanguage();
+  const t = (key: string) => tRaw(key, 'login');
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -228,38 +233,42 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row font-['Inter'] bg-white overflow-hidden">
+    <div dir={language === 'ar' ? 'rtl' : 'ltr'} className={`min-h-screen flex flex-col lg:flex-row font-['29LT_Kaff',_Cairo,_Inter,_sans-serif] bg-white overflow-hidden relative ${language === 'ar' ? 'text-right' : 'text-left'}`}>
       {/* Left Column: Form Area */}
       <div className="w-full lg:w-[45%] xl:w-[40%] flex flex-col justify-center items-center p-6 bg-[#f8f9fa] relative z-10 min-h-screen lg:min-h-0">
+        {/* Language Switcher Widget */}
+        <div className={`absolute top-6 ${language === 'ar' ? 'left-6' : 'right-6'} z-30`}>
+          <LanguageSwitcherWidget />
+        </div>
         
         {/* Mobile Logo (Visible only on small screens) */}
-        <div className="lg:hidden absolute top-8 left-8">
-          <Link to="/" className="flex items-center gap-2">
+        <div className={`lg:hidden absolute top-8 ${language === 'ar' ? 'right-8' : 'left-8'}`}>
+          <Link to="/" dir="ltr" className="flex items-center gap-2">
             <img src="/new logo/logo filess-25.svg" alt="SILACOD" className="w-8 h-8 object-contain" />
             <img src="/new logo/logo filess-24.svg" alt="SILACOD" className="h-5 object-contain" />
           </Link>
         </div>
 
         <div className="w-full max-w-[360px]">
-          <div className="bg-white rounded-[2rem] p-8 sm:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+          <div className="bg-white rounded-[2rem] p-8 sm:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)]" dir={language === 'ar' ? 'rtl' : 'ltr'}>
             
             {requiresPasswordChange ? (
               <form onSubmit={handleForcePasswordSubmit} className="space-y-6">
                 <div className="text-center space-y-2 mb-8">
-                  <h1 className="text-[28px] font-bold text-[#2e315e]">New Password</h1>
-                  <p className="text-[13px] font-medium text-[#ff5722]">Please set a new password</p>
+                  <h1 className="text-[28px] font-bold text-[#2e315e]">{t('new_password_title')}</h1>
+                  <p className="text-[13px] font-medium text-[#ff5722]">{t('new_password_subtitle')}</p>
                 </div>
 
                 <div className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 ml-1">New Password</label>
+                    <label className={`text-xs font-bold text-slate-700 ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>{t('new_password_label')}</label>
                     <div className="relative group/input">
-                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                      <div className={`absolute ${language === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-slate-400`}>
                         <Lock size={18} />
                       </div>
                       <input
                         type={showPassword ? 'text' : 'password'}
-                        className="w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-4 pl-11 pr-11 transition-all outline-none border text-[13px] text-slate-700 font-medium placeholder:text-slate-400"
+                        className={`w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-4 ${language === 'ar' ? 'pr-11 pl-11' : 'pl-11 pr-11'} transition-all outline-none border text-[13px] text-slate-700 font-medium placeholder:text-slate-400`}
                         placeholder="••••••••"
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
@@ -268,7 +277,7 @@ export default function LoginPage() {
                       />
                       <button
                         type="button"
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                        className={`absolute ${language === 'ar' ? 'left-4' : 'right-4'} top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors`}
                         onClick={() => setShowPassword(!showPassword)}
                       >
                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -277,14 +286,14 @@ export default function LoginPage() {
                   </div>
                   
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 ml-1">Confirm Password</label>
+                    <label className={`text-xs font-bold text-slate-700 ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>{t('confirm_password_label')}</label>
                     <div className="relative group/input">
-                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                      <div className={`absolute ${language === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-slate-400`}>
                         <Lock size={18} />
                       </div>
                       <input
                         type={showPassword ? 'text' : 'password'}
-                        className="w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-4 pl-11 pr-11 transition-all outline-none border text-[13px] text-slate-700 font-medium placeholder:text-slate-400"
+                        className={`w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-4 ${language === 'ar' ? 'pr-11 pl-11' : 'pl-11 pr-11'} transition-all outline-none border text-[13px] text-slate-700 font-medium placeholder:text-slate-400`}
                         placeholder="••••••••"
                         value={confirmNewPassword}
                         onChange={(e) => setConfirmNewPassword(e.target.value)}
@@ -305,14 +314,14 @@ export default function LoginPage() {
                       }}
                       className="w-full bg-slate-100 text-slate-600 font-bold py-2.5 rounded-xl hover:bg-slate-200 transition-all text-[13px]"
                     >
-                      Back
+                      {t('back_btn')}
                     </button>
                     <button
                       type="submit"
                       className="w-full bg-[#ff5722] text-white font-bold py-2.5 rounded-xl hover:bg-[#e64a19] transition-all text-[13px]"
                       disabled={isLoading || newPassword.length < 6}
                     >
-                      {isLoading ? '...' : 'Confirm'}
+                      {isLoading ? '...' : t('confirm_btn')}
                     </button>
                   </div>
                 </div>
@@ -320,8 +329,8 @@ export default function LoginPage() {
             ) : requires2FA ? (
               <form onSubmit={handle2FASubmit} className="space-y-6">
                 <div className="text-center space-y-2 mb-8">
-                  <h1 className="text-[28px] font-bold text-[#2e315e]">Verification</h1>
-                  <p className="text-[13px] font-medium text-[#ff5722]">Please enter your 2FA code</p>
+                  <h1 className="text-[28px] font-bold text-[#2e315e]">{t('two_factor_title')}</h1>
+                  <p className="text-[13px] font-medium text-[#ff5722]">{t('two_factor_subtitle')}</p>
                 </div>
 
                 <div className="space-y-4">
@@ -345,14 +354,14 @@ export default function LoginPage() {
                       }}
                       className="w-full bg-slate-100 text-slate-600 font-bold py-2.5 rounded-xl hover:bg-slate-200 transition-all text-[13px]"
                     >
-                      Back
+                      {t('back_btn')}
                     </button>
                     <button
                       type="submit"
                       className="w-full bg-[#ff5722] text-white font-bold py-2.5 rounded-xl hover:bg-[#e64a19] transition-all text-[13px]"
                       disabled={isLoading || twoFactorCode.length !== 6}
                     >
-                      {isLoading ? '...' : 'Verify'}
+                      {isLoading ? '...' : t('verify_btn')}
                     </button>
                   </div>
                 </div>
@@ -360,21 +369,21 @@ export default function LoginPage() {
             ) : (
               <>
                 <div className="text-center space-y-2 mb-8">
-                  <h1 className="text-[28px] font-bold text-[#2e315e] tracking-tight">Welcome Back</h1>
-                  <p className="text-[13px] font-medium text-[#ff5722]">Please sign in to continue</p>
+                  <h1 className="text-[28px] font-bold text-[#2e315e] tracking-tight">{t('login_title')}</h1>
+                  <p className="text-[13px] font-medium text-[#ff5722]">{t('login_subtitle')}</p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-5">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 ml-1">Email</label>
+                    <label className={`text-xs font-bold text-slate-700 ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>{t('email_label')}</label>
                     <div className="relative group/input">
-                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                      <div className={`absolute ${language === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-slate-400`}>
                         <Mail size={18} />
                       </div>
                       <input
                         type="email"
-                        className="w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-4 pl-11 transition-all outline-none border text-[13px] text-slate-700 font-medium placeholder:text-slate-400"
-                        placeholder="Email"
+                        className={`w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-4 ${language === 'ar' ? 'pr-11 pl-4' : 'pl-11 pr-4'} transition-all outline-none border text-[13px] text-slate-700 font-medium placeholder:text-slate-400`}
+                        placeholder={t('email_label')}
                         value={formData.email}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                         required
@@ -383,30 +392,30 @@ export default function LoginPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 ml-1">Password</label>
+                    <label className={`text-xs font-bold text-slate-700 ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>{t('password_label')}</label>
                     <div className="relative group/input">
-                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                      <div className={`absolute ${language === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-slate-400`}>
                         <Lock size={18} />
                       </div>
                       <input
                         type={showPassword ? 'text' : 'password'}
-                        className="w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-4 pl-11 pr-11 transition-all outline-none border text-[13px] text-slate-700 font-medium placeholder:text-slate-400"
-                        placeholder="Password"
+                        className={`w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-4 ${language === 'ar' ? 'pr-11 pl-11' : 'pl-11 pr-11'} transition-all outline-none border text-[13px] text-slate-700 font-medium placeholder:text-slate-400`}
+                        placeholder={t('password_label')}
                         value={formData.password}
                         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                         required
                       />
                       <button
                         type="button"
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                        className={`absolute ${language === 'ar' ? 'left-4' : 'right-4'} top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors`}
                         onClick={() => setShowPassword(!showPassword)}
                       >
                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
                     </div>
-                    <div className="flex justify-end pt-1">
-                      <Link to="/forgot-password" title="Forgot password?" className="text-[12px] font-medium text-[#ff5722] hover:text-[#e64a19] transition-colors underline decoration-transparent hover:decoration-[#ff5722] underline-offset-4">
-                        I forgot my password
+                    <div className={`flex ${language === 'ar' ? 'justify-start' : 'justify-end'} pt-1`}>
+                      <Link to="/forgot-password" title={t('forgot_password_link')} className="text-[12px] font-medium text-[#ff5722] hover:text-[#e64a19] transition-colors underline decoration-transparent hover:decoration-[#ff5722] underline-offset-4">
+                        {t('forgot_password_link')}
                       </Link>
                     </div>
                   </div>
@@ -417,7 +426,7 @@ export default function LoginPage() {
                       className="w-full bg-[#ff5722] text-white font-bold py-2.5 rounded-xl hover:bg-[#e64a19] transition-all text-sm shadow-[0_4px_14px_0_rgba(255,87,34,0.39)]"
                       disabled={isLoading}
                     >
-                      {isLoading ? 'Signing in...' : 'Sign In'}
+                      {isLoading ? t('signing_in_btn') : t('sign_in_btn')}
                     </button>
                   </div>
                 </form>
@@ -426,7 +435,7 @@ export default function LoginPage() {
                   <div className="w-full flex justify-center">
                     <GoogleLogin 
                       onSuccess={handleGoogleSuccess} 
-                      onError={() => toast.error('Google login failed')}
+                      onError={() => toast.error(t('google_login_failed'))}
                       useOneTap
                       theme="outline"
                       shape="pill"
@@ -435,18 +444,18 @@ export default function LoginPage() {
                     />
                   </div>
                   <p className="text-[13px] font-semibold text-slate-500 mt-2">
-                    I Don't have an account?{' '}
+                    {t('dont_have_account')}{' '}
                     <Link to="/register" className="text-[#ff5722] hover:text-[#e64a19] transition-colors font-bold">
-                      Sign Up
+                      {t('sign_up_link')}
                     </Link>
                   </p>
                 </div>
 
                 <div className="mt-10 text-center">
                   <p className="text-[11px] font-semibold text-slate-400">
-                    <a href="/privacy" className="hover:text-[#ff5722] transition-colors">Privacy Notice</a>
+                    <a href="/privacy" className="hover:text-[#ff5722] transition-colors">{t('privacy_notice')}</a>
                     {' | '}
-                    <a href="/terms" className="hover:text-[#ff5722] transition-colors">Term of service</a>
+                    <a href="/terms" className="hover:text-[#ff5722] transition-colors">{t('terms_of_service')}</a>
                   </p>
                 </div>
               </>
@@ -459,7 +468,7 @@ export default function LoginPage() {
       <div className="hidden lg:flex lg:w-[55%] xl:w-[60%] relative overflow-hidden bg-white items-center justify-center">
         {/* Desktop Logo */}
         <div className="absolute top-10 right-12 z-20">
-          <Link to="/" className="flex items-center gap-2.5">
+          <Link to="/" dir="ltr" className="flex items-center gap-2.5">
             <img src="/new logo/logo filess-25.svg" alt="SILACOD" className="w-10 h-10 object-contain" />
             <img src="/new logo/logo filess-24.svg" alt="SILACOD" className="h-7 object-contain" />
           </Link>

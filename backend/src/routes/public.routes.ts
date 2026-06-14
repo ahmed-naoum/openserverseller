@@ -1,5 +1,5 @@
+import { prisma } from '../lib/prisma.js';
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { optionalAuth } from '../middleware/auth.js';
 import rateLimit from 'express-rate-limit';
@@ -7,7 +7,6 @@ import fs from 'fs';
 import path from 'path';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.get(
   '/version',
@@ -300,6 +299,85 @@ router.post(
     res.status(201).json({
       status: 'success',
       data: { leadId: lead.id }
+    });
+  })
+);
+
+// Rate limiter for contact messages (max 5 messages per 15 minutes per IP + User Agent)
+const contactRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  keyGenerator: (req) => {
+    const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown';
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    return `${ip}-${userAgent}`;
+  },
+  handler: (req, res, next, options) => {
+    res.status(429).json({
+      status: 'error',
+      message: 'Trop de messages envoyés. Veuillez réessayer dans quelques minutes.',
+    });
+  },
+});
+
+router.post(
+  '/contact',
+  contactRateLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { name, email, subject, message } = req.body;
+
+    if (!name || !email || !subject || !message) {
+      throw new AppException(400, 'Tous les champs (nom, email, sujet, message) sont obligatoires');
+    }
+
+    const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || null;
+    const userAgent = req.headers['user-agent'] || null;
+
+    // Create database record
+    const contactMessage = await prisma.contactMessage.create({
+      data: {
+        name,
+        email,
+        subject,
+        message,
+        ip,
+        userAgent,
+      },
+    });
+
+    // Send SMTP email
+    try {
+      const { sendEmail } = await import('../utils/mailer.js');
+      const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || 'contact@silacod.com';
+      
+      const emailContent = `
+        <h3>Nouveau message de contact reçu</h3>
+        <p><b>Nom :</b> ${name}</p>
+        <p><b>E-mail :</b> ${email}</p>
+        <p><b>Sujet :</b> ${subject}</p>
+        <p><b>Message :</b></p>
+        <blockquote style="background: #f8f9fa; padding: 15px; border-left: 4px solid #ff5722; margin: 10px 0; font-family: sans-serif;">
+          ${message.replace(/\n/g, '<br/>')}
+        </blockquote>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;"/>
+        <p style="font-size: 11px; color: #888; font-family: sans-serif;">
+          <b>Adresse IP :</b> ${ip}<br/>
+          <b>Navigateur :</b> ${userAgent}
+        </p>
+      `;
+
+      await sendEmail({
+        to: adminEmail,
+        subject: `[SILACOD Contact] ${subject}`,
+        html: emailContent,
+      });
+    } catch (mailErr) {
+      console.error('Failed to send contact email notification via SMTP:', mailErr);
+    }
+
+    res.status(201).json({
+      status: 'success',
+      data: { contactMessage },
     });
   })
 );

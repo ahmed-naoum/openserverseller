@@ -1,9 +1,8 @@
+import { prisma } from '../lib/prisma.js';
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 
-const prisma = new PrismaClient();
 
 export const getStats = async (req: Request, res: Response) => {
   const vendorId = req.user!.id;

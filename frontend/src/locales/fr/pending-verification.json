@@ -1,0 +1,16 @@
+{
+  "pending_welcome": "Bienvenue sur SILACOD",
+  "pending_subtitle": "Votre compte est en attente d'activation et de révision",
+  "pending_card_title": "En attente de révision du compte",
+  "pending_card_desc": "Votre compte a été créé avec succès ! Notre équipe examine actuellement votre demande et vous recevrez une notification une fois le compte activé.",
+  "step_registered_success": "Inscrit avec succès",
+  "step_registered_desc": "Vos informations de compte ont été enregistrées dans notre système.",
+  "step_reviewing_title": "Examen de la demande",
+  "step_reviewing_desc": "L'administrateur vérifie actuellement vos informations et active le compte.",
+  "step_activation_notice_title": "Notification d'activation",
+  "step_activation_notice_desc": "Vous recevrez un message de confirmation une fois le compte entièrement activé.",
+  "pending_timeline_notice": "L'activation prend généralement de 24 à 48 heures. Vous recevrez un e-mail ou un message WhatsApp une fois terminée.",
+  "logout_btn": "Se déconnecer",
+  "back_home_btn": "Retour à l'accueil",
+  "need_help_label": "Besoin d'aide ?"
+}

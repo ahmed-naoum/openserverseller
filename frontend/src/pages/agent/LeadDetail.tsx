@@ -113,34 +113,36 @@ export default function AgentLeadDetail() {
       const isShortTimeout = isWrongOrder || isCancelOrder;
       const totalCooldownSeconds = isShortTimeout ? 120 : 420; // 2 minutes for short timeouts, 7 minutes for ASSIGNED
       
-      // Check if sessionStorage is stale:
+      // Check if sessionStorage is stale or NaN:
       if (savedStart) {
         const parsedStart = parseInt(savedStart, 10);
-        // Reset the timer if transitioning from ASSIGNED to WRONG_ORDER or CANCEL_ORDER
-        // The lead updated recently, but the savedStart is far behind (the original 7 min start)
-        if (isShortTimeout && (leadUpdatedAt - parsedStart > 5000)) {
+        if (isNaN(parsedStart)) {
+          sessionStorage.removeItem(storageKey);
+          savedStart = null;
+        } else if (isShortTimeout && (!isNaN(leadUpdatedAt) && leadUpdatedAt - parsedStart > 5000)) {
            sessionStorage.removeItem(storageKey);
            savedStart = null;
-        } else if (Date.now() - parsedStart > totalCooldownSeconds * 1000 || parsedStart < leadUpdatedAt - 5000) {
+        } else if (Date.now() - parsedStart > totalCooldownSeconds * 1000 || (!isNaN(leadUpdatedAt) && parsedStart < leadUpdatedAt - 5000)) {
           sessionStorage.removeItem(storageKey);
           savedStart = null;
         }
       }
 
-      const startTime = savedStart ? parseInt(savedStart, 10) : Date.now();
+      let parsedStartVal = savedStart ? parseInt(savedStart, 10) : NaN;
+      const startTime = !isNaN(parsedStartVal) ? parsedStartVal : Date.now();
       
-      if (!savedStart) {
+      if (isNaN(parsedStartVal)) {
         sessionStorage.setItem(storageKey, startTime.toString());
       }
 
       const calculateRemaining = () => {
         const elapsed = (Date.now() - startTime) / 1000;
-        return Math.max(0, 30 - elapsed);
+        return isNaN(elapsed) ? 0 : Math.max(0, 30 - elapsed);
       };
 
       const calculateGlobal = () => {
         const elapsed = (Date.now() - startTime) / 1000;
-        return Math.max(0, totalCooldownSeconds - elapsed);
+        return isNaN(elapsed) ? 0 : Math.max(0, totalCooldownSeconds - elapsed);
       };
 
       setCooldownRemaining(calculateRemaining());
@@ -225,11 +227,11 @@ export default function AgentLeadDetail() {
       toast.success(`Statut mis à jour: ${status}`);
       
       // Only clear timer if we're navigating away immediately (so the new status isn't tracked)
-      if (id && ['CALL_LATER', 'NO_REPLY', 'CONFIRMED', 'CANCEL_REASON_PRICE', 'INVALID'].includes(status)) {
+      if (id && ['CALL_LATER', 'NO_REPLY', 'CONFIRMED', 'CANCEL_REASON_PRICE', 'INVALID', 'CANCEL_ORDER', 'WRONG_ORDER'].includes(status)) {
         sessionStorage.removeItem(`lead_cooldown_${id}`);
       }
 
-      if (['CALL_LATER', 'NO_REPLY', 'CONFIRMED', 'CANCEL_REASON_PRICE', 'INVALID'].includes(status)) {
+      if (['CALL_LATER', 'NO_REPLY', 'CONFIRMED', 'CANCEL_REASON_PRICE', 'INVALID', 'CANCEL_ORDER', 'WRONG_ORDER'].includes(status)) {
         navigate('/agent/leads');
       } else {
         loadDetail();

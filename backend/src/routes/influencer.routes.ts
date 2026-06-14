@@ -30,44 +30,93 @@ router.post(
   })
 );
 
+router.get(
+  '/links/check-unique',
+  authenticate,
+  authorize('VENDOR', 'INFLUENCER'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { name } = req.query;
+    if (!name || typeof name !== 'string') {
+      return res.json({ unique: false, message: 'Nom invalide' });
+    }
+
+    const exists = await prisma.referralLink.findUnique({
+      where: { code: name }
+    });
+
+    return res.json({ unique: !exists });
+  })
+);
+
 router.post(
   '/links',
   authenticate,
   authorize('VENDOR', 'INFLUENCER'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { productId } = req.body;
+    const { productId, customName } = req.body;
 
     if (!req.user!.isInfluencer) {
       throw new AppException(400, 'You must enable influencer mode first');
     }
 
-    // NEW: Check if there is an APPROVED claim for this product
+    // Check if there is an APPROVED claim for this product
     const claim = await prisma.affiliateClaim.findUnique({
-      where: { userId_productId: { userId, productId } }
+      where: { userId_productId: { userId, productId: Number(productId) } }
     });
 
     if (!claim || claim.status !== 'APPROVED') {
       throw new AppException(403, 'You must have an APPROVED claim for this product before generating a link');
     }
 
-    const existingLink = await prisma.referralLink.findUnique({
-      where: { influencerId_productId: { influencerId: userId, productId } }
+    // Limit to max 5 links per product
+    const linkCount = await prisma.referralLink.count({
+      where: { influencerId: userId, productId: Number(productId) }
     });
 
-    if (existingLink) {
-      return res.json(existingLink);
+    if (linkCount >= 5) {
+      throw new AppException(400, 'Vous ne pouvez pas créer plus de 5 liens pour ce produit.');
     }
 
-    const code = uuidv4().slice(0, 8).toUpperCase();
+    let code = '';
+    if (customName) {
+      const nameStr = String(customName).trim();
+      if (nameStr.length < 3 || nameStr.length > 20) {
+        throw new AppException(400, 'Le nom personnalisé doit contenir entre 3 et 20 caractères.');
+      }
+      const nameRegex = /^[a-zA-Z0-9-_]+$/;
+      if (!nameRegex.test(nameStr)) {
+        throw new AppException(400, 'Le nom personnalisé ne peut contenir que des lettres, chiffres, tirets (-) et underscores (_).');
+      }
+
+      // Check uniqueness
+      const existingCode = await prisma.referralLink.findUnique({
+        where: { code: nameStr }
+      });
+      if (existingCode) {
+        throw new AppException(400, 'Ce nom de lien est déjà utilisé. Veuillez en choisir un autre.');
+      }
+      code = nameStr;
+    } else {
+      // Default fallback - generate a random code
+      let attempts = 0;
+      let generated = uuidv4().slice(0, 8).toUpperCase();
+      while (attempts < 5) {
+        const exists = await prisma.referralLink.findUnique({ where: { code: generated } });
+        if (!exists) break;
+        generated = uuidv4().slice(0, 8).toUpperCase();
+        attempts++;
+      }
+      code = generated;
+    }
 
     const referralLink = await prisma.referralLink.create({
       data: {
         influencerId: userId,
-        productId,
+        productId: Number(productId),
         code,
-        isActive: false,
-        status: 'BUILDING'
+        isActive: true, // Default to true when created so it's immediately active
+        status: 'ACTIVE' // Let's make it ACTIVE by default to be usable immediately
       }
     });
 
@@ -1074,6 +1123,7 @@ router.get(
           limit: Number(limit),
           total: totalCommissions + leadCommissions.length,
           totalPages: Math.ceil((totalCommissions + leadCommissions.length) / Number(limit)),
+
         }
       }
     });

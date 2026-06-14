@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Landmark, X, Search, ChevronDown, Check } from 'lucide-react';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export const MOROCCAN_BANKS = [
   { id: 'cih', name: 'CIH BANK', logo: '/banks/cih.webp' },
@@ -24,12 +25,14 @@ interface BankSelectProps {
 }
 
 export default function BankSelect({ value, onChange }: BankSelectProps) {
+  const { t, language } = useLanguage();
+  const dir = language === 'ar' ? 'rtl' : 'ltr';
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [customBank, setCustomBank] = useState('');
 
   const isPredefinedBank = MOROCCAN_BANKS.some((b) => b.name === value);
-  const displayValue = value || 'Sélectionner une banque';
+  const displayValue = value || t('select_bank_placeholder', 'dashboard');
   
   // Find selected bank object for logo display in the trigger button
   const selectedBankObj = MOROCCAN_BANKS.find(b => b.name === value);
@@ -54,11 +57,11 @@ export default function BankSelect({ value, onChange }: BankSelectProps) {
     <>
       {/* Trigger Button */}
       <div className="space-y-1.5">
-        <label className="block text-sm font-bold text-slate-600">Banque *</label>
+        <label className="block text-sm font-bold text-slate-600">{t('bank_label', 'dashboard')} *</label>
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="w-full flex items-center justify-between px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all text-sm font-medium text-left"
+          className="w-full flex items-center justify-between px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all text-sm font-medium text-start"
         >
           <div className="flex items-center gap-3 overflow-hidden">
             <div className="w-8 h-8 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center flex-shrink-0 p-1">
@@ -70,7 +73,7 @@ export default function BankSelect({ value, onChange }: BankSelectProps) {
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
                     if (e.currentTarget.nextElementSibling) {
-                      (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'block';
+                       (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'block';
                     }
                   }}
                 />
@@ -91,14 +94,14 @@ export default function BankSelect({ value, onChange }: BankSelectProps) {
 
       {/* Modal */}
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" style={{ direction: dir }}>
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col relative animate-in zoom-in-95 duration-200">
             
             {/* Header */}
             <div className="flex items-center justify-between p-5 sm:p-6 border-b border-slate-100 bg-slate-50 rounded-t-3xl">
               <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
                 <Landmark size={20} className="text-primary-500" />
-                Sélectionner votre banque
+                {t('select_bank_title', 'dashboard')}
               </h3>
               <button 
                 onClick={() => setIsOpen(false)}
@@ -113,13 +116,13 @@ export default function BankSelect({ value, onChange }: BankSelectProps) {
               
               {/* Search */}
               <div className="relative mb-6">
-                <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Search size={18} className={`absolute ${dir === 'rtl' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-slate-400`} />
                 <input
                   type="text"
-                  placeholder="Rechercher une banque..."
+                  placeholder={t('search_bank_placeholder', 'dashboard')}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-primary-500 focus:bg-white outline-none transition-all text-sm font-medium"
+                  className={`w-full ${dir === 'rtl' ? 'pr-11 pl-4' : 'pl-11 pr-4'} py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-primary-500 focus:bg-white outline-none transition-all text-sm font-medium`}
                 />
               </div>
 
@@ -139,7 +142,7 @@ export default function BankSelect({ value, onChange }: BankSelectProps) {
                       }`}
                     >
                       {isSelected && (
-                        <div className="absolute top-2 right-2 w-5 h-5 bg-primary-600 rounded-full flex items-center justify-center text-white shadow-sm">
+                        <div className={`absolute top-2 ${dir === 'rtl' ? 'left-2' : 'right-2'} w-5 h-5 bg-primary-600 rounded-full flex items-center justify-center text-white shadow-sm`}>
                           <Check size={12} strokeWidth={3} />
                         </div>
                       )}
@@ -151,7 +154,7 @@ export default function BankSelect({ value, onChange }: BankSelectProps) {
                           onError={(e) => {
                             e.currentTarget.style.display = 'none';
                             if (e.currentTarget.nextElementSibling) {
-                              (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'block';
+                               (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'block';
                             }
                           }}
                         />
@@ -171,19 +174,21 @@ export default function BankSelect({ value, onChange }: BankSelectProps) {
               
               {filteredBanks.length === 0 && (
                 <div className="text-center py-8">
-                  <p className="text-slate-500 text-sm font-medium">Aucune banque trouvée pour "{searchTerm}"</p>
+                  <p className="text-slate-500 text-sm font-medium">
+                    {t('no_bank_found', 'dashboard').replace('{query}', searchTerm)}
+                  </p>
                 </div>
               )}
 
               {/* Custom Bank */}
               <div className="mt-8 pt-6 border-t border-slate-100">
-                <h4 className="text-sm font-bold text-slate-700 mb-3">Votre banque n'est pas dans la liste ?</h4>
+                <h4 className="text-sm font-bold text-slate-700 mb-3">{t('bank_not_in_list', 'dashboard')}</h4>
                 <form onSubmit={handleCustomSubmit} className="flex gap-2">
                   <input
                     type="text"
                     value={customBank}
                     onChange={(e) => setCustomBank(e.target.value)}
-                    placeholder="Saisissez le nom de votre banque..."
+                    placeholder={t('enter_bank_name_placeholder', 'dashboard')}
                     className="flex-1 px-4 py-3 bg-white border border-slate-200 rounded-xl focus:border-primary-500 outline-none transition-all text-sm font-medium"
                   />
                   <button
@@ -191,7 +196,7 @@ export default function BankSelect({ value, onChange }: BankSelectProps) {
                     disabled={!customBank.trim()}
                     className="px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold transition-all disabled:opacity-50 text-sm whitespace-nowrap"
                   >
-                    Confirmer
+                    {t('confirm', 'dashboard')}
                   </button>
                 </form>
               </div>

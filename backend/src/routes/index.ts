@@ -3,6 +3,7 @@ import path from 'path';
 import { auditLog } from '../middleware/security.js';
 import authRoutes from './auth.routes.js';
 import userRoutes from './user.routes.js';
+import userSettingsRoutes from './userSettings.routes.js';
 import productRoutes from './product.routes.js';
 import categoryRoutes from './category.routes.js';
 import leadRoutes from './lead.routes.js';
@@ -25,6 +26,7 @@ import announcementRoutes from './announcement.routes.js';
 import settingsRoutes from './settings.routes.js';
 import securityRoutes from './security.routes.js';
 import webhookRoutes from './webhook.routes.js';
+import damanesignWebhookRoutes from './damanesign-webhook.routes.js';
 import youcanRoutes from './youcan.routes.js';
 import supportRoutes from './support.routes.js';
 import invoiceRoutes from './invoice.routes.js';
@@ -34,10 +36,11 @@ import backupRoutes from './admin/backup.routes.js';
 const router = Router();
 
 router.get('/health', (req, res) => {
+  const isProd = process.env.NODE_ENV === 'production';
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    version: '1.0.0',
+    ...(isProd ? {} : { version: '1.0.0', env: process.env.NODE_ENV || 'development' }),
   });
 });
 
@@ -45,9 +48,10 @@ router.get('/health', (req, res) => {
 router.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 router.use('/auth', authRoutes);
+router.use('/user', auditLog, userSettingsRoutes);
 router.use('/users', auditLog, userRoutes);
 router.use('/products', auditLog, productRoutes);
-router.use('/categories', categoryRoutes);
+router.use('/categories', auditLog, categoryRoutes);
 router.use('/leads', auditLog, leadRoutes);
 router.use('/invoices', auditLog, invoiceRoutes);
 router.use('/orders', auditLog, orderRoutes);
@@ -67,13 +71,14 @@ router.use('/public', publicRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/inventory', auditLog, inventoryRoutes);
-router.use('/fulfillment', fulfillmentRoutes);
+router.use('/fulfillment', auditLog, fulfillmentRoutes);
 router.use('/chat', chatRoutes);
 router.use('/dashboard', dashboardRoutes);
-router.use('/announcements', announcementRoutes);
+router.use('/announcements', auditLog, announcementRoutes);
 router.use('/influencer', auditLog, influencerRoutes);
-router.use('/settings', settingsRoutes);
-router.use('/webhooks', webhookRoutes);
+router.use('/settings', auditLog, settingsRoutes);
+router.use('/webhooks/damanesign', damanesignWebhookRoutes);
+router.use('/webhooks', auditLog, webhookRoutes);
 router.use('/youcan', auditLog, youcanRoutes);
 router.use('/support', auditLog, supportRoutes);
 

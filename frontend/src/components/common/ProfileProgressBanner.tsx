@@ -1,10 +1,12 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { getVerificationStatus } from '../../pages/common/ProfileVerification';
 import { UserCheck } from 'lucide-react';
 
 export default function ProfileProgressBanner() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const location = useLocation();
   const { percentage } = getVerificationStatus(user);
 
@@ -68,10 +70,10 @@ export default function ProfileProgressBanner() {
         {/* Text Content */}
         <div className="flex-1 min-w-0">
           <h3 className="text-white text-sm sm:text-[15px] font-black tracking-tight mb-0.5">
-            Complétez votre profil
+            {t('banner_title', 'dashboard')}
           </h3>
           <p className="text-slate-400 text-[12px] sm:text-[13px] font-medium leading-snug">
-            Votre profil est complété à <span className="text-emerald-400 font-bold">{percentage}%</span>. Complétez-le pour accéder à toutes les fonctionnalités.
+            {t('banner_subtitle', 'dashboard').replace('{percentage}', `${percentage}%`)}
           </p>
         </div>
       </div>
@@ -82,7 +84,7 @@ export default function ProfileProgressBanner() {
         className="w-full sm:w-auto flex-shrink-0 flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-black rounded-xl shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 hover:-translate-y-0.5 transition-all duration-300 z-10"
       >
         <UserCheck size={16} />
-        Compléter le Profil
+        {t('banner_button', 'dashboard')}
       </Link>
     </div>
   );

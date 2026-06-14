@@ -3,6 +3,7 @@ import { influencerApi, leadsApi } from '../../lib/api';
 import { ReferralLink, InfluencerCommission } from '../../types';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
+import { useLanguage } from '../../contexts/LanguageContext';
 import {
   Users, MousePointerClick, UserCheck, ShoppingCart,
   Filter, Search, Calendar,
@@ -65,6 +66,16 @@ const PAYMENT_SITUATION_BADGES: Record<string, { label: string; color: string }>
 };
 
 export default function InfluencerLeads() {
+  const { t } = useLanguage();
+
+  const getStatusLabel = (status: string) => {
+    return t(`all_status_badges.${status}`, 'leads', ALL_STATUS_BADGES[status]?.label || status);
+  };
+
+  const getPaymentLabel = (situation: string) => {
+    return t(`payment_situation_badges.${situation}`, 'leads', PAYMENT_SITUATION_BADGES[situation]?.label || situation);
+  };
+
   const [links, setLinks] = useState<ReferralLink[]>([]);
   const [commissions, setCommissions] = useState<InfluencerCommission[]>([]);
   const [loading, setLoading] = useState(true);
@@ -506,8 +517,8 @@ export default function InfluencerLeads() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Mes Leads & Parrainages</h1>
-          <p className="text-sm text-gray-500 mt-1">Suivez tous vos leads, conversions et livraisons en un seul endroit.</p>
+          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">{t('title', 'leads', 'Mes Leads & Parrainages')}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t('subtitle', 'leads', 'Suivez tous vos leads, conversions et livraisons en un seul endroit.')}</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -516,14 +527,14 @@ export default function InfluencerLeads() {
             className="flex items-center gap-1.5 px-4 py-2 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:text-influencer-600 hover:border-influencer-100 hover:bg-influencer-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Actualiser
+            {t('refresh', 'leads', 'Actualiser')}
           </button>
           <button
             onClick={() => setShowStats(!showStats)}
             className="flex items-center gap-1.5 px-4 py-2 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50 transition-all"
           >
             {showStats ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            Statistiques
+            {t('stats', 'leads', 'Statistiques')}
           </button>
 
         </div>
@@ -537,7 +548,7 @@ export default function InfluencerLeads() {
           <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col xl:flex-row items-start xl:items-center gap-4 justify-between">
             <div className="flex items-center gap-2 mb-2 xl:mb-0">
               <Filter className="w-4 h-4 text-influencer-500" />
-              <span className="text-xs font-black text-gray-900 uppercase tracking-widest">Filtres Globaux</span>
+              <span className="text-xs font-black text-gray-900 uppercase tracking-widest">{t('filters_global', 'leads', 'Filtres Globaux')}</span>
             </div>
             
             <div className="flex flex-col sm:flex-row items-center gap-4 w-full xl:w-auto">
@@ -547,7 +558,7 @@ export default function InfluencerLeads() {
                 onChange={(e) => setTableSelectedProductId(e.target.value)}
                 className="w-full sm:w-auto px-4 py-2.5 text-xs font-bold bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-influencer-500 transition-all text-gray-600"
               >
-                <option value="ALL">Tous les produits</option>
+                <option value="ALL">{t('all_products', 'leads', 'Tous les produits')}</option>
                 {links.map(link => (
                   <option key={link.id} value={link.id}>
                     {link.product?.nameFr || link.code} {link.product?.sku ? `(${link.product.sku})` : ''}
@@ -557,19 +568,29 @@ export default function InfluencerLeads() {
 
               {/* Date Range Pills */}
               <div className="flex flex-wrap items-center bg-gray-50 p-1 rounded-xl border border-gray-100 w-full sm:w-auto">
-                {['TOUS', 'AUJOURD_HUI', '7J', '15J', '30J', '90J', 'CUSTOM'].map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => setTableDateRange(r as any)}
-                    className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all flex-1 sm:flex-none text-center ${
-                      tableDateRange === r 
-                        ? 'bg-white text-gray-900 shadow-sm' 
-                        : 'text-gray-400 hover:text-gray-600'
-                    }`}
-                  >
-                    {r === 'AUJOURD_HUI' ? "AUJOURD'HUI" : r}
-                  </button>
-                ))}
+                {['TOUS', 'AUJOURD_HUI', '7J', '15J', '30J', '90J', 'CUSTOM'].map((r) => {
+                  let label = r;
+                  if (r === 'TOUS') label = t('range_all', 'leads', 'Tous');
+                  else if (r === 'AUJOURD_HUI') label = t('range_today', 'leads', "Aujourd'hui");
+                  else if (r === 'CUSTOM') label = t('range_custom', 'leads', 'Personnalisé');
+                  else if (r.endsWith('J')) {
+                    const count = r.replace('J', '');
+                    label = t('range_days', 'leads', '{count}j').replace('{count}', count);
+                  }
+                  return (
+                    <button
+                      key={r}
+                      onClick={() => setTableDateRange(r as any)}
+                      className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all flex-1 sm:flex-none text-center ${
+                        tableDateRange === r 
+                          ? 'bg-white text-gray-900 shadow-sm' 
+                          : 'text-gray-400 hover:text-gray-600'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
 
               {tableDateRange === 'CUSTOM' && (
@@ -580,7 +601,7 @@ export default function InfluencerLeads() {
                      onChange={(e) => setStartDate(e.target.value)}
                      className="flex-1 sm:flex-none text-[10px] font-bold bg-white border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-influencer-500/20"
                    />
-                   <span className="text-[10px] text-gray-400 font-bold uppercase">au</span>
+                   <span className="text-[10px] text-gray-400 font-bold uppercase">{t('date_separator', 'leads', 'au')}</span>
                    <input 
                      type="date"
                      value={endDate}
@@ -596,22 +617,22 @@ export default function InfluencerLeads() {
             <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center">
               <Zap className="w-5 h-5 mx-auto mb-2 text-green-500" />
               <h3 className="text-xl font-black text-gray-900">{totalLeads.toLocaleString()}</h3>
-              <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">Total Leads</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">{t('total_leads', 'leads', 'Total Leads')}</p>
             </div>
             <div className="relative bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center border-b-4 border-b-amber-400 pb-8">
               <CheckCircle2 className="w-5 h-5 mx-auto mb-2 text-amber-600" />
               <h3 className="text-xl font-black text-amber-600">{confirmationRate.toFixed(1)}%</h3>
-              <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">Taux de Confirmation</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">{t('confirmation_rate', 'leads', 'Taux de Confirmation')}</p>
               <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-amber-500 text-white text-[13px] font-black px-5 py-2 rounded-full shadow-lg border-2 border-white whitespace-nowrap uppercase tracking-widest">
-                {confirmedLeads} LEADS CONFIRMÉS
+                {t('leads_confirmed', 'leads', '{count} LEADS CONFIRMÉS').replace('{count}', String(confirmedLeads))}
               </div>
             </div>
             <div className="relative bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center border-b-4 border-b-emerald-400 pb-8">
               <Truck className="w-5 h-5 mx-auto mb-2 text-emerald-600" />
               <h3 className="text-xl font-black text-emerald-600">{deliveryRate.toFixed(1)}%</h3>
-              <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">Taux de Livraison</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">{t('delivery_rate', 'leads', 'Taux de Livraison')}</p>
               <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[13px] font-black px-5 py-2 rounded-full shadow-lg border-2 border-white whitespace-nowrap uppercase tracking-widest">
-                {deliveredLeads} LEADS LIVRÉS
+                {t('leads_delivered', 'leads', '{count} LEADS LIVRÉS').replace('{count}', String(deliveredLeads))}
               </div>
             </div>
           </div>
@@ -621,7 +642,7 @@ export default function InfluencerLeads() {
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
                 <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-influencer-500" />
-                  Performance
+                  {t('performance', 'leads', 'Performance')}
                 </h3>
               </div>
               <div className="h-64 w-full">
@@ -634,6 +655,7 @@ export default function InfluencerLeads() {
                     <Line 
                       type="monotone" 
                       dataKey="Leads" 
+                      name={t('total_leads', 'leads', 'Total Leads')}
                       stroke="#8b5cf6" 
                       strokeWidth={4}
                       dot={{ r: 4, fill: '#8b5cf6', strokeWidth: 2, stroke: '#fff' }}
@@ -647,7 +669,7 @@ export default function InfluencerLeads() {
             <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col">
                <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-2 mb-6">
                   <MapPin className="w-4 h-4 text-orange-500" />
-                  Top Villes Performance
+                  {t('top_cities', 'leads', 'Top Villes Performance')}
                 </h3>
                 <div className="flex-1 min-h-[200px] relative">
                   <ResponsiveContainer width="100%" height="100%">
@@ -668,7 +690,7 @@ export default function InfluencerLeads() {
                   </ResponsiveContainer>
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                     <span className="text-xl font-black text-gray-900">{cityDistData.length}</span>
-                    <span className="text-[8px] font-bold text-gray-400 uppercase">Villes Top</span>
+                    <span className="text-[8px] font-bold text-gray-400 uppercase">{t('cities_top', 'leads', 'Villes Top')}</span>
                   </div>
                 </div>
                 <div className="mt-4 space-y-1">
@@ -692,7 +714,7 @@ export default function InfluencerLeads() {
             <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col">
               <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-2 mb-6">
                 <PieIcon className="w-4 h-4 text-blue-500" />
-                Analyse de Confirmation
+                {t('confirmation_analysis', 'leads', 'Analyse de Confirmation')}
               </h3>
               {confirmationDistData.length > 0 ? (
                 <>
@@ -717,7 +739,7 @@ export default function InfluencerLeads() {
                       <span className="text-2xl font-black text-gray-900">
                         {confirmationDistData.reduce((acc, curr) => acc + curr.value, 0)}
                       </span>
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total</span>
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('total', 'leads', 'Total')}</span>
                     </div>
                   </div>
                   <div className="mt-6 grid grid-cols-2 gap-2">
@@ -735,7 +757,7 @@ export default function InfluencerLeads() {
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center text-gray-400 min-h-[200px]">
                   <PieIcon className="w-12 h-12 mb-3 opacity-20" />
-                  <p className="text-sm font-medium">Aucune donnée disponible</p>
+                  <p className="text-sm font-medium">{t('no_data', 'leads', 'Aucune donnée disponible')}</p>
                 </div>
               )}
             </div>
@@ -744,7 +766,7 @@ export default function InfluencerLeads() {
             <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col">
               <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-2 mb-6">
                 <Truck className="w-4 h-4 text-emerald-500" />
-                Analyse de Livraison
+                {t('delivery_analysis', 'leads', 'Analyse de Livraison')}
               </h3>
 
               {deliveryDistData.length > 0 ? (
@@ -770,7 +792,7 @@ export default function InfluencerLeads() {
                       <span className="text-2xl font-black text-gray-900">
                         {deliveryDistData.reduce((acc, curr) => acc + curr.value, 0)}
                       </span>
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total</span>
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('total', 'leads', 'Total')}</span>
                     </div>
                   </div>
                   <div className="mt-6 grid grid-cols-2 gap-2">
@@ -788,7 +810,7 @@ export default function InfluencerLeads() {
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center text-gray-400 min-h-[200px]">
                   <Truck className="w-12 h-12 mb-3 opacity-20" />
-                  <p className="text-sm font-medium">Aucune livraison en cours</p>
+                  <p className="text-sm font-medium">{t('no_delivery', 'leads', 'Aucune livraison en cours')}</p>
                 </div>
               )}
         </div>
@@ -809,7 +831,7 @@ export default function InfluencerLeads() {
               onChange={(e) => setStatusFilter(e.target.value)}
               className="w-full pl-10 pr-10 py-2.5 text-xs font-bold text-gray-700 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-influencer-500 transition-all appearance-none cursor-pointer hover:bg-gray-100/50"
             >
-              <option value="ALL">Tous les statuts ({dateFilteredCommissions.length})</option>
+              <option value="ALL">{t('all_status', 'leads', 'Tous les statuts ({count})').replace('{count}', String(dateFilteredCommissions.length))}</option>
               {(() => {
                 const renderedLabels = new Set();
                 return activeStatuses
@@ -841,7 +863,7 @@ export default function InfluencerLeads() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Rechercher par nom, téléphone ou ville..."
+                placeholder={t('search_placeholder', 'leads', 'Rechercher par nom, téléphone ou ville...')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-11 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-influencer-500 transition-all font-medium placeholder:text-gray-400"
@@ -856,13 +878,13 @@ export default function InfluencerLeads() {
         <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <h2 className="text-sm font-bold text-gray-700 flex items-center gap-2">
             <Filter className="w-4 h-4 text-influencer-500" />
-            {statusFilter === 'ALL' ? 'Tous les Leads' : (ALL_STATUS_BADGES[statusFilter]?.label || statusFilter)}
+            {statusFilter === 'ALL' ? t('all_leads_title', 'leads', 'Tous les Leads') : (ALL_STATUS_BADGES[statusFilter]?.label || statusFilter)}
             <span className="text-gray-400 font-medium">({sortedCommissions.length})</span>
           </h2>
 
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold text-gray-400 uppercase">Par page:</span>
+              <span className="text-[10px] font-bold text-gray-400 uppercase">{t('per_page', 'leads', 'Par page:')}</span>
               <select
                 value={itemsPerPage}
                 onChange={(e) => setItemsPerPage(Number(e.target.value))}
@@ -882,7 +904,7 @@ export default function InfluencerLeads() {
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-influencer-100 text-influencer-700 rounded-lg text-[10px] font-bold hover:bg-influencer-200 transition-all"
                 >
                   <Headphones className="w-3.5 h-3.5" />
-                  Pousser la sélection ({selectedIds.length})
+                  {t('push_selected', 'leads', 'Pousser la sélection ({count})').replace('{count}', String(selectedIds.length))}
                 </button>
               )}
               {selectedIds.length > 0 && (
@@ -892,7 +914,7 @@ export default function InfluencerLeads() {
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold hover:bg-red-200 transition-all"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  Supprimer ({selectedIds.length})
+                  {t('delete_selected', 'leads', 'Supprimer ({count})').replace('{count}', String(selectedIds.length))}
                 </button>
               )}
             </div>
@@ -913,16 +935,16 @@ export default function InfluencerLeads() {
                         onChange={handleSelectAll}
                       />
                     </th>
-                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Tracking Number</th>
-                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Client</th>
-                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Produit</th>
-                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Pack/Option</th>
-                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Montant</th>
-                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Date</th>
-                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Situation</th>
-                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Commentaires</th>
-                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Actions</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('th_tracking', 'leads', 'Tracking Number')}</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('th_client', 'leads', 'Client')}</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('th_product', 'leads', 'Produit')}</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('th_pack_option', 'leads', 'Pack/Option')}</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('th_amount', 'leads', 'Montant')}</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('th_status', 'leads', 'Status')}</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('th_date', 'leads', 'Date')}</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('th_situation', 'leads', 'Situation')}</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('th_comments', 'leads', 'Commentaires')}</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('th_actions', 'leads', 'Actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white">
@@ -1033,7 +1055,7 @@ export default function InfluencerLeads() {
                         {/* Option */}
                         <td className="px-5 py-4">
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter mb-0.5">Sélection</span>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter mb-0.5">{t('selection', 'leads', 'Sélection')}</span>
                             <span className="text-xs font-black text-influencer-600 truncate max-w-[100px]">
                               {(commission.order as any)?.productVariant || (commission as any).order?.productVariant || '-'}
                             </span>
@@ -1059,14 +1081,14 @@ export default function InfluencerLeads() {
                             {status === 'CANCEL_REASON_PRICE' && (commission.order as any)?.lead?.requestedPriceMad && (
                               <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-600 text-white rounded border border-gray-400 text-[9px] font-black shadow-sm mb-1">
                                 💰 {(commission.order as any).lead.requestedPriceMad} MAD 
-                                {(commission.order as any).lead.requestedPriceStatus === 'PENDING' ? ' (En attente)' : 
-                                 (commission.order as any).lead.requestedPriceStatus === 'APPROVED' ? ' (Approuvé)' : 
-                                 (commission.order as any).lead.requestedPriceStatus === 'REJECTED' ? ' (Rejeté)' : ''}
+                                {(commission.order as any).lead.requestedPriceStatus === 'PENDING' ? t('status_pending_parenthesis', 'leads', ' (En attente)') : 
+                                 (commission.order as any).lead.requestedPriceStatus === 'APPROVED' ? t('status_approved_parenthesis', 'leads', ' (Approuvé)') : 
+                                 (commission.order as any).lead.requestedPriceStatus === 'REJECTED' ? t('status_rejected_parenthesis', 'leads', ' (Rejeté)') : ''}
                               </span>
                             )}
                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${badge.color}`}>
                               <StatusIcon className="w-3 h-3" />
-                              {badge.label}
+                              {((status === 'CONFIRMED' || status === 'PRICE_CONFIRMED') && commission.order?.coliatyPackageCode) ? badge.label : getStatusLabel(status)}
                             </span>
                             {status === 'CALL_LATER' && (commission.order as any)?.lead?.callbackDate && (
                               <span className="flex items-center gap-1 px-1.5 py-0.5 bg-orange-50 text-orange-600 rounded border border-orange-100 text-[8px] font-black uppercase shadow-sm animate-pulse">
@@ -1098,7 +1120,7 @@ export default function InfluencerLeads() {
                             const badge = PAYMENT_SITUATION_BADGES[sit] || PAYMENT_SITUATION_BADGES.NOT_PAID;
                             return (
                               <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest ${badge.color}`}>
-                                {badge.label}
+                                {getPaymentLabel(sit)}
                               </span>
                             );
                           })()}
@@ -1113,7 +1135,7 @@ export default function InfluencerLeads() {
                               </p>
                             </div>
                           ) : (
-                            <span className="text-[10px] text-gray-300 italic">Aucun commentaire</span>
+                            <span className="text-[10px] text-gray-300 italic">{t('no_comment', 'leads', 'Aucun commentaire')}</span>
                           )}
                         </td>
 
@@ -1127,7 +1149,7 @@ export default function InfluencerLeads() {
                                     const realId = String(commission.id).replace('lead-', '');
                                     handleBulkPush([Number(realId)]);
                                   }}
-                                  className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-all" title="Envoyer au Call Center"
+                                  className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-all" title={t('send_to_call_center', 'leads', 'Envoyer au Call Center')}
                                 >
                                   <Headphones className="w-4 h-4" />
                                 </button>
@@ -1136,29 +1158,29 @@ export default function InfluencerLeads() {
                                     const realId = String(commission.id).replace('lead-', '');
                                     setConfirmModal({
                                       isOpen: true,
-                                      title: 'Supprimer ce lead ?',
-                                      message: 'Cette action est irréversible. Voulez-vous vraiment continuer ?',
+                                      title: t('confirm_single_delete_title', 'leads', 'Supprimer ce lead ?'),
+                                      message: t('confirm_single_delete_msg', 'leads', 'Cette action est irréversible. Voulez-vous vraiment continuer ?'),
                                       variant: 'danger',
                                       onConfirm: async () => {
                                         try {
                                           await influencerApi.deleteLead(Number(realId));
-                                          toast.success('Lead supprimé');
+                                          toast.success(t('delete_success_single', 'leads', 'Lead supprimé'));
                                           loadData();
                                           setConfirmModal(prev => ({ ...prev, isOpen: false }));
                                         } catch (err: any) {
-                                          toast.error(err?.response?.data?.message || 'Erreur');
+                                          toast.error(err?.response?.data?.message || t('error_generic', 'leads', 'Erreur'));
                                         }
                                       }
                                     });
                                   }}
-                                  className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-all" title="Supprimer"
+                                  className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-all" title={t('delete', 'leads', 'Supprimer')}
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
                               </>
                             )}
                             {(commission.order?.status === 'ASSIGNED' || status === 'CANCEL_REASON_PRICE') && (
-                              <span className="text-[10px] text-cyan-600 font-bold bg-cyan-50 px-2 py-1 rounded-lg">Au Call Center</span>
+                              <span className="text-[10px] text-cyan-600 font-bold bg-cyan-50 px-2 py-1 rounded-lg">{t('to_call_center', 'leads', 'Au Call Center')}</span>
                             )}
                             {status === 'CANCEL_REASON_PRICE' && (commission.order as any)?.lead?.requestedPriceStatus === 'PENDING' && (
                               <div className="flex gap-1">
@@ -1166,31 +1188,31 @@ export default function InfluencerLeads() {
                                   onClick={async () => {
                                     try {
                                       await leadsApi.respondPriceRequest(Number(String(commission.id).replace('lead-', '')), 'APPROVE');
-                                      toast.success('Demande de prix approuvée');
+                                      toast.success(t('price_approved', 'leads', 'Demande de prix approuvée'));
                                       loadData();
                                     } catch (err: any) {
-                                      toast.error(err?.response?.data?.message || 'Erreur');
+                                      toast.error(err?.response?.data?.message || t('error_generic', 'leads', 'Erreur'));
                                     }
                                   }}
-                                  className="p-2 rounded-xl text-emerald-600 bg-emerald-50 hover:bg-emerald-100 transition-all text-[11px] font-black uppercase shadow-sm border border-emerald-100 flex flex-col items-center gap-1 min-w-[50px]" title="Accepter"
+                                  className="p-2 rounded-xl text-emerald-600 bg-emerald-50 hover:bg-emerald-100 transition-all text-[11px] font-black uppercase shadow-sm border border-emerald-100 flex flex-col items-center gap-1 min-w-[50px]" title={t('accept', 'leads', 'Accepter')}
                                 >
                                   <CheckCircle className="w-4 h-4" />
-                                  OUI
+                                  {t('yes', 'leads', 'OUI')}
                                 </button>
                                 <button
                                   onClick={async () => {
                                     try {
                                       await leadsApi.respondPriceRequest(Number(String(commission.id).replace('lead-', '')), 'REJECT');
-                                      toast.success('Demande de prix rejetée');
+                                      toast.success(t('price_rejected', 'leads', 'Demande de prix rejetée'));
                                       loadData();
                                     } catch (err: any) {
-                                      toast.error(err?.response?.data?.message || 'Erreur');
+                                      toast.error(err?.response?.data?.message || t('error_generic', 'leads', 'Erreur'));
                                     }
                                   }}
-                                  className="p-2 rounded-xl text-rose-600 bg-rose-50 hover:bg-rose-100 transition-all text-[11px] font-black uppercase shadow-sm border border-rose-100 flex flex-col items-center gap-1 min-w-[50px]" title="Refuser"
+                                  className="p-2 rounded-xl text-rose-600 bg-rose-50 hover:bg-rose-100 transition-all text-[11px] font-black uppercase shadow-sm border border-rose-100 flex flex-col items-center gap-1 min-w-[50px]" title={t('refuse_btn', 'leads', 'Refuser')}
                                 >
                                   <XCircle className="w-4 h-4" />
-                                  NON
+                                  {t('no', 'leads', 'NON')}
                                 </button>
                               </div>
                             )}
@@ -1211,8 +1233,8 @@ export default function InfluencerLeads() {
                               .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
                               // Remove consecutive duplicate statuses (caused by both lead & order history updating)
                               .filter((entry, i, arr) => {
-                                if (i === 0) return true;
-                                return entry.newStatus !== arr[i - 1].newStatus;
+                                  if (i === 0) return true;
+                                  return entry.newStatus !== arr[i - 1].newStatus;
                               });
 
                               return mergedHistory.length > 0 ? (
@@ -1223,7 +1245,7 @@ export default function InfluencerLeads() {
                                     leadNotes: (commission.order as any)?.lead?.notes || '',
                                     history: mergedHistory,
                                   })}
-                                  className="p-1.5 rounded-lg text-violet-500 hover:bg-violet-50 transition-all" title="Voir l'historique"
+                                  className="p-1.5 rounded-lg text-violet-500 hover:bg-violet-50 transition-all" title={t('view_history', 'leads', 'Voir l\'historique')}
                                 >
                                   <History className="w-4 h-4" />
                                 </button>
@@ -1243,11 +1265,14 @@ export default function InfluencerLeads() {
               <div className="p-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white">
                 <div className="flex flex-col sm:flex-row items-center gap-4">
                   <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                    Affichage de <span className="text-gray-900">{Math.min(sortedCommissions.length, (currentPage - 1) * itemsPerPage + 1)}</span> à <span className="text-gray-900">{Math.min(sortedCommissions.length, currentPage * itemsPerPage)}</span> sur <span className="text-gray-900">{sortedCommissions.length}</span> leads
+                    {t('showing_leads', 'leads', 'Affichage de {start} à {end} sur {total} leads')
+                      .replace('{start}', String(Math.min(sortedCommissions.length, (currentPage - 1) * itemsPerPage + 1)))
+                      .replace('{end}', String(Math.min(sortedCommissions.length, currentPage * itemsPerPage)))
+                      .replace('{total}', String(sortedCommissions.length))}
                   </div>
                   
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase">Par page:</span>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase">{t('per_page', 'leads', 'Par page:')}</span>
                     <select
                       value={itemsPerPage}
                       onChange={(e) => setItemsPerPage(Number(e.target.value))}
@@ -1308,11 +1333,11 @@ export default function InfluencerLeads() {
         ) : (
           <div className="p-12 text-center">
             <Package className="w-12 h-12 mx-auto text-gray-200 mb-3" />
-            <p className="text-gray-500 font-medium">Aucun lead trouvé</p>
+            <p className="text-gray-500 font-medium">{t('no_lead_found', 'leads', 'Aucun lead trouvé')}</p>
             <p className="text-gray-400 text-sm mt-1">
               {statusFilter !== 'ALL'
-                ? `Aucun lead avec le statut "${ALL_STATUS_BADGES[statusFilter]?.label || statusFilter}".`
-                : 'Vos leads apparaîtront ici dès qu\'un client commande via vos liens.'}
+                ? t('no_lead_status_desc', 'leads', 'Aucun lead avec le statut "{status}".').replace('{status}', getStatusLabel(statusFilter))
+                : t('no_lead_desc', 'leads', 'Vos leads apparaîtront ici dès qu\'un client commande via vos liens.')}
             </p>
           </div>
         )}
@@ -1327,14 +1352,14 @@ export default function InfluencerLeads() {
               <div className="flex-1">
                 <h2 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
                   <History className="w-5 h-5 text-violet-500" />
-                  Historique des statuts
+                  {t('history_title', 'leads', 'Historique des statuts')}
                 </h2>
                 <div className="flex flex-col gap-1 mt-1">
                   <p className="text-xs text-gray-400 font-medium">{historyModal.customerName}</p>
                   {historyModal.leadNotes && (
                     <div className="bg-amber-50 border border-amber-100/50 rounded-xl px-3 py-2 mt-2">
                       <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest flex items-center gap-1.5 mb-1">
-                        <MessageSquare className="w-3 h-3" /> Commentaire du Lead
+                        <MessageSquare className="w-3 h-3" /> {t('lead_comment', 'leads', 'Commentaire du Lead')}
                       </p>
                       <p className="text-xs text-amber-900/80 font-medium italic">
                         "{historyModal.leadNotes}"
@@ -1356,7 +1381,7 @@ export default function InfluencerLeads() {
               {historyModal.history.length === 0 ? (
                 <div className="text-center py-8 text-gray-400">
                   <History className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                  <p className="text-sm font-medium">Aucun historique disponible</p>
+                  <p className="text-sm font-medium">{t('no_history_available', 'leads', 'Aucun historique disponible')}</p>
                 </div>
               ) : (
                 <div className="relative">
@@ -1381,11 +1406,11 @@ export default function InfluencerLeads() {
                           <div className="flex-1 bg-gray-50 rounded-2xl px-4 py-3">
                             <div className="flex items-center flex-wrap gap-2 mb-1">
                               <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${oldBadge.color}`}>
-                                {oldBadge.label}
+                                {getStatusLabel(entry.oldStatus)}
                               </span>
                               <span className="text-gray-400 text-xs">→</span>
                               <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${newBadge.color}`}>
-                                {newBadge.label}
+                                {getStatusLabel(entry.newStatus)}
                               </span>
                             </div>
                             {entry.notes && (
@@ -1393,7 +1418,7 @@ export default function InfluencerLeads() {
                             )}
                             <div className="flex items-center justify-between mt-2">
                               <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">
-                                {entry.changer?.profile?.fullName || 'Système'}
+                                {entry.changer?.profile?.fullName || t('system', 'leads', 'Système')}
                               </span>
                               <span className="text-[9px] text-gray-400">
                                 {entry.createdAt ? format(new Date(entry.createdAt), 'dd MMM yyyy HH:mm') : '-'}
@@ -1413,7 +1438,7 @@ export default function InfluencerLeads() {
                 onClick={() => setHistoryModal(prev => ({ ...prev, isOpen: false }))}
                 className="w-full px-6 py-3 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-700 bg-gray-50 hover:bg-gray-100 rounded-2xl transition-all"
               >
-                Fermer
+                {t('close', 'leads', 'Fermer')}
               </button>
             </div>
           </div>
@@ -1431,10 +1456,10 @@ export default function InfluencerLeads() {
                     <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center">
                       <AlertCircle className="w-6 h-6 text-amber-500" />
                     </div>
-                    Vérification des Doublons
+                    {t('dup_verification', 'leads', 'Vérification des Doublons')}
                   </h2>
                   <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-2">
-                    {Object.values(duplicateCheck.groups).filter(g => g.length > 1).length} groupes de numéros identiques trouvés
+                    {t('dup_groups_found', 'leads', '{count} groupes de numéros identiques trouvés').replace('{count}', String(Object.values(duplicateCheck.groups).filter(g => g.length > 1).length))}
                   </p>
                 </div>
                 <button
@@ -1452,9 +1477,9 @@ export default function InfluencerLeads() {
                   <Headphones size={20} />
                 </div>
                 <div>
-                  <p className="text-sm font-black text-amber-900 uppercase tracking-tight">Optimisation de l'envoi</p>
+                  <p className="text-sm font-black text-amber-900 uppercase tracking-tight">{t('optimization_title', 'leads', "Optimisation de l'envoi")}</p>
                   <p className="text-xs text-amber-700/70 font-medium mt-1 leading-relaxed">
-                    Nous avons détecté des prospects avec le même numéro de téléphone. Veuillez sélectionner uniquement ceux que vous souhaitez envoyer au Call Center.
+                    {t('optimization_desc', 'leads', 'Nous avons détecté des prospects avec le même numéro de téléphone. Veuillez sélectionner uniquement ceux que vous souhaitez envoyer au Call Center.')}
                   </p>
                 </div>
               </div>
@@ -1472,7 +1497,7 @@ export default function InfluencerLeads() {
                           <span className="text-sm font-black text-slate-700 tracking-tight">{phone}</span>
                         </div>
                         <span className="px-3 py-1 bg-white rounded-full text-[10px] font-black text-slate-400 uppercase tracking-widest border border-slate-100">
-                          {group.length} Doublons
+                          {t('dup_count', 'leads', '{count} Doublons').replace('{count}', String(group.length))}
                         </span>
                       </div>
                       <div className="divide-y divide-slate-100">
@@ -1522,7 +1547,7 @@ export default function InfluencerLeads() {
                                   }`}>
                                     <Headphones size={18} />
                                   </div>
-                                  <span className={`text-[9px] font-black uppercase tracking-widest ${isSelected ? 'text-influencer-600' : 'text-slate-400'}`}>Envoyer</span>
+                                  <span className={`text-[9px] font-black uppercase tracking-widest ${isSelected ? 'text-influencer-600' : 'text-slate-400'}`}>{t('send', 'leads', 'Envoyer')}</span>
                                 </button>
 
                                 {/* Option 2: DELETE */}
@@ -1545,7 +1570,7 @@ export default function InfluencerLeads() {
                                   }`}>
                                     <Trash2 size={18} />
                                   </div>
-                                  <span className={`text-[9px] font-black uppercase tracking-widest ${duplicateCheck.deleteIds.includes(leadId) ? 'text-red-600' : 'text-slate-400'}`}>Supprimer</span>
+                                  <span className={`text-[9px] font-black uppercase tracking-widest ${duplicateCheck.deleteIds.includes(leadId) ? 'text-red-600' : 'text-slate-400'}`}>{t('delete', 'leads', 'Supprimer')}</span>
                                 </button>
                               </div>
                             </div>
@@ -1562,7 +1587,7 @@ export default function InfluencerLeads() {
                 onClick={() => setDuplicateCheck(prev => ({ ...prev, isOpen: false }))}
                 className="flex-1 px-8 py-4 bg-white text-slate-500 rounded-2xl text-[11px] font-black uppercase tracking-widest border border-slate-200 hover:bg-gray-50 transition-all"
               >
-                Annuler
+                {t('cancel', 'leads', 'Annuler')}
               </button>
               {(() => {
                 const hasDuplicateSelections = Object.entries(duplicateCheck.groups).some(([phone, group]) => {
@@ -1581,8 +1606,10 @@ export default function InfluencerLeads() {
                       if (duplicateCheck.deleteIds.length > 0) {
                         setConfirmModal({
                           isOpen: true,
-                          title: 'Nettoyage des doublons',
-                          message: `Vous allez envoyer ${duplicateCheck.ids.length} leads. Les ${duplicateCheck.deleteIds.length} doublons sélectionnés seront définitivement supprimés pour nettoyer votre liste. Confirmer ?`,
+                          title: t('dup_confirm_title', 'leads', 'Nettoyage des doublons'),
+                          message: t('dup_confirm_msg', 'leads', 'Vous allez envoyer {idsCount} leads. Les {deleteCount} doublons sélectionnés seront définitivement supprimés pour nettoyer votre liste. Confirmer ?')
+                            .replace('{idsCount}', String(duplicateCheck.ids.length))
+                            .replace('{deleteCount}', String(duplicateCheck.deleteIds.length)),
                           variant: 'danger',
                           onConfirm: async () => {
                             try {
@@ -1603,11 +1630,13 @@ export default function InfluencerLeads() {
                                 }
                               }
 
-                              toast.success(`${duplicateCheck.ids.length} envoyés et ${duplicateCheck.deleteIds.length} supprimés`);
+                              toast.success(t('dup_process_success', 'leads', '{pushCount} envoyés et {deleteCount} supprimés')
+                                .replace('{pushCount}', String(duplicateCheck.ids.length))
+                                .replace('{deleteCount}', String(duplicateCheck.deleteIds.length)));
                               setSelectedIds([]);
                               setConfirmModal(prev => ({ ...prev, isOpen: false }));
                             } catch (err: any) {
-                              toast.error(err.response?.data?.message || 'Erreur lors du traitement');
+                              toast.error(err.response?.data?.message || t('error_process', 'leads', 'Erreur lors du traitement'));
                             } finally {
                               loadData();
                               setIsPushingBulk(false);
@@ -1626,7 +1655,7 @@ export default function InfluencerLeads() {
                     }`}
                   >
                     <Headphones size={16} />
-                    {hasDuplicateSelections ? 'Doublons sélectionnés' : `Confirmer (${duplicateCheck.ids.length + duplicateCheck.deleteIds.length})`}
+                    {hasDuplicateSelections ? t('dup_has_selections', 'leads', 'Doublons sélectionnés') : t('confirm_count', 'leads', 'Confirmer ({count})').replace('{count}', String(duplicateCheck.ids.length + duplicateCheck.deleteIds.length))}
                   </button>
                 );
               })()}
@@ -1656,7 +1685,7 @@ export default function InfluencerLeads() {
                 onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
                 className="flex-1 px-6 py-3 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 bg-white border border-slate-100 rounded-2xl transition-all shadow-sm"
               >
-                Annuler
+                {t('cancel', 'leads', 'Annuler')}
               </button>
               <button
                 onClick={confirmModal.onConfirm}
@@ -1667,7 +1696,7 @@ export default function InfluencerLeads() {
                     : 'bg-influencer-600 hover:bg-influencer-700 shadow-influencer-200'
                 }`}
               >
-                {isPushingBulk ? 'En cours...' : 'Confirmer'}
+                {isPushingBulk ? t('loading_generic', 'leads', 'En cours...') : t('confirm_btn', 'leads', 'Confirmer')}
               </button>
             </div>
           </div>

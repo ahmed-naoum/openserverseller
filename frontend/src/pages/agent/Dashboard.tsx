@@ -320,7 +320,7 @@ export default function AgentDashboard() {
               <span className={`px-3 py-1 text-xs font-black rounded-lg border w-fit ${
                 isGirly ? 'bg-pink-50 text-pink-600 border-pink-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'
               }`}>
-                Taux de Confirmation: {confirmationRate}%
+                Taux de Confirmation: {confirmationRate}% ({confirmationStats.confirmed}/{confirmationStats.total})
               </span>
             </div>
 
@@ -419,7 +419,7 @@ export default function AgentDashboard() {
               <span className={`px-3 py-1 text-xs font-black rounded-lg border w-fit ${
                 isGirly ? 'bg-pink-50 text-pink-600 border-pink-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'
               }`}>
-                Taux de Livraison: {deliveryRate}%
+                Taux de Livraison: {deliveryRate}% ({deliveryStats.delivered}/{deliveryStats.total})
               </span>
             </div>
 

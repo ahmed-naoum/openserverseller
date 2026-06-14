@@ -166,6 +166,20 @@ router.get(
   })
 );
 
+router.delete(
+  '/audit-logs',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    await prisma.activityLog.deleteMany({});
+    res.json({
+      status: 'success',
+      message: 'Tous les journaux d\'activité ont été supprimés',
+    });
+  })
+);
+
+
 // Get all affiliate claims for approval
 router.get(
   '/affiliate-claims',
@@ -827,24 +841,25 @@ router.get(
   })
 );
 
-// Verify email manually
+// Verify email manually (supports verify & unverify)
 router.patch(
   '/users/:uuid/verify-email',
   authenticate,
   authorize('SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
     const { uuid } = req.params;
+    const { verified = true } = req.body || {};
     
     const user = await prisma.user.update({
       where: { uuid: String(uuid) },
-      data: { emailVerifiedAt: new Date() },
+      data: { emailVerifiedAt: verified ? new Date() : null },
     });
 
     await checkAndActivateUser(user.id);
 
     res.json({
       status: 'success',
-      message: 'E-mail vérifié avec succès',
+      message: verified ? 'E-mail vérifié avec succès' : 'Vérification e-mail annulée',
       data: user,
     });
   })
@@ -872,7 +887,7 @@ router.patch(
   })
 );
 
-// Update KYC status
+// Update KYC status (supports APPROVED, REJECTED, PENDING)
 router.patch(
   '/users/:uuid/verify-kyc',
   authenticate,
@@ -881,7 +896,7 @@ router.patch(
     const { uuid } = req.params;
     const { status } = req.body;
 
-    if (!['APPROVED', 'REJECTED'].includes(status)) {
+    if (!['APPROVED', 'REJECTED', 'PENDING'].includes(status)) {
         throw new AppException(400, 'Statut invalide');
     }
 
@@ -891,7 +906,7 @@ router.patch(
         kycStatus: status,
         kycDocuments: {
             updateMany: {
-                where: { status: 'PENDING' },
+                where: { status: { in: ['PENDING', 'APPROVED', 'REJECTED'] } },
                 data: { status }
             }
         }
@@ -903,7 +918,38 @@ router.patch(
 
     res.json({
       status: 'success',
-      message: `KYC ${status === 'APPROVED' ? 'approuvé' : 'rejeté'} avec succès`,
+      message: `KYC mis à jour vers ${status} avec succès`,
+      data: user,
+    });
+  })
+);
+
+// Manually approve/sign or reset contract for user
+router.patch(
+  '/users/:uuid/verify-contract',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { uuid } = req.params;
+    const { accepted = true } = req.body || {};
+
+    const user = await prisma.user.update({
+      where: { uuid: String(uuid) },
+      data: {
+        contractAccepted: accepted ? true : false,
+        contractSignedAt: accepted ? new Date() : null,
+        damanesignTransactionId: accepted ? undefined : null,
+        damanesignMemberId: accepted ? undefined : null,
+        damanesignFileId: accepted ? undefined : null,
+        damanesignSignedFileUrl: accepted ? undefined : null,
+      },
+    });
+
+    await checkAndActivateUser(user.id);
+
+    res.json({
+      status: 'success',
+      message: accepted ? 'Contrat signé manuellement avec succès' : 'Contrat réinitialisé avec succès',
       data: user,
     });
   })
@@ -918,7 +964,7 @@ router.patch(
     const { id } = req.params;
     const { status } = req.body;
 
-    if (!['APPROVED', 'REJECTED'].includes(status)) {
+    if (!['APPROVED', 'REJECTED', 'PENDING'].includes(status)) {
         throw new AppException(400, 'Statut invalide');
     }
 
@@ -1811,6 +1857,559 @@ router.post(
     res.json({
       status: 'success',
       data: { success, ip }
+    });
+  })
+);
+
+// ========== INFLUENCER INSPECTOR ==========
+router.get(
+  '/influencer-inspector',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    // Get business users (Vendor, Influencer, Grosseller)
+    const allUsers = await prisma.user.findMany({
+      where: { role: { name: { in: ['VENDOR', 'INFLUENCER', 'GROSSELLER'] } } },
+      include: {
+        role: true,
+        profile: true,
+        wallet: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const results = await Promise.all(
+      allUsers.map(async (user) => {
+        // Referral Links
+        const links = await prisma.referralLink.findMany({
+          where: { influencerId: user.id },
+          include: {
+            product: { select: { id: true, nameFr: true, nameAr: true } },
+            landingPage: { select: { id: true, title: true } },
+          },
+        });
+        const activeLinks = links.filter((l) => l.isActive).length;
+        const totalLinks = links.length;
+
+        // Clicks (total views & unique visitors)
+        const clicks = await (prisma as any).referralLinkClick.findMany({
+          where: { referralLinkId: { in: links.map((l) => l.id) } },
+          select: { referralLinkId: true, ipAddress: true, userAgent: true },
+        });
+        const totalViews = clicks.length;
+        const uniqueSet = new Set<string>();
+        clicks.forEach((c: any) =>
+          uniqueSet.add(`${c.ipAddress}-${c.userAgent || 'unknown'}`)
+        );
+        const uniqueVisitors = uniqueSet.size;
+
+        // WhatsApp clicks
+        const totalWhatsappClicks = links.reduce(
+          (sum, l) => sum + (l.whatsappClicks || 0),
+          0
+        );
+
+        // Leads
+        const leads = await prisma.lead.findMany({
+          where: { OR: [{ referralLink: { influencerId: user.id } }, { vendorId: user.id }] },
+          include: { order: true },
+        });
+        const totalLeads = leads.length;
+
+        // Confirmed = leads that have an order
+        const confirmedLeads = leads.filter((l) => l.order).length;
+
+        // Delivered
+        const deliveredLeads = leads.filter(
+          (l) => l.status === 'DELIVERED'
+        ).length;
+
+        // Revenue from delivered orders
+        const totalRevenue = leads
+          .filter((l) => l.status === 'DELIVERED' && l.order)
+          .reduce((sum, l) => sum + Number(l.order?.totalAmountMad || 0), 0);
+
+        // Commissions
+        const commissions = await prisma.influencerCommission.findMany({
+          where: { influencerId: user.id },
+        });
+        const totalCommissions = commissions.reduce(
+          (sum, c) => sum + Number(c.amount),
+          0
+        );
+        const paidCommissions = commissions
+          .filter((c) => c.status === 'PAID')
+          .reduce((sum, c) => sum + Number(c.amount), 0);
+        const pendingCommissions = commissions
+          .filter((c) => c.status === 'PENDING')
+          .reduce((sum, c) => sum + Number(c.amount), 0);
+
+        // Payout requests
+        const payouts = await prisma.payoutRequest.findMany({
+          where: { vendorId: user.id },
+        });
+        const totalWithdrawn = payouts
+          .filter(
+            (p) => p.status === 'COMPLETED' || p.status === 'APPROVED'
+          )
+          .reduce((sum, p) => sum + Number(p.amountMad), 0);
+        const pendingPayouts = payouts
+          .filter((p) => p.status === 'PENDING')
+          .reduce((sum, p) => sum + Number(p.amountMad), 0);
+
+        // Affiliate claims
+        const claims = await prisma.affiliateClaim.findMany({
+          where: { userId: user.id },
+          include: { product: { select: { id: true, nameFr: true, nameAr: true } } },
+        });
+
+        // Lead status breakdown
+        const statusBreakdown: Record<string, number> = {};
+        leads.forEach((l) => {
+          statusBreakdown[l.status] = (statusBreakdown[l.status] || 0) + 1;
+        });
+
+        // Links detail
+        const linksDetail = links.map((link) => {
+          const linkLeads = leads.filter(
+            (l) => l.referralLinkId === link.id
+          );
+          const linkClicks = clicks.filter(
+            (c: any) => c.referralLinkId === link.id
+          );
+          const uniqueClicksSet = new Set();
+          linkClicks.forEach((c: any) => {
+            uniqueClicksSet.add(`${c.ipAddress}-${c.userAgent || 'unknown'}`);
+          });
+
+          return {
+            id: link.id,
+            code: link.code,
+            isActive: link.isActive,
+            status: link.status,
+            product: link.product,
+            landingPage: link.landingPage,
+            clicks: uniqueClicksSet.size, // unique visitors
+            rawClicks: linkClicks.length, // total views
+            whatsappClicks: link.whatsappClicks,
+            leadsCount: linkLeads.length,
+            confirmedCount: linkLeads.filter((l) => l.order).length,
+            deliveredCount: linkLeads.filter(
+              (l) => l.status === 'DELIVERED'
+            ).length,
+            createdAt: link.createdAt,
+          };
+        });
+
+        return {
+          id: user.id,
+          uuid: user.uuid,
+          email: user.email,
+          fullName: user.profile?.fullName || user.email,
+          roleName: user.role.name,
+          phone: user.phone || null,
+          avatarUrl: user.profile?.avatarUrl || null,
+          isActive: user.isActive,
+          kycStatus: user.kycStatus,
+          createdAt: user.createdAt,
+          lastLoginAt: user.lastLoginAt,
+          // Stats
+          totalLinks,
+          activeLinks,
+          totalViews,
+          uniqueVisitors,
+          totalWhatsappClicks,
+          totalLeads,
+          confirmedLeads,
+          deliveredLeads,
+          totalRevenue,
+          // Wallet
+          walletBalance: user.wallet?.balanceMad ?? 0,
+          totalEarned: user.wallet?.totalEarnedMad ?? 0,
+          totalWithdrawn: user.wallet?.totalWithdrawnMad ?? 0,
+          // Commissions
+          totalCommissions,
+          paidCommissions,
+          pendingCommissions,
+          // Payouts
+          totalWithdrawnPayouts: totalWithdrawn,
+          pendingPayouts,
+          // Breakdowns
+          statusBreakdown,
+          linksDetail,
+          claimsCount: claims.length,
+          approvedClaims: claims.filter((c) => c.status === 'APPROVED').length,
+        };
+      })
+    );
+
+    // Global totals
+    const totals = {
+      totalUsers: results.length,
+      totalInfluencers: results.length,
+      totalLeads: results.reduce((s, r) => s + r.totalLeads, 0),
+      totalConfirmed: results.reduce((s, r) => s + r.confirmedLeads, 0),
+      totalDelivered: results.reduce((s, r) => s + r.deliveredLeads, 0),
+      totalRevenue: results.reduce((s, r) => s + r.totalRevenue, 0),
+      totalViews: results.reduce((s, r) => s + r.totalViews, 0),
+      totalUniqueVisitors: results.reduce((s, r) => s + r.uniqueVisitors, 0),
+      totalWhatsappClicks: results.reduce(
+        (s, r) => s + r.totalWhatsappClicks,
+        0
+      ),
+      totalWalletBalance: results.reduce((s, r) => s + r.walletBalance, 0),
+      totalEarned: results.reduce((s, r) => s + r.totalEarned, 0),
+      totalWithdrawn: results.reduce(
+        (s, r) => s + r.totalWithdrawnPayouts,
+        0
+      ),
+      totalLinks: results.reduce((s, r) => s + r.totalLinks, 0),
+      totalActiveLinks: results.reduce((s, r) => s + r.activeLinks, 0),
+    };
+
+    res.json({
+      status: 'success',
+      data: {
+        users: results,
+        influencers: results,
+        totals,
+      },
+    });
+  })
+);
+
+// ========== SUPPORT INSPECTOR ==========
+router.get(
+  '/support-inspector',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    // Get all system support agents
+    const agents = await prisma.user.findMany({
+      where: { role: { name: 'SYSTEM_SUPPORT' } },
+      include: {
+        profile: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Get all support conversations overall
+    const allSupportConversations = await prisma.conversation.findMany({
+      where: { type: 'SUPPORT' },
+      include: {
+        supportRequest: {
+          include: {
+            user: { include: { profile: true, role: true } },
+            product: { select: { nameFr: true, sku: true } },
+          },
+        },
+        messages: {
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    const results = await Promise.all(
+      agents.map(async (agent) => {
+        // Tickets claimed by this agent
+        const agentConversations = allSupportConversations.filter(
+          (c) => c.claimedByUserId === agent.id
+        );
+
+        const totalTickets = agentConversations.length;
+        const activeTickets = agentConversations.filter(
+          (c) => c.status === 'ACTIVE' || c.status === 'PENDING_CLAIM'
+        ).length;
+        const closedTickets = agentConversations.filter(
+          (c) => c.status === 'CLOSED' || c.status === 'ARCHIVED'
+        ).length;
+
+        // Calculate response times
+        let totalResponseTimeMinutes = 0;
+        let responseTimeCount = 0;
+
+        const ticketsDetail = agentConversations.map((c) => {
+          let responseTimeMinutes: number | null = null;
+          
+          // First user message vs First agent response
+          const clientMsg = c.messages[0];
+          const agentMsg = c.messages.find((m) => m.senderId === agent.id);
+
+          if (clientMsg && agentMsg) {
+            const diffMs = agentMsg.createdAt.getTime() - clientMsg.createdAt.getTime();
+            responseTimeMinutes = Math.max(0, Math.round(diffMs / 60000));
+            totalResponseTimeMinutes += responseTimeMinutes;
+            responseTimeCount++;
+          }
+
+          return {
+            id: c.id,
+            subject: c.supportRequest?.subject || c.title || 'Support Ticket',
+            category: c.supportRequest?.type || 'GENERAL',
+            status: c.status,
+            messagesCount: c.messages.length,
+            responseTimeMinutes,
+            createdAt: c.createdAt,
+            claimedAt: c.claimedAt,
+            client: c.supportRequest?.user
+              ? {
+                  fullName: c.supportRequest.user.profile?.fullName || c.supportRequest.user.email,
+                  email: c.supportRequest.user.email,
+                  roleName: c.supportRequest.user.role?.name || 'USER',
+                }
+              : null,
+            product: c.supportRequest?.product
+              ? {
+                  nameFr: c.supportRequest.product.nameFr,
+                  sku: c.supportRequest.product.sku,
+                }
+              : null,
+          };
+        });
+
+        const averageResponseTimeMinutes =
+          responseTimeCount > 0
+            ? Math.round(totalResponseTimeMinutes / responseTimeCount)
+            : null;
+
+        return {
+          id: agent.id,
+          fullName: agent.profile?.fullName || agent.email,
+          email: agent.email,
+          isActive: agent.isActive,
+          totalTickets,
+          activeTickets,
+          closedTickets,
+          averageResponseTimeMinutes,
+          ticketsDetail,
+        };
+      })
+    );
+
+    // Global totals
+    const totalAgents = agents.length;
+    const totalTickets = allSupportConversations.length;
+    const totalActiveTickets = allSupportConversations.filter(
+      (c) => c.status === 'ACTIVE'
+    ).length;
+    const totalClosedTickets = allSupportConversations.filter(
+      (c) => c.status === 'CLOSED' || c.status === 'ARCHIVED'
+    ).length;
+    const totalPendingTickets = allSupportConversations.filter(
+      (c) => c.status === 'PENDING_CLAIM'
+    ).length;
+
+    res.json({
+      status: 'success',
+      data: {
+        agents: results,
+        totals: {
+          totalAgents,
+          totalTickets,
+          totalActiveTickets,
+          totalClosedTickets,
+          totalPendingTickets,
+        },
+      },
+    });
+  })
+);
+
+// ========== REFERRAL LINKS MANAGEMENT ==========
+router.get(
+  '/referral-links',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const links = await prisma.referralLink.findMany({
+      include: {
+        product: {
+          include: { images: { where: { isPrimary: true }, take: 1 } }
+        },
+        influencer: {
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+            profile: { select: { fullName: true } }
+          }
+        },
+        landingPage: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const linkIds = links.map(l => l.id);
+
+    const allClicks = await (prisma as any).referralLinkClick.findMany({
+      where: { referralLinkId: { in: linkIds } },
+      select: { referralLinkId: true, ipAddress: true }
+    });
+
+    const allLeads = await prisma.lead.findMany({
+      where: { referralLinkId: { in: linkIds } },
+      select: { id: true, referralLinkId: true, status: true, order: { select: { id: true } } }
+    });
+
+    const formatted = links.map(link => {
+      const linkClicks = allClicks.filter(c => c.referralLinkId === link.id);
+      const linkLeads = allLeads.filter(l => l.referralLinkId === link.id);
+      const uniqueIps = new Set(linkClicks.map(c => c.ipAddress));
+
+      return {
+        id: link.id,
+        code: link.code,
+        isActive: link.isActive,
+        status: link.status,
+        createdAt: link.createdAt,
+        product: link.product,
+        influencer: {
+          id: link.influencer?.id,
+          email: link.influencer?.email,
+          phone: link.influencer?.phone,
+          fullName: link.influencer?.profile?.fullName || 'Inconnu'
+        },
+        landingPage: link.landingPage,
+        rawClicks: linkClicks.length,
+        clicks: uniqueIps.size,
+        whatsappClicks: link.whatsappClicks || 0,
+        leadsCount: linkLeads.length,
+        confirmedCount: linkLeads.filter(l => l.order || l.status === 'CONFIRMED' || l.status === 'DELIVERED').length,
+        deliveredCount: linkLeads.filter(l => l.status === 'DELIVERED').length,
+      };
+    });
+
+    res.json({ status: 'success', data: formatted });
+  })
+);
+
+router.delete(
+  '/referral-links/:id',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const linkId = parseInt(String(req.params.id));
+
+    const link = await prisma.referralLink.findUnique({
+      where: { id: linkId }
+    });
+
+    if (!link) {
+      throw new AppException(404, 'Referral link not found');
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Disconnect leads
+      await tx.lead.updateMany({
+        where: { referralLinkId: linkId },
+        data: { referralLinkId: null }
+      });
+
+      // Delete influencer commissions
+      await (tx as any).influencerCommission.deleteMany({
+        where: { referralLinkId: linkId }
+      });
+
+      // Delete the referral link
+      await prisma.referralLink.delete({
+        where: { id: linkId }
+      });
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Referral link deleted successfully'
+    });
+  })
+);
+
+// ========== CONTACT MESSAGES MANAGEMENT ==========
+// Get all contact messages
+router.get(
+  '/contact-messages',
+  authenticate,
+  authorize('SUPER_ADMIN', 'SYSTEM_SUPPORT'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { page = 1, limit = 20, search, status } = req.query;
+
+    const where: any = {};
+    if (status) {
+      where.status = status as string;
+    }
+    if (search) {
+      where.OR = [
+        { name: { contains: search as string, mode: 'insensitive' } },
+        { email: { contains: search as string, mode: 'insensitive' } },
+        { subject: { contains: search as string, mode: 'insensitive' } },
+        { message: { contains: search as string, mode: 'insensitive' } },
+      ];
+    }
+
+    const [messages, total] = await Promise.all([
+      prisma.contactMessage.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (Number(page) - 1) * Number(limit),
+        take: Number(limit),
+      }),
+      prisma.contactMessage.count({ where }),
+    ]);
+
+    res.json({
+      status: 'success',
+      data: {
+        messages,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          totalPages: Math.ceil(total / Number(limit)),
+        },
+      },
+    });
+  })
+);
+
+// Update contact message status
+router.patch(
+  '/contact-messages/:id/status',
+  authenticate,
+  authorize('SUPER_ADMIN', 'SYSTEM_SUPPORT'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    const { status } = req.body;
+
+    if (!status) {
+      throw new AppException(400, 'Status is required');
+    }
+
+    const updated = await prisma.contactMessage.update({
+      where: { id },
+      data: { status },
+    });
+
+    res.json({
+      status: 'success',
+      data: updated,
+    });
+  })
+);
+
+// Delete contact message
+router.delete(
+  '/contact-messages/:id',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+
+    await prisma.contactMessage.delete({
+      where: { id },
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Message de contact supprimé avec succès',
     });
   })
 );

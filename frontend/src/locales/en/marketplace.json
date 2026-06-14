@@ -1,0 +1,22 @@
+{
+  "title": "Affiliate Marketplace",
+  "subtitle": "Discover available products and generate your referral links.",
+  "search_placeholder": "Search by product name, SKU...",
+  "view_product_page": "View product page",
+  "influencer_price": "Influencer Price",
+  "view_details": "View Details",
+  "pending_approval": "Pending approval...",
+  "request_rejected": "Request rejected",
+  "link_ready": "Link ready!",
+  "generate_link": "Generate link",
+  "no_products": "No Affiliate Products",
+  "no_products_desc": "No products are currently available for affiliation.",
+  "load_more": "Load more",
+  "error_load_data": "Unable to load data",
+  "error_profile_100": "You must complete your profile to 100% to claim a product.",
+  "success_claimed": "Product claimed! Pending approval.",
+  "error_claimed": "Error claiming product",
+  "success_link_generated": "Link generated and copied!",
+  "error_link_generated": "Error generating link",
+  "success_copied": "Link copied!"
+}

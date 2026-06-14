@@ -1,6 +1,6 @@
+import { prisma } from '../lib/prisma.js';
 import { Router, Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
-import { PrismaClient } from '@prisma/client';
 import multer from 'multer';
 import { OcrService } from '../services/ocr.service.js';
 import bcrypt from 'bcryptjs';
@@ -15,9 +15,10 @@ import { OAuth2Client } from 'google-auth-library';
 import rateLimit from 'express-rate-limit';
 import { encrypt, decrypt } from '../utils/crypto.js';
 import { fetchMaintenanceSettings } from '../middleware/maintenance.js';
+import { generateContractPdf } from '../services/contract.service.js';
+import * as damanesign from '../services/damanesign.service.js';
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID || 'UNCONFIGURED_CLIENT_ID');
-
 const authLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 10, // Limit each IP to 10 register requests per windowMs
@@ -43,7 +44,6 @@ const passwordResetLimiter = rateLimit({
 });
 
 const router = Router();
-const prisma = new PrismaClient();
 
 const getGeoLocation = async (ip: string): Promise<string | null> => {
   try {
@@ -78,6 +78,24 @@ const generateTokens = (userId: string) => {
   );
 
   return { accessToken, refreshToken };
+};
+
+const setAuthCookies = (res: Response, accessToken: string, refreshToken: string) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  res.cookie('token', accessToken, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'strict',
+    path: '/',
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  });
+  res.cookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'strict',
+    path: '/',
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+  });
 };
 
 const generateTwoFactorToken = (userId: string) => {
@@ -117,6 +135,7 @@ router.post(
     body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
     body('fullName').trim().isLength({ min: 4, max: 20 }).withMessage('Le nom complet doit contenir entre 4 et 20 caractères'),
     body('role').optional().isIn(['VENDOR', 'CALL_CENTER_AGENT', 'GROSSELLER', 'INFLUENCER', 'CONFIRMATION_AGENT']),
+    body('cguAccepted').custom((value) => value === true || value === 'true' || value === 1 || value === '1').withMessage("Veuillez accepter les Conditions Générales d'Utilisation (CGU)"),
   ],
   asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
@@ -124,8 +143,9 @@ router.post(
       throw new AppException(400, 'Validation failed');
     }
 
-    const { email, phone, password, fullName, role = 'VENDOR' } = req.body;
+    const { email, phone, password, fullName, role = 'VENDOR', language = 'ar' } = req.body;
     const normalizedPhone = phone ? normalizePhoneNumber(phone) : undefined;
+    const langCode = ['en', 'fr', 'ar'].includes(language) ? language : 'ar';
 
     if (!email) {
       throw new AppException(400, 'Email is required');
@@ -184,12 +204,15 @@ router.post(
         referralCode: role === 'INFLUENCER' ? Math.random().toString(36).substring(2, 10).toUpperCase() : null,
         kycStatus: 'PENDING',
         isActive: false,
+        cguAccepted: true,
+        cguAcceptedAt: new Date(),
         registrationIp,
         detectedCity,
+        language: langCode,
         profile: {
           create: {
             fullName,
-            language: 'fr',
+            language: langCode,
             instagramUsername: (req.body as any).instagramUsername || null,
             tiktokUsername: (req.body as any).tiktokUsername || null,
             facebookUsername: (req.body as any).facebookUsername || null,
@@ -249,6 +272,7 @@ router.post(
     console.log(`[DEV] OTP for ${email || phone}: ${otp}`);
 
     const { accessToken, refreshToken } = generateTokens(user.uuid);
+    setAuthCookies(res, accessToken, refreshToken);
 
     res.status(201).json({
       status: 'success',
@@ -293,6 +317,7 @@ router.post(
     body('xUsername').optional().trim(),
     body('youtubeUsername').optional().trim(),
     body('snapchatUsername').optional().trim(),
+    body('cguAccepted').custom((value) => value === true || value === 'true' || value === 1 || value === '1').withMessage("Veuillez accepter les Conditions Générales d'Utilisation (CGU)"),
   ],
   asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
@@ -300,8 +325,9 @@ router.post(
       throw new AppException(400, 'Validation failed');
     }
 
-    const { email, phone, password, fullName, instagramUsername, tiktokUsername, facebookUsername, xUsername, youtubeUsername, snapchatUsername, instagramUrl, tiktokUrl, facebookUrl, youtubeUrl, snapchatUrl } = req.body;
+    const { email, phone, password, fullName, instagramUsername, tiktokUsername, facebookUsername, xUsername, youtubeUsername, snapchatUsername, instagramUrl, tiktokUrl, facebookUrl, youtubeUrl, snapchatUrl, language = 'ar' } = req.body;
     const normalizedPhone = phone ? normalizePhoneNumber(phone) : undefined;
+    const langCode = ['en', 'fr', 'ar'].includes(language) ? language : 'ar';
 
     if (!email) {
       throw new AppException(400, 'Email is required');
@@ -370,12 +396,15 @@ router.post(
         referralCode: uuidv4().slice(0, 8).toUpperCase(),
         kycStatus: 'PENDING', // Needs admin approval
         isActive: false,
+        cguAccepted: true,
+        cguAcceptedAt: new Date(),
         registrationIp,
         detectedCity,
+        language: langCode,
         profile: {
           create: {
             fullName,
-            language: 'fr',
+            language: langCode,
             instagramUsername: actualUsername,
             tiktokUsername: actualTiktok,
             facebookUsername: actualFacebook,
@@ -434,6 +463,7 @@ router.post(
     }
 
     const { accessToken, refreshToken } = generateTokens(user.uuid);
+    setAuthCookies(res, accessToken, refreshToken);
 
     const userProfile = user.profile;
 
@@ -538,6 +568,7 @@ router.post(
     });
 
     const { accessToken, refreshToken } = generateTokens(user.uuid);
+    setAuthCookies(res, accessToken, refreshToken);
 
     res.json({
       status: 'success',
@@ -553,6 +584,7 @@ router.post(
           kycStatus: user.kycStatus,
           isActive: user.isActive,
           mode: user.mode,
+          language: user.language || user.profile?.language || 'ar',
           isInfluencer: user.isInfluencer || user.role.name === 'INFLUENCER',
           instagramUsername: ((user as any).profile)?.instagramUsername,
           tiktokUsername: ((user as any).profile)?.tiktokUsername,
@@ -621,6 +653,7 @@ router.post(
     });
 
     const { accessToken, refreshToken } = generateTokens(user.uuid);
+    setAuthCookies(res, accessToken, refreshToken);
 
     res.json({
       status: 'success',
@@ -636,6 +669,7 @@ router.post(
           kycStatus: user.kycStatus,
           isActive: user.isActive,
           mode: user.mode,
+          language: user.language || user.profile?.language || 'ar',
           isInfluencer: user.isInfluencer || user.role.name === 'INFLUENCER',
           instagramUsername: ((user as any).profile)?.instagramUsername,
           tiktokUsername: ((user as any).profile)?.tiktokUsername,
@@ -700,6 +734,7 @@ router.post(
     });
 
     const { accessToken, refreshToken } = generateTokens(user.uuid);
+    setAuthCookies(res, accessToken, refreshToken);
 
     res.json({
       status: 'success',
@@ -715,6 +750,7 @@ router.post(
           kycStatus: user.kycStatus,
           isActive: user.isActive,
           mode: user.mode,
+          language: user.language || user.profile?.language || 'ar',
           isInfluencer: user.isInfluencer || user.role.name === 'INFLUENCER',
           instagramUsername: ((user as any).profile)?.instagramUsername,
           tiktokUsername: ((user as any).profile)?.tiktokUsername,
@@ -739,7 +775,8 @@ router.post(
 router.post(
   '/google',
   asyncHandler(async (req: Request, res: Response) => {
-    const { credential, role } = req.body; 
+    const { credential, role, language = 'ar' } = req.body; 
+    const langCode = ['en', 'fr', 'ar'].includes(language) ? language : 'ar';
     
     if (!credential) {
       throw new AppException(400, 'Google credential is required');
@@ -792,6 +829,7 @@ router.post(
       });
 
       const { accessToken, refreshToken } = generateTokens(user.uuid);
+      setAuthCookies(res, accessToken, refreshToken);
 
       return res.json({
         status: 'success',
@@ -807,6 +845,7 @@ router.post(
             kycStatus: user.kycStatus,
             isActive: user.isActive,
             mode: user.mode,
+            language: user.language || user.profile?.language || 'ar',
             isInfluencer: user.isInfluencer || user.role.name === 'INFLUENCER',
             avatarUrl: user.profile?.avatarUrl,
           },
@@ -852,11 +891,12 @@ router.post(
         registrationIp,
         detectedCity,
         emailVerifiedAt: new Date(),
+        language: langCode,
         profile: {
           create: {
             fullName: payload.name || payload.email,
             avatarUrl: payload.picture,
-            language: 'fr',
+            language: langCode,
           },
         },
       } as any,
@@ -882,6 +922,7 @@ router.post(
     }
 
     const { accessToken, refreshToken } = generateTokens(user.uuid);
+    setAuthCookies(res, accessToken, refreshToken);
     
     return res.status(201).json({
       status: 'success',
@@ -950,9 +991,9 @@ router.post(
 
     // Prevent helpers from impersonating administrative, support, or other elevated roles
     if (req.user!.roleName === 'HELPER') {
-      const allowedRoles = ['VENDOR', 'SELLER', 'GROSSELLER', 'INFLUENCER'];
+      const allowedRoles = ['VENDOR', 'SELLER', 'GROSSELLER', 'INFLUENCER', 'CALL_CENTER_AGENT'];
       if (!allowedRoles.includes(targetUser.role.name)) {
-        throw new AppException(403, "Permission denied. Helpers are only allowed to impersonate client roles (Vendor, Seller, Grosseller, Influencer).");
+        throw new AppException(403, "Permission denied. Helpers are only allowed to impersonate client roles and agents (Vendor, Seller, Grosseller, Influencer, Call Center Agent).");
       }
     }
 
@@ -969,6 +1010,21 @@ router.post(
       process.env.JWT_SECRET as string,
       { expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '30d') as any }
     );
+
+    res.cookie('token', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
 
     res.json({
       status: 'success',
@@ -1535,28 +1591,231 @@ router.post(
   })
 );
 
+router.get(
+  '/contract-preview',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const userId = req.user!.id;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { profile: true, bankAccounts: true },
+    });
+
+    if (!user) {
+      throw new AppException(404, 'User not found');
+    }
+
+    if (!user.profile?.fullName) {
+      throw new AppException(400, 'Veuillez renseigner votre nom complet dans votre profil.');
+    }
+    if (!user.profile?.cinNumber) {
+      throw new AppException(400, 'Veuillez renseigner votre numéro de CIN.');
+    }
+
+    const defaultBank = user.bankAccounts.find(b => b.isDefault) || user.bankAccounts[0];
+    if (!defaultBank) {
+      throw new AppException(400, 'Veuillez ajouter un compte bancaire avant de visualiser.');
+    }
+
+    const decryptedRib = decrypt(defaultBank.ribAccount);
+    const iceNumber = defaultBank.iceNumber || undefined;
+
+    const pdfBuffer = await generateContractPdf({
+      fullName: user.profile.fullName,
+      cinNumber: user.profile.cinNumber,
+      city: user.profile.city || 'Marrakech',
+      address: user.profile.address || 'Marrakech',
+      ribAccount: decryptedRib,
+      iceNumber,
+      date: new Date().toLocaleDateString('fr-FR'),
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="projet_contrat.pdf"');
+    res.send(pdfBuffer);
+  })
+);
+
 router.post(
   '/sign-contract',
   authenticate,
   asyncHandler(async (req, res) => {
     const userId = req.user!.id;
 
-    const updatedUser = await prisma.user.update({
+    // Fetch user details including profile and bank accounts
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { profile: true, bankAccounts: true },
+    });
+
+    if (!user) {
+      throw new AppException(404, 'User not found');
+    }
+
+    if (!user.profile?.fullName) {
+      throw new AppException(400, 'Veuillez renseigner votre nom complet dans votre profil.');
+    }
+    if (!user.profile?.cinNumber) {
+      throw new AppException(400, 'Veuillez renseigner votre numéro de CIN.');
+    }
+
+    // Get the default or first bank account
+    const defaultBank = user.bankAccounts.find(b => b.isDefault) || user.bankAccounts[0];
+    if (!defaultBank) {
+      throw new AppException(400, 'Veuillez ajouter un compte bancaire avant de signer.');
+    }
+
+    const decryptedRib = decrypt(defaultBank.ribAccount);
+    const iceNumber = defaultBank.iceNumber || undefined;
+
+    // 1. Generate PDF
+    const pdfBuffer = await generateContractPdf({
+      fullName: user.profile.fullName,
+      cinNumber: user.profile.cinNumber,
+      city: user.profile.city || 'Marrakech',
+      address: user.profile.address || 'Marrakech',
+      ribAccount: decryptedRib,
+      iceNumber,
+      date: new Date().toLocaleDateString('fr-FR'),
+    });
+
+    // 2. Upload PDF to DamaneSign
+    const fileName = `contrat_silacod_${user.id}_${Date.now()}.pdf`;
+    const uploadResult = await damanesign.uploadFile(pdfBuffer, fileName);
+
+    // 3. Create Transaction on DamaneSign
+    const userPhone = user.phone || '+212600000000';
+    const userEmail = user.email || 'user@silacod.com';
+
+    const [firstname, ...lastnameParts] = user.profile.fullName.split(' ');
+    const lastname = lastnameParts.join(' ') || 'User';
+
+    const member: damanesign.DamanesignMemberInput = {
+      type: 'signer',
+      firstname,
+      lastname,
+      email: userEmail,
+      phone: userPhone,
+      authenticationMode: 'sms',
+      signatureType: 'simple',
+      position: 1,
+      fields: [
+        {
+          file: uploadResult.id,
+          page: 1,
+          position: '300,50,150,80',
+          type: 'signature',
+        }
+      ],
+    };
+
+    const transaction = await damanesign.createTransaction({
+      name: `Signature Contrat Silacod - ${user.profile.fullName}`,
+      description: 'Contrat d\'adhésion au réseau de distribution Silacod',
+      type: 'simple',
+      deliveryMode: 'sms',
+      authenticationMode: 'sms',
+      members: [member],
+    });
+
+    // 4. Start the transaction
+    await damanesign.startTransaction(transaction.id);
+
+    const createdMember = transaction.members[0];
+    if (!createdMember) {
+      throw new AppException(500, 'Erreur lors de la création du membre signataire sur DamaneSign.');
+    }
+
+    // 5. Get signature URL
+    const signatureUrl = await damanesign.getSignatureUrl(transaction.id, createdMember.id);
+
+    // 6. Save tracking IDs to User model
+    await prisma.user.update({
       where: { id: userId },
       data: {
-        contractAccepted: true,
-        contractSignedAt: new Date(),
+        damanesignTransactionId: transaction.id,
+        damanesignMemberId: createdMember.id,
+        damanesignFileId: uploadResult.id,
       },
     });
 
-    await checkAndActivateUser(userId);
+    res.json({
+      status: 'success',
+      message: 'Transaction DamaneSign générée',
+      data: {
+        signatureUrl,
+      },
+    });
+  })
+);
+
+router.get(
+  '/contract-status',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const userId = req.user!.id;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new AppException(404, 'User not found');
+    }
+
+    if (user.contractAccepted) {
+      return res.json({
+        status: 'success',
+        data: {
+          signed: true,
+          signedAt: user.contractSignedAt,
+        },
+      });
+    }
+
+    if (!user.damanesignTransactionId) {
+      return res.json({
+        status: 'success',
+        data: {
+          signed: false,
+          hasTransaction: false,
+        },
+      });
+    }
+
+    try {
+      const txDetails = await damanesign.getTransaction(user.damanesignTransactionId);
+      const isSigned = txDetails.status === 'finished' || 
+                       txDetails.members.every(m => m.status === 'finished' || m.status === 'signed');
+      
+      if (isSigned) {
+        await prisma.user.update({
+          where: { id: userId },
+          data: {
+            contractAccepted: true,
+            contractSignedAt: new Date(),
+          },
+        });
+        await checkAndActivateUser(userId);
+
+        return res.json({
+          status: 'success',
+          data: {
+            signed: true,
+            signedAt: new Date(),
+          },
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching DamaneSign status:', err);
+    }
 
     res.json({
       status: 'success',
-      message: 'Contract signed successfully',
       data: {
-        contractAccepted: updatedUser.contractAccepted,
-        contractSignedAt: updatedUser.contractSignedAt,
+        signed: false,
+        hasTransaction: true,
+        transactionId: user.damanesignTransactionId,
       },
     });
   })
@@ -1599,7 +1858,7 @@ router.get(
           avatarUrl: user.profile?.avatarUrl,
           city: user.profile?.city,
           address: user.profile?.address,
-          language: (user.profile as any)?.language,
+          language: user.language || (user.profile as any)?.language || 'ar',
           role: user.role.name,
           mode: user.mode,
           contractAccepted: user.contractAccepted,
@@ -1613,6 +1872,7 @@ router.get(
           canManageOrders: user.canManageOrders,
           canManageInfluencerLinks: user.canManageInfluencerLinks,
           canManageTickets: user.canManageTickets,
+          canScanReturns: user.canScanReturns,
           isTwoFactorEnabled: (user as any).isTwoFactorEnabled,
           instagramUsername: ((user as any).profile)?.instagramUsername,
           tiktokUsername: ((user as any).profile)?.tiktokUsername,
@@ -1888,6 +2148,16 @@ router.delete(
   })
 );
 
-
+router.post(
+  '/logout',
+  (req: Request, res: Response) => {
+    res.clearCookie('token', { path: '/' });
+    res.clearCookie('refreshToken', { path: '/' });
+    res.json({
+      status: 'success',
+      message: 'Logout successful',
+    });
+  }
+);
 
 export default router;

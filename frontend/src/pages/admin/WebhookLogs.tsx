@@ -41,6 +41,37 @@ function getStatusStyle(status: string | null, processed: boolean) {
   return { bg: 'bg-gray-50 border-gray-100', text: 'text-gray-500', icon: <AlertTriangle className="w-4 h-4" /> };
 }
 
+function getSituationStyle(situation: string | null) {
+  if (!situation) return null;
+  const norm = situation.toUpperCase().replace(/_/g, ' ').trim();
+  if (norm === 'PAID' || norm === 'PAYÉ' || norm === 'PAYE') {
+    return {
+      label: 'PAYÉ',
+      bg: 'bg-emerald-50 border-emerald-100',
+      text: 'text-emerald-600'
+    };
+  }
+  if (norm === 'UNPAID' || norm === 'NON PAYÉ' || norm === 'NON PAYE' || norm === 'NO PAYED' || norm === 'NO PAYEE') {
+    return {
+      label: 'NON PAYÉ',
+      bg: 'bg-rose-50 border-rose-100',
+      text: 'text-rose-600'
+    };
+  }
+  if (norm === 'FACTURED' || norm === 'FACTURÉE' || norm === 'FACTUREE' || norm === 'FACTURE') {
+    return {
+      label: 'FACTURÉE',
+      bg: 'bg-blue-50 border-blue-100',
+      text: 'text-blue-600'
+    };
+  }
+  return {
+    label: norm,
+    bg: 'bg-slate-50 border-slate-100',
+    text: 'text-slate-600'
+  };
+}
+
 export default function WebhookLogs() {
   const [logs, setLogs] = useState<WebhookLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -160,8 +191,9 @@ export default function WebhookLogs() {
             <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest">
               <div className="col-span-2">Statut</div>
               <div className="col-span-2">Type</div>
-              <div className="col-span-3">Package Code</div>
-              <div className="col-span-3">Date</div>
+              <div className="col-span-2">Package Code</div>
+              <div className="col-span-2">Situation</div>
+              <div className="col-span-2">Date</div>
               <div className="col-span-2">Détails</div>
             </div>
 
@@ -189,18 +221,30 @@ export default function WebhookLogs() {
                         {isSituation ? 'SITUATION' : 'STATUS'}
                       </span>
                     </div>
-                    <div className="col-span-3">
-                      <p className="text-xs font-bold text-slate-700 font-mono">{packageCode}</p>
+                    <div className="col-span-2">
+                      <p className="text-xs font-bold text-slate-700 font-mono truncate">{packageCode}</p>
                       {coliatyStatus !== '—' && (
-                        <p className="text-[10px] text-slate-400 mt-0.5">→ {coliatyStatus}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5 truncate">→ {coliatyStatus}</p>
                       )}
-                      {isSituation && log.payload?.SITUATION && (
+                      {isSituation && log.payload?.NET != null && (
                         <p className="text-[10px] text-emerald-600 font-bold mt-0.5">
-                          💰 {log.payload.SITUATION} {log.payload.NET != null ? `(NET: ${log.payload.NET} MAD)` : ''}
+                          NET: {log.payload.NET} MAD
                         </p>
                       )}
                     </div>
-                    <div className="col-span-3">
+                    <div className="col-span-2">
+                      {(() => {
+                        const sit = log.payload?.SITUATION;
+                        const sitStyle = getSituationStyle(sit);
+                        if (!sitStyle) return <span className="text-slate-300 text-xs font-bold">—</span>;
+                        return (
+                          <span className={`inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-tighter px-2.5 py-1 rounded-lg border ${sitStyle.bg} ${sitStyle.text}`}>
+                            {sitStyle.label}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                    <div className="col-span-2">
                       <p className="text-xs font-semibold text-slate-600">
                         {format(new Date(log.createdAt), "dd MMM yyyy 'à' HH:mm", { locale: fr })}
                       </p>

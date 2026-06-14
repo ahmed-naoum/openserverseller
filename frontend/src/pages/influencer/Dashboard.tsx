@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { dashboardApi, influencerApi } from '../../lib/api';
 import { ReferralLink, InfluencerCommission } from '../../types';
 import {
   DollarSign, TrendingUp, Zap, MousePointerClick, ArrowUpRight, Crown,
-  Plus, ShoppingBag, Wallet, Activity, BarChart3, CheckCircle2, Truck, ExternalLink, Eye, RefreshCw
+  Plus, ShoppingBag, Wallet, Activity, BarChart3, CheckCircle2, Truck, ExternalLink, Eye, RefreshCw,
+  MessageCircle
 } from 'lucide-react';
 import { ProCard } from '../../components/common/ProCard';
 import { TierProgressBanner } from '../../components/influencer/TierProgressBanner';
@@ -22,11 +24,20 @@ import toast from 'react-hot-toast';
 
 export default function InfluencerDashboard() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [referralLinks, setReferralLinks] = useState<ReferralLink[]>([]);
   const [commissions, setCommissions] = useState<InfluencerCommission[]>([]);
+  const [allCommissions, setAllCommissions] = useState<InfluencerCommission[]>([]);
   const [wallet, setWallet] = useState<any>(null);
   const [walletTransactions, setWalletTransactions] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>({ conversions: 0, confirmed: 0, delivered: 0 });
+  const [stats, setStats] = useState<any>({
+    conversions: 0,
+    confirmed: 0,
+    delivered: 0,
+    totalViews: 0,
+    uniqueVisitors: 0,
+    whatsappClicks: 0
+  });
   const [leadCountsByLink, setLeadCountsByLink] = useState<any[]>([]);
   const [dateRange, setDateRange] = useState<number | 'custom' | 'all'>('all');
   const [startDate, setStartDate] = useState('');
@@ -51,10 +62,22 @@ export default function InfluencerDashboard() {
         params.days = dateRange;
       }
 
+      // Filter links stats by the same date range
+      const linkParams: any = {};
+      if (dateRange === 'custom') {
+        if (startDate) linkParams.start = startDate;
+        if (endDate) linkParams.end = endDate;
+      } else if (typeof dateRange === 'number') {
+        const start = new Date();
+        start.setDate(start.getDate() - (dateRange - 1));
+        linkParams.start = start.toISOString().split('T')[0];
+        linkParams.end = new Date().toISOString().split('T')[0];
+      }
+
       const [dashboardRes, linksRes, customersRes] = await Promise.all([
         dashboardApi.influencer(params),
-        influencerApi.getLinks(),
-        influencerApi.getCustomers()
+        influencerApi.getLinks(linkParams),
+        influencerApi.getCustomers({ all: true })
       ]);
       
       setReferralLinks(linksRes.data);
@@ -64,6 +87,9 @@ export default function InfluencerDashboard() {
       setWalletTransactions(dashboardRes.data.walletTransactions || []);
       setStats(dashboardRes.data.stats || { conversions: 0, confirmed: 0, delivered: 0 });
       setLeadCountsByLink(dashboardRes.data.leadCountsByLink || []);
+
+      const commissionsData = customersRes.data?.data?.commissions || customersRes.data?.commissions || [];
+      setAllCommissions(commissionsData);
     } catch (error) {
       console.error('Failed to load dashboard:', error);
     } finally {
@@ -71,24 +97,85 @@ export default function InfluencerDashboard() {
     }
   };
 
-  const todayClicks = referralLinks.reduce((sum, l) => sum + l.clicks, 0);
-  const todayConversions = stats.conversions;
-  
-  const totalItems = stats.conversions;
-  const confirmedItems = stats.confirmed;
-  const deliveredItems = stats.delivered;
+  const totalViews = stats.totalViews || 0;
+  const uniqueVisitors = stats.uniqueVisitors || 0;
+  const whatsappClicks = stats.whatsappClicks || 0;
 
-  const confirmationRate = totalItems > 0 ? (confirmedItems / totalItems) * 100 : 0;
-  const deliveryRate = confirmedItems > 0 ? (deliveredItems / confirmedItems) * 100 : 0;
+  // Filter allCommissions by date for the quick stats cards
+  const dateFilteredCommissions = allCommissions.filter(c => {
+    const leadDate = new Date(c.order?.createdAt || c.createdAt);
+    
+    if (dateRange === 'all') return true;
+    
+    const now = new Date();
+    if (dateRange === 1) {
+      return leadDate.toDateString() === now.toDateString();
+    }
+    
+    if (dateRange === 'custom') {
+      if (!startDate && !endDate) return true;
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        if (leadDate < start) return false;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        if (leadDate > end) return false;
+      }
+      return true;
+    }
+
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    if (dateRange === 7) d.setDate(now.getDate() - 7);
+    else if (dateRange === 30) d.setDate(now.getDate() - 30);
+    
+    return leadDate >= d;
+  });
+
+  const totalLeads = dateFilteredCommissions.length;
+
+  const deliveryStatuses = [
+    'PENDING', 'PUSHED_TO_DELIVERY', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED', 'CONFIRMED_DELIVERY',
+    'NEW_PARCEL', 'WAITING_PICKUP', 'PICKED_UP', 'SENT', 'RECEIVED', 'DISTRIBUTION', 'PROGRAMMER_AUTO', 'POSTPONED',
+    'WAITING_PREPARATION', 'PREPARED', 'ENCORE_PREPARED', 'CANCELED_BY_SELLER', 'CANCELED_BY_SYSTEM', 'REFUSE',
+    'NOANSWER', 'CANCELED', 'ERR', 'PROGRAMMER', 'INCORRECT_ADDRESS'
+  ];
+
+  const confirmedLeads = dateFilteredCommissions.filter(c => {
+    const s = (c.order?.status || 'UNKNOWN').toUpperCase();
+    return s === 'CONFIRMED' || deliveryStatuses.includes(s);
+  }).length;
+  
+  const deliveredLeads = dateFilteredCommissions.filter(c => (c.order?.status || '').toUpperCase() === 'DELIVERED').length;
+
+  const confirmationRate = totalLeads > 0 ? (confirmedLeads / totalLeads) * 100 : 0;
+  const deliveryRate = confirmedLeads > 0 ? (deliveredLeads / confirmedLeads) * 100 : 0;
+
+  const todayConversions = totalLeads;
+  const totalItems = totalLeads;
+  const confirmedItems = confirmedLeads;
+  const deliveredItems = deliveredLeads;
+
+  const totalLinkClicks = referralLinks.reduce((sum, l) => sum + (l.clicks || 0), 0);
+  const totalLinkConversions = referralLinks.reduce((sum, l) => sum + (l.conversions || 0), 0);
+  const totalLinkRawClicks = referralLinks.reduce((sum, l) => sum + (l.rawClicks || l.clicks || 0), 0);
+  const totalLinkWhatsappClicks = referralLinks.reduce((sum, l) => sum + (l.whatsappClicks || 0), 0);
 
   // Generate chart day keys based on range
   const getNumDays = () => {
     if (dateRange === 'all') {
-      if (commissions.length === 0) return 7;
-      const firstDate = new Date(Math.min(...commissions.map(c => new Date(c.createdAt).getTime())));
+      const allDates = [
+        ...commissions.map(c => new Date(c.createdAt).getTime()),
+        ...walletTransactions.map(tx => new Date(tx.createdAt).getTime())
+      ];
+      if (allDates.length === 0) return 7;
+      const firstDate = new Date(Math.min(...allDates));
       const diffTime = Math.abs(new Date().getTime() - firstDate.getTime());
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return Math.min(diffDays + 1, 30); // Cap at 30 for chart readability even in "All" mode, or show all if you prefer
+      return Math.max(7, Math.min(diffDays + 1, 365)); // Ensure at least 7 days to draw a nice line, cap at 365
     }
     return dateRange === 'custom' ? 7 : Number(dateRange);
   };
@@ -120,7 +207,7 @@ export default function InfluencerDashboard() {
       .filter(tx => new Date(tx.createdAt) <= targetDate)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
 
-    const val = latestTxBefore ? latestTxBefore.balanceAfterMad : (wallet?.balanceMad || 0);
+    const val = latestTxBefore ? latestTxBefore.balanceAfterMad : (walletTransactions.length > 0 ? 0 : (wallet?.balanceMad || 0));
     return { date, balance: Number(val.toFixed(2)) };
   });
 
@@ -179,25 +266,127 @@ export default function InfluencerDashboard() {
       {/* Tier Progress Banner */}
       <TierProgressBanner totalEarned={wallet?.totalEarnedMad || 0} />
 
-      {/* Stats Quick Cards: Grid of 5 */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
-        {[
-          { label: 'Vues de Page', val: todayClicks, icon: MousePointerClick, color: 'text-blue-600', bg: 'bg-blue-50' },
-          { label: 'Ventes', val: todayConversions, icon: Zap, color: 'text-green-600', bg: 'bg-green-50' },
-          { label: 'Taux de Conv.', val: `${todayClicks > 0 ? ((todayConversions / todayClicks) * 100).toFixed(1) : 0}%`, icon: TrendingUp, color: 'text-purple-600', bg: 'bg-purple-50' },
-          { label: 'Confirmation', val: `${confirmationRate.toFixed(1)}%`, icon: CheckCircle2, color: 'text-amber-600', bg: 'bg-amber-50' },
-          { label: 'Livraison', val: `${deliveryRate.toFixed(1)}%`, icon: Truck, color: 'text-emerald-600', bg: 'bg-emerald-50' }
-        ].map((stat) => (
-          <div key={stat.label} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</p>
-            <div className="flex items-center justify-between mt-3">
-              <h3 className={`text-2xl font-black ${stat.color}`}>{stat.val}</h3>
-              <div className={`p-2.5 ${stat.bg} ${stat.color} rounded-2xl group-hover:scale-110 transition-transform`}>
-                <stat.icon className="w-4 h-4" />
-              </div>
+      {/* Stats Quick Cards: Grid of 7 */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 xl:gap-6">
+        {/* Card 1: Vues de Page */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-100/80 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group flex flex-col justify-between min-h-[145px]">
+          <div className="flex items-start justify-between">
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{t('db_page_views', 'dashboard')}</span>
+            <div className="p-2 bg-blue-50 text-blue-600 rounded-xl group-hover:scale-110 transition-transform">
+              <Eye className="w-4 h-4" />
             </div>
           </div>
-        ))}
+          <div className="mt-2">
+            <h3 className="text-3xl font-black text-blue-600 tracking-tight">{totalLinkRawClicks.toLocaleString()}</h3>
+          </div>
+          <div className="mt-4 pt-2 border-t border-slate-100/50 flex items-center justify-between text-[8px] font-extrabold text-slate-400 uppercase tracking-wider">
+            <span>{t('db_total_views', 'dashboard')}</span>
+          </div>
+        </div>
+
+        {/* Card 2: Visiteurs Uniques */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-100/80 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group flex flex-col justify-between min-h-[145px]">
+          <div className="flex items-start justify-between">
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{t('db_uniques', 'dashboard')}</span>
+            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl group-hover:scale-110 transition-transform">
+              <MousePointerClick className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <h3 className="text-3xl font-black text-indigo-600 tracking-tight">{totalLinkClicks.toLocaleString()}</h3>
+          </div>
+          <div className="mt-4 pt-2 border-t border-slate-100/50 flex items-center justify-between text-[8px] font-extrabold text-slate-400 uppercase tracking-wider">
+            <span>{t('db_unique_traffic', 'dashboard')}</span>
+          </div>
+        </div>
+
+        {/* Card 3: Clics WhatsApp */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-100/80 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group flex flex-col justify-between min-h-[145px]">
+          <div className="flex items-start justify-between">
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{t('db_whatsapp_clicks', 'dashboard')}</span>
+            <div className="p-2 bg-green-50 text-green-600 rounded-xl group-hover:scale-110 transition-transform">
+              <MessageCircle className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <h3 className="text-3xl font-black text-green-600 tracking-tight">{totalLinkWhatsappClicks.toLocaleString()}</h3>
+          </div>
+          <div className="mt-4 pt-2 border-t border-slate-100/50 flex items-center justify-between text-[8px] font-extrabold text-slate-400 uppercase tracking-wider">
+            <span>{t('db_whatsapp_clicks', 'dashboard')}</span>
+          </div>
+        </div>
+
+        {/* Card 4: Leads Totaux */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-100/80 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group flex flex-col justify-between min-h-[145px]">
+          <div className="flex items-start justify-between">
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{t('db_total_leads', 'dashboard')}</span>
+            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl group-hover:scale-110 transition-transform">
+              <Zap className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <h3 className="text-3xl font-black text-emerald-600 tracking-tight">{todayConversions.toLocaleString()}</h3>
+          </div>
+          <div className="mt-4 pt-2 border-t border-slate-100/50 flex items-center justify-between text-[8px] font-extrabold text-slate-400 uppercase tracking-wider">
+            <span>{t('db_total_leads', 'dashboard')}</span>
+          </div>
+        </div>
+
+        {/* Card 5: Taux de Conversion */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-100/80 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group flex flex-col justify-between min-h-[145px]">
+          <div className="flex items-start justify-between">
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{t('db_conv_rate', 'dashboard')}</span>
+            <div className="p-2 bg-purple-50 text-purple-600 rounded-xl group-hover:scale-110 transition-transform">
+              <TrendingUp className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <h3 className="text-3xl font-black text-purple-600 tracking-tight">
+              {totalLinkClicks > 0 ? ((totalLinkConversions / totalLinkClicks) * 100).toFixed(1) : '0.0'}%
+            </h3>
+          </div>
+          <div className="mt-4 pt-2 border-t border-slate-100/50 flex items-center justify-between text-[8px] font-extrabold text-purple-700 uppercase tracking-wider">
+            <span>{t('db_leads_visitors', 'dashboard')}</span>
+          </div>
+        </div>
+
+        {/* Card 6: Taux de Confirmation */}
+        <div className="relative bg-white p-5 rounded-2xl border border-slate-100/80 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group flex flex-col justify-between min-h-[145px] border-b-4 border-b-amber-400 pb-7">
+          <div className="flex items-start justify-between">
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{t('db_confirmation', 'dashboard')}</span>
+            <div className="p-2 bg-amber-50 text-amber-600 rounded-xl group-hover:scale-110 transition-transform">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <h3 className="text-3xl font-black text-amber-600 tracking-tight">
+              {confirmationRate.toFixed(1)}%
+            </h3>
+            <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">{t('db_ratio', 'dashboard')} ({confirmedItems}/{totalItems})</p>
+          </div>
+          <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-amber-500 text-white text-[9px] font-black px-3.5 py-1.5 rounded-full shadow-lg border-2 border-white whitespace-nowrap uppercase tracking-widest transition-transform group-hover:scale-105">
+            {confirmedItems} {t('db_leads_confirmed', 'dashboard')}
+          </div>
+        </div>
+
+        {/* Card 7: Taux de Livraison */}
+        <div className="relative bg-white p-5 rounded-2xl border border-slate-100/80 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group flex flex-col justify-between min-h-[145px] border-b-4 border-b-emerald-400 pb-7">
+          <div className="flex items-start justify-between">
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{t('db_delivery', 'dashboard')}</span>
+            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl group-hover:scale-110 transition-transform">
+              <Truck className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <h3 className="text-3xl font-black text-emerald-600 tracking-tight">
+              {deliveryRate.toFixed(1)}%
+            </h3>
+            <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">{t('db_ratio', 'dashboard')} ({deliveredItems}/{confirmedItems})</p>
+          </div>
+          <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[9px] font-black px-3.5 py-1.5 rounded-full shadow-lg border-2 border-white whitespace-nowrap uppercase tracking-widest transition-transform group-hover:scale-105">
+            {deliveredItems} {t('db_leads_delivered', 'dashboard')}
+          </div>
+        </div>
       </div>
 
 
@@ -212,13 +401,13 @@ export default function InfluencerDashboard() {
               <Wallet className="w-24 h-24 text-white" />
             </div>
             <div className="relative z-10 space-y-4">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{isFiltered ? 'Solde à la fin' : 'Solde Portefeuille'}</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{isFiltered ? t('db_final_balance', 'dashboard') : t('db_wallet_balance', 'dashboard')}</p>
               <div className="flex items-baseline gap-2">
                 <h3 className="text-5xl font-black text-white">{displayBalance?.toLocaleString() || 0}</h3>
                 <span className="text-sm font-bold text-slate-400 uppercase">DH</span>
               </div>
               <Link to="/influencer/wallet" className="flex items-center gap-2 text-xs font-black text-influencer-400 hover:text-white transition-colors group/link">
-                GÉRER MES RETRAITS <ArrowUpRight className="w-3 h-3 group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 transition-transform" />
+                {t('db_manage_withdrawals', 'dashboard')} <ArrowUpRight className="w-3 h-3 group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 transition-transform" />
               </Link>
             </div>
           </div>
@@ -231,16 +420,16 @@ export default function InfluencerDashboard() {
             <div className="relative z-10 space-y-4">
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{isFiltered ? 'Gagné (Période)' : 'Total Gagné'}</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{isFiltered ? t('db_earned_period', 'dashboard') : t('db_total_earned', 'dashboard')}</p>
                   <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${currentTier.color}`}>
-                    {currentTier.name}
+                    {t(currentTier.name === 'Débutant' ? 'tier_beginner' : currentTier.name === 'Silver' ? 'tier_silver' : currentTier.name === 'Gold' ? 'tier_gold' : currentTier.name === 'Platine' ? 'tier_platine' : currentTier.name, 'dashboard')}
                   </span>
                 </div>
                 <div className="flex items-baseline gap-2">
                   <h3 className="text-3xl font-black text-green-600">+{displayEarned?.toLocaleString() || 0}</h3>
                   <span className="text-sm font-bold text-slate-400 uppercase">DH</span>
                 </div>
-                <p className="text-[9px] font-bold text-slate-300 italic mt-1">{isFiltered ? 'Sur la période sélectionnée' : 'Depuis la création du compte'}</p>
+                <p className="text-[9px] font-bold text-slate-300 italic mt-1">{isFiltered ? t('db_selected_period', 'dashboard') : t('db_since_creation', 'dashboard')}</p>
               </div>
             </div>
           </div>
@@ -251,12 +440,12 @@ export default function InfluencerDashboard() {
               <DollarSign className="w-24 h-24 text-slate-900" />
             </div>
             <div className="relative z-10 space-y-2">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{isFiltered ? 'Retiré (Période)' : 'Total Retiré'}</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{isFiltered ? t('db_withdrawn_period', 'dashboard') : t('db_total_withdrawn', 'dashboard')}</p>
               <div className="flex items-baseline gap-2">
                 <h3 className="text-3xl font-black text-blue-600">-{displayWithdrawn?.toLocaleString() || 0}</h3>
                 <span className="text-sm font-bold text-slate-400 uppercase">DH</span>
               </div>
-              <p className="text-[9px] font-bold text-slate-300 italic">{isFiltered ? 'Sur la période sélectionnée' : 'Virements effectués'}</p>
+              <p className="text-[9px] font-bold text-slate-300 italic">{isFiltered ? t('db_selected_period', 'dashboard') : t('db_wire_transfers', 'dashboard')}</p>
             </div>
           </div>
         </div>
@@ -268,15 +457,27 @@ export default function InfluencerDashboard() {
               <div className="space-y-1">
                 <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
                   {chartType === 'revenue' ? (
-                    <><Activity className="w-6 h-6 text-influencer-500" /> Performance</>
+                    <><Activity className="w-6 h-6 text-influencer-500" /> {t('db_performance', 'dashboard')}</>
                   ) : (
-                    <><Wallet className="w-6 h-6 text-blue-500" /> Évolution du Solde</>
+                    <><Wallet className="w-6 h-6 text-blue-500" /> {t('db_balance_evolution', 'dashboard')}</>
                   )}
                 </h2>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                   {chartType === 'revenue' 
-                    ? `Revenus ${dateRange === 'custom' ? 'de la période' : dateRange === 'all' ? 'depuis le début' : dateRange === 1 ? 'd\'aujourd\'hui' : `des ${dateRange} jours`}` 
-                    : `Suivi du portefeuille ${dateRange === 'custom' ? 'sur la période' : dateRange === 'all' ? 'depuis le début' : dateRange === 1 ? 'd\'aujourd\'hui' : `sur ${dateRange} jours`}`}
+                    ? (dateRange === 'custom' 
+                        ? t('db_revenue_chart_sub', 'dashboard') 
+                        : dateRange === 'all' 
+                        ? t('db_revenue_chart_all', 'dashboard') 
+                        : dateRange === 1 
+                        ? t('db_revenue_chart_today', 'dashboard') 
+                        : t('db_revenue_chart_days', 'dashboard').replace('{days}', String(dateRange)))
+                    : (dateRange === 'custom' 
+                        ? t('db_balance_chart_sub', 'dashboard') 
+                        : dateRange === 'all' 
+                        ? t('db_balance_chart_all', 'dashboard') 
+                        : dateRange === 1 
+                        ? t('db_balance_chart_today', 'dashboard') 
+                        : t('db_balance_chart_days', 'dashboard').replace('{days}', String(dateRange)))}
                 </p>
               </div>
 
@@ -285,7 +486,7 @@ export default function InfluencerDashboard() {
                   <button
                     onClick={() => loadDashboard()}
                     className="p-2 text-slate-400 hover:text-slate-600 transition-all"
-                    title="Actualiser"
+                    title={t('db_refresh', 'dashboard')}
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
                   </button>
@@ -301,7 +502,7 @@ export default function InfluencerDashboard() {
                             : 'text-slate-400 hover:text-slate-600'
                         }`}
                       >
-                        {range === 'custom' ? 'Personnalisé' : range === 'all' ? 'Tout' : range === 1 ? 'Aujourd\'hui' : `${range}J`}
+                        {range === 'custom' ? t('db_custom', 'dashboard') : range === 'all' ? t('db_all', 'dashboard') : range === 1 ? t('db_today', 'dashboard') : `${range}J`}
                       </button>
                     ))}
                   </div>
@@ -313,7 +514,7 @@ export default function InfluencerDashboard() {
                         chartType === 'revenue' ? 'bg-white text-influencer-600 shadow-sm' : 'text-slate-500'
                       }`}
                     >
-                      Ventes
+                      {t('db_sales', 'dashboard')}
                     </button>
                     <button
                       onClick={() => setChartType('balance')}
@@ -321,7 +522,7 @@ export default function InfluencerDashboard() {
                         chartType === 'balance' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'
                       }`}
                     >
-                      Solde
+                      {t('db_balance_title', 'dashboard')}
                     </button>
                   </div>
                 </div>
@@ -360,7 +561,7 @@ export default function InfluencerDashboard() {
                   <RechartsTooltip 
                     contentStyle={{borderRadius: '20px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px'}}
                     itemStyle={{fontWeight: 900, color: chartType === 'revenue' ? '#8b5cf6' : '#3b82f6'}}
-                    formatter={(val: number) => [`${val.toLocaleString()} DH`, chartType === 'revenue' ? 'Revenu' : 'Solde']}
+                    formatter={(val: number) => [`${val.toLocaleString()} DH`, chartType === 'revenue' ? t('db_revenue_title', 'dashboard') : t('db_balance_title', 'dashboard')]}
                   />
                   <Area 
                     type="monotone" 

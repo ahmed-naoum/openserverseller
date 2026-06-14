@@ -1,23 +1,24 @@
 import { motion } from 'framer-motion';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export default function LiveTicker() {
+  const { t, language } = useLanguage();
+
   const events = [
-    "🚀 تم شحن طلب 'ساعة ذكية' إلى طنجة (قبل دقيقتين)",
-    "⚡ انضم بائع جديد لبناء علامته التجارية للتو",
-    "💰 تم تحويل عمولة بقيمة 450 درهم إلى حساب أمين",
-    "📦 تم شحن 150 وحدة من المنتجات الرائجة للشركاء",
-    "🌟 انضم مؤثر VIP جديد للمنصة للتو",
-    "🚀 تم شحن طلب إلى الدار البيضاء (قبل 5 دقائق)",
-    "💰 حققت ليلى أرباحاً صافية بقيمة 2,100 درهم اليوم",
+    t('ticker_event1'),
+    t('ticker_event2'),
+    t('ticker_event3'),
+    t('ticker_event4'),
+    t('ticker_event5'),
   ];
 
   return (
-    <div dir="rtl" className="bg-gray-900 border-b border-gray-800 py-3 overflow-hidden whitespace-nowrap font-['29LT_Kaff',Cairo,Inter,sans-serif] w-full z-50 relative text-right">
+    <div dir={language === 'ar' ? 'rtl' : 'ltr'} className={`bg-gray-900 border-b border-gray-800 py-3 overflow-hidden whitespace-nowrap font-['29LT_Kaff',Cairo,Inter,sans-serif] w-full z-50 relative ${language === 'ar' ? 'text-right' : 'text-left'}`}>
       <div className="flex">
         <motion.div
-          animate={{ x: [0, 2000] }}
-          transition={{ duration: 40, repeat: Infinity, ease: 'linear' }}
-          className="flex space-x-12 px-6 flex-row-reverse"
+          animate={{ x: language === 'ar' ? [0, 2000] : [0, -2000] }}
+          transition={{ duration: 55, repeat: Infinity, ease: 'linear' }}
+          className={`flex space-x-12 px-6 ${language === 'ar' ? 'flex-row-reverse' : 'flex-row'}`}
         >
           {/* Double the array for seamless scrolling */}
           {[...events, ...events].map((event, i) => (

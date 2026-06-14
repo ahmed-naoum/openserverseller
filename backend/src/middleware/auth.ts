@@ -3,6 +3,16 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+const parseCookies = (cookieHeader: string | undefined): Record<string, string> => {
+  const list: Record<string, string> = {};
+  if (!cookieHeader) return list;
+  cookieHeader.split(';').forEach((cookie) => {
+    const parts = cookie.split('=');
+    list[parts.shift()!.trim()] = decodeURIComponent(parts.join('='));
+  });
+  return list;
+};
+
 export const authenticate = async (
   req: Request,
   res: Response,
@@ -10,15 +20,23 @@ export const authenticate = async (
 ) => {
   try {
     const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    let token = '';
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    } else if (req.headers.cookie) {
+      const cookies = parseCookies(req.headers.cookie);
+      token = cookies.token || '';
+    } else if (req.query.token) {
+      token = req.query.token as string;
+    }
+
+    if (!token) {
       return res.status(401).json({
         status: 'error',
         message: 'Authentication required. Please log in.',
       });
     }
-
-    const token = authHeader.split(' ')[1];
     const jwt = require('jsonwebtoken');
     
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
@@ -111,12 +129,19 @@ export const optionalAuth = async (
 ) => {
   try {
     const authHeader = req.headers.authorization;
+    let token = '';
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    } else if (req.headers.cookie) {
+      const cookies = parseCookies(req.headers.cookie);
+      token = cookies.token || '';
+    }
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!token) {
       return next();
     }
 
-    const token = authHeader.split(' ')[1];
     const jwt = require('jsonwebtoken');
     
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {

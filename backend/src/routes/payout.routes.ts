@@ -1,13 +1,12 @@
+import { prisma } from '../lib/prisma.js';
 import { Router, Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
-import { PrismaClient } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { encrypt, decrypt } from '../utils/crypto.js';
 import { payoutRateLimiter } from '../middleware/security.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.get(
   '/',

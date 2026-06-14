@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { helperApi } from '../../lib/api';
-import { ScanLine, CheckCircle, XCircle, Clock, PackageX, Camera, Keyboard, User, Trash2, CheckSquare, Square, ChevronDown, ChevronRight, Calculator } from 'lucide-react';
+import { ScanLine, CheckCircle, XCircle, Clock, PackageX, Camera, Keyboard, User, Trash2, CheckSquare, Square, ChevronDown, ChevronRight, Calculator, ShieldAlert } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import toast from 'react-hot-toast';
+import { useAuth } from '../../contexts/AuthContext';
+import { Link } from 'react-router-dom';
 
 interface ScannedOrder {
   orderId: number;
@@ -24,6 +26,7 @@ interface ScanHistory {
 }
 
 export default function HelperScanner() {
+  const { user } = useAuth();
   const [inputValue, setInputValue] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
@@ -80,6 +83,26 @@ export default function HelperScanner() {
     window.addEventListener('click', focusInput);
     return () => window.removeEventListener('click', focusInput);
   }, [isCameraMode]);
+
+  if (user?.role === 'HELPER' && !user?.canScanReturns) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center px-4">
+        <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center mb-6 animate-bounce">
+          <ShieldAlert size={40} />
+        </div>
+        <h2 className="text-2xl font-black text-slate-800 mb-2">Accès Non Autorisé</h2>
+        <p className="text-slate-500 max-w-md mb-8">
+          Vous n'avez pas la permission de scanner les retours. Veuillez contacter un administrateur pour obtenir l'accès.
+        </p>
+        <Link 
+          to="/helper" 
+          className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
+        >
+          Retour au Tableau de Bord
+        </Link>
+      </div>
+    );
+  }
 
   // Persist to localStorage
   useEffect(() => {

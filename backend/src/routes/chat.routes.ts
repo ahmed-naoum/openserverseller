@@ -1,12 +1,11 @@
+import { prisma } from '../lib/prisma.js';
 import { Router } from 'express';
 import { body, validationResult } from 'express-validator';
-import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { io } from '../index.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Helper to log conversation actions
 async function logConversationAction(conversationId: number, userId: number | null, action: string, details?: string) {
