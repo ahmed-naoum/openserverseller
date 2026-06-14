@@ -1,0 +1,2582 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Damanesign API Swagger",
+    "description": "Damanesign API",
+    "contact": {
+      "name": "Damanesign",
+      "url": "https://www.damanesign.ma",
+      "email": "support@damanesign.ma"
+    },
+    "version": "2.6.1"
+  },
+  "servers": [
+    {
+      "url": "https://api-recette.damanesign.ma"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Files",
+      "description": "Files API. Use this resource to upload documents before creating a transaction or a seal, inspect uploaded file metadata, and download the original binary content."
+    },
+    {
+      "name": "Transactions",
+      "description": "Transactions API. Create and update endpoints use TransactionInput; the available options for type, deliveryMode, authenticationMode, members[].signatureType and members[].authenticationMode also depend on the account configuration."
+    },
+    {
+      "name": "Seal",
+      "description": "Seal API. Use these endpoints to apply an electronic company seal to an uploaded PDF and to list seal operations performed by the authenticated company."
+    },
+    {
+      "name": "Users",
+      "description": "Users API. Use these endpoints to list and inspect users belonging to the authenticated company."
+    }
+  ],
+  "paths": {
+    "/transactions/{id}": {
+      "get": {
+        "tags": [
+          "Transactions"
+        ],
+        "summary": "Find a transaction by ID",
+        "description": "Returns the full transaction detail, including members, files, tags, reminder, workspace and current lifecycle status. The caller must have access through ownership, workspace membership, list_transactions permission or member participation.",
+        "operationId": "getTransaction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "transaction id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponseOutput"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Transactions"
+        ],
+        "summary": "Update a transaction by ID",
+        "description": "Updates an existing transaction. The transaction must have the DRAFT status.\nThe same rules as transaction creation apply:\n- type defines the global signature type; type=hybrid lets you define members[].signatureType member by member.\n- deliveryMode accepts email, sms or none and applies to the whole transaction.\n- authenticationMode accepts email, sms, none or hybrid. email/sms/none applies to all signers; hybrid lets you define members[].authenticationMode per signer.\n- validators always use authenticationMode=none.\n- for advanced and qualified signatures, authenticationMode must be none.\nAllowed values are controlled by the account configuration. If some fields are missing or blank, the company's default values may be applied.\n",
+        "operationId": "putTransaction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Transaction id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransactionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The request has succeeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The server cannot or will not process the request due to something that is perceived to be a client error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Transactions"
+        ],
+        "summary": "Delete a transaction by ID",
+        "description": "Deletes a transaction owned by the authenticated company. Active transactions cannot be deleted; cancel an active transaction instead. The caller must be the creator, belong to the transaction workspace, or have list_transactions delete permission.",
+        "operationId": "deleteTransactionById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "transaction id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponseOutput"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/transactions/{id}/member/{memberId}": {
+      "put": {
+        "tags": [
+          "Transactions"
+        ],
+        "summary": "Update a member by ID",
+        "description": "Updates a member on an ACTIVE or DRAFT transaction when the account configuration allows updates after transaction start.\nThe request body uses MemberInput. If the member is still PENDING, the member information can be updated.\nFor authentication: members[].authenticationMode is relevant when the transaction uses authenticationMode=hybrid; otherwise the transaction global mode is applied to signers.\n",
+        "operationId": "memberUpdate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Transaction id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "memberId",
+            "in": "path",
+            "description": "Member id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The request has succeeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The server cannot or will not process the request due to something that is perceived to be a client error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/transactions/{id}/member/{memberId}/authentication/{mode}": {
+      "put": {
+        "tags": [
+          "Transactions"
+        ],
+        "summary": "Update a member authentication mode by ID",
+        "description": "Updates a member authentication mode on an ACTIVE or DRAFT transaction.\nThe mode must be allowed by the account configuration. Expected member values: email, sms or none.\nThis operation is useful when you need to adjust one member without rebuilding the full TransactionInput.\n",
+        "operationId": "memberAuthenticationUpdate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Transaction id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "memberId",
+            "in": "path",
+            "description": "Member id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "path",
+            "description": "Member authentication mode. Expected values: email, sms or none, depending on the account configuration.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "email",
+                "sms",
+                "none"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The server cannot or will not process the request due to something that is perceived to be a client error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/transactions": {
+      "get": {
+        "tags": [
+          "Transactions"
+        ],
+        "summary": "Get list of transactions",
+        "description": "Lists transactions visible to the authenticated user.\nThe response is paginated with x-damanesign-pagination-* headers. When xlsx=true, the endpoint returns an Excel export instead of JSON.\nFilters can be combined: status/type/tags/workspace restrict the result set, text filters use contains semantics, and date filters accept the supported comparison operators shown in each parameter description.\nUsers without list_transactions permission are restricted to their own transaction scope.\n",
+        "operationId": "filterTransactions",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "description": "Filter by transaction signature type. Values accepted for creation depend on the account configuration.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "simple",
+                "advanced",
+                "qualified",
+                "hybrid"
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Filter by transaction lifecycle status.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "finished",
+                "expired",
+                "refused",
+                "draft",
+                "canceled"
+              ]
+            }
+          },
+          {
+            "name": "tags",
+            "in": "query",
+            "description": "Filter by tag identifiers attached to the transaction.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Zero-based pagination offset.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of transactions returned in the response.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "description": "Filter by name (contains)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "member",
+            "in": "query",
+            "description": "Filter by member firstName or lastName (contains)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "creator",
+            "in": "query",
+            "description": "Filter by creator firstname or lastname",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspaceIds",
+            "in": "query",
+            "description": "Filter by workspace identifiers.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "createdAt",
+            "in": "query",
+            "description": "Filter by creation date. Supported operators: createdAt[after]=2017-09-18, createdAt[before]=2017-09-18, createdAt[strictly_after]=2017-09-18, createdAt[strictly_before]=2017-09-18.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "date"
+              }
+            }
+          },
+          {
+            "name": "expiresAt",
+            "in": "query",
+            "description": "Filter by expiration date. Supported operators: expiresAt[after]=2017-09-18, expiresAt[before]=2017-09-18, expiresAt[strictly_after]=2017-09-18, expiresAt[strictly_before]=2017-09-18.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "date"
+              }
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "description": "Sort direction for the default transaction ordering.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "xlsx",
+            "in": "query",
+            "description": "When true, returns an Excel export instead of the JSON list.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded",
+            "headers": {
+              "x-damanesign-pagination-total-items": {
+                "description": "Total of items for the pagination",
+                "style": "simple",
+                "schema": {
+                  "type": "object",
+                  "example": 100
+                }
+              },
+              "x-damanesign-pagination-page-current": {
+                "description": "Current page of pagination",
+                "style": "simple",
+                "schema": {
+                  "type": "object",
+                  "example": 2
+                }
+              },
+              "x-damanesign-pagination-page-last": {
+                "description": "Last page of pagination",
+                "style": "simple",
+                "schema": {
+                  "type": "object",
+                  "example": 89
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponseOutput"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Transactions"
+        ],
+        "summary": "Create new transaction",
+        "description": "Creates a transaction from a TransactionInput.\nImportant points when choosing parameters:\n- type: simple, advanced, qualified or hybrid, depending on the account configuration. With type=hybrid, set members[].signatureType to choose the signature type for each member.\n- deliveryMode: email, sms or none. This mode is used for notifications and applies to the whole transaction; there is no deliveryMode=hybrid.\n- authenticationMode: email, sms, none or hybrid. With email/sms/none, the mode is applied to all signers. With hybrid, set members[].authenticationMode for each signer.\n- validators: members with type=validator automatically use authenticationMode=none.\n- advanced/qualified: an advanced, qualified signature requires authenticationMode=none at transaction or member level.\n- default values: if type, deliveryMode or authenticationMode is missing or blank, the company's configured default value is applied when possible.\nThe values actually accepted depend on the account configuration; a 400 error indicates the allowed values when a choice is not permitted.\n",
+        "operationId": "postTransaction",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransactionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "The request has succeeded and has led to the creation of a resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The server cannot or will not process the request due to something that is perceived to be a client error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/transactions/{id}/start": {
+      "post": {
+        "tags": [
+          "Transactions"
+        ],
+        "summary": "Start a transaction",
+        "description": "Starts a draft transaction and sends invitations to the first eligible members.\nBefore activation, the API validates the transaction content, member workflow, account configuration and available subscription packs for each required signature service.\nFor ordered transactions, only the first processing member is invited at start; the next member is invited when the previous member completes the action.\n",
+        "operationId": "startTransaction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Identifier of the draft transaction to start.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transaction started successfully."
+          },
+          "400": {
+            "description": "The transaction cannot be started because it is not a valid draft, has missing members/files or fails validation.",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponseOutput"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not allowed to start this transaction or no subscription pack is available."
+          },
+          "404": {
+            "description": "Transaction not found.",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/transactions/{id}/reminders": {
+      "post": {
+        "tags": [
+          "Transactions"
+        ],
+        "summary": "Remind members to sign",
+        "description": "Sends a manual reminder to members who still need to act on an active transaction.\nFor ordered transactions, only the current processing member is reminded. For circuit-based transactions, the reminder follows the active circuit node.\nThe operation also writes an activity entry and emits the REMINDER_EXECUTED webhook event.\n",
+        "operationId": "memberReminders",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Identifier of the active transaction.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reminder sent successfully."
+          },
+          "400": {
+            "description": "The transaction is not active or cannot be reminded.",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponseOutput"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not allowed to send reminders for this transaction."
+          },
+          "404": {
+            "description": "Transaction not found.",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/transactions/{id}/prolong": {
+      "post": {
+        "tags": [
+          "Transactions"
+        ],
+        "summary": "Update the expiration date",
+        "description": "Extends or changes the expiration date of an active, expired or draft transaction.\nThe new date must not be in the past. When an expired transaction is prolonged, it is restored to active status; a draft transaction remains draft.\nThe caller must be the creator, belong to the transaction workspace, or have list_transactions write permission.\n",
+        "operationId": "putExpiredAt",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Transaction id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string",
+                "format": "date",
+                "description": "New Expiration Date"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Expiration date updated successfully."
+          },
+          "400": {
+            "description": "Invalid expiration date or transaction status.",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponseOutput"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not allowed to update this transaction."
+          },
+          "404": {
+            "description": "Transaction not found.",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/transactions/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Transactions"
+        ],
+        "summary": "Cancel a transaction",
+        "description": "Cancels an active transaction and notifies members who were already involved in the signing workflow.\nDraft, finished, expired, refused or already canceled transactions are left unchanged and return 204.\nThe operation writes an activity entry and emits the TRANSACTION_CANCELED webhook event.\n",
+        "operationId": "transactionCancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Identifier of the transaction to cancel.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Transaction canceled, already canceled, or not active."
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponseOutput"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not allowed to cancel this transaction."
+          },
+          "404": {
+            "description": "Transaction not found.",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/seal": {
+      "post": {
+        "tags": [
+          "Seal"
+        ],
+        "summary": "Seal a document",
+        "description": "Applies an advanced company seal to an uploaded PDF.\nThe file must already exist in DamaneSign and the certificate must belong to the authenticated company. The activation code is validated against the selected certificate before the PDF is sealed.\nOptional fields define where the visible seal image is placed in the document. When image is provided, it must be a base64 data URL.\nThe endpoint updates the original file content and returns a SealOutput referencing the sealed file.\n",
+        "operationId": "stampPost",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SealInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The document was sealed successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SealOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid activation code, missing seal entitlement, invalid input or unsupported file.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No available subscription pack for the seal service.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SealOutput"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Certificate or file not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SealOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/files/upload": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Upload a file",
+        "description": "Uploads a document or signature image and returns the file metadata needed by other endpoints.\nFor transaction documents, use type=signable and contentType=application/pdf. The API extracts PDF metadata such as page count, page size and whether the file was already signed before upload.\nFor handwritten signature images, use type=sign_image and contentType=image.\nThe returned id can be used in TransactionInput.files, MemberInput.fields, SealInput.file, or download endpoints.\n",
+        "operationId": "uploadFile",
+        "parameters": [
+          {
+            "name": "contentType",
+            "in": "query",
+            "description": "Content type of the uploaded file.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "application/pdf",
+                "image"
+              ]
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "description": "Business type of the file. signable is a document to sign or seal; attachment is supporting evidence; sign_image is the user's handwritten signature image.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "signable",
+                "attachment",
+                "sign_image"
+              ]
+            },
+            "example": "signable"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Binary file to upload. Use a PDF for transaction or seal documents, and an image for a sign_image."
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "File uploaded successfully",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The uploaded file is empty, has an unsupported content type, or the request is not multipart/form-data.",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/users": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Get a list of users",
+        "description": "Returns users of the authenticated company. Results can be filtered by free-text query, group and workspace, and are paginated with x-damanesign-pagination-* response headers.",
+        "operationId": "getAllUsersList",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "description": "Free-text filter applied to user identity fields.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Zero-based pagination offset.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of users returned in the response.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          },
+          {
+            "name": "group",
+            "in": "query",
+            "description": "Filter by user group identifier.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "description": "Filter by workspace identifier.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserOutput"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Get user by ID",
+        "description": "Returns the profile, company, group and status information for one user in the authenticated company.",
+        "operationId": "getUserById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "User identifier.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/transactions/{id}/member/{memberId}/url": {
+      "get": {
+        "tags": [
+          "Transactions"
+        ],
+        "summary": "Get signature URL for member",
+        "description": "Returns the web signature URL for a specific member of a transaction. The caller must be that member or have list_transactions execute permission.",
+        "operationId": "transactionsSignatureUrl",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Transaction identifier.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "memberId",
+            "in": "path",
+            "description": "Member identifier inside the transaction.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponseOutput"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not allowed to access this member signature URL.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Transaction or member token not found.",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/seals": {
+      "get": {
+        "tags": [
+          "Seal"
+        ],
+        "summary": "Get list of seals",
+        "description": "Returns seal operations for the authenticated company. The result can be filtered by sealed file name or certificate identifier and is paginated with x-damanesign-pagination-* response headers.",
+        "operationId": "filterSeals",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "description": "Filters seals by the sealed file name. The search is a contains match.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "certificateId",
+            "in": "query",
+            "description": "Filters seals by the certificate identifier used to seal the file.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Zero-based pagination offset.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of seals returned in the response.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded",
+            "headers": {
+              "x-damanesign-pagination-total-items": {
+                "description": "Total of items for the pagination",
+                "style": "simple",
+                "schema": {
+                  "type": "object",
+                  "example": 100
+                }
+              },
+              "x-damanesign-pagination-page-current": {
+                "description": "Current page of pagination",
+                "style": "simple",
+                "schema": {
+                  "type": "object",
+                  "example": 1
+                }
+              },
+              "x-damanesign-pagination-page-last": {
+                "description": "Last page of pagination",
+                "style": "simple",
+                "schema": {
+                  "type": "object",
+                  "example": 10
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SealOutput"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/files/{id}": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Get file metadata by ID",
+        "description": "Returns metadata for a file owned by the authenticated company, without returning the binary content. Use this endpoint to inspect the filename, content type, size, page count, checksum and signature-before-upload flag.",
+        "operationId": "getFilesById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "File identifier returned by POST /files/upload.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "File not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileOutput"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/files/{id}/download": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Download a file",
+        "description": "Downloads the binary content of an uploaded file.\nThe file must belong to the authenticated company. The response is returned as an attachment and includes the original filename in the Content-Disposition header.\nUse GET /files/{id} first when you need metadata such as contentType, size, number of pages or signature status before downloading the content.\n",
+        "operationId": "downloadFile",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "File identifier returned by POST /files/upload.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the file content either as a downloadable binary stream ",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "File not found",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorResponseOutput": {
+        "type": "object",
+        "description": "Standard error payload returned when the API rejects a request.",
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "Field or parameter related to the error, when the error can be attached to a specific input.",
+            "example": "members[0].email"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable error message explaining why the request failed.",
+            "example": "Email is required"
+          }
+        }
+      },
+      "Field": {
+        "type": "object",
+        "description": "Visible field placed on a PDF for a member, such as a signature, name, email, date or text field.",
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "Identifier of the uploaded PDF where the field is placed.",
+            "example": "9d1ede2b-5687-4440-bdc8-dd0bc64f6abc"
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32",
+            "description": "One-based PDF page number where the visible field is placed.",
+            "example": 1
+          },
+          "position": {
+            "type": "string",
+            "description": "Field rectangle in the PDF, formatted as llx,lly,width,height. llx and lly are the lower-left coordinates; width and height define the field size.",
+            "example": "400,700,500,800",
+            "pattern": "^[0-9]+(,[0-9]+){3}$"
+          },
+          "type": {
+            "type": "string",
+            "description": "Field type rendered for the member.",
+            "enum": [
+              "signature-field",
+              "name-field",
+              "email-field",
+              "date-field",
+              "text-field"
+            ],
+            "example": "signature-field"
+          }
+        },
+        "required": [
+          "file"
+        ]
+      },
+      "FieldQrCode": {
+        "type": "object",
+        "description": "QR code placement added to a transaction document.",
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "Identifier of the uploaded PDF where the QR code is placed.",
+            "example": "9d1ede2b-5687-4440-bdc8-dd0bc64f6abc"
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32",
+            "description": "One-based PDF page number where the QR code is placed.",
+            "example": 1
+          },
+          "position": {
+            "type": "string",
+            "description": "Corner where the QR code is placed: tl=top left, tr=top right, ll=lower left, lr=lower right.",
+            "enum": [
+              "tl",
+              "tr",
+              "ll",
+              "lr"
+            ],
+            "example": "lr"
+          }
+        },
+        "required": [
+          "file"
+        ]
+      },
+      "MemberInput": {
+        "type": "object",
+        "description": "Member input",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Participant type:\n- signer: legally signs documents.\n- validator: validates documents without signing. A validator always uses authenticationMode=none.\nIf this field is missing, signer is used by default.\n",
+            "enum": [
+              "signer",
+              "validator"
+            ],
+            "example": "signer"
+          },
+          "firstname": {
+            "type": "string",
+            "description": "Firstname of an external member.",
+            "example": "youssef"
+          },
+          "lastname": {
+            "type": "string",
+            "description": "Lastname of an external member.",
+            "example": "ahmed"
+          },
+          "email": {
+            "type": "string",
+            "description": "Email of an external member.",
+            "example": "youssef.ahmed@email.com",
+            "pattern": "^[A-Za-z0-9_.-]+@[A-Za-z0-9.-]+$"
+          },
+          "phone": {
+            "type": "string",
+            "description": "Phone of an external member.",
+            "example": "+212661000000",
+            "pattern": "^(?:\\+212[67]\\d{8}|\\+(?!212)[1-9]\\d{7,14})$"
+          },
+          "authenticationMode": {
+            "type": "string",
+            "description": "Member-specific authentication mode. This field is used when the transaction has authenticationMode=hybrid.\nAvailable values for a signer: email, sms or none, depending on the account configuration.\nFor a validator, the value is forced to none.\nIf the transaction has authenticationMode=email, sms or none, this field is ignored and replaced with the transaction global mode for signers.\nIf the transaction has authenticationMode=hybrid and this field is missing for a signer, the company's default authentication mode is used.\n",
+            "enum": [
+              "email",
+              "sms",
+              "none"
+            ],
+            "example": "sms"
+          },
+          "position": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Member position in the workflow when transaction.ordered=true. Positions must be provided and ordered; the next member is invited when the previous one has completed the action.",
+            "example": 2
+          },
+          "user": {
+            "type": "string",
+            "description": "User id reference, when member is user"
+          },
+          "fields": {
+            "type": "array",
+            "description": "Fields associated with the member in the documents. Each entry indicates the file, the field type and, for a visible signature, the page and position in the document.",
+            "items": {
+              "$ref": "#/components/schemas/Field"
+            }
+          },
+          "signatureType": {
+            "type": "string",
+            "description": "Member-specific signature type. This field is used when the transaction has type=hybrid.\nAvailable values depend on the account configuration: simple, advanced, qualified.\nIf the transaction has a global type other than hybrid, this field is ignored and replaced with the transaction global type.\nFor advanced or qualified, the member authentication mode must be none.\n",
+            "enum": [
+              "simple",
+              "advanced",
+              "qualified"
+            ],
+            "example": "simple"
+          },
+          "consentText": {
+            "type": "string",
+            "description": "Consent text of the member in format html",
+            "maxLength": 2000,
+            "minLength": 0
+          }
+        },
+        "required": [
+          "email",
+          "firstname",
+          "lastname",
+          "phone"
+        ]
+      },
+      "ReminderUpdateInput": {
+        "type": "object",
+        "description": "Automatic reminder configuration attached to a transaction.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identifier of the reminder configuration, when updating an existing reminder.",
+            "example": "9d1ervtb-5687-xx40-bdc8-dd0bc64f66xx"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Enables or disables automatic reminders for the transaction."
+          },
+          "interval": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of days between two automatic reminder executions.",
+            "example": 2
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Maximum number of reminder executions before automatic reminders stop.",
+            "example": 3
+          },
+          "counter": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of reminder executions already performed.",
+            "example": 0
+          }
+        }
+      },
+      "TransactionInput": {
+        "type": "object",
+        "description": "Complete TransactionInput. See the TransactionInput and MemberInput schemas for details about available options and the impact of hybrid modes.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of transaction",
+            "example": "contrat travail - youssef ahmed",
+            "maxLength": 250,
+            "minLength": 0
+          },
+          "type": {
+            "type": "string",
+            "description": "Transaction/signature type to create. Available values depend on the account configuration:\n- simple : simple signature.\n- advanced : advanced signature. In this case authenticationMode must be none.\n- qualified : qualified signature. In this case authenticationMode must be none.\n- hybrid: lets you define the signature type member by member using members[].signatureType.\nIf this field is missing or blank, the company's configured default transaction type is used.\n",
+            "enum": [
+              "simple",
+              "advanced",
+              "qualified",
+              "hybrid"
+            ],
+            "example": "simple"
+          },
+          "deliveryMode": {
+            "type": "string",
+            "description": "Transaction notification mode. Available values depend on the account configuration:\n- email: invitations and notifications are sent by email.\n- sms: invitations and notifications are sent by SMS.\n- none: no automatic notification is sent.\nThis mode applies to the whole transaction. There is no hybrid value for deliveryMode.\nIf this field is missing or blank, the company's configured default delivery mode is used.\n",
+            "enum": [
+              "email",
+              "sms",
+              "none"
+            ],
+            "example": "email"
+          },
+          "authenticationMode": {
+            "type": "string",
+            "description": "Authentication mode required before members sign. Available values depend on the account configuration:\n- sms: each signer receives an authentication code by SMS.\n- email: each signer receives an authentication code by email.\n- none: no additional authentication is required.\n- hybrid: the mode is selected member by member using members[].authenticationMode.\nIf the value is email, sms or none, it is applied to all signers; validators automatically use none.\nIf the value is hybrid, each signer can have its own members[].authenticationMode among email, sms or none; validators remain on none.\nFor advanced/advanced_timestamped and qualified/qualified_timestamped transactions, the expected value is none.\nIf this field is missing or blank, the company's configured default authentication mode is used.\n",
+            "enum": [
+              "email",
+              "sms",
+              "hybrid",
+              "none"
+            ],
+            "example": "sms"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of transaction",
+            "example": "contrat de travail youssef ahmed,  pour le debut de l'année",
+            "maxLength": 500,
+            "minLength": 0
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date",
+            "description": "Expiration date. The transaction will be out of usage after this date, format dd-MM-yyyy."
+          },
+          "ordered": {
+            "type": "boolean",
+            "description": "Defines whether members must act in a specific order. If true, each member must have a position and only the first eligible member is invited at start; the next member is invited when the previous one has completed the action."
+          },
+          "members": {
+            "type": "array",
+            "description": "List of transaction participants. The list cannot be empty and must contain at least one member with type=signer. The members[].authenticationMode and members[].signatureType fields are useful when authenticationMode or type is set to hybrid.",
+            "items": {
+              "$ref": "#/components/schemas/MemberInput"
+            }
+          },
+          "qrCode": {
+            "type": "array",
+            "description": "List of qrCode",
+            "items": {
+              "$ref": "#/components/schemas/FieldQrCode"
+            }
+          },
+          "reminder": {
+            "$ref": "#/components/schemas/ReminderUpdateInput",
+            "description": "Return reminder"
+          },
+          "workspace": {
+            "type": "string",
+            "description": "Workspace ID",
+            "example": "01d7a887-abec-4210-bc88-849c7e8e96cx"
+          },
+          "templateId": {
+            "type": "string",
+            "description": "Template ID",
+            "example": "01d7a887-abec-4210-bc88-849c7e8e96cx"
+          },
+          "tagIds": {
+            "type": "array",
+            "description": "List of tags Ids",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "FileOutput": {
+        "type": "object",
+        "description": "Metadata of a file stored by DamaneSign. The binary content is not embedded in this object; use /files/{id}/download to retrieve it.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique file identifier. Use this value in transactions, seal requests and download endpoints.",
+            "example": "9d1ede2b-5687-4440-bdc8-dd0bc64f6123"
+          },
+          "name": {
+            "type": "string",
+            "description": "Original filename sent during upload.",
+            "example": "bon-de-commande.pdf"
+          },
+          "pages": {
+            "type": "integer",
+            "description": "Number of pages detected for a PDF document. This value is null for signature images.",
+            "example": 1
+          },
+          "contentType": {
+            "type": "string",
+            "description": "MIME-like content type stored for the file.",
+            "example": "application/pdf"
+          },
+          "type": {
+            "type": "string",
+            "description": "Business usage of the file. signable files can be signed or sealed; attachment files support a transaction; sign_image stores a user's handwritten signature image.",
+            "enum": [
+              "signable",
+              "attachment",
+              "sign_image"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Date and time when the file metadata was created."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Date and time when the file metadata was last updated."
+          },
+          "creator": {
+            "type": "string",
+            "description": "Identifier of the user who uploaded the file.",
+            "example": "9d1ede2b-5687-4440-bdc8-dd0bc64f6Xyz"
+          },
+          "hash": {
+            "type": "string",
+            "description": "Checksum calculated for the stored file content.",
+            "example": "ab29cb08a4ee63903dec4cb6828fe30f7392cdea0fc6598578ff36aba2fc6060"
+          },
+          "preHash": {
+            "type": "string",
+            "description": "Checksum calculated before a content transformation, when applicable.",
+            "example": "ac29cb08a4ee63903dec4cb6828fe30f7392cdea0fc6598578ff36aba2fc8080"
+          },
+          "hashAlgorithm": {
+            "type": "string",
+            "description": "Algorithm used to calculate hash and preHash.",
+            "example": "SHA-256"
+          },
+          "size": {
+            "type": "integer",
+            "description": "File size in bytes.",
+            "example": 1024576
+          },
+          "width": {
+            "type": "number",
+            "format": "double",
+            "description": "Detected width of a PDF page or image canvas, in points/pixels depending on the source.",
+            "example": 595
+          },
+          "height": {
+            "type": "number",
+            "format": "double",
+            "description": "Detected height of a PDF page or image canvas, in points/pixels depending on the source.",
+            "example": 842
+          },
+          "ownerId": {
+            "type": "string",
+            "description": "Identifier of the business object that owns the file, such as a transaction, template, seal or user."
+          },
+          "isSignedBeforeUpload": {
+            "type": "boolean",
+            "description": "True when the uploaded PDF already contained a digital signature before DamaneSign processing."
+          },
+          "link": {
+            "type": "string",
+            "description": "Relative API path for this file metadata.",
+            "example": "/files/9d1ede2b-5687-4440-bdc8-dd0bc64f668c"
+          }
+        }
+      },
+      "MemberOutput": {
+        "type": "object",
+        "description": "Participant of a transaction. A member can be a signer, who legally signs documents, or a validator, who approves without signing.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique member identifier inside the transaction.",
+            "example": "9d1ede2b-5687-4440-bdc8-dd0bc64f668c"
+          },
+          "type": {
+            "type": "string",
+            "description": "Role of the member. signer signs documents legally; validator approves documents without signing.",
+            "enum": [
+              "signer",
+              "validator"
+            ]
+          },
+          "firstname": {
+            "type": "string",
+            "description": "Member first name."
+          },
+          "lastname": {
+            "type": "string",
+            "description": "Member last name."
+          },
+          "email": {
+            "type": "string",
+            "description": "Email address used to identify and notify the member."
+          },
+          "phone": {
+            "type": "string",
+            "description": "Phone number used for SMS delivery or SMS authentication when configured."
+          },
+          "signatureType": {
+            "type": "string",
+            "description": "Signature service assigned to this member. Relevant when the transaction type is hybrid.",
+            "enum": [
+              "simple",
+              "simple_timestamped",
+              "advanced",
+              "advanced_timestamped",
+              "qualified",
+              "qualified_timestamped",
+              "hybrid",
+              "seal_simple",
+              "seal_advanced",
+              "seal_advanced_timestamped",
+              "timestamp"
+            ]
+          },
+          "authenticationMode": {
+            "type": "string",
+            "description": "Authentication mode assigned to this member. Relevant when the transaction authenticationMode is hybrid.",
+            "enum": [
+              "email",
+              "sms",
+              "hybrid",
+              "none"
+            ]
+          },
+          "position": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Member order in the workflow when transaction.ordered=true. Position 1 acts first, then the next position is invited after completion."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Date and time when the member was added to the transaction."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Date and time when the member data or status was last updated."
+          },
+          "executedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Date of signature or validation"
+          },
+          "status": {
+            "type": "string",
+            "description": "Current status of the member in the transaction workflow.",
+            "enum": [
+              "pending",
+              "processing",
+              "done",
+              "refused"
+            ]
+          },
+          "fields": {
+            "type": "array",
+            "description": "Visible fields assigned to this member on the transaction documents.",
+            "items": {
+              "$ref": "#/components/schemas/Field"
+            }
+          },
+          "comment": {
+            "type": "string",
+            "description": "Comment of a member when he refuses a signature"
+          },
+          "consentText": {
+            "type": "string",
+            "description": "Consent text accepted by the member during signature."
+          },
+          "fullName": {
+            "type": "string",
+            "description": "Computed full name of the member."
+          },
+          "signImageId": {
+            "type": "string"
+          },
+          "initial": {
+            "type": "string",
+            "description": "Computed initials of the member.",
+            "example": "YA"
+          }
+        },
+        "required": [
+          "fullName",
+          "initial"
+        ]
+      },
+      "ReminderOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Reminder's ID",
+            "example": "9d1ervtb-5687-xx40-bdc8-dd0bc64f66xx"
+          },
+          "transaction": {
+            "type": "string",
+            "description": "Id of the transaction",
+            "example": "9d1ede2b-5687-4440-bdc8-dd0bc64f668c"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Define if reminder is enable or not"
+          },
+          "interval": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Means that the reminder will be sent every x days."
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Means that the reminder will be executed x times, after that, he will be desactivated."
+          },
+          "counter": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Counter for limit"
+          },
+          "company": {
+            "type": "string",
+            "description": "Company's ID"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Created date of the reminder"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Updated date of the reminder"
+          },
+          "last_execution": {
+            "type": "string",
+            "format": "date",
+            "description": "last Date the reminder was sent"
+          }
+        }
+      },
+      "TagOutput": {
+        "type": "object",
+        "description": "Tag attached to a transaction to make search and classification easier.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique tag identifier.",
+            "example": "9d1ede2b-5687-4440-bdc8-dd0bc64f668c"
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name of the tag.",
+            "example": "Contrats RH"
+          },
+          "color": {
+            "type": "string",
+            "description": "Display color associated with the tag.",
+            "example": "#2F80ED"
+          }
+        }
+      },
+      "TransactionOutput": {
+        "type": "object",
+        "description": "Complete transaction returned by the API, including lifecycle status, participants, files, reminders, workspace and tags.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique transaction identifier.",
+            "example": "9d1ede2b-5687-4440-bdc8-dd0bc64f668c"
+          },
+          "name": {
+            "type": "string",
+            "description": "Transaction title displayed to the creator and members.",
+            "example": "invitation contrat de travail"
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional transaction description shown in transaction details.",
+            "example": "description de l'invitation"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Date and time when the transaction was created."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Date and time when the transaction was last updated."
+          },
+          "reminder": {
+            "$ref": "#/components/schemas/ReminderOutput",
+            "description": "Automatic reminder configuration attached to the transaction, when enabled."
+          },
+          "workspace": {
+            "$ref": "#/components/schemas/WorkspaceOutput",
+            "description": "Workspace associated with the transaction, when one was selected."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date",
+            "description": "Expiration date. Members can no longer act on the transaction after this date unless it is prolonged."
+          },
+          "type": {
+            "type": "string",
+            "description": "Signature service used by the transaction. hybrid means member-specific signature types are used.",
+            "enum": [
+              "simple",
+              "simple_timestamped",
+              "advanced",
+              "advanced_timestamped",
+              "qualified",
+              "qualified_timestamped",
+              "hybrid",
+              "seal_simple",
+              "seal_advanced",
+              "seal_advanced_timestamped",
+              "timestamp"
+            ],
+            "example": "simple"
+          },
+          "status": {
+            "type": "string",
+            "description": "Current transaction lifecycle status.",
+            "enum": [
+              "draft",
+              "active",
+              "finished",
+              "expired",
+              "refused",
+              "canceled"
+            ]
+          },
+          "deliveryMode": {
+            "type": "string",
+            "description": "Notification channel used to invite and notify members.",
+            "enum": [
+              "email",
+              "sms",
+              "none"
+            ],
+            "example": "email"
+          },
+          "authenticationMode": {
+            "type": "string",
+            "description": "Authentication mode required before signers can sign. hybrid means member-specific authentication modes are used.",
+            "enum": [
+              "email",
+              "sms",
+              "hybrid",
+              "none"
+            ],
+            "example": "email"
+          },
+          "creator": {
+            "type": "string",
+            "description": "Identifier of the user who created the transaction.",
+            "example": "9d1ede2b-5687-4440-bdc8-dd0bc64f668c"
+          },
+          "creatorName": {
+            "type": "string",
+            "description": "The creator's full name",
+            "example": "ahmed youssef"
+          },
+          "ordered": {
+            "type": "boolean",
+            "description": "Defines whether members must act in position order. If true, only the current member is invited until that member completes the action.",
+            "example": true
+          },
+          "members": {
+            "type": "array",
+            "description": "Participants in the transaction, including signers and validators.",
+            "items": {
+              "$ref": "#/components/schemas/MemberOutput"
+            }
+          },
+          "files": {
+            "type": "array",
+            "description": "List of files used in the transaction.",
+            "items": {
+              "$ref": "#/components/schemas/FileOutput"
+            }
+          },
+          "qrCode": {
+            "type": "array",
+            "description": "QR code placements configured for the transaction documents.",
+            "items": {
+              "$ref": "#/components/schemas/FieldQrCode"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "description": "Tags attached to the transaction.",
+            "items": {
+              "$ref": "#/components/schemas/TagOutput"
+            }
+          },
+          "templateId": {
+            "type": "string",
+            "description": "Template ID",
+            "example": "01d7a887-abec-4210-bc88-849c7e8e96cx"
+          },
+          "link": {
+            "type": "string",
+            "description": "Relative API path for this transaction.",
+            "example": "/transactions/9d1ede2b-5687-4440-bdc8-dd0bc64f668c"
+          }
+        }
+      },
+      "WorkspaceOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Object's ID",
+            "example": "9d1ede2b-5687-4440-bdc8-dd0bc64f668c"
+          },
+          "name": {
+            "type": "string",
+            "description": "Workspace's name",
+            "example": "HR"
+          },
+          "description": {
+            "type": "string",
+            "description": "Workspace's description",
+            "example": "description"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Created date of the object"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Updated date of the object"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "FieldInput": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Page of the visible signature. This property is ignored if fieldName is set.  If you want a visible signature, you must set page, position and fieldName.",
+            "example": 1
+          },
+          "position": {
+            "type": "string",
+            "description": "Coordinates of the signature image to set. Format is : \\\"llx,lly,width,height\\\". llx=left lower x coordinate, lly=left lower y coordinate, width=the width value, height = the height value. To get easily coordinates, when you are on page https://app.damanesign.ma/transaction-builder?id=xxx-xxx-xxx-xxx press the F6 key on the keyboard",
+            "example": "400,700,500,800",
+            "pattern": "^[0-9]+(,[0-9]+){3}$"
+          }
+        }
+      },
+      "SealInput": {
+        "type": "object",
+        "description": "Seal request containing the file, certificate, activation code and optional visible seal placement.",
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "Identifier of the uploaded PDF to seal. This value is returned by POST /files/upload.",
+            "example": "9d1ede2b-5687-4440-bdc8-dd0bc64f6123"
+          },
+          "certificate": {
+            "type": "string",
+            "description": "Identifier of the company certificate used to produce the seal.",
+            "example": "9d1ede2b-5687-4440-bdc8-dd0bc64f6abc"
+          },
+          "code": {
+            "type": "string",
+            "description": "Activation code associated with the selected certificate.",
+            "example": 1234
+          },
+          "image": {
+            "type": "string",
+            "description": "Optional visible seal image as a base64 data URL. When omitted, the seal can still be applied without a custom image depending on field configuration.",
+            "example": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAA2wAAAPc..."
+          },
+          "fields": {
+            "type": "array",
+            "description": "Visible seal placements in the document. Each entry identifies the page and rectangle where the seal image is rendered.",
+            "items": {
+              "$ref": "#/components/schemas/FieldInput"
+            }
+          }
+        },
+        "required": [
+          "certificate",
+          "code",
+          "file"
+        ]
+      },
+      "SealOutput": {
+        "type": "object",
+        "description": "Result of a seal operation. It identifies the sealed file, the certificate used and the seal operation metadata.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier of the seal operation.",
+            "example": "9d1ede2b-5687-4440-bdc8-dd0bc64f668c"
+          },
+          "creator": {
+            "type": "string",
+            "description": "Identifier of the user who initiated the seal operation.",
+            "example": "9d1ede2b-5687-4440-bdc8-dd0bc64f6xyz"
+          },
+          "type": {
+            "type": "string",
+            "description": "Seal service used for this operation.",
+            "example": "seal_advanced"
+          },
+          "file": {
+            "$ref": "#/components/schemas/FileOutput",
+            "description": "Metadata of the file after the seal has been applied."
+          },
+          "certificate": {
+            "type": "string",
+            "description": "Identifier of the certificate used to seal the file.",
+            "example": "9d1ede2b-5687-4440-bdc8-dd0bc64f6abc"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Date and time when the seal operation was created."
+          }
+        }
+      },
+      "CompanyOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Object's ID",
+            "example": "9d1ede2b-5687-4440-bdc8-dd0bc6109323"
+          },
+          "name": {
+            "type": "string",
+            "description": "Company name",
+            "example": "Société A"
+          },
+          "logo": {
+            "type": "string",
+            "description": "Company logo"
+          },
+          "url": {
+            "type": "string",
+            "description": "Url for company",
+            "example": "www.societe.ma"
+          },
+          "ice": {
+            "type": "string",
+            "description": "ICE for company",
+            "example": 149039344
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Created date of the company"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Updated date of the company"
+          },
+          "link": {
+            "type": "string",
+            "description": "Object's link",
+            "example": "/companies/9d1ede2b-5687-4440-bdc8-dd0bc6109323"
+          }
+        }
+      },
+      "UserGroupOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id of the object",
+            "example": "9d1ede2b-5687-4440-bdc8-dd0bc64f668c"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the UserGroupOutput"
+          },
+          "permissions": {
+            "type": "array",
+            "description": "Permissions of UserGroupOutput",
+            "items": {
+              "type": "string"
+            }
+          },
+          "link": {
+            "type": "string",
+            "description": "Object's link",
+            "example": "/user_groups/9d1ede2b-5687-4440-bdc8-dd0bc64f668c"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "UserOutput": {
+        "type": "object",
+        "description": "User profile returned by the Users API for a member of the authenticated company.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique user identifier.",
+            "example": "9d1ede2b-5687-4440-bdc8-dd0bc64f668c"
+          },
+          "firstname": {
+            "type": "string",
+            "description": "User first name.",
+            "example": "John"
+          },
+          "lastname": {
+            "type": "string",
+            "description": "User last name.",
+            "example": "Ahmed"
+          },
+          "title": {
+            "type": "string",
+            "description": "User job title.",
+            "example": "Manager"
+          },
+          "email": {
+            "type": "string",
+            "description": "User email address.",
+            "example": "john.ahmed@societe.ma"
+          },
+          "phone": {
+            "type": "string",
+            "description": "User's phone number (mobiles and landline telephones are supported). Phone number must be formatted to E164 (https://en.wikipedia.org/wiki/E.164) which includes the symbol '+' and the country code. For example : +212612131315. All countries are supported."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "True when the user account is active."
+          },
+          "mfaEnabled": {
+            "type": "boolean",
+            "description": "True when multi-factor authentication is enabled for the user."
+          },
+          "company": {
+            "$ref": "#/components/schemas/CompanyOutput",
+            "description": "Company to which the user belongs."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Date and time when the user account was created."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Date and time when the user account was last updated."
+          },
+          "signImageId": {
+            "type": "string",
+            "description": "Identifier of the user's saved handwritten signature image, when available."
+          },
+          "group": {
+            "$ref": "#/components/schemas/UserGroupOutput",
+            "description": "Group and permissions assigned to the user."
+          },
+          "fullName": {
+            "type": "string",
+            "description": "Computed user full name.",
+            "example": "John Ahmed"
+          },
+          "link": {
+            "type": "string",
+            "description": "Relative API path for this user.",
+            "example": "/users/9d1ede2b-5687-4440-bdc8-dd0bc64f668c"
+          },
+          "initial": {
+            "type": "string",
+            "description": "Computed user initials.",
+            "example": "JA"
+          }
+        },
+        "required": [
+          "email",
+          "firstname",
+          "fullName",
+          "initial",
+          "lastname"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "x-api-key": {
+        "type": "apiKey",
+        "name": "x-api-key",
+        "in": "header"
+      }
+    }
+  }
+}
