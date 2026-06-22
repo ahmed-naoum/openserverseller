@@ -12,6 +12,9 @@ import { uploadRateLimiter } from '../middleware/security.js';
 
 const router = Router();
 
+// Disable sharp cache to prevent file locking issues on Windows
+sharp.cache(false);
+
 // Ensure upload directories exist
 const uploadsDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadsDir)) {
@@ -97,8 +100,11 @@ const optimizeAndConvertImage = async (
     const webpFilename = `${baseName}-optimized.webp`;
     const outputPath = path.join(dir, webpFilename);
 
+    // Read the file into memory first to avoid file-locking on Windows
+    const fileBuffer = fs.readFileSync(filePath);
+
     // Sharp strips EXIF metadata automatically unless withMetadata() is explicitly called
-    const info = await sharp(filePath)
+    const info = await sharp(fileBuffer)
       .resize({ width: 1200, withoutEnlargement: true })
       .webp({ quality: 80 })
       .toFile(outputPath);

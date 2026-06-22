@@ -5,6 +5,7 @@ import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { v4 as uuidv4 } from 'uuid';
 import { io } from '../index.js';
+import { containsBlockedWord } from '../utils/blockedWords.js';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -40,8 +41,13 @@ router.get(
       return res.json({ unique: false, message: 'Nom invalide' });
     }
 
+    const nameStr = name.trim();
+    if (nameStr.length < 3 || nameStr.length > 20 || !/^[a-zA-Z0-9-_]+$/.test(nameStr)) {
+      return res.json({ unique: false, message: 'Format invalide' });
+    }
+
     const exists = await prisma.referralLink.findUnique({
-      where: { code: name }
+      where: { code: nameStr }
     });
 
     return res.json({ unique: !exists });
@@ -87,6 +93,12 @@ router.post(
       const nameRegex = /^[a-zA-Z0-9-_]+$/;
       if (!nameRegex.test(nameStr)) {
         throw new AppException(400, 'Le nom personnalisé ne peut contenir que des lettres, chiffres, tirets (-) et underscores (_).');
+      }
+
+      // Check for blocked/forbidden words
+      const blockedWord = containsBlockedWord(nameStr);
+      if (blockedWord) {
+        throw new AppException(400, 'Ce nom contient un mot interdit et ne peut pas être utilisé.');
       }
 
       // Check uniqueness
@@ -1005,6 +1017,7 @@ router.get(
       include: {
         order: {
           include: {
+            items: true,
             lead: {
               include: {
                 statusHistory: {
@@ -1048,6 +1061,7 @@ router.get(
       include: {
         order: {
           include: {
+            items: true,
             statusHistory: {
               include: { changedByUser: { select: { id: true, profile: { select: { fullName: true } } } } },
               orderBy: { createdAt: 'asc' }
@@ -1085,6 +1099,7 @@ router.get(
         coliatyPackageCode: (lead as any).order?.coliatyPackageCode,
         coliatyPackageId: (lead as any).order?.coliatyPackageId,
         statusHistory: (lead as any).order?.statusHistory || [],
+        items: (lead as any).order?.items || [],
         lead: {
           paymentSituation: lead.paymentSituation,
           callbackDate: lead.callbackAt,
@@ -1432,6 +1447,10 @@ router.patch(
 
     if (!isAdmin && !isOwner && !isAuthorizedHelper) {
       throw new AppException(403, 'You do not have permission to perform this action');
+    }
+
+    if (link.status === 'SUSPENDED' && !isAdmin) {
+      throw new AppException(403, 'Ce lien est bloqué par l\'administration et ne peut pas être réactivé.');
     }
 
     const updateData: any = {};

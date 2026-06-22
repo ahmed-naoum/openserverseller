@@ -1,13 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { influencerApi } from '../../lib/api';
 import { ReferralLink } from '../../types';
-import { Search, Plus, MousePointerClick, Zap, Target, DollarSign, Copy, QrCode, RefreshCw, AlertCircle, Link as LinkIcon, Power, Eye, TrendingUp, Activity, Calendar, MessageCircle } from 'lucide-react';
+import { Search, Plus, MousePointerClick, Zap, Target, DollarSign, Copy, QrCode, RefreshCw, AlertCircle, Link as LinkIcon, Power, Eye, TrendingUp, Activity, Calendar, MessageCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { 
   ResponsiveContainer, ComposedChart, Line, Area, Bar, XAxis, YAxis, CartesianGrid, 
   Tooltip as RechartsTooltip, Legend 
 } from 'recharts';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { containsBlockedWord } from '../../utils/blockedWords';
 
 export default function InfluencerLinks() {
   const { t } = useLanguage();
@@ -21,6 +22,7 @@ export default function InfluencerLinks() {
   const [endDate, setEndDate] = useState('');
   const [selectedLinkIdForChart, setSelectedLinkIdForChart] = useState<number | null>(null);
   const [isStatsLoading, setIsStatsLoading] = useState(false);
+  const [expandedProducts, setExpandedProducts] = useState<Record<number, boolean>>({});
   
   // Modal states
   const [selectedLink, setSelectedLink] = useState<ReferralLink | null>(null);
@@ -137,17 +139,39 @@ export default function InfluencerLinks() {
     toast.success(t('toast_copied', 'links'));
   };
 
-  const handleToggleStatus = async (link: ReferralLink) => {
-    setIsToggling(link.id);
-    try {
-      const res = await influencerApi.updateLinkStatus(link.id, !link.isActive);
-      setLinks(prev => prev.map(l => l.id === link.id ? { ...l, isActive: res.data.isActive } : l));
-      toast.success(link.isActive ? t('toast_deactivated', 'links') : t('toast_activated', 'links'));
-    } catch (err: any) {
-      toast.error(t('toast_status_error', 'links'));
-    } finally {
-      setIsToggling(null);
-    }
+  const handleToggleStatus = (link: ReferralLink) => {
+    setConfirmModal({
+      isOpen: true,
+      title: link.isActive ? t('confirm_deactivate_title', 'links') || "Désactiver le lien ?" : t('confirm_activate_title', 'links') || "Activer le lien ?",
+      message: link.isActive 
+        ? t('confirm_deactivate_message', 'links') || "Êtes-vous sûr de vouloir désactiver ce lien ? Les visiteurs cliquant sur ce lien ne pourront plus accéder à l'offre et verront le message 'Offre indisponible'."
+        : t('confirm_activate_message', 'links') || "Êtes-vous sûr de vouloir réactiver ce lien de parrainage ?",
+      icon: <Power size={32} className={link.isActive ? "text-red-500 animate-pulse" : "text-emerald-500"} />,
+      confirmText: link.isActive ? t('btn_deactivate', 'links') || "Oui, désactiver" : t('btn_activate', 'links') || "Oui, activer",
+      variant: link.isActive ? 'danger' : 'primary',
+      isLoading: false,
+      step: undefined,
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isLoading: true }));
+        try {
+          const res = await influencerApi.updateLinkStatus(link.id, !link.isActive);
+          setLinks(prev => prev.map(l => l.id === link.id ? { ...l, isActive: res.data.isActive } : l));
+          toast.success(link.isActive ? t('toast_deactivated', 'links') : t('toast_activated', 'links'));
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        } catch (err: any) {
+          toast.error(t('toast_status_error', 'links'));
+        } finally {
+          setConfirmModal(prev => ({ ...prev, isLoading: false }));
+        }
+      }
+    });
+  };
+
+  const toggleProductExpand = (productId: number) => {
+    setExpandedProducts(prev => ({
+      ...prev,
+      [productId]: !prev[productId]
+    }));
   };
 
   const handleRegenerateCode = async (link: ReferralLink) => {
@@ -221,7 +245,7 @@ export default function InfluencerLinks() {
   };
 
   const handleNameChange = (val: string) => {
-    let clean = val.replace(/\s+/g, '-');
+    let clean = val.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
     setCustomName(clean);
 
     if (!clean) {
@@ -241,11 +265,19 @@ export default function InfluencerLinks() {
       setCustomNameError(t('err_name_invalid_chars', 'links'));
       return;
     }
+    const blocked = containsBlockedWord(clean);
+    if (blocked) {
+      setCustomNameError(t('err_name_blocked', 'links'));
+      return;
+    }
     setCustomNameError('');
   };
 
   useEffect(() => {
     if (!customName || customName.length < 3 || customName.length > 20 || !/^[a-zA-Z0-9-_]+$/.test(customName)) {
+      return;
+    }
+    if (containsBlockedWord(customName)) {
       return;
     }
     const timer = setTimeout(async () => {
@@ -308,6 +340,47 @@ export default function InfluencerLinks() {
       if (sortBy === 'conversions') return b.conversions - a.conversions;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
+
+  // Grouping filtered links by product ID
+  const groupedProducts = filteredLinks.reduce((acc: any[], link) => {
+    const productId = link.productId;
+    let group = acc.find(g => g.productId === productId);
+    if (!group) {
+      group = {
+        productId,
+        product: link.product,
+        links: [],
+        totalRawClicks: 0,
+        totalClicks: 0,
+        totalConversions: 0,
+        totalWhatsappClicks: 0,
+        totalEarnings: 0,
+        mostRecentDate: new Date(0)
+      };
+      acc.push(group);
+    }
+    
+    group.links.push(link);
+    group.totalRawClicks += (link.rawClicks || link.clicks);
+    group.totalClicks += link.clicks;
+    group.totalConversions += link.conversions;
+    group.totalWhatsappClicks += (link.whatsappClicks || 0);
+    group.totalEarnings += link.earnings;
+    
+    const linkDate = new Date(link.createdAt);
+    if (linkDate > group.mostRecentDate) {
+      group.mostRecentDate = linkDate;
+    }
+    
+    return acc;
+  }, []);
+
+  const sortedGroupedProducts = [...groupedProducts].sort((a, b) => {
+    if (sortBy === 'earnings') return b.totalEarnings - a.totalEarnings;
+    if (sortBy === 'clicks') return b.totalClicks - a.totalClicks;
+    if (sortBy === 'conversions') return b.totalConversions - a.totalConversions;
+    return b.mostRecentDate.getTime() - a.mostRecentDate.getTime();
+  });
 
 
   if (loading) {
@@ -618,138 +691,265 @@ export default function InfluencerLinks() {
 
       {/* Links Pro Table */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        {filteredLinks.length > 0 ? (
+        {sortedGroupedProducts.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-slate-50">
                   <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('th_product', 'links')}</th>
-                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('th_code', 'links')}</th>
-                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">{t('th_performance', 'links')}</th>
-                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('th_status', 'links')}</th>
+                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">{t('th_links_count', 'links') || "Liens"}</th>
+                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">{t('th_performance_combined', 'links') || "Performance Cumulée"}</th>
+                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{t('th_earnings_combined', 'links') || "Gains Totaux"}</th>
                   <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{t('th_actions', 'links')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {filteredLinks.map((link) => {
-                  const ctr = link.clicks > 0 ? ((link.conversions / link.clicks) * 100).toFixed(1) : '0.0';
-                  const epc = link.clicks > 0 ? (link.earnings / link.clicks).toFixed(2) : '0.00';
+                {sortedGroupedProducts.map((group) => {
+                  const isExpanded = !!expandedProducts[group.productId];
+                  const activeCount = group.links.filter((l: any) => l.isActive).length;
+                  const combinedCtr = group.totalClicks > 0 ? ((group.totalConversions / group.totalClicks) * 100).toFixed(1) : '0.0';
+                  const isLimitReached = group.links.length >= 5;
+                  
                   return (
-                    <tr 
-                      key={link.id} 
-                      onClick={() => {
-                        setSelectedLinkIdForChart(link.id);
-                        const chartEl = document.getElementById('performance-chart');
-                        if (chartEl) {
-                          window.scrollTo({ top: chartEl.getBoundingClientRect().top + window.scrollY - 100, behavior: 'smooth' });
-                        }
-                      }}
-                      className={`hover:bg-slate-50/50 transition-all group cursor-pointer ${selectedLinkIdForChart === link.id ? 'bg-influencer-50/30' : ''}`}
-                    >
-                      <td className="px-8 py-5">
-                        <div className="flex items-center gap-4">
-                          <div className="relative w-12 h-12 rounded-2xl overflow-hidden border border-slate-100 shadow-sm">
-                            {link.product?.images?.[0]?.imageUrl ? (
-                              <img src={link.product.images[0].imageUrl} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-400"><Eye size={16} /></div>
-                            )}
+                    <Fragment key={`group-${group.productId}`}>
+                      <tr 
+                        onClick={() => toggleProductExpand(group.productId)}
+                        className={`hover:bg-slate-50/50 transition-all group cursor-pointer ${isExpanded ? 'bg-slate-50/20' : ''}`}
+                      >
+                        <td className="px-8 py-5">
+                          <div className="flex items-center gap-4">
+                            <div className="relative w-12 h-12 rounded-2xl overflow-hidden border border-slate-100 shadow-sm flex-shrink-0">
+                              {group.product?.images?.[0]?.imageUrl ? (
+                                <img src={group.product.images[0].imageUrl} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-400"><Eye size={16} /></div>
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-sm font-black text-slate-900 truncate max-w-[200px]">{group.product?.nameFr || t('default_product', 'links')}</p>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase">SKU: {group.product?.sku}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-sm font-black text-slate-900 truncate max-w-[200px]">{link.product?.nameFr || t('default_product', 'links')}</p>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase">{t('generated_at', 'links').replace('{date}', new Date(link.createdAt).toLocaleDateString())}</p>
+                        </td>
+                        <td className="px-8 py-5 text-center">
+                          <div className="flex flex-col items-center justify-center gap-1">
+                            <span className="px-2.5 py-1 bg-slate-50 text-slate-700 rounded-xl text-xs font-bold border border-slate-100">
+                              {group.links.length} {group.links.length > 1 ? t('links_plural', 'links') || "liens" : t('links_singular', 'links') || "lien"}
+                            </span>
+                            <span className="text-[9px] font-bold text-emerald-600">
+                              {activeCount} {t('active_label', 'links') || "actifs"}
+                            </span>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-8 py-5">
-                        <span className="px-3 py-1.5 bg-slate-50 text-slate-600 rounded-xl text-xs font-mono font-bold border border-slate-100">
-                          {link.code}
-                        </span>
-                      </td>
-                      <td className="px-8 py-5">
-                        <div className="flex items-center justify-center">
-                          <div className="flex items-center gap-6">
-                            <div className="text-center group-hover:transform group-hover:scale-110 transition-all duration-300">
-                              <p className="text-xs font-black text-slate-900 mb-0.5">{(link.rawClicks || link.clicks).toLocaleString()}</p>
-                              <div className="flex items-center justify-center gap-1">
-                                <Eye size={10} className="text-violet-500" />
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_views', 'links')}</p>
+                        </td>
+                        <td className="px-8 py-5">
+                          <div className="flex items-center justify-center">
+                            <div className="flex items-center gap-6">
+                              <div className="text-center">
+                                <p className="text-xs font-black text-slate-900 mb-0.5">{group.totalRawClicks.toLocaleString()}</p>
+                                <div className="flex items-center justify-center gap-1">
+                                  <Eye size={10} className="text-violet-500" />
+                                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_views', 'links')}</p>
+                                </div>
                               </div>
-                            </div>
-                            <div className="text-center group-hover:transform group-hover:scale-110 transition-all duration-300 delay-75">
-                              <p className="text-xs font-black text-slate-900 mb-0.5">{link.clicks.toLocaleString()}</p>
-                              <div className="flex items-center justify-center gap-1">
-                                <MousePointerClick size={10} className="text-blue-500" />
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_visitors', 'links')}</p>
+                              <div className="text-center">
+                                <p className="text-xs font-black text-slate-900 mb-0.5">{group.totalClicks.toLocaleString()}</p>
+                                <div className="flex items-center justify-center gap-1">
+                                  <MousePointerClick size={10} className="text-blue-500" />
+                                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_visitors', 'links')}</p>
+                                </div>
                               </div>
-                            </div>
-                            <div className="text-center group-hover:transform group-hover:scale-110 transition-all duration-300 delay-100">
-                              <p className="text-xs font-black text-slate-900 mb-0.5">{link.conversions.toLocaleString()}</p>
-                              <div className="flex items-center justify-center gap-1">
-                                <Zap size={10} className="text-purple-500" />
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_sales', 'links')}</p>
+                              <div className="text-center">
+                                <p className="text-xs font-black text-slate-900 mb-0.5">{group.totalConversions.toLocaleString()}</p>
+                                <div className="flex items-center justify-center gap-1">
+                                  <Zap size={10} className="text-purple-500" />
+                                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_sales', 'links')}</p>
+                                </div>
                               </div>
-                            </div>
-                            <div className="text-center group-hover:transform group-hover:scale-110 transition-all duration-300 delay-125">
-                              <p className="text-xs font-black text-slate-900 mb-0.5">{link.whatsappClicks || 0}</p>
-                              <div className="flex items-center justify-center gap-1">
-                                <MessageCircle size={10} className="text-green-500" />
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_whatsapp', 'links')}</p>
-                              </div>
-                            </div>
-                            <div className="text-center group-hover:transform group-hover:scale-110 transition-all duration-300 delay-150">
-                              <p className="text-xs font-black text-indigo-600 mb-0.5">{link.clicks > 0 ? ((link.conversions / link.clicks) * 100).toFixed(1) : '0.0'}%</p>
-                              <div className="flex items-center justify-center gap-1">
-                                <Target size={10} className="text-indigo-500" />
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_ctr', 'links')}</p>
+                              <div className="text-center">
+                                <p className="text-xs font-black text-indigo-600 mb-0.5">{combinedCtr}%</p>
+                                <div className="flex items-center justify-center gap-1">
+                                  <Target size={10} className="text-indigo-500" />
+                                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_ctr', 'links')}</p>
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-8 py-5">
-                        {link.status === 'BUILDING' ? (
-                          <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 text-amber-600 rounded-xl w-fit">
-                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                            <span className="text-[10px] font-black uppercase tracking-wider">{t('status_building', 'links')}</span>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleToggleStatus(link); }}
-                            disabled={isToggling === link.id}
-                            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all ${
-                              link.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'
-                            }`}
-                          >
-                            <Power className={`w-3 h-3 ${link.isActive ? 'text-emerald-500' : 'text-slate-400'}`} />
-                            <span className="text-[10px] font-black uppercase tracking-wider">{link.isActive ? t('status_active', 'links') : t('status_paused', 'links')}</span>
-                          </button>
-                        )}
-                      </td>
-                      <td className="px-8 py-5 text-right">
-                        <div className="flex items-center justify-end gap-3">
-                          {/* Safe Actions */}
-                          <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all">
-                            <button onClick={(e) => { e.stopPropagation(); copyLink(link.code); }} className="p-2.5 bg-slate-50 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all" title={t('btn_copy', 'links')}><Copy size={16} /></button>
-                            <button onClick={(e) => { e.stopPropagation(); setSelectedLink(link); setShowQrModal(true); }} className="p-2.5 bg-slate-50 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-all" title={t('btn_qr', 'links')}><QrCode size={16} /></button>
-                          </div>
-                          
-                          {/* Danger Zone Separator */}
-                          <div className="w-[1px] h-6 bg-slate-100 opacity-0 group-hover:opacity-100 transition-all" />
-                          
-                          {/* Dangerous Actions */}
-                          <div className="opacity-0 group-hover:opacity-100 transition-all">
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); handleRegenerateCode(link); }} 
-                              className="p-2.5 bg-red-50/30 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all" 
-                              title={t('tooltip_regenerate', 'links')}
+                        </td>
+                        <td className="px-8 py-5 text-right font-black text-slate-950 text-sm">
+                          {group.totalEarnings.toLocaleString()} MAD
+                        </td>
+                        <td className="px-8 py-5 text-right">
+                          <div className="flex items-center justify-end gap-3" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => {
+                                setSelectedProductId(group.productId);
+                                setCustomName('');
+                                setCustomNameError('');
+                                setShowCreateModal(true);
+                                fetchApprovedClaims();
+                              }}
+                              disabled={isLimitReached}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm"
                             >
-                              <RefreshCw size={16} />
+                              <Plus className="w-3.5 h-3.5" />
+                              {t('btn_create', 'links') || "Créer"}
+                            </button>
+                            <button
+                              onClick={() => toggleProductExpand(group.productId)}
+                              className="p-2 bg-slate-50 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all"
+                            >
+                              {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                             </button>
                           </div>
-                        </div>
-                      </td>
-                    </tr>
+                        </td>
+                      </tr>
+                      
+                      {isExpanded && (
+                        <tr key={`expanded-${group.productId}`}>
+                          <td colSpan={5} className="bg-slate-50/50 px-8 py-6 border-b border-slate-100">
+                            <div className="space-y-4">
+                              <div className="flex items-center justify-between">
+                                <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest">
+                                  {t('links_details_title', 'links') || "Détails des Liens pour"} {group.product?.nameFr}
+                                </h4>
+                              </div>
+                              <div className="bg-white rounded-xl border border-slate-100/70 overflow-hidden shadow-sm">
+                                <table className="w-full text-left">
+                                  <thead>
+                                    <tr className="border-b border-slate-100 bg-slate-50/30">
+                                      <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">{t('th_code', 'links')}</th>
+                                      <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">{t('th_performance', 'links')}</th>
+                                      <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">{t('th_status', 'links')}</th>
+                                      <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">{t('th_actions', 'links')}</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                    {group.links.map((link: any) => {
+                                      const ctr = link.clicks > 0 ? ((link.conversions / link.clicks) * 100).toFixed(1) : '0.0';
+                                      return (
+                                        <tr 
+                                          key={link.id}
+                                          onClick={() => {
+                                            setSelectedLinkIdForChart(link.id);
+                                            const chartEl = document.getElementById('performance-chart');
+                                            if (chartEl) {
+                                              window.scrollTo({ top: chartEl.getBoundingClientRect().top + window.scrollY - 100, behavior: 'smooth' });
+                                            }
+                                          }}
+                                          className={`hover:bg-slate-50/30 transition-all cursor-pointer ${selectedLinkIdForChart === link.id ? 'bg-influencer-50/20' : ''}`}
+                                        >
+                                          <td className="px-6 py-4">
+                                            <div className="space-y-1">
+                                              <span className="px-2.5 py-1 bg-slate-50 text-slate-600 rounded-lg text-xs font-mono font-bold border border-slate-100 inline-block">
+                                                {link.code}
+                                              </span>
+                                              <p className="text-[9px] text-slate-400 font-bold uppercase truncate max-w-[200px]">
+                                                URL: {window.location.origin}/r/{link.code}
+                                              </p>
+                                            </div>
+                                          </td>
+                                          <td className="px-6 py-4">
+                                            <div className="flex items-center justify-center gap-4">
+                                              <div className="text-center">
+                                                <p className="text-xs font-black text-slate-900 mb-0.5">{(link.rawClicks || link.clicks).toLocaleString()}</p>
+                                                <div className="flex items-center justify-center gap-0.5">
+                                                  <Eye size={8} className="text-violet-500" />
+                                                  <span className="text-[7px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_views', 'links')}</span>
+                                                </div>
+                                              </div>
+                                              <div className="text-center">
+                                                <p className="text-xs font-black text-slate-900 mb-0.5">{link.clicks.toLocaleString()}</p>
+                                                <div className="flex items-center justify-center gap-0.5">
+                                                  <MousePointerClick size={8} className="text-blue-500" />
+                                                  <span className="text-[7px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_visitors', 'links')}</span>
+                                                </div>
+                                              </div>
+                                              <div className="text-center">
+                                                <p className="text-xs font-black text-slate-900 mb-0.5">{link.conversions.toLocaleString()}</p>
+                                                <div className="flex items-center justify-center gap-0.5">
+                                                  <Zap size={8} className="text-purple-500" />
+                                                  <span className="text-[7px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_sales', 'links')}</span>
+                                                </div>
+                                              </div>
+                                              <div className="text-center">
+                                                <p className="text-xs font-black text-slate-900 mb-0.5">{link.whatsappClicks || 0}</p>
+                                                <div className="flex items-center justify-center gap-0.5">
+                                                  <MessageCircle size={8} className="text-green-500" />
+                                                  <span className="text-[7px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_whatsapp', 'links')}</span>
+                                                </div>
+                                              </div>
+                                              <div className="text-center">
+                                                <p className="text-xs font-black text-indigo-600 mb-0.5">{ctr}%</p>
+                                                <div className="flex items-center justify-center gap-0.5">
+                                                  <Target size={8} className="text-indigo-500" />
+                                                  <span className="text-[7px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_ctr', 'links')}</span>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </td>
+                                          <td className="px-6 py-4">
+                                            {link.status === 'SUSPENDED' ? (
+                                              <div className="flex items-center gap-1.5 px-2 py-1 bg-rose-50 text-rose-600 rounded-lg w-fit border border-rose-100">
+                                                <AlertCircle size={10} className="text-rose-500" />
+                                                <span className="text-[9px] font-black uppercase tracking-wider">Bloqué</span>
+                                              </div>
+                                            ) : link.status === 'BUILDING' ? (
+                                              <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 text-amber-600 rounded-lg w-fit">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                                <span className="text-[9px] font-black uppercase tracking-wider">{t('status_building', 'links')}</span>
+                                              </div>
+                                            ) : (
+                                              <button
+                                                onClick={(e) => { e.stopPropagation(); handleToggleStatus(link); }}
+                                                disabled={isToggling === link.id}
+                                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all ${
+                                                  link.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'
+                                                }`}
+                                              >
+                                                <Power className={`w-2.5 h-2.5 ${link.isActive ? 'text-emerald-500' : 'text-slate-400'}`} />
+                                                <span className="text-[9px] font-black uppercase tracking-wider">{link.isActive ? t('status_active', 'links') : t('status_paused', 'links')}</span>
+                                              </button>
+                                            )}
+                                          </td>
+                                          <td className="px-6 py-4 text-right">
+                                            <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                                              <button 
+                                                onClick={() => copyLink(link.code)} 
+                                                disabled={link.status === 'SUSPENDED'}
+                                                className="p-2 bg-slate-50 text-slate-400 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-all" 
+                                                title={t('btn_copy', 'links')}
+                                              >
+                                                <Copy size={12} />
+                                              </button>
+                                              <button 
+                                                onClick={() => { setSelectedLink(link); setShowQrModal(true); }} 
+                                                disabled={link.status === 'SUSPENDED'}
+                                                className="p-2 bg-slate-50 text-slate-400 hover:text-purple-600 hover:bg-purple-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-all" 
+                                                title={t('btn_qr', 'links')}
+                                              >
+                                                <QrCode size={12} />
+                                              </button>
+                                              <button 
+                                                onClick={() => handleRegenerateCode(link)} 
+                                                disabled={link.status === 'SUSPENDED'}
+                                                className="p-2 bg-red-50/30 text-red-300 hover:text-red-500 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-all" 
+                                                title={t('tooltip_regenerate', 'links')}
+                                              >
+                                                <RefreshCw size={12} />
+                                              </button>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -1007,7 +1207,7 @@ export default function InfluencerLinks() {
                     {isCreatingLink && (
                       <RefreshCw size={14} className="animate-spin" />
                     )}
-                    {t('btn_generate', 'links')}
+                    {t('btn_generate', 'links', 'GÉNÉRER')}
                   </button>
                 </div>
               </form>

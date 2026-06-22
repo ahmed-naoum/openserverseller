@@ -183,6 +183,8 @@ router.post(
         phone,
         password: hashedPassword,
         roleId: roleRecord.id,
+        isInfluencer: role === 'INFLUENCER',
+        referralCode: role === 'INFLUENCER' ? uuidv4().slice(0, 8).toUpperCase() : null,
         isActive: true, // Auto-activate admin-created accounts
         profile: {
           create: {
@@ -359,6 +361,10 @@ router.patch(
         email: email !== undefined ? email : undefined,
         phone: phone !== undefined ? phone : undefined,
         role: { connect: { id: roleId } },
+        ...(role !== undefined ? {
+          isInfluencer: role === 'INFLUENCER',
+          ...(role === 'INFLUENCER' && !user.referralCode ? { referralCode: uuidv4().slice(0, 8).toUpperCase() } : {})
+        } : {}),
         isActive: isActive !== undefined ? Boolean(isActive) : undefined,
         kycStatus: kycStatus !== undefined ? kycStatus : undefined,
         canImpersonate: typeof canImpersonate === 'boolean' ? canImpersonate : undefined,

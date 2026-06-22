@@ -23,6 +23,7 @@ import { setupPassport } from './config/passport.js';
 import { securityHeaders, ipFilter, sanitizeInput, validateRequestSize, globalRateLimiter, rateLimitCheckMiddleware } from './middleware/security.js';
 import { maintenanceMiddleware } from './middleware/maintenance.js';
 import { startLeadsReassignmentCron } from './jobs/leadReassignment.js';
+import { seedTrafficData } from './lib/trafficTracker.js';
 
 const app = express();
 app.set('trust proxy', true);
@@ -84,7 +85,11 @@ app.use(cors({
   origin: checkOrigin,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'x-maintenance-bypass'],
+  allowedHeaders: [
+    'Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'x-maintenance-bypass',
+    'x-client-device-type', 'x-client-js', 'x-client-screen', 'x-client-window',
+    'x-client-cookies', 'x-client-platform', 'x-client-browser-version'
+  ],
 }));
 
 app.use(compression());
@@ -94,6 +99,29 @@ app.use(morgan('combined'));
 app.use(requestLogger);
 
 app.use(securityHeaders);
+app.use((req, res, next) => {
+  const url = req.originalUrl || req.url || '';
+  const sensitivePatterns = [
+    '/.env', 
+    '/wp-admin', 
+    '/phpmyadmin', 
+    '/.git', 
+    '/.config', 
+    '/composer.json', 
+    '/package.json'
+  ];
+  if (sensitivePatterns.some(pattern => url.toLowerCase().includes(pattern))) {
+    return res.status(403).json({
+      status: 'error',
+      message: 'Access denied. Restricted resource.'
+    });
+  }
+  next();
+});
+app.use((req, res, next) => {
+  res.header('Accept-CH', 'Sec-CH-UA-Platform-Version');
+  next();
+});
 app.use(ipFilter);
 app.use(sanitizeInput);
 app.use(validateRequestSize(5 * 1024 * 1024));
@@ -326,6 +354,13 @@ startLeadsReassignmentCron();
 
 // Start dynamic automated backup scheduler
 BackupService.startScheduler();
+
+// Seed initial traffic tracker history
+try {
+  seedTrafficData();
+} catch (err) {
+  console.error('Failed to seed traffic data:', err);
+}
 
 server.listen(PORT, () => {
   console.log(`

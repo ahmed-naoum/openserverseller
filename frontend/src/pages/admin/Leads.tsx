@@ -183,6 +183,7 @@ export default function AdminLeads() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [coliatyHistory, setColiatyHistory] = useState<any[]>([]);
   const [loadingColiaty, setLoadingColiaty] = useState(false);
+  const [leadToDelete, setLeadToDelete] = useState<number | null>(null);
   const limit = 20;
 
   const { data: leadsData, isLoading, refetch } = useQuery({
@@ -213,14 +214,15 @@ export default function AdminLeads() {
   const leads = leadsData?.data?.data?.leads || [];
   const pagination = leadsData?.data?.data?.pagination || { totalPages: 1, total: 0 };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce lead ?')) return;
+  const confirmDelete = async () => {
+    if (!leadToDelete) return;
     try {
-      await leadsApi.delete(id.toString());
+      await leadsApi.delete(leadToDelete.toString());
       toast.success('Lead supprimé avec succès');
+      setLeadToDelete(null);
       refetch();
-    } catch (error) {
-      toast.error('Erreur lors de la suppression');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Erreur lors de la suppression');
     }
   };
 
@@ -550,7 +552,7 @@ export default function AdminLeads() {
                       <td className="px-5 py-4 text-right">
                         <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button 
-                            onClick={() => handleDelete(lead.id)}
+                            onClick={() => setLeadToDelete(lead.id)}
                             className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                             title="Supprimer"
                           >
@@ -877,6 +879,40 @@ export default function AdminLeads() {
                   Impossible de charger les détails de ce lead.
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {leadToDelete && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-6 flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-4">
+                <AlertCircle className="w-8 h-8 text-red-500" />
+              </div>
+              <h3 className="text-xl font-black text-gray-900 mb-2">
+                Supprimer ce lead ?
+              </h3>
+              <p className="text-sm text-gray-500 font-medium">
+                Cette action est irréversible. Le lead et ses éventuelles données liées seront définitivement effacés.
+              </p>
+            </div>
+            <div className="bg-gray-50 px-6 py-4 flex gap-3">
+              <button 
+                onClick={() => setLeadToDelete(null)}
+                className="flex-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all shadow-sm"
+              >
+                Annuler
+              </button>
+              <button 
+                onClick={confirmDelete}
+                className="flex-1 px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-bold transition-all shadow-md shadow-red-200 flex items-center justify-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                Supprimer
+              </button>
             </div>
           </div>
         </div>

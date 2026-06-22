@@ -12,7 +12,7 @@ export default function AdminCategories() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['categories'],
+    queryKey: ['admin-categories'],
     queryFn: () => categoriesApi.list(),
   });
 

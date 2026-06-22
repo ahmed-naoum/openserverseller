@@ -1,0 +1,74 @@
+{
+  "title": "سجل الإشعارات",
+  "subtitle": "إدارة وتتبع جميع إشعارات النظام الخاصة بك في الوقت الفعلي.",
+  "tab_all": "الكل",
+  "tab_inventory": "منتجاتي",
+  "tab_links": "روابطي",
+  "tab_payout": "المحفظة",
+  "tab_leads": "الطلبات والمبيعات",
+  "search_placeholder": "البحث عن إشعار...",
+  "no_notifications_found": "لم يتم العثور على أي إشعارات",
+  "no_notifications_desc_search": "حاول تعديل الفلاتر أو عبارات البحث للعثور على ما تبحث عنه.",
+  "no_notifications_desc_empty": "ستظهر إشعاراتك الجديدة هنا في الوقت الفعلي بمجرد حدوث أي تغييرات.",
+  "btn_mark_all_read": "تحديد الكل كمقروء",
+  "btn_clear_all": "حذف الكل",
+  "btn_read_all_short": "قراءة الكل",
+  "btn_clear_all_short": "حذف الكل",
+  "view_all_history": "عرض السجل بالكامل",
+  "unread_suffix": "غير مقروءة",
+  "no_notifications_menu": "لا توجد إشعارات",
+  "no_notifications_menu_desc": "سيتم إعلامك في الوقت الفعلي بمجرد حدوث مبيعات أو إرسال طلبات جديدة.",
+  
+  "toast_marked_read": "تم التحديد كمقروء",
+  "toast_deleted": "تم حذف الإشعار",
+  "toast_all_marked_read": "تم تحديد جميع الإشعارات كمقروءة",
+  "toast_all_deleted": "تم حذف جميع الإشعارات.",
+  "toast_delete_error": "خطأ أثناء الحذف",
+  
+  "confirm_delete_all_title": "مسح جميع الإشعارات",
+  "confirm_delete_all_message": "هل أنت متأكد من أنك تريد حذف جميع إشعاراتك بشكل نهائي؟ هذا الإجراء لا يمكن التراجع عنه.",
+  "confirm_delete_all_btn": "حذف",
+
+  "type_claim_approved_title": "تمت الموافقة على منتجك 📣",
+  "type_claim_approved_body": "تهانينا! تم قبول طلب الانضمام لمنتج \"{productName}\". يمكنك الآن إنشاء الروابط الخاصة بك.",
+  
+  "type_claim_rejected_title": "تم رفض طلب الانضمام لمنتج ❌",
+  "type_claim_rejected_body": "عذرًا، تم رفض طلب الانضمام لمنتج \"{productName}\" من قبل المسؤول.",
+
+  "type_claim_submitted_title": "تم تقديم طلب الانضمام لمنتج 📝",
+  "type_claim_submitted_body": "طلب الانضمام لمنتج \"{productName}\" قيد المراجعة والموافقة من قبل المسؤول.",
+
+  "type_link_status_title": "🔄 تم تحديث حالة الرابط الخاص بك",
+  "type_link_status_body": "حالة رابط الإحالة الخاص بك لمنتج \"{productName}\" هي الآن: {label}.",
+  "status_label_building": "قيد الإنشاء",
+  "status_label_active": "نشط",
+  "status_label_inactive": "غير نشط",
+  "status_label_suspended": "معلق",
+
+  "type_link_clicks_title": "🎉 تم تحقيق هدف 100 زائر!",
+  "type_link_clicks_body": "تهانينا! حقق رابط الإحالة الخاص بك ({code}) 100 زائر فريد!",
+
+  "type_payout_submitted_title": "💸 تم تقديم طلب السحب",
+  "type_payout_submitted_body": "تم تقديم طلب السحب الخاص بك بمبلغ {amount} درهم (#{id}) بنجاح.",
+
+  "type_payout_completed_title": "✅ تم دفع مبلغ السحب!",
+  "type_payout_completed_body": "تم دفع طلب السحب الخاص بك بمبلغ {amount} درهم (#{id}) بنجاح.",
+
+  "type_payout_rejected_title": "❌ تم رفض طلب السحب",
+  "type_payout_rejected_body": "تم رفض طلب السحب الخاص بك بمبلغ {amount} درهم (#{id}). وتمت إعادة الأموال إلى محفظتك.",
+
+  "type_payout_pending_title": "⏳ طلب السحب قيد الانتظار",
+  "type_payout_pending_body": "طلب السحب الخاص بك بمبلغ {amount} درهم (#{id}) قيد المعالجة الآن.",
+
+  "type_new_lead_title": "🎉 مبيعة جديدة (طلب جديد) !",
+  "type_new_lead_body": "لقد تلقيت مبيعة جديدة من {fullName} ({city}) لمنتج \"{productName}\".",
+
+  "type_lead_status_changed_delivery_title": "📈 تم تحديث حالة الطلب عبر الشحن: {label}",
+  "type_lead_status_changed_title": "📈 تم تحديث حالة الطلب: {label}",
+  "type_lead_status_changed_body": "حالة طلب العميل {fullName} لمنتج \"{productName}\" أصبحت الآن {label}.",
+  
+  "lead_label_confirmed": "مؤكد",
+  "lead_label_delivered": "تم التوصيل",
+  "lead_label_cancel_price": "ملغي (السعر)",
+  "lead_label_returned": "مرجع"
+}

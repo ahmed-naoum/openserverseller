@@ -7,11 +7,22 @@ import {
   XCircle,
   ExternalLink,
   Search,
-  RefreshCw
+  RefreshCw,
+  AlertCircle,
+  Plus,
+  Power,
+  Eye,
+  MousePointerClick,
+  Zap,
+  Target,
+  DollarSign,
+  Copy,
+  QrCode
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { containsBlockedWord } from '../../utils/blockedWords';
 
 type ClaimStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'BUILDING';
 
@@ -21,6 +32,45 @@ export default function InfluencerInventory() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ClaimStatus | 'ALL'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Link Creation Modal States
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+  const [selectedProductName, setSelectedProductName] = useState('');
+  const [customName, setCustomName] = useState('');
+  const [customNameError, setCustomNameError] = useState('');
+  const [isCheckingName, setIsCheckingName] = useState(false);
+  const [isCreatingLink, setIsCreatingLink] = useState(false);
+
+  // Links List Modal States
+  const [isLinksModalOpen, setIsLinksModalOpen] = useState(false);
+  const [selectedProductForLinks, setSelectedProductForLinks] = useState<{ id: number; name: string } | null>(null);
+  const [modalLinks, setModalLinks] = useState<any[]>([]);
+  const [isModalLinksLoading, setIsModalLinksLoading] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [selectedLinkForQr, setSelectedLinkForQr] = useState<any | null>(null);
+
+  // Confirmation Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    icon: React.ReactNode;
+    confirmText: string;
+    variant: 'primary' | 'danger';
+    isLoading?: boolean;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    icon: <RefreshCw size={24} />,
+    confirmText: 'Confirmer',
+    variant: 'primary',
+    isLoading: false
+  });
+
 
   useEffect(() => {
     fetchClaims();
@@ -64,23 +114,87 @@ export default function InfluencerInventory() {
     rejected: claims.filter(c => c.status === 'REJECTED').length,
   };
 
-  const handleGenerateLink = async (productId: number) => {
+  const handleNameChange = (val: string) => {
+    let clean = val.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
+    setCustomName(clean);
+
+    if (!clean) {
+      setCustomNameError('');
+      return;
+    }
+    if (clean.length < 3) {
+      setCustomNameError(t('err_name_short', 'links', 'Le nom doit faire au moins 3 caractères'));
+      return;
+    }
+    if (clean.length > 20) {
+      setCustomNameError(t('err_name_long', 'links', 'Le nom ne doit pas dépasser 20 caractères'));
+      return;
+    }
+    const regex = /^[a-zA-Z0-9-_]+$/;
+    if (!regex.test(clean)) {
+      setCustomNameError(t('err_name_invalid_chars', 'links', 'Caractères non autorisés (lettres, chiffres, tirets)'));
+      return;
+    }
+    const blocked = containsBlockedWord(clean);
+    if (blocked) {
+      setCustomNameError(t('err_name_blocked', 'links', 'Ce nom contient un mot interdit.'));
+      return;
+    }
+    setCustomNameError('');
+  };
+
+  useEffect(() => {
+    if (!customName || customName.length < 3 || customName.length > 20 || !/^[a-zA-Z0-9-_]+$/.test(customName)) {
+      return;
+    }
+    if (containsBlockedWord(customName)) {
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setIsCheckingName(true);
+      try {
+        const res = await influencerApi.checkLinkNameUnique(customName);
+        if (!res.data.unique) {
+          setCustomNameError(t('err_name_taken', 'links', 'Ce nom de lien est déjà utilisé'));
+        } else {
+          setCustomNameError('');
+        }
+      } catch (err) {
+        console.error('Error checking name uniqueness', err);
+      } finally {
+        setIsCheckingName(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [customName]);
+
+  const handleCreateLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProductId || !customName || customNameError) return;
+
+    setIsCreatingLink(true);
     try {
-      const res = await influencerApi.createLink(productId);
+      const res = await influencerApi.createLink(selectedProductId, customName);
       const newLink = res.data;
       
       // Update the claims state locally to show the new link
       setClaims(prev => prev.map(c => {
-        if (c.productId === productId) {
+        if (c.productId === selectedProductId) {
           return { ...c, referralLink: newLink };
         }
         return c;
       }));
       
       toast.success(t('link_success', 'inventory', 'Lien généré avec succès !'));
-    } catch (error) {
-      toast.error(t('link_error', 'inventory', 'Erreur lors de la génération du lien'));
+      setShowCreateModal(false);
+      setCustomName('');
+      setSelectedProductId(null);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || t('link_error', 'inventory', 'Erreur lors de la génération du lien'));
       console.error(error);
+    } finally {
+      setIsCreatingLink(false);
     }
   };
 
@@ -88,6 +202,60 @@ export default function InfluencerInventory() {
     const link = `${window.location.origin}/r/${code}`;
     navigator.clipboard.writeText(link);
     toast.success(t('copied_success', 'inventory', 'Lien copié dans le presse-papiers !'));
+  };
+
+  const handleOpenLinksModal = async (productId: number, productName: string) => {
+    setSelectedProductForLinks({ id: productId, name: productName });
+    setIsLinksModalOpen(true);
+    setIsModalLinksLoading(true);
+    try {
+      const res = await influencerApi.getLinks();
+      const allLinks = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      setModalLinks(allLinks.filter((l: any) => l.productId === productId));
+    } catch (err) {
+      toast.error(t('error_loading_links', 'inventory', 'Impossible de charger les liens'));
+      console.error(err);
+    } finally {
+      setIsModalLinksLoading(false);
+    }
+  };
+
+  const handleToggleStatus = (link: any) => {
+    setConfirmModal({
+      isOpen: true,
+      title: link.isActive ? t('confirm_deactivate_title', 'links', "Désactiver le lien ?") : t('confirm_activate_title', 'links', "Activer le lien ?"),
+      message: link.isActive 
+        ? t('confirm_deactivate_message', 'links', "Êtes-vous sûr de vouloir désactiver ce lien ? Les visiteurs cliquant sur ce lien ne pourront plus accéder à l'offre et verront le message 'Offre indisponible'.")
+        : t('confirm_activate_message', 'links', "Êtes-vous sûr de vouloir réactiver ce lien de parrainage ?"),
+      icon: <Power size={32} className={link.isActive ? "text-red-500 animate-pulse" : "text-emerald-500"} />,
+      confirmText: link.isActive ? t('btn_deactivate', 'links', "Oui, désactiver") : t('btn_activate', 'links', "Oui, activer"),
+      variant: link.isActive ? 'danger' : 'primary',
+      isLoading: false,
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isLoading: true }));
+        try {
+          const res = await influencerApi.updateLinkStatus(link.id, !link.isActive);
+          
+          // Update in modal links list
+          setModalLinks(prev => prev.map(l => l.id === link.id ? { ...l, isActive: res.data.isActive } : l));
+          
+          // Also update the main claims state if this link matches the referralLink
+          setClaims(prev => prev.map(c => {
+            if (c.productId === link.productId && c.referralLink?.id === link.id) {
+              return { ...c, referralLink: { ...c.referralLink, isActive: res.data.isActive } };
+            }
+            return c;
+          }));
+          
+          toast.success(link.isActive ? t('toast_deactivated', 'links', 'Lien désactivé') : t('toast_activated', 'links', 'Lien activé'));
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        } catch (err: any) {
+          toast.error(t('toast_status_error', 'links', 'Erreur lors du changement de statut'));
+        } finally {
+          setConfirmModal(prev => ({ ...prev, isLoading: false }));
+        }
+      }
+    });
   };
 
   if (isLoading) {
@@ -229,11 +397,7 @@ export default function InfluencerInventory() {
                 
                 <div className="mt-auto pt-4 border-t border-gray-50 flex items-center justify-between">
                   <div className="flex flex-col gap-1">
-                    <div className="text-[10px] font-bold text-gray-400 uppercase leading-none">{t('influencer_price', 'inventory', 'Prix Influencer')}</div>
-                    <div className="text-influencer-600 font-black text-sm leading-none">
-                      {claim.product.influencerPriceMad || claim.product.retailPriceMad} <span className="text-[10px]">MAD</span>
-                    </div>
-                    <div className="text-[10px] font-bold text-influencer-50">
+                    <div className="text-sm font-black text-slate-800">
                       {t('qty', 'inventory', 'Qte')}: {claim.product.stockQuantity || 0}
                     </div>
                   </div>
@@ -252,16 +416,22 @@ export default function InfluencerInventory() {
                         </div>
                       ) : (
                         <button 
-                          onClick={() => handleCopyLink(claim.referralLink.code)}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-influencer-50 text-influencer-600 rounded-lg hover:bg-influencer-100 transition-colors text-xs font-bold"
+                          onClick={() => handleOpenLinksModal(claim.productId, claim.product.nameFr)}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 text-slate-700 hover:text-slate-900 border border-slate-100 hover:bg-slate-100 rounded-lg transition-colors text-xs font-black uppercase tracking-wider shadow-sm"
                         >
-                          <ExternalLink className="w-3 h-3" />
-                          {t('copy', 'inventory', 'Copier')}
+                          <ExternalLink className="w-3 h-3 text-slate-500" />
+                          {t('manage_links', 'inventory', 'Gérer les liens')}
                         </button>
                       )
                     ) : (
                       <button 
-                        onClick={() => handleGenerateLink(claim.productId)}
+                        onClick={() => {
+                          setSelectedProductId(claim.productId);
+                          setSelectedProductName(claim.product.nameFr);
+                          setCustomName('');
+                          setCustomNameError('');
+                          setShowCreateModal(true);
+                        }}
                         className="flex items-center gap-2 px-3 py-1.5 bg-influencer-600 text-white rounded-lg hover:bg-influencer-700 transition-colors text-xs font-bold shadow-sm"
                       >
                         <Package className="w-3 h-3" />
@@ -287,6 +457,337 @@ export default function InfluencerInventory() {
           </div>
         )}
       </div>
+
+      {/* Create Link Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">{t('create_modal_title', 'links', 'Créer un Nouveau Lien')}</h2>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">{t('create_modal_subtitle', 'links', 'PERSONNALISEZ VOTRE PARRAINAGE')}</p>
+                </div>
+                <button 
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setCustomName('');
+                    setCustomNameError('');
+                    setSelectedProductId(null);
+                  }}
+                  className="text-slate-400 hover:text-slate-600 transition-colors text-sm font-black p-2 hover:bg-slate-50 rounded-xl"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateLink} className="space-y-6">
+                {/* Product Name Display */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">{t('label_select_product', 'links', 'PRODUIT SÉLECTIONNÉ')}</label>
+                  <div className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold text-slate-700">
+                    {selectedProductName}
+                  </div>
+                </div>
+
+                {/* Custom Name input */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">{t('label_custom_name', 'links', 'NOM DU LIEN PERSONNALISÉ')}</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder={t('custom_name_placeholder', 'links', 'mon-super-lien')}
+                      value={customName}
+                      onChange={(e) => handleNameChange(e.target.value)}
+                      className={`w-full px-4 py-3 bg-slate-50 border rounded-2xl text-sm font-mono font-bold text-slate-700 focus:outline-none transition-all ${
+                        customNameError 
+                          ? 'border-red-300 focus:border-red-500' 
+                          : customName && !isCheckingName 
+                            ? 'border-emerald-300 focus:border-emerald-500' 
+                            : 'border-slate-100 focus:border-slate-900'
+                      }`}
+                      required
+                      minLength={3}
+                      maxLength={20}
+                    />
+                    {isCheckingName && (
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                        <RefreshCw size={14} className="animate-spin text-slate-400" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex justify-between items-center px-1">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase truncate max-w-[70%]">
+                      {t('final_url_prefix', 'links', 'URL FINALE')}: {window.location.origin}/r/{customName || t('name_placeholder', 'links', 'NOM')}
+                    </span>
+                    <span className={`text-[10px] font-black uppercase ${customName.length >= 3 && customName.length <= 20 ? 'text-slate-400' : 'text-amber-500'}`}>
+                      {customName.length}/20 chars
+                    </span>
+                  </div>
+                  {customNameError && (
+                    <p className="text-xs font-bold text-red-500 flex items-center gap-1.5 mt-1">
+                      <AlertCircle size={12} /> {customNameError}
+                    </p>
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-4 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCreateModal(false);
+                      setCustomName('');
+                      setCustomNameError('');
+                      setSelectedProductId(null);
+                    }}
+                    className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-400 bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all"
+                  >
+                    {t('btn_cancel', 'links', 'ANNULER')}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isCreatingLink || !selectedProductId || !customName || !!customNameError || isCheckingName}
+                    className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-white bg-slate-900 hover:bg-slate-800 rounded-2xl shadow-lg shadow-slate-200 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isCreatingLink && (
+                      <RefreshCw size={14} className="animate-spin" />
+                    )}
+                    {t('btn_generate', 'links', 'GÉNÉRER')}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Links List Modal */}
+      {isLinksModalOpen && selectedProductForLinks && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">{t('product_links_title', 'inventory', 'Liens de Parrainage')}</h2>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
+                    {t('selected_product', 'inventory', 'Produit')}: {selectedProductForLinks.name}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => {
+                    setIsLinksModalOpen(false);
+                    setSelectedProductForLinks(null);
+                    setModalLinks([]);
+                  }}
+                  className="text-slate-400 hover:text-slate-600 transition-colors text-sm font-black p-2 hover:bg-slate-50 rounded-xl"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {isModalLinksLoading ? (
+                <div className="flex items-center justify-center py-20">
+                  <RefreshCw className="w-8 h-8 text-slate-400 animate-spin" />
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Links List Container */}
+                  <div className="max-h-[350px] overflow-y-auto space-y-4 pr-1">
+                    {modalLinks.map((link) => {
+                      const ctr = link.clicks > 0 ? ((link.conversions / link.clicks) * 100).toFixed(1) : '0.0';
+                      return (
+                        <div key={link.id} className="bg-slate-50/50 border border-slate-100/70 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="space-y-2 flex-1">
+                            <div className="flex items-center gap-3">
+                              <span className="px-3 py-1 bg-white border border-slate-100 text-slate-700 rounded-xl text-xs font-mono font-bold shadow-sm">
+                                {link.code}
+                              </span>
+                              
+                              {/* Status Badge Toggle */}
+                              <button
+                                onClick={() => handleToggleStatus(link)}
+                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
+                                  link.isActive ? 'bg-emerald-50 text-emerald-600 border border-emerald-100/50' : 'bg-slate-100 text-slate-400 border border-slate-200/50'
+                                }`}
+                              >
+                                <Power className={`w-2.5 h-2.5 ${link.isActive ? 'text-emerald-500' : 'text-slate-400'}`} />
+                                {link.isActive ? t('status_active', 'links', 'Actif') : t('status_paused', 'links', 'Suspendu')}
+                              </button>
+                            </div>
+                            
+                            <p className="text-[10px] text-slate-400 font-bold uppercase truncate max-w-[280px]">
+                              URL: {window.location.origin}/r/{link.code}
+                            </p>
+
+                            {/* Mini Performance Grid */}
+                            <div className="grid grid-cols-4 gap-2 pt-2 border-t border-slate-100/50">
+                              <div>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('views', 'links', 'Vues')}</p>
+                                <p className="text-xs font-black text-slate-800">{(link.rawClicks || link.clicks).toLocaleString()}</p>
+                              </div>
+                              <div>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('visitors', 'links', 'Visiteurs')}</p>
+                                <p className="text-xs font-black text-slate-800">{link.clicks.toLocaleString()}</p>
+                              </div>
+                              <div>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('sales', 'links', 'Ventes')}</p>
+                                <p className="text-xs font-black text-slate-800">{link.conversions.toLocaleString()}</p>
+                              </div>
+                              <div>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('ctr', 'links', 'Taux')}</p>
+                                <p className="text-xs font-black text-indigo-600">{ctr}%</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Quick Actions */}
+                          <div className="flex items-center gap-2 self-end sm:self-center">
+                            <button
+                              onClick={() => {
+                                const fullUrl = `${window.location.origin}/r/${link.code}`;
+                                navigator.clipboard.writeText(fullUrl);
+                                toast.success(t('copied_success', 'inventory', 'Lien copié dans le presse-papiers !'));
+                              }}
+                              className="p-2.5 bg-white text-slate-400 hover:text-slate-900 border border-slate-100 rounded-xl transition-all shadow-sm"
+                              title={t('btn_copy', 'links', 'Copier le lien')}
+                            >
+                              <Copy size={14} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedLinkForQr(link);
+                                setShowQrModal(true);
+                              }}
+                              className="p-2.5 bg-white text-slate-400 hover:text-purple-600 border border-slate-100 rounded-xl transition-all shadow-sm"
+                              title={t('btn_qr', 'links', 'Code QR')}
+                            >
+                              <QrCode size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {modalLinks.length === 0 && (
+                      <div className="p-10 text-center bg-slate-50 border border-dashed border-slate-100 rounded-2xl">
+                        <Package className="w-12 h-12 mx-auto text-slate-300 mb-2 opacity-55" />
+                        <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">
+                          {t('no_links_created', 'inventory', 'Aucun lien généré pour le moment')}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Add New Link Button */}
+                  <div className="pt-4 border-t border-slate-100/80 flex justify-between items-center gap-4">
+                    <button
+                      onClick={() => {
+                        setIsLinksModalOpen(false);
+                        setSelectedProductId(selectedProductForLinks.id);
+                        setSelectedProductName(selectedProductForLinks.name);
+                        setCustomName('');
+                        setCustomNameError('');
+                        setShowCreateModal(true);
+                      }}
+                      disabled={modalLinks.length >= 5}
+                      className="flex-1 py-3.5 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-lg shadow-slate-200 flex items-center justify-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" /> {t('btn_create_another_link', 'inventory', 'Créer un autre lien')} ({modalLinks.length}/5)
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsLinksModalOpen(false);
+                        setSelectedProductForLinks(null);
+                        setModalLinks([]);
+                      }}
+                      className="px-6 py-3.5 bg-slate-50 hover:bg-slate-100 text-slate-400 rounded-2xl text-xs font-black uppercase tracking-widest transition-all"
+                    >
+                      {t('btn_close', 'links', 'Fermer')}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Modal */}
+      {showQrModal && selectedLinkForQr && (
+        <div className="fixed inset-0 z-[110] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-10 text-center animate-in zoom-in-95 duration-300">
+            <h2 className="text-2xl font-black text-slate-900 mb-2">{t('qr_title', 'links', 'Code QR du lien')}</h2>
+            <p className="text-sm text-slate-400 font-medium mb-8">{t('qr_subtitle', 'links', 'Scannez ou téléchargez le code QR')}</p>
+            <div className="bg-white p-6 rounded-2xl border-4 border-dashed border-slate-100 inline-block mb-8">
+              <img 
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(`${window.location.origin}/r/${selectedLinkForQr?.code}`)}`}
+                alt="QR Code"
+                className="w-48 h-48 mx-auto"
+              />
+            </div>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => {
+                  const link = document.createElement('a');
+                  link.href = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(`${window.location.origin}/r/${selectedLinkForQr?.code}`)}`;
+                  link.download = `qr-link-${selectedLinkForQr?.code}.png`;
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  toast.success(t('toast_qr_ready', 'links', 'Téléchargement lancé !'));
+                }}
+                className="w-full py-4 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl"
+              >
+                {t('btn_download_hd', 'links', 'Télécharger HD')}
+              </button>
+              <button onClick={() => setShowQrModal(false)} className="w-full py-4 bg-slate-50 text-slate-400 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-100 transition-all">
+                {t('btn_close', 'links', 'Fermer')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[120] p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200">
+            <div className="p-8 text-center">
+              <div className="w-20 h-20 rounded-full mx-auto mb-6 flex items-center justify-center bg-slate-50">
+                {confirmModal.icon}
+              </div>
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-3">
+                {confirmModal.title}
+              </h2>
+              <p className="text-sm text-slate-500 font-medium leading-relaxed mb-6">
+                {confirmModal.message}
+              </p>
+            </div>
+            <div className="p-8 bg-slate-50/50 flex gap-4">
+              <button
+                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                disabled={confirmModal.isLoading}
+                className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-400 bg-white border border-slate-100 rounded-2xl transition-all disabled:opacity-50"
+              >
+                {t('btn_cancel', 'links', 'Annuler')}
+              </button>
+              <button
+                onClick={confirmModal.onConfirm}
+                disabled={confirmModal.isLoading}
+                className={`flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-white rounded-2xl shadow-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
+                  confirmModal.variant === 'danger' ? 'bg-red-500 hover:bg-red-600' : 'bg-slate-900 hover:bg-slate-800'
+                }`}
+              >
+                {confirmModal.isLoading && (
+                  <RefreshCw size={14} className="animate-spin" />
+                )}
+                {confirmModal.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

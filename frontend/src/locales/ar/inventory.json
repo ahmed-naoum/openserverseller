@@ -13,7 +13,7 @@
   "qty": "الكمية",
   "link_preparation": "الرابط قيد التحضير من قبل الفريق...",
   "copy": "نسخ",
-  "generate": "إنشاء",
+  "generate": "إنشاء رابط جديد",
   "not_eligible": "غير مؤهل",
   "verifying": "جاري التحقق...",
   "no_product_found": "لم يتم العثور على أي منتج",
@@ -22,5 +22,11 @@
   "link_success": "تم إنشاء الرابط بنجاح!",
   "link_error": "حدث خطأ أثناء إنشاء الرابط",
   "copied_success": "تم نسخ الرابط إلى الحافظة!",
-  "influencer_price": "سعر المؤثر"
+  "influencer_price": "سعر المؤثر",
+  "manage_links": "إدارة الروابط",
+  "product_links_title": "روابط الإحالة",
+  "selected_product": "المنتج",
+  "error_loading_links": "تعذر تحميل الروابط",
+  "btn_create_another_link": "إنشاء رابط آخر",
+  "no_links_created": "لم يتم إنشاء أي رابط بعد"
 }

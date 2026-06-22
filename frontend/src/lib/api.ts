@@ -49,6 +49,25 @@ api.interceptors.request.use(
     if (bypassToken && config.headers) {
       config.headers['x-maintenance-bypass'] = bypassToken;
     }
+
+    // Add rich client telemetry headers for SOC Dashboard tracking
+    if (config.headers && typeof window !== 'undefined') {
+      config.headers['x-client-screen'] = `${window.screen.width}x${window.screen.height}`;
+      config.headers['x-client-window'] = `${window.innerWidth}x${window.innerHeight}`;
+      config.headers['x-client-cookies'] = navigator.cookieEnabled ? '1' : '0';
+      config.headers['x-client-js'] = '1';
+      config.headers['x-client-platform'] = navigator.platform;
+      
+      const ua = navigator.userAgent;
+      let browserVersion = '';
+      const match = ua.match(/(chrome|safari|firefox|msie|trident(?=\/))\/?\s*(\d+)/i) || [];
+      if (match.length > 2) browserVersion = match[2];
+      config.headers['x-client-browser-version'] = browserVersion;
+      
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+      config.headers['x-client-device-type'] = isMobile ? 'Mobile' : 'Desktop';
+    }
+
     return config;
   },
   (error) => {
@@ -119,6 +138,8 @@ export const authApi = {
     api.get(`/auth/verify-reset-token/${token}`),
   verifyOtp: (data: { email?: string; phone?: string; otp: string }) =>
     api.post('/auth/verify-otp', data),
+  verifyEmail: (data: { email: string; otp: string }) =>
+    api.post('/auth/verify-email', data),
   googleAuth: (data: { credential: string; role?: string; language?: string }) =>
     api.post('/auth/google', data),
   login2FA: (data: { twoFactorToken: string; code: string }) =>
@@ -130,6 +151,8 @@ export const authApi = {
   updateLanguageSetting: (language: string) => api.put('/user/settings', { language }),
   impersonate: (data: { targetUserId: number }) =>
     api.post('/auth/impersonate', data),
+  revertImpersonate: () =>
+    api.post('/auth/revert-impersonate'),
   sendBankOtp: (data: { bankName: string; ribAccount: string; iceNumber?: string }) =>
     api.post('/auth/bank-accounts/send-otp', data),
   verifyBankOtp: (otp: string) =>
@@ -288,6 +311,7 @@ export const publicApi = {
   trackWhatsappClick: (code: string) => api.post(`/influencer/links/${code}/track-whatsapp`),
   submitReferralLead: (data: { referralCode: string; fullName: string; phone: string; city: string; address: string; productVariant?: string }) => api.post('/public/leads', data),
   submitContact: (data: { name: string; email: string; subject: string; message: string }) => api.post('/public/contact', data),
+  checkBlock: (path: string) => api.get('/public/check-block', { params: { path } }),
 };
 
 export const uploadApi = {
@@ -313,6 +337,8 @@ export const adminApi = {
     api.patch(`/admin/users/${uuid}/verify-kyc`, { status }),
   verifyBank: (id: number, status: 'APPROVED' | 'REJECTED' | 'PENDING') =>
     api.patch(`/admin/bank-accounts/${id}/status`, { status }),
+  verifyBankManually: (uuid: string, approved?: boolean) =>
+    api.patch(`/admin/users/${uuid}/verify-bank`, { approved }),
   verifyUser: (uuid: string, isActive: boolean) => api.patch(`/admin/users/${uuid}/active`, { isActive }),
   verifyContract: (uuid: string, accepted?: boolean) => api.patch(`/admin/users/${uuid}/verify-contract`, { accepted }),
   users: (params?: { role?: string; status?: string; page?: number; limit?: number; search?: string }) =>
@@ -528,6 +554,67 @@ export const securityApi = {
   clearThreat: (ip?: string) => api.delete('/admin/security/clear-threat', { data: { ip } }),
   getSettings: () => api.get('/admin/security/settings'),
   updateSettings: (data: any) => api.put('/admin/security/settings', data),
+
+  // Session Inventory
+  getSessions: () => api.get('/admin/security/sessions'),
+  terminateSession: (socketId: string) => api.delete(`/admin/security/sessions/${socketId}`),
+  blockGlobalSession: (socketId: string) => api.post(`/admin/security/sessions/${socketId}/block-global`),
+  getBlockedSessions: () => api.get('/admin/security/sessions/blocks'),
+  unblockSession: (key: string) => api.delete(`/admin/security/sessions/blocks/${encodeURIComponent(key)}`),
+  unblockAllSessions: () => api.delete('/admin/security/sessions/blocks/all'),
+
+  // Incidents
+  getIncidents: () => api.get('/admin/security/incidents'),
+  createIncident: (data: { title: string; severity: 'INFO' | 'WARNING' | 'CRITICAL'; recommendedSteps?: string }) =>
+    api.post('/admin/security/incidents', data),
+  updateIncident: (id: string, data: { status: 'OPEN' | 'INVESTIGATING' | 'RESOLVED' | 'FALSE_POSITIVE'; assignedAdminId?: number }) =>
+    api.put(`/admin/security/incidents/${id}`, data),
+
+  // Alert Rules
+  getAlertRules: () => api.get('/admin/security/rules/alert'),
+  createAlertRule: (data: { name: string; eventType: string; condition: string; threshold: number; action: string }) =>
+    api.post('/admin/security/rules/alert', data),
+  toggleAlertRule: (id: string, isActive: boolean) =>
+    api.put(`/admin/security/rules/alert/${id}`, { isActive }),
+  deleteAlertRule: (id: string) =>
+    api.delete(`/admin/security/rules/alert/${id}`),
+
+  // Playbooks
+  getPlaybooks: () => api.get('/admin/security/playbooks'),
+  updatePlaybookStep: (id: string, steps: any[]) =>
+    api.post(`/admin/security/playbooks/${id}/step`, { steps }),
+
+  // Compliance
+  getCompliance: () => api.get('/admin/security/compliance'),
+  verifyCompliance: (id: string, data: { status: 'COMPLIANT' | 'NON_COMPLIANT' | 'PARTIAL'; evidenceLink?: string }) =>
+    api.post(`/admin/security/compliance/verify/${id}`, data),
+  exportCompliancePdf: () =>
+    api.get('/admin/security/compliance/export-pdf', { responseType: 'blob' }),
+
+  // GDPR Requests
+  getGdprRequests: () => api.get('/admin/security/gdpr/requests'),
+  createGdprRequest: (data: { requesterEmail: string; requestType: 'RIGHT_TO_ERASURE' | 'ACCESS_REQUEST' }) =>
+    api.post('/admin/security/gdpr/requests', data),
+  updateGdprRequest: (id: string, status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED') =>
+    api.put(`/admin/security/gdpr/requests/${id}`, { status }),
+
+  // Pentest findings
+  getPentest: () => api.get('/admin/security/pentest'),
+  createPentest: (data: { title: string; severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'; owner: string }) =>
+    api.post('/admin/security/pentest', data),
+
+  // CVE vulnerability database
+  getVulns: () => api.get('/admin/security/vulns'),
+
+  // Immutable Audit Chain Logs
+  getAuditLogs: () => api.get('/admin/security/audit/logs'),
+  verifyAuditChain: () => api.get('/admin/security/audit/verify'),
+
+  // Global Threat Heatmap & Advanced Analytics
+  getAnalytics: () => api.get('/admin/security/analytics'),
+
+  // Database Infrastructure Stats
+  getDatabaseStats: () => api.get('/admin/security/database-stats'),
 };
 
 export const settingsApi = {

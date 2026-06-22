@@ -62,5 +62,20 @@
   "privacy_notice": "سياسة الخصوصية",
   "terms_of_service": "شروط الخدمة",
   "email_label": "البريد الإلكتروني",
-  "password_label": "كلمة المرور"
+  "password_label": "كلمة المرور",
+  "name_invalid_chars": "يجب ألا يحتوي الاسم الكامل على أرقام",
+  "passwords_dont_match": "كلمتا المرور غير متطابقتين",
+  "email_required": "البريد الإلكتروني مطلوب",
+  "social_media_required": "يرجى تقديم حساب واحد على الأقل من وسائل التواصل الاجتماعي",
+  "username_too_short": "اسم المستخدم يجب أن يكون 3 أحرف على الأقل",
+  "username_too_long": "يجب ألا يتجاوز اسم المستخدم 30 حرفاً",
+  "verify_email_title": "تحقق من بريدك الإلكتروني",
+  "verify_email_desc": "لقد أرسلنا رمز التحقق إلى",
+  "verify_code_btn": "التحقق من الرمز",
+  "didnt_receive_code": "لم تتلقَ الرمز؟",
+  "resend_btn": "إعادة الإرسال",
+  "logout_goback_btn": "تسجيل الخروج والرجوع",
+  "session_invalid": "الجلسة غير صالحة. يرجى تسجيل الدخول مرة أخرى.",
+  "enter_6_digits": "يرجى إدخال الرمز المكون من 6 أرقام",
+  "email_verified_success": "تم التحقق من البريد الإلكتروني بنجاح!"
 }

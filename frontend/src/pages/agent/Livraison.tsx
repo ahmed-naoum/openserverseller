@@ -47,6 +47,7 @@ interface Parcel {
   leadFullName: string;
   vendorName: string | null;
   vendorEmail: string | null;
+  notes?: string | null;
   createdAt: string;
 }
 
@@ -603,6 +604,11 @@ export default function AgentLivraison() {
                             👤 Référent: {parcel.vendorName || '—'}{parcel.vendorEmail ? ` · ${parcel.vendorEmail}` : ''}
                           </span>
                         )}
+                        {parcel.notes && (
+                          <span className="flex items-center gap-1.5 text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md text-[11px] font-bold border border-amber-100 max-w-[250px] truncate" title={parcel.notes}>
+                            📝 Note: {parcel.notes}
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -717,7 +723,18 @@ export default function AgentLivraison() {
 
                 {/* Expanded: Products */}
                 {isExpanded && (
-                  <div className="border-t border-gray-100 bg-gray-50/50 p-5 space-y-3">
+                  <div className="border-t border-gray-100 bg-gray-50/50 p-5 space-y-4">
+                    {parcel.notes && (
+                      <div className="bg-amber-50/40 border border-amber-100/70 rounded-2xl p-4 shadow-sm">
+                        <h5 className="text-[11px] font-black text-amber-800 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                          <span>📝</span> Notes (Internes & Livraison Coliaty)
+                        </h5>
+                        <p className="text-xs font-semibold text-amber-900 leading-relaxed whitespace-pre-wrap">
+                          {parcel.notes}
+                        </p>
+                      </div>
+                    )}
+
                     <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2">
                       <Box className="w-4 h-4 text-gray-400" />
                       Produits commandés

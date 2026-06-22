@@ -1,9 +1,20 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Home, Package, Rocket, Search } from 'lucide-react';
+import { useEffect } from 'react';
 
 export default function NotFoundPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    // Explicitly report this client-side route as a 404 to the backend Global Analytics
+    fetch('/api/v1/public/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 404, path: location.pathname }),
+    }).catch(() => {});
+  }, [location.pathname]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center px-4 font-inter overflow-hidden relative">

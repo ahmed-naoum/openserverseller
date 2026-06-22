@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { trackRequest } from '../lib/trafficTracker.js';
 
 export const requestLogger = (
   req: Request,
@@ -12,7 +13,7 @@ export const requestLogger = (
     const logData = {
       timestamp: new Date().toISOString(),
       method: req.method,
-      path: req.path,
+      path: req.originalUrl || req.path,
       status: res.statusCode,
       duration: `${duration}ms`,
       userAgent: req.get('user-agent'),
@@ -21,6 +22,13 @@ export const requestLogger = (
     };
 
     console.log(JSON.stringify(logData));
+    
+    // Log in-memory analytics for threat map dashboard
+    try {
+      trackRequest(req, res, duration);
+    } catch (err) {
+      console.error('Failed to log analytics traffic:', err);
+    }
   });
 
   next();

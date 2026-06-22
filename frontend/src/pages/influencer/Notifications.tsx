@@ -18,6 +18,8 @@ import {
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
+import { useLanguage } from '../../contexts/LanguageContext';
+import { translateNotification } from '../../utils/notificationTranslator';
 
 export default function InfluencerNotifications() {
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -26,6 +28,7 @@ export default function InfluencerNotifications() {
   const [searchQuery, setSearchQuery] = useState('');
   const { socket } = useSocket();
   const navigate = useNavigate();
+  const { t, language } = useLanguage();
 
   // Confirmation Modal states
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
@@ -41,7 +44,7 @@ export default function InfluencerNotifications() {
       const res = await notificationsApi.list({ page: 1, limit: 100 });
       setNotifications(res.data.data.notifications || []);
     } catch (error) {
-      toast.error('Impossible de charger les notifications');
+      toast.error(t('toast_load_error', 'notifications', 'Impossible de charger les notifications'));
       console.error(error);
     } finally {
       setIsLoading(false);
@@ -102,7 +105,7 @@ export default function InfluencerNotifications() {
     try {
       await notificationsApi.markRead(id);
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
-      toast.success('Marquée comme lue');
+      toast.success(t('toast_marked_read', 'notifications', 'Marquée comme lue'));
     } catch (err) {
       console.error('Failed to mark read:', err);
     }
@@ -113,7 +116,7 @@ export default function InfluencerNotifications() {
     try {
       await notificationsApi.delete(id);
       setNotifications(prev => prev.filter(n => n.id !== id));
-      toast.success('Notification supprimée');
+      toast.success(t('toast_deleted', 'notifications', 'Notification supprimée'));
     } catch (err) {
       console.error('Failed to delete notification:', err);
     }
@@ -123,7 +126,7 @@ export default function InfluencerNotifications() {
     try {
       await notificationsApi.markAllRead();
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-      toast.success('Toutes les notifications ont été marquées comme lues');
+      toast.success(t('toast_all_marked_read', 'notifications', 'Toutes les notifications ont été marquées comme lues'));
     } catch (err) {
       console.error('Failed to mark all read:', err);
     }
@@ -131,15 +134,15 @@ export default function InfluencerNotifications() {
 
   const handleDeleteAll = () => {
     setConfirmData({
-      title: "Vider tout l'historique",
-      message: "Voulez-vous vraiment supprimer définitivement toutes vos notifications ? Cette action est irréversible.",
+      title: t('confirm_delete_all_title', 'notifications', "Vider tout l'historique"),
+      message: t('confirm_delete_all_message', 'notifications', "Voulez-vous vraiment supprimer définitivement toutes vos notifications ? Cette action est irréversible."),
       onConfirm: async () => {
         try {
           await notificationsApi.deleteAll();
           setNotifications([]);
-          toast.success('Historique vidé avec succès');
+          toast.success(t('toast_all_deleted', 'notifications', 'Historique vidé avec succès'));
         } catch (err) {
-          toast.error('Erreur lors de la suppression');
+          toast.error(t('toast_delete_error', 'notifications', 'Erreur lors de la suppression'));
           console.error(err);
         }
       }
@@ -205,10 +208,10 @@ export default function InfluencerNotifications() {
             <div className="p-2 bg-influencer-50 rounded-xl text-influencer-600">
               <Bell size={20} className="animate-pulse" />
             </div>
-            Historique des Notifications
+            {t('title', 'notifications', 'Historique des Notifications')}
           </h1>
           <p className="text-xs font-bold text-slate-400 mt-1">
-            Gérez et suivez toutes vos notifications système en temps réel.
+            {t('subtitle', 'notifications', 'Gérez et suivez toutes vos notifications système en temps réel.')}
           </p>
         </div>
 
@@ -219,14 +222,14 @@ export default function InfluencerNotifications() {
               className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-black text-slate-700 shadow-sm hover:shadow active:scale-95 transition-all duration-300"
             >
               <CheckCheck size={14} className="text-emerald-500" />
-              <span>Tout marquer comme lu</span>
+              <span>{t('btn_mark_all_read', 'notifications', 'Tout marquer comme lu')}</span>
             </button>
             <button
               onClick={handleDeleteAll}
               className="inline-flex items-center gap-2 px-4 py-2 bg-rose-50 hover:bg-rose-100 border border-rose-100 hover:border-rose-200 rounded-xl text-xs font-black text-rose-600 active:scale-95 transition-all duration-300"
             >
               <Trash2 size={14} />
-              <span>Tout effacer</span>
+              <span>{t('btn_clear_all', 'notifications', 'Tout effacer')}</span>
             </button>
           </div>
         )}
@@ -237,11 +240,11 @@ export default function InfluencerNotifications() {
         {/* Filter Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto scrollbar-hide py-1">
           {[
-            { id: 'ALL', label: 'Toutes' },
-            { id: 'INVENTORY', label: 'Mes Produits' },
-            { id: 'LINKS', label: 'Mes Liens' },
-            { id: 'PAYOUT', label: 'Portefeuille' },
-            { id: 'LEADS', label: 'Leads & Ventes' }
+            { id: 'ALL', label: t('tab_all', 'notifications', 'Toutes') },
+            { id: 'INVENTORY', label: t('tab_inventory', 'notifications', 'Mes Produits') },
+            { id: 'LINKS', label: t('tab_links', 'notifications', 'Mes Liens') },
+            { id: 'PAYOUT', label: t('tab_payout', 'notifications', 'Portefeuille') },
+            { id: 'LEADS', label: t('tab_leads', 'notifications', 'Leads & Ventes') }
           ].map(tab => (
             <button
               key={tab.id}
@@ -261,7 +264,7 @@ export default function InfluencerNotifications() {
         <div className="relative w-full md:w-80">
           <input
             type="text"
-            placeholder="Rechercher une notification..."
+            placeholder={t('search_placeholder', 'notifications', 'Rechercher une notification...')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-100 hover:border-slate-200 focus:border-influencer-200 focus:ring-1 focus:ring-influencer-200 rounded-xl text-xs font-bold text-slate-700 outline-none transition-all shadow-sm"
@@ -285,16 +288,21 @@ export default function InfluencerNotifications() {
             <div className="w-16 h-16 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center mx-auto text-slate-400 mb-4 shadow-inner">
               <Bell size={24} className="text-slate-400/80 animate-bounce" />
             </div>
-            <p className="text-sm font-black text-slate-800">Aucune notification trouvée</p>
+            <p className="text-sm font-black text-slate-800">{t('no_notifications_found', 'notifications', 'Aucune notification trouvée')}</p>
             <p className="text-xs text-slate-400 font-bold mt-1.5 max-w-sm mx-auto leading-relaxed">
               {searchQuery || activeFilter !== 'ALL' 
-                ? 'Essayez de modifier vos filtres ou vos termes de recherche pour trouver ce que vous cherchez.' 
-                : 'Vos nouvelles notifications apparaîtront en temps réel dès que des événements se produiront.'}
+                ? t('no_notifications_desc_search', 'notifications', 'Essayez de modifier vos filtres ou vos termes de recherche pour trouver ce que vous cherchez.') 
+                : t('no_notifications_desc_empty', 'notifications', 'Vos nouvelles notifications apparaîtront en temps réel dès que des événements se produiront.')}
             </p>
           </div>
         ) : (
           filteredNotifications.map((notif) => {
             const { icon: IconComponent, color, bg } = getNotificationIconDetails(notif.type);
+            const translated = translateNotification(notif, (k, ns, fb) => t(k, ns || 'notifications', fb));
+            const dateObj = new Date(notif.createdAt);
+            const formattedDate = dateObj.toLocaleDateString(language, { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const formattedTime = dateObj.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' });
+
             return (
               <div
                 key={notif.id}
@@ -314,27 +322,27 @@ export default function InfluencerNotifications() {
                 </div>
 
                 {/* Body Texts */}
-                <div className="flex-1 min-w-0 pr-12">
+                <div className={`flex-1 min-w-0 ${language === 'ar' ? 'pl-12' : 'pr-12'}`}>
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-4">
                     <p className="text-xs font-black text-slate-900 tracking-tight leading-snug">
-                      {notif.title}
+                      {translated.title}
                     </p>
                     <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap self-start sm:self-auto bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-100">
-                      {new Date(notif.createdAt).toLocaleDateString()} à {new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {formattedDate} - {formattedTime}
                     </span>
                   </div>
                   <p className="text-xs font-medium text-slate-500 leading-relaxed mt-1.5">
-                    {notif.body}
+                    {translated.body}
                   </p>
                 </div>
 
-                {/* Right side hover action buttons */}
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300">
+                {/* Right/Left side hover action buttons */}
+                <div className={`absolute ${language === 'ar' ? 'left-4' : 'right-4'} top-1/2 -translate-y-1/2 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300`}>
                   {!notif.isRead && (
                     <button
                       onClick={(e) => handleMarkRead(notif.id, e)}
                       className="p-2 bg-white border border-slate-200 hover:border-emerald-200 rounded-xl text-slate-400 hover:text-emerald-600 shadow-sm transition-all active:scale-95"
-                      title="Marquer comme lu"
+                      title={t('btn_read_all_short', 'notifications', 'Marquer comme lu')}
                     >
                       <Check size={14} />
                     </button>
@@ -342,7 +350,7 @@ export default function InfluencerNotifications() {
                   <button
                     onClick={(e) => handleDelete(notif.id, e)}
                     className="p-2 bg-rose-50 border border-rose-100 hover:border-rose-200 rounded-xl text-rose-500 hover:text-rose-600 shadow-sm transition-all active:scale-95"
-                    title="Supprimer"
+                    title={t('confirm_delete_all_btn', 'notifications', 'Supprimer')}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -360,7 +368,7 @@ export default function InfluencerNotifications() {
         title={confirmData.title}
         message={confirmData.message}
         type="danger"
-        confirmText="Supprimer"
+        confirmText={t('confirm_delete_all_btn', 'notifications', 'Supprimer')}
       />
     </div>
   );

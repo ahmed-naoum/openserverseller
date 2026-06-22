@@ -382,4 +382,47 @@ router.post(
   })
 );
 
+// Analytics tracking endpoint for SPA route changes
+router.post(
+  '/track',
+  (req: Request, res: Response) => {
+    if (req.body?.status === 404) {
+      res.status(404).send();
+      return;
+    }
+    res.status(204).send();
+  }
+);
+
+router.get(
+  '/check-block',
+  optionalAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const path = req.query.path as string;
+    if (!path) return res.json({ status: 'success', data: { isBlocked: false } });
+
+    const { pageBlocks } = await import('./security.routes.js');
+    const ip = req.headers['x-forwarded-for']?.toString().split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+    
+    // Check if there is a matching block for this user UUID
+    let isBlocked = false;
+    
+    if (req.user?.uuid) {
+      isBlocked = pageBlocks.has(`${req.user.uuid}-${path}`);
+      if (!isBlocked && path !== '*') isBlocked = pageBlocks.has(`${req.user.uuid}-*`);
+    }
+
+    // Fallback to IP-based checks
+    if (!isBlocked) {
+      isBlocked = pageBlocks.has(`${ip}-${path}`);
+      if (!isBlocked && path !== '*') isBlocked = pageBlocks.has(`${ip}-*`);
+    }
+
+    res.json({
+      status: 'success',
+      data: { isBlocked }
+    });
+  })
+);
+
 export default router;

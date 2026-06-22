@@ -22,8 +22,16 @@ export default function RoleGuard({ children, allowedRoles, fallbackPath }: Role
     return <Navigate to="/login" replace />;
   }
 
+  if (!user.emailVerified) {
+    return <Navigate to="/verify-email" replace />;
+  }
+
   if (!user.isActive && user.role !== 'UNCONFIRMED') {
-    return <Navigate to="/pending-verification" replace />;
+    // If the system requires manual approval, redirect to pending-verification.
+    // Otherwise, allow the inactive user to access the dashboard so they can complete KYC, Bank, and Contract steps.
+    if (user.requiresManualApproval) {
+      return <Navigate to="/pending-verification" replace />;
+    }
   }
 
   if (!allowedRoles.includes(user.role)) {

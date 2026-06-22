@@ -1,0 +1,74 @@
+{
+  "title": "Notification History",
+  "subtitle": "Manage and track all your system notifications in real time.",
+  "tab_all": "All",
+  "tab_inventory": "My Products",
+  "tab_links": "My Links",
+  "tab_payout": "Wallet",
+  "tab_leads": "Leads & Sales",
+  "search_placeholder": "Search a notification...",
+  "no_notifications_found": "No notifications found",
+  "no_notifications_desc_search": "Try modifying your filters or search terms to find what you are looking for.",
+  "no_notifications_desc_empty": "Your new notifications will appear in real time as events occur.",
+  "btn_mark_all_read": "Mark all as read",
+  "btn_clear_all": "Clear all",
+  "btn_read_all_short": "Read all",
+  "btn_clear_all_short": "Clear all",
+  "view_all_history": "View all history",
+  "unread_suffix": "unread",
+  "no_notifications_menu": "No notifications",
+  "no_notifications_menu_desc": "You will be notified in real time when sales and requests occur.",
+  
+  "toast_marked_read": "Marked as read",
+  "toast_deleted": "Notification deleted",
+  "toast_all_marked_read": "All notifications marked as read",
+  "toast_all_deleted": "All notifications deleted.",
+  "toast_delete_error": "Error while deleting",
+  
+  "confirm_delete_all_title": "Clear all notifications",
+  "confirm_delete_all_message": "Are you sure you want to permanently delete all your notifications? This action is irreversible.",
+  "confirm_delete_all_btn": "Delete",
+
+  "type_claim_approved_title": "Your product has been approved 📣",
+  "type_claim_approved_body": "Congratulations! Your affiliation request for the product \"{productName}\" was accepted. You can now generate links.",
+  
+  "type_claim_rejected_title": "Affiliation request rejected ❌",
+  "type_claim_rejected_body": "Sorry, your affiliation request for the product \"{productName}\" was rejected by the administrator.",
+
+  "type_claim_submitted_title": "Affiliation request submitted 📝",
+  "type_claim_submitted_body": "Your affiliation request for the product \"{productName}\" is pending approval by the administrator.",
+
+  "type_link_status_title": "🔄 Your link status updated",
+  "type_link_status_body": "The status of your referral link for the product \"{productName}\" is now: {label}.",
+  "status_label_building": "Building",
+  "status_label_active": "Active",
+  "status_label_inactive": "Inactive",
+  "status_label_suspended": "Suspended",
+
+  "type_link_clicks_title": "🎉 100 visitors goal reached!",
+  "type_link_clicks_body": "Congratulations! Your referral link ({code}) generated 100 unique visitors!",
+
+  "type_payout_submitted_title": "💸 Payout request submitted",
+  "type_payout_submitted_body": "Your payout request of {amount} MAD (#{id}) was successfully submitted.",
+
+  "type_payout_completed_title": "✅ Payout completed!",
+  "type_payout_completed_body": "Your payout request of {amount} MAD (#{id}) was successfully paid.",
+
+  "type_payout_rejected_title": "❌ Payout rejected",
+  "type_payout_rejected_body": "Your payout request of {amount} MAD (#{id}) was rejected. The funds have been returned to your wallet.",
+
+  "type_payout_pending_title": "⏳ Payout pending",
+  "type_payout_pending_body": "Your payout request of {amount} MAD (#{id}) is now being processed.",
+
+  "type_new_lead_title": "🎉 New sale (Lead)!",
+  "type_new_lead_body": "You received a new lead from {fullName} ({city}) for the product \"{productName}\".",
+
+  "type_lead_status_changed_delivery_title": "📈 Lead status updated via Delivery: {label}",
+  "type_lead_status_changed_title": "📈 Lead status updated: {label}",
+  "type_lead_status_changed_body": "The lead of {fullName} for product \"{productName}\" is now {label}.",
+  
+  "lead_label_confirmed": "CONFIRMED",
+  "lead_label_delivered": "DELIVERED",
+  "lead_label_cancel_price": "CANCELLED (PRICE)",
+  "lead_label_returned": "RETURNED"
+}

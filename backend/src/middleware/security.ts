@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import xss from 'xss';
 import { streamLogToExternalTransport } from '../services/logger.service.js';
-
+import { logImmutableAction } from '../utils/hashChain.js';
 
 export interface DynamicSecuritySettings {
   enableIPBlocking: boolean;
@@ -78,6 +78,81 @@ export const clearSecurityCache = () => {
   cacheExpiresAt = 0;
 };
 
+export const parseCookies = (cookieHeader?: string): Record<string, string> => {
+  const list: Record<string, string> = {};
+  if (!cookieHeader) return list;
+
+  try {
+    cookieHeader.split(';').forEach((cookie) => {
+      const parts = cookie.split('=');
+      const key = parts.shift()?.trim();
+      if (key) {
+        list[key] = decodeURIComponent(parts.join('='));
+      }
+    });
+  } catch {
+    // Catch malformed URI components gracefully
+  }
+  return list;
+};
+
+export const logSecurityEvent = async (data: {
+  eventType: string;
+  severity: 'INFO' | 'WARNING' | 'CRITICAL';
+  sourceIp: string;
+  country?: string;
+  endpoint?: string;
+  payload?: string;
+  action: 'BLOCKED' | 'FLAGGED' | 'ALLOWED';
+  userId?: number;
+  userEmail?: string;
+  details?: string;
+}) => {
+  try {
+    // 1. Log to append-only database table
+    await prisma.securityEvent.create({
+      data: {
+        eventType: data.eventType,
+        severity: data.severity,
+        sourceIp: data.sourceIp,
+        country: data.country || 'Unknown',
+        endpoint: data.endpoint || null,
+        payload: data.payload || null,
+        action: data.action,
+        userId: data.userId || null,
+        userEmail: data.userEmail || null,
+        details: data.details || null,
+      }
+    });
+
+    // 2. Stream event over WebSocket to active listeners (SOC dashboard)
+    try {
+      const { io } = await import('../index.js');
+      if (io) {
+        io.emit('security_event', {
+          ...data,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (wsErr) {
+      // Ignore WebSocket loading errors during early server startup
+    }
+
+    // 3. Log to immutable audit log for critical alerts
+    if (data.severity === 'CRITICAL') {
+      await logImmutableAction(
+        data.userId || null,
+        data.userEmail || null,
+        `SECURITY_ALERT: ${data.eventType} - ${data.action}`,
+        data.sourceIp,
+        data.details || null
+      );
+    }
+  } catch (err) {
+    console.error('Failed to log security event:', err);
+  }
+};
+
 export const ipFilter = async (
   req: Request,
   res: Response,
@@ -112,6 +187,7 @@ export const ipFilter = async (
 
   next();
 };
+
 export const auditLog = async (
   req: Request,
   res: Response,
@@ -168,6 +244,7 @@ export const auditLog = async (
     try {
       const duration = Date.now() - startTime;
       const userId = (req as any).user?.id || null;
+      const userEmail = (req as any).user?.email || null;
 
       let postFetchState: any = null;
       if (req.method !== 'GET' && prismaModelName && whereClause && (prisma as any)[prismaModelName] && preFetchState) {
@@ -208,6 +285,15 @@ export const auditLog = async (
           changes: changesString,
         },
       });
+
+      // Write to the Cryptographic Hash Chain Audit Log
+      await logImmutableAction(
+        userId,
+        userEmail,
+        `${req.method} ${req.originalUrl}`,
+        req.ip || 'unknown',
+        changesPayload
+      );
 
       // Stream to secure external logging provider
       await streamLogToExternalTransport({
@@ -265,17 +351,21 @@ export const sanitizeInput = async (
     return next();
   }
 
-  const sanitize = (obj: any): any => {
+  const sanitize = (obj: any, depth = 0): any => {
+    if (depth > 10) return obj; // Enforce depth limit to prevent stack overflows
     if (typeof obj === 'string') {
-      return sanitizeString(obj);
+      return xss(obj).trim();
     }
     if (Array.isArray(obj)) {
-      return obj.map(sanitize);
+      return obj.map(item => sanitize(item, depth + 1));
     }
     if (obj && typeof obj === 'object') {
+      if (obj instanceof Date) return obj;
       const sanitized: any = {};
       for (const key in obj) {
-        sanitized[key] = sanitize(obj[key]);
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+          sanitized[key] = sanitize(obj[key], depth + 1);
+        }
       }
       return sanitized;
     }
@@ -295,9 +385,80 @@ export const sanitizeInput = async (
   next();
 };
 
-function sanitizeString(str: string): string {
-  return xss(str).trim();
-}
+export const csrfProtection = (req: Request, res: Response, next: NextFunction) => {
+  const method = req.method.toUpperCase();
+  
+  // Set XSRF-TOKEN cookie if it is not present on safe requests
+  const cookies = parseCookies(req.headers.cookie);
+  let xsrfToken = cookies['XSRF-TOKEN'];
+  if (!xsrfToken) {
+    xsrfToken = crypto.randomBytes(32).toString('hex');
+    res.cookie('XSRF-TOKEN', xsrfToken, {
+      httpOnly: false, // Must be readable by client JS
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+    });
+  }
+
+  // Bypass CSRF checks for GET, HEAD, OPTIONS
+  if (['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    return next();
+  }
+
+  // Bypass CSRF for public webhook and upload routes
+  if (req.originalUrl.includes('/webhook') || req.originalUrl.includes('/uploads/')) {
+    return next();
+  }
+
+  const headerToken = req.headers['x-xsrf-token'] || req.headers['X-XSRF-TOKEN'] || req.headers['x-xsrf-token'.toLowerCase()];
+  if (!headerToken || headerToken !== xsrfToken) {
+    logSecurityEvent({
+      eventType: 'CSRF_VIOLATION',
+      severity: 'WARNING',
+      sourceIp: req.ip || req.socket.remoteAddress || 'unknown',
+      endpoint: req.originalUrl,
+      action: 'BLOCKED',
+      details: `CSRF Mismatch: header=${headerToken}, cookie=${xsrfToken}`,
+    });
+    return res.status(403).json({
+      status: 'error',
+      message: 'Invalid CSRF token',
+    });
+  }
+
+  next();
+};
+
+export const honeypotTrap = async (req: Request, res: Response) => {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  
+  await logSecurityEvent({
+    eventType: 'RECONNAISSANCE',
+    severity: 'CRITICAL',
+    sourceIp: ip,
+    endpoint: req.originalUrl,
+    action: 'BLOCKED',
+    details: `Honeypot hit on path: ${req.originalUrl}`,
+  });
+
+  // Auto-block the IP
+  const settings = await fetchSecuritySettings();
+  if (!settings.blockedIPs.includes(ip)) {
+    settings.blockedIPs.push(ip);
+    await prisma.platformSettings.upsert({
+      where: { key: 'security_settings' },
+      update: { value: settings as any },
+      create: { key: 'security_settings', value: settings as any }
+    });
+    clearSecurityCache();
+  }
+
+  return res.status(403).json({
+    status: 'error',
+    message: 'Access denied.',
+  });
+};
 
 export const generateCSRFToken = (): string => {
   return crypto.randomBytes(32).toString('hex');
@@ -333,7 +494,9 @@ export const validateRequestSize = (maxSize: number = 1024 * 1024) => {
     }
     next();
   };
-};export const sensitiveDataMasking = (data: any): any => {
+};
+
+export const sensitiveDataMasking = (data: any): any => {
   const sensitiveFields = [
     'password', 'passwordhash', 'token', 'secret', 
     'creditcard', 'rib', 'otp', 'bankname', 
@@ -376,7 +539,7 @@ const shouldSkipRateLimit = async (req: Request): Promise<boolean> => {
     const settings = await fetchSecuritySettings();
     const clientIP = req.ip || req.socket.remoteAddress || 'unknown';
     
-    // 0. Skip if localhost (very useful for development & local admin testing)
+    // Skip if localhost
     if (
       clientIP === '::1' || 
       clientIP === '127.0.0.1' || 
@@ -386,12 +549,12 @@ const shouldSkipRateLimit = async (req: Request): Promise<boolean> => {
       return true;
     }
 
-    // 1. Skip if IP is whitelisted
+    // Skip if IP is whitelisted
     if (settings.whitelistedIPs.includes(clientIP)) {
       return true;
     }
 
-    // 2. Skip if request is an admin/helper login attempt
+    // Skip if request is an admin/helper login attempt
     if (req.path && req.path.includes('/auth/login')) {
       const { email, phone } = req.body || {};
       if (email || phone) {
@@ -410,7 +573,7 @@ const shouldSkipRateLimit = async (req: Request): Promise<boolean> => {
       }
     }
 
-    // 3. Skip if request has a bearer token belonging to an admin/helper user
+    // Skip if request has a bearer token belonging to an admin/helper user
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.split(' ')[1];
@@ -427,14 +590,13 @@ const shouldSkipRateLimit = async (req: Request): Promise<boolean> => {
       }
     }
   } catch (err) {
-    // If verification or DB query fails, fall back to not skipping
+    // Fall back to not skipping
   }
   return false;
 };
 
 const rateLimitBlockedIPs = new Map<string, number>();
 
-// Helper to check and prune blocked IPs
 const isIPRateLimitBlocked = (ip: string): boolean => {
   const blockedUntil = rateLimitBlockedIPs.get(ip);
   if (!blockedUntil) return false;
@@ -454,7 +616,6 @@ export const rateLimitCheckMiddleware = async (
   const clientIP = req.ip || req.socket.remoteAddress || 'unknown';
 
   if (isIPRateLimitBlocked(clientIP)) {
-    // Admins and helpers are completely exempted from rate limits and blocks
     const skip = await shouldSkipRateLimit(req);
     if (skip) {
       return next();
@@ -476,7 +637,6 @@ export const globalRateLimiter = rateLimit({
   handler: (req: Request, res: Response) => {
     const clientIP = req.ip || req.socket.remoteAddress || 'unknown';
     
-    // Block IP for 10 minutes (10 * 60 * 1000 ms)
     rateLimitBlockedIPs.set(clientIP, Date.now() + 10 * 60 * 1000);
 
     res.status(429).json({
@@ -486,6 +646,17 @@ export const globalRateLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false
+});
+
+export const login2faLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes window
+  limit: 5, // Max 5 requests per 5 minutes
+  message: {
+    status: 'error',
+    message: 'Too many 2FA verification attempts. Please try again in 5 minutes.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 export const uploadRateLimiter = rateLimit({

@@ -48,6 +48,11 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
+      // Proxy scan attempts on sensitive files/folders to the backend for security tracking and 403 response
+      '^/(\\.env|\\.git|\\.config|wp-admin|phpmyadmin|composer\\.json|package\\.json)': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
     },
   },
 });

@@ -1047,7 +1047,9 @@ export default function InfluencerLeads() {
                             )}
                             <div className="flex flex-col">
                               <span className="text-sm font-bold text-gray-900">{commission.referralLink?.product?.nameFr || '-'}</span>
-                              <span className="text-[10px] text-gray-400 font-mono mt-0.5 uppercase">SKU: {commission.referralLink?.product?.sku || '-'}</span>
+                              <span className="text-[10px] text-gray-400 font-mono mt-0.5 uppercase">
+                                SKU: {commission.referralLink?.product?.sku || '-'} | QTE: {commission.order?.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1}
+                              </span>
                             </div>
                           </div>
                         </td>

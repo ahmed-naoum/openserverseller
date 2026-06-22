@@ -1,0 +1,74 @@
+{
+  "title": "Historique des Notifications",
+  "subtitle": "Gériez et suivez toutes vos notifications système en temps réel.",
+  "tab_all": "Toutes",
+  "tab_inventory": "Mes Produits",
+  "tab_links": "Mes Liens",
+  "tab_payout": "Portefeuille",
+  "tab_leads": "Leads & Ventes",
+  "search_placeholder": "Rechercher une notification...",
+  "no_notifications_found": "Aucune notification trouvée",
+  "no_notifications_desc_search": "Essayez de modifier vos filtres ou vos termes de recherche pour trouver ce que vous cherchez.",
+  "no_notifications_desc_empty": "Vos nouvelles notifications apparaîtront en temps réel dès que des événements se produiront.",
+  "btn_mark_all_read": "Tout marquer comme lu",
+  "btn_clear_all": "Tout effacer",
+  "btn_read_all_short": "Tout lire",
+  "btn_clear_all_short": "Tout effacer",
+  "view_all_history": "Voir tout l'historique",
+  "unread_suffix": "non lues",
+  "no_notifications_menu": "Aucune notification",
+  "no_notifications_menu_desc": "Vous serez notifié en temps réel lors de vos ventes et de vos demandes.",
+  
+  "toast_marked_read": "Marquée comme lue",
+  "toast_deleted": "Notification supprimée",
+  "toast_all_marked_read": "Toutes les notifications ont été marquées comme lues",
+  "toast_all_deleted": "Toutes les notifications ont été supprimées.",
+  "toast_delete_error": "Erreur lors de la suppression",
+  
+  "confirm_delete_all_title": "Supprimer toutes les notifications",
+  "confirm_delete_all_message": "Voulez-vous vraiment supprimer définitivement toutes vos notifications ? Cette action est irréversible.",
+  "confirm_delete_all_btn": "Supprimer",
+
+  "type_claim_approved_title": "Votre produit a été approuvé 📣",
+  "type_claim_approved_body": "Félicitations ! Votre demande d'affiliation pour le produit \"{productName}\" a été acceptée. Vous pouvez maintenant générer des liens.",
+  
+  "type_claim_rejected_title": "Demande d'affiliation refusée ❌",
+  "type_claim_rejected_body": "Désolé, votre demande d'affiliation pour le produit \"{productName}\" a été refusée par l'administrateur.",
+
+  "type_claim_submitted_title": "Demande d'affiliation soumise 📝",
+  "type_claim_submitted_body": "Votre demande d'affiliation pour le produit \"{productName}\" est en attente d'approbation par l'administrateur.",
+
+  "type_link_status_title": "🔄 Statut de votre lien mis à jour",
+  "type_link_status_body": "Le statut de votre lien de parrainage pour le produit \"{productName}\" est maintenant : {label}.",
+  "status_label_building": "En construction",
+  "status_label_active": "Actif",
+  "status_label_inactive": "Inactif",
+  "status_label_suspended": "Suspendu",
+
+  "type_link_clicks_title": "🎉 Objectif 100 visiteurs atteint !",
+  "type_link_clicks_body": "Félicitations ! Votre lien de parrainage ({code}) a généré 100 visiteurs uniques !",
+
+  "type_payout_submitted_title": "💸 Demande de retrait soumise",
+  "type_payout_submitted_body": "Votre demande de retrait d'un montant de {amount} MAD (#{id}) a été soumise avec succès.",
+
+  "type_payout_completed_title": "✅ Retrait effectué !",
+  "type_payout_completed_body": "Votre demande de retrait de {amount} MAD (#{id}) a été payée avec succès.",
+
+  "type_payout_rejected_title": "❌ Retrait rejeté",
+  "type_payout_rejected_body": "Votre demande de retrait de {amount} MAD (#{id}) a été rejetée. Les fonds ont été restitués à votre portefeuille.",
+
+  "type_payout_pending_title": "⏳ Retrait en attente",
+  "type_payout_pending_body": "Votre demande de retrait de {amount} MAD (#{id}) est maintenant en cours de traitement.",
+
+  "type_new_lead_title": "🎉 Nouvelle vente (Lead) !",
+  "type_new_lead_body": "Vous avez reçu un nouveau lead de {fullName} ({city}) pour le produit \"{productName}\".",
+
+  "type_lead_status_changed_delivery_title": "📈 Statut du lead mis à jour via Livraison : {label}",
+  "type_lead_status_changed_title": "📈 Statut du lead mis à jour : {label}",
+  "type_lead_status_changed_body": "Le lead de {fullName} pour le produit \"{productName}\" est maintenant {label}.",
+  
+  "lead_label_confirmed": "CONFIRMÉ",
+  "lead_label_delivered": "LIVRÉ",
+  "lead_label_cancel_price": "ANNULÉ (PRIX)",
+  "lead_label_returned": "RETOURNÉ"
+}

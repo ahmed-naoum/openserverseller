@@ -52,6 +52,8 @@ model User {
   kycStatus       String    @default("PENDING")
   emailVerifiedAt DateTime?
   phoneVerifiedAt DateTime?
+  emailOtp        String?
+  emailOtpExpiry  DateTime?
   lastLoginAt     DateTime?
 
   // 2FA and SSO
@@ -991,3 +993,155 @@ model ContactMessage {
 
   @@map("contact_messages")
 }
+
+model SecurityEvent {
+  id        String   @id @default(uuid())
+  timestamp DateTime @default(now())
+  eventType String   // BOT, INJECTION, BRUTE_FORCE, DDOS, RECONNAISSANCE, CSP_VIOLATION, etc.
+  severity  String   // INFO, WARNING, CRITICAL
+  sourceIp  String
+  country   String?
+  endpoint  String?
+  payload   String?
+  action    String   // BLOCKED, FLAGGED, ALLOWED
+  userId    Int?
+  userEmail String?
+  details   String?
+
+  @@map("security_events")
+}
+
+model ImmutableAuditLog {
+  id        String   @id @default(uuid())
+  timestamp DateTime @default(now())
+  userId    Int?
+  userEmail String?
+  action    String
+  ip        String
+  changes   String?
+  prevHash  String   // Previous record's SHA-256 hash
+  hash      String   // Current record's SHA-256 hash (fields + prevHash)
+  signature String?  // Optional private-key signature
+
+  @@map("immutable_audit_logs")
+}
+
+model SecurityIncident {
+  id          String   @id @default(uuid())
+  title       String
+  severity    String   // LOW, MEDIUM, HIGH, CRITICAL
+  status      String   @default("OPEN") // OPEN, INVESTIGATING, RESOLVED
+  eventDetails Json?
+  affectedIps String[]
+  recommendedSteps String?
+  assignedAdminId Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("security_incidents")
+}
+
+model SecurityAlertRule {
+  id         String   @id @default(uuid())
+  name       String
+  eventType  String
+  condition  String   // e.g. "GREATER_THAN"
+  threshold  Int
+  action     String   // EMAIL, SLACK, DISCORD, BLOCK_IP, LOCK_ACCOUNT
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@map("security_alert_rules")
+}
+
+model PlaybookTemplate {
+  id          String   @id @default(uuid())
+  scenario    String   // DDOS, ACCOUNT_TAKEOVER, DATA_BREACH, RANSOMWARE
+  steps       Json     // Array of checklist items: { id: string, label: string, completed: boolean }
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("playbook_templates")
+}
+
+model ComplianceItem {
+  id          String   @id @default(uuid())
+  standard    String   // GDPR, PCI_DSS, ISO27001
+  requirement String
+  status      String   @default("COMPLIANT") // COMPLIANT, AT_RISK, NON_COMPLIANT
+  evidenceLink String?
+  verifiedAt  DateTime @default(now())
+
+  @@map("compliance_items")
+}
+
+model GdprRequest {
+  id            String   @id @default(uuid())
+  requesterEmail String
+  requestType   String   // ERASURE, ACCESS, PORTABILITY
+  status        String   @default("PENDING") // PENDING, PROCESSING, COMPLETED
+  deadline      DateTime
+  assignedAdminId Int?
+  createdAt     DateTime @default(now())
+
+  @@map("gdpr_requests")
+}
+
+model PenTestFinding {
+  id          String   @id @default(uuid())
+  title       String
+  severity    String   // LOW, MEDIUM, HIGH, CRITICAL
+  status      String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED
+  owner       String?
+  createdAt   DateTime @default(now())
+
+  @@map("pentest_findings")
+}
+
+model VulnerabilityCheck {
+  id             String   @id @default(uuid())
+  packageName    String
+  cveId          String
+  severity       String
+  cvssScore      Float
+  affectedVersion String
+  fixedVersion   String
+  patchNotes     String?
+  createdAt      DateTime @default(now())
+
+  @@map("vulnerability_checks")
+}
+
+model TrafficLog {
+  id            Int      @id @default(autoincrement())
+  timestamp     DateTime @default(now())
+  method        String   @db.VarChar(10)
+  path          String
+  status        Int
+  ip            String   @db.VarChar(45)
+  userAgent     String
+  host          String   @db.VarChar(255)
+  httpVersion   String   @db.VarChar(10)
+  cached        Boolean  @default(false)
+  encrypted     Boolean  @default(false)
+  ssl           String   @db.VarChar(10)
+  country       String   @db.VarChar(10)
+  city          String?  @db.VarChar(100)
+  latitude      Float?
+  longitude     Float?
+  bandwidth     Int      @default(0)
+  referer       String   @default("Direct")
+  browser       String   @db.VarChar(50)
+  os            String   @db.VarChar(50)
+  contentType   String   @db.VarChar(100)
+  deviceType    String?  @db.VarChar(20)
+  platform      String?  @db.VarChar(50)
+  browserVersion String? @db.VarChar(30)
+
+  @@index([timestamp])
+  @@index([status])
+  @@index([ip])
+  @@index([country])
+  @@map("traffic_logs")
+}
+

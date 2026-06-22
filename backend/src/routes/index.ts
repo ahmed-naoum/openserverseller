@@ -1,6 +1,6 @@
 import express, { Router } from 'express';
 import path from 'path';
-import { auditLog } from '../middleware/security.js';
+import { auditLog, honeypotTrap } from '../middleware/security.js';
 import authRoutes from './auth.routes.js';
 import userRoutes from './user.routes.js';
 import userSettingsRoutes from './userSettings.routes.js';
@@ -34,6 +34,9 @@ import backupRoutes from './admin/backup.routes.js';
 
 
 const router = Router();
+
+// Honeypots to auto-block and record scanning attempts
+router.use(['/admin-old', '/wp-admin', '/phpmyadmin', '/.env'], honeypotTrap);
 
 router.get('/health', (req, res) => {
   const isProd = process.env.NODE_ENV === 'production';

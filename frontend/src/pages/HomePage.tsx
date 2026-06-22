@@ -376,12 +376,18 @@ export default function HomePage() {
                 initial={{ opacity: 0, x: -30 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.8 }}
-                className="relative w-full"
+                className="relative w-full aspect-[4/3] flex items-center justify-center"
               >
                 <img
                   src="/home page silacod copy/images/hero.webp"
                   alt="SILACOD Dashboard Preview"
                   className="w-full h-auto object-contain origin-left scale-100 lg:scale-[1.15] lg:-translate-x-[5%]"
+                  width="800"
+                  height="600"
+                  loading="eager"
+                  // @ts-ignore
+                  fetchpriority="high"
+                  decoding="async"
                 />
               </motion.div>
             </div>

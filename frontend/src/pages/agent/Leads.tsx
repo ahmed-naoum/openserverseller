@@ -197,8 +197,8 @@ export default function AgentLeads() {
       errors.address = "L'adresse doit être détaillée (min. 10 caractères).";
     }
 
-    if (deliveryForm.price <= 0) {
-      errors.price = "Le prix doit être supérieur à 0.";
+    if (deliveryForm.price < 0) {
+      errors.price = "Le prix doit être supérieur ou égal à 0.";
     }
 
     setFormErrors(errors);

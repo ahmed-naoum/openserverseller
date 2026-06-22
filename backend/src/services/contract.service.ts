@@ -30,49 +30,39 @@ export async function generateContractPdf(data: ContractData): Promise<Buffer> {
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  // Let's overlay the user information box at the top or at a specific position
-  // In the recette PDF, usually there's a place for user info. We will place it 
-  // on the first page at a clean coordinate.
-  page.drawRectangle({
-    x: 40,
-    y: height - 180,
-    width: width - 80,
-    height: 120,
-    color: rgb(0.96, 0.97, 0.98),
-    borderColor: rgb(0.9, 0.9, 0.9),
-    borderWidth: 1,
-  });
-
-  page.drawText('INFORMATIONS CONTRACTANT / CONTRACTOR INFO', {
-    x: 50,
-    y: height - 85,
-    size: 10,
-    font: boldFont,
-    color: rgb(0.1, 0.1, 0.1),
-  });
-
-  const lines = [
-    `Nom Complet: ${data.fullName}`,
-    `CIN: ${data.cinNumber}  |  Ville: ${data.city}`,
-    `Adresse: ${data.address}`,
-    `Compte Bancaire (RIB): ${data.ribAccount}`,
-  ];
-
-  if (data.iceNumber) {
-    lines.push(`ICE: ${data.iceNumber}`);
+  // Page 1 - English Column
+  page.drawText(data.fullName, { x: 115, y: 522, size: 8, font: boldFont, color: rgb(0.1, 0.1, 0.3) });
+  page.drawText('Marocaine', { x: 75, y: 510, size: 8, font, color: rgb(0.1, 0.1, 0.3) });
+  page.drawText(data.cinNumber, { x: 75, y: 483, size: 8, font: boldFont, color: rgb(0.1, 0.1, 0.3) });
+  
+  const addressText = `${data.address}, ${data.city}`;
+  if (addressText.length > 35) {
+    page.drawText(addressText.substring(0, 35), { x: 75, y: 470, size: 8, font, color: rgb(0.1, 0.1, 0.3) });
+    page.drawText(addressText.substring(35), { x: 75, y: 470, size: 8, font, color: rgb(0.1, 0.1, 0.3) });
+  } else {
+    page.drawText(addressText, { x: 75, y: 470, size: 8, font, color: rgb(0.1, 0.1, 0.3) });
   }
-  lines.push(`Fait le: ${data.date}`);
 
-  let y = height - 105;
-  for (const line of lines) {
-    page.drawText(line, {
-      x: 50,
-      y,
-      size: 9,
-      font,
-      color: rgb(0.2, 0.2, 0.3),
-    });
-    y -= 14;
+  // Page 1 - Arabic Column (using Latin/French since standard Helvetica has no Arabic glyphs)
+  page.drawText(data.fullName, { x: 360, y: 516, size: 8, font: boldFont, color: rgb(0.1, 0.1, 0.3) });
+  page.drawText('Marocaine', { x: 450, y: 503, size: 8, font, color: rgb(0.1, 0.1, 0.3) });
+  page.drawText(data.cinNumber, { x: 410, y: 490, size: 8, font: boldFont, color: rgb(0.1, 0.1, 0.3) });
+  if (addressText.length > 35) {
+    page.drawText(addressText.substring(0, 35), { x: 335, y: 477, size: 8, font, color: rgb(0.1, 0.1, 0.3) });
+    page.drawText(addressText.substring(35), { x: 335, y: 477, size: 8, font, color: rgb(0.1, 0.1, 0.3) });
+  } else {
+    page.drawText(addressText, { x: 335, y: 477, size: 8, font, color: rgb(0.1, 0.1, 0.3) });
+  }
+
+  // Page 4 - Fill signature and contract execution details
+  const page4 = pages[3];
+  if (page4) {
+    page4.drawText(data.fullName, { x: 320, y: 613, size: 7, font: boldFont, color: rgb(0.1, 0.1, 0.3) });
+    page4.drawText(data.ribAccount, { x: 320, y: 597, size: 8, font: boldFont, color: rgb(0.1, 0.1, 0.3) });
+    page4.drawText(data.fullName, { x: 124,  y: 588, size: 7, font: boldFont, color: rgb(0.1, 0.1, 0.3) });
+    page4.drawText(data.ribAccount, { x: 120 , y: 571, size: 8, font: boldFont, color: rgb(0.1, 0.1, 0.3) });
+    page4.drawText(data.date, { x: 200, y: 525, size: 9, font: boldFont, color: rgb(0.1, 0.1, 0.3) });
+    page4.drawText(data.fullName, { x: 410, y: 480, size: 7, font: boldFont, color: rgb(0.1, 0.1, 0.3) });
   }
 
   const pdfBytes = await pdfDoc.save();

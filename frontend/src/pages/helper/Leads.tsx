@@ -29,6 +29,7 @@ interface Lead {
   productPrice?: number;
   order?: { totalAmountMad: number; coliatyPackageCode?: string; orderNumber?: string };
   callbackAt?: string | Date;
+  assignedAgent?: { id: number; fullName?: string; uuid?: string } | null;
 }
 
 interface Vendor { id: number; fullName?: string; email?: string; role?: string }
@@ -242,7 +243,7 @@ export default function HelperLeads() {
     if (!phoneDigits.startsWith('0') || phoneDigits.length !== 10) errors.phone = "Format 06XXXXXXXX";
     if (!deliveryForm.city) errors.city = "Obligatoire";
     if (!deliveryForm.address || deliveryForm.address.trim().length < 10) errors.address = "Adresse trop courte";
-    if (deliveryForm.price <= 0) errors.price = "Prix > 0";
+    if (deliveryForm.price < 0) errors.price = "Prix >= 0";
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -642,6 +643,20 @@ export default function HelperLeads() {
                             <Truck size={12} className="group-hover/ship:translate-x-1 transition-transform" />
                             Pousser à Coliaty 🚀
                           </button>
+                        )}
+
+                        {lead.assignedAgent && (
+                          <div className="mt-2 pt-2 border-t border-gray-100/70 flex flex-col gap-1">
+                            <span className="text-[9px] font-black tracking-widest text-gray-400 uppercase">Agent Assigné</span>
+                            <div className="flex items-center gap-1.5 text-xs text-gray-700 font-bold">
+                              <div className="w-5 h-5 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 text-[9px] font-black">
+                                {lead.assignedAgent.fullName ? lead.assignedAgent.fullName.charAt(0).toUpperCase() : 'A'}
+                              </div>
+                              <span className="truncate max-w-[120px]" title={lead.assignedAgent.fullName}>
+                                {lead.assignedAgent.fullName || 'Agent'}
+                              </span>
+                            </div>
+                          </div>
                         )}
                       </div>
                     </td>

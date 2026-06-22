@@ -62,5 +62,20 @@
   "privacy_notice": "Privacy Notice",
   "terms_of_service": "Terms of Service",
   "email_label": "Email",
-  "password_label": "Password"
+  "password_label": "Password",
+  "name_invalid_chars": "Full name must not contain numbers",
+  "passwords_dont_match": "Passwords do not match",
+  "email_required": "Email address is required",
+  "social_media_required": "Please provide at least one social media account",
+  "username_too_short": "Username must be at least 3 characters",
+  "username_too_long": "Username must not exceed 30 characters",
+  "verify_email_title": "Verify your email",
+  "verify_email_desc": "We have sent a verification code to",
+  "verify_code_btn": "Verify code",
+  "didnt_receive_code": "Didn't receive the code?",
+  "resend_btn": "Resend",
+  "logout_goback_btn": "Logout and go back",
+  "session_invalid": "Invalid session. Please login again.",
+  "enter_6_digits": "Please enter the 6-digit code",
+  "email_verified_success": "Email verified successfully!"
 }

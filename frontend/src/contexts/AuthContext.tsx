@@ -38,7 +38,7 @@ interface AuthContextType {
   login2FA: (data: { twoFactorToken: string; code: string }) => Promise<AuthUser>;
   forcePasswordChange: (data: { tempToken: string; newPassword: string }) => Promise<AuthUser>;
   googleAuth: (data: { credential: string; role?: string }) => Promise<{ user?: AuthUser; requiresTwoFactor?: boolean; twoFactorToken?: string; requiresPasswordChange?: boolean; tempToken?: string; message?: string }>;
-  register: (data: { email?: string; phone?: string; password: string; fullName: string; role?: string; cguAccepted?: boolean }) => Promise<AuthUser>;
+  register: (data: { email?: string; phone?: string; password: string; fullName: string; role?: string; cguAccepted?: boolean; turnstileToken?: string }) => Promise<AuthUser>;
   registerInfluencer: (data: any) => Promise<AuthUser>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -158,7 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { user };
   };
 
-  const register = async (data: { email?: string; phone?: string; password: string; fullName: string; role?: string }) => {
+  const register = async (data: { email?: string; phone?: string; password: string; fullName: string; role?: string; cguAccepted?: boolean; turnstileToken?: string }) => {
     const guestLang = localStorage.getItem('guest_lang');
     const response = await authApi.register({
       ...data,

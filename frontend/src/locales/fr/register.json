@@ -62,5 +62,20 @@
   "privacy_notice": "Charte de confidentialité",
   "terms_of_service": "Conditions d'utilisation",
   "email_label": "Email",
-  "password_label": "Mot de passe"
+  "password_label": "Mot de passe",
+  "name_invalid_chars": "Le nom ne doit pas contenir de chiffres",
+  "passwords_dont_match": "Les mots de passe ne correspondent pas",
+  "email_required": "L'adresse email est requise",
+  "social_media_required": "Veuillez fournir au moins un réseau social",
+  "username_too_short": "Le pseudo doit contenir au moins 3 caractères",
+  "username_too_long": "Le pseudo ne doit pas dépasser 30 caractères",
+  "verify_email_title": "Vérifiez votre email",
+  "verify_email_desc": "Nous avons envoyé un code de vérification à",
+  "verify_code_btn": "Vérifier le code",
+  "didnt_receive_code": "Vous n'avez pas reçu le code ?",
+  "resend_btn": "Renvoyer",
+  "logout_goback_btn": "Se déconnecter et retourner",
+  "session_invalid": "Session invalide. Veuillez vous reconnecter.",
+  "enter_6_digits": "Veuillez entrer le code à 6 chiffres",
+  "email_verified_success": "Email vérifié avec succès !"
 }

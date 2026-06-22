@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import MaintenanceGuard from './components/MaintenanceGuard';
 import PageLoader from './components/PageLoader';
 import toast, { Toaster } from 'react-hot-toast';
@@ -80,6 +80,7 @@ import ConfirmationDashboard from './pages/confirmation/Dashboard';
 import HelperDashboard from './pages/helper/Dashboard';
 import HelperLeads from './pages/helper/Leads';
 import HelperColis from './pages/helper/Colis';
+import HelperRetours from './pages/helper/Retours';
 import HelperTickets from './pages/helper/Tickets';
 import HelperUsers from './pages/helper/Users';
 import HelperLinks from './pages/helper/Links';
@@ -92,6 +93,7 @@ import ProductDetail from './pages/marketplace/ProductDetail';
 import ReferralForm from './pages/public/ReferralForm';
 import ThankYouPage from './pages/public/ThankYouPage';
 import PendingVerificationPage from './pages/auth/PendingVerificationPage';
+import EmailVerificationPage from './pages/auth/EmailVerificationPage';
 import SettingsPage from './pages/common/SettingsPage';
 import NotFoundPage from './pages/common/NotFoundPage';
 import ProfileVerification from './pages/common/ProfileVerification';
@@ -106,6 +108,7 @@ import CareersPage from './pages/CareersPage';
 import BlogPage from './pages/BlogPage';
 import PricingPage from './pages/PricingPage';
 import ScrollToTop from './components/common/ScrollToTop';
+import BlockedPage from './pages/common/BlockedPage';
 
 // Context
 import { AuthProvider } from './contexts/AuthContext';
@@ -116,6 +119,30 @@ import { LanguageProvider } from './contexts/LanguageContext';
 import RoleGuard from './components/auth/RoleGuard';
 import UnauthGuard from './components/auth/UnauthGuard';
 import { settingsApi } from './lib/api';
+
+function PageTracker() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check if current path is blocked
+    const blockedPages = JSON.parse(localStorage.getItem('blocked_pages') || '[]');
+    if ((blockedPages.includes('*') || blockedPages.includes(location.pathname)) && location.pathname !== '/blocked') {
+      const blockedPath = blockedPages.includes('*') ? 'all pages' : location.pathname;
+      navigate(`/blocked?path=${encodeURIComponent(blockedPath)}`, { replace: true });
+      return;
+    }
+
+    // Fire-and-forget network request to backend to register the page view in the HTTP logs
+    fetch('/api/v1/public/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: location.pathname }),
+    }).catch(() => {});
+  }, [location.pathname, navigate]);
+
+  return null;
+}
 
 function App() {
   const [loading, setLoading] = useState(true);
@@ -168,6 +195,7 @@ function App() {
   return (
     <>
       <ScrollToTop />
+      <PageTracker />
       {loading && <PageLoader onComplete={() => setLoading(false)} />}
     <AuthProvider>
       <LanguageProvider>
@@ -180,6 +208,7 @@ function App() {
           <Route path="/login" element={<UnauthGuard><LoginPage /></UnauthGuard>} />
           <Route path="/register" element={<UnauthGuard><RegisterPage /></UnauthGuard>} />
           <Route path="/influencer/register" element={<UnauthGuard><RegisterPage /></UnauthGuard>} />
+          <Route path="/verify-email" element={<EmailVerificationPage />} />
           <Route path="/forgot-password" element={<UnauthGuard><ForgotPassword /></UnauthGuard>} />
           <Route path="/reset-password" element={<UnauthGuard><ResetPassword /></UnauthGuard>} />
           <Route path="/marketplace" element={<PublicMarketplace />} />
@@ -195,6 +224,7 @@ function App() {
           <Route path="/careers" element={<CareersPage />} />
           <Route path="/blog" element={<BlogPage />} />
           <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/blocked" element={<BlockedPage />} />
 
         {/* Verification Route */}
         <Route path="/verify" element={
@@ -299,7 +329,7 @@ function App() {
           <Route index element={<AgentDashboard />} />
           <Route path="leads" element={<AgentLeads />} />
           <Route path="insert-lead" element={<InsertLead />} />
-          <Route path="dispatch" element={<ColiatyDispatch />} />
+          <Route path="dispatch" element={<Navigate to="/agent/insert-lead" replace />} />
           <Route path="my-leads" element={<AgentMyLeads />} />
           <Route path="leads/:id" element={<AgentLeadDetail />} />
           <Route path="orders" element={<AgentOrders />} />
@@ -331,6 +361,7 @@ function App() {
           <Route path="leads" element={<HelperLeads />} />
           <Route path="links" element={<HelperLinks />} />
           <Route path="colis" element={<HelperColis />} />
+          <Route path="retours" element={<HelperRetours />} />
           <Route path="scanner" element={<HelperScanner />} />
           <Route path="tickets" element={<HelperTickets />} />
           <Route path="marketplace" element={<PublicMarketplace />} />

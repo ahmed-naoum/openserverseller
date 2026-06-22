@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { checkAndActivateUser } from '../utils/verification.js';
-import { decrypt } from '../utils/crypto.js';
+import { decrypt, encrypt } from '../utils/crypto.js';
 import { getBlockedIPsList, unblockIP } from '../middleware/security.js';
 import fs from 'fs';
 import path from 'path';
@@ -955,6 +955,63 @@ router.patch(
   })
 );
 
+// Manually verify/approve bank account (creates default if none exists)
+router.patch(
+  '/users/:uuid/verify-bank',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { uuid } = req.params;
+    const { approved = true } = req.body || {};
+
+    const user = await prisma.user.findUnique({
+      where: { uuid: String(uuid) },
+      include: { bankAccounts: true }
+    });
+
+    if (!user) {
+      throw new AppException(404, 'User not found');
+    }
+
+    if (approved) {
+      if (user.bankAccounts.length > 0) {
+        await prisma.userBankAccount.updateMany({
+          where: { userId: user.id },
+          data: { status: 'APPROVED' }
+        });
+      } else {
+        await prisma.userBankAccount.create({
+          data: {
+            userId: user.id,
+            bankName: 'Validation Manuelle',
+            ribAccount: encrypt('000000000000000000000000'),
+            status: 'APPROVED',
+            isDefault: true
+          }
+        });
+      }
+    } else {
+      await prisma.userBankAccount.updateMany({
+        where: { userId: user.id },
+        data: { status: 'PENDING' }
+      });
+    }
+
+    await checkAndActivateUser(user.id);
+
+    const updatedUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: { bankAccounts: true }
+    });
+
+    res.json({
+      status: 'success',
+      message: approved ? 'Compte bancaire validé avec succès' : 'Vérification bancaire réinitialisée',
+      data: updatedUser,
+    });
+  })
+);
+
 // Update bank account status
 router.patch(
   '/bank-accounts/:id/status',
@@ -1110,10 +1167,12 @@ router.get(
           leads: leads.map((l) => {
             // Calculate price from variant or product
             let productPrice = 0;
-            if (l.order?.totalAmountMad) {
+            let hasPriceFromOrder = false;
+            if (l.order?.totalAmountMad !== undefined && l.order?.totalAmountMad !== null) {
               productPrice = Number(l.order.totalAmountMad);
+              hasPriceFromOrder = true;
             }
-            if (!productPrice && l.productVariant && l.referralLink?.landingPage?.customStructure) {
+            if (!hasPriceFromOrder && l.productVariant && l.referralLink?.landingPage?.customStructure) {
               try {
                 let structure = l.referralLink.landingPage.customStructure;
                 if (typeof structure === 'string') structure = JSON.parse(structure as string);

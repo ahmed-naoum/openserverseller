@@ -11,9 +11,9 @@ import LanguageSwitcherWidget from '../../components/common/LanguageSwitcherWidg
 
 
 const SLIDER_IMAGES = [
-  '/home page silacod copy/images/08bb1c52a445cbe7c3723025e483b81a86e1011f.webp',
-  '/home page silacod copy/images/photo-1622151834677-70f982c9adef.webp',
-  '/home page silacod copy/images/9b7eeea5895229f0b36694c175ab30ed89bceca4.webp'
+  '/images/login/grossiste.webp',
+  '/images/login/influencer-login.webp',
+  '/images/login/seller-new.webp'
 ];
 
 export default function LoginPage() {
@@ -72,18 +72,14 @@ export default function LoginPage() {
       const user = res.user!;
       toast.success('Connexion réussie!');
       
-      // If user is not active, check if manual approval is required
-      if (!user.isActive) {
-        try {
-          const statusRes = await settingsApi.getMaintenanceStatus();
-          const { registrationBlocked, influencerRegistrationBlocked } = statusRes.data?.data || {};
-          
-          if ((user.role === 'INFLUENCER' && influencerRegistrationBlocked) || 
-              (user.role !== 'INFLUENCER' && registrationBlocked)) {
-            navigate('/pending-verification');
-            return;
-          }
-        } catch {}
+      if (!user.emailVerified) {
+        navigate('/verify-email');
+        return;
+      }
+      
+      if (!user.isActive && user.requiresManualApproval) {
+        navigate('/pending-verification');
+        return;
       }
 
       // Redirect based on role
@@ -117,17 +113,14 @@ export default function LoginPage() {
       const user = await login2FA({ twoFactorToken, code: twoFactorCode });
       toast.success('Connexion réussie!');
       
-      if (!user.isActive) {
-        try {
-          const statusRes = await settingsApi.getMaintenanceStatus();
-          const { registrationBlocked, influencerRegistrationBlocked } = statusRes.data?.data || {};
-          
-          if ((user.role === 'INFLUENCER' && influencerRegistrationBlocked) || 
-              (user.role !== 'INFLUENCER' && registrationBlocked)) {
-            navigate('/pending-verification');
-            return;
-          }
-        } catch {}
+      if (!user.emailVerified) {
+        navigate('/verify-email');
+        return;
+      }
+      
+      if (!user.isActive && user.requiresManualApproval) {
+        navigate('/pending-verification');
+        return;
       }
 
       if (user.role === 'SUPER_ADMIN' || user.role === 'FINANCE_ADMIN' || user.role === 'SYSTEM_SUPPORT') {
@@ -161,6 +154,11 @@ export default function LoginPage() {
     try {
       const user = await forcePasswordChange({ tempToken, newPassword });
       toast.success('Mot de passe mis à jour et connexion réussie!');
+      
+      if (!user.emailVerified) {
+        navigate('/verify-email');
+        return;
+      }
       
       if (user.role === 'SUPER_ADMIN' || user.role === 'FINANCE_ADMIN' || user.role === 'SYSTEM_SUPPORT') {
         navigate('/admin');
@@ -199,17 +197,14 @@ export default function LoginPage() {
       const user = res.user!;
       toast.success('Connexion avec Google réussie!');
       
-      if (!user.isActive) {
-        try {
-          const statusRes = await settingsApi.getMaintenanceStatus();
-          const { registrationBlocked, influencerRegistrationBlocked } = statusRes.data?.data || {};
-          
-          if ((user.role === 'INFLUENCER' && influencerRegistrationBlocked) || 
-              (user.role !== 'INFLUENCER' && registrationBlocked)) {
-            navigate('/pending-verification');
-            return;
-          }
-        } catch {}
+      if (!user.emailVerified) {
+        navigate('/verify-email');
+        return;
+      }
+      
+      if (!user.isActive && user.requiresManualApproval) {
+        navigate('/pending-verification');
+        return;
       }
 
       if (user.role === 'SUPER_ADMIN' || user.role === 'FINANCE_ADMIN' || user.role === 'SYSTEM_SUPPORT') {
@@ -235,7 +230,7 @@ export default function LoginPage() {
   return (
     <div dir={language === 'ar' ? 'rtl' : 'ltr'} className={`min-h-screen flex flex-col lg:flex-row font-['29LT_Kaff',_Cairo,_Inter,_sans-serif] bg-white overflow-hidden relative ${language === 'ar' ? 'text-right' : 'text-left'}`}>
       {/* Left Column: Form Area */}
-      <div className="w-full lg:w-[45%] xl:w-[40%] flex flex-col justify-center items-center p-6 bg-[#f8f9fa] relative z-10 min-h-screen lg:min-h-0">
+      <div className="w-full lg:w-[50%] xl:w-[45%] flex flex-col justify-center items-center p-6 bg-[#f8f9fa] relative z-10 min-h-screen">
         {/* Language Switcher Widget */}
         <div className={`absolute top-6 ${language === 'ar' ? 'left-6' : 'right-6'} z-30`}>
           <LanguageSwitcherWidget />
@@ -249,16 +244,28 @@ export default function LoginPage() {
           </Link>
         </div>
 
-        <div className="w-full max-w-[360px]">
+        <div className="w-full max-w-[400px] py-6">
+          <div className="text-center space-y-2 mb-6 mt-8 lg:mt-0">
+            <h1 className="text-[32px] font-extrabold text-[#2e315e] tracking-tight">
+              {requiresPasswordChange 
+                ? t('new_password_title') 
+                : requires2FA 
+                ? t('two_factor_title') 
+                : t('login_title')}
+            </h1>
+            <p className="text-[17px] font-medium text-[#ff5722]">
+              {requiresPasswordChange 
+                ? t('new_password_subtitle') 
+                : requires2FA 
+                ? t('two_factor_subtitle') 
+                : t('login_subtitle')}
+            </p>
+          </div>
+
           <div className="bg-white rounded-[2rem] p-8 sm:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)]" dir={language === 'ar' ? 'rtl' : 'ltr'}>
             
             {requiresPasswordChange ? (
               <form onSubmit={handleForcePasswordSubmit} className="space-y-6">
-                <div className="text-center space-y-2 mb-8">
-                  <h1 className="text-[28px] font-bold text-[#2e315e]">{t('new_password_title')}</h1>
-                  <p className="text-[13px] font-medium text-[#ff5722]">{t('new_password_subtitle')}</p>
-                </div>
-
                 <div className="space-y-4">
                   <div className="space-y-1.5">
                     <label className={`text-xs font-bold text-slate-700 ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>{t('new_password_label')}</label>
@@ -328,11 +335,6 @@ export default function LoginPage() {
               </form>
             ) : requires2FA ? (
               <form onSubmit={handle2FASubmit} className="space-y-6">
-                <div className="text-center space-y-2 mb-8">
-                  <h1 className="text-[28px] font-bold text-[#2e315e]">{t('two_factor_title')}</h1>
-                  <p className="text-[13px] font-medium text-[#ff5722]">{t('two_factor_subtitle')}</p>
-                </div>
-
                 <div className="space-y-4">
                   <input
                     type="text"
@@ -368,11 +370,6 @@ export default function LoginPage() {
               </form>
             ) : (
               <>
-                <div className="text-center space-y-2 mb-8">
-                  <h1 className="text-[28px] font-bold text-[#2e315e] tracking-tight">{t('login_title')}</h1>
-                  <p className="text-[13px] font-medium text-[#ff5722]">{t('login_subtitle')}</p>
-                </div>
-
                 <form onSubmit={handleSubmit} className="space-y-5">
                   <div className="space-y-1.5">
                     <label className={`text-xs font-bold text-slate-700 ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>{t('email_label')}</label>
@@ -465,11 +462,11 @@ export default function LoginPage() {
       </div>
 
       {/* Right Column: Image Slider */}
-      <div className="hidden lg:flex lg:w-[55%] xl:w-[60%] relative overflow-hidden bg-white items-center justify-center">
+      <div className="hidden lg:flex lg:w-[50%] xl:w-[55%] relative overflow-hidden bg-white items-center justify-center">
         {/* Desktop Logo */}
         <div className="absolute top-10 right-12 z-20">
-          <Link to="/" dir="ltr" className="flex items-center gap-2.5">
-            <img src="/new logo/logo filess-25.svg" alt="SILACOD" className="w-10 h-10 object-contain" />
+          <Link to="/" dir="ltr" className="flex items-center gap-2.5 group">
+            <motion.img whileHover={{ rotateY: 15, scale: 1.05 }} src="/new logo/logo filess-25.svg" alt="SILACOD" className="w-10 h-10 origin-center object-contain" />
             <img src="/new logo/logo filess-24.svg" alt="SILACOD" className="h-7 object-contain" />
           </Link>
         </div>
@@ -485,26 +482,27 @@ export default function LoginPage() {
             let scale = 1;
             let zIndex = 0;
             let opacity = 0;
+            let filter = 'blur(0px)';
 
             if (isActive) {
-              x = 0; scale = 1; zIndex = 30; opacity = 1;
+              x = 0; scale = 1; zIndex = 30; opacity = 1; filter = 'blur(0px)';
             } else if (isPrev) {
-              x = -280; scale = 0.85; zIndex = 10; opacity = 1;
+              x = -280; scale = 0.85; zIndex = 10; opacity = 0.85; filter = 'blur(6px)';
             } else if (isNext) {
-              x = 280; scale = 0.85; zIndex = 10; opacity = 1;
+              x = 280; scale = 0.85; zIndex = 10; opacity = 0.85; filter = 'blur(6px)';
             }
 
             return (
               <motion.div
                 key={src}
-                className="absolute w-[320px] xl:w-[380px] aspect-[4/5] rounded-[2rem] overflow-hidden shadow-2xl cursor-pointer"
-                animate={{ x, scale, zIndex, opacity }}
+                className="absolute w-[380px] xl:w-[450px] cursor-pointer"
+                animate={{ x, scale, zIndex, opacity, filter }}
                 transition={{ duration: 0.7, ease: [0.32, 0.72, 0, 1] }}
                 onClick={() => setCurrentSlide(idx)}
                 style={{ originX: 0.5, originY: 0.5 }}
               >
-                <img src={src} alt="Showcase" className="w-full h-full object-cover" />
-                {!isActive && <div className="absolute inset-0 bg-white/20" />}
+                <img src={src} alt="Showcase" className="w-full h-auto object-contain" />
+                {!isActive && <div className="absolute inset-0 bg-white/10 rounded-[2rem]" />}
               </motion.div>
             );
           })}

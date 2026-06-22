@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import BankSelect from '../../components/common/BankSelect';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { compressToWebP, blobToWebPFile } from '../../utils/imageCompressor';
 
 type StepStatus = 'COMPLETED' | 'IN_PROGRESS' | 'PENDING' | 'LOCKED' | 'REJECTED';
 
@@ -178,72 +179,132 @@ function IdentityVerificationForm({ onComplete }: { onComplete: () => void }) {
     address: '',
     city: '',
   });
-  const [extractionData, setExtractionData] = useState<{
-    recto?: any;
-    verso?: any;
-    rectoText?: string;
-    versoText?: string;
-  }>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [extractionData, setExtractionData] = useState<{ recto?: any; verso?: any; rectoText?: string; versoText?: string; }>({});
+
+  // Camera state
+  const [cameraOpen, setCameraOpen] = useState<number | null>(null); // 0=recto, 1=verso
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const rectoInputRef = useRef<HTMLInputElement>(null);
   const versoInputRef = useRef<HTMLInputElement>(null);
 
   const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'application/pdf'];
 
-  const handleSingleFileChange = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // ── Validation helpers ──
+  const CIN_REGEX = /^[A-Z]{1,2}\d{5,7}$/;
+  const PASSPORT_REGEX = /^[A-Z0-9]{6,9}$/;
+  const NAME_REGEX = /^[A-ZÀ-ÖØ-Ý\u0600-\u06FF\s'-]{4,60}$/;
 
-    if (!allowedTypes.includes(file.type)) {
-      toast.error(tVerif('identity_toast_unsupported', 'Format de fichier non supporté. Veuillez utiliser JPG, PNG, WEBP ou PDF.'));
-      return;
+  const validateField = (name: string, value: string) => {
+    let error = '';
+    switch (name) {
+      case 'fullName':
+        if (!value.trim()) error = 'Le nom complet est requis';
+        else if (value.trim().length < 4) error = 'Min 4 caractères';
+        else if (value.trim().length > 60) error = 'Max 60 caractères';
+        else if (!NAME_REGEX.test(value.trim())) error = 'Caractères invalides (lettres uniquement)';
+        else if (value.trim().split(/\s+/).length < 2) error = 'Prénom et nom requis';
+        break;
+      case 'cinNumber':
+        if (!value.trim()) error = 'Numéro requis';
+        else if (documentType === 'CIN' && !CIN_REGEX.test(value.trim())) error = 'Format CIN invalide (ex: AB123456)';
+        else if (documentType === 'PASSPORT' && !PASSPORT_REGEX.test(value.trim())) error = 'Format passeport invalide';
+        break;
+      case 'birthDate':
+        if (!value) error = 'Date requise';
+        else {
+          const d = new Date(value);
+          const now = new Date();
+          const age = now.getFullYear() - d.getFullYear();
+          if (age < 18) error = 'Vous devez avoir au moins 18 ans';
+          else if (age > 100) error = 'Date invalide';
+        }
+        break;
+      case 'city':
+        if (!value.trim()) error = 'Ville requise';
+        else if (value.trim().length < 2) error = 'Min 2 caractères';
+        break;
+      case 'address':
+        if (!value.trim()) error = 'Adresse requise';
+        else if (value.trim().length < 5) error = 'Min 5 caractères';
+        break;
     }
-
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error(tVerif('identity_toast_too_large', 'Fichier trop volumineux. La taille maximale est de 10MB.'));
-      return;
-    }
-
-    setDocumentFiles(prev => {
-      const next = [...prev];
-      next[index] = file;
-      return next;
-    });
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      setDocumentPreviews(prev => {
-        const next = [...prev];
-        next[index] = reader.result as string;
-        return next;
-      });
-    };
-    reader.readAsDataURL(file);
-
-    handleExtraction(file, index);
-    e.target.value = '';
+    return error;
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files) return;
-    const newFiles = Array.from(e.target.files);
-    const validFiles = newFiles.filter(file => allowedTypes.includes(file.type));
-    const availableSlots = 2 - documentFiles.length;
-    const toAdd = validFiles.slice(0, availableSlots);
+  const handleFieldChange = (name: string, value: string) => {
+    const upper = name === 'fullName' || name === 'cinNumber' ? value.toUpperCase() : value;
+    setKycForm(prev => ({ ...prev, [name]: upper }));
+    const err = validateField(name, upper);
+    setFieldErrors(prev => ({ ...prev, [name]: err }));
+  };
 
-    if (toAdd.length > 0) {
-      const newFilesArr = [...documentFiles, ...toAdd];
-      setDocumentFiles(newFilesArr);
-      toAdd.forEach((file, idx) => {
-        const fileIndex = documentFiles.length + idx;
-        if (fileIndex < 2) handleExtraction(file, fileIndex);
+  // ── Camera helpers ──
+  const openCamera = async (index: number) => {
+    setCameraOpen(index);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
       });
-      toAdd.forEach(file => {
-        const reader = new FileReader();
-        reader.onload = () => setDocumentPreviews(p => [...p, reader.result as string]);
-        reader.readAsDataURL(file);
-      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+      }
+    } catch {
+      toast.error('Impossible d\'accéder à la caméra');
+      setCameraOpen(null);
     }
+  };
+
+  const capturePhoto = async () => {
+    if (!videoRef.current || !canvasRef.current || cameraOpen === null) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d')!.drawImage(video, 0, 0);
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      closeCamera();
+      const label = cameraOpen === 0 ? 'recto' : 'verso';
+      const webpFile = await blobToWebPFile(blob, `kyc_${label}`, 1920, 0.82);
+      setFileAtIndex(cameraOpen!, webpFile);
+    }, 'image/jpeg', 0.95);
+  };
+
+  const closeCamera = () => {
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
+    setCameraOpen(null);
+  };
+
+  // ── File handling with WebP compression ──
+  const setFileAtIndex = async (index: number, file: File) => {
+    let processed = file;
+    if (file.type.startsWith('image/')) {
+      try { processed = await compressToWebP(file, 1920, 0.82); } catch { /* fallback to original */ }
+    }
+
+    setDocumentFiles(prev => { const n = [...prev]; n[index] = processed; return n; });
+    const reader = new FileReader();
+    reader.onload = () => {
+      setDocumentPreviews(prev => { const n = [...prev]; n[index] = reader.result as string; return n; });
+    };
+    reader.readAsDataURL(processed);
+    handleExtraction(processed, index);
+  };
+
+  const handleSingleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!allowedTypes.includes(file.type)) { toast.error('Format non supporté (JPG, PNG, WEBP, PDF)'); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error('Fichier trop volumineux (max 10MB)'); return; }
+    await setFileAtIndex(index, file);
     e.target.value = '';
   };
 
@@ -253,68 +314,83 @@ function IdentityVerificationForm({ onComplete }: { onComplete: () => void }) {
       const type = fileIndex === 0 ? 'recto' : 'verso';
       const res = await authApi.extractKycData(file, type);
       const data = res.data.data;
-      
-      setExtractionData(prev => ({ 
-        ...prev, 
-        [type]: data,
-        [`${type}Text`]: data.rawText || ''
-      }));
-      
-      const fileName = fileIndex === 0 ? tVerif('identity_toast_recto', 'du Recto') : tVerif('identity_toast_verso', 'du Verso');
-      toast.success(tVerif('identity_toast_analysis_done', 'Analyse {face} terminée.').replace('{face}', fileName));
-    } catch (err) {
-      console.error('Extraction error:', err);
-    } finally {
-      setExtractionLoading(false);
-    }
+      setExtractionData(prev => ({ ...prev, [type]: data, [`${type}Text`]: data.rawText || '' }));
+      toast.success(`Analyse ${fileIndex === 0 ? 'du Recto' : 'du Verso'} terminée.`);
+    } catch { /* silent */ } finally { setExtractionLoading(false); }
   };
-
-  const isFormValid = !!documentFiles[0] && !!documentFiles[1] &&
-    !!kycForm.fullName.trim() && !!kycForm.cinNumber.trim() &&
-    !!kycForm.birthDate && !!kycForm.city.trim() && !!kycForm.address.trim();
 
   const removeFile = (index: number) => {
-    setDocumentFiles(prev => prev.filter((_, i) => i !== index));
-    setDocumentPreviews(prev => prev.filter((_, i) => i !== index));
+    setDocumentFiles(prev => { const n = [...prev]; delete n[index]; return n; });
+    setDocumentPreviews(prev => { const n = [...prev]; delete n[index]; return n; });
   };
 
+  // ── Form validation ──
+  const allErrors = Object.entries(kycForm).reduce((acc, [k, v]) => {
+    const e = validateField(k, v);
+    if (e) acc[k] = e;
+    return acc;
+  }, {} as Record<string, string>);
+
+  const isFormValid = !!documentFiles[0] && !!documentFiles[1] && Object.keys(allErrors).length === 0
+    && !!kycForm.fullName.trim() && !!kycForm.cinNumber.trim() && !!kycForm.birthDate && !!kycForm.city.trim() && !!kycForm.address.trim();
+
   const handleSubmit = async () => {
-    const validDocs = documentFiles.filter(Boolean);
-    if (validDocs.length !== 2) return toast.error(tVerif('identity_toast_two_sides', 'Veuillez uploader les deux faces du document (Recto et Verso)'));
-    
-    if (!kycForm.fullName.trim()) return toast.error(tVerif('identity_toast_name_req', 'Le nom complet est requis'));
-    if (!kycForm.cinNumber.trim()) return toast.error(tVerif('identity_toast_cin_req', 'Le numéro de CIN est requis'));
-    if (!kycForm.birthDate) return toast.error(tVerif('identity_toast_birth_req', 'La date de naissance est requise'));
-    if (!kycForm.city.trim()) return toast.error(tVerif('identity_toast_city_req', 'La ville est requise'));
-    if (!kycForm.address.trim()) return toast.error(tVerif('identity_toast_addr_req', 'L\'adresse est requise'));
+    // Trigger all field errors
+    const errs: Record<string, string> = {};
+    Object.entries(kycForm).forEach(([k, v]) => { const e = validateField(k, v); if (e) errs[k] = e; });
+    setFieldErrors(errs);
+    if (Object.keys(errs).length > 0) { toast.error('Veuillez corriger les erreurs'); return; }
+
+    const validDocs = [documentFiles[0], documentFiles[1]].filter(Boolean);
+    if (validDocs.length !== 2) { toast.error('Les deux faces du document sont requises'); return; }
 
     setLoading(true);
     try {
       const formData = new FormData();
       validDocs.forEach(file => formData.append('files', file));
-      const uploadRes = await api.post('/upload/kyc', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const uploadRes = await api.post('/upload/kyc', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       const uploadedFiles = uploadRes.data.data.files;
       await authApi.submitKyc({
         documents: uploadedFiles.map((f: any, idx: number) => ({
-          type: documentType,
-          url: f.url,
-          metadata: idx === 0 ? extractionData : null 
+          type: documentType, url: f.url, metadata: idx === 0 ? extractionData : null
         })),
         ...kycForm
       });
       toast.success(tVerif('identity_toast_success', 'Documents et informations soumis avec succès !'));
       onComplete();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || tVerif('identity_toast_error', 'Erreur lors de la soumission'));
-    } finally {
-      setLoading(false);
-    }
+      toast.error(err?.response?.data?.message || 'Erreur lors de la soumission');
+    } finally { setLoading(false); }
   };
 
   return (
     <div className="space-y-6">
+      {/* Hidden canvas for camera capture */}
+      <canvas ref={canvasRef} className="hidden" />
+
+      {/* Camera Modal */}
+      {cameraOpen !== null && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg rounded-2xl overflow-hidden bg-black shadow-2xl">
+            <video ref={videoRef} autoPlay playsInline muted className="w-full h-auto rounded-2xl" />
+            <div className="absolute bottom-4 left-0 right-0 flex items-center justify-center gap-6">
+              <button onClick={closeCamera} className="w-12 h-12 rounded-full bg-white/20 backdrop-blur text-white flex items-center justify-center hover:bg-white/30 transition-all">
+                <CameraOff size={22} />
+              </button>
+              <button onClick={capturePhoto} className="w-16 h-16 rounded-full bg-white border-4 border-white/50 flex items-center justify-center hover:scale-110 active:scale-95 transition-all shadow-xl">
+                <Camera size={28} className="text-slate-800" />
+              </button>
+              <button onClick={() => { closeCamera(); openCamera(cameraOpen); }} className="w-12 h-12 rounded-full bg-white/20 backdrop-blur text-white flex items-center justify-center hover:bg-white/30 transition-all">
+                <RefreshCw size={20} />
+              </button>
+            </div>
+          </div>
+          <p className="text-white/70 text-xs font-bold mt-4 uppercase tracking-widest">
+            {cameraOpen === 0 ? 'Photographier le Recto' : 'Photographier le Verso'}
+          </p>
+        </div>
+      )}
+
       {user?.kycStatus === 'REJECTED' && (
         <div className="bg-rose-50 border border-rose-100 rounded-xl p-4 text-sm text-rose-700 flex items-start gap-3">
           <AlertTriangle className="flex-shrink-0 mt-0.5" size={18} />
@@ -328,7 +404,8 @@ function IdentityVerificationForm({ onComplete }: { onComplete: () => void }) {
         <p className="font-semibold text-slate-700 mb-1">📋 {tVerif('identity_instructions', 'Instructions')}</p>
         <ul className="list-disc list-inside space-y-1 text-xs">
           <li>{tVerif('identity_inst_1', "Sélectionnez le type de votre pièce d'identité.")}</li>
-          <li>{tVerif('identity_inst_2', "Uploadez les photos recto et verso de votre document.")}</li>
+          <li>{tVerif('identity_inst_2', "Uploadez ou photographiez les recto et verso de votre document.")}</li>
+          <li>Les images sont automatiquement compressées et converties en WebP.</li>
         </ul>
       </div>
 
@@ -359,104 +436,64 @@ function IdentityVerificationForm({ onComplete }: { onComplete: () => void }) {
         </div>
       </div>
 
-      {/* Separate Upload Zones */}
+      {/* Upload Zones with Camera buttons */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">{tVerif('identity_photo_recto', 'Photo Recto')}</label>
-          <div 
-            onClick={() => rectoInputRef.current?.click()}
-            className={`relative border-2 border-dashed rounded-2xl p-4 transition-all cursor-pointer group flex flex-col items-center justify-center min-h-[144px] ${
-              documentPreviews[0] ? 'border-emerald-200 bg-emerald-50/20' : 'border-slate-200 hover:border-primary-400 hover:bg-primary-50/20'
-            }`}
-          >
-            {documentPreviews[0] ? (
-              <div className="relative w-full h-full rounded-xl overflow-hidden shadow-sm">
-                <img src={documentPreviews[0]} alt="Recto" className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <p className="text-white text-[10px] font-black uppercase">{tVerif('identity_change', 'Changer')}</p>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-                  <Camera size={20} />
-                </div>
-                <p className="text-[11px] font-bold text-slate-500">{tVerif('identity_recto_cin', 'Recto CIN')}</p>
-              </>
-            )}
-            {extractionLoading && documentFiles[0] && !extractionData?.rectoText && (
-              <div className="absolute inset-0 bg-white/80 backdrop-blur-[1px] rounded-2xl flex flex-col items-center justify-center gap-2">
-                <Loader2 className="animate-spin text-primary-500" size={20} />
-                <span className="text-[9px] font-black uppercase text-primary-600">{tVerif('identity_analyzing', 'Analyse...')}</span>
-              </div>
-            )}
-          </div>
-          <input type="file" ref={rectoInputRef} className="hidden" accept="image/*,application/pdf" capture="environment" onChange={(e) => handleSingleFileChange(e, 0)} />
-        </div>
-
-        <div className="space-y-2">
-          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">{tVerif('identity_photo_verso', 'Photo Verso')}</label>
-          <div 
-            onClick={() => versoInputRef.current?.click()}
-            className={`relative border-2 border-dashed rounded-2xl p-4 transition-all cursor-pointer group flex flex-col items-center justify-center min-h-[144px] ${
-              documentPreviews[1] ? 'border-emerald-200 bg-emerald-50/20' : 'border-slate-200 hover:border-primary-400 hover:bg-primary-50/20'
-            }`}
-          >
-            {documentPreviews[1] ? (
-              <div className="relative w-full h-full rounded-xl overflow-hidden shadow-sm">
-                <img src={documentPreviews[1]} alt="Verso" className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <p className="text-white text-[10px] font-black uppercase">{tVerif('identity_change', 'Changer')}</p>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-                  <Camera size={20} />
-                </div>
-                <p className="text-[11px] font-bold text-slate-500">{tVerif('identity_verso_cin', 'Verso CIN')}</p>
-              </>
-            )}
-            {extractionLoading && documentFiles[1] && !extractionData?.versoText && (
-              <div className="absolute inset-0 bg-white/80 backdrop-blur-[1px] rounded-2xl flex flex-col items-center justify-center gap-2">
-                <Loader2 className="animate-spin text-primary-500" size={20} />
-                <span className="text-[9px] font-black uppercase text-primary-600">{tVerif('identity_analyzing', 'Analyse...')}</span>
-              </div>
-            )}
-          </div>
-          <input type="file" ref={versoInputRef} className="hidden" accept="image/*,application/pdf" capture="environment" onChange={(e) => handleSingleFileChange(e, 1)} />
-        </div>
-      </div>
-
-      {/* File Previews */}
-      {documentPreviews.length > 0 && (
-        <div className="space-y-2">
-          <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
-            {tVerif('identity_ready_to_send', "Documents Prêts à l'envoi ({count})").replace('{count}', String(documentPreviews.length))}
-          </label>
-          <div className="flex gap-3 flex-wrap p-3 bg-slate-50 border border-slate-100 rounded-xl">
-            {documentPreviews.map((preview, i) => (
-              <div key={i} className="relative group w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden border-2 border-slate-200 shadow-sm">
-                {preview.startsWith('data:image') ? (
-                  <img src={preview} alt="Preview" className="w-full h-full object-cover" />
+        {[0, 1].map(index => {
+          const label = index === 0 ? tVerif('identity_photo_recto', 'Photo Recto') : tVerif('identity_photo_verso', 'Photo Verso');
+          const placeholder = index === 0 ? tVerif('identity_recto_cin', 'Recto CIN') : tVerif('identity_verso_cin', 'Verso CIN');
+          const inputRef = index === 0 ? rectoInputRef : versoInputRef;
+          const extractKey = index === 0 ? 'rectoText' : 'versoText';
+          return (
+            <div key={index} className="space-y-2">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</label>
+              <div
+                onClick={() => inputRef.current?.click()}
+                className={`relative border-2 border-dashed rounded-2xl p-4 transition-all cursor-pointer group flex flex-col items-center justify-center min-h-[144px] ${
+                  documentPreviews[index] ? 'border-emerald-200 bg-emerald-50/20' : 'border-slate-200 hover:border-primary-400 hover:bg-primary-50/20'
+                }`}
+              >
+                {documentPreviews[index] ? (
+                  <div className="relative w-full h-full rounded-xl overflow-hidden shadow-sm">
+                    <img src={documentPreviews[index]} alt={label} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <p className="text-white text-[10px] font-black uppercase">{tVerif('identity_change', 'Changer')}</p>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); removeFile(index); }}
+                      className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-all"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
                 ) : (
-                  <div className="w-full h-full bg-slate-100 flex items-center justify-center">
-                    <FileText size={20} className="text-slate-400" />
+                  <>
+                    <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                      <Upload size={20} />
+                    </div>
+                    <p className="text-[11px] font-bold text-slate-500">{placeholder}</p>
+                  </>
+                )}
+                {extractionLoading && documentFiles[index] && !(extractionData as any)?.[extractKey] && (
+                  <div className="absolute inset-0 bg-white/80 backdrop-blur-[1px] rounded-2xl flex flex-col items-center justify-center gap-2">
+                    <Loader2 className="animate-spin text-primary-500" size={20} />
+                    <span className="text-[9px] font-black uppercase text-primary-600">{tVerif('identity_analyzing', 'Analyse...')}</span>
                   </div>
                 )}
-                <button
-                  onClick={() => removeFile(i)}
-                  className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
-                >
-                  <X size={10} />
-                </button>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); openCamera(index); }}
+                className="w-full flex items-center justify-center gap-2 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all"
+              >
+                <Camera size={14} /> Utiliser la caméra
+              </button>
+              <input type="file" ref={inputRef} className="hidden" accept="image/*,application/pdf" onChange={(e) => handleSingleFileChange(e, index)} />
+            </div>
+          );
+        })}
+      </div>
 
-      {/* Identity Details Form */}
+      {/* Identity Details Form with validation */}
       <div className="space-y-4 pt-4 border-t border-slate-100 animate-in fade-in slide-in-from-top-4 duration-500">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
@@ -465,65 +502,45 @@ function IdentityVerificationForm({ onComplete }: { onComplete: () => void }) {
             {extractionLoading && <Loader2 size={14} className="animate-spin text-primary-500" />}
           </h3>
         </div>
-
         <p className="text-[10px] text-slate-400 font-bold uppercase leading-relaxed">
           {tVerif('identity_details_instructions', 'Veuillez entrer vos informations manuellement pour validation. Tous les champs sont obligatoires (*).')}
         </p>
-        
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2">
             <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">{tVerif('identity_fullname', 'Nom complet (comme sur la CIN) *')}</label>
-            <input
-              type="text"
-              required
-              value={kycForm.fullName}
-              onChange={(e) => setKycForm({...kycForm, fullName: e.target.value.toUpperCase()})}
-              className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all font-medium"
-              placeholder={tVerif('identity_fullname_placeholder', 'EX: AHMED KHALID')}
-            />
+            <input type="text" value={kycForm.fullName} onChange={(e) => handleFieldChange('fullName', e.target.value)}
+              className={`w-full px-4 py-3 bg-white border-2 rounded-xl focus:ring-4 outline-none transition-all font-medium ${fieldErrors.fullName ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500/10' : 'border-slate-200 focus:border-primary-500 focus:ring-primary-500/10'}`}
+              placeholder={tVerif('identity_fullname_placeholder', 'EX: AHMED KHALID')} />
+            {fieldErrors.fullName && <p className="text-[10px] text-rose-500 font-bold mt-1 flex items-center gap-1"><AlertTriangle size={10} />{fieldErrors.fullName}</p>}
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">{tVerif('identity_cin', 'N° CIN *')}</label>
-            <input
-              type="text"
-              required
-              value={kycForm.cinNumber}
-              onChange={(e) => setKycForm({...kycForm, cinNumber: e.target.value.toUpperCase()})}
-              className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all font-mono font-bold"
-              placeholder={tVerif('identity_cin_placeholder', 'EX: AB123456')}
-            />
+            <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">{documentType === 'CIN' ? tVerif('identity_cin', 'N° CIN *') : 'N° Passeport *'}</label>
+            <input type="text" value={kycForm.cinNumber} onChange={(e) => handleFieldChange('cinNumber', e.target.value)}
+              className={`w-full px-4 py-3 bg-white border-2 rounded-xl focus:ring-4 outline-none transition-all font-mono font-bold ${fieldErrors.cinNumber ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500/10' : 'border-slate-200 focus:border-primary-500 focus:ring-primary-500/10'}`}
+              placeholder={documentType === 'CIN' ? 'EX: AB123456' : 'EX: AB1234567'} />
+            {fieldErrors.cinNumber && <p className="text-[10px] text-rose-500 font-bold mt-1 flex items-center gap-1"><AlertTriangle size={10} />{fieldErrors.cinNumber}</p>}
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">{tVerif('identity_birthdate', 'Date de naissance *')}</label>
-            <input
-              type="date"
-              required
-              value={kycForm.birthDate}
-              onChange={(e) => setKycForm({...kycForm, birthDate: e.target.value})}
-              className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all font-medium"
-            />
+            <input type="date" value={kycForm.birthDate} onChange={(e) => handleFieldChange('birthDate', e.target.value)}
+              max={new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().split('T')[0]}
+              className={`w-full px-4 py-3 bg-white border-2 rounded-xl focus:ring-4 outline-none transition-all font-medium ${fieldErrors.birthDate ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500/10' : 'border-slate-200 focus:border-primary-500 focus:ring-primary-500/10'}`} />
+            {fieldErrors.birthDate && <p className="text-[10px] text-rose-500 font-bold mt-1 flex items-center gap-1"><AlertTriangle size={10} />{fieldErrors.birthDate}</p>}
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">{tVerif('identity_city', 'Ville *')}</label>
-            <input
-              type="text"
-              required
-              value={kycForm.city}
-              onChange={(e) => setKycForm({...kycForm, city: e.target.value})}
-              className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all font-medium"
-              placeholder={tVerif('identity_city_placeholder', 'Casablanca')}
-            />
+            <input type="text" value={kycForm.city} onChange={(e) => handleFieldChange('city', e.target.value)}
+              className={`w-full px-4 py-3 bg-white border-2 rounded-xl focus:ring-4 outline-none transition-all font-medium ${fieldErrors.city ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500/10' : 'border-slate-200 focus:border-primary-500 focus:ring-primary-500/10'}`}
+              placeholder={tVerif('identity_city_placeholder', 'Casablanca')} />
+            {fieldErrors.city && <p className="text-[10px] text-rose-500 font-bold mt-1 flex items-center gap-1"><AlertTriangle size={10} />{fieldErrors.city}</p>}
           </div>
           <div className="sm:col-span-2">
             <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">{tVerif('identity_address', 'Adresse *')}</label>
-            <input
-              type="text"
-              required
-              value={kycForm.address}
-              onChange={(e) => setKycForm({...kycForm, address: e.target.value})}
-              className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all font-medium"
-              placeholder={tVerif('identity_address_placeholder', 'Rue...')}
-            />
+            <input type="text" value={kycForm.address} onChange={(e) => handleFieldChange('address', e.target.value)}
+              className={`w-full px-4 py-3 bg-white border-2 rounded-xl focus:ring-4 outline-none transition-all font-medium ${fieldErrors.address ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500/10' : 'border-slate-200 focus:border-primary-500 focus:ring-primary-500/10'}`}
+              placeholder={tVerif('identity_address_placeholder', 'Rue...')} />
+            {fieldErrors.address && <p className="text-[10px] text-rose-500 font-bold mt-1 flex items-center gap-1"><AlertTriangle size={10} />{fieldErrors.address}</p>}
           </div>
         </div>
       </div>

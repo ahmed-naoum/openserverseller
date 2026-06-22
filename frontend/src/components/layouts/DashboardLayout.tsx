@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { translateNotification } from '../../utils/notificationTranslator';
 import { dashboardApi, chatApi, notificationsApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { useSocket } from '../../contexts/SocketContext';
@@ -51,6 +52,7 @@ import {
   Plus,
   Database,
   History,
+  RotateCcw,
   ScanLine,
   Headphones,
   Trash,
@@ -164,8 +166,7 @@ const navigation = {
   agent: [
     { name: 'Tableau de bord', href: '/agent', icon: Home },
     { name: 'Réclamer Leads', href: '/agent/leads', icon: Zap },
-    { name: 'Insérer Lead', href: '/agent/insert-lead', icon: Plus },
-    { name: 'Expédition Coliaty', href: '/agent/dispatch', icon: Truck },
+    { name: 'WhatsApp Leads', href: '/agent/insert-lead', icon: Plus },
     { name: 'Livraison', href: '/agent/livraison', icon: Truck },
     { name: 'Paramètres', href: '/agent/settings', icon: Settings },
   ],
@@ -266,6 +267,7 @@ const navigation = {
       icon: Package,
       children: [
         { name: 'Colis', href: '/helper/colis', icon: Package },
+        { name: 'Colis Retournés', href: '/helper/retours', icon: RotateCcw },
         { name: 'Scanner Retour', href: '/helper/scanner', icon: ScanLine },
         { name: 'Tickets & Ramassage', href: '/helper/tickets', icon: FileText },
       ]
@@ -648,6 +650,7 @@ export default function DashboardLayout() {
     if (item.href === '/helper/leads') return !!user?.canManageLeads;
     if (item.href === '/helper/products') return !!user?.canManageProducts;
     if (item.href === '/helper/colis') return !!user?.canManageOrders;
+    if (item.href === '/helper/retours') return !!user?.canScanReturns;
     if (item.href === '/helper/scanner') return !!user?.canScanReturns;
     if (item.href === '/helper/tickets') return !!user?.canManageTickets;
     if (item.href === '/helper/links') return !!user?.canManageInfluencerLinks;
@@ -1292,7 +1295,7 @@ export default function DashboardLayout() {
               </button>
 
               {/* Language Switcher */}
-              <LanguageSwitcherWidget variant="header" />
+              <LanguageSwitcherWidget variant="dashboard-header" />
 
               {/* Notifications */}
               <div className="relative">
@@ -1316,13 +1319,13 @@ export default function DashboardLayout() {
                 {showNotificationsMenu && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setShowNotificationsMenu(false)}></div>
-                    <div className="absolute right-0 mt-3 w-80 sm:w-[420px] bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300">
+                    <div className={`absolute ${language === 'ar' ? 'left-0 origin-top-left' : 'right-0 origin-top-right'} mt-3 w-80 sm:w-[420px] bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300`}>
                       {/* Tray Header */}
                       <div className="px-5 py-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between">
                         <div>
-                          <p className="text-xs font-black text-slate-900 uppercase tracking-wider">Notifications</p>
+                          <p className="text-xs font-black text-slate-900 uppercase tracking-wider">{t('title', 'notifications', 'Notifications')}</p>
                           <p className="text-[10px] font-bold text-slate-400 mt-0.5">
-                            {unreadNotifications.length} non lues
+                            {unreadNotifications.length} {t('unread_suffix', 'notifications', 'non lues')}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1332,13 +1335,13 @@ export default function DashboardLayout() {
                                 onClick={handleMarkAllRead}
                                 className="text-[9px] font-black text-primary-600 hover:text-primary-700 bg-primary-50 px-2 py-1.5 rounded-md transition-colors"
                               >
-                                Tout lire
+                                {t('btn_read_all_short', 'notifications', 'Tout lire')}
                               </button>
                               <button 
                                 onClick={handleDeleteAllNotifications}
                                 className="text-[9px] font-black text-rose-600 hover:text-rose-700 bg-rose-50 px-2 py-1.5 rounded-md transition-colors"
                               >
-                                Tout effacer
+                                {t('btn_clear_all_short', 'notifications', 'Tout effacer')}
                               </button>
                             </>
                           )}
@@ -1352,9 +1355,9 @@ export default function DashboardLayout() {
                             <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto text-slate-400 mb-3">
                               <Bell size={20} className="animate-bounce" />
                             </div>
-                            <p className="text-xs font-black text-slate-800">Aucune notification</p>
+                            <p className="text-xs font-black text-slate-800">{t('no_notifications_menu', 'notifications', 'Aucune notification')}</p>
                             <p className="text-[10px] text-slate-400 font-bold mt-1">
-                              Vous serez notifié en temps réel lors de vos ventes et de vos demandes.
+                              {t('no_notifications_menu_desc', 'notifications', 'Vous serez notifié en temps réel lors de vos ventes et de vos demandes.')}
                             </p>
                           </div>
                         ) : (
@@ -1376,6 +1379,8 @@ export default function DashboardLayout() {
                               IconComponent = Users;
                             }
 
+                            const translated = translateNotification(notif, (k, ns, fb) => t(k, ns || 'notifications', fb));
+
                             return (
                               <div
                                 key={notif.id}
@@ -1395,25 +1400,25 @@ export default function DashboardLayout() {
                                 </div>
 
                                 {/* Texts */}
-                                <div className="flex-1 min-w-0">
+                                <div className={`flex-1 min-w-0 ${language === 'ar' ? 'pl-6' : 'pr-6'}`}>
                                   <div className="flex items-center justify-between gap-2">
-                                    <p className="text-[11px] font-black text-slate-900 truncate pr-4">
-                                      {notif.title}
+                                    <p className={`text-[11px] font-black text-slate-900 truncate ${language === 'ar' ? 'pl-4' : 'pr-4'}`}>
+                                      {translated.title}
                                     </p>
                                     <span className="text-[8px] font-bold text-slate-400 whitespace-nowrap">
                                       {new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     </span>
                                   </div>
                                   <p className="text-[10px] font-medium text-slate-500 leading-relaxed mt-1">
-                                    {notif.body}
+                                    {translated.body}
                                   </p>
                                 </div>
 
                                 {/* Individual Delete button */}
                                 <button
                                   onClick={(e) => handleDeleteNotification(notif.id, e)}
-                                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 bg-white border border-slate-100 rounded-lg text-slate-400 hover:text-rose-600 hover:border-rose-200 transition-all opacity-0 group-hover:opacity-100 shadow-sm active:scale-95"
-                                  title="Supprimer"
+                                  className={`absolute ${language === 'ar' ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 p-1.5 bg-white border border-slate-100 rounded-lg text-slate-400 hover:text-rose-600 hover:border-rose-200 transition-all opacity-0 group-hover:opacity-100 shadow-sm active:scale-95`}
+                                  title={t('confirm_delete_all_btn', 'notifications', 'Supprimer')}
                                 >
                                   <Trash size={10} />
                                 </button>
@@ -1431,7 +1436,7 @@ export default function DashboardLayout() {
                             onClick={() => setShowNotificationsMenu(false)}
                             className="inline-flex items-center gap-1.5 text-[10px] font-black text-slate-600 hover:text-primary-600 transition-colors uppercase tracking-wider"
                           >
-                            <span>Voir tout l'historique</span>
+                            <span>{t('view_all_history', 'notifications', "Voir tout l'historique")}</span>
                             <ChevronRight size={10} />
                           </Link>
                         </div>
@@ -1470,7 +1475,7 @@ export default function DashboardLayout() {
                 {showProfileMenu && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setShowProfileMenu(false)}></div>
-                    <div className="absolute right-0 mt-3 w-64 bg-white rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300">
+                    <div className={`absolute ${language === 'ar' ? 'left-0 origin-top-left' : 'right-0 origin-top-right'} mt-3 w-64 bg-white rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300`}>
                       <div className="px-6 py-6 border-b border-slate-50 bg-slate-50/50 flex items-center">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-black text-slate-900 truncate">{user?.fullName}</p>

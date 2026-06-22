@@ -17,6 +17,8 @@ import { encrypt, decrypt } from '../utils/crypto.js';
 import { fetchMaintenanceSettings } from '../middleware/maintenance.js';
 import { generateContractPdf } from '../services/contract.service.js';
 import * as damanesign from '../services/damanesign.service.js';
+import { parseCookies } from '../middleware/security.js';
+import { sendOtpEmail, verifyTurnstile } from '../services/email.service.js';
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID || 'UNCONFIGURED_CLIENT_ID');
 const authLimiter = rateLimit({
@@ -132,18 +134,33 @@ router.post(
       }
       return true;
     }),
-    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
-    body('fullName').trim().isLength({ min: 4, max: 20 }).withMessage('Le nom complet doit contenir entre 4 et 20 caractères'),
-    body('role').optional().isIn(['VENDOR', 'CALL_CENTER_AGENT', 'GROSSELLER', 'INFLUENCER', 'CONFIRMATION_AGENT']),
+    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters').custom((value) => {
+      const criteria = [/[A-Z]/, /[a-z]/, /[0-9]/, /[^A-Za-z0-9]/].filter(r => r.test(value)).length;
+      if (criteria < 3) throw new Error('Password must meet at least 3 of 4 complexity criteria (uppercase, lowercase, number, symbol)');
+      return true;
+    }),
+    body('fullName').trim().escape().isLength({ min: 4, max: 20 }).withMessage('Le nom complet doit contenir entre 4 et 20 caractères').custom((value) => {
+      if (/[0-9]/.test(value)) throw new Error('Full name must not contain numbers');
+      return true;
+    }),
+    body('turnstileToken').notEmpty().withMessage('CAPTCHA verification is required'),
     body('cguAccepted').custom((value) => value === true || value === 'true' || value === 1 || value === '1').withMessage("Veuillez accepter les Conditions Générales d'Utilisation (CGU)"),
   ],
   asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      throw new AppException(400, 'Validation failed');
+      const firstError = errors.array()[0];
+      throw new AppException(400, (firstError as any).msg || 'Validation failed');
     }
 
-    const { email, phone, password, fullName, role = 'VENDOR', language = 'ar' } = req.body;
+    // Verify Turnstile CAPTCHA
+    const isTurnstileValid = await verifyTurnstile(req.body.turnstileToken);
+    if (!isTurnstileValid) {
+      throw new AppException(400, 'CAPTCHA verification failed. Please try again.');
+    }
+
+    const { email, phone, password, fullName, language = 'ar' } = req.body;
+    const role = 'VENDOR'; // Hardcoded — only VENDOR can register via this route
     const normalizedPhone = phone ? normalizePhoneNumber(phone) : undefined;
     const langCode = ['en', 'fr', 'ar'].includes(language) ? language : 'ar';
 
@@ -194,57 +211,39 @@ router.post(
 
     const detectedCity = await getGeoLocation(registrationIp);
 
-    const user = (await prisma.user.create({
-      data: {
-        email,
-        phone: normalizedPhone,
-        password: hashedPassword,
-        roleId: userRole.id,
-        isInfluencer: role === 'INFLUENCER',
-        referralCode: role === 'INFLUENCER' ? Math.random().toString(36).substring(2, 10).toUpperCase() : null,
-        kycStatus: 'PENDING',
-        isActive: false,
-        cguAccepted: true,
-        cguAcceptedAt: new Date(),
-        registrationIp,
-        detectedCity,
-        language: langCode,
-        profile: {
-          create: {
-            fullName,
-            language: langCode,
-            instagramUsername: (req.body as any).instagramUsername || null,
-            tiktokUsername: (req.body as any).tiktokUsername || null,
-            facebookUsername: (req.body as any).facebookUsername || null,
-            xUsername: (req.body as any).xUsername || null,
-            youtubeUsername: (req.body as any).youtubeUsername || null,
-            snapchatUsername: (req.body as any).snapchatUsername || null,
-          } as any,
+    let user;
+    try {
+      user = (await prisma.user.create({
+        data: {
+          email,
+          phone: normalizedPhone,
+          password: hashedPassword,
+          roleId: userRole.id,
+          isInfluencer: false,
+          kycStatus: 'PENDING',
+          isActive: false,
+          cguAccepted: true,
+          cguAcceptedAt: new Date(),
+          registrationIp,
+          detectedCity,
+          language: langCode,
+          profile: {
+            create: {
+              fullName,
+              language: langCode,
+            } as any,
+          },
         },
-      },
-      include: {
-        profile: true,
-        role: true,
-      },
-    })) as any;
-
-    // Auto-assign global agents if this is an influencer
-    if (role === 'INFLUENCER') {
-      const globalAgents = await prisma.user.findMany({
-        where: {
-          role: { name: 'CALL_CENTER_AGENT' },
-          autoAssignInfluencers: true
-        }
-      });
-
-      if (globalAgents.length > 0) {
-        await prisma.agentInfluencerAssignment.createMany({
-          data: globalAgents.map(agent => ({
-            agentId: agent.id,
-            influencerId: user.id
-          }))
-        });
+        include: {
+          profile: true,
+          role: true,
+        },
+      })) as any;
+    } catch (error: any) {
+      if (error.code === 'P2002') {
+        throw new AppException(409, 'User already exists with this email or phone (caught race condition)');
       }
+      throw error;
     }
 
     // Auto-assign new user to helpers with autoAssignHelperUsers enabled
@@ -265,18 +264,25 @@ router.post(
       });
     }
 
+    // Generate and send OTP email
     const otp = generateOTP();
-    // In a real application, you would store otpExpiry and otp
-    // const otpExpiry = new Date(Date.now() + parseInt(process.env.OTP_EXPIRY_MINUTES || '5', 10) * 60 * 1000);
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { emailOtp: otp, emailOtpExpiry: otpExpiry } as any,
+    });
 
-    console.log(`[DEV] OTP for ${email || phone}: ${otp}`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[DEV] OTP for ${email}: ${otp}`);
+    }
+    await sendOtpEmail(email, otp, langCode);
 
     const { accessToken, refreshToken } = generateTokens(user.uuid);
     setAuthCookies(res, accessToken, refreshToken);
 
     res.status(201).json({
       status: 'success',
-      message: 'Registration successful. Please verify your email or phone.',
+      message: 'Registration successful. Please verify your email.',
       data: {
         user: {
           uuid: user.uuid,
@@ -286,12 +292,14 @@ router.post(
           role: user.role.name,
           kycStatus: user.kycStatus,
           isActive: user.isActive,
+          emailVerified: !!user.emailVerifiedAt,
+          emailVerifiedAt: user.emailVerifiedAt,
         },
         tokens: {
           accessToken,
           refreshToken,
         },
-        requiresVerification: true,
+        requiresEmailVerification: true,
       },
     });
   })
@@ -309,20 +317,35 @@ router.post(
       }
       return true;
     }),
-    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
-    body('fullName').trim().isLength({ min: 4, max: 20 }).withMessage('Le nom complet doit contenir entre 4 et 20 caractères'),
-    body('instagramUsername').optional().trim(),
-    body('tiktokUsername').optional().trim(),
-    body('facebookUsername').optional().trim(),
-    body('xUsername').optional().trim(),
-    body('youtubeUsername').optional().trim(),
-    body('snapchatUsername').optional().trim(),
+    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters').custom((value) => {
+      const criteria = [/[A-Z]/, /[a-z]/, /[0-9]/, /[^A-Za-z0-9]/].filter(r => r.test(value)).length;
+      if (criteria < 3) throw new Error('Password must meet at least 3 of 4 complexity criteria');
+      return true;
+    }),
+    body('fullName').trim().escape().isLength({ min: 4, max: 20 }).withMessage('Le nom complet doit contenir entre 4 et 20 caractères').custom((value) => {
+      if (/[0-9]/.test(value)) throw new Error('Full name must not contain numbers');
+      return true;
+    }),
+    body('instagramUsername').optional().trim().escape(),
+    body('tiktokUsername').optional().trim().escape(),
+    body('facebookUsername').optional().trim().escape(),
+    body('xUsername').optional().trim().escape(),
+    body('youtubeUsername').optional().trim().escape(),
+    body('snapchatUsername').optional().trim().escape(),
+    body('turnstileToken').notEmpty().withMessage('CAPTCHA verification is required'),
     body('cguAccepted').custom((value) => value === true || value === 'true' || value === 1 || value === '1').withMessage("Veuillez accepter les Conditions Générales d'Utilisation (CGU)"),
   ],
   asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      throw new AppException(400, 'Validation failed');
+      const firstError = errors.array()[0];
+      throw new AppException(400, (firstError as any).msg || 'Validation failed');
+    }
+
+    // Verify Turnstile CAPTCHA
+    const isTurnstileValid = await verifyTurnstile(req.body.turnstileToken);
+    if (!isTurnstileValid) {
+      throw new AppException(400, 'CAPTCHA verification failed. Please try again.');
     }
 
     const { email, phone, password, fullName, instagramUsername, tiktokUsername, facebookUsername, xUsername, youtubeUsername, snapchatUsername, instagramUrl, tiktokUrl, facebookUrl, youtubeUrl, snapchatUrl, language = 'ar' } = req.body;
@@ -386,46 +409,54 @@ router.post(
 
     const detectedCity = await getGeoLocation(registrationIp);
 
-    const user = (await prisma.user.create({
-      data: {
-        email,
-        phone: normalizedPhone || null,
-        password: hashedPassword,
-        roleId: influencerRole.id,
-        isInfluencer: true,
-        referralCode: uuidv4().slice(0, 8).toUpperCase(),
-        kycStatus: 'PENDING', // Needs admin approval
-        isActive: false,
-        cguAccepted: true,
-        cguAcceptedAt: new Date(),
-        registrationIp,
-        detectedCity,
-        language: langCode,
-        profile: {
-          create: {
-            fullName,
-            language: langCode,
-            instagramUsername: actualUsername,
-            tiktokUsername: actualTiktok,
-            facebookUsername: actualFacebook,
-            xUsername: actualX,
-            youtubeUsername: actualYoutube,
-            snapchatUsername: actualSnapchat,
-            metadata: {
-              instagramUrl: instagramUrl || null,
-              tiktokUrl: tiktokUrl || null,
-              facebookUrl: facebookUrl || null,
-              youtubeUrl: youtubeUrl || null,
-              snapchatUrl: snapchatUrl || null,
-            }
+    let user;
+    try {
+      user = (await prisma.user.create({
+        data: {
+          email,
+          phone: normalizedPhone || null,
+          password: hashedPassword,
+          roleId: influencerRole.id,
+          isInfluencer: true,
+          referralCode: uuidv4().slice(0, 8).toUpperCase(),
+          kycStatus: 'PENDING', // Needs admin approval
+          isActive: false,
+          cguAccepted: true,
+          cguAcceptedAt: new Date(),
+          registrationIp,
+          detectedCity,
+          language: langCode,
+          profile: {
+            create: {
+              fullName,
+              language: langCode,
+              instagramUsername: actualUsername,
+              tiktokUsername: actualTiktok,
+              facebookUsername: actualFacebook,
+              xUsername: actualX,
+              youtubeUsername: actualYoutube,
+              snapchatUsername: actualSnapchat,
+              metadata: {
+                instagramUrl: instagramUrl || null,
+                tiktokUrl: tiktokUrl || null,
+                facebookUrl: facebookUrl || null,
+                youtubeUrl: youtubeUrl || null,
+                snapchatUrl: snapchatUrl || null,
+              }
+            },
           },
         },
-      },
-      include: {
-        profile: true,
-        role: true,
-      },
-    })) as any;
+        include: {
+          profile: true,
+          role: true,
+        },
+      })) as any;
+    } catch (error: any) {
+      if (error.code === 'P2002') {
+        throw new AppException(409, 'User already exists with this email or phone (caught race condition)');
+      }
+      throw error;
+    }
 
     // Auto-assign global agents
     const globalAgents = await prisma.user.findMany({
@@ -462,28 +493,97 @@ router.post(
       });
     }
 
+    // Generate and send OTP email
+    const otp = generateOTP();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { emailOtp: otp, emailOtpExpiry: otpExpiry } as any,
+    });
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[DEV] OTP for ${email}: ${otp}`);
+    }
+    await sendOtpEmail(email, otp, langCode);
+
     const { accessToken, refreshToken } = generateTokens(user.uuid);
     setAuthCookies(res, accessToken, refreshToken);
 
-    const userProfile = user.profile;
-
     res.status(201).json({
       status: 'success',
-      message: 'Influencer registration successful. Your account is pending admin approval.',
+      message: 'Influencer registration successful. Please verify your email.',
       data: {
         user: {
           uuid: user.uuid,
           email: user.email,
-          fullName: userProfile?.fullName,
+          fullName: user.profile?.fullName,
           role: user.role?.name,
           kycStatus: user.kycStatus,
-          instagramFollowers: userProfile?.instagramFollowers,
+          isActive: user.isActive,
+          emailVerified: !!user.emailVerifiedAt,
+          emailVerifiedAt: user.emailVerifiedAt,
         },
         tokens: {
           accessToken,
           refreshToken,
         },
+        requiresEmailVerification: true,
       },
+    });
+  })
+);
+
+router.post(
+  '/verify-email',
+  loginLimiter,
+  [
+    body('email').notEmpty().isEmail(),
+    body('otp').notEmpty().isString(),
+  ],
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new AppException(400, 'Validation failed');
+    }
+
+    const { email, otp } = req.body;
+
+    const user = await prisma.user.findFirst({
+      where: { email },
+    });
+
+    if (!user) {
+      throw new AppException(404, 'User not found');
+    }
+
+    if (user.emailVerifiedAt) {
+      throw new AppException(400, 'Email is already verified');
+    }
+
+    if (!user.emailOtp || !user.emailOtpExpiry) {
+      throw new AppException(400, 'No verification OTP found for this user');
+    }
+
+    if (user.emailOtp !== otp) {
+      throw new AppException(400, 'Invalid verification code');
+    }
+
+    if (new Date() > user.emailOtpExpiry) {
+      throw new AppException(400, 'Verification code has expired. Please request a new one.');
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerifiedAt: new Date(),
+        emailOtp: null,
+        emailOtpExpiry: null,
+      } as any,
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Email verified successfully',
     });
   })
 );
@@ -570,6 +670,14 @@ router.post(
     const { accessToken, refreshToken } = generateTokens(user.uuid);
     setAuthCookies(res, accessToken, refreshToken);
 
+    const maintenanceSettings = await fetchMaintenanceSettings();
+    let requiresManualApproval = false;
+    if (user.role.name === 'VENDOR') {
+      requiresManualApproval = maintenanceSettings.registrationBlocked;
+    } else if (user.role.name === 'INFLUENCER') {
+      requiresManualApproval = maintenanceSettings.influencerRegistrationBlocked;
+    }
+
     res.json({
       status: 'success',
       message: 'Login successful',
@@ -583,6 +691,9 @@ router.post(
           role: user.role.name,
           kycStatus: user.kycStatus,
           isActive: user.isActive,
+          requiresManualApproval,
+          emailVerified: !!user.emailVerifiedAt,
+          emailVerifiedAt: user.emailVerifiedAt,
           mode: user.mode,
           language: user.language || user.profile?.language || 'ar',
           isInfluencer: user.isInfluencer || user.role.name === 'INFLUENCER',
@@ -668,6 +779,8 @@ router.post(
           role: user.role.name,
           kycStatus: user.kycStatus,
           isActive: user.isActive,
+          emailVerified: !!user.emailVerifiedAt,
+          emailVerifiedAt: user.emailVerifiedAt,
           mode: user.mode,
           language: user.language || user.profile?.language || 'ar',
           isInfluencer: user.isInfluencer || user.role.name === 'INFLUENCER',
@@ -749,6 +862,8 @@ router.post(
           role: user.role.name,
           kycStatus: user.kycStatus,
           isActive: user.isActive,
+          emailVerified: !!user.emailVerifiedAt,
+          emailVerifiedAt: user.emailVerifiedAt,
           mode: user.mode,
           language: user.language || user.profile?.language || 'ar',
           isInfluencer: user.isInfluencer || user.role.name === 'INFLUENCER',
@@ -1011,6 +1126,30 @@ router.post(
       { expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '30d') as any }
     );
 
+    const cookies = parseCookies(req.headers.cookie);
+    const currentToken = cookies['token'] || req.headers.authorization?.split(' ')[1];
+    const currentRefreshToken = cookies['refreshToken'];
+
+    if (currentToken) {
+      res.cookie('originalToken', currentToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+    }
+
+    if (currentRefreshToken) {
+      res.cookie('originalRefreshToken', currentRefreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        path: '/',
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+      });
+    }
+
     res.cookie('token', accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -1166,12 +1305,12 @@ router.post(
       throw new AppException(404, 'User not found');
     }
 
-    const targetEmail = email || user.email;
+    const targetIdentifier = email || normalizedPhone || user.email || user.phone;
 
-    if (targetEmail) {
+    if (targetIdentifier) {
       const storedOtp = await prisma.passwordReset.findFirst({
         where: {
-          email: targetEmail as string,
+          email: targetIdentifier as string,
           token: otp,
           expiresAt: { gt: new Date() }
         }
@@ -1183,8 +1322,6 @@ router.post(
 
       // Valid OTP, delete it so it can't be reused
       await prisma.passwordReset.delete({ where: { id: storedOtp.id } });
-    } else {
-      console.log(`[DEV] Phone OTP Verified: ${otp} for ${phone}`);
     }
 
     if (email) {
@@ -1232,50 +1369,81 @@ router.post(
 
     const otp = generateOTP();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins expiry
-    const targetEmail = email || user.email;
+    const targetIdentifier = email || normalizedPhone || user.email || user.phone;
 
-    if (targetEmail) {
+    if (targetIdentifier) {
+      // Rate-limiting / spam protection: check if an OTP was sent in the last 60 seconds
+      const existingOtp = await prisma.passwordReset.findFirst({
+        where: { email: targetIdentifier as string },
+        orderBy: { createdAt: 'desc' }
+      });
+
+      if (existingOtp) {
+        const timeSinceLastOtp = Date.now() - new Date(existingOtp.createdAt).getTime();
+        const cooldownMs = 60 * 1000; // 60 seconds cooldown
+        if (timeSinceLastOtp < cooldownMs) {
+          const remainingSeconds = Math.ceil((cooldownMs - timeSinceLastOtp) / 1000);
+          res.status(429).json({
+            status: 'error',
+            message: `Veuillez patienter ${remainingSeconds} secondes avant de demander un nouveau code.`,
+            remainingSeconds
+          });
+          return;
+        }
+      }
       // Clear old OTPs
       await prisma.passwordReset.deleteMany({
-        where: { email: targetEmail as string }
+        where: { email: targetIdentifier as string }
       });
 
       // Save new OTP
       await prisma.passwordReset.create({
         data: {
-          email: targetEmail as string,
+          email: targetIdentifier as string,
           token: otp,
           expiresAt
         }
       });
 
-      const { sendEmail } = await import('../utils/mailer.js');
-      
-      try {
-        await sendEmail({
-          to: targetEmail as string,
-          subject: 'Votre code de vérification SILACOD',
-          text: `Bonjour,\n\nVoici votre code de vérification: ${otp}\nIl expirera dans 15 minutes.`,
-          html: `
-            <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-              <h2 style="color: #4F46E5;">SILACOD - Vérification</h2>
-              <p>Bonjour,</p>
-              <p>Voici votre code de vérification à 6 chiffres :</p>
-              <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; font-size: 24px; font-weight: bold; text-align: center; letter-spacing: 5px; margin: 20px 0;">
-                ${otp}
-              </div>
-              <p>Ce code expirera dans 15 minutes.</p>
-              <p>Si vous n'avez pas demandé ce code, ignorez cet email.</p>
-              <p>Cordialement,<br>L'équipe SILACOD</p>
-            </div>
-          `
+      // If user email is not verified, update user table emailOtp
+      if (!user.emailVerifiedAt) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            emailOtp: otp,
+            emailOtpExpiry: expiresAt
+          } as any
         });
-      } catch (err) {
-        console.error('Failed to send OTP email:', err);
-        throw new AppException(500, 'Erreur lors de l\'envoi de l\'email');
       }
-    } else {
-      console.log(`[DEV] New OTP for ${phone}: ${otp}`);
+
+      if (email || user.email) {
+        const { sendEmail } = await import('../utils/mailer.js');
+        try {
+          await sendEmail({
+            to: targetIdentifier as string,
+            subject: 'Votre code de vérification SILACOD',
+            text: `Bonjour,\n\nVoici votre code de vérification: ${otp}\nIl expirera dans 15 minutes.`,
+            html: `
+              <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                <h2 style="color: #4F46E5;">SILACOD - Vérification</h2>
+                <p>Bonjour,</p>
+                <p>Voici votre code de vérification à 6 chiffres :</p>
+                <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; font-size: 24px; font-weight: bold; text-align: center; letter-spacing: 5px; margin: 20px 0;">
+                  ${otp}
+                </div>
+                <p>Ce code expirera dans 15 minutes.</p>
+                <p>Si vous n'avez pas demandé ce code, ignorez cet email.</p>
+                <p>Cordialement,<br>L'équipe SILACOD</p>
+              </div>
+            `
+          });
+        } catch (err) {
+          console.error('Failed to send OTP email:', err);
+          throw new AppException(500, 'Erreur lors de l\'envoi de l\'email');
+        }
+      } else {
+        console.log(`[DEV/SMS] New OTP for ${targetIdentifier}: ${otp}`);
+      }
     }
 
     res.json({
@@ -1680,6 +1848,35 @@ router.post(
       date: new Date().toLocaleDateString('fr-FR'),
     });
 
+    const isMockMode = process.env.NODE_ENV === 'development' || process.env.DAMANESIGN_API_KEY === 'QUxMIFlPVVIgQkFTRSBBUkUgQkVMT05HIFRPIFVT';
+
+    if (isMockMode) {
+      const mockTxId = `mock-tx-${Date.now()}`;
+      const mockMemberId = `mock-member-${Date.now()}`;
+      const mockFileId = `mock-file-${Date.now()}`;
+
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          damanesignTransactionId: mockTxId,
+          damanesignMemberId: mockMemberId,
+          damanesignFileId: mockFileId,
+        },
+      });
+
+      const host = req.get('host');
+      const protocol = req.protocol;
+      const signatureUrl = `${protocol}://${host}/api/v1/auth/mock-signature?uuid=${user.uuid}`;
+
+      return res.json({
+        status: 'success',
+        message: 'Transaction DamaneSign générée (Mock Mode)',
+        data: {
+          signatureUrl,
+        },
+      });
+    }
+
     // 2. Upload PDF to DamaneSign
     const fileName = `contrat_silacod_${user.id}_${Date.now()}.pdf`;
     const uploadResult = await damanesign.uploadFile(pdfBuffer, fileName);
@@ -1751,6 +1948,258 @@ router.post(
 );
 
 router.get(
+  '/mock-signature',
+  asyncHandler(async (req, res) => {
+    const { uuid } = req.query;
+    if (!uuid || typeof uuid !== 'string') {
+      return res.status(400).send('Invalid UUID');
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { uuid },
+      include: { profile: true, bankAccounts: true },
+    });
+
+    if (!user || !user.profile) {
+      return res.status(404).send('User or profile not found');
+    }
+
+    const defaultBank = user.bankAccounts.find(b => b.isDefault) || user.bankAccounts[0];
+    const decryptedRib = defaultBank ? decrypt(defaultBank.ribAccount) : 'Aucun compte bancaire';
+
+    res.send(`
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Silacod Sandbox - Signature de Contrat</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #0f172a, #1e1b4b);
+      font-family: 'Outfit', sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      color: #f1f5f9;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.03);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 24px;
+      padding: 40px;
+      max-width: 480px;
+      width: 90%;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      text-align: center;
+    }
+    .badge {
+      display: inline-block;
+      padding: 6px 12px;
+      background: rgba(99, 102, 241, 0.15);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      color: #a5b4fc;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 20px;
+    }
+    h1 {
+      font-size: 24px;
+      font-weight: 800;
+      margin: 0 0 10px 0;
+      background: linear-gradient(to right, #e2e8f0, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    p.desc {
+      color: #94a3b8;
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 30px;
+    }
+    .details {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 30px;
+      text-align: left;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      font-size: 13px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .detail-row:last-child {
+      border-bottom: none;
+    }
+    .detail-label {
+      color: #64748b;
+      font-weight: 600;
+    }
+    .detail-val {
+      color: #cbd5e1;
+      font-weight: 800;
+    }
+    button {
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      border: none;
+      color: white;
+      padding: 16px 32px;
+      font-size: 15px;
+      font-weight: 800;
+      border-radius: 16px;
+      cursor: pointer;
+      width: 100%;
+      box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);
+      transition: all 0.2s ease;
+    }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 20px 25px -5px rgba(99, 102, 241, 0.4);
+    }
+    button:active {
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">Sandbox / Test Environment</div>
+    <h1>Signer le Contrat</h1>
+    <p class="desc">Vous êtes sur le point de signer électroniquement votre contrat d'adhésion Silacod en mode de test sécurisé.</p>
+    
+    <div class="details">
+      <div class="detail-row">
+        <span class="detail-label">Nom Complet</span>
+        <span class="detail-val">${user.profile.fullName || 'Non spécifié'}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">CIN</span>
+        <span class="detail-val">${user.profile.cinNumber || 'Non spécifié'}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Ville / Adresse</span>
+        <span class="detail-val">${user.profile.city || ''}, ${user.profile.address || ''}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Compte Bancaire (RIB)</span>
+        <span class="detail-val">${decryptedRib}</span>
+      </div>
+    </div>
+
+    <form method="POST" action="/api/v1/auth/mock-signature?uuid=${uuid}">
+      <button type="submit">Signer le contrat numériquement</button>
+    </form>
+  </div>
+</body>
+</html>
+    `);
+  })
+);
+
+router.post(
+  '/mock-signature',
+  asyncHandler(async (req, res) => {
+    const { uuid } = req.query;
+    if (!uuid || typeof uuid !== 'string') {
+      return res.status(400).send('Invalid UUID');
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { uuid },
+    });
+
+    if (!user) {
+      return res.status(404).send('User not found');
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        contractAccepted: true,
+        contractSignedAt: new Date(),
+      },
+    });
+
+    await checkAndActivateUser(user.id);
+
+    res.send(`
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Signature Réussie</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #022c22, #064e3b);
+      font-family: 'Outfit', sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      color: #f1f5f9;
+      text-align: center;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.03);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 24px;
+      padding: 40px;
+      max-width: 400px;
+      width: 90%;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+    .icon {
+      font-size: 48px;
+      margin-bottom: 20px;
+    }
+    h1 {
+      font-size: 24px;
+      font-weight: 800;
+      color: #34d399;
+      margin: 0 0 10px 0;
+    }
+    p {
+      color: #a7f3d0;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+  </style>
+  <script>
+    setTimeout(() => {
+      window.close();
+    }, 2000);
+  </script>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">✅</div>
+    <h1>Contrat Signé !</h1>
+    <p>Votre contrat a été signé avec succès. Cette fenêtre va se fermer automatiquement.</p>
+  </div>
+</body>
+</html>
+    `);
+  })
+);
+
+router.get(
   '/contract-status',
   authenticate,
   asyncHandler(async (req, res) => {
@@ -1779,6 +2228,18 @@ router.get(
         data: {
           signed: false,
           hasTransaction: false,
+        },
+      });
+    }
+
+    if (user.damanesignTransactionId && user.damanesignTransactionId.startsWith('mock-tx-')) {
+      return res.json({
+        status: 'success',
+        data: {
+          signed: user.contractAccepted,
+          signedAt: user.contractSignedAt,
+          hasTransaction: true,
+          transactionId: user.damanesignTransactionId,
         },
       });
     }
@@ -1839,6 +2300,14 @@ router.get(
       throw new AppException(404, 'User not found');
     }
 
+    const maintenanceSettings = await fetchMaintenanceSettings();
+    let requiresManualApproval = false;
+    if (user.role.name === 'VENDOR') {
+      requiresManualApproval = maintenanceSettings.registrationBlocked;
+    } else if (user.role.name === 'INFLUENCER') {
+      requiresManualApproval = maintenanceSettings.influencerRegistrationBlocked;
+    }
+
     if (user.bankAccounts) {
       user.bankAccounts = user.bankAccounts.map((account: any) => ({
         ...account,
@@ -1865,6 +2334,7 @@ router.get(
           contractSignedAt: user.contractSignedAt,
           kycStatus: user.kycStatus,
           isActive: user.isActive,
+          requiresManualApproval,
           isInfluencer: user.isInfluencer || user.role.name === 'INFLUENCER',
           canImpersonate: user.canImpersonate,
           canManageProducts: user.canManageProducts,
@@ -1883,6 +2353,7 @@ router.get(
           referralCode: user.referralCode,
           bankAccounts: user.bankAccounts || [],
           emailVerified: !!user.emailVerifiedAt,
+          emailVerifiedAt: user.emailVerifiedAt,
           phoneVerified: !!user.phoneVerifiedAt,
           wallet: user.wallet ? {
             balanceMad: user.wallet.balanceMad,
@@ -1940,6 +2411,10 @@ router.post(
   '/logout',
   authenticate,
   asyncHandler(async (_req: Request, res: Response) => {
+    res.clearCookie('token', { path: '/' });
+    res.clearCookie('refreshToken', { path: '/' });
+    res.clearCookie('originalToken', { path: '/' });
+    res.clearCookie('originalRefreshToken', { path: '/' });
     res.json({
       status: 'success',
       message: 'Logged out successfully',
@@ -2149,13 +2624,47 @@ router.delete(
 );
 
 router.post(
-  '/logout',
+  '/revert-impersonate',
   (req: Request, res: Response) => {
-    res.clearCookie('token', { path: '/' });
-    res.clearCookie('refreshToken', { path: '/' });
+    const cookies = parseCookies(req.headers.cookie);
+    const originalToken = cookies['originalToken'];
+    const originalRefreshToken = cookies['originalRefreshToken'];
+
+    if (!originalToken || !originalRefreshToken) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'No active impersonation session found'
+      });
+    }
+
+    // Clear impersonation cookies
+    res.clearCookie('originalToken', { path: '/' });
+    res.clearCookie('originalRefreshToken', { path: '/' });
+
+    // Restore original tokens
+    res.cookie('token', originalToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.cookie('refreshToken', originalRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+
     res.json({
       status: 'success',
-      message: 'Logout successful',
+      message: 'Reverted impersonation successfully',
+      data: {
+        token: originalToken,
+        refreshToken: originalRefreshToken
+      }
     });
   }
 );

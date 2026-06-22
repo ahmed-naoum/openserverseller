@@ -22,5 +22,11 @@
   "link_success": "Lien généré avec succès !",
   "link_error": "Erreur lors de la génération du lien",
   "copied_success": "Lien copié dans le presse-papiers !",
-  "influencer_price": "Prix Influencer"
+  "influencer_price": "Prix Influencer",
+  "manage_links": "Gérer les liens",
+  "product_links_title": "Liens de Parrainage",
+  "selected_product": "Produit",
+  "error_loading_links": "Impossible de charger les liens",
+  "btn_create_another_link": "Créer un autre lien",
+  "no_links_created": "Aucun lien généré pour le moment"
 }

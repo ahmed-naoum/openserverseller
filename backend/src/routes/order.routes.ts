@@ -680,13 +680,24 @@ router.post(
       else if (normalizedColiatyPhone.startsWith('212')) normalizedColiatyPhone = '0' + normalizedColiatyPhone.slice(3);
       else if (!normalizedColiatyPhone.startsWith('0')) normalizedColiatyPhone = '0' + normalizedColiatyPhone;
 
-      let baseContent = product?.nameFr || product?.nameAr || 'Marchandise';
+      // Use pack name (productVariant) if available, combined with product name, otherwise fall back to product name
+      const packName = lead.productVariant || (order as any).productVariant;
+      const productName = product?.nameFr || product?.nameAr || '';
+      let baseContent = '';
+      if (productName && packName) {
+        baseContent = `${productName} - ${packName}`;
+      } else {
+        baseContent = packName || productName || 'Marchandise';
+      }
       if (baseContent.trim().length < 5) {
         baseContent = `${baseContent} - Colis`;
       }
       if (baseContent.trim().length < 5) {
         baseContent = 'Marchandise';
       }
+
+      // Extract package_note from the lead notes
+      const packageNote = lead.notes || '';
 
       return {
         package_reciever: order.customerName,
@@ -697,7 +708,7 @@ router.post(
         package_content: baseContent.substring(0, 100),
         package_no_open: false,
         package_replacement: false,
-        package_note: '',
+        package_note: packageNote,
         package_old_tracking: '',
       };
     });
@@ -972,7 +983,7 @@ router.post(
         data: {
           customerName: package_reciever || order.customerName,
           customerPhone: package_phone || order.customerPhone,
-          totalAmountMad: package_price ? Number(package_price) : order.totalAmountMad,
+          totalAmountMad: (package_price !== undefined && package_price !== null && package_price !== '') ? Number(package_price) : order.totalAmountMad,
           ...(request_type === 'CHANGE_DESTINATION' ? {
              customerCity: package_city,
              customerAddress: package_address
@@ -1080,7 +1091,7 @@ router.put(
         data: {
           customerName: package_reciever || order.customerName,
           customerPhone: package_phone || order.customerPhone,
-          totalAmountMad: package_price ? Number(package_price) : order.totalAmountMad,
+          totalAmountMad: (package_price !== undefined && package_price !== null && package_price !== '') ? Number(package_price) : order.totalAmountMad,
           customerCity: package_city || order.customerCity,
           customerAddress: package_addresse || order.customerAddress,
           packageContent: package_content || order.packageContent,

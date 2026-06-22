@@ -72,7 +72,7 @@ const callColiatyCreateParcel = async (parcelData: {
 };
 
 const getPackPrice = (lead: any) => {
-  if (lead.order?.totalAmountMad) {
+  if (lead.order?.totalAmountMad !== undefined && lead.order?.totalAmountMad !== null) {
     return Number(lead.order.totalAmountMad);
   }
   if (lead.productVariant && lead.referralLink?.landingPage?.customStructure) {
@@ -1043,7 +1043,8 @@ router.post(
       throw new AppException(400, 'Validation failed');
     }
 
-    const { fullName, phone, whatsapp, city, address, productId, notes, vendorId: bodyVendorId, sourceMode, package_replacement, package_old_tracking, package_note, customPrice, packName, skipColiaty, source } = req.body;
+    const { fullName, phone, whatsapp, city, address, productId, notes, vendorId: bodyVendorId, sourceMode, package_replacement, package_old_tracking, package_note, customPrice, packName, skipColiaty, source, qte } = req.body;
+    const qteNum = qte && Number(qte) > 0 ? Number(qte) : 1;
 
     // HELPER, CALL_CENTER_AGENT, and SUPER_ADMIN must supply a vendorId in the request body
     const needsVendorId = ['HELPER', 'CALL_CENTER_AGENT', 'SUPER_ADMIN'].includes(req.user!.roleName);
@@ -1061,14 +1062,14 @@ router.post(
       throw new AppException(404, 'Product not found');
     }
 
-    if (product.stockQuantity < 1) {
-      throw new AppException(400, `Stock insuffisant pour ce produit. (Disponible: ${product.stockQuantity})`);
+    if (product.stockQuantity < qteNum) {
+      throw new AppException(400, `Stock insuffisant pour ce produit. (Disponible: ${product.stockQuantity}, Demandé: ${qteNum})`);
     }
 
     // Pricing calculation (override with customPrice if provided)
-    const totalAmountMad = customPrice !== undefined && customPrice !== null && Number(customPrice) > 0 
+    const totalAmountMad = (customPrice !== undefined && customPrice !== null && customPrice !== '') 
       ? Number(customPrice) 
-      : product.retailPriceMad;
+      : product.retailPriceMad * qteNum;
     const commissionPercentage = parseFloat(process.env.PLATFORM_COMMISSION_PERCENTAGE || '15');
     const platformFeeMad = totalAmountMad * (commissionPercentage / 100);
     const vendorEarningMad = totalAmountMad - platformFeeMad;
@@ -1089,7 +1090,13 @@ router.post(
     else if (!normalizedColiatyPhone.startsWith('0')) normalizedColiatyPhone = '0' + normalizedColiatyPhone;
 
     // Coliaty requires package_content between 5 and 100 characters
-    let baseContent = packName ? String(packName) : (product.nameFr || product.nameAr || 'Marchandise');
+    const productName = product.nameFr || product.nameAr || '';
+    let baseContent = '';
+    if (productName && packName) {
+      baseContent = `${productName} - ${packName}`;
+    } else {
+      baseContent = packName ? String(packName) : (productName || 'Marchandise');
+    }
     let contentValue = baseContent;
     const details = [];
     if (product.sku) details.push(`SKU:${product.sku}`);
@@ -1156,7 +1163,7 @@ router.post(
           address,
           status: newLeadStatus,
           productVariant: packName || null,
-          notes: notes || `Lead inséré ${skipColiaty ? '(en attente d\'expédition)' : 'et poussé à Coliaty manuellement'} par l'agent.${package_note ? ` (Note Coliaty: ${package_note})` : ''}${package_replacement === true || package_replacement === 'true' ? ` [Replacement de: ${package_old_tracking}]` : ''}${packName ? ` [Nom du Pack: ${packName}]` : ''}${customPrice ? ` [Prix Custom: ${customPrice} MAD]` : ''}`,
+          notes: notes || `Lead inséré ${skipColiaty ? '(en attente d\'expédition)' : 'et poussé à Coliaty manuellement'} par l'agent.${package_note ? ` (Note Coliaty: ${package_note})` : ''}${package_replacement === true || package_replacement === 'true' ? ` [Replacement de: ${package_old_tracking}]` : ''}${packName ? ` [Nom du Pack: ${packName}]` : ''}${(customPrice !== undefined && customPrice !== null && customPrice !== '') ? ` [Prix Custom: ${customPrice} MAD]` : ''}`,
           sourceMode: sourceMode || 'VENDOR',
           source: source || 'MANUAL',
           assignedAgentId: req.user!.roleName === 'CALL_CENTER_AGENT' ? req.user!.id : null,
@@ -1187,8 +1194,10 @@ router.post(
             create: [
               {
                 productId: product.id,
-                quantity: 1,
-                unitPriceMad: product.retailPriceMad,
+                quantity: qteNum,
+                unitPriceMad: (customPrice !== undefined && customPrice !== null && customPrice !== '') 
+                  ? Number(customPrice) / qteNum 
+                  : product.retailPriceMad,
                 totalPriceMad: totalAmountMad,
               },
             ],
@@ -1199,7 +1208,7 @@ router.post(
       // 3. Decrement Product Stock
       await tx.product.update({
         where: { id: product.id },
-        data: { stockQuantity: { decrement: 1 } },
+        data: { stockQuantity: { decrement: qteNum } },
       });
 
       // 4. Record history logs
@@ -1819,14 +1828,22 @@ router.post(
       else if (!normalizedPhone.startsWith('0')) normalizedPhone = '0' + normalizedPhone;
       
       // Coliaty requires package_content between 5 and 100 characters
-      let baseContent = package_content || productToOrder.nameFr || productToOrder.nameAr || 'Marchandise';
       const finalVariant = productVariant || lead.productVariant;
+      const productName = productToOrder.nameFr || productToOrder.nameAr || '';
+      let baseContent = package_content;
+      if (!baseContent) {
+        if (productName && finalVariant) {
+          baseContent = `${productName} - ${finalVariant}`;
+        } else {
+          baseContent = finalVariant || productName || 'Marchandise';
+        }
+      }
       
       // Append SKU and Pack if available for better visibility in Coliaty
       let contentValue = baseContent;
       const details = [];
       if (productToOrder.sku) details.push(`SKU:${productToOrder.sku}`);
-      if (finalVariant) details.push(`PK:${finalVariant}`);
+      if (finalVariant && !baseContent.includes(finalVariant)) details.push(`PK:${finalVariant}`);
       
       if (details.length > 0) {
         contentValue = `${baseContent} (${details.join(' ')})`;
@@ -2306,15 +2323,21 @@ router.delete(
       throw new AppException(403, 'Not authorized to delete this assigned lead');
     }
 
-    // Must not be an order already
+    // Must not be pushed to Coliaty already
     const existingOrder = await prisma.order.findUnique({
       where: { leadId: lead.id }
     });
-    if (existingOrder) {
+    if (existingOrder && existingOrder.coliatyPackageCode) {
       throw new AppException(400, 'Cannot delete a lead that has already been pushed to delivery. Please cancel the order first.');
     }
 
     await prisma.$transaction(async (tx) => {
+      if (existingOrder) {
+        await tx.orderItem.deleteMany({ where: { orderId: existingOrder.id } });
+        await tx.orderStatusHistory.deleteMany({ where: { orderId: existingOrder.id } });
+        await tx.order.delete({ where: { id: existingOrder.id } });
+      }
+
       // Clean up lead assignments and history to allow delete
       await tx.leadAssignment.deleteMany({ where: { leadId: lead.id } });
       await tx.leadStatusHistory.deleteMany({ where: { leadId: lead.id } });

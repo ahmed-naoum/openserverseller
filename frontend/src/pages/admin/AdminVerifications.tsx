@@ -161,6 +161,16 @@ export default function AdminVerifications() {
     onError: () => toast.error('Erreur lors de la mise à jour bancaire'),
   });
 
+  const verifyBankManuallyMutation = useMutation({
+    mutationFn: ({ uuid, approved }: { uuid: string; approved?: boolean }) => 
+      adminApi.verifyBankManually(uuid, approved),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-verifications'] });
+      toast.success(variables.approved === false ? 'Vérification bancaire annulée' : 'Compte bancaire validé manuellement');
+    },
+    onError: () => toast.error('Erreur lors de la validation du compte bancaire'),
+  });
+
   const verifyUserMutation = useMutation({
     mutationFn: ({ uuid, isActive }: { uuid: string; isActive: boolean }) => 
       adminApi.verifyUser(uuid, isActive),
@@ -961,7 +971,7 @@ export default function AdminVerifications() {
                                       disabled={verifyBankMutation.isPending}
                                       className="flex-1 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md active:scale-95 disabled:opacity-50"
                                     >
-                                      Valider
+                                      Valider manuellement
                                     </button>
                                     <button
                                       onClick={() => verifyBankMutation.mutate({ id: ba.id, status: 'REJECTED' })}
@@ -976,9 +986,18 @@ export default function AdminVerifications() {
                             ))}
                           </div>
                         ) : (
-                          <div className="flex items-center gap-2 p-3 rounded-2xl bg-slate-50 border border-slate-100">
-                            <AlertCircle size={14} className="text-slate-400" />
-                            <span className="text-xs font-medium text-slate-400">Aucun compte bancaire enregistré</span>
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                              <AlertCircle size={14} className="text-slate-400" />
+                              <span className="text-xs font-medium text-slate-400">Aucun compte bancaire enregistré</span>
+                            </div>
+                            <button
+                              onClick={() => verifyBankManuallyMutation.mutate({ uuid: user.uuid, approved: true })}
+                              disabled={verifyBankManuallyMutation.isPending}
+                              className="w-full py-3 bg-gradient-to-r from-primary-500 to-indigo-600 hover:from-primary-600 hover:to-indigo-700 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-md active:scale-95 disabled:opacity-50"
+                            >
+                              {verifyBankManuallyMutation.isPending ? 'Validation...' : 'Valider manuellement'}
+                            </button>
                           </div>
                         )}
                       </div>

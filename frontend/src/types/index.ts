@@ -9,6 +9,7 @@ export interface User {
   roleName?: string;
   kycStatus: string;
   isActive: boolean;
+  requiresManualApproval?: boolean;
   mode?: 'SELLER' | 'AFFILIATE';
   isInfluencer?: boolean;
   instagramUsername?: string;

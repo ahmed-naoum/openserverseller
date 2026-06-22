@@ -87,6 +87,18 @@ export default function AdminLinks() {
     }
   };
 
+  const blockLink = async (link: ReferralLink, block: boolean) => {
+    try {
+      const newStatus = block ? 'SUSPENDED' : 'ACTIVE';
+      const newActive = !block;
+      await helperApi.updateLinkStatus(link.id, newActive, newStatus);
+      setLinks(prev => prev.map(l => l.id === link.id ? { ...l, isActive: newActive, status: newStatus } : l));
+      toast.success(block ? 'Lien bloqué avec succès !' : 'Lien débloqué avec succès !');
+    } catch {
+      toast.error('Impossible de modifier le statut de blocage du lien');
+    }
+  };
+
   const handleDeleteClick = (link: ReferralLink, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedLinkToDelete(link);
@@ -118,8 +130,9 @@ export default function AdminLinks() {
   const filtered = links.filter(link => {
     const matchesStatus =
       statusFilter === '' ||
-      (statusFilter === 'active' && link.isActive) ||
-      (statusFilter === 'inactive' && !link.isActive) ||
+      (statusFilter === 'active' && link.isActive && link.status !== 'SUSPENDED') ||
+      (statusFilter === 'inactive' && !link.isActive && link.status !== 'SUSPENDED') ||
+      (statusFilter === 'blocked' && link.status === 'SUSPENDED') ||
       (statusFilter === 'building' && link.status === 'BUILDING');
 
     const matchesInfluencer = influencerFilter === '' || link.influencer?.id === Number(influencerFilter);
@@ -261,6 +274,7 @@ export default function AdminLinks() {
                 <option value="">Tous les statuts</option>
                 <option value="active">Actifs</option>
                 <option value="inactive">Inactifs</option>
+                <option value="blocked">Bloqués</option>
                 <option value="building">En construction</option>
               </select>
             </div>
@@ -396,17 +410,24 @@ export default function AdminLinks() {
 
                         {/* Status Toggle */}
                         <td className="px-6 py-4 text-center" onClick={e => e.stopPropagation()}>
-                          <button
-                            onClick={() => toggleStatus(link)}
-                            className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 mx-auto ${
-                              link.isActive
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                                : 'bg-rose-50 text-rose-700 border border-rose-100'
-                            }`}
-                          >
-                            <Power size={10} />
-                            {link.isActive ? 'Actif' : 'Inactif'}
-                          </button>
+                          {link.status === 'SUSPENDED' ? (
+                            <span className="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 mx-auto bg-red-50 text-red-700 border border-red-100">
+                              <AlertTriangle size={10} />
+                              Bloqué
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => toggleStatus(link)}
+                              className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 mx-auto ${
+                                link.isActive
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                                  : 'bg-rose-50 text-rose-700 border border-rose-100'
+                              }`}
+                            >
+                              <Power size={10} />
+                              {link.isActive ? 'Actif' : 'Inactif'}
+                            </button>
+                          )}
                         </td>
 
                         {/* Actions */}
@@ -427,6 +448,24 @@ export default function AdminLinks() {
                             >
                               <Wand2 size={13} />
                             </button>
+
+                            {link.status === 'SUSPENDED' ? (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); blockLink(link, false); }}
+                                className="p-1.5 hover:bg-emerald-50 rounded-lg text-slate-400 hover:text-emerald-600 transition-colors"
+                                title="Débloquer le lien de parrainage"
+                              >
+                                <ShieldCheck size={13} />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); blockLink(link, true); }}
+                                className="p-1.5 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-600 transition-colors"
+                                title="Bloquer le lien de parrainage"
+                              >
+                                <AlertTriangle size={13} />
+                              </button>
+                            )}
 
                             <button
                               onClick={(e) => handleDeleteClick(link, e)}

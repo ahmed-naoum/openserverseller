@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { settingsApi } from '../../lib/api';
@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../../contexts/LanguageContext';
 import LanguageSwitcherWidget from '../../components/common/LanguageSwitcherWidget';
 import CguModal from '../../components/auth/CguModal';
-
+import { Turnstile } from '@marsidev/react-turnstile';
 
 interface FormErrors {
   fullName?: string;
@@ -64,6 +64,7 @@ const validateField = (name: string, value: string, allValues?: FormDataType): s
       if (!value.trim()) return 'name_required';
       if (value.trim().length < 4) return 'name_too_short';
       if (value.trim().length > 20) return 'name_too_long';
+      if (/[0-9]/.test(value)) return 'name_invalid_chars'; // Or a dedicated key like 'name_no_numbers' if translation exists
       return undefined;
     case 'email':
       if (!value) return 'email_required';
@@ -76,7 +77,14 @@ const validateField = (name: string, value: string, allValues?: FormDataType): s
     case 'instagramUsername':
     case 'tiktokUsername':
     case 'facebookUsername':
-      if (value && value.trim().includes(' ')) return 'username_no_spaces';
+    case 'youtubeUsername':
+    case 'snapchatUsername':
+      if (value) {
+        const trimmed = value.trim();
+        if (trimmed.includes(' ')) return 'username_no_spaces';
+        if (trimmed.length < 3) return 'username_too_short';
+        if (trimmed.length > 30) return 'username_too_long';
+      }
       return undefined;
     case 'password':
       if (!value) return 'password_required';
@@ -92,6 +100,9 @@ const validateField = (name: string, value: string, allValues?: FormDataType): s
       return undefined;
   }
 };
+
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || 
+  (import.meta.env.PROD ? "0x4AAAAAADmEpM-gki0llHcX" : "1x00000000000000000000AA");
 
 export default function RegisterPage() {
   const { language, t: tRaw } = useLanguage();
@@ -121,7 +132,9 @@ export default function RegisterPage() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const submittedRef = useRef(false);
   const [step, setStep] = useState(1);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   // Update role dynamically if URL changes without remounting the component
   useEffect(() => {
@@ -129,6 +142,7 @@ export default function RegisterPage() {
     if (formData.role !== newRole) {
       setFormData(prev => ({ ...prev, role: newRole }));
       setStep(1);
+      setTurnstileToken(null);
     }
   }, [pathname]);
 
@@ -217,19 +231,24 @@ export default function RegisterPage() {
     });
 
     if (!formData.email) {
-        newErrors.email = 'L\'adresse email est requise';
+        newErrors.email = 'email_required';
         isValid = false;
     }
     if (!formData.phone) {
-        newErrors.phone = 'Le numéro de téléphone est requis';
+        newErrors.phone = 'phone_required';
         isValid = false;
     }
 
     if (formData.role === 'INFLUENCER' && !formData.instagramUsername && !formData.tiktokUsername && !formData.facebookUsername && !formData.youtubeUsername && !formData.snapchatUsername) {
-        toast.error('Veuillez fournir au moins un réseau social');
+        toast.error(t('social_media_required'));
         isValid = false;
     }
     
+    if (!turnstileToken) {
+        toast.error('Veuillez valider le captcha');
+        isValid = false;
+    }
+
     setErrors(newErrors);
     
     const fieldsToTouch: Record<string, boolean> = { fullName: true, email: true, phone: true, password: true, confirmPassword: true };
@@ -254,14 +273,28 @@ export default function RegisterPage() {
         newTouched[field] = true;
       });
       if (!formData.email) {
-        newErrors.email = 'L\'adresse email est requise'; isValid = false;
+        newErrors.email = 'email_required'; isValid = false;
       }
       if (!formData.phone) {
-        newErrors.phone = 'Le numéro de téléphone est requis'; isValid = false;
+        newErrors.phone = 'phone_required'; isValid = false;
       }
     } else if (step === 2) {
-      if (!formData.instagramUsername && !formData.tiktokUsername && !formData.facebookUsername && !formData.youtubeUsername && !formData.snapchatUsername) {
-        toast.error('Veuillez fournir au moins un réseau social');
+      const socialFields = ['instagramUsername', 'tiktokUsername', 'facebookUsername', 'youtubeUsername', 'snapchatUsername'];
+      let hasAtLeastOne = false;
+      socialFields.forEach(field => {
+        const val = formData[field as keyof typeof formData] as string;
+        if (val) {
+          hasAtLeastOne = true;
+          const err = validateField(field, val, formData);
+          if (err) {
+            newErrors[field as keyof FormErrors] = err;
+            isValid = false;
+          }
+          newTouched[field] = true;
+        }
+      });
+      if (!hasAtLeastOne) {
+        toast.error(t('social_media_required'));
         isValid = false;
       }
     }
@@ -274,7 +307,9 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    if (!validateForm() || submittedRef.current) return;
+    
+    submittedRef.current = true;
 
     if (!cguAccepted) {
       const msg = language === 'ar' 
@@ -283,6 +318,11 @@ export default function RegisterPage() {
         ? "Veuillez accepter les Conditions Générales d'Utilisation (CGU) pour continuer."
         : 'Please accept the General Conditions of Use (CGU) to proceed.';
       toast.error(msg);
+      return;
+    }
+
+    if (!turnstileToken) {
+      toast.error(language === 'ar' ? 'الرجاء إكمال التحقق من الكابتشا' : 'Veuillez valider le captcha');
       return;
     }
 
@@ -308,18 +348,10 @@ export default function RegisterPage() {
             youtubeUrl: formData.youtubeUrl || undefined,
             snapchatUrl: formData.snapchatUrl || undefined,
             cguAccepted: true,
+            turnstileToken,
         });
         toast.success('Compte créateur créé avec succès ! Bienvenue 🎉');
-        
-        try {
-          const statusRes = await settingsApi.getMaintenanceStatus();
-          if (statusRes.data?.data?.influencerRegistrationBlocked) {
-            navigate('/pending-verification');
-            return;
-          }
-        } catch {}
- 
-        navigate('/influencer/verification');
+        navigate('/verify-email', { state: { email: formData.email } });
       } else {
         const user = await register({
             email: formData.email,
@@ -328,26 +360,17 @@ export default function RegisterPage() {
             fullName: formData.fullName,
             role: 'VENDOR',
             cguAccepted: true,
+            turnstileToken,
         });
         toast.success('Compte créé avec succès !');
-        
-        try {
-          const statusRes = await settingsApi.getMaintenanceStatus();
-          if (statusRes.data?.data?.registrationBlocked && !user.isActive) {
-            navigate('/pending-verification');
-            return;
-          }
-        } catch {}
-
-        if (user.roleName === 'SUPER_ADMIN' || user.roleName === 'FINANCE_ADMIN') navigate('/admin');
-        else if (user.roleName === 'CALL_CENTER_AGENT') navigate('/agent');
-        else if (user.roleName === 'GROSSELLER') navigate('/grosseller');
-        else navigate('/dashboard');
+        navigate('/verify-email', { state: { email: formData.email } });
       }
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Erreur lors de l'inscription");
+      setTurnstileToken(null);
     } finally {
       setIsLoading(false);
+      submittedRef.current = false;
     }
   };
 
@@ -372,8 +395,8 @@ export default function RegisterPage() {
   };
 
   const currentImage = formData.role === 'VENDOR' 
-    ? '/home page silacod copy/images/Bali.webp' 
-    : '/home page silacod copy/images/9b7eeea5895229f0b36694c175ab30ed89bceca4.webp';
+    ? '/images/login-seller-img.webp' 
+    : '/images/login-influencer-img.webp';
 
   return (
     <div dir={language === 'ar' ? 'rtl' : 'ltr'} className={`min-h-screen flex flex-col lg:flex-row font-['29LT_Kaff',_Cairo,_Inter,_sans-serif] bg-white overflow-x-hidden relative ${language === 'ar' ? 'text-right' : 'text-left'}`}>
@@ -451,7 +474,7 @@ export default function RegisterPage() {
                 <>
                   <div className="space-y-1.5">
                     <label className={`text-xs font-bold text-slate-700 flex justify-between ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>
-                        <span>{t('full_name_label')}</span>
+                        <span>{t('full_name_label')} <span className="text-[#ff5722]">*</span></span>
                         {touched.fullName && (errors.fullName ? <span className="text-red-500 text-[10px]">{t(errors.fullName)}</span> : <span className="text-green-500 text-[10px]">{t('field_valid')}</span>)}
                     </label>
                     <div className="relative group/input">
@@ -547,6 +570,9 @@ export default function RegisterPage() {
                                             <LinkIcon size={20} />
                                         </button>
                                     </div>
+                                    {touched.instagramUsername && errors.instagramUsername && (
+                                        <p className="text-red-500 text-[10px] font-bold mt-1">{t(errors.instagramUsername)}</p>
+                                    )}
                                     {showUrlInputs['instagram'] && (
                                         <div className="relative">
                                             <span className={`absolute inset-y-0 ${language === 'ar' ? 'right-0 pr-4' : 'left-0 pl-4'} flex items-center text-slate-400`}>
@@ -566,6 +592,9 @@ export default function RegisterPage() {
                                             <LinkIcon size={20} />
                                         </button>
                                     </div>
+                                    {touched.tiktokUsername && errors.tiktokUsername && (
+                                        <p className="text-red-500 text-[10px] font-bold mt-1">{t(errors.tiktokUsername)}</p>
+                                    )}
                                     {showUrlInputs['tiktok'] && (
                                         <div className="relative">
                                             <span className={`absolute inset-y-0 ${language === 'ar' ? 'right-0 pr-4' : 'left-0 pl-4'} flex items-center text-slate-400`}>
@@ -585,6 +614,9 @@ export default function RegisterPage() {
                                             <LinkIcon size={20} />
                                         </button>
                                     </div>
+                                    {touched.facebookUsername && errors.facebookUsername && (
+                                        <p className="text-red-500 text-[10px] font-bold mt-1">{t(errors.facebookUsername)}</p>
+                                    )}
                                     {showUrlInputs['facebook'] && (
                                         <div className="relative">
                                             <span className={`absolute inset-y-0 ${language === 'ar' ? 'right-0 pr-4' : 'left-0 pl-4'} flex items-center text-slate-400`}>
@@ -605,6 +637,9 @@ export default function RegisterPage() {
                                             <LinkIcon size={20} />
                                         </button>
                                     </div>
+                                    {touched.youtubeUsername && errors.youtubeUsername && (
+                                        <p className="text-red-500 text-[10px] font-bold mt-1">{t(errors.youtubeUsername)}</p>
+                                    )}
                                     {showUrlInputs['youtube'] && (
                                         <div className="relative">
                                             <span className={`absolute inset-y-0 ${language === 'ar' ? 'right-0 pr-4' : 'left-0 pl-4'} flex items-center text-slate-400`}>
@@ -624,6 +659,9 @@ export default function RegisterPage() {
                                             <LinkIcon size={20} />
                                         </button>
                                     </div>
+                                    {touched.snapchatUsername && errors.snapchatUsername && (
+                                        <p className="text-red-500 text-[10px] font-bold mt-1">{t(errors.snapchatUsername)}</p>
+                                    )}
                                     {showUrlInputs['snapchat'] && (
                                         <div className="relative">
                                             <span className={`absolute inset-y-0 ${language === 'ar' ? 'right-0 pr-4' : 'left-0 pl-4'} flex items-center text-slate-400`}>
@@ -642,7 +680,7 @@ export default function RegisterPage() {
               {(formData.role === 'VENDOR' || step === 3) && (
                 <div className="space-y-5 pt-2">
                     <div className="space-y-1.5">
-                      <label className={`text-sm font-bold text-slate-700 ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>{t('password_label')}</label>
+                      <label className={`text-sm font-bold text-slate-700 ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>{t('password_label')} <span className="text-[#ff5722]">*</span></label>
                       <div className="relative group/input">
                         <div className={`absolute ${language === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${formData.password.length > 0 && isPasswordStrong ? 'text-green-500' : 'text-slate-400'}`}>
                           <Lock size={20} />
@@ -700,7 +738,7 @@ export default function RegisterPage() {
                     </div>
  
                     <div className="space-y-1.5">
-                      <label className={`text-sm font-bold text-slate-700 ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>{t('repeat_password_label')}</label>
+                      <label className={`text-sm font-bold text-slate-700 ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>{t('repeat_password_label')} <span className="text-[#ff5722]">*</span></label>
                       <div className="relative group/input">
                         <div className={`absolute ${language === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${formData.confirmPassword.length > 0 && formData.confirmPassword === formData.password ? 'text-green-500' : 'text-slate-400'}`}>
                           <Lock size={20} />
@@ -758,6 +796,21 @@ export default function RegisterPage() {
                 </div>
               )}
  
+              {(formData.role === 'VENDOR' || step === 3) && (
+                <div className="flex justify-center mt-6">
+                  <Turnstile
+                    siteKey={TURNSTILE_SITE_KEY}
+                    onSuccess={(token) => setTurnstileToken(token)}
+                    onExpire={() => setTurnstileToken(null)}
+                    onError={() => setTurnstileToken(null)}
+                    options={{
+                      theme: 'light',
+                      language: language === 'ar' ? 'ar' : 'fr',
+                    }}
+                  />
+                </div>
+              )}
+
               <div className="pt-3 flex gap-3">
                 {formData.role === 'INFLUENCER' && step > 1 && (
                   <button

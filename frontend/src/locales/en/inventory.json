@@ -22,5 +22,11 @@
   "link_success": "Link generated successfully!",
   "link_error": "Error while generating the link",
   "copied_success": "Link copied to clipboard!",
-  "influencer_price": "Influencer Price"
+  "influencer_price": "Influencer Price",
+  "manage_links": "Manage links",
+  "product_links_title": "Referral Links",
+  "selected_product": "Product",
+  "error_loading_links": "Failed to load links",
+  "btn_create_another_link": "Create another link",
+  "no_links_created": "No links generated yet"
 }

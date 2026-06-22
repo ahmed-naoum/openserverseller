@@ -42,6 +42,37 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       console.log('🔴 Socket disconnected');
     });
 
+    newSocket.on('session:terminated', (data: { message?: string, blockedPath?: string }) => {
+      if (data.blockedPath) {
+        const blockedPages = JSON.parse(localStorage.getItem('blocked_pages') || '[]');
+        if (!blockedPages.includes(data.blockedPath)) {
+          blockedPages.push(data.blockedPath);
+          localStorage.setItem('blocked_pages', JSON.stringify(blockedPages));
+        }
+        
+        // If they are currently on that path, redirect them
+        if (data.blockedPath === '*' || window.location.pathname === data.blockedPath) {
+          const redirectPath = data.blockedPath === '*' ? 'all pages' : data.blockedPath;
+          window.location.href = `/blocked?path=${encodeURIComponent(redirectPath)}`;
+        }
+      }
+    });
+
+    newSocket.on('session:unblocked', (data: { path: string }) => {
+      const blockedPages = JSON.parse(localStorage.getItem('blocked_pages') || '[]');
+      const newBlocked = blockedPages.filter((p: string) => p !== data.path);
+      localStorage.setItem('blocked_pages', JSON.stringify(newBlocked));
+      
+      // If we are currently on the blocked page for this path, send them back
+      if (window.location.pathname === '/blocked') {
+        const params = new URLSearchParams(window.location.search);
+        const urlPath = params.get('path');
+        if (urlPath === data.path || (urlPath === 'all pages' && data.path === '*')) {
+          window.location.href = data.path === '*' ? '/' : data.path;
+        }
+      }
+    });
+
     newSocket.on('connect_error', (err) => {
       console.warn('Socket connection error:', err.message);
     });

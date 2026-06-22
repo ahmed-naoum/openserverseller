@@ -136,10 +136,15 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
                   <img 
                     src={resolveUrl(content.url)} 
                     alt="Block Content" 
-                    className="h-auto"
+                    className="h-auto w-full object-contain"
+                    loading="eager"
+                    // @ts-ignore
+                    fetchpriority="high"
+                    decoding="async"
                     style={{ 
                       width: content.width ? `${content.width}%` : '100%',
-                      maxHeight: content.maxHeight ? `${content.maxHeight}px` : 'none'
+                      maxHeight: content.maxHeight ? `${content.maxHeight}px` : 'none',
+                      minHeight: '200px' // Reduce CLS for images without strict heights
                     }}
                   />
                 ) : (
@@ -289,12 +294,13 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
                   marginBottom: `${content.marginBottom ?? 0}px`,
                   paddingLeft: `${content.paddingLeft ?? 16}px`,
                   paddingRight: `${content.paddingRight ?? 16}px`,
+                  minHeight: '650px', // FIX: Reserve space for checkout to prevent massive Cumulative Layout Shift (CLS)
                 }}
               >
                 {renderCheckout ? (
                   renderCheckout(content)
                 ) : (
-                  <div className="bg-white rounded-3xl p-8 border border-gray-200 shadow-xl opacity-80 pointer-events-none">
+                  <div className="bg-white rounded-3xl p-8 border border-gray-200 shadow-xl opacity-80 pointer-events-none h-full">
                     <h2 className="text-2xl font-black text-center mb-6">Commander Maintenant (Aperçu)</h2>
                     <div className="space-y-4">
                       <div className="h-12 bg-gray-50 rounded-xl border border-gray-200" />
