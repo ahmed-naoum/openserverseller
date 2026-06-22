@@ -18,6 +18,7 @@ import {
   ShieldAlert,
   Mail,
   Smartphone,
+  ChevronLeft,
   ChevronRight,
   Filter,
   Eye,
@@ -1720,7 +1721,7 @@ export default function AdminUsers() {
         </div>
 
         {/* Main Content Area: Sidebar + Table */}
-        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 items-start">
+        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 lg:items-start">
           
           {/* Left Sidebar Filter Panel */}
           <div className="w-full lg:w-72 xl:w-80 flex-shrink-0">
@@ -1810,7 +1811,7 @@ export default function AdminUsers() {
           </div>
 
         {/* Users Table Area */}
-        <div className="flex-1 min-w-0 overflow-hidden">
+        <div className="w-full lg:flex-1 min-w-0 overflow-hidden">
           {isLoading ? (
             <div className="flex items-center justify-center py-40">
                 <div className="flex flex-col items-center gap-4">
@@ -1819,7 +1820,7 @@ export default function AdminUsers() {
                 </div>
             </div>
           ) : (
-            <div className="bg-white rounded-2xl sm:rounded-3xl border-none shadow-xl overflow-hidden flex flex-col" style={{ maxHeight: 'calc(100vh - 14rem)' }}>
+            <div className="bg-white w-full rounded-2xl sm:rounded-3xl border-none shadow-xl overflow-hidden flex flex-col" style={{ maxHeight: 'calc(100vh - 14rem)' }}>
               <div className="overflow-auto flex-1 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-slate-50 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                 
                 {/* ── Mobile Card View ── */}
@@ -1883,58 +1884,73 @@ export default function AdminUsers() {
                       </div>
 
                       {/* Bottom: Actions */}
-                      <div className="flex items-center gap-2 pt-1">
-                        <button
-                          onClick={() => setEditingUser(user)}
-                          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-slate-50 border border-slate-100 text-slate-500 hover:text-primary-600 hover:bg-primary-50 text-[10px] font-black uppercase tracking-wider transition-all"
-                        >
-                          <Edit2 size={13} /> Modifier
-                        </button>
-                        {user.role !== 'SUPER_ADMIN' && (
+                      <div className="flex flex-col gap-2 pt-2 border-t border-slate-100/50 mt-2">
+                        {/* Primary actions: Edit & Impersonate */}
+                        <div className="flex gap-2">
                           <button
-                            onClick={() => handleImpersonate(user.id, user.role)}
-                            disabled={impersonatingId === user.id}
-                            className="py-2 px-3 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 hover:bg-indigo-600 hover:text-white text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1"
-                            title="Se connecter"
+                            onClick={() => setEditingUser(user)}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-50 border border-slate-100 text-slate-500 hover:text-primary-600 hover:bg-primary-50 text-[10px] font-black uppercase tracking-wider transition-all"
                           >
-                            {impersonatingId === user.id ? <Loader2 size={13} className="animate-spin" /> : <LogIn size={13} />}
-                            Assister
+                            <Edit2 size={13} /> Modifier
                           </button>
-                        )}
-                        <button
-                          onClick={() => user.isActive ? deactivateMutation.mutate(user.uuid) : activateMutation.mutate(user.uuid)}
-                          className={`py-2 px-3 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
-                            user.isActive 
-                              ? 'bg-rose-50 border-rose-100 text-rose-500' 
-                              : 'bg-emerald-50 border-emerald-100 text-emerald-500'
-                          }`}
-                        >
-                          <Power size={13} /> {user.isActive ? 'Off' : 'On'}
-                        </button>
-                        {user.role === 'CALL_CENTER_AGENT' && (
-                          <button onClick={() => setAssigningAgent(user)} className="py-2 px-3 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 text-[10px] font-black uppercase" title="Assigner">
-                            <Users size={13} />
+                          {user.role !== 'SUPER_ADMIN' && (
+                            <button
+                              onClick={() => handleImpersonate(user.id, user.role)}
+                              disabled={impersonatingId === user.id}
+                              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 hover:bg-indigo-600 hover:text-white text-[10px] font-black uppercase tracking-wider transition-all"
+                              title="Se connecter"
+                            >
+                              {impersonatingId === user.id ? <Loader2 size={13} className="animate-spin" /> : <LogIn size={13} />}
+                              Assister
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Secondary actions: Power toggle, Assign, and security buttons */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => user.isActive ? deactivateMutation.mutate(user.uuid) : activateMutation.mutate(user.uuid)}
+                            className={`flex-1 py-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
+                              user.isActive 
+                                ? 'bg-rose-50 border-rose-100 text-rose-500 hover:bg-rose-100/50' 
+                                : 'bg-emerald-50 border-emerald-100 text-emerald-500 hover:bg-emerald-100/50'
+                            }`}
+                          >
+                            <Power size={13} /> {user.isActive ? 'Suspendre' : 'Activer'}
                           </button>
-                        )}
-                        {user.role === 'HELPER' && (
-                          <button onClick={() => setAssigningHelper(user)} className="py-2 px-3 rounded-xl bg-orange-50 border border-orange-100 text-orange-500 text-[10px] font-black uppercase" title="Assigner">
-                            <Users size={13} />
+                          {user.role === 'CALL_CENTER_AGENT' && (
+                            <button 
+                              onClick={() => setAssigningAgent(user)} 
+                              className="py-2 px-3 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-all flex items-center justify-center shrink-0" 
+                              title="Assigner"
+                            >
+                              <Users size={13} />
+                            </button>
+                          )}
+                          {user.role === 'HELPER' && (
+                            <button 
+                              onClick={() => setAssigningHelper(user)} 
+                              className="py-2 px-3 rounded-xl bg-orange-50 border border-orange-100 text-orange-500 hover:bg-orange-600 hover:text-white transition-all flex items-center justify-center shrink-0" 
+                              title="Assigner"
+                            >
+                              <Users size={13} />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => { if (window.confirm('Réinitialiser la 2FA ?')) reset2FAMutation.mutate(user.uuid); }}
+                            className="py-2 px-3 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-amber-600 hover:bg-amber-50 hover:border-amber-100 transition-all flex items-center justify-center shrink-0"
+                            title="Reset 2FA"
+                          >
+                            <ShieldOff size={13} />
                           </button>
-                        )}
-                        <button
-                          onClick={() => { if (window.confirm('Réinitialiser la 2FA ?')) reset2FAMutation.mutate(user.uuid); }}
-                          className="py-2 px-3 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-amber-600 transition-all"
-                          title="Reset 2FA"
-                        >
-                          <ShieldOff size={13} />
-                        </button>
-                        <button
-                          onClick={() => { if (window.confirm('Générer un mot de passe ?')) { setTempUserForReset(user); sendPwResetMutation.mutate(user.uuid); } }}
-                          className="py-2 px-3 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-indigo-600 transition-all"
-                          title="Reset password"
-                        >
-                          <KeyIcon size={13} />
-                        </button>
+                          <button
+                            onClick={() => { if (window.confirm('Générer un mot de passe ?')) { setTempUserForReset(user); sendPwResetMutation.mutate(user.uuid); } }}
+                            className="py-2 px-3 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-100 transition-all flex items-center justify-center shrink-0"
+                            title="Reset password"
+                          >
+                            <KeyIcon size={13} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -2122,11 +2138,11 @@ export default function AdminUsers() {
               {/* Pagination */}
               {pagination.total > 0 && (
                 <div className="p-4 sm:p-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/50">
-                  <div className="flex items-center gap-3">
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider text-center sm:text-left">
                       Affichage de <span className="font-extrabold text-slate-800">{users.length}</span> sur <span className="font-extrabold text-slate-800">{pagination.total}</span> utilisateur(s)
                     </p>
-                    <div className="h-4 w-px bg-slate-200" />
+                    <div className="hidden sm:block h-4 w-px bg-slate-200" />
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Afficher :</span>
                       <select
@@ -2144,15 +2160,16 @@ export default function AdminUsers() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
                     <button
                       disabled={page === 1}
                       onClick={() => setPage(p => Math.max(1, p - 1))}
-                      className="px-4 py-2.5 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-700 bg-white border border-slate-100 rounded-xl transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                      className="px-2 sm:px-4 py-2 sm:py-2.5 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-700 bg-white border border-slate-100 rounded-xl transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 flex items-center justify-center gap-1"
                     >
-                      Précédent
+                      <ChevronLeft size={16} />
+                      <span className="hidden sm:inline">Précédent</span>
                     </button>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
                       {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((p) => {
                         const isFirst = p === 1;
                         const isLast = p === pagination.totalPages;
@@ -2169,7 +2186,7 @@ export default function AdminUsers() {
                           <button
                             key={p}
                             onClick={() => setPage(p)}
-                            className={`w-9 h-9 rounded-xl text-xs font-black transition-all flex items-center justify-center ${
+                            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl text-xs font-black transition-all flex items-center justify-center ${
                               page === p
                                 ? 'bg-[#2c2f74] text-white shadow-md shadow-primary-200 scale-105'
                                 : 'bg-white border border-slate-100 text-slate-500 hover:bg-slate-50'
@@ -2183,9 +2200,10 @@ export default function AdminUsers() {
                     <button
                       disabled={page === pagination.totalPages}
                       onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
-                      className="px-4 py-2.5 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-700 bg-white border border-slate-100 rounded-xl transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                      className="px-2 sm:px-4 py-2 sm:py-2.5 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-700 bg-white border border-slate-100 rounded-xl transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 flex items-center justify-center gap-1"
                     >
-                      Suivant
+                      <span className="hidden sm:inline">Suivant</span>
+                      <ChevronRight size={16} />
                     </button>
                   </div>
                 </div>
