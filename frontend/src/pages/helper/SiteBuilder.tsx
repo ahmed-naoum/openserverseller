@@ -50,12 +50,17 @@ export default function SiteBuilder() {
   type Snapshot = { blocks: EditorBlock[]; pageSettings: any };
   const historyRef = useRef<Snapshot[]>([]);
   const historyIndexRef = useRef(-1);
-  const isRestoringRef = useRef(false);
+  // Skip counter: when > 0, the next N useEffect fires from state changes are ignored (not pushed to history).
+  // This bridges the gap between synchronous undo/redo calls and async React setState renders.
+  const skipHistoryRef = useRef(0);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
   const pushHistory = useCallback((b: EditorBlock[], ps: any) => {
-    if (isRestoringRef.current) return;
+    if (skipHistoryRef.current > 0) {
+      skipHistoryRef.current -= 1;
+      return;
+    }
     const snap: Snapshot = { blocks: JSON.parse(JSON.stringify(b)), pageSettings: JSON.parse(JSON.stringify(ps)) };
     // Trim any redo entries beyond the current index
     const newHistory = historyRef.current.slice(0, historyIndexRef.current + 1);
@@ -70,24 +75,22 @@ export default function SiteBuilder() {
 
   const undo = useCallback(() => {
     if (historyIndexRef.current <= 0) return;
+    skipHistoryRef.current += 1;
     historyIndexRef.current -= 1;
     const snap = historyRef.current[historyIndexRef.current];
-    isRestoringRef.current = true;
     setBlocks(JSON.parse(JSON.stringify(snap.blocks)));
     setPageSettings(JSON.parse(JSON.stringify(snap.pageSettings)));
-    isRestoringRef.current = false;
     setCanUndo(historyIndexRef.current > 0);
     setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
   }, []);
 
   const redo = useCallback(() => {
     if (historyIndexRef.current >= historyRef.current.length - 1) return;
+    skipHistoryRef.current += 1;
     historyIndexRef.current += 1;
     const snap = historyRef.current[historyIndexRef.current];
-    isRestoringRef.current = true;
     setBlocks(JSON.parse(JSON.stringify(snap.blocks)));
     setPageSettings(JSON.parse(JSON.stringify(snap.pageSettings)));
-    isRestoringRef.current = false;
     setCanUndo(historyIndexRef.current > 0);
     setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
   }, []);
