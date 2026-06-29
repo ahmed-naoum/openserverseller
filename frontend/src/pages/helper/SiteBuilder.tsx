@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { helperApi, publicApi, uploadApi } from '../../lib/api';
@@ -8,7 +8,7 @@ import {
   Type, Image as ImageIcon, Heading, LayoutTemplate, Link as LinkIcon, 
   ShoppingCart, ArrowUp, ArrowDown, Trash2, Save, ChevronLeft, Loader2,
   Clock, Space, Upload, ShieldCheck, Plus, ExternalLink, Code, Copy, Download, MessageSquare,
-  Layers, GripVertical
+  Layers, GripVertical, Undo2, Redo2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -45,6 +45,83 @@ export default function SiteBuilder() {
   const [productData, setProductData] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
+
+  // ── Undo / Redo history ──
+  type Snapshot = { blocks: EditorBlock[]; pageSettings: any };
+  const historyRef = useRef<Snapshot[]>([]);
+  const historyIndexRef = useRef(-1);
+  const isRestoringRef = useRef(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  const pushHistory = useCallback((b: EditorBlock[], ps: any) => {
+    if (isRestoringRef.current) return;
+    const snap: Snapshot = { blocks: JSON.parse(JSON.stringify(b)), pageSettings: JSON.parse(JSON.stringify(ps)) };
+    // Trim any redo entries beyond the current index
+    const newHistory = historyRef.current.slice(0, historyIndexRef.current + 1);
+    newHistory.push(snap);
+    // Cap at 50 entries
+    if (newHistory.length > 50) newHistory.shift();
+    historyRef.current = newHistory;
+    historyIndexRef.current = newHistory.length - 1;
+    setCanUndo(historyIndexRef.current > 0);
+    setCanRedo(false);
+  }, []);
+
+  const undo = useCallback(() => {
+    if (historyIndexRef.current <= 0) return;
+    historyIndexRef.current -= 1;
+    const snap = historyRef.current[historyIndexRef.current];
+    isRestoringRef.current = true;
+    setBlocks(JSON.parse(JSON.stringify(snap.blocks)));
+    setPageSettings(JSON.parse(JSON.stringify(snap.pageSettings)));
+    isRestoringRef.current = false;
+    setCanUndo(historyIndexRef.current > 0);
+    setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
+  }, []);
+
+  const redo = useCallback(() => {
+    if (historyIndexRef.current >= historyRef.current.length - 1) return;
+    historyIndexRef.current += 1;
+    const snap = historyRef.current[historyIndexRef.current];
+    isRestoringRef.current = true;
+    setBlocks(JSON.parse(JSON.stringify(snap.blocks)));
+    setPageSettings(JSON.parse(JSON.stringify(snap.pageSettings)));
+    isRestoringRef.current = false;
+    setCanUndo(historyIndexRef.current > 0);
+    setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
+  }, []);
+
+  // Track changes with debounce to avoid spamming history on rapid typing
+  const historyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (loading) return;
+    if (historyTimerRef.current) clearTimeout(historyTimerRef.current);
+    historyTimerRef.current = setTimeout(() => {
+      pushHistory(blocks, pageSettings);
+    }, 400);
+    return () => { if (historyTimerRef.current) clearTimeout(historyTimerRef.current); };
+  }, [blocks, pageSettings, loading, pushHistory]);
+
+  // Keyboard shortcuts: Ctrl+Z / Ctrl+Shift+Z
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [undo, redo]);
 
   // JSON Input/Export states
   const [jsonInput, setJsonInput] = useState('');
@@ -352,7 +429,27 @@ export default function SiteBuilder() {
             <span className="font-bold text-gray-900">Constructeur de Page (BETA)</span>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* Undo / Redo */}
+          <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+            <button
+              onClick={undo}
+              disabled={!canUndo}
+              className="p-2 rounded-md hover:bg-white hover:shadow-sm text-gray-500 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:shadow-none transition-all"
+              title="Annuler (Ctrl+Z)"
+            >
+              <Undo2 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={redo}
+              disabled={!canRedo}
+              className="p-2 rounded-md hover:bg-white hover:shadow-sm text-gray-500 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:shadow-none transition-all"
+              title="Refaire (Ctrl+Shift+Z)"
+            >
+              <Redo2 className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="w-px h-6 bg-gray-200" />
           {referralCode && (
             <button 
               onClick={() => window.open(`/r/${referralCode}`, '_blank')}
