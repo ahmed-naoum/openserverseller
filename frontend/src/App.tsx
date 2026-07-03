@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import MaintenanceGuard from './components/MaintenanceGuard';
 import PageLoader from './components/PageLoader';
@@ -73,7 +73,7 @@ import InfluencerProfile from './pages/influencer/Profile';
 import InfluencerLinks from './pages/influencer/Links';
 import InfluencerCampaigns from './pages/influencer/Campaigns';
 import InfluencerLeads from './pages/influencer/Leads';
-import InfluencerMarketplace from './pages/influencer/Marketplace';
+const InfluencerMarketplace = lazy(() => import('./pages/influencer/Marketplace'));
 import InfluencerInventory from './pages/influencer/Inventory';
 import InfluencerNotifications from './pages/influencer/Notifications';
 import ConfirmationDashboard from './pages/confirmation/Dashboard';
@@ -272,7 +272,11 @@ function App() {
           <Route path="leads" element={<InfluencerLeads />} />
           <Route path="inventory" element={<InfluencerInventory />} />
           <Route path="notifications" element={<InfluencerNotifications />} />
-          <Route path="marketplace" element={<InfluencerMarketplace />} />
+          <Route path="marketplace" element={
+            <Suspense fallback={<PageLoader />}>
+              <InfluencerMarketplace />
+            </Suspense>
+          } />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
           <Route path="invoices" element={<UserInvoices />} />

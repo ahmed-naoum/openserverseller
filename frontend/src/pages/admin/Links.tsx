@@ -8,6 +8,7 @@ import {
   Filter, X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { buildReferralUrl } from '../../utils/referral';
 
 interface ReferralLink {
   id: number;
@@ -27,6 +28,7 @@ interface ReferralLink {
     email: string;
     phone?: string;
     fullName: string;
+    subdomain?: string | null;
   };
   landingPage?: any;
   rawClicks: number;
@@ -71,8 +73,9 @@ export default function AdminLinks() {
     }
   };
 
-  const copyLink = (code: string) => {
-    navigator.clipboard.writeText(`${window.location.origin}/r/${code}`);
+  const copyLink = (code: string, subdomain?: string | null) => {
+    const url = buildReferralUrl(code, subdomain);
+    navigator.clipboard.writeText(url);
     toast.success('Lien copié avec succès !');
   };
 
@@ -434,7 +437,7 @@ export default function AdminLinks() {
                         <td className="px-6 py-4 text-right" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1.5">
                             <button
-                              onClick={() => copyLink(link.code)}
+                              onClick={() => copyLink(link.code, link.influencer?.subdomain)}
                               className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-indigo-600 transition-colors"
                               title="Copier le lien d'affiliation"
                             >

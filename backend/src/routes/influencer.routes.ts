@@ -6,9 +6,12 @@ import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { v4 as uuidv4 } from 'uuid';
 import { io } from '../index.js';
 import { containsBlockedWord } from '../utils/blockedWords.js';
+import { validateInfluencerSubdomain } from '../utils/subdomain.js';
 
 const router = Router();
 const prisma = new PrismaClient();
+const recentClicks = new Map<string, number>();
+
 
 router.post(
   '/enable',
@@ -266,16 +269,25 @@ router.get(
         })
       ]);
 
-      // Calculate unique clicks (IP + User Agent)
+      // Calculate unique clicks (IP + User Agent) and whatsapp clicks
       const uniqueClicksSet = new Set();
+      let whatsappClicks = 0;
+      let rawViews = 0;
+
       clicksData.forEach((c: any) => {
-        uniqueClicksSet.add(`${c.ipAddress}-${c.userAgent || 'unknown'}`);
+        if (c.userAgent === 'whatsapp_click') {
+          whatsappClicks++;
+        } else {
+          rawViews++;
+          uniqueClicksSet.add(`${c.ipAddress}-${c.userAgent || 'unknown'}`);
+        }
       });
 
       return {
         ...link,
         clicks: uniqueClicksSet.size,
-        rawClicks: clicksData.length,
+        rawClicks: rawViews,
+        whatsappClicks,
         conversions: leadsCount,
         earnings: earningsSum._sum.amount || 0
       };
@@ -304,41 +316,52 @@ router.get(
     // Increment clicks with IP deduplication
     const ip = req.ip || req.socket.remoteAddress || 'unknown';
     const userAgent = req.headers['user-agent'];
+    const clickKey = `${link.id}-${ip}-${userAgent || 'unknown'}`;
+    const now = Date.now();
 
-    // Check if this IP + UserAgent has already clicked this link
-    const existingClick = await (prisma as any).referralLinkClick.findFirst({
-      where: {
-        referralLinkId: link.id,
-        ipAddress: ip,
-        userAgent: typeof userAgent === 'string' ? userAgent : null
-      }
-    });
+    const isDuplicate = recentClicks.has(clickKey) && (now - recentClicks.get(clickKey)!) < 10000;
 
-    await (prisma as any).referralLinkClick.create({
-      data: {
-        referralLinkId: link.id,
-        ipAddress: ip,
-        userAgent: typeof userAgent === 'string' ? userAgent : null
-      }
-    });
+    if (!isDuplicate) {
+      recentClicks.set(clickKey, now);
+      setTimeout(() => {
+        recentClicks.delete(clickKey);
+      }, 10000);
 
-    // Only increment the counter if it's a new IP
-    if (!existingClick) {
-      const updatedLink = await (prisma as any).referralLink.update({
-        where: { id: link.id },
-        data: { clicks: { increment: 1 } }
+      // Check if this IP + UserAgent has already clicked this link
+      const existingClick = await (prisma as any).referralLinkClick.findFirst({
+        where: {
+          referralLinkId: link.id,
+          ipAddress: ip,
+          userAgent: typeof userAgent === 'string' ? userAgent : null
+        }
       });
-      if (updatedLink.clicks === 100) {
-        try {
-          const { createNotification } = await import('../utils/notification.js');
-          await createNotification(
-            link.influencerId,
-            'REFERRAL_LINK_CLICKS',
-            '🎉 Objectif 100 visiteurs atteint !',
-            `Félicitations ! Votre lien de parrainage (${link.code}) a généré 100 visiteurs uniques !`
-          );
-        } catch (err) {
-          console.error('Failed to trigger clicks milestone notification:', err);
+
+      await (prisma as any).referralLinkClick.create({
+        data: {
+          referralLinkId: link.id,
+          ipAddress: ip,
+          userAgent: typeof userAgent === 'string' ? userAgent : null
+        }
+      });
+
+      // Only increment the counter if it's a new IP
+      if (!existingClick) {
+        const updatedLink = await (prisma as any).referralLink.update({
+          where: { id: link.id },
+          data: { clicks: { increment: 1 } }
+        });
+        if (updatedLink.clicks === 100) {
+          try {
+            const { createNotification } = await import('../utils/notification.js');
+            await createNotification(
+              link.influencerId,
+              'REFERRAL_LINK_CLICKS',
+              '🎉 Objectif 100 visiteurs atteint !',
+              `Félicitations ! Votre lien de parrainage (${link.code}) a généré 100 visiteurs uniques !`
+            );
+          } catch (err) {
+            console.error('Failed to trigger clicks milestone notification:', err);
+          }
         }
       }
     }
@@ -365,43 +388,58 @@ router.get(
       throw new AppException(404, 'Referral link or product not found or inactive');
     }
 
+    if (!validateInfluencerSubdomain(req, link.influencer.subdomain)) {
+      throw new AppException(404, 'Referral link or product not found or inactive');
+    }
+
     // Increment clicks (Unique - per IP)
     const ip = req.ip || req.socket.remoteAddress || 'unknown';
     const userAgent = req.headers['user-agent'];
+    const clickKey = `${link.id}-${ip}-${userAgent || 'unknown'}`;
+    const now = Date.now();
 
-    const existingClick = await (prisma as any).referralLinkClick.findFirst({
-      where: {
-        referralLinkId: link.id,
-        ipAddress: ip,
-        userAgent: typeof userAgent === 'string' ? userAgent : null
-      }
-    });
+    const isDuplicate = recentClicks.has(clickKey) && (now - recentClicks.get(clickKey)!) < 10000;
 
-    await (prisma as any).referralLinkClick.create({
-      data: {
-        referralLinkId: link.id,
-        ipAddress: ip,
-        userAgent: typeof userAgent === 'string' ? userAgent : null
-      }
-    });
+    if (!isDuplicate) {
+      recentClicks.set(clickKey, now);
+      setTimeout(() => {
+        recentClicks.delete(clickKey);
+      }, 10000);
 
-    // Only increment the click counter if it's a new IP
-    if (!existingClick) {
-      const updatedLink = await (prisma as any).referralLink.update({
-        where: { id: link.id },
-        data: { clicks: { increment: 1 } }
+      const existingClick = await (prisma as any).referralLinkClick.findFirst({
+        where: {
+          referralLinkId: link.id,
+          ipAddress: ip,
+          userAgent: typeof userAgent === 'string' ? userAgent : null
+        }
       });
-      if (updatedLink.clicks === 100) {
-        try {
-          const { createNotification } = await import('../utils/notification.js');
-          await createNotification(
-            link.influencerId,
-            'REFERRAL_LINK_CLICKS',
-            '🎉 Objectif 100 visiteurs atteint !',
-            `Félicitations ! Votre lien de parrainage (${link.code}) a généré 100 visiteurs uniques !`
-          );
-        } catch (err) {
-          console.error('Failed to trigger clicks milestone notification:', err);
+
+      await (prisma as any).referralLinkClick.create({
+        data: {
+          referralLinkId: link.id,
+          ipAddress: ip,
+          userAgent: typeof userAgent === 'string' ? userAgent : null
+        }
+      });
+
+      // Only increment the click counter if it's a new IP
+      if (!existingClick) {
+        const updatedLink = await (prisma as any).referralLink.update({
+          where: { id: link.id },
+          data: { clicks: { increment: 1 } }
+        });
+        if (updatedLink.clicks === 100) {
+          try {
+            const { createNotification } = await import('../utils/notification.js');
+            await createNotification(
+              link.influencerId,
+              'REFERRAL_LINK_CLICKS',
+              '🎉 Objectif 100 visiteurs atteint !',
+              `Félicitations ! Votre lien de parrainage (${link.code}) a généré 100 visiteurs uniques !`
+            );
+          } catch (err) {
+            console.error('Failed to trigger clicks milestone notification:', err);
+          }
         }
       }
     }
@@ -436,10 +474,14 @@ router.post(
 
     const link = await (prisma as any).referralLink.findUnique({
       where: { code: code as string },
-      select: { id: true }
+      include: { influencer: { select: { subdomain: true } } }
     });
 
     if (!link) {
+      throw new AppException(404, 'Referral link not found');
+    }
+
+    if (!validateInfluencerSubdomain(req, link.influencer?.subdomain)) {
       throw new AppException(404, 'Referral link not found');
     }
 
@@ -1181,6 +1223,13 @@ router.get(
       include: {
         referralLink: {
           include: {
+            influencer: {
+              select: {
+                id: true,
+                email: true,
+                profile: { select: { fullName: true } }
+              }
+            },
             product: {
               select: {
                 id: true,
@@ -1521,6 +1570,7 @@ router.get(
             id: true, 
             email: true,
             phone: true,
+            subdomain: true,
             profile: { select: { fullName: true } }
           }
         }

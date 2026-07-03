@@ -1530,7 +1530,7 @@ export default function DashboardLayout() {
         </header>
 
         {/* Page content */}
-        <div className="flex-1 overflow-y-auto relative px-3 sm:px-4 lg:px-6 py-3 sm:py-4 min-h-[calc(100vh-56px)]">
+        <div className="flex-1 relative px-3 sm:px-4 lg:px-6 py-3 sm:py-4 min-h-[calc(100vh-56px)]">
           {/* Background Mesh for content area */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40">
             <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary-400/5 rounded-full blur-[100px]" />

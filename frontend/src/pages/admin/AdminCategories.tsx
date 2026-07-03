@@ -112,7 +112,9 @@ export default function AdminCategories() {
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">{cat.nameFr}</div>
-                          <div className="text-xs text-gray-500">{cat.nameAr}</div>
+                          <div className="text-xs text-gray-500">
+                            {cat.nameEn ? `${cat.nameEn} | ` : ''}{cat.nameAr}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -299,7 +301,7 @@ function CategoryModal({ isOpen, onClose, category, allCategories, onSuccess }: 
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Nom (Français) *</label>
                   <input
@@ -307,8 +309,19 @@ function CategoryModal({ isOpen, onClose, category, allCategories, onSuccess }: 
                     required
                     value={formData.nameFr}
                     onChange={(e) => setFormData({ ...formData, nameFr: e.target.value })}
-                    className="input"
+                    className="input text-xs"
                     placeholder="Cosmétiques"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nom (English) *</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.nameEn}
+                    onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
+                    className="input text-xs"
+                    placeholder="Cosmetics"
                   />
                 </div>
                 <div>
@@ -319,7 +332,7 @@ function CategoryModal({ isOpen, onClose, category, allCategories, onSuccess }: 
                     dir="rtl"
                     value={formData.nameAr}
                     onChange={(e) => setFormData({ ...formData, nameAr: e.target.value })}
-                    className="input"
+                    className="input text-xs"
                     placeholder="مستحضرات التجميل"
                   />
                 </div>

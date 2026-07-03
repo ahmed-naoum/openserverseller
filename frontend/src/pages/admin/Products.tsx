@@ -310,10 +310,6 @@ export default function AdminProducts() {
                       <td className="py-5 px-6">
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
-                            <span className="w-8 text-[9px] font-black text-slate-300">COÛT</span>
-                            <span className="text-xs font-black text-slate-600">{Number(product.baseCostMad).toLocaleString()} MAD</span>
-                          </div>
-                          <div className="flex items-center gap-2">
                             <span className="w-8 text-[9px] font-black text-primary-400">VTE</span>
                             <span className="text-xs font-black text-primary-600">{Number(product.retailPriceMad).toLocaleString()} MAD</span>
                           </div>

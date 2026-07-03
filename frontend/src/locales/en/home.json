@@ -11,6 +11,7 @@
   "go_to_dashboard": "Go to dashboard",
   "start_influencer": "Start now as an influencer",
   "start_selling": "Start selling now",
+  "start_now_free": "Start now for free",
   "stats_title": "Numbers reflecting the platform's strength and user trust",
   "stats_desc": "Thousands of orders, hundreds of products, and a growing network of sellers and marketers work daily on SILACOD to build a simpler and more professional e-commerce.",
   "morocco_coverage": "Coverage of all Moroccan cities",
@@ -136,5 +137,7 @@
   "story3_placeholder": "Video Coming Soon",
   "story3_text": "I chose products from the platform and started promoting them. Every successfully delivered order gives me a commission. I earn without buying or storing inventory.",
   "banner_influencer_cta": "Start Now as an Influencer",
-  "banner_seller_cta": "Start Selling Now"
+  "banner_seller_cta": "Start Selling Now",
+  "best_seller_fire": "Best Seller 🔥",
+  "wholesale_price": "Wholesale Price"
 }

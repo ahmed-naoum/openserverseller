@@ -16,6 +16,7 @@ type StepStatus = 'COMPLETED' | 'IN_PROGRESS' | 'PENDING' | 'LOCKED' | 'REJECTED
 
 // ─── Helper: compute verification progress ─────────────────────────────
 export function getVerificationStatus(user: any) {
+  const hasSubdomain = !!user?.subdomain;
   const emailVerified = !!user?.emailVerified;
   const kycStatus = user?.kycStatus || 'PENDING';
   const contractAccepted = !!user?.contractAccepted;
@@ -27,11 +28,12 @@ export function getVerificationStatus(user: any) {
   const allBanksRejected = hasBankAccounts && user.bankAccounts.every((ba: any) => ba.status === 'REJECTED');
   const anyBankApproved = user?.bankAccounts?.some((ba: any) => ba.status === 'APPROVED');
   const anyBankPending = user?.bankAccounts?.some((ba: any) => ba.status === 'PENDING');
-  const bankDone = anyBankApproved; // For final completion
-  const bankUnlockingContract = anyBankApproved || anyBankPending; // To allow signing while pending
 
   const steps = {
-    email: emailVerified ? 'COMPLETED' as StepStatus : 'PENDING' as StepStatus,
+    subdomain: hasSubdomain ? 'COMPLETED' as StepStatus : 'PENDING' as StepStatus,
+    email: emailVerified 
+      ? 'COMPLETED' as StepStatus 
+      : (hasSubdomain ? 'PENDING' as StepStatus : 'LOCKED' as StepStatus),
     identity: identityDone ? 'COMPLETED' as StepStatus
       : identityInProgress ? 'IN_PROGRESS' as StepStatus
       : (kycStatus === 'REJECTED' ? 'REJECTED' as StepStatus : (emailVerified ? 'PENDING' as StepStatus : 'LOCKED' as StepStatus)),
@@ -48,10 +50,152 @@ export function getVerificationStatus(user: any) {
   };
 
   const completed = Object.values(steps).filter(s => s === 'COMPLETED').length;
-  const total = 4;
+  const total = 5;
   const percentage = Math.round((completed / total) * 100);
 
   return { steps, completed, total, percentage };
+}
+
+// ─── Subdomain Configuration Form ────────────────────────────────────
+function SubdomainConfigurationForm({ onComplete }: { onComplete: () => void }) {
+  const { user } = useAuth();
+  const { t } = useLanguage();
+  const tVerif = (key: string, fallback?: string) => t(key, 'verification', fallback);
+
+  const [subdomain, setSubdomain] = useState(user?.subdomain || '');
+  const [checking, setChecking] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'available' | 'taken' | 'invalid' | 'reserved' | 'blocked'>('idle');
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!subdomain) {
+      setStatus('idle');
+      setFeedbackMessage('');
+      return;
+    }
+
+    const cleaned = subdomain.trim().toLowerCase();
+    if (cleaned.length < 3 || cleaned.length > 30) {
+      setStatus('invalid');
+      setFeedbackMessage(tVerif('subdomain_invalid', 'Only lowercase letters, numbers, and hyphens are allowed (3-30 chars).'));
+      return;
+    }
+
+    if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(cleaned)) {
+      setStatus('invalid');
+      setFeedbackMessage(tVerif('subdomain_invalid', 'Only lowercase letters, numbers, and hyphens are allowed (3-30 chars).'));
+      return;
+    }
+
+    setChecking(true);
+    setStatus('idle');
+    const delayDebounce = setTimeout(async () => {
+      try {
+        const response = await authApi.checkSubdomain(cleaned);
+        const data = response.data;
+        if (data.available) {
+          setStatus('available');
+          setFeedbackMessage(tVerif('subdomain_available', 'This subdomain name is available!'));
+        } else {
+          if (data.message && (data.message.includes('réservé') || data.message.includes('reserved'))) {
+            setStatus('reserved');
+          } else {
+            setStatus('taken');
+          }
+          setFeedbackMessage(data.message || tVerif('subdomain_taken', 'This subdomain is already taken. Please try another.'));
+        }
+      } catch (err: any) {
+        setStatus('taken');
+        setFeedbackMessage(err.response?.data?.message || tVerif('subdomain_taken', 'This subdomain is already taken. Please try another.'));
+      } finally {
+        setChecking(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(delayDebounce);
+  }, [subdomain]);
+
+  const handleSave = async () => {
+    if (status !== 'available') return;
+    setSaving(true);
+    try {
+      await authApi.saveSubdomain(subdomain.trim().toLowerCase());
+      toast.success(tVerif('subdomain_toast_success', 'Subdomain configured successfully!'));
+      onComplete();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || tVerif('subdomain_toast_error', 'Failed to save subdomain.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const currentHost = window.location.host;
+  const domainSuffix = currentHost.replace(/^www\./, '');
+
+  return (
+    <div className="space-y-6 max-w-md mx-auto py-4">
+      <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3 shadow-sm">
+        <h4 className="text-sm font-bold text-slate-800">
+          {tVerif('subdomain_title', 'Custom Subdomain')}
+        </h4>
+        <p className="text-xs text-slate-600 leading-relaxed">
+          {tVerif('subdomain_desc', 'Set your personalized subdomain name to host your landing pages and product offers')}
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs font-bold text-slate-700">
+          {tVerif('subdomain_label', 'Choose your Subdomain name')}
+        </label>
+        <div className="relative flex items-center rounded-xl border-2 border-slate-200 bg-white focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/20 transition-all overflow-hidden">
+          <input
+            type="text"
+            value={subdomain}
+            onChange={(e) => setSubdomain(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+            disabled={saving || !!user?.subdomain}
+            placeholder={tVerif('subdomain_placeholder', 'my-store')}
+            className="w-full bg-transparent px-4 py-3 text-sm focus:outline-none text-slate-800 font-medium placeholder:text-slate-400"
+          />
+          <span className="flex-shrink-0 text-xs font-semibold text-slate-500 border-l border-slate-200 px-4 py-3 bg-slate-50">
+            .{domainSuffix}
+          </span>
+        </div>
+
+        {checking && (
+          <p className="text-[11px] text-slate-600 flex items-center gap-1.5 px-1 font-medium">
+            <Loader2 size={12} className="animate-spin" />
+            {tVerif('subdomain_checking', 'Checking availability...')}
+          </p>
+        )}
+        {!checking && status === 'available' && (
+          <p className="text-[11px] text-emerald-600 font-semibold px-1">
+            ✓ {feedbackMessage}
+          </p>
+        )}
+        {!checking && (status === 'taken' || status === 'invalid' || status === 'reserved' || status === 'blocked') && (
+          <p className="text-[11px] text-rose-600 font-semibold px-1">
+            ⚠ {feedbackMessage}
+          </p>
+        )}
+
+        <p className="text-[11px] text-slate-500 px-1 pt-1 italic">
+          {tVerif('subdomain_suffix', 'Your links will look like: {subdomain}.silacod.ma/r/link-code').replace('{subdomain}', subdomain || 'your-store')}
+        </p>
+      </div>
+
+      {!user?.subdomain && (
+        <button
+          onClick={handleSave}
+          disabled={status !== 'available' || saving}
+          className="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold text-sm py-3 px-4 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-primary-600/10 hover:shadow-primary-600/20 active:scale-[0.98] transition-all"
+        >
+          {saving ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+          {tVerif('subdomain_btn_save', 'Confirm Subdomain')}
+        </button>
+      )}
+    </div>
+  );
 }
 
 // ─── OTP Email Verification Form ─────────────────────────────────────
@@ -806,28 +950,6 @@ function ContractSigningForm({ onComplete }: { onComplete: () => void }) {
 
   const [loading, setLoading] = useState(false);
   const [accepted, setAccepted] = useState(false);
-  const [signingUrl, setSigningUrl] = useState<string | null>(null);
-  const [isPolling, setIsPolling] = useState(false);
-  const pollingRef = useRef<any>(null);
-
-  const startPolling = () => {
-    if (pollingRef.current) clearInterval(pollingRef.current);
-    setIsPolling(true);
-    pollingRef.current = setInterval(async () => {
-      try {
-        const res = await api.get('/auth/contract-status');
-        if (res.data?.data?.signed) {
-          clearInterval(pollingRef.current);
-          setIsPolling(false);
-          toast.success(tVerif('contract_toast_success', 'Contrat signé avec succès !'));
-          await refreshUser();
-          onComplete();
-        }
-      } catch (err) {
-        console.error('Error polling contract status:', err);
-      }
-    }, 4000);
-  };
 
   useEffect(() => {
     const checkStatus = async () => {
@@ -835,18 +957,12 @@ function ContractSigningForm({ onComplete }: { onComplete: () => void }) {
         const res = await api.get('/auth/contract-status');
         if (res.data?.data?.signed) {
           onComplete();
-        } else if (res.data?.data?.hasTransaction) {
-          startPolling();
         }
       } catch (err) {
         console.error('Error checking contract status:', err);
       }
     };
     checkStatus();
-
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    };
   }, []);
 
   const handleSign = async () => {
@@ -854,14 +970,12 @@ function ContractSigningForm({ onComplete }: { onComplete: () => void }) {
     setLoading(true);
     try {
       const res = await api.post('/auth/sign-contract');
-      const url = res.data?.data?.signatureUrl;
-      if (url) {
-        setSigningUrl(url);
-        window.open(url, '_blank');
-        startPolling();
-        toast.success(tVerif('contract_toast_open_new', 'Veuillez signer le document dans la nouvelle fenêtre.'));
+      if (res.data?.data?.signed) {
+        toast.success(tVerif('contract_toast_success', 'Contrat signé avec succès !'));
+        await refreshUser();
+        onComplete();
       } else {
-        toast.error(tVerif('contract_toast_fail_link', 'Impossible de générer le lien de signature.'));
+        toast.error(tVerif('contract_toast_fail_link', 'Impossible de valider la signature.'));
       }
     } catch (err: any) {
       toast.error(err?.response?.data?.message || tVerif('contract_toast_error', 'Erreur lors de la préparation du contrat'));
@@ -870,68 +984,13 @@ function ContractSigningForm({ onComplete }: { onComplete: () => void }) {
     }
   };
 
-  const getContractContent = () => {
-    const role = user?.role;
-    const textAlign = language === 'ar' ? 'text-right' : 'text-left';
-    
-    const generalText = `
-      <div class="mt-6 pt-6 border-t border-slate-100">
-        <h4 class="font-black text-slate-900 mb-3 ${textAlign}">${tVerif('contract_general_title', '4. نص مشترك لجميع المستخدمين (General)')}</h4>
-        <div class="${textAlign} text-slate-600 text-sm leading-relaxed space-y-2">
-          <p><strong>${tVerif('contract_general_subtitle', 'الأمان والملكية الفكرية:')}</strong></p>
-          <p>${tVerif('contract_general_p1', '• جميع البرمجيات والأنظمة والذكاء الاصطناعي المشغل للمنصة هي ملكية حصرية لشركة Silacod.')}</p>
-          <p>${tVerif('contract_general_p2', '• باستخدامك للمنصة، فإنك توافق على التوقيع الرقمي على العقود والوصولات عبر خدمة Damanesign المدمجة، وتعتبر هذه التوقيعات ملزمة قانوناً.')}</p>
-          <p>${tVerif('contract_general_p3', '• تخضع جميع النزاعات التجارية للقانون المغربي، ويكون الاختصاص الحصري لمحاكم مدينة الدار البيضاء.')}</p>
-        </div>
-      </div>
-    `;
-
-    if (role === 'VENDOR') {
-      return `
-        <div class="space-y-4">
-          <h4 class="font-black text-slate-900 mb-3 ${textAlign}">${tVerif('contract_vendor_title', '1. لتجار الجملة (Wholesalers)')}</h4>
-          <div class="${textAlign} text-slate-600 text-sm leading-relaxed space-y-2">
-            <p><strong>${tVerif('contract_vendor_subtitle', 'شروط العرض والتوريد:')}</strong></p>
-            <p>${tVerif('contract_vendor_p1', '• يتعهد تاجر الجملة بأن جميع المنتجات المعروضة أصلية ومطابقة للصور والأوصاف المقدمة.')}</p>
-            <p>${tVerif('contract_vendor_p2', '• يجب تحديث حالة المخزون بصفة دورية؛ المنصة غير مسؤولة عن الطلبات التي تتم على منتجات غير متوفرة.')}</p>
-            <p>${tVerif('contract_vendor_p3', '• يقر التاجر بمسؤوليته القانونية الكاملة عن جودة المنتج وعيوبه الخفية وفقاً للقانون المغربي.')}</p>
-            <p>${tVerif('contract_vendor_p4', '• يتم تحصيل مستحقات التاجر بعد تأكيد استلام الزبون النهائي للمنتج وانقضاء فترة الاسترجاع القانونية.')}</p>
-          </div>
-          ${generalText}
-        </div>
-      `;
+  const getContractPreviewUrl = () => {
+    if (BACKEND_URL.includes('localhost:3001')) {
+      return `/api/v1/auth/contract-preview?token=${localStorage.getItem('accessToken')}`;
     }
-
-    if (role === 'INFLUENCER') {
-      return `
-        <div class="space-y-4">
-          <h4 class="font-black text-slate-900 mb-3 ${textAlign}">${tVerif('contract_influencer_title', '2. للمؤثرين (Influencers)')}</h4>
-          <div class="${textAlign} text-slate-600 text-sm leading-relaxed space-y-2">
-            <p><strong>${tVerif('contract_influencer_subtitle', 'ميثاق الترويج والعمولة:')}</strong></p>
-            <p>${tVerif('contract_influencer_p1', '• يلتزم المؤثر بالترويج للمنتجات بطريقة مهنية وعدم تقديم وعود كاذبة للمستهلكين.')}</p>
-            <p>${tVerif('contract_influencer_p2', '• جميع المحتويات التسويقية (صور/فيديوهات) التي توفرها المنصة هي ملكية فكرية محمية، ويُسمح باستخدامها فقط داخل نطاق حملات Silacod.')}</p>
-            <p>${tVerif('contract_influencer_p3', '• لا تظهر المنتجات التي يتم اختيارها (Claimed) في حساب المؤثر إلا بعد مراجعة وقبول فريق الدعم التقني للمنصة.')}</p>
-            <p>${tVerif('contract_influencer_p4', '• يتم احتساب العمولات بناءً على المبيعات المحققة والمدفوعة فعلياً، وتُصرف وفق الجدول الزمني المحدد في لوحة التحكم.')}</p>
-          </div>
-          ${generalText}
-        </div>
-      `;
-    }
-
-    return `
-      <div class="space-y-4">
-        <h4 class="font-black text-slate-900 mb-3 ${textAlign}">${tVerif('contract_seller_title', '3. للبائعين (Sellers)')}</h4>
-        <div class="${textAlign} text-slate-600 text-sm leading-relaxed space-y-2">
-          <p><strong>${tVerif('contract_seller_subtitle', 'إدارة المبيعات والطلبات:')}</strong></p>
-          <p>${tVerif('contract_seller_p1', '• يقر "البائع" بأن دوره يقتصر على تسويق وبيع المنتجات المتوفرة في مستودعات المنصة/الموردين فقط، ولا يحق له إضافة منتجات خارجية.')}</p>
-          <p>${tVerif('contract_seller_p2', '• جميع الطلبات المودعة تخضع للتدقيق من قبل إدارة المنصة قبل إرسالها لشركة الشحن.')}</p>
-          <p>${tVerif('contract_seller_p3', '• يلتزم البائع بحماية خصوصية بيانات الزبائن (Leads) وعدم استخدامها خارج إطار إتمام عملية البيع عبر المنصة، وذلك تماشياً مع قوانين الـ CNDP.')}</p>
-          <p>${tVerif('contract_seller_p4', '• أي محاولة للتلاعب بالنظام أو التحايل على العمولات تؤدي لإيقاف الحساب فوراً.')}</p>
-        </div>
-        ${generalText}
-      </div>
-    `;
+    return `${BACKEND_URL}/api/v1/auth/contract-preview?token=${localStorage.getItem('accessToken')}`;
   };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
@@ -941,7 +1000,7 @@ function ContractSigningForm({ onComplete }: { onComplete: () => void }) {
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{tVerif('contract_preview_desc', 'Le contrat sera personnalisé avec vos informations (Nom, CIN, Adresse, RIB)')}</p>
           </div>
           <a
-            href={`${BACKEND_URL}/api/v1/auth/contract-preview?token=${localStorage.getItem('accessToken')}`}
+            href={getContractPreviewUrl()}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-xl font-bold text-xs transition-all shadow-sm group"
@@ -951,86 +1010,43 @@ function ContractSigningForm({ onComplete }: { onComplete: () => void }) {
           </a>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-5 max-h-[300px] overflow-y-auto custom-scrollbar shadow-inner" 
-             dangerouslySetInnerHTML={{ __html: getContractContent() }} 
-             dir={language === 'ar' ? 'rtl' : 'ltr'} />
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-inner">
+          <iframe
+            src={getContractPreviewUrl()}
+            className="w-full border-0"
+            style={{ height: '500px' }}
+            title="Contract Preview"
+          />
+        </div>
       </div>
 
-      {isPolling ? (
-        <div className="bg-blue-50/70 border-2 border-blue-100 rounded-2xl p-6 flex flex-col items-center justify-center text-center gap-4 animate-in fade-in zoom-in duration-300">
-          <div className="relative flex items-center justify-center">
-            <span className="animate-ping absolute inline-flex h-8 w-8 rounded-full bg-blue-400 opacity-75"></span>
-            <div className="relative rounded-full bg-blue-500 p-2 text-white">
-              <Loader2 className="animate-spin" size={20} />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <h4 className="text-sm font-black text-slate-800 uppercase tracking-wider">{tVerif('contract_waiting_sig', 'Attente de signature électronique...')}</h4>
-            <p className="text-xs text-slate-500 max-w-sm">
-              {tVerif('contract_waiting_sig_desc', 'Veuillez compléter la signature du contrat sur la plateforme sécurisée {platform}. Une fois terminé, cette page se mettra à jour automatiquement.').replace('{platform}', 'DamaneSign')}
-            </p>
-          </div>
-          {signingUrl && (
-            <button
-              onClick={() => window.open(signingUrl, '_blank')}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs transition-all shadow-md shadow-blue-500/10"
-            >
-              {tVerif('contract_btn_open_page', 'Ouvrir la page de signature')}
-            </button>
-          )}
-          <button
-            onClick={async () => {
-              setLoading(true);
-              try {
-                const res = await api.post('/auth/sign-contract');
-                const url = res.data?.data?.signatureUrl;
-                if (url) {
-                  setSigningUrl(url);
-                  window.open(url, '_blank');
-                  startPolling();
-                }
-              } catch (err: any) {
-                toast.error(err?.response?.data?.message || 'Erreur');
-              } finally {
-                setLoading(false);
-              }
-            }}
-            className="text-[10px] text-slate-400 hover:text-slate-600 font-bold uppercase tracking-wider underline transition-all animate-pulse"
-          >
-            {tVerif('contract_btn_generate_new', 'Générer un nouveau contrat')}
-          </button>
-        </div>
-      ) : (
-        <>
-          <div className="flex items-start gap-3 p-4 bg-primary-50 border border-primary-100 rounded-xl">
-            <input 
-              type="checkbox" 
-              id="accept-contract"
-              checked={accepted}
-              onChange={(e) => setAccepted(e.target.checked)}
-              className="mt-1 w-5 h-5 rounded border-primary-300 text-primary-600 focus:ring-primary-500"
-            />
-            <label htmlFor="accept-contract" className="text-sm font-bold text-primary-900 cursor-pointer">
-              {tVerif('contract_accept_label', 'أقر بأنني قرأت ووافقت على جميع شروط العقد المذكورة أعلاه.')}
-            </label>
-          </div>
+      <div className="flex items-start gap-3 p-4 bg-primary-50 border border-primary-100 rounded-xl">
+        <input 
+          type="checkbox" 
+          id="accept-contract"
+          checked={accepted}
+          onChange={(e) => setAccepted(e.target.checked)}
+          className="mt-1 w-5 h-5 rounded border-primary-300 text-primary-600 focus:ring-primary-500"
+        />
+        <label htmlFor="accept-contract" className="text-sm font-bold text-primary-900 cursor-pointer">
+          {tVerif('contract_accept_label', 'أقر بأنني قرأت ووافقت على جميع شروط العقد المذكورة أعلاه.')}
+        </label>
+      </div>
 
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2 text-xs text-slate-400 font-medium px-1">
-              <Shield size={14} className="text-slate-300" />
-              {tVerif('contract_secure_sig', 'Signature sécurisée via le service intégré Damanesign')}
-            </div>
-            <button
-              onClick={handleSign}
-              disabled={loading || !accepted}
-              className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-2xl shadow-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed group"
-            >
-              {loading ? <Loader2 size={20} className="animate-spin" /> : <FileText size={20} className="group-hover:scale-110 transition-transform" />}
-              {tVerif('contract_btn_sign', 'Signer le contrat numériquement')}
-            </button>
-          </div>
-        </>
-      )}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-2 text-xs text-slate-400 font-medium px-1">
+          <Shield size={14} className="text-slate-300" />
+          {tVerif('contract_secure_sig', 'Approbation et validation sécurisée du contrat')}
+        </div>
+        <button
+          onClick={handleSign}
+          disabled={loading || !accepted}
+          className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-2xl shadow-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed group"
+        >
+          {loading ? <Loader2 size={20} className="animate-spin" /> : <FileText size={20} className="group-hover:scale-110 transition-transform" />}
+          {tVerif('contract_btn_sign', 'Valider la signature du contrat')}
+        </button>
+      </div>
     </div>
   );
 }
@@ -1051,6 +1067,15 @@ export default function ProfileVerification({ hideHeader = false }: { hideHeader
   const stepConfigs = [
     {
       id: 1,
+      key: 'subdomain' as const,
+      title: tVerif('subdomain_title', 'Custom Subdomain'),
+      description: tVerif('subdomain_desc', 'Set your personalized subdomain name to host your landing pages and product offers'),
+      icon: Sparkles,
+      gradient: 'from-indigo-500 to-purple-500',
+      form: <SubdomainConfigurationForm onComplete={handleStepComplete} />,
+    },
+    {
+      id: 2,
       key: 'email' as const,
       title: tVerif('email_title', 'Vérification Email'),
       description: tVerif('email_desc', 'Confirmez votre adresse email : {email}').replace('{email}', user?.email || ''),
@@ -1059,7 +1084,7 @@ export default function ProfileVerification({ hideHeader = false }: { hideHeader
       form: <EmailVerificationForm onComplete={handleStepComplete} />,
     },
     {
-      id: 2,
+      id: 3,
       key: 'identity' as const,
       title: tVerif('identity_title', "Vérification d'Identité"),
       description: tVerif('identity_desc', 'Vérifiez votre identité en fournissant les documents requis (CIN ou Passeport)'),
@@ -1068,7 +1093,7 @@ export default function ProfileVerification({ hideHeader = false }: { hideHeader
       form: <IdentityVerificationForm onComplete={handleStepComplete} />,
     },
     {
-      id: 3,
+      id: 4,
       key: 'bank' as const,
       title: tVerif('bank_title', 'Méthode de Paiement Bancaire'),
       description: tVerif('bank_desc', 'Ajoutez au moins une méthode de paiement bancaire (RIB)'),
@@ -1077,7 +1102,7 @@ export default function ProfileVerification({ hideHeader = false }: { hideHeader
       form: <BankPaymentForm onComplete={handleStepComplete} />,
     },
     {
-      id: 4,
+      id: 5,
       key: 'contract' as const,
       title: tVerif('contract_title', 'Contrat & Engagement'),
       description: tVerif('contract_desc', 'Prenez connaissance de nos conditions et signez votre contrat'),

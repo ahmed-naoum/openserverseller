@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { BACKEND_URL } from '../../../lib/api';
+import { BACKEND_URL, publicApi } from '../../../lib/api';
 import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-export type BlockType = 'header' | 'hero' | 'image' | 'text' | 'button' | 'express_checkout' | 'spacer' | 'countdown' | 'whatsapp' | 'slider';
+export type BlockType = 'header' | 'hero' | 'image' | 'text' | 'button' | 'express_checkout' | 'spacer' | 'countdown' | 'whatsapp' | 'slider' | 'products' | 'audio';
 
 export interface EditorBlock {
   id: string;
@@ -275,9 +275,79 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
               <div key={id} style={{ height: `${content.height || 32}px`, width: '100%' }} />
             );
 
+          case 'products':
+            return (
+              <ProductsBlock key={id} content={content} resolveUrl={resolveUrl} />
+            );
+
           case 'slider':
             return (
               <SliderBlock key={id} id={id} content={content} isEditor={isEditor} resolveUrl={resolveUrl} />
+            );
+
+          case 'audio':
+            const audios = content.audios || [
+              { id: 'default', title: content.title || '', url: content.url || '' }
+            ];
+
+            return (
+              <div 
+                key={id} 
+                className="w-full max-w-6xl mx-auto px-6 flex flex-col items-center" 
+                style={{ 
+                  paddingTop: `${content.paddingTop ?? 16}px`,
+                  paddingBottom: `${content.paddingBottom ?? 16}px`,
+                  marginTop: `${content.marginTop ?? 0}px`,
+                  marginBottom: `${content.marginBottom ?? 0}px`,
+                }}
+              >
+                <div 
+                  className={`grid grid-cols-1 gap-6 w-full ${
+                    audios.length === 1 
+                      ? 'max-w-md mx-auto grid-cols-1' 
+                      : audios.length === 2 
+                        ? 'max-w-3xl mx-auto md:grid-cols-2' 
+                        : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+                  }`}
+                >
+                  {audios.map((audio: any, idx: number) => (
+                    <div 
+                      key={audio.id || idx}
+                      className="w-full bg-white rounded-2xl border border-gray-100 shadow-md p-5 flex flex-col gap-3 transition-all hover:shadow-lg"
+                      style={{
+                        backgroundColor: content.bgColor || '#ffffff',
+                        borderColor: content.borderColor || '#f3f4f6',
+                      }}
+                    >
+                      {audio.title ? (
+                        <div className="text-xs font-black text-gray-500 uppercase tracking-widest text-center mb-1 truncate">
+                          {audio.title}
+                        </div>
+                      ) : (
+                        <div className="text-xs font-black text-gray-400 uppercase tracking-widest text-center mb-1 italic">
+                          Audio {idx + 1}
+                        </div>
+                      )}
+                      {audio.url ? (
+                        <audio 
+                          src={resolveUrl(audio.url)}
+                          controls={content.controls !== false}
+                          controlsList="nodownload"
+                          autoPlay={!!content.autoplay && idx === 0}
+                          loop={!!content.loop}
+                          className="w-full accent-orange-500"
+                        />
+                      ) : (
+                        <div className="w-full py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400 gap-2">
+                          <span className="text-2xl">🎵</span>
+                          <span className="text-xs font-bold text-gray-500">Lecteur Audio — Aucun fichier</span>
+                          <span className="text-[10px] text-gray-400">Téléchargez un audio dans les propriétés</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
             );
 
           case 'express_checkout':
@@ -317,6 +387,368 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
             return null;
         }
       })}
+    </div>
+  );
+}
+
+// --------------- Products Block Component ---------------
+interface ProductsBlockProps {
+  content: any;
+  resolveUrl: (url?: string) => string;
+}
+
+function ProductsBlock({ content, resolveUrl }: ProductsBlockProps) {
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const accountIds = content.accountIds || [];
+  const layoutType = content.layoutType || 'grid'; // 'grid' | 'slider'
+  const selectedProducts = content.selectedProducts || [];
+  const gridCols = content.gridCols || 3;
+  
+  const cardBg = content.cardBg || '#ffffff';
+  const cardRadius = content.cardRadius ?? 16;
+  const cardShadow = content.cardShadow || 'md';
+  const titleColor = content.titleColor || '#111827';
+  const descColor = content.descColor || '#4b5563';
+  const priceColor = content.priceColor || '#f97316';
+  const btnBg = content.btnBg || '#f97316';
+  const btnColor = content.btnColor || '#ffffff';
+  
+  const paddingTop = content.paddingTop ?? 32;
+  const paddingBottom = content.paddingBottom ?? 32;
+  const marginTop = content.marginTop ?? 0;
+  const marginBottom = content.marginBottom ?? 0;
+
+  useEffect(() => {
+    if (accountIds.length === 0) {
+      setProducts([]);
+      return;
+    }
+
+    const fetchProducts = async () => {
+      setLoading(true);
+      try {
+        const res = await publicApi.getProductsByAccounts(accountIds.join(','));
+        const data = res.data.status === 'success' ? res.data.data.products : res.data.products || [];
+        setProducts(data);
+      } catch (err) {
+        console.error('Failed to load products for ProductsBlock:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, [JSON.stringify(accountIds)]);
+
+  // Filter and sort products based on selectedProducts content config
+  const displayedProducts = selectedProducts.length > 0
+    ? products
+        .filter(p => selectedProducts.some((sp: any) => sp.productId === p.id))
+        .sort((a, b) => {
+          const indexA = selectedProducts.findIndex((sp: any) => sp.productId === a.id);
+          const indexB = selectedProducts.findIndex((sp: any) => sp.productId === b.id);
+          return indexA - indexB;
+        })
+    : products;
+
+  // Responsive cards per view for slider/carousel
+  const [cardsPerView, setCardsPerView] = useState(3);
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 640) {
+        setCardsPerView(1);
+      } else if (window.innerWidth < 1024) {
+        setCardsPerView(2);
+      } else {
+        setCardsPerView(Math.min(gridCols, 3));
+      }
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [gridCols]);
+
+   const [currentIndex, setCurrentIndex] = useState(0);
+  const maxIndex = Math.max(0, displayedProducts.length - cardsPerView);
+  const [isHovered, setIsHovered] = useState(false);
+  
+  const slideStep = content.slideStep || 1;
+  
+  const next = () => setCurrentIndex(prev => {
+    if (prev >= maxIndex) return 0;
+    return Math.min(maxIndex, prev + slideStep);
+  });
+  
+  const prev = () => setCurrentIndex(prev => {
+    if (prev <= 0) return maxIndex;
+    return Math.max(0, prev - slideStep);
+  });
+
+  // Autoplay auto scroll animation
+  useEffect(() => {
+    if (layoutType !== 'slider' || content.autoPlay === false || isHovered) return;
+    const speed = content.autoPlaySpeed || 3500;
+    const interval = setInterval(() => {
+      setCurrentIndex(prev => {
+        if (prev >= maxIndex) return 0;
+        return Math.min(maxIndex, prev + slideStep);
+      });
+    }, speed);
+    return () => clearInterval(interval);
+  }, [layoutType, maxIndex, content.autoPlay, content.autoPlaySpeed, isHovered, slideStep]);
+
+  const shadowClass = 
+    cardShadow === 'sm' ? 'shadow-sm' :
+    cardShadow === 'md' ? 'shadow-md' :
+    cardShadow === 'lg' ? 'shadow-lg' :
+    cardShadow === 'xl' ? 'shadow-xl' : 'shadow-none';
+
+  const gridClass = 
+    gridCols === 1 ? 'grid-cols-1' :
+    gridCols === 2 ? 'grid-cols-1 sm:grid-cols-2' :
+    gridCols === 3 ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3' :
+    'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4';
+
+  const handleButtonClick = (linkUrl: string, product: any) => {
+    if (!linkUrl) return;
+    if (linkUrl.startsWith('#')) {
+      const targetId = linkUrl.replace('#', '');
+      const el = document.getElementById(targetId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      }
+      // Premium feature: Dispatch select-product custom event to auto-select option in checkout
+      const event = new CustomEvent('select-product', { detail: { product } });
+      window.dispatchEvent(event);
+    } else {
+      window.open(linkUrl, '_blank');
+    }
+  };
+
+  const renderCardContent = (product: any) => {
+    const primaryImage = product.images?.[0]?.imageUrl || '';
+    const categoryName = product.categories?.[0]?.nameFr || product.categories?.[0]?.nameAr || '';
+    
+    // Find card button config
+    const spConfig = selectedProducts.find((sp: any) => sp.productId === product.id);
+    const btnLink = spConfig?.link || '#express-checkout-block';
+    const btnText = spConfig?.buttonText || 'Commander';
+    const cardBtnBg = spConfig?.btnBg || btnBg;
+    const cardBtnColor = spConfig?.btnColor || btnColor;
+
+    return (
+      <div 
+        className={`flex flex-col border border-gray-100 overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-lg h-full ${shadowClass}`}
+        style={{ 
+          backgroundColor: cardBg,
+          borderRadius: `${cardRadius}px`
+        }}
+      >
+        <div className="relative h-48 bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
+          {primaryImage ? (
+            <img 
+              src={resolveUrl(primaryImage)} 
+              alt={product.nameFr || product.nameEn} 
+              className="w-full h-full object-contain p-2 transition-transform duration-500 hover:scale-105"
+              loading="lazy"
+            />
+          ) : (
+            <div className="text-gray-300">
+              <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+          )}
+          {categoryName && (
+            <span className="absolute top-3 left-3 bg-black/60 backdrop-blur-sm text-white text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md">
+              {categoryName}
+            </span>
+          )}
+        </div>
+
+        <div className="p-4 flex flex-col flex-1 justify-between">
+          <div className="space-y-1">
+            <h4 
+              className="text-base font-black line-clamp-1"
+              style={{ color: titleColor }}
+            >
+              {product.nameFr || product.nameEn || product.nameAr}
+            </h4>
+            <p 
+              className="text-xs line-clamp-2 leading-relaxed"
+              style={{ color: descColor }}
+            >
+              {product.description || "Aucune description disponible."}
+            </p>
+          </div>
+          
+          <div className="mt-4 pt-3 border-t border-gray-50">
+            {content.showPrice !== false && (
+              <div className="flex items-center justify-between">
+                <span 
+                  className="text-lg font-black"
+                  style={{ color: priceColor }}
+                >
+                  {product.retailPriceMad || product.priceMad || 0} MAD
+                </span>
+              </div>
+            )}
+            
+            <button
+              onClick={() => handleButtonClick(btnLink, product)}
+              className="w-full py-2.5 px-4 rounded-xl font-black text-xs text-center shadow transition-all mt-3 active:scale-98 cursor-pointer"
+              style={{
+                backgroundColor: cardBtnBg,
+                color: cardBtnColor
+              }}
+            >
+              {btnText}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div 
+      className="w-full max-w-6xl mx-auto px-4"
+      style={{
+        paddingTop: `${paddingTop}px`,
+        paddingBottom: `${paddingBottom}px`,
+        marginTop: `${marginTop}px`,
+        marginBottom: `${marginBottom}px`
+      }}
+    >
+      {loading ? (
+        <div className={`grid ${layoutType === 'slider' ? 'grid-cols-3' : gridClass} gap-6`}>
+          {Array.from({ length: layoutType === 'slider' ? cardsPerView : (gridCols * 2 || 6) }).map((_, i) => (
+            <div key={i} className="animate-pulse bg-gray-100 rounded-2xl overflow-hidden border border-gray-200" style={{ height: '380px' }}>
+              <div className="bg-gray-200 h-48 w-full" />
+              <div className="p-4 space-y-3">
+                <div className="h-4 bg-gray-200 rounded w-1/4" />
+                <div className="h-6 bg-gray-200 rounded w-3/4" />
+                <div className="h-4 bg-gray-200 rounded w-5/6" />
+                <div className="h-10 bg-gray-200 rounded w-full mt-4" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : displayedProducts.length === 0 ? (
+        <div className="text-center py-12 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+          <p className="text-sm text-gray-500 font-bold">Aucun produit disponible ou sélectionné.</p>
+        </div>
+      ) : layoutType === 'slider' ? (
+        <div className="relative w-full" onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
+          {content.animationType === 'continuous' ? (
+            <>
+              <style>{`
+                @keyframes sitebuilderMarquee {
+                  0% { transform: translate3d(0, 0, 0); }
+                  100% { transform: translate3d(-50%, 0, 0); }
+                }
+              `}</style>
+              <div className="overflow-hidden w-full relative">
+                <div 
+                  className="flex py-2" 
+                  style={{
+                    gap: '16px',
+                    width: 'max-content',
+                    animation: `sitebuilderMarquee ${content.autoPlaySpeed || 15000}ms linear infinite`,
+                    animationPlayState: isHovered ? 'paused' : 'running'
+                  }}
+                >
+                  {[...displayedProducts, ...displayedProducts].map((product, idx) => (
+                    <div 
+                      key={`${product.id}-${idx}`} 
+                      style={{
+                        width: '280px',
+                        flexShrink: 0,
+                        minWidth: 0
+                      }}
+                    >
+                      {renderCardContent(product)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="overflow-hidden w-full relative">
+                <div 
+                  className="flex py-2" 
+                  style={{
+                    gap: '16px',
+                    transform: `translate3d(calc(-${currentIndex} * (100% + 16px) / ${cardsPerView}), 0, 0)`,
+                    transition: content.animationType === 'smooth'
+                      ? 'transform 1000ms cubic-bezier(0.25, 1, 0.5, 1)'
+                      : content.animationType === 'bounce'
+                      ? 'transform 800ms cubic-bezier(0.34, 1.56, 0.64, 1)'
+                      : 'transform 500ms ease-in-out'
+                  }}
+                >
+                  {displayedProducts.map((product) => (
+                    <div 
+                      key={product.id} 
+                      style={{
+                        flex: `0 0 calc(100% / ${cardsPerView} - ${(16 * (cardsPerView - 1)) / cardsPerView}px)`,
+                        minWidth: 0
+                      }}
+                    >
+                      {renderCardContent(product)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Navigation controls */}
+              {displayedProducts.length > cardsPerView && (
+                <>
+                  <button 
+                    onClick={prev}
+                    className="absolute left-[-16px] top-1/2 -translate-y-1/2 w-9 h-9 bg-white shadow-md border border-gray-100 rounded-full flex items-center justify-center text-gray-600 hover:scale-105 active:scale-95 transition-all z-10"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <button 
+                    onClick={next}
+                    className="absolute right-[-16px] top-1/2 -translate-y-1/2 w-9 h-9 bg-white shadow-md border border-gray-100 rounded-full flex items-center justify-center text-gray-600 hover:scale-105 active:scale-95 transition-all z-10"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                  
+                  {/* Pagination Dots */}
+                  <div className="flex items-center justify-center gap-1.5 mt-5">
+                    {Array.from({ length: maxIndex + 1 }).map((_, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setCurrentIndex(idx)}
+                        className={`rounded-full transition-all duration-300 ${
+                          idx === currentIndex
+                            ? 'w-6 h-2 bg-orange-500'
+                            : 'w-2 h-2 bg-gray-300 hover:bg-gray-400'
+                        }`}
+                        style={idx === currentIndex ? { backgroundColor: btnBg } : {}}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      ) : (
+        <div className={`grid ${gridClass} gap-6`}>
+          {displayedProducts.map((product) => (
+            <div key={product.id}>
+              {renderCardContent(product)}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

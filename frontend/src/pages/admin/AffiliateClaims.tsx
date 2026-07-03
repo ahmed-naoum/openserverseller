@@ -447,14 +447,16 @@ export default function AdminAffiliateClaims() {
                             >
                               <XCircle className="w-5 h-5" />
                             </button>
-                            <button
-                              onClick={() => handleUpdateStatus(claim.id, { status: 'APPROVED' })}
-                              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors group relative"
-                              title="Approuver"
-                            >
-                              <CheckCircle2 className="w-5 h-5" />
-                            </button>
-                            {claim.user?.mode !== 'AFFILIATE' && (
+                            {userRole !== 'INFLUENCER' && (
+                              <button
+                                onClick={() => handleUpdateStatus(claim.id, { status: 'APPROVED' })}
+                                className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors group relative"
+                                title="Approuver"
+                              >
+                                <CheckCircle2 className="w-5 h-5" />
+                              </button>
+                            )}
+                            {(claim.user?.mode !== 'AFFILIATE' || userRole === 'INFLUENCER') && (
                               <button
                                 onClick={() => openCloneModal(claim)}
                                 className="text-[10px] bg-amber-600 text-white hover:bg-amber-700 font-bold py-1.5 px-3 rounded-lg transition-colors shadow-sm whitespace-nowrap"

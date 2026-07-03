@@ -221,7 +221,7 @@ router.delete(
   asyncHandler(async (req: Request, res: Response) => {
     const { socketId } = req.params;
     const { io } = await import('../index.js');
-    const socket = io?.sockets.sockets.get(socketId as string);
+    const socket = io?.sockets.sockets.get(socketId as string) as any;
 
     if (socket) {
       const blockedPath = socket.currentPage || '/';
@@ -270,7 +270,7 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const { socketId } = req.params;
     const { io } = await import('../index.js');
-    const socket = io?.sockets.sockets.get(socketId as string);
+    const socket = io?.sockets.sockets.get(socketId as string) as any;
 
     if (socket) {
       let targetEmail = 'Guest';
@@ -383,7 +383,7 @@ router.delete(
   authorize('SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
     const { key } = req.params;
-    const decodedKey = decodeURIComponent(key);
+    const decodedKey = decodeURIComponent(key as string);
     
     const blockData = pageBlocks.get(decodedKey);
     if (!blockData) {

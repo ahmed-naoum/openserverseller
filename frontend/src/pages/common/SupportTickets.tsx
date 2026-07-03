@@ -6,6 +6,7 @@ import {
   MessageSquare, 
   Clock, 
   ChevronRight, 
+  ChevronLeft,
   X,
   AlertCircle,
   CheckCircle2,
@@ -29,6 +30,8 @@ const CATEGORIES = ['General', 'Payment', 'Delivery', 'Product Issue', 'Bug', 'A
 
 export default function SupportTickets() {
   const { t, language } = useLanguage();
+  const direction = language === 'ar' ? 'rtl' : 'ltr';
+  const textAlign = language === 'ar' ? 'text-right' : 'text-left';
   const [tickets, setTickets] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -478,16 +481,17 @@ export default function SupportTickets() {
                   </button>
                 </div>
 
-                <form onSubmit={handleCreateTicket} className="space-y-8">
+                <form onSubmit={handleCreateTicket} className="space-y-8" dir={direction}>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">{t('modal_subject', 'support')}</label>
+                      <label className={`text-[10px] font-black text-slate-400 uppercase tracking-widest block ${language === 'ar' ? 'pr-2' : 'pl-2'}`}>{t('modal_subject', 'support')}</label>
                       <div className="relative group">
                         <input
                           type="text"
                           placeholder={t('modal_subject_placeholder', 'support')}
                           required
-                          className="w-full bg-slate-50/50 border border-slate-200/60 rounded-2xl py-4 px-6 text-sm font-bold focus:outline-none focus:border-primary-500 focus:bg-white focus:ring-4 focus:ring-primary-500/5 transition-all"
+                          dir={direction}
+                          className={`w-full bg-slate-50/50 border border-slate-200/60 rounded-2xl py-4 px-6 text-sm font-bold focus:outline-none focus:border-primary-500 focus:bg-white focus:ring-4 focus:ring-primary-500/5 transition-all ${textAlign}`}
                           value={newTicket.subject}
                           onChange={(e) => setNewTicket({ ...newTicket, subject: e.target.value })}
                         />
@@ -495,27 +499,29 @@ export default function SupportTickets() {
                     </div>
 
                     <div className="space-y-2.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">{t('modal_category', 'support')}</label>
+                      <label className={`text-[10px] font-black text-slate-400 uppercase tracking-widest block ${language === 'ar' ? 'pr-2' : 'pl-2'}`}>{t('modal_category', 'support')}</label>
                       <div className="relative group">
                         <select
-                          className="w-full bg-slate-50/50 border border-slate-200/60 rounded-2xl py-4 px-6 text-sm font-bold focus:outline-none focus:border-primary-500 focus:bg-white focus:ring-4 focus:ring-primary-500/5 transition-all appearance-none cursor-pointer"
+                          dir={direction}
+                          className={`w-full bg-slate-50/50 border border-slate-200/60 rounded-2xl py-4 ${language === 'ar' ? 'pr-6 pl-12' : 'pl-6 pr-12'} text-sm font-bold focus:outline-none focus:border-primary-500 focus:bg-white focus:ring-4 focus:ring-primary-500/5 transition-all appearance-none cursor-pointer ${textAlign}`}
                           value={newTicket.category}
                           onChange={(e) => setNewTicket({ ...newTicket, category: e.target.value })}
                         >
                           {CATEGORIES.map(c => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
                         </select>
-                        <ChevronDown size={16} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-focus-within:text-primary-500 transition-colors" />
+                        <ChevronDown size={16} className={`absolute ${language === 'ar' ? 'left-5' : 'right-5'} top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-focus-within:text-primary-500 transition-colors`} />
                       </div>
                     </div>
                   </div>
 
                   <div className="space-y-2.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">{t('modal_details', 'support')}</label>
+                    <label className={`text-[10px] font-black text-slate-400 uppercase tracking-widest block ${language === 'ar' ? 'pr-2' : 'pl-2'}`}>{t('modal_details', 'support')}</label>
                     <textarea
                       placeholder={t('modal_details_placeholder', 'support')}
                       required
                       rows={5}
-                      className="w-full bg-slate-50/50 border border-slate-200/60 rounded-2xl py-4 px-6 text-sm font-medium focus:outline-none focus:border-primary-500/50 focus:bg-white focus:ring-2 focus:ring-primary-500/5 transition-all resize-none text-slate-600 leading-relaxed"
+                      dir={direction}
+                      className={`w-full bg-slate-50/50 border border-slate-200/60 rounded-2xl py-4 px-6 text-sm font-medium focus:outline-none focus:border-primary-500/50 focus:bg-white focus:ring-2 focus:ring-primary-500/5 transition-all resize-none text-slate-600 leading-relaxed ${textAlign}`}
                       value={newTicket.description}
                       onChange={(e) => setNewTicket({ ...newTicket, description: e.target.value })}
                     />
@@ -535,7 +541,11 @@ export default function SupportTickets() {
                       className="flex-[2] bg-slate-900 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-primary-600 shadow-md hover:-translate-y-0.5 active:scale-95 transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
                     >
                       {isSubmitting ? t('modal_submitting', 'support') : t('modal_submit', 'support')}
-                      <ChevronRight size={18} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" />
+                      {language === 'ar' ? (
+                        <ChevronLeft size={18} strokeWidth={3} className="group-hover:-translate-x-1 transition-transform" />
+                      ) : (
+                        <ChevronRight size={18} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" />
+                      )}
                     </button>
                   </div>
                 </form>

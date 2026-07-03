@@ -1,4 +1,18 @@
 {
+  "subdomain_title": "اسم النطاق الفرعي المخصص",
+  "subdomain_desc": "قم بتعيين اسم نطاق فرعي شخصي لعرض صفحات الهبوط وعروض المنتجات الخاصة بك",
+  "subdomain_label": "اختر اسم النطاق الفرعي الخاص بك",
+  "subdomain_placeholder": "my-store",
+  "subdomain_suffix": "ستبدو روابطك كالتالي: {subdomain}.silacod.ma/r/link-code",
+  "subdomain_checking": "جاري التحقق من التوفر...",
+  "subdomain_available": "اسم النطاق الفرعي هذا متاح!",
+  "subdomain_taken": "اسم النطاق الفرعي هذا مستخدم بالفعل. يرجى تجربة اسم آخر.",
+  "subdomain_invalid": "مسموح فقط بالأحرف الصغيرة والأرقام والشرطات (3-30 حرفًا).",
+  "subdomain_reserved": "اسم النطاق الفرعي هذا محجوز.",
+  "subdomain_btn_save": "تأكيد النطاق الفرعي",
+  "subdomain_toast_success": "تم إعداد النطاق الفرعي بنجاح!",
+  "subdomain_toast_error": "فشل حفظ النطاق الفرعي.",
+
   "email_title": "تأكيد البريد الإلكتروني",
   "email_desc": "أكد عنوان بريدك الإلكتروني: {email}",
   "email_notice_to_send": "سنقوم بإرسال رمز التحقق إلى:",

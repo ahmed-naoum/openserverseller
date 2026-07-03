@@ -163,6 +163,14 @@ export const authApi = {
     api.delete(`/auth/bank-accounts/${id}`, { data: { password } }),
   resendOtp: (data: { email?: string; phone?: string }) =>
     api.post('/auth/resend-otp', data),
+  checkSubdomain: (name: string) =>
+    api.get(`/auth/check-subdomain?name=${encodeURIComponent(name)}`),
+  saveSubdomain: (subdomain: string) =>
+    api.post('/auth/save-subdomain', { subdomain }),
+  sendSubdomainOtp: (subdomain: string) =>
+    api.post('/auth/subdomain/send-otp', { subdomain }),
+  verifySubdomainOtp: (subdomain: string, otp: string) =>
+    api.post('/auth/subdomain/verify-otp', { subdomain, otp }),
   extractKycData: async (file: File, type: 'recto' | 'verso' = 'recto') => {
     const formData = new FormData();
     formData.append('file', file);
@@ -312,10 +320,14 @@ export const publicApi = {
   submitReferralLead: (data: { referralCode: string; fullName: string; phone: string; city: string; address: string; productVariant?: string }) => api.post('/public/leads', data),
   submitContact: (data: { name: string; email: string; subject: string; message: string }) => api.post('/public/contact', data),
   checkBlock: (path: string) => api.get('/public/check-block', { params: { path } }),
+  getProductsByAccounts: (accountIds: string) => api.get('/public/products-by-accounts', { params: { accountIds } }),
 };
 
 export const uploadApi = {
   image: (data: FormData) => api.post('/upload/image', data, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  audio: (data: FormData) => api.post('/upload/audio', data, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
   productImages: (data: FormData, onProgress?: (progress: number) => void) =>
@@ -341,6 +353,8 @@ export const adminApi = {
     api.patch(`/admin/users/${uuid}/verify-bank`, { approved }),
   verifyUser: (uuid: string, isActive: boolean) => api.patch(`/admin/users/${uuid}/active`, { isActive }),
   verifyContract: (uuid: string, accepted?: boolean) => api.patch(`/admin/users/${uuid}/verify-contract`, { accepted }),
+  updateUserSubdomain: (uuid: string, subdomain: string) => api.patch(`/admin/users/${uuid}/subdomain`, { subdomain }),
+  clearUserSubdomain: (uuid: string) => api.patch(`/admin/users/${uuid}/subdomain`, { subdomain: null }),
   users: (params?: { role?: string; status?: string; page?: number; limit?: number; search?: string }) =>
     api.get('/users', { params }),
   getRoleCounts: () => api.get('/users/role-counts'),

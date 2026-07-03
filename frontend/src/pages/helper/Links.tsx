@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import LandingPageBuilderModal from '../../components/helper/LandingPageBuilderModal';
+import { buildReferralUrl } from '../../utils/referral';
 
 interface ReferralLink {
   id: number;
@@ -20,7 +21,7 @@ interface ReferralLink {
   status: string;
   createdAt: string;
   product?: { sku?: string; nameFr?: string; retailPriceMad?: number | string; images?: { url: string }[] };
-  influencer?: { id: number; fullName?: string; email?: string; phone?: string };
+  influencer?: { id: number; fullName?: string; email?: string; phone?: string; subdomain?: string | null };
 }
 
 export default function HelperLinks() {
@@ -63,8 +64,9 @@ export default function HelperLinks() {
     }
   };
 
-  const copyLink = (code: string) => {
-    navigator.clipboard.writeText(`${window.location.origin}/r/${code}`);
+  const copyLink = (code: string, subdomain?: string | null) => {
+    const url = buildReferralUrl(code, subdomain);
+    navigator.clipboard.writeText(url);
     toast.success('Lien copié !');
   };
 
@@ -243,7 +245,7 @@ export default function HelperLinks() {
                             </button>
                           )}
                           <button
-                            onClick={() => copyLink(link.code)}
+                            onClick={() => copyLink(link.code, link.influencer?.subdomain)}
                             className="p-2 rounded-lg text-slate-400 hover:text-orange-600 hover:bg-orange-50 hover:scale-110 transition-all duration-200"
                             title="Copier le lien"
                           >

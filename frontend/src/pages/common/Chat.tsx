@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { chatApi, adminApi, uploadApi, BACKEND_URL } from '../../lib/api';
 import {
   Send, Search, Plus, MessageSquare, CheckCheck,
-  ChevronLeft, Headphones, MoreVertical, Smile, Paperclip, Clock,
+  ChevronLeft, ChevronRight, Headphones, MoreVertical, Smile, Paperclip, Clock,
   FileText, Download, Image as ImageIcon,
   CheckCircle, UserPlus, X, RotateCcw, Ticket
 } from 'lucide-react';
@@ -610,7 +610,7 @@ export default function Chat() {
     >
       {/* ── Sidebar ──────────────────────────────────────────────────── */}
       <div
-        className={`${showMobileList ? 'flex' : 'hidden'} lg:flex w-full lg:w-80 xl:w-96 flex-col border-r border-slate-100 flex-shrink-0 bg-white`}
+        className={`${showMobileList ? 'flex' : 'hidden'} lg:flex w-full lg:w-80 xl:w-96 flex-col ${language === 'ar' ? 'border-l' : 'border-r'} border-slate-100 flex-shrink-0 bg-white`}
       >
         {/* Sidebar Header */}
         <div className="px-5 pt-5 pb-4 border-b border-slate-50">
@@ -627,13 +627,13 @@ export default function Chat() {
 
           {/* Search */}
           <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search size={15} className={`absolute ${language === 'ar' ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400`} />
             <input
               type="text"
               placeholder={t('search_placeholder', 'chat')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-100 rounded-xl pl-9 pr-4 py-2.5 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 transition-all"
+              className={`w-full bg-slate-50 border border-slate-100 rounded-xl ${language === 'ar' ? 'pr-9 pl-4' : 'pl-9 pr-4'} py-2.5 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 transition-all`}
             />
           </div>
         </div>
@@ -671,10 +671,10 @@ export default function Chat() {
                   <button
                     key={conv.id}
                     onClick={() => handleSelectConv(conv.id.toString())}
-                    className={`w-full text-left px-4 py-3.5 flex items-center gap-3 transition-all group ${
+                    className={`w-full ${language === 'ar' ? 'text-right' : 'text-left'} px-4 py-3.5 flex items-center gap-3 transition-all group ${
                       isActive
-                        ? 'bg-violet-50 border-r-2 border-violet-500'
-                        : 'hover:bg-slate-50 border-r-2 border-transparent'
+                        ? `bg-violet-50 ${language === 'ar' ? 'border-l-2' : 'border-r-2'} border-violet-500`
+                        : `hover:bg-slate-50 ${language === 'ar' ? 'border-l-2' : 'border-r-2'} border-transparent`
                     }`}
                   >
                     {/* Avatar */}
@@ -731,12 +731,12 @@ export default function Chat() {
             {/* Chat Header */}
             <div className="px-5 py-4 bg-white border-b border-slate-100 flex items-center gap-3 shadow-sm">
               {/* Mobile back */}
-              <button
-                onClick={() => setShowMobileList(true)}
-                className="lg:hidden mr-1 w-8 h-8 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-500 transition-colors"
-              >
-                <ChevronLeft size={20} />
-              </button>
+               <button
+                 onClick={() => setShowMobileList(true)}
+                 className={`lg:hidden ${language === 'ar' ? 'ml-1' : 'mr-1'} w-8 h-8 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-500 transition-colors`}
+               >
+                 {language === 'ar' ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+               </button>
 
               {selectedConv.type === 'SUPPORT' ? (
                 <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center flex-shrink-0">
@@ -775,15 +775,15 @@ export default function Chat() {
                 </button>
 
                  {showActionMenu && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-[60] animate-in fade-in zoom-in-95 duration-200 origin-top-right">
+                   <div className={`absolute ${language === 'ar' ? 'left-0 origin-top-left' : 'right-0 origin-top-right'} mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-[60] animate-in fade-in zoom-in-95 duration-200`}>
                     <div className="px-3 py-2 border-b border-slate-50 mb-1">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('actions_ticket', 'chat')}</p>
+                       <p className={`text-[10px] font-black text-slate-400 uppercase tracking-widest ${language === 'ar' ? 'text-right' : 'text-left'}`}>{t('actions_ticket', 'chat')}</p>
                     </div>
 
                     {(user?.role === 'SYSTEM_SUPPORT' || user?.role === 'SUPER_ADMIN') && selectedConv?.status === 'PENDING_CLAIM' && (
                       <button
                         onClick={handleClaim}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm font-bold text-emerald-600 hover:bg-emerald-50 transition-colors group"
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 ${language === 'ar' ? 'text-right' : 'text-left'} text-sm font-bold text-emerald-600 hover:bg-emerald-50 transition-colors group`}
                       >
                         <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center group-hover:scale-110 transition-transform">
                           <UserPlus size={16} />
@@ -798,7 +798,7 @@ export default function Chat() {
                     {(user?.role === 'SYSTEM_SUPPORT' || user?.role === 'SUPER_ADMIN') && selectedConv?.status === 'ACTIVE' && (
                       <button
                         onClick={handleCloseTicket}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm font-bold text-rose-600 hover:bg-rose-50 transition-colors group"
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 ${language === 'ar' ? 'text-right' : 'text-left'} text-sm font-bold text-rose-600 hover:bg-rose-50 transition-colors group`}
                       >
                         <div className="w-8 h-8 rounded-xl bg-rose-100 flex items-center justify-center group-hover:scale-110 transition-transform">
                           <CheckCircle size={16} />
@@ -813,7 +813,7 @@ export default function Chat() {
                     {(user?.role === 'SYSTEM_SUPPORT' || user?.role === 'SUPER_ADMIN') && selectedConv?.status === 'CLOSED' && (
                       <button
                         onClick={handleOpenTicket}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm font-bold text-emerald-600 hover:bg-emerald-50 transition-colors group"
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 ${language === 'ar' ? 'text-right' : 'text-left'} text-sm font-bold text-emerald-600 hover:bg-emerald-50 transition-colors group`}
                       >
                         <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center group-hover:scale-110 transition-transform">
                           <RotateCcw size={16} />
@@ -827,7 +827,7 @@ export default function Chat() {
 
                     <button
                       onClick={() => { setShowLogsModal(true); setShowActionMenu(false); }}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors group"
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 ${language === 'ar' ? 'text-right' : 'text-left'} text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors group`}
                     >
                       <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center group-hover:scale-110 transition-transform text-slate-400">
                         <Clock size={16} />
@@ -877,7 +877,7 @@ export default function Chat() {
                       );
                       if (!customer) return null;
                       return (
-                        <div className="flex items-center gap-3 border-l border-slate-100 pl-6">
+                        <div className={`flex items-center gap-3 ${language === 'ar' ? 'border-r border-slate-100 pr-6 pl-0' : 'border-l border-slate-100 pl-6'}`}>
                            <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center font-black">
                              👤
                            </div>
@@ -1171,14 +1171,14 @@ export default function Chat() {
               ) : (
                 <div className="space-y-6">
                   {logs.map((log: any, index: number) => (
-                    <div key={log.id} className="relative pl-6">
+                    <div key={log.id} className={`relative ${language === 'ar' ? 'pr-6 pl-0' : 'pl-6 pr-0'}`}>
                       {/* Timeline line */}
                       {index !== logs.length - 1 && (
-                        <div className="absolute left-[11px] top-8 bottom-[-24px] w-0.5 bg-slate-100" />
+                        <div className={`absolute ${language === 'ar' ? 'right-[11px] left-auto' : 'left-[11px] right-auto'} top-8 bottom-[-24px] w-0.5 bg-slate-100`} />
                       )}
                       
                       {/* Timeline dot */}
-                      <div className={`absolute left-0 top-1.5 w-6 h-6 rounded-full border-4 border-white flex items-center justify-center shadow-sm ${
+                      <div className={`absolute ${language === 'ar' ? 'right-0 left-auto' : 'left-0 right-auto'} top-1.5 w-6 h-6 rounded-full border-4 border-white flex items-center justify-center shadow-sm ${
                         log.action === 'CREATED' ? 'bg-violet-500' :
                         log.action === 'CLAIMED' ? 'bg-emerald-500' :
                         log.action === 'CLOSED' ? 'bg-slate-400' :
@@ -1187,7 +1187,7 @@ export default function Chat() {
                         <div className="w-1.5 h-1.5 rounded-full bg-white" />
                       </div>
 
-                      <div className="bg-slate-50 rounded-2xl p-4 ml-2">
+                      <div className={`bg-slate-50 rounded-2xl p-4 ${language === 'ar' ? 'mr-2 ml-0 text-right' : 'ml-2 mr-0 text-left'}`}>
                         <div className="flex items-start justify-between gap-4 mb-2">
                           <p className="text-sm font-bold text-slate-900">
                             {log.action === 'CREATED' ? t('log_created', 'chat') :

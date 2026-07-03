@@ -9,6 +9,7 @@ import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { io } from '../index.js';
 import { uploadRateLimiter } from '../middleware/security.js';
+import { exec } from 'child_process';
 
 const router = Router();
 
@@ -87,6 +88,55 @@ const avatarUpload = multer({
     }
   },
 });
+
+const audioUpload = multer({
+  storage,
+  limits: { fileSize: 30 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/wave',
+      'audio/ogg', 'audio/webm', 'audio/aac', 'audio/mp4', 'audio/m4a', 'audio/x-m4a',
+      'audio/flac', 'audio/x-flac'
+    ];
+    const allowedExtensions = ['.mp3', '.wav', '.ogg', '.webm', '.aac', '.m4a', '.mp4', '.flac', '.caf', '.wma'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedTypes.includes(file.mimetype) || allowedExtensions.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid audio file type or extension'));
+    }
+  },
+});
+
+const convertToMp3 = (inputPath: string): Promise<string> => {
+  const ext = path.extname(inputPath).toLowerCase();
+  const baseName = path.basename(inputPath);
+
+  if (ext === '.mp3') {
+    return Promise.resolve(baseName);
+  }
+
+  return new Promise((resolve, reject) => {
+    const dir = path.dirname(inputPath);
+    const fileBase = path.basename(inputPath, path.extname(inputPath));
+    const mp3Filename = `${fileBase}.mp3`;
+    const outputPath = path.join(dir, mp3Filename);
+
+    const cmd = `ffmpeg -y -i "${inputPath}" -vn -ar 44100 -ac 2 -b:a 192k "${outputPath}"`;
+    
+    exec(cmd, (error) => {
+      if (inputPath !== outputPath && fs.existsSync(inputPath)) {
+        try {
+          fs.unlinkSync(inputPath);
+        } catch (e) {}
+      }
+      if (error) {
+        return reject(error);
+      }
+      resolve(mp3Filename);
+    });
+  });
+};
 
 // Helper to compress and convert images to WebP
 const optimizeAndConvertImage = async (
@@ -341,6 +391,39 @@ router.post(
         avatarUrl,
       },
     });
+  })
+);
+
+// ─── Audio Upload and Transcode to MP3 ─────────────────────────────
+router.post(
+  '/audio',
+  authenticate,
+  uploadRateLimiter,
+  audioUpload.single('file'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) {
+      throw new AppException(400, 'No file uploaded');
+    }
+
+    try {
+      const mp3Filename = await convertToMp3(req.file.path);
+      const fileUrl = `/uploads/${mp3Filename}`;
+
+      res.json({
+        status: 'success',
+        data: {
+          url: fileUrl,
+          filename: mp3Filename,
+        },
+      });
+    } catch (err: any) {
+      if (req.file && fs.existsSync(req.file.path)) {
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (e) {}
+      }
+      throw new AppException(500, `Audio conversion failed: ${err.message || err}`);
+    }
   })
 );
 

@@ -13,8 +13,9 @@ export async function checkAndActivateUser(userId: number) {
   const isKycApproved = user.kycStatus === 'APPROVED';
   const hasApprovedBank = user.bankAccounts.some((ba: any) => ba.status === 'APPROVED');
   const isContractSigned = user.contractAccepted === true;
+  const hasSubdomain = user.subdomain !== null && user.subdomain !== undefined && user.subdomain !== '';
 
-  const shouldBeActive = isEmailVerified && isKycApproved && hasApprovedBank && isContractSigned;
+  const shouldBeActive = hasSubdomain && isEmailVerified && isKycApproved && hasApprovedBank && isContractSigned;
 
   if (shouldBeActive && !user.isActive) {
     await prisma.user.update({

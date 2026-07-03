@@ -695,6 +695,7 @@ router.post(
           emailVerified: !!user.emailVerifiedAt,
           emailVerifiedAt: user.emailVerifiedAt,
           mode: user.mode,
+          subdomain: user.subdomain,
           language: user.language || user.profile?.language || 'ar',
           isInfluencer: user.isInfluencer || user.role.name === 'INFLUENCER',
           instagramUsername: ((user as any).profile)?.instagramUsername,
@@ -1794,13 +1795,12 @@ router.get(
       cinNumber: user.profile.cinNumber,
       city: user.profile.city || 'Marrakech',
       address: user.profile.address || 'Marrakech',
-      ribAccount: decryptedRib,
       iceNumber,
       date: new Date().toLocaleDateString('fr-FR'),
     });
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'inline; filename="projet_contrat.pdf"');
+    res.setHeader('Content-Disposition', 'inline; filename="contrat.fin.silacod.pdf"');
     res.send(pdfBuffer);
   })
 );
@@ -1837,111 +1837,22 @@ router.post(
     const decryptedRib = decrypt(defaultBank.ribAccount);
     const iceNumber = defaultBank.iceNumber || undefined;
 
-    // 1. Generate PDF
-    const pdfBuffer = await generateContractPdf({
-      fullName: user.profile.fullName,
-      cinNumber: user.profile.cinNumber,
-      city: user.profile.city || 'Marrakech',
-      address: user.profile.address || 'Marrakech',
-      ribAccount: decryptedRib,
-      iceNumber,
-      date: new Date().toLocaleDateString('fr-FR'),
-    });
-
-    const isMockMode = process.env.NODE_ENV === 'development' || process.env.DAMANESIGN_API_KEY === 'QUxMIFlPVVIgQkFTRSBBUkUgQkVMT05HIFRPIFVT';
-
-    if (isMockMode) {
-      const mockTxId = `mock-tx-${Date.now()}`;
-      const mockMemberId = `mock-member-${Date.now()}`;
-      const mockFileId = `mock-file-${Date.now()}`;
-
-      await prisma.user.update({
-        where: { id: userId },
-        data: {
-          damanesignTransactionId: mockTxId,
-          damanesignMemberId: mockMemberId,
-          damanesignFileId: mockFileId,
-        },
-      });
-
-      const host = req.get('host');
-      const protocol = req.protocol;
-      const signatureUrl = `${protocol}://${host}/api/v1/auth/mock-signature?uuid=${user.uuid}`;
-
-      return res.json({
-        status: 'success',
-        message: 'Transaction DamaneSign générée (Mock Mode)',
-        data: {
-          signatureUrl,
-        },
-      });
-    }
-
-    // 2. Upload PDF to DamaneSign
-    const fileName = `contrat_silacod_${user.id}_${Date.now()}.pdf`;
-    const uploadResult = await damanesign.uploadFile(pdfBuffer, fileName);
-
-    // 3. Create Transaction on DamaneSign
-    const userPhone = user.phone || '+212600000000';
-    const userEmail = user.email || 'user@silacod.com';
-
-    const [firstname, ...lastnameParts] = user.profile.fullName.split(' ');
-    const lastname = lastnameParts.join(' ') || 'User';
-
-    const member: damanesign.DamanesignMemberInput = {
-      type: 'signer',
-      firstname,
-      lastname,
-      email: userEmail,
-      phone: userPhone,
-      authenticationMode: 'sms',
-      signatureType: 'simple',
-      position: 1,
-      fields: [
-        {
-          file: uploadResult.id,
-          page: 1,
-          position: '300,50,150,80',
-          type: 'signature',
-        }
-      ],
-    };
-
-    const transaction = await damanesign.createTransaction({
-      name: `Signature Contrat Silacod - ${user.profile.fullName}`,
-      description: 'Contrat d\'adhésion au réseau de distribution Silacod',
-      type: 'simple',
-      deliveryMode: 'sms',
-      authenticationMode: 'sms',
-      members: [member],
-    });
-
-    // 4. Start the transaction
-    await damanesign.startTransaction(transaction.id);
-
-    const createdMember = transaction.members[0];
-    if (!createdMember) {
-      throw new AppException(500, 'Erreur lors de la création du membre signataire sur DamaneSign.');
-    }
-
-    // 5. Get signature URL
-    const signatureUrl = await damanesign.getSignatureUrl(transaction.id, createdMember.id);
-
-    // 6. Save tracking IDs to User model
+    // Directly sign/accept the contract in the database and activate the user.
     await prisma.user.update({
       where: { id: userId },
       data: {
-        damanesignTransactionId: transaction.id,
-        damanesignMemberId: createdMember.id,
-        damanesignFileId: uploadResult.id,
+        contractAccepted: true,
+        contractSignedAt: new Date(),
       },
     });
 
+    await checkAndActivateUser(userId);
+
     res.json({
       status: 'success',
-      message: 'Transaction DamaneSign générée',
+      message: 'Contrat signé et validé avec succès',
       data: {
-        signatureUrl,
+        signed: true,
       },
     });
   })
@@ -2330,6 +2241,7 @@ router.get(
           language: user.language || (user.profile as any)?.language || 'ar',
           role: user.role.name,
           mode: user.mode,
+          subdomain: user.subdomain,
           contractAccepted: user.contractAccepted,
           contractSignedAt: user.contractSignedAt,
           kycStatus: user.kycStatus,
@@ -2623,6 +2535,135 @@ router.delete(
   })
 );
 
+const RESERVED_SUBDOMAINS = [
+  'admin', 'api', 'www', 'app', 'mail', 'blog', 'cdn', 'static',
+  'support', 'help', 'helper', 'auth', 'login', 'register', 'root',
+  'status', 'portal', 'billing', 'pay', 'checkout', 'shop', 'store',
+  'dev', 'test', 'prod', 'localhost', 'system', 'secure', 'web',
+  'damanesign', 'youcan', 'silacod', 'silacod-dev'
+];
+
+router.get(
+  '/check-subdomain',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { name } = req.query;
+    if (!name || typeof name !== 'string') {
+      return res.json({ available: false, message: 'Nom invalide' });
+    }
+
+    const subdomain = name.trim().toLowerCase();
+    if (subdomain.length < 3 || subdomain.length > 30) {
+      return res.json({ available: false, message: 'Le sous-domaine doit contenir entre 3 et 30 caractères' });
+    }
+
+    if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(subdomain)) {
+      return res.json({ available: false, message: 'Le sous-domaine ne doit contenir que des lettres minuscules, chiffres et tirets, sans tirets consécutifs ou aux extrémités' });
+    }
+
+    if (RESERVED_SUBDOMAINS.includes(subdomain)) {
+      return res.json({ available: false, message: 'Ce nom de sous-domaine est réservé' });
+    }
+
+    const { containsBlockedWord } = await import('../utils/blockedWords.js');
+    if (containsBlockedWord(subdomain)) {
+      return res.json({ available: false, message: 'Ce sous-domaine contient un mot interdit' });
+    }
+
+    // Check if another user already has this subdomain
+    const existing = await prisma.user.findFirst({
+      where: {
+        subdomain,
+        NOT: { id: req.user!.id }
+      }
+    });
+
+    if (existing) {
+      return res.json({ available: false, message: 'Ce sous-domaine est déjà pris' });
+    }
+
+    return res.json({ available: true, message: 'Ce sous-domaine est disponible' });
+  })
+);
+
+router.post(
+  '/save-subdomain',
+  authenticate,
+  [
+    body('subdomain').trim().notEmpty().toLowerCase()
+  ],
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new AppException(400, 'Format de sous-domaine invalide');
+    }
+
+    const subdomain = req.body.subdomain.trim().toLowerCase();
+    if (subdomain.length < 3 || subdomain.length > 30) {
+      throw new AppException(400, 'Le sous-domaine doit contenir entre 3 et 30 caractères');
+    }
+
+    if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(subdomain)) {
+      throw new AppException(400, 'Format invalide (lettres minuscules, chiffres et tirets uniquement)');
+    }
+
+    if (RESERVED_SUBDOMAINS.includes(subdomain)) {
+      throw new AppException(400, 'Ce nom de sous-domaine est réservé');
+    }
+
+    const { containsBlockedWord } = await import('../utils/blockedWords.js');
+    if (containsBlockedWord(subdomain)) {
+      throw new AppException(400, 'Ce sous-domaine contient un mot interdit');
+    }
+
+    // Check uniqueness
+    const existing = await prisma.user.findFirst({
+      where: {
+        subdomain,
+        NOT: { id: req.user!.id }
+      }
+    });
+
+    if (existing) {
+      throw new AppException(400, 'Ce sous-domaine est déjà pris');
+    }
+
+    // Save
+    await prisma.user.update({
+      where: { id: req.user!.id },
+      data: { subdomain }
+    });
+
+    // Check and activate user since subdomain is now set (Step 1)
+    await checkAndActivateUser(req.user!.id);
+
+    // Get the final user status
+    const finalUser = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      include: { profile: true, role: true }
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Sous-domaine enregistré avec succès',
+      data: {
+        user: {
+          id: finalUser?.id,
+          uuid: finalUser?.uuid,
+          email: finalUser?.email,
+          phone: finalUser?.phone,
+          fullName: finalUser?.profile?.fullName,
+          role: finalUser?.role.name,
+          kycStatus: finalUser?.kycStatus,
+          isActive: finalUser?.isActive,
+          subdomain: finalUser?.subdomain,
+          mode: finalUser?.mode
+        }
+      }
+    });
+  })
+);
+
 router.post(
   '/revert-impersonate',
   (req: Request, res: Response) => {
@@ -2667,6 +2708,153 @@ router.post(
       }
     });
   }
+);
+
+// ─── POST /auth/subdomain/send-otp ───────────────────────────────────────────
+router.post(
+  '/subdomain/send-otp',
+  authenticate,
+  [
+    body('subdomain')
+      .notEmpty()
+      .withMessage('Subdomain is required')
+      .trim()
+      .toLowerCase()
+      .custom((value) => {
+        const cleaned = value.trim().toLowerCase();
+        const regex = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+        if (!regex.test(cleaned) || cleaned.length < 3 || cleaned.length > 30) {
+          throw new Error('Only lowercase letters, numbers, and hyphens are allowed (3-30 chars).');
+        }
+        return true;
+      }),
+  ],
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new AppException(400, errors.array()[0].msg, errors.array());
+    }
+
+    const { subdomain } = req.body;
+    const cleanedSubdomain = subdomain.trim().toLowerCase();
+    const userId = req.user!.id;
+
+    // Check if the subdomain is already taken by another user
+    const existing = await prisma.user.findFirst({
+      where: {
+        subdomain: cleanedSubdomain,
+        NOT: { id: userId }
+      }
+    });
+
+    if (existing) {
+      throw new AppException(400, 'This subdomain is already taken. Please try another.');
+    }
+
+    // Generate and save OTP
+    const otp = generateOTP();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        emailOtp: otp,
+        emailOtpExpiry: otpExpiry
+      } as any
+    });
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[DEV] Subdomain OTP for ${req.user!.email}: ${otp}`);
+    }
+
+    const dbUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { language: true }
+    });
+    const langCode = dbUser?.language || 'fr';
+    await sendOtpEmail(req.user!.email, otp, langCode);
+
+    res.json({
+      status: 'success',
+      message: 'Verification OTP sent to your email.'
+    });
+  })
+);
+
+// ─── POST /auth/subdomain/verify-otp ────────────────────────────────────────
+router.post(
+  '/subdomain/verify-otp',
+  authenticate,
+  [
+    body('subdomain')
+      .notEmpty()
+      .withMessage('Subdomain is required')
+      .trim()
+      .toLowerCase(),
+    body('otp')
+      .notEmpty()
+      .withMessage('OTP is required')
+      .trim()
+  ],
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new AppException(400, errors.array()[0].msg, errors.array());
+    }
+
+    const { subdomain, otp } = req.body;
+    const cleanedSubdomain = subdomain.trim().toLowerCase();
+    const userId = req.user!.id;
+
+    // Verify user otp
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      throw new AppException(404, 'User not found');
+    }
+
+    if (!user.emailOtp || !user.emailOtpExpiry) {
+      throw new AppException(400, 'No verification OTP found. Please send a new code.');
+    }
+
+    if (new Date() > user.emailOtpExpiry) {
+      throw new AppException(400, 'The verification code has expired. Please send a new one.');
+    }
+
+    if (user.emailOtp !== otp) {
+      throw new AppException(400, 'Invalid verification code.');
+    }
+
+    // Double check if the subdomain has been taken in the meantime
+    const existing = await prisma.user.findFirst({
+      where: {
+        subdomain: cleanedSubdomain,
+        NOT: { id: userId }
+      }
+    });
+
+    if (existing) {
+      throw new AppException(400, 'This subdomain is already taken. Please try another.');
+    }
+
+    // Update user subdomain
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        subdomain: cleanedSubdomain,
+        emailOtp: null,
+        emailOtpExpiry: null
+      } as any
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Subdomain updated successfully!',
+      data: { subdomain: cleanedSubdomain }
+    });
+  })
 );
 
 export default router;

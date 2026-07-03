@@ -1,4 +1,18 @@
 {
+  "subdomain_title": "Sous-domaine personnalisé",
+  "subdomain_desc": "Choisissez un nom de sous-domaine unique pour héberger vos pages de destination et offres de produits",
+  "subdomain_label": "Choisissez votre nom de sous-domaine",
+  "subdomain_placeholder": "ma-boutique",
+  "subdomain_suffix": "Vos liens ressembleront à : {subdomain}.silacod.ma/r/code-lien",
+  "subdomain_checking": "Vérification de la disponibilité...",
+  "subdomain_available": "Ce sous-domaine est disponible !",
+  "subdomain_taken": "Ce sous-domaine est déjà pris. Veuillez en choisir un autre.",
+  "subdomain_invalid": "Seuls les lettres minuscules, chiffres et tirets sont autorisés (3 à 30 caractères).",
+  "subdomain_reserved": "Ce nom de sous-domaine est réservé.",
+  "subdomain_btn_save": "Confirmer le sous-domaine",
+  "subdomain_toast_success": "Sous-domaine configuré avec succès !",
+  "subdomain_toast_error": "Échec de l'enregistrement du sous-domaine.",
+
   "email_title": "Vérification Email",
   "email_desc": "Confirmez votre adresse email : {email}",
   "email_notice_to_send": "Nous allons envoyer un code de vérification à :",

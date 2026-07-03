@@ -24,12 +24,14 @@ export default function GrossellerMarketplace() {
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [purchasedIds, setPurchasedIds] = useState<Set<number>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(Number(searchParams.get('page')) || 1);
   const [total, setTotal] = useState(0);
   const [requestingFor, setRequestingFor] = useState<number | null>(null);
 
   // Debounce search
   useEffect(() => {
+    const currentSearchQuery = searchParams.get('search') || '';
+    if (search === currentSearchQuery) return;
     const timer = setTimeout(() => {
       setSearchParams(prev => {
         if (search) prev.set('search', search);
@@ -40,7 +42,7 @@ export default function GrossellerMarketplace() {
       setPage(1);
     }, 500);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, searchParams, setSearchParams]);
 
   useEffect(() => {
     fetchData();
@@ -205,7 +207,7 @@ export default function GrossellerMarketplace() {
                   <div className="p-5 flex-1 flex flex-col">
                     <div className="flex-1">
                       <h3 className="text-lg font-bold text-gray-900 mb-1 leading-tight line-clamp-2">
-                        {product.nameFr}
+                        {product.nameAr ? `${product.nameAr} / ${product.nameFr}` : product.nameFr}
                       </h3>
                       <p className="text-xs text-gray-400 font-medium mb-3">SKU: {product.sku}</p>
                     </div>

@@ -5,6 +5,7 @@ import { optionalAuth } from '../middleware/auth.js';
 import rateLimit from 'express-rate-limit';
 import fs from 'fs';
 import path from 'path';
+import { validateInfluencerSubdomain } from '../utils/subdomain.js';
 
 const router = Router();
 
@@ -120,10 +121,14 @@ router.get(
     };
 
     if (category) {
-      const categoryRecord = await prisma.category.findUnique({
-        where: { slug: category as string },
-      });
-      if (categoryRecord) where.categories = { some: { id: categoryRecord.id } };
+      const categorySlugs = (category as string).split(',').map(s => s.trim()).filter(Boolean);
+      if (categorySlugs.length > 0) {
+        where.categories = {
+          some: {
+            slug: { in: categorySlugs }
+          }
+        };
+      }
     }
 
     if (search) {
@@ -228,10 +233,17 @@ router.post(
 
     const link = await prisma.referralLink.findUnique({
       where: { code: referralCode },
-      include: { product: true }
+      include: { 
+        product: true,
+        influencer: { select: { subdomain: true } }
+      }
     });
 
     if (!link || !link.isActive || !link.product.isActive) {
+      throw new AppException(404, 'Referral link or product not found or inactive');
+    }
+
+    if (!validateInfluencerSubdomain(req, link.influencer?.subdomain)) {
       throw new AppException(404, 'Referral link or product not found or inactive');
     }
 

@@ -239,6 +239,59 @@ export default function SettingsPage() {
     }
   };
 
+  // Subdomain states & handlers
+  const [isEditingSubdomain, setIsEditingSubdomain] = useState(false);
+  const [newSubdomain, setNewSubdomain] = useState(user?.subdomain || '');
+  const [subdomainOtpStep, setSubdomainOtpStep] = useState<'idle' | 'sending' | 'verify'>('idle');
+  const [subdomainOtpValue, setSubdomainOtpValue] = useState('');
+  const [subdomainLoading, setSubdomainLoading] = useState(false);
+
+  useEffect(() => {
+    if (user?.subdomain) {
+      setNewSubdomain(user.subdomain);
+    }
+  }, [user]);
+
+  const handleSubdomainSendOtp = async (e?: any) => {
+    e?.preventDefault?.();
+    if (!newSubdomain) return toast.error(t('settings_subdomain_toast_empty', 'dashboard'));
+    const regex = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+    if (!regex.test(newSubdomain) || newSubdomain.length < 3 || newSubdomain.length > 30) {
+      return toast.error(t('settings_subdomain_toast_invalid', 'dashboard'));
+    }
+
+    setSubdomainOtpStep('sending');
+    setSubdomainLoading(true);
+    try {
+      await authApi.sendSubdomainOtp(newSubdomain);
+      setSubdomainOtpValue('');
+      setSubdomainOtpStep('verify');
+      toast.success(t('settings_subdomain_otp_sent_toast', 'dashboard'));
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.response?.data?.error || t('settings_subdomain_send_error_toast', 'dashboard'));
+      setSubdomainOtpStep('idle');
+    } finally {
+      setSubdomainLoading(false);
+    }
+  };
+
+  const handleSubdomainOtpVerify = async () => {
+    if (subdomainOtpValue.length !== 6) return;
+    setSubdomainLoading(true);
+    try {
+      await authApi.verifySubdomainOtp(newSubdomain, subdomainOtpValue);
+      toast.success(t('settings_subdomain_success_toast', 'dashboard'));
+      await refreshUser();
+      setIsEditingSubdomain(false);
+      setSubdomainOtpStep('idle');
+      setSubdomainOtpValue('');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.response?.data?.error || t('settings_subdomain_invalid_otp_toast', 'dashboard'));
+    } finally {
+      setSubdomainLoading(false);
+    }
+  };
+
   const handleAvatarSave = async (croppedBlob: Blob) => {
     setUploadingAvatar(true);
     try {
@@ -590,6 +643,210 @@ export default function SettingsPage() {
                       onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
                     />
                   </div>
+
+                  {/* Influencer Custom Subdomain Section */}
+                  {user?.role === 'INFLUENCER' && (
+                    <div className="pt-8 mt-4 border-t border-gray-100">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2.5 bg-primary-50 rounded-xl text-primary-600">
+                            <Globe size={22} />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-bold text-gray-900">{t('settings_subdomain_title', 'dashboard')}</h3>
+                            <p className="text-sm text-gray-500">{t('settings_subdomain_desc', 'dashboard')}</p>
+                          </div>
+                        </div>
+                        {!isEditingSubdomain && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsEditingSubdomain(true);
+                              setNewSubdomain(user?.subdomain || '');
+                              setSubdomainOtpStep('idle');
+                            }}
+                            className={`px-4 py-2 border rounded-xl font-semibold text-sm transition-all duration-200 hover:shadow-md ${
+                              isPrincess 
+                                ? 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100/50' 
+                                : isGirly 
+                                ? 'bg-pink-50 border-pink-200 text-pink-700 hover:bg-pink-100/50' 
+                                : 'bg-primary-50 border-primary-200 text-primary-700 hover:bg-primary-100/50'
+                            }`}
+                          >
+                            {user?.subdomain ? t('settings_subdomain_btn_edit', 'dashboard') : t('settings_subdomain_btn_config', 'dashboard')}
+                          </button>
+                        )}
+                      </div>
+
+                      {!isEditingSubdomain ? (
+                        <div className="bg-gray-50/50 rounded-2xl border border-gray-100 p-5 flex items-center justify-between">
+                          <div>
+                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest block mb-1">
+                              {t('settings_subdomain_status_label', 'dashboard')}
+                            </span>
+                            {user?.subdomain ? (
+                              <div className="font-mono text-base font-bold">
+                                <span className="text-primary-600">{user.subdomain}</span>
+                                <span className="text-gray-400">.{window.location.host}</span>
+                              </div>
+                            ) : (
+                              <span className="text-sm font-semibold text-gray-500 italic">
+                                {t('settings_subdomain_no_config', 'dashboard')}
+                              </span>
+                            )}
+                          </div>
+                          {user?.subdomain && (
+                            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold uppercase tracking-wider">
+                              <CheckCircle2 size={14} /> {t('settings_subdomain_active', 'dashboard')}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="bg-gray-50/50 rounded-2xl border border-gray-200 p-6 space-y-6">
+                          {subdomainOtpStep === 'idle' || subdomainOtpStep === 'sending' ? (
+                            <div className="space-y-4">
+                              <div className="space-y-2">
+                                <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">
+                                  {t('settings_subdomain_input_label', 'dashboard')}
+                                </label>
+                                <div className="flex rounded-xl shadow-sm border border-gray-200 overflow-hidden bg-white focus-within:ring-4 focus-within:ring-primary-500/10 focus-within:border-primary-500 transition-all duration-200">
+                                  <input
+                                    type="text"
+                                    required
+                                    pattern="^[a-z0-9]+(-[a-z0-9]+)*$"
+                                    title={t('settings_subdomain_input_title', 'dashboard')}
+                                    disabled={subdomainLoading}
+                                    placeholder="mon-boutique"
+                                    className="flex-1 min-w-0 border-0 px-4 py-3 bg-transparent text-gray-900 font-mono font-bold focus:ring-0 placeholder:text-gray-300"
+                                    value={newSubdomain}
+                                    onChange={(e) => setNewSubdomain(e.target.value.toLowerCase().trim())}
+                                  />
+                                  <span className="inline-flex items-center px-4 border-l border-gray-200 bg-gray-50 text-gray-500 text-sm font-semibold select-none font-mono">
+                                    .{window.location.host}
+                                  </span>
+                                </div>
+                                <p className="text-[10.5px] text-gray-400 font-medium">
+                                  {t('settings_subdomain_allowed_chars', 'dashboard')}<span className="font-mono text-gray-600 bg-gray-100 px-1 py-0.5 rounded">seller</span>.
+                                </p>
+                              </div>
+
+                              <div className="flex gap-3 justify-end">
+                                <button
+                                  type="button"
+                                  disabled={subdomainLoading}
+                                  onClick={() => setIsEditingSubdomain(false)}
+                                  className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-xl font-semibold text-sm transition-all"
+                                >
+                                  {t('settings_subdomain_cancel', 'dashboard')}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={subdomainLoading}
+                                  onClick={handleSubdomainSendOtp}
+                                  className={`px-5 py-2 text-white rounded-xl font-semibold text-sm transition-all duration-200 flex items-center gap-2 hover:shadow-lg ${
+                                    isPrincess 
+                                      ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/10' 
+                                      : isGirly 
+                                      ? 'bg-pink-600 hover:bg-pink-700 shadow-pink-600/10' 
+                                      : 'bg-primary-600 hover:bg-primary-700 shadow-primary-600/10'
+                                  }`}
+                                >
+                                  {subdomainLoading && <RefreshCw size={14} className="animate-spin" />}
+                                  {t('settings_subdomain_send_code', 'dashboard')}
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              <div className="p-4 bg-primary-50 rounded-xl border border-primary-100 text-sm text-primary-800 flex items-start gap-3">
+                                <AlertCircle size={20} className="mt-0.5 flex-shrink-0" />
+                                <div>
+                                  <p className="font-bold">{t('settings_subdomain_otp_required', 'dashboard')}</p>
+                                  <p className="mt-0.5">{t('settings_subdomain_otp_sent_to_email', 'dashboard')} <span className="font-mono font-bold bg-primary-100 px-1 rounded">{newSubdomain}</span>.</p>
+                                </div>
+                              </div>
+
+                              <div className="space-y-2">
+                                <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">
+                                  {t('settings_subdomain_otp_input_label', 'dashboard')}
+                                </label>
+                                <input
+                                  type="text"
+                                  maxLength={6}
+                                  pattern="^[0-9]{6}$"
+                                  placeholder="000000"
+                                  disabled={subdomainLoading}
+                                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-center font-mono text-2xl font-bold tracking-widest text-gray-900 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all duration-200"
+                                  value={subdomainOtpValue}
+                                  onChange={(e) => {
+                                    const val = e.target.value.replace(/[^0-9]/g, '');
+                                    setSubdomainOtpValue(val);
+                                    if (val.length === 6 && !subdomainLoading) {
+                                      setSubdomainLoading(true);
+                                      authApi.verifySubdomainOtp(newSubdomain, val)
+                                        .then(async () => {
+                                          toast.success(t('settings_subdomain_success_toast', 'dashboard'));
+                                          await refreshUser();
+                                          setIsEditingSubdomain(false);
+                                          setSubdomainOtpStep('idle');
+                                          setSubdomainOtpValue('');
+                                        })
+                                        .catch((err: any) => {
+                                          toast.error(err?.response?.data?.message || err?.response?.data?.error || t('settings_subdomain_invalid_otp_toast', 'dashboard'));
+                                        })
+                                        .finally(() => {
+                                          setSubdomainLoading(false);
+                                        });
+                                    }
+                                  }}
+                                />
+                              </div>
+
+                              <div className="flex gap-3 justify-between items-center">
+                                <button
+                                  type="button"
+                                  disabled={subdomainLoading}
+                                  onClick={() => setSubdomainOtpStep('idle')}
+                                  className="text-xs font-bold text-primary-600 hover:underline disabled:opacity-50"
+                                >
+                                  {t('settings_subdomain_edit_typed', 'dashboard')}
+                                </button>
+                                <div className="flex gap-3">
+                                  <button
+                                    type="button"
+                                    disabled={subdomainLoading}
+                                    onClick={() => {
+                                      setIsEditingSubdomain(false);
+                                      setSubdomainOtpStep('idle');
+                                    }}
+                                    className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-xl font-semibold text-sm transition-all"
+                                  >
+                                    {t('settings_subdomain_cancel', 'dashboard')}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={subdomainLoading || subdomainOtpValue.length !== 6}
+                                    onClick={handleSubdomainOtpVerify}
+                                    className={`px-5 py-2 text-white rounded-xl font-semibold text-sm transition-all duration-200 flex items-center gap-2 hover:shadow-lg ${
+                                      isPrincess 
+                                        ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/10' 
+                                        : isGirly 
+                                        ? 'bg-pink-600 hover:bg-pink-700 shadow-pink-600/10' 
+                                        : 'bg-primary-600 hover:bg-primary-700 shadow-primary-600/10'
+                                    } disabled:opacity-50`}
+                                  >
+                                    {subdomainLoading && <RefreshCw size={14} className="animate-spin" />}
+                                    {t('settings_subdomain_verify_confirm', 'dashboard')}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Influencer Social Platforms Section */}
                   {user?.role === 'INFLUENCER' && (
                     <div className="pt-8 mt-4 border-t border-gray-100">

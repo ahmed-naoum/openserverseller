@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { Link, useSearchParams } from 'react-router-dom';
 import { marketplaceApi, publicApi } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -110,6 +111,7 @@ function ProductCardCarousel({ images, alt }: { images: { imageUrl: string }[]; 
 }
 
 export default function PublicMarketplace() {
+  const { language } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, isAuthenticated } = useAuth();
 
@@ -141,7 +143,7 @@ export default function PublicMarketplace() {
   const [categories, setCategories] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(Number(searchParams.get('page')) || 1);
   const [total, setTotal] = useState(0);
 
   // Sync view mode when user mode changes (e.g. mode switch)
@@ -156,6 +158,8 @@ export default function PublicMarketplace() {
 
   // Debounce search
   useEffect(() => {
+    const currentSearchQuery = searchParams.get('search') || '';
+    if (search === currentSearchQuery) return;
     const timer = setTimeout(() => {
       setSearchParams(prev => {
         if (search) prev.set('search', search);
@@ -166,7 +170,7 @@ export default function PublicMarketplace() {
       setPage(1);
     }, 500);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, searchParams, setSearchParams]);
 
   useEffect(() => {
     fetchCategories();
@@ -340,7 +344,11 @@ export default function PublicMarketplace() {
                          : 'bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800 hover:scale-[1.02] border border-slate-100 shadow-sm'
                      }`}
                    >
-                     <span className="truncate">{cat.nameFr}</span>
+                     <span className="truncate">
+                       {language === 'ar' ? cat.nameAr || cat.nameFr :
+                        language === 'en' ? cat.nameEn || cat.nameFr :
+                        cat.nameFr}
+                     </span>
                      <div className="flex items-center gap-2">
                        <span className={`text-[9px] px-2 py-1 rounded-lg border transition-colors ${
                          selectedCategory === cat.slug 
@@ -440,7 +448,11 @@ export default function PublicMarketplace() {
 
                         <div className="absolute top-5 left-5 right-5 flex items-start justify-between z-10">
                            <span className="px-4 py-2 bg-white/90 backdrop-blur-2xl rounded-2xl border border-white/50 text-[9px] font-black uppercase tracking-widest text-slate-800 shadow-xl shadow-black/5 transform transition-transform group-hover/item:-translate-y-1">
-                             {product.category?.nameFr}
+                             {product.category && (
+                               language === 'ar' ? product.category.nameAr || product.category.nameFr :
+                               language === 'en' ? product.category.nameEn || product.category.nameFr :
+                               product.category.nameFr
+                             )}
                            </span>
 
                            {/* Status Indicators */}
@@ -477,7 +489,9 @@ export default function PublicMarketplace() {
                             <Package size={12} /> {product.sku}
                           </p>
                           <h3 className="text-2xl font-black text-slate-900 tracking-tight leading-none group-hover/item:text-primary-600 transition-colors mb-2">
-                            <Link to={`../product/${product.id}`}>{product.nameFr}</Link>
+                            <Link to={`../product/${product.id}`}>
+                              {product.nameAr ? `${product.nameAr} / ${product.nameFr}` : product.nameFr}
+                            </Link>
                           </h3>
                         </div>
                         
@@ -610,7 +624,9 @@ export default function PublicMarketplace() {
                      className={`w-full text-left px-5 py-4 rounded-2xl text-lg font-bold transition-all ${
                        selectedCategory === cat.slug ? 'bg-primary-50 text-primary-700 shadow-sm' : 'text-gray-600'
                      }`}
-                   >{cat.nameFr}</button>
+                   >{language === 'ar' ? cat.nameAr || cat.nameFr :
+                     language === 'en' ? cat.nameEn || cat.nameFr :
+                     cat.nameFr}</button>
                  ))}
               </nav>
             </motion.div>

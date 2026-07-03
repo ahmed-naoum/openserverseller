@@ -111,10 +111,12 @@ export function resolveSocialPlatform(
 export default function AdminVerifications() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'ALL' | 'PENDING' | 'PENDING_EMAIL' | 'PENDING_KYC' | 'PENDING_BANK' | 'PENDING_CONTRACT'>('PENDING');
+  const [activeTab, setActiveTab] = useState<'ALL' | 'PENDING' | 'PENDING_EMAIL' | 'PENDING_KYC' | 'PENDING_BANK' | 'PENDING_CONTRACT'>('ALL');
   const [roleFilter, setRoleFilter] = useState<'ALL' | 'SELLER' | 'INFLUENCER' | 'VENDOR'>('ALL');
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [imageModal, setImageModal] = useState<{ url: string; title: string } | null>(null);
+  const [editingSubdomainUuid, setEditingSubdomainUuid] = useState<string | null>(null);
+  const [subdomainInput, setSubdomainInput] = useState('');
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-verifications'],
@@ -179,6 +181,27 @@ export default function AdminVerifications() {
       toast.success('Statut utilisateur mis à jour');
     },
     onError: () => toast.error('Erreur lors de la mise à jour du statut utilisateur'),
+  });
+
+  const updateSubdomainMutation = useMutation({
+    mutationFn: ({ uuid, subdomain }: { uuid: string; subdomain: string }) =>
+      adminApi.updateUserSubdomain(uuid, subdomain),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-verifications'] });
+      toast.success('Sous-domaine mis à jour avec succès');
+      setEditingSubdomainUuid(null);
+      setSubdomainInput('');
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message || 'Erreur lors de la mise à jour du sous-domaine'),
+  });
+
+  const clearSubdomainMutation = useMutation({
+    mutationFn: (uuid: string) => adminApi.clearUserSubdomain(uuid),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-verifications'] });
+      toast.success('Sous-domaine supprimé avec succès');
+    },
+    onError: () => toast.error('Erreur lors de la suppression du sous-domaine'),
   });
 
   const stats = {
@@ -459,6 +482,13 @@ export default function AdminVerifications() {
                     }`}>
                       <CreditCard size={14} />
                       {hasApprovedBank ? 'Banque ✓' : hasPendingBank ? 'Banque ⏳' : 'Pas de RIB'}
+                    </div>
+                    {/* Subdomain */}
+                    <div className={`flex items-center gap-2 px-4 py-2 rounded-2xl border text-xs font-black uppercase tracking-widest ${
+                      user.subdomain ? 'bg-primary-50 text-primary-600 border-primary-200' : 'bg-slate-50 text-slate-400 border-slate-200'
+                    }`}>
+                      <Globe size={14} />
+                      {user.subdomain ? `${user.subdomain}` : 'Pas de domaine'}
                     </div>
 
                     {/* Expand Button */}
@@ -1062,6 +1092,76 @@ export default function AdminVerifications() {
                           )}
                         </div>
                       </div>
+                    </div>
+
+                    {/* Subdomain Management */}
+                    <div className="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm space-y-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2.5 rounded-xl ${user.subdomain ? 'bg-primary-100 text-primary-600' : 'bg-slate-100 text-slate-400'}`}>
+                          <Globe size={18} />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-black text-slate-800 uppercase tracking-wider">Sous-domaine</h4>
+                          <p className="text-[11px] font-medium text-slate-400 mt-0.5">
+                            {user.subdomain ? (
+                              <span className="font-mono font-bold text-primary-600">{user.subdomain}<span className="text-slate-400">.{window.location.host}</span></span>
+                            ) : 'Non configuré'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {editingSubdomainUuid === user.uuid ? (
+                        <div className="space-y-3">
+                          <div className="flex rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white focus-within:ring-4 focus-within:ring-primary-50 focus-within:border-primary-500 transition-all">
+                            <input
+                              type="text"
+                              placeholder="mon-boutique"
+                              className="flex-1 min-w-0 border-0 px-4 py-3 bg-transparent text-slate-900 font-mono font-bold focus:ring-0 placeholder:text-slate-300 text-sm"
+                              value={subdomainInput}
+                              onChange={(e) => setSubdomainInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                            />
+                            <span className="inline-flex items-center px-3 border-l border-slate-200 bg-slate-50 text-slate-400 text-[11px] font-semibold select-none font-mono">
+                              .{window.location.host}
+                            </span>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                if (!subdomainInput || subdomainInput.length < 3) return toast.error('Minimum 3 caractères');
+                                updateSubdomainMutation.mutate({ uuid: user.uuid, subdomain: subdomainInput });
+                              }}
+                              disabled={updateSubdomainMutation.isPending || subdomainInput.length < 3}
+                              className="flex-1 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md active:scale-95 disabled:opacity-50"
+                            >
+                              {updateSubdomainMutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
+                            </button>
+                            <button
+                              onClick={() => { setEditingSubdomainUuid(null); setSubdomainInput(''); }}
+                              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95"
+                            >
+                              Annuler
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <button
+                            onClick={() => { setEditingSubdomainUuid(user.uuid); setSubdomainInput(user.subdomain || ''); }}
+                            className="w-full py-3 bg-gradient-to-r from-primary-500 to-indigo-600 hover:from-primary-600 hover:to-indigo-700 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-md active:scale-95"
+                          >
+                            {user.subdomain ? 'Modifier le sous-domaine' : 'Définir un sous-domaine'}
+                          </button>
+                          {user.subdomain && (
+                            <button
+                              onClick={() => clearSubdomainMutation.mutate(user.uuid)}
+                              disabled={clearSubdomainMutation.isPending}
+                              className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 border border-rose-100 disabled:opacity-50"
+                            >
+                              {clearSubdomainMutation.isPending ? 'Suppression...' : 'Annuler / Réinitialiser'}
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Extra Info Row */}

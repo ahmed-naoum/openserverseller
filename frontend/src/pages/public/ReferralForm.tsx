@@ -24,6 +24,18 @@ export default function ReferralForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [selectedOption, setSelectedOption] = useState<any>(null);
+  const [selectedProductFromBlock, setSelectedProductFromBlock] = useState<any>(null);
+
+  useEffect(() => {
+    const handleSelectProduct = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail?.product) {
+        setSelectedProductFromBlock(customEvent.detail.product);
+      }
+    };
+    window.addEventListener('select-product', handleSelectProduct);
+    return () => window.removeEventListener('select-product', handleSelectProduct);
+  }, []);
 
   useEffect(() => {
     if (code) {
@@ -70,7 +82,9 @@ export default function ReferralForm() {
       await publicApi.submitReferralLead({
         referralCode: code!,
         ...form,
-        productVariant: selectedOption?.name
+        productVariant: selectedProductFromBlock 
+          ? `${selectedProductFromBlock.nameFr || selectedProductFromBlock.nameEn || selectedProductFromBlock.nameAr} (${selectedOption?.name || 'Standard'})`
+          : selectedOption?.name
       });
       navigate('/thank-you', { replace: true });
     } catch (err: any) {
@@ -170,7 +184,7 @@ export default function ReferralForm() {
                     fontSize: `${blockContent.priceSize || 30}px` 
                   }}
                 >
-                  {selectedOption?.price || product?.retailPriceMad} <span className="text-lg uppercase ml-1 opacity-60">MAD</span>
+                  {selectedOption?.price || selectedProductFromBlock?.retailPriceMad || selectedProductFromBlock?.priceMad || product?.retailPriceMad} <span className="text-lg uppercase ml-1 opacity-60">MAD</span>
                 </div>
               )}
               <p className="text-sm text-gray-500 font-medium">

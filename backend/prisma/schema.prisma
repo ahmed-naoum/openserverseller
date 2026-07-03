@@ -44,6 +44,7 @@ model User {
 
   // Influencer fields
   referralCode  String? @unique
+  subdomain     String? @unique
   isInfluencer  Boolean @default(false)
   totalEarnings Float   @default(0)
   platformFeeRate Float @default(0.13)

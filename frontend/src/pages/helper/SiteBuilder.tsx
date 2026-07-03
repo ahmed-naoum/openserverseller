@@ -1,16 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { helperApi, publicApi, uploadApi } from '../../lib/api';
+import { helperApi, publicApi, uploadApi, adminApi } from '../../lib/api';
 import BlockRenderer, { EditorBlock, BlockType } from '../../components/helper/sitebuilder/BlockRenderer';
 import WhatsAppWidget, { IconRenderer } from '../../components/public/WhatsAppWidget';
 import { 
   Type, Image as ImageIcon, Heading, LayoutTemplate, Link as LinkIcon, 
   ShoppingCart, ArrowUp, ArrowDown, Trash2, Save, ChevronLeft, Loader2,
   Clock, Space, Upload, ShieldCheck, Plus, ExternalLink, Code, Copy, Download, MessageSquare,
-  Layers, GripVertical, Undo2, Redo2
+  Layers, GripVertical, Undo2, Redo2, ShoppingBag, Music
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { buildReferralUrl } from '../../utils/referral';
 
 export default function SiteBuilder() {
   const { id } = useParams<{ id: string }>();
@@ -44,7 +45,11 @@ export default function SiteBuilder() {
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [productData, setProductData] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadingAudioId, setUploadingAudioId] = useState<string | null>(null);
   const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [ownerId, setOwnerId] = useState<number | null>(null);
+  const [ownerSubdomain, setOwnerSubdomain] = useState<string | null>(null);
 
   // ── Undo / Redo history ──
   type Snapshot = { blocks: EditorBlock[]; pageSettings: any };
@@ -106,10 +111,11 @@ export default function SiteBuilder() {
     return () => { if (historyTimerRef.current) clearTimeout(historyTimerRef.current); };
   }, [blocks, pageSettings, loading, pushHistory]);
 
-  // Keyboard shortcuts: Ctrl+Z / Ctrl+Shift+Z
+  // Keyboard shortcuts: Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+      const key = e.key.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && key === 'z') {
         e.preventDefault();
         if (e.shiftKey) {
           redo();
@@ -117,7 +123,7 @@ export default function SiteBuilder() {
           undo();
         }
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+      if ((e.ctrlKey || e.metaKey) && key === 'y') {
         e.preventDefault();
         redo();
       }
@@ -165,6 +171,40 @@ export default function SiteBuilder() {
       toast.error('JSON invalide. Veuillez vérifier le code.');
     }
   };
+
+  const [blockProducts, setBlockProducts] = useState<any[]>([]);
+  const [loadingBlockProducts, setLoadingBlockProducts] = useState(false);
+
+  const activeBlock = blocks.find(b => b.id === selectedBlockId);
+
+  useEffect(() => {
+    if (activeBlock?.type !== 'products') return;
+    const accountIds = activeBlock.content.accountIds || [];
+
+    // Automatically enforce that the link ownerId is selected in the background
+    if (ownerId && (!accountIds.includes(ownerId) || accountIds.length === 0)) {
+      updateBlockContent('accountIds', [ownerId]);
+      return;
+    }
+
+    if (accountIds.length === 0) {
+      setBlockProducts([]);
+      return;
+    }
+    const fetchBlockProducts = async () => {
+      setLoadingBlockProducts(true);
+      try {
+        const res = await publicApi.getProductsByAccounts(accountIds.join(','));
+        const data = res.data.status === 'success' ? res.data.data.products : res.data.products || [];
+        setBlockProducts(data);
+      } catch (err) {
+        console.error('Failed to fetch block products in SiteBuilder:', err);
+      } finally {
+        setLoadingBlockProducts(false);
+      }
+    };
+    fetchBlockProducts();
+  }, [activeBlock?.id, JSON.stringify(activeBlock?.content?.accountIds), ownerId]);
 
   // Load existing data
   useEffect(() => {
@@ -224,6 +264,23 @@ export default function SiteBuilder() {
       if (landingPage?.referralLink?.code) {
         setReferralCode(landingPage.referralLink.code);
       }
+      const ownerUserId = landingPage?.referralLink?.influencerId || landingPage?.referralLink?.influencer?.id;
+      if (ownerUserId) {
+        setOwnerId(ownerUserId);
+      }
+      const ownerSub = landingPage?.referralLink?.influencer?.subdomain;
+      if (ownerSub) {
+        setOwnerSubdomain(ownerSub);
+      }
+      
+      // Fetch accounts for products block
+      try {
+        const uRes = await adminApi.users({ limit: 1000 });
+        const usersList = uRes.data?.status === 'success' ? uRes.data.data.users : uRes.data?.users || [];
+        setAccounts(usersList);
+      } catch (uErr) {
+        console.error('Failed to load accounts in SiteBuilder:', uErr);
+      }
     } catch (err) {
       toast.error('Erreur lors du chargement des données');
     } finally {
@@ -249,10 +306,14 @@ export default function SiteBuilder() {
   };
 
   const addBlock = (type: BlockType) => {
+    const defaultContent = getDefaultContentForType(type) as any;
+    if (type === 'products' && ownerId) {
+      defaultContent.accountIds = [ownerId];
+    }
     const newBlock: EditorBlock = {
       id: crypto.randomUUID(),
       type,
-      content: getDefaultContentForType(type)
+      content: defaultContent
     };
     setBlocks(prev => [...prev, newBlock]);
     setSelectedBlockId(newBlock.id);
@@ -371,6 +432,24 @@ export default function SiteBuilder() {
         dotColor: '#f97316',
         paddingTop: 24, paddingBottom: 24, marginTop: 0, marginBottom: 0
       };
+      case 'products': return {
+        accountIds: [],
+        layoutType: 'grid',
+        selectedProducts: [],
+        gridCols: 3,
+        cardBg: '#ffffff',
+        cardRadius: 16,
+        cardShadow: 'md',
+        titleColor: '#111827',
+        descColor: '#4b5563',
+        priceColor: '#f97316',
+        btnBg: '#f97316',
+        btnColor: '#ffffff',
+        paddingTop: 32,
+        paddingBottom: 32,
+        marginTop: 0,
+        marginBottom: 0
+      };
       case 'express_checkout': return { 
         title: 'Commander Maintenant', 
         subtitle: 'Remplissez le formulaire ci-dessous pour réserver votre produit. Le paiement se fera à la livraison.',
@@ -399,11 +478,25 @@ export default function SiteBuilder() {
         packBorderRadius: 16,
         paddingTop: 32, paddingBottom: 32, paddingLeft: 16, paddingRight: 16, marginTop: 0, marginBottom: 0 
       };
+      case 'audio': return {
+        audios: [
+          { id: '1', title: 'Audio 1', url: '' },
+          { id: '2', title: 'Audio 2', url: '' },
+          { id: '3', title: 'Audio 3', url: '' }
+        ],
+        controls: true,
+        autoplay: false,
+        loop: false,
+        bgColor: '#ffffff',
+        borderColor: '#f3f4f6',
+        paddingTop: 16,
+        paddingBottom: 16,
+        marginTop: 0,
+        marginBottom: 0
+      };
       default: return {};
     }
   };
-
-  const activeBlock = blocks.find(b => b.id === selectedBlockId);
 
   if (loading) {
     return (
@@ -455,7 +548,7 @@ export default function SiteBuilder() {
           <div className="w-px h-6 bg-gray-200" />
           {referralCode && (
             <button 
-              onClick={() => window.open(`/r/${referralCode}`, '_blank')}
+              onClick={() => window.open(buildReferralUrl(referralCode, ownerSubdomain), '_blank')}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
             >
               <ExternalLink className="w-4 h-4" />
@@ -482,6 +575,8 @@ export default function SiteBuilder() {
             <div className="space-y-2">
               <ToolButton fullWidth icon={<ImageIcon className="w-4 h-4" />} label="Image" onClick={() => addBlock('image')} />
               <ToolButton fullWidth icon={<Layers className="w-4 h-4 text-purple-500" />} label="Slider / Carrousel" onClick={() => addBlock('slider')} />
+              <ToolButton fullWidth icon={<ShoppingBag className="w-4 h-4 text-orange-500" />} label="Propositions Produits" onClick={() => addBlock('products')} />
+              <ToolButton fullWidth icon={<Music className="w-4 h-4 text-indigo-500" />} label="Lecteur Audio" onClick={() => addBlock('audio')} />
             </div>
           </div>
           
@@ -1017,6 +1112,158 @@ export default function SiteBuilder() {
                 {activeBlock.type === 'spacer' && (
                   <div className="space-y-4">
                     <Field label="Hauteur (px)" type="number" value={activeBlock.content.height} onChange={(v: any) => updateBlockContent('height', v)} />
+                  </div>
+                )}
+
+                {activeBlock.type === 'audio' && (
+                  <div className="space-y-6">
+                    <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-100">
+                      <div className="flex items-center gap-3 mb-2">
+                        <Music className="w-5 h-5 text-indigo-500" />
+                        <span className="font-black text-indigo-900 text-sm">Lecteur Audio Multi-Cartes</span>
+                      </div>
+                      <p className="text-xs text-indigo-700 leading-relaxed">
+                        Ajoutez un ou plusieurs audios. Ils s'afficheront sous forme de cartes élégantes alignées (jusqu'à 3 par ligne sur grand écran).
+                      </p>
+                    </div>
+
+                    <div className="space-y-4">
+                      {((activeBlock.content.audios as any[]) || [
+                        { id: '1', title: activeBlock.content.title || '', url: activeBlock.content.url || '' }
+                      ]).map((audio: any, idx: number) => {
+                        const isThisUploading = uploadingAudioId === audio.id;
+                        
+                        return (
+                          <div key={audio.id || idx} className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-3 relative group">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-[10px] font-bold text-gray-400 uppercase">Audio #{idx + 1}</h4>
+                              {(((activeBlock.content.audios as any[]) || []).length > 1) && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const currentAudios = [...(activeBlock.content.audios || [])];
+                                    const updated = currentAudios.filter((_, i) => i !== idx);
+                                    updateBlockContent('audios', updated);
+                                  }}
+                                  className="text-gray-400 hover:text-red-500 p-1 transition-all"
+                                  title="Supprimer cet audio"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+
+                            <Field 
+                              label="Titre de la carte" 
+                              type="text" 
+                              value={audio.title || ''} 
+                              placeholder="Ex: Écoutez le témoignage"
+                              onChange={(v: string) => {
+                                const currentAudios = [...(activeBlock.content.audios || [
+                                  { id: '1', title: activeBlock.content.title || '', url: activeBlock.content.url || '' }
+                                ])];
+                                currentAudios[idx] = { ...currentAudios[idx], title: v };
+                                updateBlockContent('audios', currentAudios);
+                              }} 
+                            />
+
+                            <div>
+                              <label className="flex items-center justify-center gap-2 p-3 border-2 border-dashed border-gray-200 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 cursor-pointer transition-all">
+                                {isThisUploading ? (
+                                  <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
+                                ) : (
+                                  <Upload className="w-4 h-4 text-gray-400" />
+                                )}
+                                <span className="text-xs font-bold text-gray-500">
+                                  {isThisUploading ? 'Conversion en MP3...' : 'Télécharger un audio'}
+                                </span>
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  accept="audio/*"
+                                  disabled={uploadingAudioId !== null}
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    try {
+                                      setUploadingAudioId(audio.id);
+                                      const formData = new FormData();
+                                      formData.append('file', file);
+                                      const res = await uploadApi.audio(formData);
+                                      
+                                      const currentAudios = [...(activeBlock.content.audios || [
+                                        { id: '1', title: activeBlock.content.title || '', url: activeBlock.content.url || '' }
+                                      ])];
+                                      currentAudios[idx] = { ...currentAudios[idx], url: res.data.data.url };
+                                      updateBlockContent('audios', currentAudios);
+                                      toast.success('Audio téléchargé et converti avec succès !');
+                                    } catch (err) {
+                                      toast.error('Erreur lors de la conversion audio');
+                                    } finally {
+                                      setUploadingAudioId(null);
+                                    }
+                                  }}
+                                />
+                              </label>
+                            </div>
+
+                            {audio.url && (
+                              <div className="text-[10px] text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-lg p-2 font-mono break-all">
+                                Fichier actuel: {audio.url}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentAudios = [...(activeBlock.content.audios || [
+                            { id: '1', title: activeBlock.content.title || '', url: activeBlock.content.url || '' }
+                          ])];
+                          currentAudios.push({
+                            id: Math.random().toString(36).substring(2, 9),
+                            title: `Audio ${currentAudios.length + 1}`,
+                            url: ''
+                          });
+                          updateBlockContent('audios', currentAudios);
+                        }}
+                        className="w-full flex items-center justify-center gap-2 p-3 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 text-xs font-bold text-gray-700 transition-all shadow-sm"
+                      >
+                        <Plus className="w-4 h-4 text-gray-500" />
+                        Ajouter une carte audio
+                      </button>
+                    </div>
+
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-4">
+                      <h4 className="text-[10px] font-bold text-gray-400 uppercase">Options de Lecture</h4>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-600">Afficher les contrôles</span>
+                        <Field type="switch" value={activeBlock.content.controls !== false} onChange={(v: boolean) => updateBlockContent('controls', v)} />
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-600">Lecture Automatique (Autoplay)</span>
+                        <Field type="switch" value={!!activeBlock.content.autoplay} onChange={(v: boolean) => updateBlockContent('autoplay', v)} />
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-600">Lecture en boucle (Loop)</span>
+                        <Field type="switch" value={!!activeBlock.content.loop} onChange={(v: boolean) => updateBlockContent('loop', v)} />
+                      </div>
+                    </div>
+
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-4">
+                      <h4 className="text-[10px] font-bold text-gray-400 uppercase">Couleurs</h4>
+                      <Field label="Couleur de fond" type="color" value={activeBlock.content.bgColor || '#ffffff'} onChange={(v: string) => updateBlockContent('bgColor', v)} />
+                      <Field label="Couleur de la bordure" type="color" value={activeBlock.content.borderColor || '#f3f4f6'} onChange={(v: string) => updateBlockContent('borderColor', v)} />
+                    </div>
+
+                    <div className="pt-4 border-t border-gray-100">
+                      <SpacingControls content={activeBlock.content} onChange={updateBlockContent} noLeftRight />
+                    </div>
                   </div>
                 )}
 
@@ -1604,6 +1851,362 @@ export default function SiteBuilder() {
                     
                     <div className="pt-4 border-t border-gray-100">
                        <SpacingControls content={activeBlock.content} onChange={updateBlockContent} />
+                    </div>
+                  </div>
+                )}
+
+                {activeBlock.type === 'products' && (
+                  <div className="space-y-6">
+                    <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100">
+                      <div className="flex items-center gap-3 mb-2">
+                        <ShoppingBag className="w-5 h-5 text-orange-500" />
+                        <span className="font-black text-orange-900 text-sm">Propositions Produits</span>
+                      </div>
+                      <p className="text-xs text-orange-700 leading-relaxed">
+                        Affichez les produits de vos vendeurs ou influenceurs sous forme de grille ou carrousel.
+                      </p>
+                    </div>
+
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-4">
+                      <h4 className="text-[10px] font-bold text-gray-400 uppercase">Configuration</h4>
+                      
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Format d'affichage</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { type: 'grid', label: 'Grille CSS' },
+                            { type: 'slider', label: 'Slide (Carrousel)' }
+                          ].map(opt => {
+                            const isSelected = (activeBlock.content.layoutType || 'grid') === opt.type;
+                            return (
+                              <button
+                                key={opt.type}
+                                type="button"
+                                onClick={() => updateBlockContent('layoutType', opt.type)}
+                                className={`text-center py-2 rounded-lg border border-2 transition-all text-xs font-black ${
+                                  isSelected 
+                                    ? 'border-orange-500 bg-orange-50 text-orange-700' 
+                                    : 'border-gray-100 hover:border-gray-200 bg-white text-gray-500'
+                                }`}
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+
+
+                      {(activeBlock.content.layoutType || 'grid') === 'grid' && (
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Colonnes (Desktop)</label>
+                          <div className="grid grid-cols-4 gap-2">
+                            {[1, 2, 3, 4].map(n => {
+                              const isSelected = (activeBlock.content.gridCols || 3) === n;
+                              return (
+                                <button
+                                  key={n}
+                                  type="button"
+                                  onClick={() => updateBlockContent('gridCols', n)}
+                                  className={`text-center py-2 rounded-lg border-2 transition-all text-xs font-black ${
+                                    isSelected 
+                                      ? 'border-orange-500 bg-orange-50 text-orange-700' 
+                                      : 'border-gray-100 hover:border-gray-200 bg-white text-gray-500'
+                                  }`}
+                                >
+                                  {n}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-4">
+                      <h4 className="text-[10px] font-bold text-gray-400 uppercase font-black">Sélection des Produits</h4>
+                      {loadingBlockProducts ? (
+                        <div className="text-xs text-gray-400 italic py-2">Chargement des produits...</div>
+                      ) : blockProducts.length === 0 ? (
+                        <div className="text-xs text-gray-400 italic py-2">Sélectionnez d'abord un compte pour charger ses produits.</div>
+                      ) : (
+                        <div className="space-y-3.5 max-h-[420px] overflow-y-auto pr-1">
+                          {blockProducts.map(p => {
+                            const selectedItem = (activeBlock.content.selectedProducts || []).find((sp: any) => sp.productId === p.id);
+                            const isChecked = !!selectedItem;
+                            
+                            return (
+                              <div 
+                                key={p.id} 
+                                className={`border rounded-2xl p-3.5 transition-all duration-300 ${
+                                  isChecked 
+                                    ? 'border-orange-500 bg-orange-50/30 shadow-xs' 
+                                    : 'border-gray-200/80 bg-white hover:border-gray-300'
+                                }`}
+                              >
+                                <div 
+                                  className="flex items-center gap-3 cursor-pointer select-none"
+                                  onClick={() => {
+                                    let updated;
+                                    if (!isChecked) {
+                                      const defaultLink = p.referralLinks?.[0]?.code
+                                        ? buildReferralUrl(p.referralLinks[0].code, ownerSubdomain)
+                                        : '';
+                                      updated = [...(activeBlock.content.selectedProducts || []), { productId: p.id, link: defaultLink, buttonText: 'Commander' }];
+                                    } else {
+                                      updated = (activeBlock.content.selectedProducts || []).filter((sp: any) => sp.productId !== p.id);
+                                    }
+                                    updateBlockContent('selectedProducts', updated);
+                                  }}
+                                >
+                                  {/* Selection Check Ring */}
+                                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all shrink-0 ${
+                                    isChecked 
+                                      ? 'border-orange-500 bg-orange-500 text-white' 
+                                      : 'border-gray-300 bg-white'
+                                  }`}>
+                                    {isChecked && <span className="text-[10px] font-black leading-none">✓</span>}
+                                  </div>
+                                  
+                                  {/* Thumbnail Image */}
+                                  {p.images?.[0]?.url ? (
+                                    <img src={p.images[0].url} className="w-10 h-10 object-cover rounded-lg border border-gray-200/50 shrink-0" />
+                                  ) : (
+                                    <div className="w-10 h-10 bg-gray-50 rounded-lg border border-gray-200/30 flex items-center justify-center text-gray-400 shrink-0">
+                                      <ShoppingBag className="w-4 h-4" />
+                                    </div>
+                                  )}
+
+                                  {/* Info */}
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-black text-gray-800 truncate leading-tight">{p.nameFr || p.nameEn || p.nameAr}</p>
+                                    <p className="text-[9px] text-gray-400 font-bold uppercase mt-0.5 tracking-tighter">{p.sku || 'Sans SKU'}</p>
+                                  </div>
+                                </div>
+
+                                {isChecked && (
+                                  <div className="mt-3.5 pt-3.5 border-t border-dashed border-gray-200/80 space-y-3">
+                                    <div>
+                                      <label className="block text-[9px] font-bold text-gray-400 uppercase mb-1">Destination du Bouton</label>
+                                      <div className="flex items-center gap-1.5 w-full min-w-0">
+                                        <select 
+                                          value={selectedItem.link || ''}
+                                          onChange={(e) => {
+                                            const updated = (activeBlock.content.selectedProducts || []).map((sp: any) => {
+                                              if (sp.productId === p.id) {
+                                                return { ...sp, link: e.target.value };
+                                              }
+                                              return sp;
+                                            });
+                                            updateBlockContent('selectedProducts', updated);
+                                          }}
+                                          className="flex-1 min-w-0 text-[11px] bg-white border border-gray-200 rounded-xl px-2 py-1.5 text-gray-600 focus:outline-none focus:ring-1 focus:ring-orange-500 font-bold truncate"
+                                        >
+                                          {(p.referralLinks || []).length === 0 ? (
+                                            <option value="">Aucun lien de landing page</option>
+                                          ) : (
+                                            (p.referralLinks || []).map((link: any) => {
+                                              const url = buildReferralUrl(link.code, ownerSubdomain);
+                                              const displayCode = link.code.length > 15 ? link.code.slice(0, 12) + '...' : link.code;
+                                              return (
+                                                <option key={link.id} value={url}>
+                                                  /r/{displayCode}
+                                                </option>
+                                              );
+                                            })
+                                          )}
+                                        </select>
+                                        <a 
+                                          href={selectedItem.link && selectedItem.link.startsWith('http') ? selectedItem.link : undefined} 
+                                          target="_blank" 
+                                          rel="noopener noreferrer"
+                                          className={`w-8 h-8 rounded-xl border flex items-center justify-center transition-all shrink-0 ${
+                                            selectedItem.link && selectedItem.link.startsWith('http')
+                                              ? 'bg-white hover:bg-orange-50 hover:text-orange-600 text-gray-400 border-gray-200 cursor-pointer'
+                                              : 'bg-gray-50 text-gray-300 border-gray-100/50 cursor-not-allowed pointer-events-none'
+                                          }`}
+                                          title="Visiter la landing page"
+                                        >
+                                          <ExternalLink className="w-3.5 h-3.5" />
+                                        </a>
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <label className="block text-[9px] font-bold text-gray-400 uppercase mb-1">Texte du Bouton (ex: Shop Now)</label>
+                                      <input 
+                                        type="text"
+                                        value={selectedItem.buttonText || ''}
+                                        onChange={(e) => {
+                                          const updated = (activeBlock.content.selectedProducts || []).map((sp: any) => {
+                                            if (sp.productId === p.id) {
+                                              return { ...sp, buttonText: e.target.value };
+                                            }
+                                            return sp;
+                                          });
+                                          updateBlockContent('selectedProducts', updated);
+                                        }}
+                                        className="w-full text-xs bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-gray-600 focus:outline-none focus:ring-1 focus:ring-orange-500 font-medium"
+                                        placeholder="Commander"
+                                      />
+                                    </div>
+                                    <div className="flex gap-2.5 mt-2">
+                                      <div className="flex-1">
+                                        <label className="block text-[9px] font-bold text-gray-400 uppercase mb-1">Fond Btn</label>
+                                        <div className="flex gap-1.5 items-center">
+                                          <input 
+                                            type="color" 
+                                            value={selectedItem.btnBg || activeBlock.content.btnBg || '#f97316'} 
+                                            onChange={(e) => {
+                                              const updated = (activeBlock.content.selectedProducts || []).map((sp: any) => {
+                                                if (sp.productId === p.id) {
+                                                  return { ...sp, btnBg: e.target.value };
+                                                }
+                                                return sp;
+                                              });
+                                              updateBlockContent('selectedProducts', updated);
+                                            }} 
+                                            className="h-6 w-7 border border-gray-200 p-0 rounded-lg cursor-pointer shrink-0" 
+                                          />
+                                          <input 
+                                            type="text" 
+                                            value={selectedItem.btnBg || activeBlock.content.btnBg || '#f97316'} 
+                                            onChange={(e) => {
+                                              const updated = (activeBlock.content.selectedProducts || []).map((sp: any) => {
+                                                if (sp.productId === p.id) {
+                                                  return { ...sp, btnBg: e.target.value };
+                                                }
+                                                return sp;
+                                              });
+                                              updateBlockContent('selectedProducts', updated);
+                                            }} 
+                                            className="w-full text-[10px] border border-gray-200 px-1.5 py-0.5 rounded-lg font-mono uppercase text-gray-500 focus:outline-none focus:ring-1 focus:ring-orange-500" 
+                                          />
+                                        </div>
+                                      </div>
+                                      <div className="flex-1">
+                                        <label className="block text-[9px] font-bold text-gray-400 uppercase mb-1">Texte Btn</label>
+                                        <div className="flex gap-1.5 items-center">
+                                          <input 
+                                            type="color" 
+                                            value={selectedItem.btnColor || activeBlock.content.btnColor || '#ffffff'} 
+                                            onChange={(e) => {
+                                              const updated = (activeBlock.content.selectedProducts || []).map((sp: any) => {
+                                                if (sp.productId === p.id) {
+                                                  return { ...sp, btnColor: e.target.value };
+                                                }
+                                                return sp;
+                                              });
+                                              updateBlockContent('selectedProducts', updated);
+                                            }} 
+                                            className="h-6 w-7 border border-gray-200 p-0 rounded-lg cursor-pointer shrink-0" 
+                                          />
+                                          <input 
+                                            type="text" 
+                                            value={selectedItem.btnColor || activeBlock.content.btnColor || '#ffffff'} 
+                                            onChange={(e) => {
+                                              const updated = (activeBlock.content.selectedProducts || []).map((sp: any) => {
+                                                if (sp.productId === p.id) {
+                                                  return { ...sp, btnColor: e.target.value };
+                                                }
+                                                return sp;
+                                              });
+                                              updateBlockContent('selectedProducts', updated);
+                                            }} 
+                                            className="w-full text-[10px] border border-gray-200 px-1.5 py-0.5 rounded-lg font-mono uppercase text-gray-500 focus:outline-none focus:ring-1 focus:ring-orange-500" 
+                                          />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-4">
+                      <h4 className="text-[10px] font-bold text-gray-400 uppercase font-black">Options d'Affichage</h4>
+                      <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-gray-200/60 shadow-2xs">
+                        <span className="text-xs font-bold text-gray-600">Afficher le prix</span>
+                        <input 
+                          type="checkbox"
+                          checked={activeBlock.content.showPrice !== false}
+                          onChange={(e) => updateBlockContent('showPrice', e.target.checked)}
+                          className="rounded text-orange-500 focus:ring-orange-500 w-4 h-4 border-gray-300 cursor-pointer"
+                        />
+                      </div>
+                      
+                      {(activeBlock.content.layoutType || 'grid') === 'slider' && (
+                        <div className="space-y-3 bg-white p-3 rounded-xl border border-gray-200/60 shadow-2xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-gray-600">Défilement auto.</span>
+                            <input 
+                              type="checkbox"
+                              checked={activeBlock.content.autoPlay !== false}
+                              onChange={(e) => updateBlockContent('autoPlay', e.target.checked)}
+                              className="rounded text-orange-500 focus:ring-orange-500 w-4 h-4 border-gray-300 cursor-pointer"
+                            />
+                          </div>
+                          {activeBlock.content.autoPlay !== false && (
+                            <div className="flex items-center justify-between gap-4 pt-2 border-t border-dashed border-gray-100">
+                              <span className="text-[9px] font-bold text-gray-400 uppercase">Intervalle (ms)</span>
+                              <input 
+                                type="number"
+                                min={1000}
+                                step={500}
+                                value={activeBlock.content.autoPlaySpeed || 3500}
+                                onChange={(e) => updateBlockContent('autoPlaySpeed', Number(e.target.value))}
+                                className="w-20 text-xs bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-right text-gray-600 font-bold focus:outline-none focus:ring-1 focus:ring-orange-500"
+                              />
+                            </div>
+                          )}
+                          
+                          <div className="flex items-center justify-between gap-4 pt-2 border-t border-dashed border-gray-100">
+                            <span className="text-[11px] font-bold text-gray-600">Défiler par</span>
+                            <select 
+                              value={activeBlock.content.slideStep || 1}
+                              onChange={(e) => updateBlockContent('slideStep', Number(e.target.value))}
+                              className="text-xs bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-gray-600 font-bold focus:outline-none focus:ring-1 focus:ring-orange-500"
+                            >
+                              <option value={1}>1 carte</option>
+                              <option value={2}>2 cartes</option>
+                              <option value={3}>3 cartes</option>
+                            </select>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-4 pt-2 border-t border-dashed border-gray-100">
+                            <span className="text-[11px] font-bold text-gray-600">Transition</span>
+                            <select 
+                              value={activeBlock.content.animationType || 'standard'}
+                              onChange={(e) => updateBlockContent('animationType', e.target.value)}
+                              className="text-xs bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-gray-600 font-bold focus:outline-none focus:ring-1 focus:ring-orange-500"
+                            >
+                              <option value="standard">Standard</option>
+                              <option value="smooth">Fluide</option>
+                              <option value="bounce">Ressort</option>
+                              <option value="continuous">Continu</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-4">
+                      <h4 className="text-[10px] font-bold text-gray-400 uppercase">Style des Cartes</h4>
+                      <Field label="Couleur de fond" type="color" value={activeBlock.content.cardBg || '#ffffff'} onChange={(v: string) => updateBlockContent('cardBg', v)} />
+                      <Field label="Arrondi (px)" type="number" value={activeBlock.content.cardRadius ?? 16} onChange={(v: number) => updateBlockContent('cardRadius', v)} />
+                      <Field label="Couleur titre" type="color" value={activeBlock.content.titleColor || '#111827'} onChange={(v: string) => updateBlockContent('titleColor', v)} />
+                      <Field label="Couleur description" type="color" value={activeBlock.content.descColor || '#4b5563'} onChange={(v: string) => updateBlockContent('descColor', v)} />
+                      <Field label="Couleur prix" type="color" value={activeBlock.content.priceColor || '#f97316'} onChange={(v: string) => updateBlockContent('priceColor', v)} />
+                      <Field label="Couleur de fond Bouton" type="color" value={activeBlock.content.btnBg || '#f97316'} onChange={(v: string) => updateBlockContent('btnBg', v)} />
+                      <Field label="Couleur Texte Bouton" type="color" value={activeBlock.content.btnColor || '#ffffff'} onChange={(v: string) => updateBlockContent('btnColor', v)} />
+                    </div>
+
+                    <div className="pt-4 border-t border-gray-100">
+                      <SpacingControls content={activeBlock.content} onChange={updateBlockContent} />
                     </div>
                   </div>
                 )}

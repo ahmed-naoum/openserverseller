@@ -8,10 +8,13 @@ import {
   Tooltip as RechartsTooltip, Legend 
 } from 'recharts';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { buildReferralUrl } from '../../utils/referral';
 import { containsBlockedWord } from '../../utils/blockedWords';
 
 export default function InfluencerLinks() {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const [links, setLinks] = useState<ReferralLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -134,7 +137,7 @@ export default function InfluencerLinks() {
   }, [selectedLinkIdForChart]);
 
   const copyLink = (code: string) => {
-    const link = `${window.location.origin}/r/${code}`;
+    const link = buildReferralUrl(code, user?.subdomain);
     navigator.clipboard.writeText(link);
     toast.success(t('toast_copied', 'links'));
   };
@@ -766,6 +769,13 @@ export default function InfluencerLinks() {
                                 </div>
                               </div>
                               <div className="text-center">
+                                <p className="text-xs font-black text-slate-900 mb-0.5">{group.totalWhatsappClicks.toLocaleString()}</p>
+                                <div className="flex items-center justify-center gap-1">
+                                  <MessageCircle size={10} className="text-green-500" />
+                                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_whatsapp', 'links')}</p>
+                                </div>
+                              </div>
+                              <div className="text-center">
                                 <p className="text-xs font-black text-indigo-600 mb-0.5">{combinedCtr}%</p>
                                 <div className="flex items-center justify-center gap-1">
                                   <Target size={10} className="text-indigo-500" />
@@ -844,7 +854,7 @@ export default function InfluencerLinks() {
                                                 {link.code}
                                               </span>
                                               <p className="text-[9px] text-slate-400 font-bold uppercase truncate max-w-[200px]">
-                                                URL: {window.location.origin}/r/{link.code}
+                                                URL: {buildReferralUrl(link.code, user?.subdomain)}
                                               </p>
                                             </div>
                                           </td>
@@ -1059,7 +1069,7 @@ export default function InfluencerLinks() {
             <p className="text-sm text-slate-400 font-medium mb-8">{t('qr_subtitle', 'links')}</p>
             <div className="bg-white p-6 rounded-2xl border-4 border-dashed border-slate-100 inline-block mb-8">
               <img 
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(`${window.location.origin}/r/${selectedLink?.code}`)}`}
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(buildReferralUrl(selectedLink?.code, user?.subdomain))}`}
                 alt="QR Code"
                 className="w-48 h-48 mx-auto"
               />
@@ -1068,7 +1078,7 @@ export default function InfluencerLinks() {
               <button
                 onClick={() => {
                   const link = document.createElement('a');
-                  link.href = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(`${window.location.origin}/r/${selectedLink?.code}`)}`;
+                  link.href = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(buildReferralUrl(selectedLink?.code, user?.subdomain))}`;
                   link.download = `qr-link-${selectedLink?.code}.png`;
                   document.body.appendChild(link);
                   link.click();
@@ -1172,7 +1182,7 @@ export default function InfluencerLinks() {
                   </div>
                   <div className="flex justify-between items-center px-1">
                     <span className="text-[10px] text-slate-400 font-bold uppercase">
-                      {t('final_url_prefix', 'links')}: {window.location.origin}/r/{customName || t('name_placeholder', 'links')}
+                      {t('final_url_prefix', 'links')}: {buildReferralUrl(customName || t('name_placeholder', 'links'), user?.subdomain)}
                     </span>
                     <span className={`text-[10px] font-black uppercase ${customName.length >= 3 && customName.length <= 20 ? 'text-slate-400' : 'text-amber-500'}`}>
                       {customName.length}/20 chars

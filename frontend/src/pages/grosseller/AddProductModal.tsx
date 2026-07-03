@@ -63,7 +63,7 @@ export default function AddProductModal({ isOpen, onClose, onSuccess, isAdmin = 
       nameAr: editProduct?.nameAr || '',
       description: editProduct?.description || '',
       categoryId: initialCategoryIds[0] || '',
-      baseCostMad: editProduct?.baseCostMad?.toString() || '',
+      baseCostMad: editProduct?.baseCostMad?.toString() || '0',
       retailPriceMad: editProduct?.retailPriceMad?.toString() || '',
       affiliatePriceMad: editProduct?.affiliatePriceMad?.toString() || '',
       influencerPriceMad: editProduct?.influencerPriceMad?.toString() || '',
@@ -523,37 +523,22 @@ export default function AddProductModal({ isOpen, onClose, onSuccess, isAdmin = 
                     className="space-y-6"
                   >
                     <SectionHeader icon={Truck} title="Logistique & Prix" currentStep={2} maxSteps={totalSteps} />
-                    <div className="grid grid-cols-2 gap-5">
-                      <div className="space-y-1.5">
-                        <label className="label">Coût de base (MAD)</label>
-                        <input
-                          type="number"
-                          required
-                          min="0"
-                          step="0.01"
-                          autoFocus
-                          onFocus={handleNumericFocus}
-                          className="input"
-                          value={formData.baseCostMad}
-                          onChange={(e) => setFormData({ ...formData, baseCostMad: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="label flex items-center gap-1.5">
-                          <Layers size={14} className="text-secondary-500" />
-                          Prix Vendeur / Public (MAD)
-                        </label>
-                        <input
-                          type="number"
-                          required
-                          min="0"
-                          step="0.01"
-                          onFocus={handleNumericFocus}
-                          className="input bg-secondary-50/20 border-secondary-200"
-                          value={formData.retailPriceMad}
-                          onChange={(e) => setFormData({ ...formData, retailPriceMad: e.target.value })}
-                        />
-                      </div>
+                    <div className="space-y-1.5">
+                      <label className="label flex items-center gap-1.5">
+                        <Layers size={14} className="text-secondary-500" />
+                        Prix Vendeur / Public (MAD)
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min="0"
+                        step="0.01"
+                        autoFocus
+                        onFocus={handleNumericFocus}
+                        className="input bg-secondary-50/20 border-secondary-200"
+                        value={formData.retailPriceMad}
+                        onChange={(e) => setFormData({ ...formData, retailPriceMad: e.target.value })}
+                      />
                     </div>
 
                     {(formData.visibility.includes('AFFILIATE') || formData.visibility.includes('INFLUENCER')) && (
@@ -619,31 +604,17 @@ export default function AddProductModal({ isOpen, onClose, onSuccess, isAdmin = 
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-5">
-                      <div className="space-y-1.5">
-                        <label className="label">Quantité Initiale</label>
-                        <input
-                          type="number"
-                          required
-                          min="0"
-                          onFocus={handleNumericFocus}
-                          className="input"
-                          value={formData.stockQuantity}
-                          onChange={(e) => setFormData({ ...formData, stockQuantity: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="label">Jours de Production</label>
-                        <input
-                          type="number"
-                          required
-                          min="0"
-                          onFocus={handleNumericFocus}
-                          className="input"
-                          value={formData.minProductionDays}
-                          onChange={(e) => setFormData({ ...formData, minProductionDays: e.target.value })}
-                        />
-                      </div>
+                    <div className="space-y-1.5">
+                      <label className="label">Quantité Initiale</label>
+                      <input
+                        type="number"
+                        required
+                        min="0"
+                        onFocus={handleNumericFocus}
+                        className="input"
+                        value={formData.stockQuantity}
+                        onChange={(e) => setFormData({ ...formData, stockQuantity: e.target.value })}
+                      />
                     </div>
                   </motion.div>
                 )}

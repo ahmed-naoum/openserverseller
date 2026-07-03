@@ -1,4 +1,18 @@
 {
+  "subdomain_title": "Custom Subdomain",
+  "subdomain_desc": "Set your personalized subdomain name to host your landing pages and product offers",
+  "subdomain_label": "Choose your Subdomain name",
+  "subdomain_placeholder": "my-store",
+  "subdomain_suffix": "Your links will look like: {subdomain}.silacod.ma/r/link-code",
+  "subdomain_checking": "Checking availability...",
+  "subdomain_available": "This subdomain name is available!",
+  "subdomain_taken": "This subdomain is already taken. Please try another.",
+  "subdomain_invalid": "Only lowercase letters, numbers, and hyphens are allowed (3-30 chars).",
+  "subdomain_reserved": "This subdomain name is reserved.",
+  "subdomain_btn_save": "Confirm Subdomain",
+  "subdomain_toast_success": "Subdomain configured successfully!",
+  "subdomain_toast_error": "Failed to save subdomain.",
+
   "email_title": "Email Verification",
   "email_desc": "Confirm your email address: {email}",
   "email_notice_to_send": "We will send a verification code to:",

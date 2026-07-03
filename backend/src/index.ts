@@ -48,6 +48,18 @@ const checkOrigin = (origin: string | undefined, callback: (err: Error | null, o
     return;
   }
 
+  // Support local development subdomains on localhost (e.g., http://seller.localhost:5173)
+  try {
+    const parsedOrigin = new URL(origin);
+    const hostname = parsedOrigin.hostname;
+    if ((hostname === 'localhost' || hostname.endsWith('.localhost')) && parsedOrigin.port === '5173') {
+      callback(null, origin);
+      return;
+    }
+  } catch (e) {
+    // Ignore URL parsing errors
+  }
+
   const frontendUrl = process.env.FRONTEND_URL;
   if (frontendUrl) {
     try {
@@ -57,7 +69,7 @@ const checkOrigin = (origin: string | undefined, callback: (err: Error | null, o
       const frontendHost = parsedFrontend.hostname.replace(/^www\./, '');
       const originHost = parsedOrigin.hostname.replace(/^www\./, '');
       
-      if (originHost === frontendHost) {
+      if (originHost === frontendHost || originHost.endsWith('.' + frontendHost)) {
         callback(null, origin);
         return;
       }

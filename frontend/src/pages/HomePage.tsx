@@ -354,17 +354,10 @@ export default function HomePage() {
                     <ArrowLeft size={18} />
                   </Link>
                 ) : (
-                  <>
-                    {/* Left button: hollow outline button with dark/blue border */}
-                    <Link to="/influencer/register" className="w-full sm:w-auto rounded-[12px] border-[1.5px] border-[#2e315e] hover:bg-slate-100 transition-all px-8 py-[14px] flex items-center justify-center gap-2 text-[16px] font-black text-[#2e315e]">
-                      <span>{t('start_influencer')}</span>
-                    </Link>
-                    {/* Right button: solid orange/coral color with a white arrow pointing left inside it */}
-                    <Link to="/register" className="w-full sm:w-auto rounded-[12px] bg-[#ff5722] hover:bg-[#e64a19] transition-all px-8 py-[14px] flex items-center justify-center gap-3 text-[16px] font-black text-white">
-                      <span>{t('start_selling')}</span>
-                      <ArrowLeft size={18} />
-                    </Link>
-                  </>
+                  <Link to="/register" className="w-full sm:w-auto rounded-[12px] bg-[#ff5722] hover:bg-[#e64a19] transition-all px-8 py-[14px] flex items-center justify-center gap-3 text-[16px] font-black text-white shadow-xl shadow-[#ff5722]/20">
+                    <span>{t('start_now_free')}</span>
+                    <ArrowLeft size={18} />
+                  </Link>
                 )}
               </div>
 

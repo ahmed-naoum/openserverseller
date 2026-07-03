@@ -887,6 +887,62 @@ router.patch(
   })
 );
 
+// Admin set/update/clear user subdomain
+router.patch(
+  '/users/:uuid/subdomain',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { uuid } = req.params;
+    const { subdomain } = req.body;
+
+    // If subdomain is null or empty, clear it
+    if (subdomain === null || subdomain === '' || subdomain === undefined) {
+      const updated = await prisma.user.update({
+        where: { uuid: String(uuid) },
+        data: { subdomain: null },
+      });
+      return res.json({
+        status: 'success',
+        message: 'Subdomain cleared',
+        data: updated,
+      });
+    }
+
+    if (typeof subdomain !== 'string') {
+      throw new AppException(400, 'Subdomain is required');
+    }
+
+    const cleaned = subdomain.trim().toLowerCase();
+    const regex = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+    if (!regex.test(cleaned) || cleaned.length < 3 || cleaned.length > 30) {
+      throw new AppException(400, 'Invalid subdomain format (3-30 chars, lowercase letters, numbers, hyphens)');
+    }
+
+    // Check uniqueness
+    const targetUser = await prisma.user.findUnique({ where: { uuid: String(uuid) } });
+    if (!targetUser) throw new AppException(404, 'User not found');
+
+    const existing = await prisma.user.findFirst({
+      where: { subdomain: cleaned, NOT: { id: targetUser.id } }
+    });
+    if (existing) {
+      throw new AppException(400, 'This subdomain is already taken by another user');
+    }
+
+    const updated = await prisma.user.update({
+      where: { uuid: String(uuid) },
+      data: { subdomain: cleaned },
+    });
+
+    res.json({
+      status: 'success',
+      message: `Subdomain updated to "${cleaned}"`,
+      data: updated,
+    });
+  })
+);
+
 // Update KYC status (supports APPROVED, REJECTED, PENDING)
 router.patch(
   '/users/:uuid/verify-kyc',
@@ -2290,6 +2346,7 @@ router.get(
             id: true,
             email: true,
             phone: true,
+            subdomain: true,
             profile: { select: { fullName: true } }
           }
         },
@@ -2326,6 +2383,7 @@ router.get(
           id: link.influencer?.id,
           email: link.influencer?.email,
           phone: link.influencer?.phone,
+          subdomain: link.influencer?.subdomain,
           fullName: link.influencer?.profile?.fullName || 'Inconnu'
         },
         landingPage: link.landingPage,

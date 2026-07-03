@@ -22,12 +22,15 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { buildReferralUrl } from '../../utils/referral';
 import { containsBlockedWord } from '../../utils/blockedWords';
 
 type ClaimStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'BUILDING';
 
 export default function InfluencerInventory() {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const [claims, setClaims] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ClaimStatus | 'ALL'>('ALL');
@@ -82,7 +85,9 @@ export default function InfluencerInventory() {
       const res = await influencerApi.getClaims();
       // Handle potential response structure differences
       const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-      setClaims(data);
+      // Filter out rejected claims
+      const activeClaims = data.filter((c: any) => c.status !== 'REJECTED');
+      setClaims(activeClaims);
     } catch (error) {
       toast.error(t('error_loading', 'inventory', 'Impossible de charger vos produits'));
       console.error(error);
@@ -111,7 +116,6 @@ export default function InfluencerInventory() {
     pending: claims.filter(c => c.status === 'PENDING').length,
     building: claims.filter(c => c.status === 'APPROVED' && c.referralLink?.status === 'BUILDING').length,
     approved: claims.filter(c => c.status === 'APPROVED' && c.referralLink?.status !== 'BUILDING').length,
-    rejected: claims.filter(c => c.status === 'REJECTED').length,
   };
 
   const handleNameChange = (val: string) => {
@@ -199,7 +203,7 @@ export default function InfluencerInventory() {
   };
 
   const handleCopyLink = (code: string) => {
-    const link = `${window.location.origin}/r/${code}`;
+    const link = buildReferralUrl(code, user?.subdomain);
     navigator.clipboard.writeText(link);
     toast.success(t('copied_success', 'inventory', 'Lien copié dans le presse-papiers !'));
   };
@@ -296,7 +300,7 @@ export default function InfluencerInventory() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
             <Clock className="w-6 h-6" />
@@ -324,20 +328,11 @@ export default function InfluencerInventory() {
             <p className="text-xl font-black text-gray-900">{stats.approved}</p>
           </div>
         </div>
-        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-red-50 flex items-center justify-center text-red-600">
-            <XCircle className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">{t('rejected', 'inventory', 'Refusés')}</p>
-            <p className="text-xl font-black text-gray-900">{stats.rejected}</p>
-          </div>
-        </div>
       </div>
 
       {/* Tabs */}
       <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-gray-200 w-fit">
-        {(['ALL', 'PENDING', 'BUILDING', 'APPROVED', 'REJECTED'] as const).map((tab) => (
+        {(['ALL', 'PENDING', 'BUILDING', 'APPROVED'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -347,7 +342,7 @@ export default function InfluencerInventory() {
                 : 'text-gray-500 hover:bg-gray-50'
             }`}
           >
-            {tab === 'ALL' ? t('all', 'inventory', 'Tous') : tab === 'PENDING' ? t('pending', 'inventory', 'En attente') : tab === 'BUILDING' ? t('building', 'inventory', 'En construction') : tab === 'APPROVED' ? t('approved', 'inventory', 'Approuvés') : t('rejected', 'inventory', 'Refusés')}
+            {tab === 'ALL' ? t('all', 'inventory', 'Tous') : tab === 'PENDING' ? t('pending', 'inventory', 'En attente') : tab === 'BUILDING' ? t('building', 'inventory', 'En construction') : t('approved', 'inventory', 'Approuvés')}
           </button>
         ))}
       </div>
@@ -518,7 +513,7 @@ export default function InfluencerInventory() {
                   </div>
                   <div className="flex justify-between items-center px-1">
                     <span className="text-[10px] text-slate-400 font-bold uppercase truncate max-w-[70%]">
-                      {t('final_url_prefix', 'links', 'URL FINALE')}: {window.location.origin}/r/{customName || t('name_placeholder', 'links', 'NOM')}
+                      {t('final_url_prefix', 'links', 'URL FINALE')}: {buildReferralUrl(customName || t('name_placeholder', 'links', 'NOM'), user?.subdomain)}
                     </span>
                     <span className={`text-[10px] font-black uppercase ${customName.length >= 3 && customName.length <= 20 ? 'text-slate-400' : 'text-amber-500'}`}>
                       {customName.length}/20 chars
@@ -617,7 +612,7 @@ export default function InfluencerInventory() {
                             </div>
                             
                             <p className="text-[10px] text-slate-400 font-bold uppercase truncate max-w-[280px]">
-                              URL: {window.location.origin}/r/{link.code}
+                              URL: {buildReferralUrl(link.code, user?.subdomain)}
                             </p>
 
                             {/* Mini Performance Grid */}
@@ -645,7 +640,7 @@ export default function InfluencerInventory() {
                           <div className="flex items-center gap-2 self-end sm:self-center">
                             <button
                               onClick={() => {
-                                const fullUrl = `${window.location.origin}/r/${link.code}`;
+                                const fullUrl = buildReferralUrl(link.code, user?.subdomain);
                                 navigator.clipboard.writeText(fullUrl);
                                 toast.success(t('copied_success', 'inventory', 'Lien copié dans le presse-papiers !'));
                               }}
@@ -721,7 +716,7 @@ export default function InfluencerInventory() {
             <p className="text-sm text-slate-400 font-medium mb-8">{t('qr_subtitle', 'links', 'Scannez ou téléchargez le code QR')}</p>
             <div className="bg-white p-6 rounded-2xl border-4 border-dashed border-slate-100 inline-block mb-8">
               <img 
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(`${window.location.origin}/r/${selectedLinkForQr?.code}`)}`}
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(buildReferralUrl(selectedLinkForQr?.code, user?.subdomain))}`}
                 alt="QR Code"
                 className="w-48 h-48 mx-auto"
               />
@@ -730,7 +725,7 @@ export default function InfluencerInventory() {
               <button
                 onClick={() => {
                   const link = document.createElement('a');
-                  link.href = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(`${window.location.origin}/r/${selectedLinkForQr?.code}`)}`;
+                  link.href = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(buildReferralUrl(selectedLinkForQr?.code, user?.subdomain))}`;
                   link.download = `qr-link-${selectedLinkForQr?.code}.png`;
                   document.body.appendChild(link);
                   link.click();

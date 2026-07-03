@@ -115,6 +115,7 @@ async function main() {
           stockStatus: item.stock,
           stockQuantity: item.stock === 'available' ? 1000 : 0, // Mock stock quantity based on string
           ficheTechniqueUrl: item.fiche_technique_url,
+          canvaLink: item.link_canva || null,
           baseCostMad: parseFloat(item.price) || 0,
           retailPriceMad: parseFloat(item.price) * 1.5 || 0, // Mock retail price as 1.5x
           visibility: ['REGULAR'],
@@ -129,8 +130,8 @@ async function main() {
              create: imagesToCreate
           },
           wholesalePrices: {
-            deleteMany: {},
-            create: wholesaleTiersToCreate
+             deleteMany: {},
+             create: wholesaleTiersToCreate
           }
         },
         create: {
@@ -144,6 +145,7 @@ async function main() {
           stockStatus: item.stock,
           stockQuantity: item.stock === 'available' ? 1000 : 0,
           ficheTechniqueUrl: item.fiche_technique_url,
+          canvaLink: item.link_canva || null,
           baseCostMad: parseFloat(item.price) || 0,
           retailPriceMad: parseFloat(item.price) * 1.5 || 0,
           visibility: ['REGULAR'],

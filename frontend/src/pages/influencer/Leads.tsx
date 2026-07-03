@@ -57,6 +57,62 @@ const ALL_STATUS_BADGES: Record<string, { label: string; color: string; icon: Re
   'PRICE_REJECTED': { label: 'Prix Refusé', color: 'bg-rose-50 text-rose-600 border border-rose-100', icon: X },
 };
 
+const STATUS_COLORS: Record<string, string> = {
+  // --- Cycle de vie / Stock ---
+  'NEW_PARCEL': '#64748b',         // Slate/Gray
+  'WAITING_PICKUP': '#f59e0b',     // Amber
+  'WAITING_PREPARATION': '#b45309',// Dark Amber/Brown
+  'PREPARED': '#10b981',           // Emerald
+  'ENCORE_PREPARED': '#3b82f6',    // Blue
+  'PICKED_UP': '#0284c7',          // Sky Blue
+
+  // --- En transit ---
+  'SENT': '#8b5cf6',               // Violet
+  'RECEIVED': '#6366f1',           // Indigo
+  'DISTRIBUTION': '#06b6d4',       // Cyan
+  'PROGRAMMER_AUTO': '#a855f7',    // Purple
+  'POSTPONED': '#f97316',          // Orange
+  'NOANSWER': '#f43f5e',           // Rose/Soft Red
+  'ERR': '#e11d48',                // Crimson Red
+  'PROGRAMMER': '#4f46e5',         // Royal Blue
+  'INCORRECT_ADDRESS': '#ec4899',  // Pink
+
+  // --- Livraison terminée ---
+  'DELIVERED': '#059669',          // Green
+  'RETURNED': '#ea580c',           // Dark Orange
+  'REFUNDED': '#14b8a6',           // Teal
+
+  // --- Annulations ---
+  'CANCELED_BY_SELLER': '#dc2626', // Red
+  'CANCELED_BY_SYSTEM': '#991b1b', // Dark Red
+  'CANCELED': '#b91c1c',           // Medium Red
+  'REFUSE': '#ef4444',             // Bright Red
+
+  'PUSHED_TO_DELIVERY': '#0ea5e9', // Light Blue
+  'CALL_LATER': '#d97706',         // Gold/Dark Yellow
+
+  // --- Legacy / Confirmation ---
+  'LEAD': '#475569',               // Cool Gray
+  'AVAILABLE': '#eab308',          // Yellow
+  'ASSIGNED': '#0891b2',           // Cyan-Blue
+  'PENDING': '#f59e0b',            // Amber
+  'CONFIRMED': '#2563eb',          // Cobalt Blue
+  'CONFIRMED_DELIVERY': '#1d4ed8', // Dark Blue
+  'SHIPPED': '#7c3aed',            // Deep Violet
+  'CANCELLED': '#ef4444',          // Red
+  'PRICE_CONFIRMED': '#3b82f6',    // Blue
+  'PRICE_REJECTED': '#f43f5e',     // Rose
+  'NO_REPLY': '#fda4af',           // Light Rose
+  'UNREACHABLE': '#cbd5e1',        // Light Slate
+  'INVALID': '#94a3b8',            // Medium Slate
+  'CONTACTED': '#86efac',          // Light Green
+  'INTERESTED': '#22c55e',         // Bright Green
+  'NOT_INTERESTED': '#fca5a5',     // Light Red
+  'CANCEL_REASON_PRICE': '#7f1d1d',// Maroon
+  'WRONG_ORDER': '#f87171',        // Light Orange-Red
+  'CANCEL_ORDER': '#ef4444',       // Red
+};
+
 const PAYMENT_SITUATION_BADGES: Record<string, { label: string; color: string }> = {
   PAID: { label: 'Payé', color: 'bg-emerald-50 text-emerald-600 border border-emerald-100' },
   'Payé': { label: 'Payé', color: 'bg-emerald-50 text-emerald-600 border border-emerald-100' },
@@ -295,7 +351,10 @@ export default function InfluencerLeads() {
   );
 
   const getStatusColorHex = (status: string) => {
-    const colorClass = ALL_STATUS_BADGES[status]?.color || '';
+    const upper = status.toUpperCase();
+    if (STATUS_COLORS[upper]) return STATUS_COLORS[upper];
+
+    const colorClass = ALL_STATUS_BADGES[upper]?.color || '';
     if (colorClass.includes('emerald')) return '#10b981';
     if (colorClass.includes('blue')) return '#3b82f6';
     if (colorClass.includes('amber')) return '#f59e0b';

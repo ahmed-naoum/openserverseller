@@ -470,12 +470,20 @@ export const verifyCSRFToken = (token: string, secret: string): boolean => {
 };
 
 export const securityHeaders = (
-  _req: Request,
+  req: Request,
   res: Response,
   next: NextFunction
 ) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
+
+  // Allow contract preview to be framed by the same origin (SAMEORIGIN)
+  const url = req.originalUrl || req.url || '';
+  if (url.includes('/contract-preview')) {
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  } else {
+    res.setHeader('X-Frame-Options', 'DENY');
+  }
+
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');

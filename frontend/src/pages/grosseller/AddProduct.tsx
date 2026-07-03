@@ -17,7 +17,7 @@ export default function AddProduct() {
     nameAr: '',
     description: '',
     categoryId: '',
-    baseCostMad: '',
+    baseCostMad: '0',
     retailPriceMad: '',
     stockQuantity: '',
     minProductionDays: '3',
@@ -202,65 +202,35 @@ export default function AddProduct() {
           <div className="space-y-5 animate-in fade-in slide-in-from-right-4">
             <h2 className="text-lg font-bold text-gray-900 border-b pb-2">Tarification B2B</h2>
             
-            <div className="grid grid-cols-2 gap-5 bg-gray-50 p-4 rounded-lg border border-gray-100">
-              <div>
-                <label className="label">Votre Coût de Base (MAD) *</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    className="input pl-12 focus:ring-grosseller-500 focus:border-grosseller-500"
-                    value={formData.baseCostMad}
-                    onChange={(e) => setFormData({ ...formData, baseCostMad: e.target.value })}
-                    placeholder="Ex: 50"
-                  />
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">MAD</div>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Le prix que le vendeur paie pour acheter votre stock.</p>
-              </div>
-              <div>
-                <label className="label">Prix de Détail Suggéré (MAD) *</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    className="input pl-12 focus:ring-grosseller-500 focus:border-grosseller-500"
-                    value={formData.retailPriceMad}
-                    onChange={(e) => setFormData({ ...formData, retailPriceMad: e.target.value })}
-                    placeholder="Ex: 150"
-                  />
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">MAD</div>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Le prix conseillé pour le client final.</p>
-              </div>
-            </div>
-
-            <h2 className="text-lg font-bold text-gray-900 border-b pb-2 pt-4">Stock & Logistique</h2>
-            <div className="grid grid-cols-2 gap-5">
-              <div>
-                <label className="label">Quantité Initiale en Stock *</label>
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+              <label className="label">Prix de Détail Suggéré (MAD) *</label>
+              <div className="relative">
                 <input
                   type="number"
                   required
-                  min="0"
-                  className="input focus:ring-grosseller-500 focus:border-grosseller-500"
-                  value={formData.stockQuantity}
-                  onChange={(e) => setFormData({ ...formData, stockQuantity: e.target.value })}
-                  placeholder="Ex: 500"
-                />
-              </div>
-              <div>
-                <label className="label">Jours de production min.</label>
-                <input
-                  type="number"
                   min="1"
-                  className="input focus:ring-grosseller-500 focus:border-grosseller-500"
-                  value={formData.minProductionDays}
-                  onChange={(e) => setFormData({ ...formData, minProductionDays: e.target.value })}
+                  className="input pl-12 focus:ring-grosseller-500 focus:border-grosseller-500"
+                  value={formData.retailPriceMad}
+                  onChange={(e) => setFormData({ ...formData, retailPriceMad: e.target.value })}
+                  placeholder="Ex: 150"
                 />
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">MAD</div>
               </div>
+              <p className="text-xs text-gray-500 mt-1">Le prix conseillé pour le client final.</p>
+            </div>
+
+            <h2 className="text-lg font-bold text-gray-900 border-b pb-2 pt-4">Stock & Logistique</h2>
+            <div className="space-y-1.5">
+              <label className="label">Quantité Initiale en Stock *</label>
+              <input
+                type="number"
+                required
+                min="0"
+                className="input focus:ring-grosseller-500 focus:border-grosseller-500"
+                value={formData.stockQuantity}
+                onChange={(e) => setFormData({ ...formData, stockQuantity: e.target.value })}
+                placeholder="Ex: 500"
+              />
             </div>
           </div>
         )}
@@ -350,7 +320,7 @@ export default function AddProduct() {
           ) : (
             <button
               onClick={handleSubmit}
-              disabled={loading || !formData.nameFr || !formData.categoryId || !formData.baseCostMad}
+              disabled={loading || !formData.nameFr || !formData.categoryId}
               className="px-6 py-2.5 rounded-lg bg-grosseller-600 text-white font-bold hover:bg-grosseller-700 transition-colors disabled:opacity-50 flex items-center gap-2"
             >
               {loading ? (
