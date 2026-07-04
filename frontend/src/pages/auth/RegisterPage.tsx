@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { settingsApi } from '../../lib/api';
@@ -109,6 +109,11 @@ export default function RegisterPage() {
   const t = (key: string) => tRaw(key, 'register');
   const { pathname } = useLocation();
   const defaultRole = pathname.includes('/influencer') ? 'INFLUENCER' : 'VENDOR';
+
+  const turnstileOptions = useMemo(() => ({
+    theme: 'light' as const,
+    language: language === 'ar' ? 'ar' : 'fr',
+  }), [language]);
 
   const [formData, setFormData] = useState<FormDataType>({
     fullName: '',
@@ -308,8 +313,6 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm() || submittedRef.current) return;
-    
-    submittedRef.current = true;
 
     if (!cguAccepted) {
       const msg = language === 'ar' 
@@ -326,6 +329,7 @@ export default function RegisterPage() {
       return;
     }
 
+    submittedRef.current = true;
     setIsLoading(true);
 
     try {
@@ -803,10 +807,7 @@ export default function RegisterPage() {
                     onSuccess={(token) => setTurnstileToken(token)}
                     onExpire={() => setTurnstileToken(null)}
                     onError={() => setTurnstileToken(null)}
-                    options={{
-                      theme: 'light',
-                      language: language === 'ar' ? 'ar' : 'fr',
-                    }}
+                    options={turnstileOptions}
                   />
                 </div>
               )}
