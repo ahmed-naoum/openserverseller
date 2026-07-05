@@ -950,6 +950,9 @@ function ContractSigningForm({ onComplete }: { onComplete: () => void }) {
 
   const [loading, setLoading] = useState(false);
   const [accepted, setAccepted] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(true);
 
   useEffect(() => {
     const checkStatus = async () => {
@@ -964,6 +967,55 @@ function ContractSigningForm({ onComplete }: { onComplete: () => void }) {
     };
     checkStatus();
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl: string | null = null;
+
+    const fetchPdf = async () => {
+      setPdfLoading(true);
+      setPdfError(null);
+      try {
+        const response = await api.get('/auth/contract-preview', {
+          responseType: 'blob'
+        });
+        
+        if (!active) return;
+        
+        const blob = new Blob([response.data], { type: 'application/pdf' });
+        objectUrl = URL.createObjectURL(blob);
+        setPdfUrl(objectUrl);
+      } catch (err: any) {
+        if (!active) return;
+        console.error('Failed to load contract PDF:', err);
+        
+        if (err.response?.data instanceof Blob) {
+          try {
+            const text = await err.response.data.text();
+            const parsed = JSON.parse(text);
+            setPdfError(parsed.message || parsed.error || 'Failed to load PDF');
+          } catch {
+            setPdfError('Failed to load PDF');
+          }
+        } else {
+          setPdfError(err.response?.data?.message || err.message || 'Failed to load PDF');
+        }
+      } finally {
+        if (active) {
+          setPdfLoading(false);
+        }
+      }
+    };
+
+    fetchPdf();
+
+    return () => {
+      active = false;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [user]);
 
   const handleSign = async () => {
     if (!accepted) return toast.error(tVerif('contract_toast_accept', 'Veuillez accepter les termes du contrat'));
@@ -991,6 +1043,19 @@ function ContractSigningForm({ onComplete }: { onComplete: () => void }) {
     return `${BACKEND_URL}/api/v1/auth/contract-preview?token=${localStorage.getItem('accessToken')}`;
   };
 
+  const handleDownload = async () => {
+    if (pdfUrl) {
+      const link = document.createElement('a');
+      link.href = pdfUrl;
+      link.download = 'contrat.fin.silacod.pdf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      window.open(getContractPreviewUrl(), '_blank');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
@@ -999,24 +1064,40 @@ function ContractSigningForm({ onComplete }: { onComplete: () => void }) {
             <h4 className="text-sm font-black text-slate-800 uppercase tracking-wider">{tVerif('contract_preview_title', 'Aperçu de votre contrat')}</h4>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{tVerif('contract_preview_desc', 'Le contrat sera personnalisé avec vos informations (Nom, CIN, Adresse, RIB)')}</p>
           </div>
-          <a
-            href={getContractPreviewUrl()}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-xl font-bold text-xs transition-all shadow-sm group"
+          <button
+            onClick={handleDownload}
+            disabled={pdfLoading}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 disabled:opacity-50 text-slate-700 rounded-xl font-bold text-xs transition-all shadow-sm group"
           >
             <FileText size={14} className="text-primary-500 group-hover:scale-110 transition-transform" />
             {tVerif('contract_btn_download', 'Télécharger le contrat PDF')}
-          </a>
+          </button>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-inner">
-          <iframe
-            src={getContractPreviewUrl()}
-            className="w-full border-0"
-            style={{ height: '500px' }}
-            title="Contract Preview"
-          />
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-inner min-h-[500px] flex flex-col justify-center items-center relative">
+          {pdfLoading ? (
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="w-10 h-10 text-primary-600 animate-spin" />
+              <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">{tVerif('pdf_loading', 'Chargement du contrat...')}</p>
+            </div>
+          ) : pdfError ? (
+            <div className="flex flex-col items-center max-w-md p-6 text-center gap-3">
+              <AlertTriangle className="w-12 h-12 text-red-500" />
+              <h5 className="text-sm font-black text-red-800 uppercase tracking-wider">{tVerif('pdf_error_title', 'Erreur de génération du PDF')}</h5>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                {pdfError.includes('Missing required details') || pdfError.includes('bank') || pdfError.includes('profile')
+                  ? tVerif('pdf_error_missing_info', 'Veuillez remplir vos informations de profil (Nom, CIN, Adresse, Banque, RIB) dans les étapes précédentes pour générer le contrat.')
+                  : pdfError}
+              </p>
+            </div>
+          ) : (
+            <iframe
+              src={pdfUrl || undefined}
+              className="w-full border-0"
+              style={{ height: '500px' }}
+              title="Contract Preview"
+            />
+          )}
         </div>
       </div>
 
