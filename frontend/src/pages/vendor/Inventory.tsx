@@ -3,6 +3,41 @@ import { inventoryApi, influencerApi } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { Package, Clock, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import React, { useRef, useState, useLayoutEffect } from 'react';
+
+const HoverMarquee = ({ text, className = "text-sm font-bold text-gray-900" }: { text: string, className?: string }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLHeadingElement>(null);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+
+  useLayoutEffect(() => {
+    if (containerRef.current && textRef.current) {
+      setIsOverflowing(textRef.current.scrollWidth > containerRef.current.clientWidth);
+    }
+  }, [text]);
+
+  if (isOverflowing) {
+    return (
+      <div className="w-full overflow-hidden whitespace-nowrap relative group/text" dir="ltr">
+        <h3 className={`${className} block overflow-hidden text-ellipsis whitespace-nowrap group-hover:hidden text-left`} dir="ltr">
+          {text}
+        </h3>
+        <div className="hidden group-hover:flex w-max animate-marquee-loop items-center">
+          <h3 className={`${className} pr-12`}>{text}</h3>
+          <h3 className={`${className} pr-12`}>{text}</h3>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef} className="w-full overflow-hidden text-left" dir="ltr">
+      <h3 ref={textRef} className={`${className} whitespace-nowrap`}>
+        {text}
+      </h3>
+    </div>
+  );
+};
 
 export default function VendorInventory() {
   const { user } = useAuth();
@@ -101,7 +136,9 @@ export default function VendorInventory() {
               </div>
               
               <div className="p-3 flex flex-col flex-1">
-                <h3 className="text-sm font-bold text-gray-900 line-clamp-1">{claim.product?.nameFr}</h3>
+                <HoverMarquee 
+                  text={`${claim.product?.nameFr}${claim.product?.nameAr ? ` / ${claim.product.nameAr}` : ''}`} 
+                />
                 
                 {claim.brandName && claim.brandName !== 'N/A' && (
                    <p className="text-[10px] uppercase font-bold text-gray-500 mt-1 line-clamp-1">Marque: <span className="text-gray-900">{claim.brandName}</span></p>
@@ -111,7 +148,7 @@ export default function VendorInventory() {
                   <div>
                     <p className="text-[8px] uppercase font-bold text-gray-400 tracking-wider">Demandé le</p>
                     <p className="text-[10px] font-semibold text-gray-700">
-                      {new Date(claim.createdAt).toLocaleDateString()}
+                      {new Date(claim.claimedAt || claim.updatedAt || Date.now()).toLocaleDateString()}
                     </p>
                   </div>
                   {claim.requestedQty !== null && (
@@ -156,9 +193,10 @@ export default function VendorInventory() {
               </div>
               
               <div className="p-3">
-                <h3 className="text-sm font-bold text-gray-900 line-clamp-1 transition-colors group-hover:text-primary-600">
-                  {item.product?.nameFr}
-                </h3>
+                <HoverMarquee 
+                  text={`${item.product?.nameFr}${item.product?.nameAr ? ` / ${item.product.nameAr}` : ''}`} 
+                  className="text-sm font-bold text-gray-900 transition-colors group-hover:text-primary-600"
+                />
                 
                 <div className="mt-3 flex items-center justify-between pt-3 border-t border-gray-50">
                   <div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { marketplaceApi, influencerApi, publicApi } from '../../lib/api';
@@ -12,10 +12,45 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { buildReferralUrl } from '../../utils/referral';
 import MarketplaceSidebar from '../../components/marketplace/MarketplaceSidebar';
 
+const HoverMarquee = ({ text, className = "" }: { text: string, className?: string }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLHeadingElement>(null);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+
+  useLayoutEffect(() => {
+    if (containerRef.current && textRef.current) {
+      setIsOverflowing(textRef.current.scrollWidth > containerRef.current.clientWidth);
+    }
+  }, [text]);
+
+  if (isOverflowing) {
+    return (
+      <div className="w-full overflow-hidden whitespace-nowrap relative group/text" dir="ltr">
+        <h3 className={`${className} block overflow-hidden text-ellipsis whitespace-nowrap group-hover:hidden text-left`} dir="ltr">
+          {text}
+        </h3>
+        <div className="hidden group-hover:flex w-max animate-marquee-loop items-center">
+          <h3 className={`${className} pr-12`}>{text}</h3>
+          <h3 className={`${className} pr-12`}>{text}</h3>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef} className="w-full overflow-hidden text-left" dir="ltr">
+      <h3 ref={textRef} className={`${className} whitespace-nowrap`}>
+        {text}
+      </h3>
+    </div>
+  );
+};
+
 export default function InfluencerMarketplace() {
   const { t, language } = useLanguage();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const basePath = user?.role === 'INFLUENCER' ? '/influencer' : user?.role === 'GROSSELLER' ? '/grosseller' : '/dashboard';
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [products, setProducts] = useState<any[]>([]);
@@ -35,6 +70,22 @@ export default function InfluencerMarketplace() {
   const [limit, setLimit] = useState(10);
   const totalPages = Math.ceil(total / limit);
 
+  const roleTitle = user?.role === 'INFLUENCER' 
+    ? t('hero_influencer', 'marketplace') 
+    : user?.role === 'GROSSELLER'
+      ? (language === 'ar' ? 'لتجار الجملة' : 'Grossiste')
+      : user?.mode === 'AFFILIATE' 
+        ? (language === 'ar' ? 'للمسوقين بالعمولة' : 'Affilié') 
+        : (language === 'ar' ? 'للبائعين' : 'Vendeur');
+
+  const priceLabel = user?.role === 'INFLUENCER' 
+    ? t('influencer_price', 'marketplace') 
+    : user?.role === 'GROSSELLER'
+      ? (language === 'ar' ? 'سعر الجملة' : 'Prix de Gros')
+      : user?.mode === 'AFFILIATE' 
+        ? (language === 'ar' ? 'سعر المسوق بالعمولة' : 'Prix Affilié') 
+        : (language === 'ar' ? 'سعر البيع' : 'Prix de Vente');
+
   useEffect(() => {
     const currentSearchQuery = searchParams.get('search') || '';
     if (search === currentSearchQuery) return;
@@ -45,7 +96,7 @@ export default function InfluencerMarketplace() {
     return () => clearTimeout(timer);
   }, [search, searchParams, setSearchParams]);
 
-  useEffect(() => { fetchData(); }, [page, limit, JSON.stringify(selectedCategories), sortBy, searchParams.get('search'), priceMin, priceMax, statusFilter]);
+  useEffect(() => { fetchData(); }, [page, limit, JSON.stringify(selectedCategories), sortBy, searchParams.get('search'), priceMin, priceMax, statusFilter, user?.mode, user?.role]);
 
   useEffect(() => {
     publicApi.categories().then(r => setCategories(r.data?.data?.categories || [])).catch(() => {});
@@ -56,7 +107,7 @@ export default function InfluencerMarketplace() {
       setIsLoading(true);
       const [productsRes, claimsRes] = await Promise.all([
         marketplaceApi.products({
-          view: 'INFLUENCER',
+          view: user?.role === 'INFLUENCER' ? 'INFLUENCER' : user?.mode === 'AFFILIATE' ? 'AFFILIATE' : 'REGULAR',
           search: searchParams.get('search') || '',
           category: selectedCategories.join(','),
           page,
@@ -124,7 +175,7 @@ export default function InfluencerMarketplace() {
   const renderClaimAction = (product: any) => {
     const claim = (claims || []).find((c: any) => c.productId === product.id);
     if (!claim) return (
-      <button onClick={(e) => { e.stopPropagation(); navigate(`/influencer/product/${product.id}`); }} className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#232863] text-white rounded-xl text-xs font-black hover:bg-[#1a1f2c] hover:shadow-lg hover:-translate-y-0.5 transition-all active:scale-95">
+      <button onClick={(e) => { e.stopPropagation(); navigate(`${basePath}/product/${product.id}`); }} className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#232863] text-white rounded-xl text-xs font-black hover:bg-[#1a1f2c] hover:shadow-lg hover:-translate-y-0.5 transition-all active:scale-95">
         <Eye className="w-3.5 h-3.5" /> {t('view_details', 'marketplace')}
       </button>
     );
@@ -208,7 +259,7 @@ export default function InfluencerMarketplace() {
             <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
               className="text-3xl md:text-5xl font-black text-white tracking-tight mb-4 leading-tight md:whitespace-nowrap"
             >
-              {t('title', 'marketplace')} <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#FF6B4A] to-orange-300">{t('hero_influencer', 'marketplace')}</span>
+              {t('title', 'marketplace')} <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#FF6B4A] to-orange-300">{roleTitle}</span>
             </motion.h1>
             
             <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
@@ -303,7 +354,7 @@ export default function InfluencerMarketplace() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.04, duration: 0.4 }}
                       whileHover={{ y: -4, boxShadow: '0 16px 48px rgba(0,0,0,0.08)' }}
-                      onClick={() => navigate(`/influencer/product/${product.id}`)}
+                      onClick={() => navigate(`${basePath}/product/${product.id}`)}
                       className="group bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col cursor-pointer"
                     >
                       <div className="relative aspect-[4/5] overflow-hidden bg-gradient-to-br from-slate-50 to-white">
@@ -341,7 +392,7 @@ export default function InfluencerMarketplace() {
 
                         {/* Quick view */}
                         <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0">
-                          <button onClick={(e) => { e.stopPropagation(); navigate(`/influencer/product/${product.id}`); }} className="w-9 h-9 flex items-center justify-center bg-white/90 backdrop-blur-md rounded-xl shadow-lg hover:scale-110 transition-all text-slate-600 hover:text-[#FF6B4A] border border-white/50" title={t('view_product_page', 'marketplace')}>
+                          <button onClick={(e) => { e.stopPropagation(); navigate(`${basePath}/product/${product.id}`); }} className="w-9 h-9 flex items-center justify-center bg-white/90 backdrop-blur-md rounded-xl shadow-lg hover:scale-110 transition-all text-slate-600 hover:text-[#FF6B4A] border border-white/50" title={t('view_product_page', 'marketplace')}>
                             <Eye className="w-4 h-4" />
                           </button>
                         </div>
@@ -349,18 +400,23 @@ export default function InfluencerMarketplace() {
 
                       <div className="p-4 flex-1 flex flex-col">
                         <div className="flex-1">
-                          <h3 className="text-sm font-black text-[#232863] mb-0.5 leading-tight line-clamp-2 group-hover:text-[#FF6B4A] transition-colors">
-                            {product.nameAr ? `${product.nameAr} / ${product.nameFr}` : product.nameFr}
-                          </h3>
+                          <HoverMarquee 
+                            text={product.nameAr ? `${product.nameAr} / ${product.nameFr}` : product.nameFr} 
+                            className="text-sm font-black text-[#232863] mb-0.5 leading-tight group-hover:text-[#FF6B4A] transition-colors"
+                          />
                           <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">SKU: {product.sku}</p>
                         </div>
                         <div className="mt-auto pt-3 border-t border-slate-50 space-y-2.5">
                           <div className="flex justify-between items-center w-full">
                             <div className="text-[8px] font-black text-[#FF6B4A] uppercase tracking-[0.15em]">
-                              {t('influencer_price', 'marketplace')}
+                              {priceLabel}
                             </div>
                             <div className="text-xl font-black text-[#232863] leading-none">
-                              {product.influencerPriceMad || product.retailPriceMad} <span className="text-[10px] font-bold text-slate-400">{language === 'ar' ? 'درهم' : 'MAD'}</span>
+                              {user?.role === 'INFLUENCER' 
+                                ? (product.influencerPriceMad || product.retailPriceMad)
+                                : user?.mode === 'AFFILIATE'
+                                  ? (product.affiliatePriceMad || product.retailPriceMad)
+                                  : product.retailPriceMad} <span className="text-[10px] font-bold text-slate-400">{language === 'ar' ? 'درهم' : 'MAD'}</span>
                             </div>
                           </div>
                           {renderClaimAction(product)}

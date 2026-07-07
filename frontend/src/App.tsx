@@ -292,10 +292,7 @@ function App() {
             <DashboardLayout />
           </RoleGuard>
         }>
-          <Route index element={<ConfirmationDashboard />} />
-          <Route path="marketplace" element={<PublicMarketplace />} />
-          <Route path="product/:id" element={<ProductDetail />} />
-          <Route path="chat" element={<Chat />} />
+          <Route index element={<AdminVerifications />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="verification" element={<ProfileVerification />} />
         </Route>
@@ -313,7 +310,11 @@ function App() {
           <Route path="orders" element={<VendorOrders />} />
           <Route path="wallet" element={<UserWallet />} />
           <Route path="inventory" element={<VendorInventory />} />
-          <Route path="marketplace" element={<PublicMarketplace />} />
+          <Route path="marketplace" element={
+            <Suspense fallback={<PageLoader />}>
+              <InfluencerMarketplace />
+            </Suspense>
+          } />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
           <Route path="settings" element={<SettingsPage />} />

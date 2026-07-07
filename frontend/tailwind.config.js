@@ -66,6 +66,7 @@ export default {
       },
       animation: {
         'bounce-slow': 'bounce-slow 3s infinite',
+        'marquee': 'marquee 10s linear infinite',
       },
       keyframes: {
         'bounce-slow': {
@@ -77,6 +78,10 @@ export default {
             transform: 'translateY(0)',
             animationTimingFunction: 'cubic-bezier(0, 0, 0.2, 1)'
           }
+        },
+        'marquee': {
+          '0%': { transform: 'translateX(0%)' },
+          '100%': { transform: 'translateX(-50%)' },
         }
       }
     },

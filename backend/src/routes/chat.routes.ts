@@ -519,6 +519,8 @@ router.post(
         let systemContent = '';
         if (order) {
             systemContent = `🛍️ Nouvelle demande d'achat\n\nProduit : ${product.nameFr} (SKU: ${product.sku})\nCommande : #${order.orderNumber}\nMarque : ${brandName || 'N/A'}\nQuantité : ${requestedQty || 0} unités\nPrix unitaire : ${product.retailPriceMad} MAD\nTotal : ${order.totalAmountMad} MAD\n\n📎 Étiquette PDF jointe`;
+        } else if (description === 'Auto-claim by Affiliate/Influencer') {
+            systemContent = `🔗 Nouvelle demande d'affiliation\n\nProduit : ${product.nameFr} (SKU: ${product.sku})\n\nL'utilisateur souhaite promouvoir ce produit. Veuillez approuver la demande pour qu'il puisse générer son lien.`;
         } else {
             systemContent = `🛠️ Nouvelle demande de Stock/Branding\n\nProduit : ${product.nameFr} (SKU: ${product.sku})\nMarque : ${brandName || 'N/A'}\nQuantité souhaitée : ${requestedQty || 0} unités\n\nL'utilisateur attend votre approbation avant de procéder au paiement.`;
         }

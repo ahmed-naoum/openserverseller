@@ -1564,6 +1564,7 @@ export default function AdminUsers() {
   const [assigningAgent, setAssigningAgent] = useState<any>(null);
   const [assigningHelper, setAssigningHelper] = useState<any>(null);
   const [tempUserForReset, setTempUserForReset] = useState<any>(null);
+  const [confirmResetPasswordUser, setConfirmResetPasswordUser] = useState<any>(null);
   const [generatedPasswordData, setGeneratedPasswordData] = useState<{password: string, user: any} | null>(null);
   const queryClient = useQueryClient();
   const { impersonate } = useAuth();
@@ -1944,7 +1945,7 @@ export default function AdminUsers() {
                             <ShieldOff size={13} />
                           </button>
                           <button
-                            onClick={() => { if (window.confirm('Générer un mot de passe ?')) { setTempUserForReset(user); sendPwResetMutation.mutate(user.uuid); } }}
+                            onClick={() => setConfirmResetPasswordUser(user)}
                             className="py-2 px-3 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-100 transition-all flex items-center justify-center shrink-0"
                             title="Reset password"
                           >
@@ -2115,12 +2116,7 @@ export default function AdminUsers() {
                                 <ShieldOff size={18} />
                               </button>
                               <button
-                                onClick={() => {
-                                  if (window.confirm('Générer un nouveau mot de passe temporaire pour cet utilisateur ?')) {
-                                    setTempUserForReset(user);
-                                    sendPwResetMutation.mutate(user.uuid);
-                                  }
-                                }}
+                                onClick={() => setConfirmResetPasswordUser(user)}
                                 className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-100 transition-all flex items-center justify-center"
                                 title="Générer mot de passe temporaire"
                               >
@@ -2284,6 +2280,53 @@ export default function AdminUsers() {
                 className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all"
               >
                 Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmResetPasswordUser && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xl flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl border border-white/20 flex flex-col scale-in-center transition-transform duration-500">
+            <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-gradient-to-br from-indigo-50/50 to-purple-50/30">
+              <div>
+                <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                  <KeyIcon size={24} className="text-indigo-600" />
+                  Réinitialiser le mot de passe
+                </h2>
+                <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">
+                  {confirmResetPasswordUser.fullName || confirmResetPasswordUser.email}
+                </p>
+              </div>
+            </div>
+            
+            <div className="p-8 space-y-4">
+              <p className="text-sm font-bold text-slate-600 leading-relaxed text-left">
+                Voulez-vous vraiment générer un nouveau mot de passe temporaire pour cet utilisateur ?
+              </p>
+              <p className="text-xs text-rose-500 font-semibold bg-rose-50 p-3.5 rounded-2xl border border-rose-100/50 text-left">
+                ⚠️ Cette action désactivera le mot de passe actuel de l'utilisateur. Il devra utiliser le nouveau mot de passe temporaire pour se connecter et sera invité à le changer immédiatement.
+              </p>
+            </div>
+
+            <div className="p-8 pt-0 flex gap-4">
+              <button
+                onClick={() => setConfirmResetPasswordUser(null)}
+                className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => {
+                  setTempUserForReset(confirmResetPasswordUser);
+                  sendPwResetMutation.mutate(confirmResetPasswordUser.uuid);
+                  setConfirmResetPasswordUser(null);
+                }}
+                disabled={sendPwResetMutation.isPending}
+                className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-white bg-indigo-600 hover:bg-indigo-700 rounded-2xl shadow-lg shadow-indigo-200/50 transition-all disabled:opacity-50"
+              >
+                {sendPwResetMutation.isPending ? 'Génération...' : 'Confirmer'}
               </button>
             </div>
           </div>

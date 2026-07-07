@@ -130,7 +130,7 @@ router.get(
 router.get(
   '/audit-logs',
   authenticate,
-  authorize('SUPER_ADMIN'),
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_SUPPORT'),
   asyncHandler(async (req: Request, res: Response) => {
     const { page = 1, limit = 50, userId, action } = req.query;
 
@@ -799,13 +799,22 @@ router.delete(
 router.get(
   '/verifications',
   authenticate,
-  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN', 'CONFIRMATION_AGENT'),
   asyncHandler(async (req: Request, res: Response) => {
     const { filter = 'all' } = req.query;
 
-    const where: any = {
-      role: { name: { notIn: ['SUPER_ADMIN', 'FINANCE_ADMIN'] } },
-    };
+    const where: any = {};
+    const currentUserRole = (req.user as any)?.roleName;
+
+    if (currentUserRole === 'CONFIRMATION_AGENT') {
+      where.role = {
+        name: { in: ['VENDOR', 'INFLUENCER', 'GROSSELLER'] }
+      };
+    } else {
+      where.role = {
+        name: { notIn: ['SUPER_ADMIN', 'FINANCE_ADMIN'] }
+      };
+    }
 
     if (filter === 'pending') {
       where.OR = [
@@ -845,7 +854,7 @@ router.get(
 router.patch(
   '/users/:uuid/verify-email',
   authenticate,
-  authorize('SUPER_ADMIN'),
+  authorize('SUPER_ADMIN', 'CONFIRMATION_AGENT'),
   asyncHandler(async (req: Request, res: Response) => {
     const { uuid } = req.params;
     const { verified = true } = req.body || {};
@@ -869,7 +878,7 @@ router.patch(
 router.patch(
   '/users/:uuid/active',
   authenticate,
-  authorize('SUPER_ADMIN'),
+  authorize('SUPER_ADMIN', 'CONFIRMATION_AGENT'),
   asyncHandler(async (req: Request, res: Response) => {
     const { uuid } = req.params;
     const { isActive } = req.body;
@@ -891,7 +900,7 @@ router.patch(
 router.patch(
   '/users/:uuid/subdomain',
   authenticate,
-  authorize('SUPER_ADMIN'),
+  authorize('SUPER_ADMIN', 'CONFIRMATION_AGENT'),
   asyncHandler(async (req: Request, res: Response) => {
     const { uuid } = req.params;
     const { subdomain } = req.body;
@@ -947,7 +956,7 @@ router.patch(
 router.patch(
   '/users/:uuid/verify-kyc',
   authenticate,
-  authorize('SUPER_ADMIN'),
+  authorize('SUPER_ADMIN', 'CONFIRMATION_AGENT'),
   asyncHandler(async (req: Request, res: Response) => {
     const { uuid } = req.params;
     const { status } = req.body;
@@ -984,7 +993,7 @@ router.patch(
 router.patch(
   '/users/:uuid/verify-contract',
   authenticate,
-  authorize('SUPER_ADMIN'),
+  authorize('SUPER_ADMIN', 'CONFIRMATION_AGENT'),
   asyncHandler(async (req: Request, res: Response) => {
     const { uuid } = req.params;
     const { accepted = true } = req.body || {};
@@ -1015,7 +1024,7 @@ router.patch(
 router.patch(
   '/users/:uuid/verify-bank',
   authenticate,
-  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN', 'CONFIRMATION_AGENT'),
   asyncHandler(async (req: Request, res: Response) => {
     const { uuid } = req.params;
     const { approved = true } = req.body || {};
@@ -1072,7 +1081,7 @@ router.patch(
 router.patch(
   '/bank-accounts/:id/status',
   authenticate,
-  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN', 'CONFIRMATION_AGENT'),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { status } = req.body;

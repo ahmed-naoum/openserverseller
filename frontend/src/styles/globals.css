@@ -255,6 +255,15 @@
     animation: mesh-light 30s ease-in-out infinite;
   }
 
+  @keyframes custom-marquee {
+    0% { transform: translateX(0%); }
+    100% { transform: translateX(-50%); }
+  }
+
+  .animate-marquee-loop {
+    animation: custom-marquee 10s linear infinite;
+  }
+
   .stagger-1 {
     animation-delay: 150ms;
   }

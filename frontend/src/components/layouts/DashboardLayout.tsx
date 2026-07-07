@@ -247,9 +247,7 @@ const navigation = {
     { name: 'Paramètres', href: '/admin/settings', icon: Settings },
   ],
   confirmation: [
-    { name: 'Centre de Vérification', href: '/confirmation', icon: Shield },
-    { name: 'Marché Public', href: '/confirmation/marketplace', icon: ShoppingCart },
-    { name: 'Messages', href: '/confirmation/chat', icon: MessageSquare },
+    { name: 'Vérifications', href: '/confirmation', icon: ShieldCheck },
     { name: 'Paramètres', href: '/confirmation/settings', icon: Settings },
   ],
   helper: [

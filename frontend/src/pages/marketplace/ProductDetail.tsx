@@ -187,9 +187,9 @@ export default function ProductDetail() {
     if (isAffiliateFlow) {
       submitBrandingRequest({
         brandName: 'N/A',
-        quantity: 1,
+        quantity: 999,
         landingPageUrl: '',
-        description: 'Auto-claim by Affiliate/Influencer'
+        description: 'Auto-claim by Affiliate'
       });
     } else {
       setIsBrandingModalOpen(true);
