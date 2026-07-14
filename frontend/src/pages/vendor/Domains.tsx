@@ -294,146 +294,24 @@ export default function Domains() {
               )}
             </div>
           ) : (
-            <div className="space-y-8">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">Connecter un domaine existant</h3>
-                <p className="text-sm text-gray-500">Utilisez votre propre nom de domaine pour vos liens de parrainage (ex: myshop.ma).</p>
-              </div>
+            <div className="relative overflow-hidden rounded-2xl p-10 text-center flex flex-col items-center justify-center min-h-[320px]">
+              {/* Glow Effects */}
+              <div className="absolute -top-20 -left-20 w-56 h-56 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-20 -right-20 w-56 h-56 bg-[#ff5722]/5 rounded-full blur-3xl pointer-events-none" />
 
-              {!user?.customDomain ? (
-                <form onSubmit={handleConnectDomain} className="space-y-4">
-                  <div>
-                    <div className="flex gap-3">
-                      <input
-                        type="text"
-                        required
-                        disabled={customDomainLoading}
-                        placeholder="example.com"
-                        value={customDomainInput}
-                        onChange={(e) => setCustomDomainInput(e.target.value.toLowerCase().trim())}
-                        className="flex-1 border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900"
-                      />
-                      <button
-                        type="submit"
-                        disabled={customDomainLoading || !customDomainInput}
-                        className="px-6 py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 transition-colors disabled:opacity-50"
-                      >
-                        {customDomainLoading ? 'Connexion...' : 'Connecter'}
-                      </button>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
-                      <AlertCircle size={14} /> Ne mettez pas de "http://" ou "www.", juste le domaine.
-                    </p>
-                  </div>
-                </form>
-              ) : (
-                <div className="space-y-6">
-                  <div className="bg-gray-50 rounded-xl p-5 border border-gray-200 flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-500 mb-1">Domaine actuel</p>
-                      <p className="text-lg font-mono font-bold text-gray-900">{user.customDomain}</p>
-                    </div>
-                    
-                    <div className="flex items-center gap-4">
-                      <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider ${
-                        user.customDomainStatus === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 
-                        user.customDomainStatus === 'FAILED' ? 'bg-red-100 text-red-700' : 
-                        'bg-amber-100 text-amber-700'
-                      }`}>
-                        {user.customDomainStatus === 'ACTIVE' && <CheckCircle2 size={14} />}
-                        {user.customDomainStatus === 'PENDING' && <RefreshCw size={14} className="animate-spin" />}
-                        {user.customDomainStatus === 'FAILED' && <AlertCircle size={14} />}
-                        {user.customDomainStatus === 'ACTIVE' ? 'Vérifié' : 
-                         user.customDomainStatus === 'FAILED' ? 'Échoué' : 
-                         'En attente'}
-                      </div>
-                      <button
-                        onClick={handleDisconnectDomain}
-                        disabled={customDomainLoading}
-                        className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Déconnecter le domaine"
-                      >
-                        <X size={20} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+              <div className="relative z-10 space-y-5 max-w-md mx-auto">
+                <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest bg-indigo-50 text-indigo-600 border border-indigo-100">
+                  <svg className="w-3 h-3 animate-spin" style={{ animationDuration: '3s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                  Bientôt disponible
+                </span>
 
-              <div className="mt-12 pt-8 border-t border-gray-200">
-                <h3 className="text-lg font-bold text-gray-900 mb-6">Comment lier votre domaine personnalisé</h3>
-                
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 space-y-4">
-                  <h4 className="text-sm font-bold text-blue-900 flex items-center gap-2">
-                    <AlertCircle size={16} /> Solution 1 (Recommandée) : Configuration DNS
-                  </h4>
-                  <p className="text-sm text-blue-800">
-                    La première solution consiste à ajouter l'enregistrement DNS suivant chez votre fournisseur de domaine (GoDaddy, Namecheap, etc.) :
-                  </p>
-                  
-                  <div className="bg-white rounded-lg border border-blue-200 overflow-hidden">
-                    <table className="w-full text-sm text-left">
-                      <thead className="bg-blue-50/50 border-b border-blue-200">
-                        <tr>
-                          <th className="px-4 py-2 font-semibold text-blue-900">Type</th>
-                          <th className="px-4 py-2 font-semibold text-blue-900">Nom / Hôte</th>
-                          <th className="px-4 py-2 font-semibold text-blue-900">Cible / Valeur</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td className="px-4 py-3 font-mono font-bold text-gray-900">CNAME</td>
-                          <td className="px-4 py-3 font-mono text-gray-900">@ <span className="text-gray-400 text-xs">(ou votre domaine)</span></td>
-                          <td className="px-4 py-3 font-mono text-gray-900">custom.silacod.com</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
+                <h3 className="text-xl md:text-2xl font-extrabold text-slate-900 tracking-tight leading-tight pt-1">
+                  Domaine personnalisé en préparation
+                </h3>
 
-                  <div className="flex items-center justify-between pt-2">
-                    <p className="text-xs text-blue-700 italic">
-                      Les modifications DNS peuvent prendre jusqu'à 24h pour se propager.
-                    </p>
-                    {user?.customDomain && user?.customDomainStatus !== 'ACTIVE' && (
-                      <button
-                        onClick={handleRefreshDomainStatus}
-                        disabled={customDomainLoading}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-                      >
-                        <RefreshCw size={14} className={customDomainLoading ? "animate-spin" : ""} />
-                        Vérifier le statut
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="bg-blue-50/50 border border-blue-100/50 rounded-xl p-5 space-y-4">
-                  <h4 className="text-sm font-bold text-blue-900 flex items-center gap-2">
-                    <AlertCircle size={16} /> Solution 2 (Optionnelle) : Validation SSL préventive
-                  </h4>
-                  <p className="text-sm text-blue-800">
-                    Si vous souhaitez valider la sécurité SSL à l'avance avant de changer le CNAME principal pour éviter toute interruption :
-                  </p>
-                  
-                  <div className="bg-white rounded-lg border border-blue-200 overflow-hidden">
-                    <table className="w-full text-sm text-left">
-                      <thead className="bg-blue-50/50 border-b border-blue-200">
-                        <tr>
-                          <th className="px-4 py-2 font-semibold text-blue-900">Type</th>
-                          <th className="px-4 py-2 font-semibold text-blue-900">Nom / Hôte</th>
-                          <th className="px-4 py-2 font-semibold text-blue-900">Cible / Valeur</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td className="px-4 py-3 font-mono font-bold text-gray-900">CNAME</td>
-                          <td className="px-4 py-3 font-mono text-gray-900">_acme-challenge{user?.customDomain ? `.${user.customDomain}` : ''}</td>
-                          <td className="px-4 py-3 font-mono text-gray-900">{user?.customDomain || 'votre-domaine'}.0da65d650e424ce1.dcv.cloudflare.com</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                <p className="text-slate-500 text-sm leading-relaxed max-w-sm mx-auto">
+                  Bientôt, vous pourrez connecter votre propre nom de domaine (ex: myshop.ma) à vos pages de vente et liens de parrainage. Restez connecté !
+                </p>
               </div>
             </div>
           )}
