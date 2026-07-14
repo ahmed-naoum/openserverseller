@@ -1149,17 +1149,18 @@ function ContractSigningForm({ onComplete }: { onComplete: () => void }) {
 export default function ProfileVerification({ hideHeader = false }: { hideHeader?: boolean }) {
   const { user, isLoading, refreshUser, platformSettings } = useAuth();
   const [expandedStep, setExpandedStep] = useState<number | null>(null);
-  const { steps, percentage, completed, total } = getVerificationStatus(user, platformSettings);
   const { t, language } = useLanguage();
   const tVerif = (key: string, fallback?: string) => t(key, 'verification', fallback);
 
-  if (isLoading || !user) {
+  if (isLoading || !user || !platformSettings) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="w-10 h-10 text-primary-600 animate-spin" />
       </div>
     );
   }
+
+  const { steps, percentage, completed, total } = getVerificationStatus(user, platformSettings);
 
   const handleStepComplete = async () => {
     await refreshUser();

@@ -1,5 +1,5 @@
 import { useAuth } from '../../contexts/AuthContext';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { getVerificationStatus } from '../../pages/common/ProfileVerification';
 
 interface RoleGuardProps {
@@ -10,6 +10,7 @@ interface RoleGuardProps {
 
 export default function RoleGuard({ children, allowedRoles, fallbackPath }: RoleGuardProps) {
   const { user, isAuthenticated, isLoading, platformSettings } = useAuth();
+  const location = useLocation();
 
   if (isLoading || !platformSettings) {
     return (
@@ -38,9 +39,8 @@ export default function RoleGuard({ children, allowedRoles, fallbackPath }: Role
   if (user.role === 'INFLUENCER' || user.role === 'VENDOR') {
     const { percentage } = getVerificationStatus(user, platformSettings);
     if (percentage < 100) {
-      const currentPath = window.location.pathname;
       const verificationPath = user.role === 'INFLUENCER' ? '/influencer/verification' : '/dashboard/verification';
-      if (currentPath !== verificationPath) {
+      if (location.pathname !== verificationPath) {
         return <Navigate to={verificationPath} replace />;
       }
     }
