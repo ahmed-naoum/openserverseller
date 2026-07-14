@@ -1,8 +1,9 @@
 import { Request } from 'express';
 
-export function getSubdomainFromRequest(req: Request): string | null {
+export function getRequestHost(req: Request): string | null {
   const originHeader = req.headers.origin as string | undefined;
   const refererHeader = req.headers.referer as string | undefined;
+  const hostHeader = req.headers.host as string | undefined;
 
   let requestHost = '';
   if (originHeader) {
@@ -15,12 +16,22 @@ export function getSubdomainFromRequest(req: Request): string | null {
       requestHost = new URL(refererHeader).host;
     } catch (e) {}
   }
+  if (!requestHost && hostHeader) {
+    requestHost = hostHeader;
+  }
 
   if (!requestHost) {
     return null;
   }
 
-  const normalizedRequestHost = requestHost.replace(/^www\./i, '').toLowerCase();
+  return requestHost.replace(/^www\./i, '').toLowerCase();
+}
+
+export function getSubdomainFromRequest(req: Request): string | null {
+  const requestHost = getRequestHost(req);
+  if (!requestHost) return null;
+
+  const normalizedRequestHost = requestHost;
 
   // 1. Support local development subdomains on localhost (e.g. seller.localhost:5173)
   if (normalizedRequestHost === 'localhost:5173' || normalizedRequestHost.endsWith('.localhost:5173')) {
@@ -53,13 +64,35 @@ export function getSubdomainFromRequest(req: Request): string | null {
   }
 
   if (normalizedRequestHost.endsWith('.' + normalizedBaseHost)) {
-    return normalizedRequestHost.slice(0, -(normalizedBaseHost.length + 1));
+    const sub = normalizedRequestHost.slice(0, -(normalizedBaseHost.length + 1));
+    if (sub === 'custom') {
+      return null;
+    }
+    return sub;
   }
 
   return null;
 }
 
-export function validateInfluencerSubdomain(req: Request, influencerSubdomain: string | null | undefined): boolean {
+export function validateInfluencerSubdomain(
+  req: Request, 
+  influencerSubdomain: string | null | undefined,
+  customDomain?: string | null | undefined
+): boolean {
+  const requestHost = getRequestHost(req);
+  if (!requestHost) {
+    return false;
+  }
+
+  // 1. Check custom domain exact match
+  if (customDomain) {
+    const normalizedCustom = customDomain.trim().toLowerCase();
+    if (requestHost === normalizedCustom) {
+      return true;
+    }
+  }
+
+  // 2. Fallback to subdomain check
   if (!influencerSubdomain) {
     return false;
   }

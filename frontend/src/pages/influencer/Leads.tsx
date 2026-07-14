@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { influencerApi, leadsApi } from '../../lib/api';
 import { ReferralLink, InfluencerCommission } from '../../types';
 import { format } from 'date-fns';
@@ -123,7 +124,7 @@ const PAYMENT_SITUATION_BADGES: Record<string, { label: string; color: string }>
 
 export default function InfluencerLeads() {
   const { t } = useLanguage();
-
+  const [searchParams] = useSearchParams();
   const getStatusLabel = (status: string) => {
     return t(`all_status_badges.${status}`, 'leads', ALL_STATUS_BADGES[status]?.label || status);
   };
@@ -576,7 +577,9 @@ export default function InfluencerLeads() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">{t('title', 'leads', 'Mes Leads & Parrainages')}</h1>
+          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
+            {t('title', 'leads', 'Mes Leads & Parrainages')}
+          </h1>
           <p className="text-sm text-gray-500 mt-1">{t('subtitle', 'leads', 'Suivez tous vos leads, conversions et livraisons en un seul endroit.')}</p>
         </div>
         <div className="flex gap-2">

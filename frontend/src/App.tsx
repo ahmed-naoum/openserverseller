@@ -14,7 +14,7 @@ import DashboardLayout from './components/layouts/DashboardLayout';
 import VendorDashboard from './pages/vendor/Dashboard';
 import VendorProducts from './pages/vendor/Products';
 import VendorLeads from './pages/vendor/Leads';
-import VendorOrders from './pages/vendor/Orders';
+
 import VendorInventory from './pages/vendor/Inventory';
 import AgentDashboard from './pages/agent/Dashboard';
 import AgentLeads from './pages/agent/Leads';
@@ -49,6 +49,8 @@ import ContactMessages from './pages/admin/ContactMessages';
 import AdminLinks from './pages/admin/Links';
 
 import YouCanCallback from './pages/vendor/YouCanCallback';
+import VendorInsertLead from './pages/vendor/InsertLead';
+import VendorDomains from './pages/vendor/Domains';
 import YouCanLeads from './pages/vendor/YouCanLeads';
 import IntegrationsPage from './pages/vendor/IntegrationsPage';
 import PlatformSettings from './pages/admin/PlatformSettings';
@@ -94,12 +96,14 @@ import ReferralForm from './pages/public/ReferralForm';
 import ThankYouPage from './pages/public/ThankYouPage';
 import PendingVerificationPage from './pages/auth/PendingVerificationPage';
 import EmailVerificationPage from './pages/auth/EmailVerificationPage';
+import CompleteRegisterGoogle from './pages/auth/CompleteRegisterGoogle';
 import SettingsPage from './pages/common/SettingsPage';
 import NotFoundPage from './pages/common/NotFoundPage';
 import ProfileVerification from './pages/common/ProfileVerification';
 import MaintenancePage from './pages/common/MaintenancePage';
 import SupportTickets from './pages/common/SupportTickets';
 import UserWallet from './pages/common/UserWallet';
+import UserPixels from './pages/common/UserPixels';
 import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
 import ContactPage from './pages/ContactPage';
@@ -207,6 +211,7 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<UnauthGuard><LoginPage /></UnauthGuard>} />
           <Route path="/register" element={<UnauthGuard><RegisterPage /></UnauthGuard>} />
+          <Route path="/register/complete-google" element={<UnauthGuard><CompleteRegisterGoogle /></UnauthGuard>} />
           <Route path="/influencer/register" element={<UnauthGuard><RegisterPage /></UnauthGuard>} />
           <Route path="/verify-email" element={<EmailVerificationPage />} />
           <Route path="/forgot-password" element={<UnauthGuard><ForgotPassword /></UnauthGuard>} />
@@ -255,6 +260,12 @@ function App() {
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="pixels" element={<UserPixels platform="META" />} />
+          <Route path="pixels/meta" element={<UserPixels platform="META" />} />
+          <Route path="pixels/google" element={<UserPixels platform="GOOGLE" />} />
+          <Route path="pixels/tiktok" element={<UserPixels platform="TIKTOK" />} />
+          <Route path="pixels/snapchat" element={<UserPixels platform="SNAPCHAT" />} />
+          <Route path="links" element={<InfluencerLinks />} />
           <Route path="verification" element={<ProfileVerification />} />
         </Route>
 
@@ -281,6 +292,7 @@ function App() {
           <Route path="chat" element={<Chat />} />
           <Route path="invoices" element={<UserInvoices />} />
           <Route path="settings" element={<SettingsPage />} />
+
           <Route path="integrations" element={<IntegrationsPage />} />
           <Route path="support" element={<SupportTickets />} />
           <Route path="verification" element={<ProfileVerification />} />
@@ -306,8 +318,9 @@ function App() {
           <Route index element={<VendorDashboard />} />
           <Route path="products" element={<VendorProducts />} />
           <Route path="leads" element={<VendorLeads />} />
+          <Route path="leads/new" element={<VendorInsertLead />} />
           <Route path="youcan-leads" element={<YouCanLeads />} />
-          <Route path="orders" element={<VendorOrders />} />
+
           <Route path="wallet" element={<UserWallet />} />
           <Route path="inventory" element={<VendorInventory />} />
           <Route path="marketplace" element={
@@ -318,6 +331,13 @@ function App() {
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="pixels" element={<UserPixels platform="META" />} />
+          <Route path="pixels/meta" element={<UserPixels platform="META" />} />
+          <Route path="pixels/google" element={<UserPixels platform="GOOGLE" />} />
+          <Route path="pixels/tiktok" element={<UserPixels platform="TIKTOK" />} />
+          <Route path="pixels/snapchat" element={<UserPixels platform="SNAPCHAT" />} />
+          <Route path="domains" element={<VendorDomains />} />
+          <Route path="links" element={<InfluencerLinks />} />
           <Route path="integrations" element={<IntegrationsPage />} />
           <Route path="youcan-callback" element={<YouCanCallback />} />
           <Route path="invoices" element={<UserInvoices />} />
@@ -348,7 +368,7 @@ function App() {
         </Route>
 
         <Route path="/helper/links/:id/builder" element={
-          <RoleGuard allowedRoles={['SUPER_ADMIN', 'HELPER']}>
+          <RoleGuard allowedRoles={['SUPER_ADMIN', 'HELPER', 'VENDOR', 'INFLUENCER']}>
             <SiteBuilder />
           </RoleGuard>
         } />

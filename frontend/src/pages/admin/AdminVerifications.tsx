@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi, BACKEND_URL } from '../../lib/api';
 import toast from 'react-hot-toast';
@@ -110,20 +110,43 @@ export function resolveSocialPlatform(
 
 export default function AdminVerifications() {
   const queryClient = useQueryClient();
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'ALL' | 'PENDING' | 'PENDING_EMAIL' | 'PENDING_KYC' | 'PENDING_BANK' | 'PENDING_CONTRACT'>('ALL');
   const [roleFilter, setRoleFilter] = useState<'ALL' | 'SELLER' | 'INFLUENCER' | 'VENDOR'>('ALL');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [imageModal, setImageModal] = useState<{ url: string; title: string } | null>(null);
   const [editingSubdomainUuid, setEditingSubdomainUuid] = useState<string | null>(null);
   const [subdomainInput, setSubdomainInput] = useState('');
 
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, activeTab, roleFilter]);
+
+  // Debounce search
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setSearchQuery(searchInput);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchInput]);
+
   const { data, isLoading } = useQuery({
-    queryKey: ['admin-verifications'],
-    queryFn: () => adminApi.getVerifications('all'),
+    queryKey: ['admin-verifications', activeTab, roleFilter, searchQuery, page, limit],
+    queryFn: () => adminApi.getVerifications({
+      filter: activeTab === 'ALL' ? 'all' : activeTab,
+      role: roleFilter,
+      search: searchQuery,
+      page,
+      limit
+    }),
   });
 
   const verifications = data?.data?.data || [];
+  const meta = data?.data?.meta || { total: 0, page: 1, limit: 10, totalPages: 1, stats: { total: 0, pending: 0, pendingEmail: 0, pendingKyc: 0, pendingBank: 0, pendingContract: 0 } };
 
   const verifyEmailMutation = useMutation({
     mutationFn: ({ uuid, verified }: { uuid: string; verified?: boolean }) => adminApi.verifyEmail(uuid, verified),
@@ -204,53 +227,11 @@ export default function AdminVerifications() {
     onError: () => toast.error('Erreur lors de la suppression du sous-domaine'),
   });
 
-  const stats = {
-    total: verifications.length,
-    pending: verifications.filter((u: any) => 
-      !u.emailVerifiedAt || 
-      ['PENDING', 'UNDER_REVIEW'].includes(u.kycStatus) || 
-      u.bankAccounts?.some((ba: any) => ba.status === 'PENDING') || 
-      !u.contractAccepted
-    ).length,
-    pendingEmail: verifications.filter((u: any) => !u.emailVerifiedAt).length,
-    pendingKyc: verifications.filter((u: any) => ['PENDING', 'UNDER_REVIEW'].includes(u.kycStatus)).length,
-    pendingBank: verifications.filter((u: any) => u.bankAccounts?.some((ba: any) => ba.status === 'PENDING')).length,
-    pendingContract: verifications.filter((u: any) => !u.contractAccepted).length,
-  };
-
-  const filteredVerifications = verifications.filter((user: any) => {
-    if (roleFilter !== 'ALL') {
-      if (user.role?.name !== roleFilter) return false;
-    }
-
-    if (activeTab === 'PENDING') {
-      const isPending = !user.emailVerifiedAt || 
-                        ['PENDING', 'UNDER_REVIEW'].includes(user.kycStatus) || 
-                        user.bankAccounts?.some((ba: any) => ba.status === 'PENDING') || 
-                        !user.contractAccepted;
-      if (!isPending) return false;
-    } else if (activeTab === 'PENDING_EMAIL') {
-      if (user.emailVerifiedAt) return false;
-    } else if (activeTab === 'PENDING_KYC') {
-      if (!['PENDING', 'UNDER_REVIEW'].includes(user.kycStatus)) return false;
-    } else if (activeTab === 'PENDING_BANK') {
-      if (!user.bankAccounts?.some((ba: any) => ba.status === 'PENDING')) return false;
-    } else if (activeTab === 'PENDING_CONTRACT') {
-      if (user.contractAccepted) return false;
-    }
-
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      user.email?.toLowerCase().includes(q) ||
-      user.phone?.toLowerCase().includes(q) ||
-      user.profile?.fullName?.toLowerCase().includes(q)
-    );
-  });
+  const stats = meta.stats || { total: 0, pending: 0, pendingEmail: 0, pendingKyc: 0, pendingBank: 0, pendingContract: 0 };
 
   const handleExportCSV = () => {
     const headers = ['Nom Complet', 'Role', 'E-mail', 'Telephone', 'Verif. Email', 'Verif. KYC', 'Verif. Banque', 'Contrat Signe', 'Compte Actif', 'Date Inscription'];
-    const rows = filteredVerifications.map((u: any) => [
+    const rows = verifications.map((u: any) => [
       u.profile?.fullName || '—',
       u.role?.name || '—',
       u.email || '—',
@@ -383,8 +364,8 @@ export default function AdminVerifications() {
             <input
               type="text"
               placeholder="Rechercher par nom, email..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-white border border-slate-200 outline-none focus:ring-4 focus:ring-primary-50 focus:border-[#2c2f74] transition-all font-medium text-slate-800 text-sm"
             />
           </div>
@@ -420,14 +401,14 @@ export default function AdminVerifications() {
           </button>
           <div className="px-5 py-3.5 rounded-2xl bg-slate-900 text-white flex items-center gap-3 shadow-md">
             <Users size={16} className="text-slate-400" />
-            <span className="text-xs font-black uppercase tracking-widest">{filteredVerifications.length} Résultats</span>
+            <span className="text-xs font-black uppercase tracking-widest">{meta.total} Résultats</span>
           </div>
         </div>
       </div>
 
       {/* User Cards */}
       <div className="space-y-6">
-        {filteredVerifications.map((user: any) => {
+        {verifications.map((user: any) => {
           const isExpanded = expandedUser === user.uuid;
           const hasPendingBank = user.bankAccounts?.some((ba: any) => ba.status === 'PENDING');
           const hasApprovedBank = user.bankAccounts?.some((ba: any) => ba.status === 'APPROVED');
@@ -1200,13 +1181,70 @@ export default function AdminVerifications() {
           );
         })}
 
-        {filteredVerifications.length === 0 && (
+        {verifications.length === 0 && (
           <div className="py-20 bg-white rounded-[2.5rem] border-2 border-dashed border-slate-100 flex flex-col items-center justify-center text-center">
             <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6">
               <ShieldCheck size={40} />
             </div>
             <h3 className="text-xl font-black text-slate-800">Aucune vérification en attente</h3>
             <p className="text-slate-400 font-medium max-w-sm mt-2">Tous vos utilisateurs sont actuellement en règle ou aucun ne correspond à votre recherche.</p>
+          </div>
+        )}
+        {/* Pagination */}
+        {meta.totalPages > 1 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-8">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Par page</span>
+              <div className="flex gap-1">
+                {[10, 20, 50].map(n => (
+                  <button
+                    key={n}
+                    onClick={() => { setLimit(n); setPage(1); }}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-black transition-all ${
+                      limit === n
+                        ? 'bg-[#2c2f74] text-white shadow-md'
+                        : 'bg-white border border-slate-100 text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setPage(Math.max(1, page - 1))} 
+                disabled={page === 1} 
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-100 rounded-xl text-xs font-black text-slate-600 disabled:opacity-30 hover:bg-[#2c2f74] hover:text-white hover:border-[#2c2f74] transition-all shadow-sm"
+              >
+                Précédent
+              </button>
+              <div className="flex gap-1">
+                {Array.from({ length: Math.min(meta.totalPages, 7) }, (_, i) => {
+                  let p: number;
+                  if (meta.totalPages <= 7) p = i + 1;
+                  else if (page <= 4) p = i + 1;
+                  else if (page >= meta.totalPages - 3) p = meta.totalPages - 6 + i;
+                  else p = page - 3 + i;
+                  return (
+                    <button 
+                      key={p} 
+                      onClick={() => setPage(p)} 
+                      className={`w-9 h-9 rounded-xl text-xs font-black transition-all ${page === p ? 'bg-primary-500 text-white shadow-lg shadow-primary-200' : 'bg-white border border-slate-100 text-slate-500 hover:bg-slate-50'}`}
+                    >
+                      {p}
+                    </button>
+                  );
+                })}
+              </div>
+              <button 
+                onClick={() => setPage(Math.min(meta.totalPages, page + 1))} 
+                disabled={page === meta.totalPages} 
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-100 rounded-xl text-xs font-black text-slate-600 disabled:opacity-30 hover:bg-[#2c2f74] hover:text-white hover:border-[#2c2f74] transition-all shadow-sm"
+              >
+                Suivant
+              </button>
+            </div>
           </div>
         )}
       </div>

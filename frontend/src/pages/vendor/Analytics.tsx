@@ -97,6 +97,7 @@ export default function VendorAnalytics() {
                   <div className={`w-3 h-3 rounded-full ${
                     item.status === 'ORDERED' ? 'bg-green-500' :
                     item.status === 'NEW' ? 'bg-blue-500' :
+                    item.status === 'LEAD' ? 'bg-indigo-500' :
                     item.status === 'INTERESTED' ? 'bg-emerald-500' :
                     'bg-gray-400'
                   }`} />

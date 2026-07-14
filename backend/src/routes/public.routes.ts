@@ -156,7 +156,11 @@ router.get(
         where: { userId: req.user.id }
       }) : Promise.resolve([]),
       req.user ? prisma.affiliateClaim.findMany({
-        where: { userId: req.user.id, status: 'ACTIVE' }
+        where: { 
+          userId: req.user.id, 
+          status: { in: ['PENDING', 'APPROVED'] },
+          userMode: view === 'REGULAR' ? 'SELLER' : 'AFFILIATE'
+        }
       }) : Promise.resolve([]),
       req.user ? prisma.supportRequest.findMany({
         where: { userId: req.user.id, status: { in: ['OPEN', 'IN_PROGRESS'] } }
@@ -235,7 +239,7 @@ router.post(
       where: { code: referralCode },
       include: { 
         product: true,
-        influencer: { select: { subdomain: true } }
+        influencer: { select: { subdomain: true, customDomain: true } }
       }
     });
 
@@ -243,23 +247,11 @@ router.post(
       throw new AppException(404, 'Referral link or product not found or inactive');
     }
 
-    if (!validateInfluencerSubdomain(req, link.influencer?.subdomain)) {
+    if (!validateInfluencerSubdomain(req, link.influencer?.subdomain, link.influencer?.customDomain)) {
       throw new AppException(404, 'Referral link or product not found or inactive');
     }
 
-    // NEW: Check for an APPROVED claim for this influencer and product
-    const claim = await prisma.affiliateClaim.findUnique({
-      where: {
-        userId_productId: {
-          userId: link.influencerId,
-          productId: link.productId
-        }
-      }
-    });
 
-    if (!claim || claim.status !== 'APPROVED') {
-      throw new AppException(403, 'The influencer has not been approved to promote this product');
-    }
 
     let vendorId = link.product.ownerId;
 

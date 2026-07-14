@@ -26,6 +26,8 @@
   "nav_my_orders": "My Orders",
   "nav_new_leads": "New Leads",
   "nav_youcan_leads": "YouCan Leads",
+  "nav_youcan_integration": "YouCan Integration",
+  "nav_youcan_connect": "Store Connection",
   "tier_banner_title": "Influencer Dashboard",
   "tier_banner_evolution": "Rank Progression",
   "tier_banner_current_position": "You are here",
@@ -78,7 +80,7 @@
   "menu_security_2fa": "Security & 2FA",
   "menu_logout": "Logout",
   "banner_title": "Complete your profile",
-  "banner_subtitle": "Your profile is {percentage}% complete. Complete it to access all features.",
+  "banner_subtitle": "Your profile is {percentage} complete. Complete it to access all features.",
   "banner_button": "Complete Profile",
   "settings_title": "Account Settings",
   "settings_subtitle": "Manage your preferences and secure your space",
@@ -188,5 +190,7 @@
   "settings_subdomain_success_toast": "Subdomain updated successfully!",
   "settings_subdomain_invalid_otp_toast": "Incorrect or expired code",
   "settings_subdomain_toast_empty": "Please enter a subdomain",
-  "settings_subdomain_toast_invalid": "Only lowercase letters, numbers, and hyphens are allowed (3-30 characters)"
+  "settings_subdomain_toast_invalid": "Only lowercase letters, numbers, and hyphens are allowed (3-30 characters)",
+  "settings_subdomain_otp_label": "Verification Code",
+  "settings_subdomain_btn_confirm": "Confirm"
 }

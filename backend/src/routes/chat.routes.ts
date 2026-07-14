@@ -418,6 +418,7 @@ router.post(
         body('brandName').optional().isString(),
         body('requestedQty').optional().isNumeric(),
         body('brandingLabelPrintUrl').optional().isString(),
+        body('requestedLandingPageUrl').optional().isString(),
     ],
     asyncHandler(async (req, res) => {
         const errors = validationResult(req);
@@ -433,6 +434,7 @@ router.post(
             brandName, 
             requestedQty, 
             brandingLabelPrintUrl,
+            requestedLandingPageUrl,
             subject,
             type: requestType,
             description
@@ -495,6 +497,7 @@ router.post(
                     brandName,
                     requestedQty,
                     brandingLabelPrintUrl,
+                    requestedLandingPageUrl,
                     orderNumber: order?.orderNumber,
                     productName: product.nameFr,
                     productSku: product.sku,
@@ -522,7 +525,7 @@ router.post(
         } else if (description === 'Auto-claim by Affiliate/Influencer') {
             systemContent = `🔗 Nouvelle demande d'affiliation\n\nProduit : ${product.nameFr} (SKU: ${product.sku})\n\nL'utilisateur souhaite promouvoir ce produit. Veuillez approuver la demande pour qu'il puisse générer son lien.`;
         } else {
-            systemContent = `🛠️ Nouvelle demande de Stock/Branding\n\nProduit : ${product.nameFr} (SKU: ${product.sku})\nMarque : ${brandName || 'N/A'}\nQuantité souhaitée : ${requestedQty || 0} unités\n\nL'utilisateur attend votre approbation avant de procéder au paiement.`;
+            systemContent = `🛠️ Nouvelle demande de Stock/Branding\n\nProduit : ${product.nameFr} (SKU: ${product.sku})\nMarque : ${brandName || 'N/A'}\nQuantité souhaitée : ${requestedQty || 0} unités${requestedLandingPageUrl ? `\nPage de vente : ${requestedLandingPageUrl}` : ''}\n\nL'utilisateur attend votre approbation avant de procéder au paiement.`;
         }
 
         // Find or create a system user to send the message

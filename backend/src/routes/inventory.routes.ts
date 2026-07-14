@@ -128,7 +128,7 @@ router.get(
     asyncHandler(async (req, res) => {
         const { page = 1, limit = 20 } = req.query;
 
-        const where: any = { userId: req.user!.id, status: 'ACTIVE' };
+        const where: any = { userId: req.user!.id, status: 'APPROVED' };
 
         const [claims, total] = await Promise.all([
             prisma.affiliateClaim.findMany({

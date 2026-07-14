@@ -65,17 +65,23 @@ router.post(
     const userId = req.user!.id;
     const { productId, customName } = req.body;
 
-    if (!req.user!.isInfluencer) {
-      throw new AppException(400, 'You must enable influencer mode first');
-    }
-
-    // Check if there is an APPROVED claim for this product
-    const claim = await prisma.affiliateClaim.findUnique({
-      where: { userId_productId: { userId, productId: Number(productId) } }
+    const product = await prisma.product.findUnique({
+      where: { id: Number(productId) },
+      select: { ownerId: true }
     });
+    const isOwner = product?.ownerId === userId;
 
-    if (!claim || claim.status !== 'APPROVED') {
-      throw new AppException(403, 'You must have an APPROVED claim for this product before generating a link');
+
+    // Check if there is an APPROVED claim for this product (unless owner)
+    let claim = null;
+    if (!isOwner) {
+      claim = await prisma.affiliateClaim.findFirst({
+        where: { userId, productId: Number(productId), status: 'APPROVED' }
+      });
+
+      if (!claim) {
+        throw new AppException(403, 'You must have an APPROVED claim for this product before generating a link');
+      }
     }
 
     // Limit to max 5 links per product
@@ -146,7 +152,7 @@ router.post(
   authorize('VENDOR', 'INFLUENCER'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { productId, brandingLabelPrintUrl, brandName, requestedQty, requestedLandingPageUrl } = req.body;
+    const { productId, brandingLabelPrintUrl, brandName, requestedQty, requestedLandingPageUrl, userMode } = req.body;
 
     const product = await prisma.product.findUnique({
       where: { id: productId }
@@ -156,8 +162,9 @@ router.post(
       throw new AppException(404, 'Product not found or not available for your role');
     }
 
+    const mode = userMode || 'AFFILIATE';
     const claim = await prisma.affiliateClaim.upsert({
-      where: { userId_productId: { userId, productId } },
+      where: { userId_productId_userMode: { userId, productId, userMode: mode } },
       update: {
         status: 'PENDING',
         brandingLabelPrintUrl,
@@ -169,6 +176,7 @@ router.post(
         userId,
         productId,
         status: 'PENDING',
+        userMode: mode,
         brandingLabelPrintUrl,
         brandName,
         requestedQty: requestedQty ? Number(requestedQty) : null,
@@ -227,10 +235,22 @@ router.get(
   authorize('VENDOR', 'INFLUENCER', 'HELPER', 'SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { start, end } = req.query;
+    const { start, end, mode } = req.query;
+
+    const whereClause: any = { influencerId: userId };
+    if (mode === 'SELLER') {
+      whereClause.product = { ownerId: userId };
+    } else if (mode === 'AFFILIATE') {
+      whereClause.product = {
+        OR: [
+          { ownerId: { not: userId } },
+          { ownerId: null }
+        ]
+      };
+    }
 
     const links = await prisma.referralLink.findMany({
-      where: { influencerId: userId },
+      where: whereClause,
       include: {
         product: { include: { images: { where: { isPrimary: true }, take: 1 } } }
       },
@@ -379,7 +399,7 @@ router.get(
       where: { code: code as string },
       include: {
         product: { include: { images: { orderBy: { sortOrder: 'asc' } }, categories: true } },
-        influencer: { include: { profile: true } },
+        influencer: { include: { profile: true, pixels: true } },
         landingPage: true
       }
     });
@@ -388,7 +408,7 @@ router.get(
       throw new AppException(404, 'Referral link or product not found or inactive');
     }
 
-    if (!validateInfluencerSubdomain(req, link.influencer.subdomain)) {
+    if (!validateInfluencerSubdomain(req, link.influencer.subdomain, link.influencer.customDomain)) {
       throw new AppException(404, 'Referral link or product not found or inactive');
     }
 
@@ -461,7 +481,8 @@ router.get(
         },
         influencerName: link.influencer.profile?.fullName,
         influencerAvatar: link.influencer.profile?.avatarUrl,
-        landingPage: link.landingPage
+        landingPage: link.landingPage,
+        pixels: link.influencer.pixels || []
       }
     });
   })
@@ -474,14 +495,14 @@ router.post(
 
     const link = await (prisma as any).referralLink.findUnique({
       where: { code: code as string },
-      include: { influencer: { select: { subdomain: true } } }
+      include: { influencer: { select: { subdomain: true, customDomain: true } } }
     });
 
     if (!link) {
       throw new AppException(404, 'Referral link not found');
     }
 
-    if (!validateInfluencerSubdomain(req, link.influencer?.subdomain)) {
+    if (!validateInfluencerSubdomain(req, link.influencer?.subdomain, link.influencer?.customDomain)) {
       throw new AppException(404, 'Referral link not found');
     }
 
@@ -569,7 +590,7 @@ router.get(
   authorize('VENDOR', 'INFLUENCER'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { start, end, days, referralLinkId } = req.query;
+    const { start, end, days, referralLinkId, mode } = req.query;
 
     let dateLimitStart: Date;
     let dateLimitEnd = new Date();
@@ -585,6 +606,10 @@ router.get(
       const whereOldest: any = { influencerId: userId };
       if (referralLinkId) {
         whereOldest.id = parseInt(referralLinkId as string);
+      } else if (mode === 'SELLER') {
+        whereOldest.product = { vendorId: userId };
+      } else if (mode === 'AFFILIATE') {
+        whereOldest.product = { vendorId: { not: userId } };
       }
       const oldestLink = await prisma.referralLink.findFirst({
         where: whereOldest,
@@ -608,6 +633,10 @@ router.get(
     const whereBase: any = { influencerId: userId };
     if (referralLinkId) {
       whereBase.id = parseInt(referralLinkId as string);
+    } else if (mode === 'SELLER') {
+      whereBase.product = { vendorId: userId };
+    } else if (mode === 'AFFILIATE') {
+      whereBase.product = { vendorId: { not: userId } };
     }
 
     const [clicks, leads, commissions] = await Promise.all([
@@ -722,7 +751,27 @@ router.delete(
       throw new AppException(404, 'Lead not found or not yours');
     }
 
-    await prisma.lead.delete({ where: { id: leadId } });
+    const existingOrder = await prisma.order.findUnique({
+      where: { leadId }
+    });
+
+    await prisma.$transaction(async (tx) => {
+      if (existingOrder) {
+        await tx.orderItem.deleteMany({ where: { orderId: existingOrder.id } });
+        await tx.orderStatusHistory.deleteMany({ where: { orderId: existingOrder.id } });
+        await tx.order.delete({ where: { id: existingOrder.id } });
+      }
+
+      // Clean up lead assignments and history to allow delete
+      await tx.leadAssignment.deleteMany({ where: { leadId } });
+      await tx.leadStatusHistory.deleteMany({ where: { leadId } });
+      await tx.callLog.deleteMany({ where: { leadId } });
+      
+      await tx.lead.delete({
+        where: { id: leadId },
+      });
+    });
+
     res.json({ status: 'success', message: 'Lead deleted' });
   })
 );
@@ -761,8 +810,41 @@ router.post(
 
     const deletedIds = leads.map(l => l.id);
 
-    await prisma.lead.deleteMany({
-      where: { id: { in: deletedIds } }
+    await prisma.$transaction(async (tx) => {
+      // Clean up orders
+      const orders = await tx.order.findMany({
+        where: { leadId: { in: deletedIds } },
+        select: { id: true }
+      });
+      const orderIds = orders.map(o => o.id);
+
+      if (orderIds.length > 0) {
+        await tx.orderItem.deleteMany({
+          where: { orderId: { in: orderIds } }
+        });
+        await tx.orderStatusHistory.deleteMany({
+          where: { orderId: { in: orderIds } }
+        });
+        await tx.order.deleteMany({
+          where: { id: { in: orderIds } }
+        });
+      }
+
+      // Clean up lead assignments and history
+      await tx.leadAssignment.deleteMany({
+        where: { leadId: { in: deletedIds } }
+      });
+      await tx.leadStatusHistory.deleteMany({
+        where: { leadId: { in: deletedIds } }
+      });
+      await tx.callLog.deleteMany({
+        where: { leadId: { in: deletedIds } }
+      });
+
+      // Finally delete the leads
+      await tx.lead.deleteMany({
+        where: { id: { in: deletedIds } }
+      });
     });
 
     res.json({
@@ -1040,22 +1122,39 @@ router.get(
   authorize('VENDOR', 'INFLUENCER'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { page = 1, limit = 20, search } = req.query;
+    const { page = 1, limit = 20, search, mode } = req.query;
 
     const skip = (Number(page) - 1) * Number(limit);
     const take = Number(limit);
+    
+    const commissionWhereClause: any = {
+      order: search ? {
+        OR: [
+          { customerName: { contains: search as string, mode: 'insensitive' } },
+          { customerPhone: { contains: search as string, mode: 'insensitive' } },
+          { customerCity: { contains: search as string, mode: 'insensitive' } },
+        ]
+      } : { isNot: null }
+    };
+
+    if (mode === 'SELLER') {
+      commissionWhereClause.referralLink = { product: { ownerId: userId } };
+    } else if (mode === 'AFFILIATE') {
+      commissionWhereClause.influencerId = userId;
+      commissionWhereClause.referralLink = { 
+        product: { 
+          OR: [
+            { ownerId: { not: userId } },
+            { ownerId: null }
+          ]
+        }
+      };
+    } else {
+      commissionWhereClause.influencerId = userId;
+    }
 
     const commissions = await prisma.influencerCommission.findMany({
-      where: {
-        influencerId: userId,
-        order: search ? {
-          OR: [
-            { customerName: { contains: search as string, mode: 'insensitive' } },
-            { customerPhone: { contains: search as string, mode: 'insensitive' } },
-            { customerCity: { contains: search as string, mode: 'insensitive' } },
-          ]
-        } : { isNot: null }
-      },
+      where: commissionWhereClause,
       include: {
         order: {
           include: {
@@ -1082,24 +1181,39 @@ router.get(
     });
 
     // New Leads (not yet orders)
-    const influencerLinks = await prisma.referralLink.findMany({
-      where: { influencerId: userId },
-      select: { id: true }
-    });
+    let leadWhereClause: any = {
+      ...(search ? {
+        OR: [
+          { fullName: { contains: search as string, mode: 'insensitive' } },
+          { phone: { contains: search as string, mode: 'insensitive' } },
+          { city: { contains: search as string, mode: 'insensitive' } },
+        ]
+      } : {})
+    };
 
-    const linkIds = influencerLinks.map(l => l.id);
+    if (mode === 'SELLER') {
+      leadWhereClause.referralLink = { product: { ownerId: userId } };
+    } else if (mode === 'AFFILIATE') {
+      leadWhereClause.referralLink = {
+        influencerId: userId,
+        product: { 
+          OR: [
+            { ownerId: { not: userId } },
+            { ownerId: null }
+          ]
+        }
+      };
+    } else {
+      const influencerLinks = await prisma.referralLink.findMany({
+        where: { influencerId: userId },
+        select: { id: true }
+      });
+      const linkIds = influencerLinks.map(l => l.id);
+      leadWhereClause.referralLinkId = { in: linkIds };
+    }
 
     const leads = await prisma.lead.findMany({
-      where: {
-        referralLinkId: { in: linkIds },
-        ...(search ? {
-          OR: [
-            { fullName: { contains: search as string, mode: 'insensitive' } },
-            { phone: { contains: search as string, mode: 'insensitive' } },
-            { city: { contains: search as string, mode: 'insensitive' } },
-          ]
-        } : {})
-      },
+      where: leadWhereClause,
       include: {
         order: {
           include: {
@@ -1227,6 +1341,8 @@ router.get(
               select: {
                 id: true,
                 email: true,
+                subdomain: true,
+                customDomain: true,
                 profile: { select: { fullName: true } }
               }
             },
@@ -1571,6 +1687,7 @@ router.get(
             email: true,
             phone: true,
             subdomain: true,
+            customDomain: true,
             profile: { select: { fullName: true } }
           }
         }

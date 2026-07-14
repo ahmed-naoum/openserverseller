@@ -4,7 +4,17 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '../../contexts/LanguageContext';
 
-export const TierProgressBanner = ({ totalEarned }: { totalEarned: number }) => {
+export const TierProgressBanner = ({ 
+  totalEarned, 
+  title,
+  productsUrl = '/influencer/inventory',
+  marketplaceUrl = '/influencer/marketplace'
+}: { 
+  totalEarned: number; 
+  title?: string;
+  productsUrl?: string;
+  marketplaceUrl?: string;
+}) => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const tiers = [
@@ -52,15 +62,15 @@ export const TierProgressBanner = ({ totalEarned }: { totalEarned: number }) => 
           <div className="space-y-4">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/10">
               <span className="text-xl">🚀</span>
-              <span className="text-xs font-black uppercase tracking-widest text-white">{t('tier_banner_title', 'dashboard')}</span>
+              <span className="text-xs font-black uppercase tracking-widest text-white">{title || t('tier_banner_title', 'dashboard')}</span>
             </div>
             <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('tier_banner_evolution', 'dashboard')}</h2>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Link to="/influencer/inventory" className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-2xl text-xs font-black text-white transition-all">
+            <Link to={productsUrl} className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-2xl text-xs font-black text-white transition-all">
               <Package className="w-3.5 h-3.5" /> {t('nav_my_products', 'dashboard')}
             </Link>
-            <Link to="/influencer/marketplace" className="flex items-center gap-2 px-6 py-3 bg-white text-slate-900 rounded-2xl text-xs font-black hover:shadow-2xl transition-all">
+            <Link to={marketplaceUrl} className="flex items-center gap-2 px-6 py-3 bg-white text-slate-900 rounded-2xl text-xs font-black hover:shadow-2xl transition-all">
               <ShoppingBag className="w-3.5 h-3.5" /> {t('nav_public_market', 'dashboard')}
             </Link>
           </div>

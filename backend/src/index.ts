@@ -291,7 +291,7 @@ const setupChatSocket = () => {
         where: { uuid: decoded.userId },
         include: { role: true },
       });
-      if (user && user.isActive) {
+      if (user) {
         socket.userUuid = user.uuid;
         socket.userRole = user.role.name;
       }

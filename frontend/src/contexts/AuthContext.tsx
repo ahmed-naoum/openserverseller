@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { authApi } from '../lib/api';
+import { authApi, settingsApi } from '../lib/api';
 
 export interface AuthUser {
   uuid: string;
@@ -34,10 +34,19 @@ interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  platformSettings: {
+    showIdentityVerification?: boolean;
+    showBankVerification?: boolean;
+    showContractVerification?: boolean;
+    enabled?: boolean;
+    registrationBlocked?: boolean;
+    influencerRegistrationBlocked?: boolean;
+  } | null;
+  refreshPlatformSettings: () => Promise<void>;
   login: (data: { email?: string; phone?: string; password: string }) => Promise<{ user?: AuthUser; requiresTwoFactor?: boolean; twoFactorToken?: string; requiresPasswordChange?: boolean; tempToken?: string; message?: string }>;
   login2FA: (data: { twoFactorToken: string; code: string }) => Promise<AuthUser>;
   forcePasswordChange: (data: { tempToken: string; newPassword: string }) => Promise<AuthUser>;
-  googleAuth: (data: { credential: string; role?: string }) => Promise<{ user?: AuthUser; requiresTwoFactor?: boolean; twoFactorToken?: string; requiresPasswordChange?: boolean; tempToken?: string; message?: string }>;
+  googleAuth: (data: { credential: string; role?: string; [key: string]: any }) => Promise<any>;
   register: (data: { email?: string; phone?: string; password: string; fullName: string; role?: string; cguAccepted?: boolean; turnstileToken?: string }) => Promise<AuthUser>;
   registerInfluencer: (data: any) => Promise<AuthUser>;
   logout: () => Promise<void>;
@@ -51,6 +60,20 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [platformSettings, setPlatformSettings] = useState<any>(null);
+
+  const refreshPlatformSettings = async () => {
+    try {
+      const res = await settingsApi.getMaintenanceStatus();
+      setPlatformSettings(res.data?.data || {});
+    } catch {
+      setPlatformSettings({
+        showIdentityVerification: true,
+        showBankVerification: true,
+        showContractVerification: true
+      });
+    }
+  };
 
   const refreshUser = async () => {
     try {
@@ -65,11 +88,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
-    if (token) {
-      refreshUser().finally(() => setIsLoading(false));
-    } else {
-      setIsLoading(false);
-    }
+    refreshPlatformSettings().finally(() => {
+      if (token) {
+        refreshUser().finally(() => setIsLoading(false));
+      } else {
+        setIsLoading(false);
+      }
+    });
   }, []);
 
   const login = async (data: { email?: string; phone?: string; password: string }) => {
@@ -123,12 +148,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user;
   };
 
-  const googleAuth = async (data: { credential: string; role?: string }) => {
+  const googleAuth = async (data: { credential: string; role?: string; [key: string]: any }) => {
     const guestLang = localStorage.getItem('guest_lang');
     const response = await authApi.googleAuth({
       ...data,
       ...(guestLang ? { language: guestLang } : {})
     });
+    
+    if (response.data.data?.status === 'needs_completion') {
+      return response.data.data;
+    }
     
     if (response.data.data?.requiresTwoFactor) {
       return { 
@@ -271,6 +300,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isLoading,
         isAuthenticated: !!user,
+        platformSettings,
+        refreshPlatformSettings,
         login,
         login2FA,
         forcePasswordChange,

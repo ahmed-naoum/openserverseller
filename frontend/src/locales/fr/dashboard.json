@@ -26,6 +26,8 @@
   "nav_my_orders": "Mes Commandes",
   "nav_new_leads": "Nouveau Leads",
   "nav_youcan_leads": "Leads YouCan",
+  "nav_youcan_integration": "Intégration YouCan",
+  "nav_youcan_connect": "Connexion Boutique",
   "tier_banner_title": "Tableau de Bord Influenceur",
   "tier_banner_evolution": "Évolution de votre rang",
   "tier_banner_current_position": "Vous êtes ici",
@@ -78,7 +80,7 @@
   "menu_security_2fa": "Sécurité & 2FA",
   "menu_logout": "Se déconnecter",
   "banner_title": "Complétez votre profil",
-  "banner_subtitle": "Votre profil est complété à {percentage}%. Complétez-le pour accéder à toutes les fonctionnalités.",
+  "banner_subtitle": "Votre profil est complété à {percentage}. Complétez-le pour accéder à toutes les fonctionnalités.",
   "banner_button": "Compléter le Profil",
   "settings_title": "Paramètres du Compte",
   "settings_subtitle": "Gérez vos préférences et sécurisez votre espace",
@@ -188,5 +190,7 @@
   "settings_subdomain_success_toast": "Sous-domaine mis à jour avec succès !",
   "settings_subdomain_invalid_otp_toast": "Code incorrect ou expiré",
   "settings_subdomain_toast_empty": "Veuillez saisir un sous-domaine",
-  "settings_subdomain_toast_invalid": "Seuls les lettres minuscules, chiffres et tirets sont autorisés (3-30 caractères)"
+  "settings_subdomain_toast_invalid": "Seuls les lettres minuscules, chiffres et tirets sont autorisés (3-30 caractères)",
+  "settings_subdomain_otp_label": "Code de vérification",
+  "settings_subdomain_btn_confirm": "Confirmer"
 }

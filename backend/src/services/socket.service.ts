@@ -52,7 +52,7 @@ export const setupSocketHandlers = (io: SocketServer) => {
         include: { role: true },
       });
 
-      if (user && user.isActive) {
+      if (user) {
         socket.userId = user.uuid;
         socket.userRole = user.role.name;
       }

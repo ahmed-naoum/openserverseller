@@ -5,10 +5,19 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import LanguageSwitcherWidget from '../../components/common/LanguageSwitcherWidget';
 
 export default function PendingVerificationPage() {
-  const { logout } = useAuth();
+  const { logout, user, revertImpersonation } = useAuth();
   const navigate = useNavigate();
   const { language, t: tRaw } = useLanguage();
   const t = (key: string) => tRaw(key, 'pending-verification');
+
+  const isImpersonating = !!localStorage.getItem('originalToken');
+  const originalUser = { role: localStorage.getItem('originalUserRole') };
+
+  const revertButtonLabel = originalUser?.role === 'SYSTEM_SUPPORT' 
+    ? 'Retourner à mon compte Admin'
+    : originalUser?.role === 'HELPER'
+    ? 'Retourner à mon compte Helper'
+    : 'Retourner à mon compte';
 
   const handleLogout = async () => {
     try {
@@ -20,8 +29,24 @@ export default function PendingVerificationPage() {
   };
 
   return (
-    <div dir={language === 'ar' ? 'rtl' : 'ltr'} className={`min-h-screen flex flex-col lg:flex-row font-['29LT_Kaff',_Cairo,_Inter,_sans-serif] bg-white overflow-x-hidden relative ${language === 'ar' ? 'text-right' : 'text-left'}`}>
-      {/* Left Column: Content Area */}
+    <div className="min-h-screen flex flex-col">
+      {/* Impersonation Banner */}
+      {isImpersonating && (
+        <div className="w-full bg-gradient-to-r from-red-600 to-amber-600 text-white text-center py-2 px-4 shadow-md z-[100] flex items-center justify-center gap-4 animate-pulse shrink-0">
+          <span className="font-bold text-sm">
+            ⚠️ Mode Assistance (Lecture Seule) : Vous êtes connecté en tant que {user?.fullName || user?.email || 'un utilisateur'}. Aucune action n'est autorisée.
+          </span>
+          <button
+            onClick={revertImpersonation}
+            className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded-md text-sm font-semibold transition-colors shrink-0"
+          >
+            {revertButtonLabel}
+          </button>
+        </div>
+      )}
+
+      <div dir={language === 'ar' ? 'rtl' : 'ltr'} className={`flex-1 flex flex-col lg:flex-row font-['29LT_Kaff',_Cairo,_Inter,_sans-serif] bg-white overflow-x-hidden relative ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+        {/* Left Column: Content Area */}
       <div className="w-full lg:w-[50%] xl:w-[45%] flex flex-col justify-center items-center p-6 bg-[#f8f9fa] relative z-10 min-h-screen">
         {/* Language Switcher Widget */}
         <div className={`absolute top-6 ${language === 'ar' ? 'left-6' : 'right-6'} z-30`}>
@@ -169,6 +194,7 @@ export default function PendingVerificationPage() {
           <div className="absolute inset-0 z-[-1] flex items-center justify-center pointer-events-none">
             <div className="w-[600px] h-[600px] rounded-full blur-[100px] bg-[#ff5722]/5"></div>
           </div>
+        </div>
         </div>
       </div>
     </div>

@@ -93,10 +93,10 @@
   "bank_toast_success": "تمت إضافة الحساب البنكي بنجاح!",
   "bank_toast_invalid_otp": "رمز غير صحيح أو منتهي الصلاحية",
   "bank_toast_error_send": "خطأ أثناء إرسال رمز التحقق",
-
-  "contract_title": "العقد والالتزام",
+ 
+  "contract_title": "العقد",
   "contract_desc": "اطلع على شروطنا وقم بتوقيع عقدك إلكترونيًا",
-  "contract_preview_title": "معاينة عقدك",
+  "contract_preview_title": "معاينة عقدك", 
   "contract_preview_desc": "سيتم تخصيص العقد بمعلوماتك الشخصية (الاسم، رقم البطاقة، العنوان، الحساب البنكي)",
   "contract_btn_download": "تحميل العقد بصيغة PDF",
   "contract_waiting_sig": "في انتظار التوقيع الإلكتروني...",

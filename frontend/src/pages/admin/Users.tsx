@@ -39,6 +39,7 @@ import {
   Percent,
   ScanLine,
   LogIn,
+  Trash2,
   Loader2
 } from 'lucide-react';
 
@@ -159,7 +160,7 @@ function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; o
           <div>
             <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
               <Users size={24} className="text-primary-600" />
-              Assigner Influenceurs
+              Assigner Influenceurs & Vendeurs
             </h2>
             <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">
               Agent: <span className="text-primary-600">{agent.fullName || agent.email}</span>
@@ -186,7 +187,7 @@ function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; o
                 </div>
                 <div>
                   <p className="text-sm font-black text-slate-800 tracking-tight">Auto-assignation globale</p>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Tous les influenceurs (présents & futurs)</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Tous les influenceurs & vendeurs (présents & futurs)</p>
                 </div>
               </div>
               <button
@@ -215,7 +216,7 @@ function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; o
             </div>
           ) : influencers.length === 0 ? (
             <div className="text-center py-12 opacity-50">
-              <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Aucun influenceur trouvé</p>
+              <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Aucun utilisateur trouvé</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -258,7 +259,16 @@ function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; o
                     {inf.fullName?.charAt(0) || '?'}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-black tracking-tight">{inf.fullName}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-black tracking-tight">{inf.fullName}</p>
+                      <span className={`px-1.5 py-0.5 text-[8px] font-black uppercase rounded border ${
+                        inf.role === 'VENDOR' 
+                          ? 'bg-amber-50 text-amber-600 border-amber-200' 
+                          : 'bg-indigo-50 text-indigo-600 border-indigo-200'
+                      }`}>
+                        {inf.role === 'VENDOR' ? 'Vendeur' : 'Influenceur'}
+                      </span>
+                    </div>
                     <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">{inf.email || inf.phone}</p>
                   </div>
                 </label>
@@ -1555,6 +1565,21 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
 }
 
 export default function AdminUsers() {
+  const formatDate = (dateString: string) => {
+    if (!dateString) return 'N/A';
+    try {
+      const date = new Date(dateString);
+      const day = date.getDate();
+      const month = date.getMonth() + 1;
+      const year = date.getFullYear();
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${month}/${day}/${year} à ${hours}:${minutes}`;
+    } catch (e) {
+      return dateString;
+    }
+  };
+
   const [roleFilter, setRoleFilter] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -1566,6 +1591,7 @@ export default function AdminUsers() {
   const [tempUserForReset, setTempUserForReset] = useState<any>(null);
   const [confirmResetPasswordUser, setConfirmResetPasswordUser] = useState<any>(null);
   const [generatedPasswordData, setGeneratedPasswordData] = useState<{password: string, user: any} | null>(null);
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState<any>(null);
   const queryClient = useQueryClient();
   const { impersonate } = useAuth();
   const [impersonatingId, setImpersonatingId] = useState<number | null>(null);
@@ -1627,6 +1653,20 @@ export default function AdminUsers() {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       queryClient.invalidateQueries({ queryKey: ['userRoleCounts'] });
     },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (uuid: string) => adminApi.deleteUser(uuid),
+    onSuccess: () => {
+      toast.success('Compte supprimé avec succès!');
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['userRoleCounts'] });
+      setConfirmDeleteUser(null);
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Erreur lors de la suppression');
+      setConfirmDeleteUser(null);
+    }
   });
 
   const reset2FAMutation = useMutation({
@@ -1862,6 +1902,49 @@ export default function AdminUsers() {
                         </div>
                       </div>
                       
+                      {/* Domains */}
+                      {(user.subdomain || user.customDomain) && (
+                        <div className="bg-slate-50 rounded-xl p-2.5 space-y-1.5 text-[11px] border border-slate-100/50">
+                          {user.subdomain && (
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-bold text-slate-400 uppercase tracking-widest text-[8px]">Sous-domaine:</span>
+                              <a 
+                                href={`https://${user.subdomain}.silacod.com`} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="font-semibold text-indigo-600 hover:underline"
+                              >
+                                {user.subdomain}.silacod.com
+                              </a>
+                            </div>
+                          )}
+                          {user.customDomain && (
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <span className="font-bold text-slate-400 uppercase tracking-widest text-[8px]">Domaine Perso:</span>
+                              <div className="flex items-center gap-1.5">
+                                <a 
+                                  href={`https://${user.customDomain}`} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="font-mono font-bold text-slate-800 hover:underline"
+                                >
+                                  {user.customDomain}
+                                </a>
+                                <span className={`px-1 py-0.5 rounded text-[8px] font-black uppercase ${
+                                  user.customDomainStatus === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' :
+                                  user.customDomainStatus === 'FAILED' ? 'bg-rose-100 text-rose-700' :
+                                  'bg-amber-100 text-amber-700'
+                                }`}>
+                                  {user.customDomainStatus === 'ACTIVE' ? 'Vérifié' :
+                                   user.customDomainStatus === 'FAILED' ? 'Échoué' :
+                                   'Attente'}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* Middle: Badges */}
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={`px-3 py-1 rounded-lg text-[10px] font-black tracking-wider uppercase border ${
@@ -1876,6 +1959,9 @@ export default function AdminUsers() {
                           user.cguAccepted ? 'bg-green-50 text-green-600 border-green-100' : 'bg-rose-50 text-rose-600 border-rose-100'
                         }`}>
                           CGU: {user.cguAccepted ? 'ACCEPTÉ' : 'NON'}
+                        </span>
+                        <span className="px-3 py-1 rounded-lg text-[10px] font-black tracking-wider uppercase border bg-slate-50 text-slate-500 border-slate-100/80">
+                          Inscrit le: {formatDate(user.createdAt)}
                         </span>
                         {user.phone && (
                           <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400">
@@ -1923,7 +2009,7 @@ export default function AdminUsers() {
                             <button 
                               onClick={() => setAssigningAgent(user)} 
                               className="py-2 px-3 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-all flex items-center justify-center shrink-0" 
-                              title="Assigner"
+                              title="Assigner Influenceurs & Vendeurs"
                             >
                               <Users size={13} />
                             </button>
@@ -1951,6 +2037,15 @@ export default function AdminUsers() {
                           >
                             <KeyIcon size={13} />
                           </button>
+                          {user.role !== 'SUPER_ADMIN' && (
+                            <button
+                              onClick={() => setConfirmDeleteUser(user)}
+                              className="py-2 px-3 rounded-xl bg-rose-50 border border-rose-100 text-rose-400 hover:text-white hover:bg-rose-600 hover:border-rose-600 transition-all flex items-center justify-center shrink-0"
+                              title="Supprimer le compte"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1963,9 +2058,11 @@ export default function AdminUsers() {
                     <tr>
                       <th className="text-left py-6 px-8 text-[10px] font-black text-slate-400 uppercase tracking-widest">Identité</th>
                       <th className="text-left py-6 px-8 text-[10px] font-black text-slate-400 uppercase tracking-widest">Contact</th>
+                      <th className="text-left py-6 px-8 text-[10px] font-black text-slate-400 uppercase tracking-widest">Domaines</th>
                       <th className="text-left py-6 px-8 text-[10px] font-black text-slate-400 uppercase tracking-widest">Privilèges</th>
                       <th className="text-left py-6 px-8 text-[10px] font-black text-slate-400 uppercase tracking-widest">Confiance</th>
                       <th className="text-left py-6 px-8 text-[10px] font-black text-slate-400 uppercase tracking-widest">Statut</th>
+                      <th className="text-left py-6 px-8 text-[10px] font-black text-slate-400 uppercase tracking-widest">Inscrit le</th>
                       <th className="text-right py-6 px-8 text-[10px] font-black text-slate-400 uppercase tracking-widest">Contrôle</th>
                     </tr>
                   </thead>
@@ -2009,6 +2106,50 @@ export default function AdminUsers() {
                           </div>
                         </td>
                         <td className="py-6 px-8">
+                          <div className="space-y-1 max-w-[220px]">
+                            {user.subdomain && (
+                              <div className="flex flex-col">
+                                <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Sous-domaine</span>
+                                <a 
+                                  href={`https://${user.subdomain}.silacod.com`} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-xs font-bold text-indigo-600 hover:underline truncate"
+                                >
+                                  {user.subdomain}.silacod.com
+                                </a>
+                              </div>
+                            )}
+                            {user.customDomain && (
+                              <div className="flex flex-col pt-1 border-t border-slate-50">
+                                <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Perso</span>
+                                <div className="flex items-center gap-1.5">
+                                  <a 
+                                    href={`https://${user.customDomain}`} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="text-xs font-mono font-bold text-slate-800 hover:underline truncate"
+                                  >
+                                    {user.customDomain}
+                                  </a>
+                                  <span className={`px-1 rounded text-[8px] font-black uppercase ${
+                                    user.customDomainStatus === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' :
+                                    user.customDomainStatus === 'FAILED' ? 'bg-rose-100 text-rose-700' :
+                                    'bg-amber-100 text-amber-700'
+                                  }`}>
+                                    {user.customDomainStatus === 'ACTIVE' ? 'V' :
+                                     user.customDomainStatus === 'FAILED' ? 'X' :
+                                     'P'}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                            {!user.subdomain && !user.customDomain && (
+                              <span className="text-xs font-semibold text-slate-300 italic">Aucun</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-6 px-8">
                           <span className="inline-block px-4 py-1.5 rounded-xl bg-slate-100 text-slate-500 text-[10px] font-black tracking-[0.1em] uppercase">
                             {user.role?.replace(/_/g, ' ')}
                           </span>
@@ -2048,6 +2189,11 @@ export default function AdminUsers() {
                              </span>
                           </div>
                         </td>
+                        <td className="py-6 px-8 whitespace-nowrap">
+                          <span className="text-xs font-bold text-slate-600">
+                            {formatDate(user.createdAt)}
+                          </span>
+                        </td>
                         <td className="py-6 px-8 text-right">
                           <div className="flex gap-2 justify-end items-center">
                             <button
@@ -2073,7 +2219,7 @@ export default function AdminUsers() {
                               <button
                                 onClick={() => setAssigningAgent(user)}
                                 className="w-10 h-10 rounded-xl bg-white border border-slate-100 text-slate-400 hover:text-primary-600 hover:border-primary-100 hover:bg-primary-50 transition-all flex items-center justify-center"
-                                title="Assigner Influenceurs"
+                                title="Assigner Influenceurs & Vendeurs"
                               >
                                 <Users size={18} />
                               </button>
@@ -2122,6 +2268,15 @@ export default function AdminUsers() {
                               >
                                 <KeyIcon size={18} />
                               </button>
+                              {user.role !== 'SUPER_ADMIN' && (
+                                <button
+                                  onClick={() => setConfirmDeleteUser(user)}
+                                  className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-100 text-rose-400 hover:text-white hover:bg-rose-600 hover:border-rose-600 transition-all flex items-center justify-center"
+                                  title="Supprimer le compte"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -2327,6 +2482,49 @@ export default function AdminUsers() {
                 className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-white bg-indigo-600 hover:bg-indigo-700 rounded-2xl shadow-lg shadow-indigo-200/50 transition-all disabled:opacity-50"
               >
                 {sendPwResetMutation.isPending ? 'Génération...' : 'Confirmer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDeleteUser && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xl flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl border border-white/20 flex flex-col scale-in-center transition-transform duration-500">
+            <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-gradient-to-br from-rose-50/50 to-red-50/30">
+              <div>
+                <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                  <Trash2 size={24} className="text-rose-600" />
+                  Supprimer le compte
+                </h2>
+                <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">
+                  {confirmDeleteUser.fullName || confirmDeleteUser.email}
+                </p>
+              </div>
+            </div>
+            
+            <div className="p-8 space-y-4">
+              <p className="text-sm font-bold text-slate-600 leading-relaxed text-left">
+                Voulez-vous vraiment supprimer définitivement ce compte utilisateur ?
+              </p>
+              <p className="text-xs text-rose-500 font-semibold bg-rose-50 p-3.5 rounded-2xl border border-rose-100/50 text-left">
+                ⚠️ Cette action est <strong>irréversible</strong>. Toutes les données associées à cet utilisateur seront supprimées : profil, portefeuille, commandes, leads, liens de parrainage, documents KYC, etc.
+              </p>
+            </div>
+
+            <div className="p-8 pt-0 flex gap-4">
+              <button
+                onClick={() => setConfirmDeleteUser(null)}
+                className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => deleteMutation.mutate(confirmDeleteUser.uuid)}
+                disabled={deleteMutation.isPending}
+                className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-white bg-rose-600 hover:bg-rose-700 rounded-2xl shadow-lg shadow-rose-200/50 transition-all disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? 'Suppression...' : 'Supprimer'}
               </button>
             </div>
           </div>

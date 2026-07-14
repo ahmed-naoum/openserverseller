@@ -4,7 +4,16 @@ import jwt from 'jsonwebtoken';
 
 
 // In-memory cache for performance
-let maintenanceCache: { enabled: boolean; secret: string; registrationBlocked: boolean; influencerRegistrationBlocked: boolean; expiresAt: number } | null = null;
+let maintenanceCache: { 
+  enabled: boolean; 
+  secret: string; 
+  registrationBlocked: boolean; 
+  influencerRegistrationBlocked: boolean; 
+  showIdentityVerification: boolean;
+  showBankVerification: boolean;
+  showContractVerification: boolean;
+  expiresAt: number;
+} | null = null;
 const CACHE_TTL = 30000; // 30 seconds
 
 export const fetchMaintenanceSettings = async () => {
@@ -19,12 +28,23 @@ export const fetchMaintenanceSettings = async () => {
     });
     
     if (setting && setting.value) {
-      const data = setting.value as { enabled: boolean; secret: string; registrationBlocked?: boolean; influencerRegistrationBlocked?: boolean };
+      const data = setting.value as { 
+        enabled: boolean; 
+        secret: string; 
+        registrationBlocked?: boolean; 
+        influencerRegistrationBlocked?: boolean;
+        showIdentityVerification?: boolean;
+        showBankVerification?: boolean;
+        showContractVerification?: boolean;
+      };
       maintenanceCache = {
         enabled: data.enabled || false,
         secret: data.secret || process.env.JWT_SECRET || '',
         registrationBlocked: data.registrationBlocked || false,
         influencerRegistrationBlocked: data.influencerRegistrationBlocked || false,
+        showIdentityVerification: data.showIdentityVerification !== false,
+        showBankVerification: data.showBankVerification !== false,
+        showContractVerification: data.showContractVerification !== false,
         expiresAt: now + CACHE_TTL
       };
       return maintenanceCache;
@@ -34,7 +54,15 @@ export const fetchMaintenanceSettings = async () => {
   }
 
   // Default if not set
-  return { enabled: false, secret: process.env.JWT_SECRET || '', registrationBlocked: false, influencerRegistrationBlocked: false };
+  return { 
+    enabled: false, 
+    secret: process.env.JWT_SECRET || '', 
+    registrationBlocked: false, 
+    influencerRegistrationBlocked: false,
+    showIdentityVerification: true,
+    showBankVerification: true,
+    showContractVerification: true
+  };
 };
 
 export const clearMaintenanceCache = () => {

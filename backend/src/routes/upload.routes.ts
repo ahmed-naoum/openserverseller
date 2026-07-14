@@ -10,8 +10,16 @@ import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { io } from '../index.js';
 import { uploadRateLimiter } from '../middleware/security.js';
 import { exec } from 'child_process';
+import { v2 as cloudinary } from 'cloudinary';
 
 const router = Router();
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
 
 // Disable sharp cache to prevent file locking issues on Windows
 sharp.cache(false);
@@ -46,7 +54,7 @@ const productImageStorage = multer.memoryStorage();
 
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
     const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.pdf'];
@@ -104,6 +112,21 @@ const audioUpload = multer({
       cb(null, true);
     } else {
       cb(new Error('Invalid audio file type or extension'));
+    }
+  },
+});
+
+const videoUpload = multer({
+  storage,
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB limit for videos
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-m4v'];
+    const allowedExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.m4v'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedTypes.includes(file.mimetype) || allowedExtensions.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Format vidéo invalide. Utilisez MP4, WebM, OGG ou MOV.'));
     }
   },
 });
@@ -423,6 +446,47 @@ router.post(
         } catch (e) {}
       }
       throw new AppException(500, `Audio conversion failed: ${err.message || err}`);
+    }
+  })
+);
+
+// ─── Cloudinary Video Upload ───────────────────────────────────────
+router.post(
+  '/cloudinary-video',
+  authenticate,
+  uploadRateLimiter,
+  videoUpload.single('file'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) {
+      throw new AppException(400, 'Aucun fichier vidéo fourni');
+    }
+
+    try {
+      const result = await cloudinary.uploader.upload(req.file.path, {
+        resource_type: 'video',
+        folder: 'silacod/videos',
+      });
+
+      // Cleanup local file
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+
+      res.json({
+        status: 'success',
+        data: {
+          url: result.secure_url,
+          filename: result.original_filename,
+          format: result.format,
+          duration: result.duration,
+        },
+      });
+    } catch (err: any) {
+      // Cleanup local file on error
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      throw new AppException(500, `Erreur lors de l'upload Cloudinary: ${err.message || err.error?.message || 'Erreur inconnue'}`);
     }
   })
 );

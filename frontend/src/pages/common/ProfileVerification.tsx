@@ -15,42 +15,55 @@ import { compressToWebP, blobToWebPFile } from '../../utils/imageCompressor';
 type StepStatus = 'COMPLETED' | 'IN_PROGRESS' | 'PENDING' | 'LOCKED' | 'REJECTED';
 
 // ─── Helper: compute verification progress ─────────────────────────────
-export function getVerificationStatus(user: any) {
+export function getVerificationStatus(user: any, platformSettings?: any) {
+  const showIdentity = platformSettings?.showIdentityVerification !== false;
+  const showBank = platformSettings?.showBankVerification !== false;
+  const showContract = platformSettings?.showContractVerification !== false;
+
   const hasSubdomain = !!user?.subdomain;
   const emailVerified = !!user?.emailVerified;
   const kycStatus = user?.kycStatus || 'PENDING';
   const contractAccepted = !!user?.contractAccepted;
 
-  const identityDone = kycStatus === 'APPROVED';
-  const identityInProgress = kycStatus === 'UNDER_REVIEW';
+  const identityDone = !showIdentity || kycStatus === 'APPROVED';
+  const identityInProgress = showIdentity && kycStatus === 'UNDER_REVIEW';
 
   const hasBankAccounts = (user?.bankAccounts?.length ?? 0) > 0;
   const allBanksRejected = hasBankAccounts && user.bankAccounts.every((ba: any) => ba.status === 'REJECTED');
-  const anyBankApproved = user?.bankAccounts?.some((ba: any) => ba.status === 'APPROVED');
-  const anyBankPending = user?.bankAccounts?.some((ba: any) => ba.status === 'PENDING');
+  const anyBankApproved = !showBank || user?.bankAccounts?.some((ba: any) => ba.status === 'APPROVED');
+  const anyBankPending = showBank && user?.bankAccounts?.some((ba: any) => ba.status === 'PENDING');
 
-  const steps = {
+  const steps: any = {
     subdomain: hasSubdomain ? 'COMPLETED' as StepStatus : 'PENDING' as StepStatus,
     email: emailVerified 
       ? 'COMPLETED' as StepStatus 
       : (hasSubdomain ? 'PENDING' as StepStatus : 'LOCKED' as StepStatus),
-    identity: identityDone ? 'COMPLETED' as StepStatus
+  };
+
+  if (showIdentity) {
+    steps.identity = identityDone ? 'COMPLETED' as StepStatus
       : identityInProgress ? 'IN_PROGRESS' as StepStatus
-      : (kycStatus === 'REJECTED' ? 'REJECTED' as StepStatus : (emailVerified ? 'PENDING' as StepStatus : 'LOCKED' as StepStatus)),
-    bank: (identityDone || identityInProgress) 
+      : (kycStatus === 'REJECTED' ? 'REJECTED' as StepStatus : (emailVerified ? 'PENDING' as StepStatus : 'LOCKED' as StepStatus));
+  }
+
+  if (showBank) {
+    steps.bank = (identityDone || identityInProgress) 
       ? (anyBankApproved ? 'COMPLETED' as StepStatus 
         : (anyBankPending ? 'IN_PROGRESS' as StepStatus 
           : (allBanksRejected ? 'REJECTED' as StepStatus : 'PENDING' as StepStatus))) 
-      : 'LOCKED' as StepStatus,
-    contract: contractAccepted 
+      : 'LOCKED' as StepStatus;
+  }
+
+  if (showContract) {
+    steps.contract = contractAccepted 
       ? 'COMPLETED' as StepStatus 
-      : (identityDone && anyBankApproved 
+      : ((identityDone && anyBankApproved)
         ? 'PENDING' as StepStatus 
-        : 'LOCKED' as StepStatus),
-  };
+        : 'LOCKED' as StepStatus);
+  }
 
   const completed = Object.values(steps).filter(s => s === 'COMPLETED').length;
-  const total = 5;
+  const total = Object.keys(steps).length;
   const percentage = Math.round((completed / total) * 100);
 
   return { steps, completed, total, percentage };
@@ -1134,18 +1147,30 @@ function ContractSigningForm({ onComplete }: { onComplete: () => void }) {
 
 // ─── Main ProfileVerification Page ──────────────────────────────────
 export default function ProfileVerification({ hideHeader = false }: { hideHeader?: boolean }) {
-  const { user, refreshUser } = useAuth();
+  const { user, isLoading, refreshUser, platformSettings } = useAuth();
   const [expandedStep, setExpandedStep] = useState<number | null>(null);
-  const { steps, percentage, completed, total } = getVerificationStatus(user);
+  const { steps, percentage, completed, total } = getVerificationStatus(user, platformSettings);
   const { t, language } = useLanguage();
   const tVerif = (key: string, fallback?: string) => t(key, 'verification', fallback);
+
+  if (isLoading || !user) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-10 h-10 text-primary-600 animate-spin" />
+      </div>
+    );
+  }
 
   const handleStepComplete = async () => {
     await refreshUser();
     setExpandedStep(null);
   };
 
-  const stepConfigs = [
+  const showIdentity = platformSettings?.showIdentityVerification !== false;
+  const showBank = platformSettings?.showBankVerification !== false;
+  const showContract = platformSettings?.showContractVerification !== false;
+
+  const rawStepConfigs = [
     {
       id: 1,
       key: 'subdomain' as const,
@@ -1164,7 +1189,7 @@ export default function ProfileVerification({ hideHeader = false }: { hideHeader
       gradient: 'from-blue-500 to-cyan-500',
       form: <EmailVerificationForm onComplete={handleStepComplete} />,
     },
-    {
+    showIdentity && {
       id: 3,
       key: 'identity' as const,
       title: tVerif('identity_title', "Vérification d'Identité"),
@@ -1173,7 +1198,7 @@ export default function ProfileVerification({ hideHeader = false }: { hideHeader
       gradient: 'from-violet-500 to-purple-500',
       form: <IdentityVerificationForm onComplete={handleStepComplete} />,
     },
-    {
+    showBank && {
       id: 4,
       key: 'bank' as const,
       title: tVerif('bank_title', 'Méthode de Paiement Bancaire'),
@@ -1182,7 +1207,7 @@ export default function ProfileVerification({ hideHeader = false }: { hideHeader
       gradient: 'from-amber-500 to-orange-500',
       form: <BankPaymentForm onComplete={handleStepComplete} />,
     },
-    {
+    showContract && {
       id: 5,
       key: 'contract' as const,
       title: tVerif('contract_title', 'Contrat & Engagement'),
@@ -1191,7 +1216,12 @@ export default function ProfileVerification({ hideHeader = false }: { hideHeader
       gradient: 'from-slate-700 to-slate-900',
       form: <ContractSigningForm onComplete={handleStepComplete} />,
     },
-  ];
+  ].filter(Boolean);
+
+  const stepConfigs = rawStepConfigs.map((step: any, index) => ({
+    ...step,
+    displayId: index + 1
+  }));
 
   const getStatusBadge = (status: StepStatus) => {
     const configs = {
@@ -1201,7 +1231,7 @@ export default function ProfileVerification({ hideHeader = false }: { hideHeader
       REJECTED: { icon: AlertTriangle, label: tVerif('status_rejected', 'Rejeté'), bg: 'bg-rose-50 text-rose-600 border-rose-100' },
       LOCKED: { icon: Lock, label: tVerif('status_locked', 'Verrouillé'), bg: 'bg-slate-50 text-slate-400 border-slate-100' },
     };
-    const c = configs[status];
+    const c = configs[status] || configs.LOCKED;
     const Icon = c.icon;
     return (
       <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${c.bg}`}>
@@ -1217,7 +1247,9 @@ export default function ProfileVerification({ hideHeader = false }: { hideHeader
       case 'IN_PROGRESS': return 'border-blue-200 bg-white ring-2 ring-blue-500/10 hover:border-blue-300';
       case 'PENDING': return 'border-amber-200 bg-white ring-2 ring-amber-500/10 hover:border-amber-300';
       case 'REJECTED': return 'border-rose-200 bg-white ring-2 ring-rose-500/10 hover:border-rose-300';
-      case 'LOCKED': return 'border-slate-100 bg-slate-50/50 opacity-60';
+      case 'LOCKED':
+      default:
+        return 'border-slate-100 bg-slate-50/50 opacity-60';
     }
   };
 
@@ -1281,7 +1313,7 @@ export default function ProfileVerification({ hideHeader = false }: { hideHeader
                   status === 'PENDING' ? 'bg-amber-400' :
                   'bg-slate-200'
                 }`} />
-                <span className="text-[9px] font-bold text-slate-400 hidden sm:block">{s.id}</span>
+                <span className="text-[9px] font-bold text-slate-400 hidden sm:block">{s.displayId}</span>
               </div>
             );
           })}
@@ -1316,11 +1348,11 @@ export default function ProfileVerification({ hideHeader = false }: { hideHeader
                 <div className={`w-12 h-12 flex-shrink-0 flex items-center justify-center rounded-2xl text-white shadow-lg bg-gradient-to-br ${step.gradient} ${
                   status === 'LOCKED' ? 'opacity-40 grayscale' : ''
                 }`}>
-                  {status === 'COMPLETED' ? (
-                    <CheckCircle2 size={22} />
-                  ) : (
-                    <span className="text-lg font-black">{step.id}</span>
-                  )}
+                {status === 'COMPLETED' ? (
+                  <CheckCircle2 size={22} />
+                ) : (
+                  <span className="text-lg font-black">{step.displayId}</span>
+                )}
                 </div>
 
                 {/* Content */}

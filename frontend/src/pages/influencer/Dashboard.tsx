@@ -101,55 +101,9 @@ export default function InfluencerDashboard() {
   const uniqueVisitors = stats.uniqueVisitors || 0;
   const whatsappClicks = stats.whatsappClicks || 0;
 
-  // Filter allCommissions by date for the quick stats cards
-  const dateFilteredCommissions = allCommissions.filter(c => {
-    const leadDate = new Date(c.order?.createdAt || c.createdAt);
-    
-    if (dateRange === 'all') return true;
-    
-    const now = new Date();
-    if (dateRange === 1) {
-      return leadDate.toDateString() === now.toDateString();
-    }
-    
-    if (dateRange === 'custom') {
-      if (!startDate && !endDate) return true;
-      if (startDate) {
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
-        if (leadDate < start) return false;
-      }
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        if (leadDate > end) return false;
-      }
-      return true;
-    }
-
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    if (dateRange === 7) d.setDate(now.getDate() - 7);
-    else if (dateRange === 30) d.setDate(now.getDate() - 30);
-    
-    return leadDate >= d;
-  });
-
-  const totalLeads = dateFilteredCommissions.length;
-
-  const deliveryStatuses = [
-    'PENDING', 'PUSHED_TO_DELIVERY', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED', 'CONFIRMED_DELIVERY',
-    'NEW_PARCEL', 'WAITING_PICKUP', 'PICKED_UP', 'SENT', 'RECEIVED', 'DISTRIBUTION', 'PROGRAMMER_AUTO', 'POSTPONED',
-    'WAITING_PREPARATION', 'PREPARED', 'ENCORE_PREPARED', 'CANCELED_BY_SELLER', 'CANCELED_BY_SYSTEM', 'REFUSE',
-    'NOANSWER', 'CANCELED', 'ERR', 'PROGRAMMER', 'INCORRECT_ADDRESS'
-  ];
-
-  const confirmedLeads = dateFilteredCommissions.filter(c => {
-    const s = (c.order?.status || 'UNKNOWN').toUpperCase();
-    return s === 'CONFIRMED' || deliveryStatuses.includes(s);
-  }).length;
-  
-  const deliveredLeads = dateFilteredCommissions.filter(c => (c.order?.status || '').toUpperCase() === 'DELIVERED').length;
+  const totalLeads = stats.conversions || 0;
+  const confirmedLeads = stats.confirmed || 0;
+  const deliveredLeads = stats.delivered || 0;
 
   const confirmationRate = totalLeads > 0 ? (confirmedLeads / totalLeads) * 100 : 0;
   const deliveryRate = confirmedLeads > 0 ? (deliveredLeads / confirmedLeads) * 100 : 0;
@@ -454,6 +408,7 @@ export default function InfluencerDashboard() {
         <div className="lg:col-span-8">
           <ProCard variant="glass" className="h-full p-6 bg-white border border-slate-100 shadow-sm">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+
               <div className="space-y-1">
                 <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
                   {chartType === 'revenue' ? (

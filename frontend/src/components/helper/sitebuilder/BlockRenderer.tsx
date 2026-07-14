@@ -3,7 +3,7 @@ import { BACKEND_URL, publicApi } from '../../../lib/api';
 import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-export type BlockType = 'header' | 'hero' | 'image' | 'text' | 'button' | 'express_checkout' | 'spacer' | 'countdown' | 'whatsapp' | 'slider' | 'products' | 'audio';
+export type BlockType = 'header' | 'hero' | 'image' | 'text' | 'button' | 'express_checkout' | 'spacer' | 'countdown' | 'whatsapp' | 'slider' | 'products' | 'audio' | 'video';
 
 export interface EditorBlock {
   id: string;
@@ -150,6 +150,30 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
                 ) : (
                   <div className="w-full h-64 bg-gray-100 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-200">
                     Image (Placeholder)
+                  </div>
+                )}
+              </div>
+            );
+
+          case 'video':
+            return (
+              <div 
+                key={id} 
+                className="w-full max-w-4xl mx-auto flex justify-center"
+                style={{ 
+                  paddingTop: `${content.paddingTop ?? 16}px`,
+                  paddingBottom: `${content.paddingBottom ?? 16}px`,
+                  marginTop: `${content.marginTop ?? 0}px`,
+                  marginBottom: `${content.marginBottom ?? 0}px`,
+                }}
+              >
+                {content.url ? (
+                  <VideoBlockComponent content={content} resolveUrl={resolveUrl} />
+                ) : (
+                  <div className="w-full h-64 bg-gray-100 flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-200">
+                    <span className="text-3xl mb-2">🎬</span>
+                    <span className="font-bold">Vidéo (Placeholder)</span>
+                    <span className="text-xs mt-1">Téléchargez une vidéo dans les propriétés</span>
                   </div>
                 )}
               </div>
@@ -1258,4 +1282,73 @@ function SliderBlock({ id, content, isEditor, resolveUrl }: SliderBlockProps) {
     </div>
   );
 }
+
+// --------------- Video Block Component with custom play button in center ---------------
+interface VideoBlockComponentProps {
+  content: any;
+  resolveUrl: (url?: string) => string;
+}
+
+function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const handlePlayToggle = () => {
+    if (!videoRef.current) return;
+    if (videoRef.current.paused) {
+      videoRef.current.play().catch(err => console.log("Play failed:", err));
+    } else {
+      videoRef.current.pause();
+    }
+  };
+
+  return (
+    <div 
+      className="relative group overflow-hidden w-full flex justify-center" 
+      style={{ 
+        width: content.width ? `${content.width}%` : '100%',
+        maxHeight: content.maxHeight ? `${content.maxHeight}px` : 'none',
+      }}
+    >
+      <video 
+        ref={videoRef}
+        src={resolveUrl(content.url)} 
+        controls={content.controls !== false}
+        autoPlay={!!content.autoplay}
+        loop={!!content.loop}
+        muted={!!content.muted}
+        playsInline
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => setIsPlaying(false)}
+        className="h-auto w-full object-contain"
+        style={{ 
+          maxHeight: content.maxHeight ? `${content.maxHeight}px` : 'none',
+        }}
+      />
+      {!isPlaying && (
+        <div 
+          onClick={handlePlayToggle}
+          className="absolute inset-0 flex items-center justify-center bg-black/20 cursor-pointer transition-opacity duration-300 hover:bg-black/35"
+        >
+          <div 
+            className="w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center shadow-2xl transform transition-all duration-300 hover:scale-110 active:scale-95"
+            style={{
+              backgroundColor: 'rgba(249, 115, 22, 0.95)',
+              border: '4px solid rgba(255, 255, 255, 0.8)',
+            }}
+          >
+            <svg 
+              className="w-8 h-8 sm:w-10 sm:h-10 text-white ml-1 fill-current" 
+              viewBox="0 0 24 24"
+            >
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 

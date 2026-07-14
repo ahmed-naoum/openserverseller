@@ -15,6 +15,8 @@ export interface User {
   canManageOrders?: boolean;
   canManageTickets?: boolean;
   avatarUrl?: string;
+  customDomain?: string | null;
+  customDomainStatus?: string | null;
   [key: string]: any;
 }
 
@@ -140,7 +142,7 @@ export const authApi = {
     api.post('/auth/verify-otp', data),
   verifyEmail: (data: { email: string; otp: string }) =>
     api.post('/auth/verify-email', data),
-  googleAuth: (data: { credential: string; role?: string; language?: string }) =>
+  googleAuth: (data: { credential: string; role?: string; language?: string; [key: string]: any }) =>
     api.post('/auth/google', data),
   login2FA: (data: { twoFactorToken: string; code: string }) =>
     api.post('/auth/login/2fa', data),
@@ -324,6 +326,9 @@ export const publicApi = {
 };
 
 export const uploadApi = {
+  cloudinaryVideo: (data: FormData) => api.post('/upload/cloudinary-video', data, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
   image: (data: FormData) => api.post('/upload/image', data, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
@@ -343,7 +348,7 @@ export const uploadApi = {
 
 export const adminApi = {
   dashboard: () => api.get('/admin/dashboard'),
-  getVerifications: (filter?: string) => api.get('/admin/verifications', { params: { filter: filter || 'all' } }),
+  getVerifications: (params?: { filter?: string; page?: number; limit?: number; search?: string; role?: string }) => api.get('/admin/verifications', { params }),
   verifyEmail: (uuid: string, verified?: boolean) => api.patch(`/admin/users/${uuid}/verify-email`, { verified }),
   verifyKyc: (uuid: string, status: 'APPROVED' | 'REJECTED' | 'PENDING') =>
     api.patch(`/admin/users/${uuid}/verify-kyc`, { status }),
@@ -363,6 +368,7 @@ export const adminApi = {
   updateUser: (uuid: string, data: any) => api.patch(`/users/${uuid}/admin-edit`, data),
   activateUser: (uuid: string) => api.patch(`/users/${uuid}/activate`),
   deactivateUser: (uuid: string) => api.patch(`/users/${uuid}/deactivate`),
+  deleteUser: (uuid: string) => api.delete(`/users/${uuid}`),
   updateKycStatus: (uuid: string, status: string) => api.patch(`/users/${uuid}/kyc-status`, { status }),
   reset2FA: (uuid: string) => api.post(`/users/${uuid}/reset-2fa`),
   sendPasswordResetLink: (uuid: string) => api.post(`/users/${uuid}/send-password-reset`),
@@ -458,6 +464,7 @@ export const chatApi = {
     brandName?: string; 
     requestedQty?: number; 
     brandingLabelPrintUrl?: string;
+    requestedLandingPageUrl?: string;
     subject?: string;
     type?: string;
     description?: string;
@@ -492,7 +499,7 @@ export const fulfillmentApi = {
 };
 
 export const dashboardApi = {
-  sellerAffiliate: () => api.get('/dashboard/seller-affiliate'),
+  sellerAffiliate: (params?: any) => api.get('/dashboard/seller-affiliate', { params }),
   switchMode: (mode: 'SELLER' | 'AFFILIATE') => api.patch('/dashboard/seller-affiliate/switch-mode', { mode }),
   grosseller: () => api.get('/dashboard/grosseller'),
   agent: () => api.get('/dashboard/agent'),
@@ -505,7 +512,7 @@ export const influencerApi = {
   enable: () => api.post('/influencer/enable'),
   createLink: (productId: number, customName?: string) => api.post('/influencer/links', { productId, customName }),
   checkLinkNameUnique: (name: string) => api.get('/influencer/links/check-unique', { params: { name } }),
-  getLinks: (params?: { start?: string; end?: string }) => api.get('/influencer/links', { params }),
+  getLinks: (params?: { start?: string; end?: string; mode?: string }) => api.get('/influencer/links', { params }),
   getLinkStats: (code: string) => api.get(`/influencer/links/${code}/stats`),
   trackConversion: (code: string, orderId: number) => api.post('/influencer/track-conversion', { code, orderId }),
   getCommissions: () => api.get('/influencer/commissions'),
@@ -520,9 +527,10 @@ export const influencerApi = {
     brandingLabelPrintUrl?: string; 
     brandName?: string; 
     requestedQty?: number; 
-    requestedLandingPageUrl?: string; 
+    requestedLandingPageUrl?: string;
+    userMode?: string;
   }) => api.post('/influencer/claims', data),
-  getCustomers: (params?: { page?: number; limit?: number; search?: string; all?: boolean }) =>
+  getCustomers: (params?: { page?: number; limit?: number; search?: string; all?: boolean; mode?: string }) =>
     api.get('/influencer/customers', { params }),
   getCampaigns: () => api.get('/influencer/campaigns'),
   createCampaign: (data: any) => api.post('/influencer/campaigns', data),
@@ -531,7 +539,7 @@ export const influencerApi = {
   sendRegenOtp: (id: number) => api.post(`/influencer/links/${id}/send-regen-otp`),
   verifyRegenOtp: (id: number, otp: string) => api.post(`/influencer/links/${id}/verify-regen-otp`, { otp }),
   updateLinkStatus: (id: number, isActive: boolean, status?: string) => api.patch(`/influencer/links/${id}/status`, { isActive, status }),
-  getDailyAnalytics: (params?: { days?: number; start?: string; end?: string; referralLinkId?: number }) => 
+  getDailyAnalytics: (params?: { days?: number | 'all'; start?: string; end?: string; referralLinkId?: number; mode?: string }) => 
     api.get('/influencer/analytics/daily', { params }),
 };
 
@@ -635,7 +643,7 @@ export const settingsApi = {
   getMaintenanceStatus: () => api.get('/settings/maintenance'),
   verifyMaintenanceBypass: (password: string) => api.post('/settings/maintenance/verify', { password }),
   getAdminMaintenanceSettings: () => api.get('/settings/maintenance/admin'),
-  updateMaintenanceSettings: (data: { enabled: boolean; secret: string; registrationBlocked: boolean; influencerRegistrationBlocked: boolean }) => api.put('/settings/maintenance', data),
+  updateMaintenanceSettings: (data: { enabled: boolean; secret: string; registrationBlocked: boolean; influencerRegistrationBlocked: boolean; showIdentityVerification?: boolean; showBankVerification?: boolean; showContractVerification?: boolean }) => api.put('/settings/maintenance', data),
   getCacheVersion: () => api.get('/public/version'),
   refreshCache: () => api.post('/admin/cache-refresh'),
 };
@@ -664,5 +672,18 @@ export const notificationsApi = {
   markAllRead: () => api.post('/notifications/read-all'),
   delete: (id: number) => api.delete(`/notifications/${id}`),
   deleteAll: () => api.delete('/notifications'),
+};
+
+export const userPixelApi = {
+  list: (platform?: string) => api.get('/user-pixels', { params: { platform } }),
+  create: (data: { name: string; type: string; pixelId: string; platform?: string; targetIds?: string[]; conversionEvent?: string }) => api.post('/user-pixels', data),
+  delete: (id: number) => api.delete(`/user-pixels/${id}`),
+  verify: (pixelId: string) => api.post('/user-pixels/verify', { pixelId }),
+};
+
+export const domainApi = {
+  connect: (domain: string) => api.post('/domain/connect', { domain }),
+  refresh: () => api.post('/domain/refresh'),
+  disconnect: () => api.delete('/domain/disconnect'),
 };
 

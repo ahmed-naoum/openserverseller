@@ -49,6 +49,11 @@ model User {
   totalEarnings Float   @default(0)
   platformFeeRate Float @default(0.13)
 
+  // Custom Domain Integration
+  customDomain       String? @unique
+  customDomainStatus String  @default("NONE") // NONE, PENDING, ACTIVE, FAILED
+  customDomainCfId   String? // Cloudflare custom hostname ID
+
   isActive        Boolean   @default(false)
   kycStatus       String    @default("PENDING")
   emailVerifiedAt DateTime?
@@ -143,6 +148,7 @@ model User {
   bankAccounts         UserBankAccount[]
   invoices             Invoice[]
   conversationLogs     ConversationLog[]  @relation("UserLogs")
+  pixels               UserPixel[]
 
   @@map("users")
 }
@@ -724,6 +730,7 @@ model AffiliateClaim {
   product   Product  @relation(fields: [productId], references: [id])
   status    String   @default("PENDING") // PENDING, APPROVED, REJECTED, REVOKED
   claimedAt DateTime @default(now())
+  userMode  String   @default("AFFILIATE") // VENDOR or AFFILIATE
   brandingLabelMockupUrl String?
   brandingLabelPrintUrl  String?
   brandName              String?
@@ -732,7 +739,7 @@ model AffiliateClaim {
 
   updatedAt DateTime @updatedAt
 
-  @@unique([userId, productId])
+  @@unique([userId, productId, userMode])
   @@map("affiliate_claims")
 }
 
@@ -797,6 +804,25 @@ model ConversationLog {
 
   @@map("conversation_logs")
 }
+
+model UserPixel {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name            String
+  type            String   @default("GLOBAL") // "GLOBAL" or "SINGLE"
+  pixelId         String
+  platform        String   @default("META")   // "META", "GOOGLE", "TIKTOK", "SNAPCHAT"
+  targetIds       Json?    // Array of string (e.g., ReferralLink codes)
+  conversionEvent String   @default("Lead")   // e.g., "Lead" or "Purchase"
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("user_pixels")
+}
+
 
 model ConversationParticipant {
   id             Int          @id @default(autoincrement())

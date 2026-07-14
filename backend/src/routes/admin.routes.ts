@@ -729,11 +729,14 @@ router.post(
 
     let finalInfluencerIds = [...influencerIds];
 
-    // If autoAssign is requested, we fetch all influencers to assign them all
+    // If autoAssign is requested, we fetch all influencers & vendors to assign them all
     if (autoAssign) {
       const allInfluencers = await prisma.user.findMany({
         where: {
-          role: { name: 'INFLUENCER' },
+          OR: [
+            { role: { name: 'INFLUENCER' } },
+            { role: { name: 'VENDOR' } },
+          ],
         },
         select: { id: true }
       });
@@ -801,38 +804,89 @@ router.get(
   authenticate,
   authorize('SUPER_ADMIN', 'FINANCE_ADMIN', 'CONFIRMATION_AGENT'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { filter = 'all' } = req.query;
+    const { filter = 'all', page = '1', limit = '10', search = '', role = 'ALL' } = req.query;
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = parseInt(limit as string, 10);
+    const skip = (pageNum - 1) * limitNum;
 
-    const where: any = {};
+    const andConditions: any[] = [];
     const currentUserRole = (req.user as any)?.roleName;
 
     if (currentUserRole === 'CONFIRMATION_AGENT') {
-      where.role = {
-        name: { in: ['VENDOR', 'INFLUENCER', 'GROSSELLER'] }
-      };
+      andConditions.push({ role: { name: { in: ['VENDOR', 'INFLUENCER', 'GROSSELLER'] } } });
     } else {
-      where.role = {
-        name: { notIn: ['SUPER_ADMIN', 'FINANCE_ADMIN'] }
-      };
+      andConditions.push({ role: { name: { notIn: ['SUPER_ADMIN', 'FINANCE_ADMIN'] } } });
     }
 
-    if (filter === 'pending') {
-      where.OR = [
-        { kycStatus: { in: ['PENDING', 'UNDER_REVIEW'] } },
-        { bankAccounts: { some: { status: 'PENDING' } } },
-      ];
+    if (role !== 'ALL') {
+      andConditions.push({ role: { name: role } });
     }
 
-    const usersWithVerifications = await prisma.user.findMany({
-      where,
-      include: {
-        profile: true,
-        role: true,
-        kycDocuments: true,
-        bankAccounts: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    if (search) {
+      andConditions.push({
+        OR: [
+          { email: { contains: search as string, mode: 'insensitive' } },
+          { phone: { contains: search as string, mode: 'insensitive' } },
+          { profile: { fullName: { contains: search as string, mode: 'insensitive' } } }
+        ]
+      });
+    }
+
+    const baseWhere = andConditions.length > 0 ? { AND: andConditions } : {};
+    const statsWhere = { ...baseWhere };
+
+    const filterConditions = [...andConditions];
+    if (filter === 'PENDING') {
+      filterConditions.push({
+        OR: [
+          { emailVerifiedAt: null },
+          { kycStatus: { in: ['PENDING', 'UNDER_REVIEW'] } },
+          { bankAccounts: { some: { status: 'PENDING' } } },
+          { contractAccepted: false }
+        ]
+      });
+    } else if (filter === 'PENDING_EMAIL') {
+      filterConditions.push({ emailVerifiedAt: null });
+    } else if (filter === 'PENDING_KYC') {
+      filterConditions.push({ kycStatus: { in: ['PENDING', 'UNDER_REVIEW'] } });
+    } else if (filter === 'PENDING_BANK') {
+      filterConditions.push({ bankAccounts: { some: { status: 'PENDING' } } });
+    } else if (filter === 'PENDING_CONTRACT') {
+      filterConditions.push({ contractAccepted: false });
+    }
+
+    const filterWhere = filterConditions.length > 0 ? { AND: filterConditions } : {};
+
+    const [
+      totalCount,
+      pendingCount,
+      pendingEmailCount,
+      pendingKycCount,
+      pendingBankCount,
+      pendingContractCount,
+      filteredTotal,
+      usersWithVerifications
+    ] = await Promise.all([
+      prisma.user.count({ where: statsWhere }),
+      prisma.user.count({ where: { AND: [...(statsWhere.AND ? (statsWhere.AND as any[]) : []), { OR: [ { emailVerifiedAt: null }, { kycStatus: { in: ['PENDING', 'UNDER_REVIEW'] } }, { bankAccounts: { some: { status: 'PENDING' } } }, { contractAccepted: false } ] } ] } }),
+      prisma.user.count({ where: { AND: [...(statsWhere.AND ? (statsWhere.AND as any[]) : []), { emailVerifiedAt: null } ] } }),
+      prisma.user.count({ where: { AND: [...(statsWhere.AND ? (statsWhere.AND as any[]) : []), { kycStatus: { in: ['PENDING', 'UNDER_REVIEW'] } } ] } }),
+      prisma.user.count({ where: { AND: [...(statsWhere.AND ? (statsWhere.AND as any[]) : []), { bankAccounts: { some: { status: 'PENDING' } } } ] } }),
+      prisma.user.count({ where: { AND: [...(statsWhere.AND ? (statsWhere.AND as any[]) : []), { contractAccepted: false } ] } }),
+      prisma.user.count({ where: filterWhere }),
+      prisma.user.findMany({
+        where: filterWhere,
+        include: {
+          profile: true,
+          role: true,
+          kycDocuments: true,
+          bankAccounts: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limitNum,
+      })
+    ]);
 
     // Decrypt RIB for admin view
     const decryptedUsers = usersWithVerifications.map(user => ({
@@ -846,6 +900,20 @@ router.get(
     res.json({
       status: 'success',
       data: decryptedUsers,
+      meta: {
+        total: filteredTotal,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(filteredTotal / limitNum),
+        stats: {
+          total: totalCount,
+          pending: pendingCount,
+          pendingEmail: pendingEmailCount,
+          pendingKyc: pendingKycCount,
+          pendingBank: pendingBankCount,
+          pendingContract: pendingContractCount,
+        }
+      }
     });
   })
 );
@@ -1117,7 +1185,7 @@ router.patch(
   })
 );
 
-// List all influencer users (for the assignment UI)
+// List all influencer and vendor users (for the assignment UI)
 router.get(
   '/influencers',
   authenticate,
@@ -1127,6 +1195,7 @@ router.get(
       where: {
         OR: [
           { role: { name: 'INFLUENCER' } },
+          { role: { name: 'VENDOR' } },
           { isInfluencer: true },
         ],
       },
@@ -1373,9 +1442,21 @@ router.get(
       orderBy: { createdAt: 'desc' }
     });
 
+    const conversations = await prisma.conversation.findMany({
+      where: {
+        supportRequestId: { in: requests.map(r => r.id) }
+      },
+      select: { id: true, supportRequestId: true }
+    });
+
+    const requestsWithConv = requests.map(r => ({
+      ...r,
+      conversationId: conversations.find((c: any) => c.supportRequestId === r.id)?.id
+    }));
+
     res.json({
       status: 'success',
-      data: requests
+      data: requestsWithConv
     });
   })
 );

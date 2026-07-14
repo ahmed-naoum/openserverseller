@@ -1,7 +1,8 @@
 import { useState, useEffect, Fragment } from 'react';
-import { influencerApi } from '../../lib/api';
+import { useNavigate } from 'react-router-dom';
+import { influencerApi, inventoryApi } from '../../lib/api';
 import { ReferralLink } from '../../types';
-import { Search, Plus, MousePointerClick, Zap, Target, DollarSign, Copy, QrCode, RefreshCw, AlertCircle, Link as LinkIcon, Power, Eye, TrendingUp, Activity, Calendar, MessageCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, Plus, MousePointerClick, Zap, Target, DollarSign, Copy, QrCode, RefreshCw, AlertCircle, Link as LinkIcon, Power, Eye, TrendingUp, Activity, Calendar, MessageCircle, ChevronDown, ChevronUp, Wand2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { 
   ResponsiveContainer, ComposedChart, Line, Area, Bar, XAxis, YAxis, CartesianGrid, 
@@ -15,6 +16,7 @@ import { containsBlockedWord } from '../../utils/blockedWords';
 export default function InfluencerLinks() {
   const { t } = useLanguage();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [links, setLinks] = useState<ReferralLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -81,6 +83,9 @@ export default function InfluencerLinks() {
         params.start = start.toISOString().split('T')[0];
         params.end = new Date().toISOString().split('T')[0];
       }
+      if (user?.mode) {
+        params.mode = user.mode;
+      }
       const res = await influencerApi.getLinks(params);
       setLinks(res.data);
     } catch (error) {
@@ -102,6 +107,9 @@ export default function InfluencerLinks() {
       }
       if (selectedLinkIdForChart) {
         params.referralLinkId = selectedLinkIdForChart;
+      }
+      if (user?.mode) {
+        params.mode = user.mode;
       }
       const res = await influencerApi.getDailyAnalytics(params);
       setDailyStats(res.data);
@@ -127,7 +135,7 @@ export default function InfluencerLinks() {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [dateRange, startDate, endDate]);
+  }, [dateRange, startDate, endDate, user?.mode]);
 
   // Refetch chart when a specific link is selected/deselected
   useEffect(() => {
@@ -239,7 +247,8 @@ export default function InfluencerLinks() {
     try {
       const res = await influencerApi.getClaims();
       const claimsList = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-      setClaims(claimsList.filter((c: any) => c.status === 'APPROVED'));
+      const currentMode = user?.mode || 'AFFILIATE';
+      setClaims(claimsList.filter((c: any) => c.status === 'APPROVED' && c.userMode === currentMode));
     } catch (err) {
       toast.error(t('toast_load_claims_error', 'links'));
     } finally {
@@ -930,6 +939,14 @@ export default function InfluencerLinks() {
                                                 title={t('btn_copy', 'links')}
                                               >
                                                 <Copy size={12} />
+                                              </button>
+                                              <button 
+                                                onClick={() => navigate(`/helper/links/${link.id}/builder`)} 
+                                                disabled={link.status === 'SUSPENDED'}
+                                                className="p-2 bg-slate-50 text-slate-400 hover:text-purple-600 hover:bg-purple-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-all" 
+                                                title={t('tooltip_builder', 'links') || "Constructeur de Page"}
+                                              >
+                                                <Wand2 size={12} />
                                               </button>
                                               <button 
                                                 onClick={() => { setSelectedLink(link); setShowQrModal(true); }} 

@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { buildReferralUrl } from '../../utils/referral';
 import MarketplaceSidebar from '../../components/marketplace/MarketplaceSidebar';
+import LinksManagerModal, { LinksManagerConfig } from '../../components/modals/LinksManagerModal';
 
 const HoverMarquee = ({ text, className = "" }: { text: string, className?: string }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -61,8 +62,7 @@ export default function InfluencerMarketplace() {
   const [total, setTotal] = useState(0);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState('newest');
-  const [generatingFor, setGeneratingFor] = useState<number | null>(null);
-  const [generatedLink, setGeneratedLink] = useState<{ productId: number; url: string } | null>(null);
+  const [linksConfig, setLinksConfig] = useState<LinksManagerConfig | null>(null);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [priceMin, setPriceMin] = useState('');
   const [priceMax, setPriceMax] = useState('');
@@ -116,7 +116,9 @@ export default function InfluencerMarketplace() {
         influencerApi.getClaims()
       ]);
       let items = productsRes.data?.data?.products || [];
-      const claimsData = Array.isArray(claimsRes.data) ? claimsRes.data : (claimsRes.data?.data || []);
+      const claimsDataRaw = Array.isArray(claimsRes.data) ? claimsRes.data : (claimsRes.data?.data || []);
+      const currentMode = user?.mode || 'AFFILIATE';
+      const claimsData = claimsDataRaw.filter((c: any) => c.userMode === currentMode);
 
       if (selectedCategories.length > 0) items = items.filter((p: any) => p.categories?.some((c: any) => selectedCategories.includes(c.slug)));
 
@@ -144,19 +146,6 @@ export default function InfluencerMarketplace() {
     } catch { toast.error(t('error_load_data', 'marketplace')); } finally { setIsLoading(false); }
   };
 
-  const handleGenerateLink = async (productId: number) => {
-    try {
-      setGeneratingFor(productId);
-      const res = await influencerApi.createLink(productId);
-      const url = buildReferralUrl(res.data.code, user?.subdomain);
-      setGeneratedLink({ productId, url });
-      navigator.clipboard.writeText(url);
-      toast.success(t('success_link_generated', 'marketplace'));
-    } catch (error: any) { toast.error(error.response?.data?.message || t('error_link_generated', 'marketplace')); } finally { setGeneratingFor(null); }
-  };
-
-  const copyToClipboard = (url: string) => { navigator.clipboard.writeText(url); toast.success(t('success_copied', 'marketplace')); };
-
   const goToPage = (p: number) => { setPage(p); setSearchParams(prev => { prev.set('page', String(p)); return prev; }); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 
   const resetFilters = () => {
@@ -182,18 +171,17 @@ export default function InfluencerMarketplace() {
     if (claim.status === 'PENDING') return <div className="w-full py-2.5 bg-amber-50 text-amber-600 rounded-xl text-xs font-black text-center border border-amber-200/50">{t('pending_approval', 'marketplace')}</div>;
     if (claim.status === 'REJECTED') return <div className="w-full py-2.5 bg-rose-50 text-rose-600 rounded-xl text-xs font-black text-center border border-rose-200/50">{t('request_rejected', 'marketplace')}</div>;
     if (claim.status === 'APPROVED') {
-      if (generatedLink && generatedLink.productId === product.id) return (
-        <div onClick={(e) => e.stopPropagation()} className="p-2.5 bg-emerald-50 border border-emerald-200/50 rounded-xl space-y-2">
-          <div className="flex items-center gap-1.5 text-emerald-700 text-[10px] font-black"><CheckCircle2 className="w-3 h-3" /> {t('link_ready', 'marketplace')}</div>
-          <div className="flex gap-1.5">
-            <input type="text" readOnly value={generatedLink.url} className="w-full text-[10px] py-1.5 px-2 rounded-lg bg-white border border-emerald-200 text-slate-600 focus:outline-none font-mono" />
-            <button onClick={(e) => { e.stopPropagation(); copyToClipboard(generatedLink.url); }} className="p-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg transition-colors flex-shrink-0"><Copy className="w-3.5 h-3.5" /></button>
-          </div>
-        </div>
-      );
       return (
-        <button onClick={(e) => { e.stopPropagation(); handleGenerateLink(product.id); }} disabled={generatingFor === product.id} className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#FF6B4A] text-white rounded-xl text-xs font-black hover:bg-[#e55a3a] transition-all disabled:opacity-50 hover:shadow-lg hover:shadow-orange-500/20">
-          {generatingFor === product.id ? <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><LinkIcon className="w-3.5 h-3.5" /> {t('generate_link', 'marketplace')}</>}
+        <button onClick={(e) => { 
+          e.stopPropagation(); 
+          setLinksConfig({
+            isOpen: true,
+            mode: 'manage',
+            productId: product.id,
+            productName: product.nameFr || product.nameEn
+          });
+        }} className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#FF6B4A] text-white rounded-xl text-xs font-black hover:bg-[#e55a3a] transition-all hover:shadow-lg hover:shadow-orange-500/20">
+          <LinkIcon className="w-3.5 h-3.5" /> {t('manage_links', 'inventory')}
         </button>
       );
     }
@@ -484,6 +472,11 @@ export default function InfluencerMarketplace() {
           </motion.div>
         </div>
       </div>
+
+      <LinksManagerModal
+        config={linksConfig}
+        onClose={() => setLinksConfig(null)}
+      />
     </div>
   );
 }

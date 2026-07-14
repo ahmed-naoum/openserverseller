@@ -13,7 +13,10 @@ export const getMaintenanceStatus = async (req: Request, res: Response) => {
       data: { 
         enabled: settings.enabled,
         registrationBlocked: settings.registrationBlocked,
-        influencerRegistrationBlocked: settings.influencerRegistrationBlocked
+        influencerRegistrationBlocked: settings.influencerRegistrationBlocked,
+        showIdentityVerification: settings.showIdentityVerification,
+        showBankVerification: settings.showBankVerification,
+        showContractVerification: settings.showContractVerification
       }
     });
   } catch (error) {
@@ -58,20 +61,30 @@ export const verifyMaintenanceBypass = async (req: Request, res: Response) => {
 // Admin: PUT /api/v1/settings/maintenance
 export const updateMaintenanceMode = async (req: Request, res: Response) => {
   try {
-    const { enabled, secret, registrationBlocked, influencerRegistrationBlocked } = req.body;
+    const { enabled, secret, registrationBlocked, influencerRegistrationBlocked, showIdentityVerification, showBankVerification, showContractVerification } = req.body;
 
     if (typeof enabled !== 'boolean' || typeof secret !== 'string') {
         return res.status(400).json({ status: 'error', message: 'Invalid payload' });
     }
     
+    const value = { 
+      enabled, 
+      secret, 
+      registrationBlocked: !!registrationBlocked, 
+      influencerRegistrationBlocked: !!influencerRegistrationBlocked,
+      showIdentityVerification: showIdentityVerification !== false,
+      showBankVerification: showBankVerification !== false,
+      showContractVerification: showContractVerification !== false
+    };
+
     await prisma.platformSettings.upsert({
       where: { key: 'maintenance_mode' },
       update: {
-        value: { enabled, secret, registrationBlocked: !!registrationBlocked, influencerRegistrationBlocked: !!influencerRegistrationBlocked }
+        value
       },
       create: {
         key: 'maintenance_mode',
-        value: { enabled, secret, registrationBlocked: !!registrationBlocked, influencerRegistrationBlocked: !!influencerRegistrationBlocked }
+        value
       }
     });
 

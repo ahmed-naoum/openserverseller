@@ -26,6 +26,8 @@
   "nav_my_orders": "طلباتي",
   "nav_new_leads": "طلبيات جديدة",
   "nav_youcan_leads": "طلبيات YouCan",
+  "nav_youcan_integration": "ربط YouCan",
+  "nav_youcan_connect": "ربط المتجر",
   "tier_banner_title": "لوحة تحكم المؤثر",
   "tier_banner_evolution": "تطور رتبتك",
   "tier_banner_current_position": "أنت هنا",
@@ -188,5 +190,7 @@
   "settings_subdomain_success_toast": "تم تحديث النطاق الفرعي بنجاح!",
   "settings_subdomain_invalid_otp_toast": "الرمز غير صحيح أو منتهي الصلاحية",
   "settings_subdomain_toast_empty": "يرجى إدخال اسم نطاق فرعي",
-  "settings_subdomain_toast_invalid": "مسموح فقط بالأحرف الصغيرة والأرقام والشرطات (3-30 حرفًا)"
+  "settings_subdomain_toast_invalid": "مسموح فقط بالأحرف الصغيرة والأرقام والشرطات (3-30 حرفًا)",
+  "settings_subdomain_otp_label": "رمز التحقق",
+  "settings_subdomain_btn_confirm": "تأكيد"
 }

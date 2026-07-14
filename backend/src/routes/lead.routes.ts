@@ -108,7 +108,7 @@ const CITIES_CACHE_TTL = 1000 * 60 * 60; // 1 hour
 router.get(
   '/coliaty/cities',
   authenticate,
-  authorize('CALL_CENTER_AGENT', 'HELPER'),
+  authorize('CALL_CENTER_AGENT', 'HELPER', 'VENDOR', 'INFLUENCER', 'SUPER_ADMIN'),
   asyncHandler(async (req, res) => {
     if (coliatyCitiesCache && Date.now() - coliatyCitiesCacheTime < CITIES_CACHE_TTL) {
       return res.json({
@@ -355,6 +355,7 @@ router.get(
     let assignedInfluencers = assignments.map(a => ({
       id: a.influencer.id,
       fullName: a.influencer.profile?.fullName || a.influencer.email,
+      email: a.influencer.email,
     }));
 
     const activeLead = await prisma.lead.findFirst({
@@ -399,20 +400,10 @@ router.get(
       });
       const linkIds = referralLinks.map(l => l.id);
 
-      // If none of the influencers have referral links, there can be no leads
-      if (linkIds.length === 0) {
-        res.json({
-          status: 'success',
-          data: {
-            leads: [],
-            hasActiveLead: !!activeLead,
-            activeLeadId: activeLead?.id || null,
-            assignedInfluencers,
-          },
-        });
-        return;
-      }
-      where.referralLinkId = { in: linkIds };
+      where.OR = [
+        { referralLinkId: { in: linkIds } },
+        { vendorId: { in: filterByInfluencers } }
+      ];
     }
 
     const leads = await prisma.lead.findMany({
@@ -992,9 +983,15 @@ router.get(
 router.get(
   '/products-by-vendor/:vendorId',
   authenticate,
-  authorize('CALL_CENTER_AGENT', 'SUPER_ADMIN', 'HELPER'),
+  authorize('CALL_CENTER_AGENT', 'SUPER_ADMIN', 'HELPER', 'VENDOR'),
   asyncHandler(async (req, res) => {
     const { vendorId } = req.params;
+    
+    // Vendors can only fetch their own products
+    if (req.user!.roleName === 'VENDOR' && Number(vendorId) !== req.user!.id) {
+      throw new AppException(403, 'Permission denied');
+    }
+
 
     const products = await prisma.product.findMany({
       where: {
@@ -1024,6 +1021,7 @@ router.get(
         name: p.nameFr || p.nameAr,
         retailPriceMad: p.retailPriceMad,
         image: p.images[0]?.imageUrl || null,
+        ownerId: p.ownerId,
       }))
     });
   })
@@ -1150,8 +1148,8 @@ router.post(
 
     // Transaction execution
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Create Lead in PUSHED_TO_DELIVERY or ORDERED status
-      const newLeadStatus = skipColiaty ? 'ORDERED' : 'PUSHED_TO_DELIVERY';
+      // 1. Create Lead in PUSHED_TO_DELIVERY or LEAD status
+      const newLeadStatus = skipColiaty ? 'LEAD' : 'PUSHED_TO_DELIVERY';
       const lead = await tx.lead.create({
         data: {
           vendorId: effectiveVendorId,
@@ -1170,46 +1168,50 @@ router.post(
         },
       });
 
-      // 2. Create Order linked to lead and Coliaty parcel
-      const order = await (tx.order as any).create({
-        data: {
-          orderNumber: generateOrderNumber(),
-          vendorId: effectiveVendorId,
-          leadId: lead.id,
-          customerName: fullName,
-          customerPhone: normalizedPhone,
-          customerCity: city || 'Casablanca',
-          customerAddress: address || city || 'Unknown',
-          totalAmountMad,
-          vendorEarningMad,
-          platformFeeMad,
-          paymentMethod: 'COD',
-          status: 'PENDING',
-          packageContent: product.nameFr || product.nameAr || 'Produit',
-          packageNoOpen: false,
-          productVariant: packName || null,
-          coliatyPackageCode: coliatyResult?.package_code || null,
-          coliatyPackageId: coliatyResult?.package_id || null,
-          items: {
-            create: [
-              {
-                productId: product.id,
-                quantity: qteNum,
-                unitPriceMad: (customPrice !== undefined && customPrice !== null && customPrice !== '') 
-                  ? Number(customPrice) / qteNum 
-                  : product.retailPriceMad,
-                totalPriceMad: totalAmountMad,
-              },
-            ],
-          },
-        },
-      });
+      let order = null;
 
-      // 3. Decrement Product Stock
-      await tx.product.update({
-        where: { id: product.id },
-        data: { stockQuantity: { decrement: qteNum } },
-      });
+      if (!skipColiaty) {
+        // 2. Create Order linked to lead and Coliaty parcel
+        order = await (tx.order as any).create({
+          data: {
+            orderNumber: generateOrderNumber(),
+            vendorId: effectiveVendorId,
+            leadId: lead.id,
+            customerName: fullName,
+            customerPhone: normalizedPhone,
+            customerCity: city || 'Casablanca',
+            customerAddress: address || city || 'Unknown',
+            totalAmountMad,
+            vendorEarningMad,
+            platformFeeMad,
+            paymentMethod: 'COD',
+            status: 'PENDING',
+            packageContent: product.nameFr || product.nameAr || 'Produit',
+            packageNoOpen: false,
+            productVariant: packName || null,
+            coliatyPackageCode: coliatyResult?.package_code || null,
+            coliatyPackageId: coliatyResult?.package_id || null,
+            items: {
+              create: [
+                {
+                  productId: product.id,
+                  quantity: qteNum,
+                  unitPriceMad: (customPrice !== undefined && customPrice !== null && customPrice !== '') 
+                    ? Number(customPrice) / qteNum 
+                    : product.retailPriceMad,
+                  totalPriceMad: totalAmountMad,
+                },
+              ],
+            },
+          },
+        });
+
+        // 3. Decrement Product Stock
+        await tx.product.update({
+          where: { id: product.id },
+          data: { stockQuantity: { decrement: qteNum } },
+        });
+      }
 
       // 4. Record history logs
       if (req.user!.roleName === 'CALL_CENTER_AGENT') {
@@ -1259,6 +1261,7 @@ router.patch(
 
     const validStatuses = [
       'NEW',
+      'LEAD',
       'AVAILABLE',
       'ASSIGNED',
       'CONTACTED',
@@ -1408,6 +1411,7 @@ router.patch(
 
     const validStatuses = [
       'NEW',
+      'LEAD',
       'ASSIGNED',
       'CALL_LATER',
       'NO_REPLY',

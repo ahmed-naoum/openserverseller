@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../../contexts/LanguageContext';
 import LanguageSwitcherWidget from '../../components/common/LanguageSwitcherWidget';
 import CguModal from '../../components/auth/CguModal';
-import { Turnstile } from '@marsidev/react-turnstile';
+import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 
 interface FormErrors {
   fullName?: string;
@@ -108,7 +108,7 @@ export default function RegisterPage() {
   const { language, t: tRaw } = useLanguage();
   const t = (key: string) => tRaw(key, 'register');
   const { pathname } = useLocation();
-  const defaultRole = pathname.includes('/influencer') ? 'INFLUENCER' : 'VENDOR';
+  const defaultRole = pathname.includes('/vendor') ? 'VENDOR' : 'INFLUENCER';
 
   const turnstileOptions = useMemo(() => ({
     theme: 'light' as const,
@@ -140,10 +140,11 @@ export default function RegisterPage() {
   const submittedRef = useRef(false);
   const [step, setStep] = useState(1);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileInstance>(null);
 
   // Update role dynamically if URL changes without remounting the component
   useEffect(() => {
-    const newRole = pathname.includes('/influencer') ? 'INFLUENCER' : 'VENDOR';
+    const newRole = pathname.includes('/vendor') ? 'VENDOR' : 'INFLUENCER';
     if (formData.role !== newRole) {
       setFormData(prev => ({ ...prev, role: newRole }));
       setStep(1);
@@ -372,6 +373,7 @@ export default function RegisterPage() {
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Erreur lors de l'inscription");
       setTurnstileToken(null);
+      turnstileRef.current?.reset();
     } finally {
       setIsLoading(false);
       submittedRef.current = false;
@@ -383,14 +385,40 @@ export default function RegisterPage() {
     setIsLoading(true);
     try {
       const userRes = await googleAuth({ credential: response.credential, role: formData.role });
+      
+      if (userRes && userRes.status === 'needs_completion') {
+        toast.success('Veuillez compléter vos informations.');
+        navigate('/register/complete-google', { 
+          state: { 
+            credential: response.credential,
+            email: userRes.email,
+            fullName: userRes.fullName,
+            avatarUrl: userRes.avatarUrl,
+            googleId: userRes.googleId,
+            role: userRes.role || formData.role
+          } 
+        });
+        return;
+      }
+
       toast.success('Compte Google connecté avec succès !');
       const user = userRes.user;
-      
       if (user?.roleName === 'SUPER_ADMIN' || user?.roleName === 'FINANCE_ADMIN') navigate('/admin');
       else if (user?.roleName === 'CALL_CENTER_AGENT') navigate('/agent');
       else if (user?.roleName === 'GROSSELLER') navigate('/grosseller');
-      else if (user?.roleName === 'INFLUENCER') navigate('/influencer');
-      else navigate('/dashboard');
+      else if (user?.roleName === 'INFLUENCER') {
+        if (user.kycStatus !== 'APPROVED') {
+          navigate('/influencer/verification');
+        } else {
+          navigate('/influencer');
+        }
+      } else {
+        if (user?.kycStatus !== 'APPROVED') {
+          navigate('/dashboard/verification');
+        } else {
+          navigate('/dashboard');
+        }
+      }
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erreur lors de l\'inscription avec Google');
     } finally {
@@ -429,21 +457,21 @@ export default function RegisterPage() {
             <div className="flex bg-[#f4f5f7] p-1 rounded-2xl mb-6 relative max-w-[340px] mx-auto">
                 <button
                     type="button"
-                    onClick={() => { setFormData({ ...formData, role: 'VENDOR' }); setStep(1); }}
-                    className={`flex-1 py-3 rounded-xl text-[13px] font-bold transition-all duration-300 ${
-                        formData.role === 'VENDOR' ? 'bg-[#ff5722] text-white shadow-md' : 'text-[#2e315e] hover:bg-slate-200/50'
-                    }`}
-                >
-                    {t('im_a_seller')}
-                </button>
-                <button
-                    type="button"
                     onClick={() => { setFormData({ ...formData, role: 'INFLUENCER' }); setStep(1); }}
                     className={`flex-1 py-3 rounded-xl text-[13px] font-bold transition-all duration-300 ${
                         formData.role === 'INFLUENCER' ? 'bg-[#ff5722] text-white shadow-md' : 'text-[#2e315e] hover:bg-slate-200/50'
                     }`}
                 >
                     {t('im_an_influencer')}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => { setFormData({ ...formData, role: 'VENDOR' }); setStep(1); }}
+                    className={`flex-1 py-3 rounded-xl text-[13px] font-bold transition-all duration-300 ${
+                        formData.role === 'VENDOR' ? 'bg-[#ff5722] text-white shadow-md' : 'text-[#2e315e] hover:bg-slate-200/50'
+                    }`}
+                >
+                    {t('im_a_seller')}
                 </button>
             </div>
 
@@ -803,10 +831,11 @@ export default function RegisterPage() {
               {(formData.role === 'VENDOR' || step === 3) && (
                 <div className="flex justify-center mt-6">
                   <Turnstile
+                    ref={turnstileRef}
                     siteKey={TURNSTILE_SITE_KEY}
                     onSuccess={(token) => setTurnstileToken(token)}
-                    onExpire={() => setTurnstileToken(null)}
-                    onError={() => setTurnstileToken(null)}
+                    onExpire={() => { setTurnstileToken(null); turnstileRef.current?.reset(); }}
+                    onError={() => { setTurnstileToken(null); turnstileRef.current?.reset(); }}
                     options={turnstileOptions}
                   />
                 </div>

@@ -2,7 +2,11 @@
  * Builds a referral link URL with the user's custom subdomain.
  * If no subdomain is present, returns the standard root-level link.
  */
-export function buildReferralUrl(code: string, subdomain?: string | null): string {
+export function buildReferralUrl(code: string, subdomain?: string | null, customDomain?: string | null, customDomainStatus?: string | null): string {
+  if (customDomain && customDomainStatus === 'ACTIVE') {
+    return `https://${customDomain}/r/${code}`;
+  }
+
   const { protocol, host } = window.location;
   
   if (!subdomain) {

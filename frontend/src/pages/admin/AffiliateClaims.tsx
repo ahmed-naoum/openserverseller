@@ -278,11 +278,11 @@ export default function AdminAffiliateClaims() {
                 ) : filteredClaims.length > 0 ? (
                   filteredClaims.map((claim) => {
                     const userRole = claim.user?.role?.name;
-                    const userMode = claim.user?.mode;
+                    const claimMode = claim.userMode || claim.user?.mode;
                     const getRoleBadge = () => {
                       if (userRole === 'INFLUENCER') return { label: 'Influenceur', color: 'bg-pink-100 text-pink-700 border-pink-200' };
-                      if (userMode === 'AFFILIATE') return { label: 'Affilié', color: 'bg-purple-100 text-purple-700 border-purple-200' };
-                      if (userRole === 'VENDOR') return { label: 'Vendeur', color: 'bg-blue-100 text-blue-700 border-blue-200' };
+                      if (claimMode === 'AFFILIATE') return { label: 'Affilié', color: 'bg-purple-100 text-purple-700 border-purple-200' };
+                      if (claimMode === 'SELLER' || claimMode === 'VENDOR' || userRole === 'VENDOR') return { label: 'Vendeur', color: 'bg-blue-100 text-blue-700 border-blue-200' };
                       return { label: userRole || 'Utilisateur', color: 'bg-gray-100 text-gray-600 border-gray-200' };
                     };
                     const badge = getRoleBadge();
@@ -456,7 +456,7 @@ export default function AdminAffiliateClaims() {
                                 <CheckCircle2 className="w-5 h-5" />
                               </button>
                             )}
-                            {(claim.user?.mode !== 'AFFILIATE' || userRole === 'INFLUENCER') && (
+                            {(claimMode !== 'AFFILIATE' || userRole === 'INFLUENCER') && (
                               <button
                                 onClick={() => openCloneModal(claim)}
                                 className="text-[10px] bg-amber-600 text-white hover:bg-amber-700 font-bold py-1.5 px-3 rounded-lg transition-colors shadow-sm whitespace-nowrap"

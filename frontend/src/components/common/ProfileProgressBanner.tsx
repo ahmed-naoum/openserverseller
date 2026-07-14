@@ -5,10 +5,10 @@ import { getVerificationStatus } from '../../pages/common/ProfileVerification';
 import { UserCheck } from 'lucide-react';
 
 export default function ProfileProgressBanner() {
-  const { user } = useAuth();
+  const { user, platformSettings } = useAuth();
   const { t } = useLanguage();
   const location = useLocation();
-  const { percentage } = getVerificationStatus(user);
+  const { percentage } = getVerificationStatus(user, platformSettings);
 
   // Don't show if 100% complete, on verification page, admin, helper, confirmation, or call center agent
   if (

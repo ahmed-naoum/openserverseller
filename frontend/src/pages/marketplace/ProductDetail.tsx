@@ -99,7 +99,7 @@ export default function ProductDetail() {
   const direction = language === 'ar' ? 'rtl' : 'ltr';
   const textAlign = language === 'ar' ? 'text-right' : 'text-left';
   const flexAlign = language === 'ar' ? 'items-end justify-end' : 'items-start justify-start';
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, platformSettings } = useAuth();
   const navigate = useNavigate();
   const { id } = useParams();
   
@@ -154,7 +154,7 @@ export default function ProductDetail() {
       navigate('/login');
       return;
     }
-    const { percentage } = getVerificationStatus(user);
+    const { percentage } = getVerificationStatus(user, platformSettings);
     if (percentage < 100) {
       toast.error('You must complete your profile to 100% to perform this action.');
       const basePath = user?.role === 'INFLUENCER' ? '/influencer' 
@@ -200,13 +200,18 @@ export default function ProductDetail() {
     const dataToUse = (overrideData && !overrideData.preventDefault) ? overrideData : brandingData;
     
     try {
+      if (dataToUse.landingPageUrl && /^(javascript|data|vbscript):/i.test(dataToUse.landingPageUrl.trim())) {
+        toast.error('URL non valide. Les protocoles javascript: ou data: sont interdits.');
+        return;
+      }
+
       setIsSubmitting(true);
       const payloadParams = {
         productId: Number(id),
         brandingLabelPrintUrl: tempPdfUrl,
         brandName: dataToUse.brandName,
         requestedQty: Number(dataToUse.quantity),
-        requestedLandingPageUrl: dataToUse.landingPageUrl,
+        requestedLandingPageUrl: dataToUse.landingPageUrl ? dataToUse.landingPageUrl.trim() : '',
         description: dataToUse.description || `L'utilisateur souhaite obtenir le produit.`
       };
 
@@ -215,7 +220,8 @@ export default function ProductDetail() {
         brandingLabelPrintUrl: payloadParams.brandingLabelPrintUrl || undefined,
         brandName: payloadParams.brandName,
         requestedQty: payloadParams.requestedQty,
-        requestedLandingPageUrl: payloadParams.requestedLandingPageUrl
+        requestedLandingPageUrl: payloadParams.requestedLandingPageUrl,
+        userMode: user?.mode || 'AFFILIATE'
       });
       const affiliateClaimId = claimRes.data.id;
 
@@ -225,6 +231,7 @@ export default function ProductDetail() {
         brandName: payloadParams.brandName,
         requestedQty: payloadParams.requestedQty,
         brandingLabelPrintUrl: payloadParams.brandingLabelPrintUrl || undefined,
+        requestedLandingPageUrl: payloadParams.requestedLandingPageUrl || undefined,
         subject: `[Achat Gros/Claim] ${product.nameFr}`,
         type: 'PRODUCT_CLAIM',
         description: payloadParams.description,
@@ -249,6 +256,17 @@ export default function ProductDetail() {
   };
 
   const handleBrandingUpload = async (step: 2 | 3, file: File) => {
+    const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error(language === 'ar' ? 'صيغة غير مدعومة. يرجى استخدام PDF, PNG أو JPG.' : 'Format non supporté. Veuillez utiliser PDF, PNG ou JPG.');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error(language === 'ar' ? 'حجم الملف يجب أن لا يتجاوز 5 ميجابايت.' : 'La taille du fichier ne doit pas dépasser 5 Mo.');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       const formData = new FormData();
@@ -339,6 +357,17 @@ export default function ProductDetail() {
   const isVendorPurchasable = user?.mode === 'SELLER' && product.visibility?.includes('REGULAR');
   
   const showBrandingFlow = ((!isAffiliateClaimable && (isVendorPurchasable || isInfluencerClaimable || isBought || isClaimed)) || user?.role === 'SUPER_ADMIN' || user?.role === 'HELPER');
+
+  const extractFilename = (url?: string | null) => {
+    if (!url) return '';
+    const parts = url.split('/');
+    let filename = parts[parts.length - 1];
+    try { filename = decodeURIComponent(filename); } catch(e) {}
+    if (/^\d{13,}-/.test(filename)) {
+      filename = filename.replace(/^\d{13,}-/, '');
+    }
+    return filename;
+  };
 
   return (
     <div className="min-h-screen bg-[#F4F6FB] font-['29LT_Kaff',_Cairo,_Inter,_sans-serif] pb-20" dir={direction}>
@@ -481,8 +510,11 @@ export default function ProductDetail() {
                    actionLabel={t('pd_step2_action', 'marketplace')}
                    isActive={!isCurrentlyPending}
                    hasUpload
-                   accept="application/pdf"
+                   accept="application/pdf,image/png,image/jpeg,image/jpg"
                    onUpload={(file: File) => handleBrandingUpload(3, file)}
+                   isSubmitting={isSubmitting}
+                   isUploaded={!!tempPdfUrl || !!product.userStatus?.brandingLabelPrintUrl}
+                   uploadedFileName={extractFilename(tempPdfUrl || product.userStatus?.brandingLabelPrintUrl)}
                  />
 
                  <BrandingCard 
@@ -521,7 +553,7 @@ export default function ProductDetail() {
    );
  }
 
-function BrandingCard({ titleAr, desc, isActive, actionLabel, onAction, hasUpload, onUpload, accept, isBonus, stepNumberAr, bullets }: any) {
+function BrandingCard({ titleAr, desc, isActive, actionLabel, onAction, hasUpload, onUpload, accept, isBonus, stepNumberAr, bullets, isSubmitting, isUploaded, uploadedFileName }: any) {
   const { language } = useLanguage();
   const direction = language === 'ar' ? 'rtl' : 'ltr';
   const textAlign = language === 'ar' ? 'text-right' : 'text-left';
@@ -551,9 +583,19 @@ function BrandingCard({ titleAr, desc, isActive, actionLabel, onAction, hasUploa
       {/* Left Side Action */}
       <div className="shrink-0 self-center">
         {hasUpload ? (
-          <label className={`px-5 py-2.5 rounded-xl border border-[#FF6B4A] text-[#FF6B4A] text-[11px] font-black uppercase tracking-widest flex items-center gap-2 bg-white ${!isActive ? 'opacity-50 pointer-events-none cursor-not-allowed' : 'cursor-pointer hover:bg-orange-50 transition-colors'}`}>
-            <Upload size={14} /> {actionLabel}
-            <input type="file" className="hidden" accept={accept} disabled={!isActive} onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])} />
+          <label className={`px-5 py-2.5 rounded-xl border text-[11px] font-black uppercase tracking-widest flex items-center gap-2 bg-white ${
+            !isActive || isSubmitting ? 'opacity-50 pointer-events-none cursor-not-allowed border-[#FF6B4A] text-[#FF6B4A]' : 
+            isUploaded ? 'border-emerald-500 text-emerald-600 hover:bg-emerald-50 cursor-pointer shadow-sm' : 
+            'border-[#FF6B4A] text-[#FF6B4A] cursor-pointer hover:bg-orange-50 transition-colors'
+          }`}>
+            {isSubmitting ? (
+              <><div className="w-3.5 h-3.5 border-2 border-[#FF6B4A] border-t-transparent rounded-full animate-spin" /> {language === 'ar' ? 'جاري الرفع...' : language === 'en' ? 'Uploading...' : 'Téléchargement...'}</>
+            ) : isUploaded ? (
+              <><Check size={14} className="text-emerald-500" /> <span className="max-w-[150px] truncate">{uploadedFileName || (language === 'ar' ? 'الملف جاهز' : language === 'en' ? 'File Ready' : 'Fichier Prêt')}</span></>
+            ) : (
+              <><Upload size={14} /> {actionLabel}</>
+            )}
+            <input type="file" className="hidden" accept={accept} disabled={!isActive || isSubmitting} onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])} />
           </label>
         ) : (
           <button onClick={onAction} disabled={!isActive} className="px-5 py-2.5 rounded-xl border border-[#FF6B4A] text-[#FF6B4A] text-[11px] font-black uppercase tracking-widest hover:bg-orange-50 transition-colors flex items-center gap-2 bg-white disabled:opacity-50 disabled:pointer-events-none">

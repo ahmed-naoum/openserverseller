@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { publicApi } from '../../lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -6,6 +6,23 @@ import { Package, ShieldCheck, Truck, Clock, CheckCircle2, UserCircle2 } from 'l
 import toast from 'react-hot-toast';
 import BlockRenderer from '../../components/helper/sitebuilder/BlockRenderer';
 import WhatsAppWidget from '../../components/public/WhatsAppWidget';
+
+const getNoScriptUrl = (pixel: any) => {
+  const platform = (pixel.platform || 'META').toUpperCase();
+  if (platform === 'META') {
+    return `https://www.facebook.com/tr?id=${pixel.pixelId}&ev=PageView&noscript=1`;
+  }
+  if (platform === 'SNAPCHAT') {
+    return `https://tr.snapchat.com/cm/i?id=${pixel.pixelId}&ev=PAGE_VIEW&noscript=1`;
+  }
+  if (platform === 'TIKTOK') {
+    return `https://analytics.tiktok.com/api/v2/pixel?id=${pixel.pixelId}&ev=PageView&noscript=1`;
+  }
+  if (platform === 'GOOGLE') {
+    return `https://www.googletagmanager.com/ns.html?id=${pixel.pixelId}`;
+  }
+  return '';
+};
 
 export default function ReferralForm() {
   const { code } = useParams<{ code: string }>();
@@ -55,7 +72,80 @@ export default function ReferralForm() {
         setSelectedOption(checkoutBlock.content.options[0]);
       }
     }
-  }, [data]); // Removed selectedOption from deps to prevent unnecessary resets if already set
+  }, [data]);
+
+  const activePixels = useMemo(() => {
+    if (!data?.pixels || !Array.isArray(data.pixels)) return [];
+    
+    const matchingSinglePixels = data.pixels.filter((p: any) => p.type === 'SINGLE' && p.targetIds?.includes(code));
+    
+    if (matchingSinglePixels.length > 0) {
+      return matchingSinglePixels;
+    }
+    
+    return data.pixels.filter((p: any) => p.type === 'GLOBAL');
+  }, [data, code]);
+
+  // Multi-platform Pixel Injection
+  useEffect(() => {
+    if (activePixels.length > 0) {
+      activePixels.forEach((pixel: any) => {
+        if (typeof window === 'undefined') return;
+
+        const platform = (pixel.platform || 'META').toUpperCase();
+
+        if (platform === 'META') {
+          // @ts-ignore
+          !function(f,b,e,v,n,t,s)
+          // @ts-ignore
+          {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+          // @ts-ignore
+          n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+          // @ts-ignore
+          if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+          // @ts-ignore
+          n.queue=[];t=b.createElement(e);t.async=!0;
+          // @ts-ignore
+          t.src=v;b.head.appendChild(t)}(window, document,'script',
+          'https://connect.facebook.net/en_US/fbevents.js');
+
+          (window as any).fbq('init', pixel.pixelId);
+          (window as any).fbq('track', 'PageView');
+
+        } else if (platform === 'GOOGLE') {
+          const script = document.createElement('script');
+          script.async = true;
+          script.src = `https://www.googletagmanager.com/gtag/js?id=${pixel.pixelId}`;
+          document.head.appendChild(script);
+
+          (window as any).dataLayer = (window as any).dataLayer || [];
+          function gtag(){ (window as any).dataLayer.push(arguments); }
+          (window as any).gtag = gtag;
+          // @ts-ignore
+          gtag('js', new Date());
+          // @ts-ignore
+          gtag('config', pixel.pixelId);
+
+        } else if (platform === 'TIKTOK') {
+          // @ts-ignore
+          !function (w, d, t) {
+            // @ts-ignore
+            w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie","holdConsent","revokeConsent","grantConsent"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){var r="https://analytics.tiktok.com/i18n/pixel/events.js",o=n&&n.partner;ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=r,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n||{};var n=document.createElement("script");n.type="text/javascript",n.async=!0,n.src=r+"?sdkid="+e+"&lib="+t;var a=document.getElementsByTagName("script")[0];a.parentNode.insertBefore(n,a)};
+            ttq.load(pixel.pixelId);
+            ttq.page();
+          }(window, document, 'ttq');
+
+        } else if (platform === 'SNAPCHAT') {
+          // @ts-ignore
+          !function(e,t,n){if(e.snaptr)return;var r=e.snaptr=function(){r.handleRequest?r.handleRequest.apply(r,arguments):r.queue.push(arguments)};r.queue=[];var a=t.createElement(n);a.async=!0;a.src="https://sc-static.net/scevent.min.js";var s=t.getElementsByTagName(n)[0];s.parentNode.insertBefore(a,s)}(window,document,"script");
+          // @ts-ignore
+          snaptr('init', pixel.pixelId);
+          // @ts-ignore
+          snaptr('track', 'PAGE_VIEW');
+        }
+      });
+    }
+  }, [activePixels]);
 
   const fetchData = async () => {
     try {
@@ -86,6 +176,28 @@ export default function ReferralForm() {
           ? `${selectedProductFromBlock.nameFr || selectedProductFromBlock.nameEn || selectedProductFromBlock.nameAr} (${selectedOption?.name || 'Standard'})`
           : selectedOption?.name
       });
+      
+      // Track Conversion
+      if (activePixels.length > 0) {
+        activePixels.forEach((pixel: any) => {
+          if (typeof window === 'undefined') return;
+          const platform = (pixel.platform || 'META').toUpperCase();
+          const eventName = pixel.conversionEvent || 'Lead';
+
+          if (platform === 'META' && (window as any).fbq) {
+            (window as any).fbq('track', eventName);
+          } else if (platform === 'GOOGLE' && (window as any).gtag) {
+            (window as any).gtag('event', eventName, { 'event_category': 'conversion' });
+          } else if (platform === 'TIKTOK' && (window as any).ttq) {
+            const ttEvent = eventName === 'Purchase' ? 'CompletePayment' : 'CompleteRegistration';
+            (window as any).ttq.track(ttEvent);
+          } else if (platform === 'SNAPCHAT' && (window as any).snaptr) {
+            const snapEvent = eventName === 'Purchase' ? 'PURCHASE' : 'SIGN_UP';
+            (window as any).snaptr('track', snapEvent);
+          }
+        });
+      }
+
       navigate('/thank-you', { replace: true });
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Une erreur est survenue');
@@ -177,14 +289,27 @@ export default function ReferralForm() {
                 {blockContent.title || 'Commander Maintenant'}
               </h2>
               {blockContent.showPrice !== false && (
-                <div 
-                  className="font-black mb-2"
-                  style={{ 
-                    color: blockContent.priceColor || '#f64444', 
-                    fontSize: `${blockContent.priceSize || 30}px` 
-                  }}
-                >
-                  {selectedOption?.price || selectedProductFromBlock?.retailPriceMad || selectedProductFromBlock?.priceMad || product?.retailPriceMad} <span className="text-lg uppercase ml-1 opacity-60">MAD</span>
+                <div className="flex items-center justify-center gap-3 mb-2">
+                  {blockContent.showOldPrice && (
+                    <span 
+                      className="font-bold line-through opacity-60"
+                      style={{ 
+                        color: blockContent.oldPriceColor || '#9ca3af',
+                        fontSize: `${blockContent.oldPriceSize || (blockContent.priceSize || 30) * 0.7}px`
+                      }}
+                    >
+                      {blockContent.oldPriceValue || (product?.retailPriceMad ? Number(product.retailPriceMad) + 50 : 150)} <span className="text-sm uppercase ml-0.5">MAD</span>
+                    </span>
+                  )}
+                  <div 
+                    className="font-black"
+                    style={{ 
+                      color: blockContent.priceColor || '#f64444', 
+                      fontSize: `${blockContent.priceSize || 30}px` 
+                    }}
+                  >
+                    {selectedOption?.price || selectedProductFromBlock?.retailPriceMad || selectedProductFromBlock?.priceMad || product?.retailPriceMad} <span className="text-lg uppercase ml-1 opacity-60">MAD</span>
+                  </div>
                 </div>
               )}
               <p className="text-sm text-gray-500 font-medium">
@@ -379,6 +504,19 @@ export default function ReferralForm() {
         {whatsappSettings?.enabled && (
           <WhatsAppWidget settings={whatsappSettings} />
         )}
+        {activePixels.map((p: any) => {
+          const url = getNoScriptUrl(p);
+          if (!url) return null;
+          return (
+            <noscript key={p.id}>
+              {p.platform === 'GOOGLE' ? (
+                <iframe src={url} height="0" width="0" style={{ display: 'none', visibility: 'hidden' }} />
+              ) : (
+                <img height="1" width="1" style={{ display: 'none' }} src={url} />
+              )}
+            </noscript>
+          );
+        })}
       </div>
     );
   }
@@ -471,6 +609,19 @@ export default function ReferralForm() {
       {whatsappSettings?.enabled && (
         <WhatsAppWidget settings={whatsappSettings} />
       )}
+      {activePixels.map((p: any) => {
+        const url = getNoScriptUrl(p);
+        if (!url) return null;
+        return (
+          <noscript key={p.id}>
+            {p.platform === 'GOOGLE' ? (
+              <iframe src={url} height="0" width="0" style={{ display: 'none', visibility: 'hidden' }} />
+            ) : (
+              <img height="1" width="1" style={{ display: 'none' }} src={url} />
+            )}
+          </noscript>
+        );
+      })}
     </div>
   );
 }

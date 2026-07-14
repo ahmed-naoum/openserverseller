@@ -90,11 +90,19 @@ export default function LoginPage() {
       } else if (user.role === 'GROSSELLER') {
         navigate('/grosseller');
       } else if (user.role === 'INFLUENCER') {
-        navigate('/influencer');
+        if (user.kycStatus !== 'APPROVED') {
+          navigate('/influencer/verification');
+        } else {
+          navigate('/influencer');
+        }
       } else if (user.role === 'UNCONFIRMED') {
         navigate('/verify');
       } else {
-        navigate('/dashboard');
+        if (user.kycStatus !== 'APPROVED') {
+          navigate('/dashboard/verification');
+        } else {
+          navigate('/dashboard');
+        }
       }
     } catch (error: any) {
       const message = error.response?.data?.message || 'Erreur de connexion';
@@ -130,11 +138,19 @@ export default function LoginPage() {
       } else if (user.role === 'GROSSELLER') {
         navigate('/grosseller');
       } else if (user.role === 'INFLUENCER') {
-        navigate('/influencer');
+        if (user.kycStatus !== 'APPROVED') {
+          navigate('/influencer/verification');
+        } else {
+          navigate('/influencer');
+        }
       } else if (user.role === 'UNCONFIRMED') {
         navigate('/verify');
       } else {
-        navigate('/dashboard');
+        if (user.kycStatus !== 'APPROVED') {
+          navigate('/dashboard/verification');
+        } else {
+          navigate('/dashboard');
+        }
       }
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Code 2FA invalide');
@@ -167,11 +183,19 @@ export default function LoginPage() {
       } else if (user.role === 'GROSSELLER') {
         navigate('/grosseller');
       } else if (user.role === 'INFLUENCER') {
-        navigate('/influencer');
+        if (user.kycStatus !== 'APPROVED') {
+          navigate('/influencer/verification');
+        } else {
+          navigate('/influencer');
+        }
       } else if (user.role === 'UNCONFIRMED') {
         navigate('/verify');
       } else {
-        navigate('/dashboard');
+        if (user.kycStatus !== 'APPROVED') {
+          navigate('/dashboard/verification');
+        } else {
+          navigate('/dashboard');
+        }
       }
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erreur lors du changement de mot de passe');
@@ -214,14 +238,26 @@ export default function LoginPage() {
       } else if (user.role === 'GROSSELLER') {
         navigate('/grosseller');
       } else if (user.role === 'INFLUENCER') {
-        navigate('/influencer');
+        if (user.kycStatus !== 'APPROVED') {
+          navigate('/influencer/verification');
+        } else {
+          navigate('/influencer');
+        }
       } else if (user.role === 'UNCONFIRMED') {
         navigate('/verify');
       } else {
-        navigate('/dashboard');
+        if (user.kycStatus !== 'APPROVED') {
+          navigate('/dashboard/verification');
+        } else {
+          navigate('/dashboard');
+        }
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Erreur lors de la connexion avec Google');
+      const errMsg = error.response?.data?.message || 'Erreur lors de la connexion avec Google';
+      toast.error(errMsg);
+      if (error.response?.status === 404) {
+        navigate('/register');
+      }
     } finally {
       setIsLoading(false);
     }

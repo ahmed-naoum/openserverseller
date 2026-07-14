@@ -31,7 +31,8 @@ import youcanRoutes from './youcan.routes.js';
 import supportRoutes from './support.routes.js';
 import invoiceRoutes from './invoice.routes.js';
 import backupRoutes from './admin/backup.routes.js';
-
+import pixelRoutes from './pixel.routes.js';
+import domainRoutes from './domain.routes.js';
 
 const router = Router();
 
@@ -84,5 +85,7 @@ router.use('/webhooks/damanesign', damanesignWebhookRoutes);
 router.use('/webhooks', auditLog, webhookRoutes);
 router.use('/youcan', auditLog, youcanRoutes);
 router.use('/support', auditLog, supportRoutes);
+router.use('/user-pixels', auditLog, pixelRoutes);
+router.use('/domain', auditLog, domainRoutes);
 
 export default router;

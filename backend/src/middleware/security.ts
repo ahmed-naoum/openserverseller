@@ -492,13 +492,20 @@ export const securityHeaders = (
 
 export const validateRequestSize = (maxSize: number = 1024 * 1024) => {
   return (req: Request, res: Response, next: NextFunction): void => {
+    const url = req.originalUrl || '';
+    let allowedSize = maxSize;
+
+    if (url.includes('/upload') || url.includes('/import') || url.includes('/backups')) {
+      allowedSize = 20 * 1024 * 1024; // 20MB
+    }
+
     const contentLength = parseInt(req.get('content-length') || '0', 10);
-    if (contentLength > maxSize) {
+    if (contentLength > allowedSize) {
       res.status(413).json({
         status: 'error',
-        message: 'Request body too large',
+        message: 'Request body too large 20MB is the max',
       });
-      return;
+      return; 
     }
     next();
   };

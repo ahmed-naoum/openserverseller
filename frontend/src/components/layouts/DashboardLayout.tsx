@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { translateNotification } from '../../utils/notificationTranslator';
-import { dashboardApi, chatApi, notificationsApi } from '../../lib/api';
+import { dashboardApi, chatApi, notificationsApi, adminApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { useSocket } from '../../contexts/SocketContext';
 import AnnouncementBanner from '../common/AnnouncementBanner';
@@ -59,21 +59,32 @@ import {
   Check,
   Crown,
   Link2,
-  Mail
+  Mail,
+  Target,
+  Music,
+  Ghost
 } from 'lucide-react';
 
 const navigation = {
   vendor: [
     
     { name: 'Tableau de bord', href: '/dashboard', icon: Home },
-    { name: 'Intégrations', href: '/dashboard/integrations', icon: Webhook },
+    { 
+      name: 'nav_youcan_integration', 
+      icon: Webhook,
+      children: [
+        { name: 'nav_youcan_connect', href: '/dashboard/integrations', icon: Link2 },
+        { name: 'nav_youcan_leads', href: '/dashboard/youcan-leads', icon: Globe },
+      ]
+    },
     { name: 'Inventaire', href: '/dashboard/inventory', icon: Package },
     { 
       name: 'Gestion Vendeur', 
       icon: Users,
       children: [
         { name: 'Mes Commandes', href: '/dashboard/leads?mode=SELLER', icon: ShoppingCart },
-        { name: 'Nouveau Leads', href: '/dashboard/orders?mode=SELLER', icon: Plus },
+        { name: 'Insérer un Lead', href: '/dashboard/leads/new?mode=SELLER', icon: Plus },
+        { name: 'Mes Liens', href: '/dashboard/links', icon: Link2 },
       ]
     },
     { 
@@ -81,10 +92,11 @@ const navigation = {
       icon: Users,
       children: [
         { name: 'Mes Commandes', href: '/dashboard/leads?mode=AFFILIATE', icon: ShoppingCart },
-        { name: 'Nouveau Leads', href: '/dashboard/orders?mode=AFFILIATE', icon: Plus },
+        { name: 'Insérer un Lead', href: '/dashboard/leads/new?mode=AFFILIATE', icon: Plus },
+        { name: 'Mes Liens', href: '/dashboard/links', icon: Link2 },
       ]
     },
-    { name: 'Leads YouCan', href: '/dashboard/youcan-leads', icon: Globe },
+    { name: 'Domaines', href: '/dashboard/domains', icon: Globe },
     { name: 'Portefeuille', href: '/dashboard/wallet', icon: CreditCard },
     { name: 'Factures', href: '/dashboard/invoices', icon: FileText },
     { name: 'Marché Public', href: '/dashboard/marketplace', icon: ShoppingCart },
@@ -94,6 +106,16 @@ const navigation = {
       children: [
         { name: 'Support & Tickets', href: '/dashboard/support', icon: MessageSquare },
         { name: 'Messages', href: '/dashboard/chat', icon: MessageSquare },
+      ]
+    },
+    { 
+      name: 'Pixels', 
+      icon: Target,
+      children: [
+        { name: 'Meta Pixels', href: '/dashboard/pixels/meta', icon: Target },
+        { name: 'Google Pixels', href: '/dashboard/pixels/google', icon: Globe },
+        { name: 'Tiktok Pixels', href: '/dashboard/pixels/tiktok', icon: Music },
+        { name: 'Snapchat Pixels', href: '/dashboard/pixels/snapchat', icon: Ghost },
       ]
     },
     { name: 'Paramètres', href: '/dashboard/settings', icon: Settings },
@@ -107,6 +129,7 @@ const navigation = {
       children: [
         { name: 'Inventaire Acheté', href: '/grosseller/inventory', icon: Package },
         { name: 'Ajouter un Produit', href: '/grosseller/add-product', icon: Tag },
+        { name: 'Mes Liens', href: '/grosseller/links', icon: Link2 },
         { name: 'En Vente', href: '/grosseller/selling', icon: ShoppingCart },
         { name: 'En Attente', href: '/grosseller/pending', icon: Clock },
         { name: 'Approuvés', href: '/grosseller/approved', icon: Package },
@@ -129,6 +152,16 @@ const navigation = {
       children: [
         { name: 'Support & Tickets', href: '/grosseller/support', icon: MessageSquare },
         { name: 'Messages', href: '/grosseller/chat', icon: MessageSquare },
+      ]
+    },
+    { 
+      name: 'Pixels', 
+      icon: Target,
+      children: [
+        { name: 'Meta Pixels', href: '/grosseller/pixels/meta', icon: Target },
+        { name: 'Google Pixels', href: '/grosseller/pixels/google', icon: Globe },
+        { name: 'Tiktok Pixels', href: '/grosseller/pixels/tiktok', icon: Music },
+        { name: 'Snapchat Pixels', href: '/grosseller/pixels/snapchat', icon: Ghost },
       ]
     },
     { name: 'Paramètres', href: '/grosseller/settings', icon: Settings },
@@ -450,6 +483,7 @@ export default function DashboardLayout() {
 
   const [totalUnread, setTotalUnread] = useState(0);
   const [queueCount, setQueueCount] = useState(0);
+  const [pendingClaimsCount, setPendingClaimsCount] = useState(0);
 
   // Request browser notification permission on mount
   useEffect(() => {
@@ -469,12 +503,15 @@ export default function DashboardLayout() {
     const fetchCounts = async () => {
       try {
         const isAgent = ['SUPER_ADMIN', 'SYSTEM_SUPPORT'].includes(user?.role || '');
-        const [convRes, queueRes] = await Promise.all([
+        const isAdmin = ['SUPER_ADMIN'].includes(user?.role || '');
+        const [convRes, queueRes, claimsRes] = await Promise.all([
           chatApi.conversations(),
-          isAgent ? chatApi.getQueue() : Promise.resolve({ data: { data: { queue: [] } } })
+          isAgent ? chatApi.getQueue() : Promise.resolve({ data: { data: { queue: [] } } }),
+          isAdmin ? adminApi.getAffiliateClaims({ status: 'PENDING' }) : Promise.resolve({ data: { data: [] } })
         ]);
         setTotalUnread(convRes.data.data.totalUnreadCount || 0);
         setQueueCount(queueRes.data.data.queue?.length || 0);
+        setPendingClaimsCount(claimsRes.data.data?.length || 0);
       } catch (err) {
         console.error('Failed to fetch counts:', err);
       }
@@ -591,12 +628,15 @@ export default function DashboardLayout() {
       const fetchCounts = async () => {
         try {
           const isAgent = ['SUPER_ADMIN', 'SYSTEM_SUPPORT'].includes(user?.role || '');
-          const [convRes, queueRes] = await Promise.all([
+          const isAdmin = ['SUPER_ADMIN'].includes(user?.role || '');
+          const [convRes, queueRes, claimsRes] = await Promise.all([
             chatApi.conversations(),
-            isAgent ? chatApi.getQueue() : Promise.resolve({ data: { data: { queue: [] } } })
+            isAgent ? chatApi.getQueue() : Promise.resolve({ data: { data: { queue: [] } } }),
+            isAdmin ? adminApi.getAffiliateClaims({ status: 'PENDING' }) : Promise.resolve({ data: { data: [] } })
           ]);
           setTotalUnread(convRes.data.data.totalUnreadCount || 0);
           setQueueCount(queueRes.data.data.queue?.length || 0);
+          setPendingClaimsCount(claimsRes.data.data?.length || 0);
         } catch {}
       };
       fetchCounts();
@@ -1017,6 +1057,11 @@ export default function DashboardLayout() {
                               {queueCount}
                             </span>
                           )}
+                          {child.href?.includes('/affiliate-claims') && pendingClaimsCount > 0 && (
+                            <span className="ml-auto bg-violet-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-violet-200">
+                              {pendingClaimsCount}
+                            </span>
+                          )}
                           {child.href?.includes('/chat') && totalUnread > 0 && (
                             <span className="ml-auto bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-rose-200">
                               {totalUnread}
@@ -1056,6 +1101,11 @@ export default function DashboardLayout() {
                             {child.href?.includes('/support') && queueCount > 0 && (
                               <span className="bg-amber-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-amber-200 animate-in zoom-in duration-300">
                                 {queueCount}
+                              </span>
+                            )}
+                            {child.href?.includes('/affiliate-claims') && pendingClaimsCount > 0 && (
+                              <span className="bg-violet-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-violet-200 animate-in zoom-in duration-300">
+                                {pendingClaimsCount}
                               </span>
                             )}
                             {child.href?.includes('/chat') && totalUnread > 0 && (

@@ -85,7 +85,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       socketRef.current = null;
       setSocket(null);
     };
-  }, [user?.id]);
+  }, [user?.uuid]);
 
   // Emit current page URL when route changes
   useEffect(() => {

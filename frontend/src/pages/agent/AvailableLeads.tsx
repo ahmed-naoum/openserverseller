@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { leadsApi } from '../../lib/api';
 import { socket, connectToCallCenter, disconnectSocket } from '../../lib/socket';
@@ -13,7 +13,22 @@ export default function AgentLeads() {
   const [assignedInfluencers, setAssignedInfluencers] = useState<any[]>([]);
   const [selectedInfluencerId, setSelectedInfluencerId] = useState<number | ''>('');
   const [claiming, setClaiming] = useState<number | null>(null);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [dropdownSearch, setDropdownSearch] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const loadData = useCallback(async () => {
     try {
@@ -118,18 +133,94 @@ export default function AgentLeads() {
           </div>
           
           {assignedInfluencers.length > 0 && (
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-500 font-medium whitespace-nowrap">Influenceur:</label>
-              <select
-                value={selectedInfluencerId}
-                onChange={(e) => setSelectedInfluencerId(e.target.value === '' ? '' : Number(e.target.value))}
-                className="input py-1.5 px-3 border-gray-200 bg-white text-sm min-w-[180px]"
-              >
-                <option value="">Tous mes influenceurs</option>
-                {assignedInfluencers.map(inf => (
-                  <option key={inf.id} value={inf.id}>{inf.fullName}</option>
-                ))}
-              </select>
+            <div className="flex items-center gap-2 relative" ref={dropdownRef}>
+              <label className="text-sm text-gray-500 font-medium whitespace-nowrap">Vendeur/Influenceur:</label>
+              
+              <div className="relative min-w-[240px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDropdownOpen(!isDropdownOpen);
+                    setDropdownSearch('');
+                  }}
+                  className="w-full flex items-center justify-between py-2 px-3 border border-gray-200 bg-white rounded-xl text-sm font-semibold hover:border-gray-300 transition-colors shadow-sm text-left"
+                >
+                  <span className="truncate max-w-[200px]">
+                    {selectedInfluencerId
+                      ? assignedInfluencers.find(inf => inf.id === selectedInfluencerId)?.fullName || 'Tous mes influenceurs/vendeurs'
+                      : 'Tous mes influenceurs/vendeurs'
+                    }
+                  </span>
+                  <span className="text-gray-400">▼</span>
+                </button>
+
+                {isDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl border border-gray-100 shadow-xl z-50 p-3 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-3 flex items-center text-gray-400 pointer-events-none">🔍</span>
+                      <input
+                        type="text"
+                        autoFocus
+                        value={dropdownSearch}
+                        onChange={(e) => setDropdownSearch(e.target.value)}
+                        placeholder="Rechercher par nom ou email..."
+                        className="w-full pl-9 pr-3 py-1.5 bg-gray-50 border border-gray-100 rounded-xl text-xs font-semibold focus:outline-none focus:border-indigo-400 focus:bg-white transition-all"
+                      />
+                    </div>
+
+                    <div className="max-h-48 overflow-y-auto divide-y divide-gray-50">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedInfluencerId('');
+                          setIsDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-colors flex flex-col gap-0.5 ${
+                          selectedInfluencerId === ''
+                            ? 'bg-indigo-50 text-indigo-600'
+                            : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span>Tous mes influenceurs/vendeurs</span>
+                      </button>
+
+                      {assignedInfluencers
+                        .filter(inf => 
+                          (inf.fullName || '').toLowerCase().includes(dropdownSearch.toLowerCase()) ||
+                          (inf.email || '').toLowerCase().includes(dropdownSearch.toLowerCase())
+                        )
+                        .map(inf => (
+                          <button
+                            key={inf.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedInfluencerId(inf.id);
+                              setIsDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-colors flex flex-col gap-0.5 mt-1 ${
+                              selectedInfluencerId === inf.id
+                                ? 'bg-indigo-50 text-indigo-600'
+                                : 'text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            <span className="font-extrabold">{inf.fullName}</span>
+                            {inf.email && (
+                              <span className="text-[10px] text-gray-400 font-medium normal-case">{inf.email}</span>
+                            )}
+                          </button>
+                        ))
+                      }
+
+                      {assignedInfluencers.filter(inf => 
+                        (inf.fullName || '').toLowerCase().includes(dropdownSearch.toLowerCase()) ||
+                        (inf.email || '').toLowerCase().includes(dropdownSearch.toLowerCase())
+                      ).length === 0 && (
+                        <p className="text-center text-[10px] text-gray-400 py-3 font-semibold">Aucun partenaire trouvé</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

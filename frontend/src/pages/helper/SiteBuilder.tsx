@@ -8,7 +8,7 @@ import {
   Type, Image as ImageIcon, Heading, LayoutTemplate, Link as LinkIcon, 
   ShoppingCart, ArrowUp, ArrowDown, Trash2, Save, ChevronLeft, Loader2,
   Clock, Space, Upload, ShieldCheck, Plus, ExternalLink, Code, Copy, Download, MessageSquare,
-  Layers, GripVertical, Undo2, Redo2, ShoppingBag, Music
+  Layers, GripVertical, Undo2, Redo2, ShoppingBag, Music, Video
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { buildReferralUrl } from '../../utils/referral';
@@ -367,6 +367,24 @@ export default function SiteBuilder() {
     }
   };
 
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploading(true);
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await uploadApi.cloudinaryVideo(formData);
+      updateBlockContent('url', res.data.data.url);
+      toast.success('Vidéo téléchargée avec succès !');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Erreur lors du téléchargement de la vidéo');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const getDefaultContentForType = (type: BlockType) => {
     switch (type) {
       case 'header': return { text: 'Mon Entreprise', bgColor: '#ffffff', color: '#111827', paddingTop: 16, paddingBottom: 16, marginTop: 0, marginBottom: 4 };
@@ -494,6 +512,7 @@ export default function SiteBuilder() {
         marginTop: 0,
         marginBottom: 0
       };
+      case 'video': return { url: '', width: 100, autoplay: false, loop: false, muted: false, controls: true, paddingTop: 16, paddingBottom: 16, marginTop: 0, marginBottom: 0 };
       default: return {};
     }
   };
@@ -513,7 +532,20 @@ export default function SiteBuilder() {
       <div className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0 z-20">
         <div className="flex items-center gap-4">
           <button 
-            onClick={() => navigate(user?.roleName === 'SUPER_ADMIN' || user?.role === 'SUPER_ADMIN' ? '/admin/links' : '/helper/links')} 
+            onClick={() => {
+              const role = user?.roleName || user?.role;
+              if (role === 'SUPER_ADMIN') {
+                navigate('/admin/links');
+              } else if (role === 'HELPER') {
+                navigate('/helper/links');
+              } else if (role === 'VENDOR') {
+                navigate('/dashboard/links');
+              } else if (role === 'INFLUENCER') {
+                navigate('/influencer/links');
+              } else {
+                navigate(-1);
+              }
+            }} 
             className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
           >
             <ChevronLeft className="w-5 h-5" />
@@ -577,6 +609,7 @@ export default function SiteBuilder() {
               <ToolButton fullWidth icon={<Layers className="w-4 h-4 text-purple-500" />} label="Slider / Carrousel" onClick={() => addBlock('slider')} />
               <ToolButton fullWidth icon={<ShoppingBag className="w-4 h-4 text-orange-500" />} label="Propositions Produits" onClick={() => addBlock('products')} />
               <ToolButton fullWidth icon={<Music className="w-4 h-4 text-indigo-500" />} label="Lecteur Audio" onClick={() => addBlock('audio')} />
+              <ToolButton fullWidth icon={<Video className="w-4 h-4 text-rose-500" />} label="Vidéo" onClick={() => addBlock('video')} />
             </div>
           </div>
           
@@ -726,6 +759,59 @@ export default function SiteBuilder() {
                         </select>
                       </div>
                     </div>
+                    <SpacingControls content={activeBlock.content} onChange={updateBlockContent} noLeftRight />
+                  </div>
+                )}
+
+                {activeBlock.type === 'video' && (
+                  <div className="space-y-4">
+                    <Field label="URL de la vidéo" type="text" value={activeBlock.content.url} onChange={(v: any) => updateBlockContent('url', v)} placeholder="https://..." />
+                    
+                    <div className="pt-2">
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Uploader sur Cloudinary</label>
+                      <label className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-200 rounded-xl hover:border-orange-500 hover:bg-orange-50 cursor-pointer transition-all">
+                        {isUploading ? (
+                          <Loader2 className="w-5 h-5 animate-spin text-orange-500" />
+                        ) : (
+                          <Upload className="w-5 h-5 text-gray-400" />
+                        )}
+                        <span className="text-sm font-bold text-gray-600">
+                          {isUploading ? 'Téléchargement...' : 'Choisir une vidéo'}
+                        </span>
+                        <input 
+                          type="file" 
+                          className="hidden" 
+                          accept="video/*" 
+                          onChange={handleVideoUpload} 
+                          disabled={isUploading} 
+                        />
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="flex items-center gap-2 text-sm text-gray-700">
+                        <input type="checkbox" checked={activeBlock.content.autoplay} onChange={(e) => updateBlockContent('autoplay', e.target.checked)} />
+                        Autoplay
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-gray-700">
+                        <input type="checkbox" checked={activeBlock.content.loop} onChange={(e) => updateBlockContent('loop', e.target.checked)} />
+                        En boucle
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-gray-700">
+                        <input type="checkbox" checked={activeBlock.content.muted} onChange={(e) => updateBlockContent('muted', e.target.checked)} />
+                        Muet
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-gray-700">
+                        <input type="checkbox" checked={activeBlock.content.controls !== false} onChange={(e) => updateBlockContent('controls', e.target.checked)} />
+                        Contrôles
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <Field label="Largeur (%)" type="number" value={activeBlock.content.width || 100} onChange={(v: any) => updateBlockContent('width', v)} />
+                      <Field label="Hauteur Max (px)" type="number" value={activeBlock.content.maxHeight || ''} onChange={(v: any) => updateBlockContent('maxHeight', v)} placeholder="Infini" />
+                    </div>
+
                     <SpacingControls content={activeBlock.content} onChange={updateBlockContent} noLeftRight />
                   </div>
                 )}
@@ -1716,10 +1802,27 @@ export default function SiteBuilder() {
                            <Field type="switch" value={activeBlock.content.showPrice} onChange={(v: boolean) => updateBlockContent('showPrice', v)} />
                         </div>
                         {activeBlock.content.showPrice !== false && (
-                          <div className="grid grid-cols-2 gap-4">
-                            <Field label="Couleur" type="color" value={activeBlock.content.priceColor} onChange={(v: string) => updateBlockContent('priceColor', v)} />
-                            <Field label="Taille (px)" type="number" value={activeBlock.content.priceSize} onChange={(v: number) => updateBlockContent('priceSize', v)} />
-                          </div>
+                          <>
+                            <div className="grid grid-cols-2 gap-4">
+                              <Field label="Couleur" type="color" value={activeBlock.content.priceColor} onChange={(v: string) => updateBlockContent('priceColor', v)} />
+                              <Field label="Taille (px)" type="number" value={activeBlock.content.priceSize} onChange={(v: number) => updateBlockContent('priceSize', v)} />
+                            </div>
+                            <div className="mt-4 border-t border-dashed border-gray-200 pt-4">
+                              <div className="flex items-center justify-between mb-2">
+                                 <label className="text-[10px] font-bold text-gray-400 uppercase">Afficher ancien prix (Barré)</label>
+                                 <Field type="switch" value={activeBlock.content.showOldPrice} onChange={(v: boolean) => updateBlockContent('showOldPrice', v)} />
+                              </div>
+                              {activeBlock.content.showOldPrice && (
+                                <div className="space-y-4">
+                                  <Field label="Valeur Ancien Prix (MAD)" type="number" value={activeBlock.content.oldPriceValue} onChange={(v: number) => updateBlockContent('oldPriceValue', v)} placeholder="Ex: 150" />
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <Field label="Couleur" type="color" value={activeBlock.content.oldPriceColor || '#9ca3af'} onChange={(v: string) => updateBlockContent('oldPriceColor', v)} />
+                                    <Field label="Taille (px)" type="number" value={activeBlock.content.oldPriceSize || (activeBlock.content.priceSize || 30) * 0.7} onChange={(v: number) => updateBlockContent('oldPriceSize', v)} />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </>
                         )}
                       </div>
                     </div>
@@ -2299,14 +2402,27 @@ const CheckoutPreview = ({ content, product }: any) => {
           {content.title || 'Commander Maintenant'}
         </h2>
         {content.showPrice !== false && (
-          <div 
-            className="font-black mb-2"
-            style={{ 
-              color: content.priceColor || '#f97316',
-              fontSize: `${content.priceSize || 30}px`
-            }}
-          >
-            {price} <span className="text-lg uppercase ml-1 opacity-60">MAD</span>
+          <div className="flex items-center justify-center gap-3 mb-2">
+            {content.showOldPrice && (
+              <span 
+                className="font-bold line-through opacity-60"
+                style={{ 
+                  color: content.oldPriceColor || '#9ca3af',
+                  fontSize: `${content.oldPriceSize || (content.priceSize || 30) * 0.7}px`
+                }}
+              >
+                {content.oldPriceValue || (product?.retailPriceMad ? Number(product.retailPriceMad) + 50 : 150)} <span className="text-sm uppercase ml-0.5">MAD</span>
+              </span>
+            )}
+            <div 
+              className="font-black"
+              style={{ 
+                color: content.priceColor || '#f97316',
+                fontSize: `${content.priceSize || 30}px`
+              }}
+            >
+              {price} <span className="text-lg uppercase ml-1 opacity-60">MAD</span>
+            </div>
           </div>
         )}
         <p className="text-gray-500 text-sm font-medium">

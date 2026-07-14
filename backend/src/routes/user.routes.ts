@@ -88,6 +88,9 @@ router.get(
           cguAccepted: u.cguAccepted,
           cguAcceptedAt: u.cguAcceptedAt,
           createdAt: u.createdAt,
+          subdomain: u.subdomain,
+          customDomain: u.customDomain,
+          customDomainStatus: u.customDomainStatus,
         })), pagination: {
           page: Number(page),
           limit: Number(limit),
@@ -203,8 +206,8 @@ router.post(
       },
     });
 
-    // Auto-assign global agents if this is an influencer
-    if (role === 'INFLUENCER') {
+    // Auto-assign global agents if this is an influencer or vendor
+    if (role === 'INFLUENCER' || role === 'VENDOR') {
       const globalAgents = await prisma.user.findMany({
         where: {
           role: { name: 'CALL_CENTER_AGENT' },
@@ -473,6 +476,9 @@ router.get(
           cguAccepted: user.cguAccepted,
           cguAcceptedAt: user.cguAcceptedAt,
           createdAt: user.createdAt,
+          subdomain: user.subdomain,
+          customDomain: user.customDomain,
+          customDomainStatus: user.customDomainStatus,
         },
       },
     });
@@ -715,6 +721,138 @@ router.post(
       status: 'success',
       message: 'Mot de passe temporaire généré avec succès.',
       data: { tempPassword },
+    });
+  })
+);
+
+router.delete(
+  '/:uuid',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req, res) => {
+    const { uuid } = req.params;
+
+    // Prevent deleting yourself
+    if (req.user!.uuid === uuid) {
+      throw new AppException(400, 'Vous ne pouvez pas supprimer votre propre compte.');
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { uuid },
+      include: { role: true },
+    });
+
+    if (!user) {
+      throw new AppException(404, 'Utilisateur introuvable.');
+    }
+
+    // Prevent deleting other SUPER_ADMIN accounts
+    if (user.role.name === 'SUPER_ADMIN') {
+      throw new AppException(403, 'Impossible de supprimer un compte Super Admin.');
+    }
+
+    // Delete all related data in a transaction using raw SQL for safety
+    await prisma.$transaction(async (tx) => {
+      const userId = user.id;
+
+      // Delete helper-user assignments
+      await tx.$executeRawUnsafe(`DELETE FROM helper_user_assignments WHERE "helperId" = $1 OR "targetUserId" = $1`, userId);
+
+      // Delete agent-influencer assignments
+      await tx.$executeRawUnsafe(`DELETE FROM agent_influencer_assignments WHERE "agentId" = $1 OR "influencerId" = $1`, userId);
+
+      // Delete referral link related data
+      await tx.$executeRawUnsafe(`DELETE FROM referral_link_clicks WHERE "referralLinkId" IN (SELECT id FROM referral_links WHERE "influencerId" = $1)`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM referral_link_landing_pages WHERE "referralLinkId" IN (SELECT id FROM referral_links WHERE "influencerId" = $1)`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM influencer_commissions WHERE "referralLinkId" IN (SELECT id FROM referral_links WHERE "influencerId" = $1)`, userId);
+      await tx.$executeRawUnsafe(`UPDATE leads SET "referralLinkId" = NULL WHERE "referralLinkId" IN (SELECT id FROM referral_links WHERE "influencerId" = $1)`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM referral_links WHERE "influencerId" = $1`, userId);
+
+      // Delete affiliate claims
+      await tx.$executeRawUnsafe(`DELETE FROM affiliate_claims WHERE "userId" = $1`, userId);
+
+      // Delete conversation logs, messages, and participations
+      await tx.$executeRawUnsafe(`DELETE FROM conversation_logs WHERE "userId" = $1`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM messages WHERE "senderId" = $1`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM conversation_participants WHERE "userId" = $1`, userId);
+
+      // Unlink conversations from support requests, then delete support requests
+      await tx.$executeRawUnsafe(`UPDATE conversations SET "supportRequestId" = NULL WHERE "supportRequestId" IN (SELECT id FROM support_requests WHERE "userId" = $1)`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM support_requests WHERE "userId" = $1`, userId);
+
+      // Delete notifications
+      await tx.$executeRawUnsafe(`DELETE FROM notifications WHERE "userId" = $1`, userId);
+
+      // Delete activity logs
+      await tx.$executeRawUnsafe(`DELETE FROM activity_logs WHERE "userId" = $1`, userId);
+
+      // Delete lead status history, call logs, lead assignments by this user
+      await tx.$executeRawUnsafe(`DELETE FROM lead_status_history WHERE "changedBy" = $1`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM call_logs WHERE "agentId" = $1`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM lead_assignments WHERE "agentId" = $1`, userId);
+
+      // Delete order-related sub-records then orders
+      await tx.$executeRawUnsafe(`DELETE FROM order_status_history WHERE "orderId" IN (SELECT id FROM orders WHERE "vendorId" = $1)`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM order_returns WHERE "orderId" IN (SELECT id FROM orders WHERE "vendorId" = $1)`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM influencer_commissions WHERE "orderId" IN (SELECT id FROM orders WHERE "vendorId" = $1)`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM wallet_transactions WHERE "orderId" IN (SELECT id FROM orders WHERE "vendorId" = $1)`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM shipment_tracking_events WHERE "shipmentId" IN (SELECT id FROM shipments WHERE "orderId" IN (SELECT id FROM orders WHERE "vendorId" = $1))`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM shipment_delivery_proofs WHERE "shipmentId" IN (SELECT id FROM shipments WHERE "orderId" IN (SELECT id FROM orders WHERE "vendorId" = $1))`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM shipments WHERE "orderId" IN (SELECT id FROM orders WHERE "vendorId" = $1)`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM production_jobs WHERE "orderId" IN (SELECT id FROM orders WHERE "vendorId" = $1)`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM order_items WHERE "orderId" IN (SELECT id FROM orders WHERE "vendorId" = $1)`, userId);
+
+      // Delete payout requests
+      await tx.$executeRawUnsafe(`DELETE FROM payout_requests WHERE "vendorId" = $1`, userId);
+
+      // Delete wallet transactions then wallet
+      await tx.$executeRawUnsafe(`DELETE FROM wallet_transactions WHERE "walletId" IN (SELECT id FROM wallets WHERE "userId" = $1)`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM wallets WHERE "userId" = $1`, userId);
+
+      // Nullify lead invoice references, then delete orders
+      await tx.$executeRawUnsafe(`UPDATE leads SET "invoiceId" = NULL WHERE "vendorId" = $1`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM orders WHERE "vendorId" = $1`, userId);
+
+      // Delete lead sub-records then leads
+      await tx.$executeRawUnsafe(`DELETE FROM lead_status_history WHERE "leadId" IN (SELECT id FROM leads WHERE "vendorId" = $1)`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM call_logs WHERE "leadId" IN (SELECT id FROM leads WHERE "vendorId" = $1)`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM lead_assignments WHERE "leadId" IN (SELECT id FROM leads WHERE "vendorId" = $1)`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM leads WHERE "vendorId" = $1`, userId);
+
+      // Delete lead import batches
+      await tx.$executeRawUnsafe(`DELETE FROM lead_import_batches WHERE "vendorId" = $1`, userId);
+
+      // Delete user pixels
+      await tx.$executeRawUnsafe(`DELETE FROM user_pixels WHERE "userId" = $1`, userId);
+
+      // Delete product inventory
+      await tx.$executeRawUnsafe(`DELETE FROM product_inventory WHERE "userId" = $1`, userId);
+
+      // Delete favorites
+      await tx.$executeRawUnsafe(`DELETE FROM favorites WHERE "userId" = $1`, userId);
+
+      // Delete invoices
+      await tx.$executeRawUnsafe(`DELETE FROM invoices WHERE "userId" = $1`, userId);
+
+      // Unlink targeted announcements
+      await tx.$executeRawUnsafe(`UPDATE announcements SET "targetUserId" = NULL WHERE "targetUserId" = $1`, userId);
+
+      // Delete KYC documents
+      await tx.$executeRawUnsafe(`DELETE FROM kyc_documents WHERE "userId" = $1`, userId);
+
+      // Delete bank accounts
+      await tx.$executeRawUnsafe(`DELETE FROM user_bank_accounts WHERE "userId" = $1`, userId);
+
+      // Delete profile
+      await tx.$executeRawUnsafe(`DELETE FROM user_profiles WHERE "userId" = $1`, userId);
+
+      // Finally, delete the user
+      await tx.$executeRawUnsafe(`DELETE FROM users WHERE id = $1`, userId);
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Utilisateur supprimé avec succès.',
     });
   })
 );

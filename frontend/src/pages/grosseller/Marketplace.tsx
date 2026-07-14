@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 
 export default function GrossellerMarketplace() {
-  const { user } = useAuth();
+  const { user, platformSettings } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get('search') || '');
@@ -78,7 +78,7 @@ export default function GrossellerMarketplace() {
   };
 
   const handleRequestProduct = async (productId: number, productName: string) => {
-    const { percentage } = getVerificationStatus(user);
+    const { percentage } = getVerificationStatus(user, platformSettings);
     if (percentage < 100) {
       toast.error('Vous devez compléter votre profil à 100% pour acheter un produit.');
       navigate('/grosseller/verification');

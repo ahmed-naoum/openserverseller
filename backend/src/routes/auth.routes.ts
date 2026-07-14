@@ -264,6 +264,24 @@ router.post(
       });
     }
 
+    // Auto-assign global agents
+    const globalAgents = await prisma.user.findMany({
+      where: {
+        role: { name: 'CALL_CENTER_AGENT' },
+        autoAssignInfluencers: true
+      }
+    });
+
+    if (globalAgents.length > 0) {
+      await prisma.agentInfluencerAssignment.createMany({
+        data: globalAgents.map(agent => ({
+          agentId: agent.id,
+          influencerId: user.id
+        })),
+        skipDuplicates: true,
+      });
+    }
+
     // Generate and send OTP email
     const otp = generateOTP();
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
@@ -285,6 +303,7 @@ router.post(
       message: 'Registration successful. Please verify your email.',
       data: {
         user: {
+          id: user.id,
           uuid: user.uuid,
           email: user.email,
           phone: user.phone,
@@ -514,6 +533,7 @@ router.post(
       message: 'Influencer registration successful. Please verify your email.',
       data: {
         user: {
+          id: user.id,
           uuid: user.uuid,
           email: user.email,
           fullName: user.profile?.fullName,
@@ -696,6 +716,8 @@ router.post(
           emailVerifiedAt: user.emailVerifiedAt,
           mode: user.mode,
           subdomain: user.subdomain,
+          customDomain: user.customDomain,
+          customDomainStatus: user.customDomainStatus,
           language: user.language || user.profile?.language || 'ar',
           isInfluencer: user.isInfluencer || user.role.name === 'INFLUENCER',
           instagramUsername: ((user as any).profile)?.instagramUsername,
@@ -973,8 +995,54 @@ router.post(
       });
     }
 
+    // If user does not exist, check role and phone
+    const { 
+      phone, 
+      fullName,
+      instagramUsername,
+      tiktokUsername,
+      facebookUsername,
+      youtubeUsername,
+      snapchatUsername,
+      instagramUrl,
+      tiktokUrl,
+      facebookUrl,
+      youtubeUrl,
+      snapchatUrl
+    } = req.body;
+
+    if (!role) {
+      throw new AppException(404, "Votre compte n'existe pas. Veuillez d'abord créer un compte sur la page d'inscription.");
+    }
+
+    if (!phone) {
+      return res.status(200).json({
+        status: 'success',
+        data: {
+          status: 'needs_completion',
+          email: payload.email,
+          fullName: payload.name || payload.email,
+          avatarUrl: payload.picture,
+          googleId: payload.sub,
+          role,
+        }
+      });
+    }
+
+    const normalizedPhone = normalizePhoneNumber(phone);
+    if (!normalizedPhone) {
+      throw new AppException(400, 'Invalid Moroccan phone number format');
+    }
+
+    const existingPhone = await prisma.user.findFirst({
+      where: { phone: normalizedPhone },
+    });
+    if (existingPhone) {
+      throw new AppException(409, 'Ce numéro de téléphone est déjà associé à un autre compte');
+    }
+
     const userRole = await prisma.role.findUnique({
-      where: { name: role || 'VENDOR' },
+      where: { name: role },
     });
 
     if (!userRole) {
@@ -995,13 +1063,21 @@ router.post(
 
     const detectedCity = await getGeoLocation(registrationIp);
 
+    const actualUsername = instagramUsername;
+    const actualTiktok = tiktokUsername;
+    const actualFacebook = facebookUsername;
+    const actualYoutube = youtubeUsername;
+    const actualSnapchat = snapchatUsername;
+
     user = await prisma.user.create({
       data: {
         email: payload.email,
+        phone: normalizedPhone,
         googleId: payload.sub,
         password: await bcrypt.hash(uuidv4(), 10),
         roleId: userRole.id,
         isInfluencer: role === 'INFLUENCER',
+        referralCode: role === 'INFLUENCER' ? uuidv4().slice(0, 8).toUpperCase() : null,
         kycStatus: 'PENDING',
         isActive: false, 
         registrationIp,
@@ -1010,9 +1086,21 @@ router.post(
         language: langCode,
         profile: {
           create: {
-            fullName: payload.name || payload.email,
+            fullName: fullName || payload.name || payload.email,
             avatarUrl: payload.picture,
             language: langCode,
+            instagramUsername: actualUsername || null,
+            tiktokUsername: actualTiktok || null,
+            facebookUsername: actualFacebook || null,
+            youtubeUsername: actualYoutube || null,
+            snapchatUsername: actualSnapchat || null,
+            metadata: role === 'INFLUENCER' ? {
+              instagramUrl: instagramUrl || null,
+              tiktokUrl: tiktokUrl || null,
+              facebookUrl: facebookUrl || null,
+              youtubeUrl: youtubeUrl || null,
+              snapchatUrl: snapchatUrl || null,
+            } : null,
           },
         },
       } as any,
@@ -1036,6 +1124,25 @@ router.post(
         skipDuplicates: true,
       });
     }
+
+    // Auto-assign global agents
+    const globalAgents = await prisma.user.findMany({
+      where: {
+        role: { name: 'CALL_CENTER_AGENT' },
+        autoAssignInfluencers: true
+      }
+    });
+
+    if (globalAgents.length > 0) {
+      await prisma.agentInfluencerAssignment.createMany({
+        data: globalAgents.map(agent => ({
+          agentId: agent.id,
+          influencerId: user.id
+        })),
+        skipDuplicates: true,
+      });
+    }
+
 
     const { accessToken, refreshToken } = generateTokens(user.uuid);
     setAuthCookies(res, accessToken, refreshToken);
@@ -2242,6 +2349,8 @@ router.get(
           role: user.role.name,
           mode: user.mode,
           subdomain: user.subdomain,
+          customDomain: user.customDomain,
+          customDomainStatus: user.customDomainStatus,
           contractAccepted: user.contractAccepted,
           contractSignedAt: user.contractSignedAt,
           kycStatus: user.kycStatus,
@@ -2540,7 +2649,7 @@ const RESERVED_SUBDOMAINS = [
   'support', 'help', 'helper', 'auth', 'login', 'register', 'root',
   'status', 'portal', 'billing', 'pay', 'checkout', 'shop', 'store',
   'dev', 'test', 'prod', 'localhost', 'system', 'secure', 'web',
-  'damanesign', 'youcan', 'silacod', 'silacod-dev'
+  'damanesign', 'youcan', 'silacod', 'silacod-dev', 'custom'
 ];
 
 router.get(
@@ -2657,6 +2766,8 @@ router.post(
           kycStatus: finalUser?.kycStatus,
           isActive: finalUser?.isActive,
           subdomain: finalUser?.subdomain,
+          customDomain: finalUser?.customDomain,
+          customDomainStatus: finalUser?.customDomainStatus,
           mode: finalUser?.mode
         }
       }

@@ -1,5 +1,6 @@
 import { useAuth } from '../../contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
+import { getVerificationStatus } from '../../pages/common/ProfileVerification';
 
 interface RoleGuardProps {
   children: React.ReactNode;
@@ -8,9 +9,9 @@ interface RoleGuardProps {
 }
 
 export default function RoleGuard({ children, allowedRoles, fallbackPath }: RoleGuardProps) {
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading, platformSettings } = useAuth();
 
-  if (isLoading) {
+  if (isLoading || !platformSettings) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
@@ -31,6 +32,17 @@ export default function RoleGuard({ children, allowedRoles, fallbackPath }: Role
     // Otherwise, allow the inactive user to access the dashboard so they can complete KYC, Bank, and Contract steps.
     if (user.requiresManualApproval) {
       return <Navigate to="/pending-verification" replace />;
+    }
+  }
+
+  if (user.role === 'INFLUENCER' || user.role === 'VENDOR') {
+    const { percentage } = getVerificationStatus(user, platformSettings);
+    if (percentage < 100) {
+      const currentPath = window.location.pathname;
+      const verificationPath = user.role === 'INFLUENCER' ? '/influencer/verification' : '/dashboard/verification';
+      if (currentPath !== verificationPath) {
+        return <Navigate to={verificationPath} replace />;
+      }
     }
   }
 
