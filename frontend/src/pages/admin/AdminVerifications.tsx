@@ -335,7 +335,7 @@ export default function AdminVerifications() {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {[
           { key: 'ALL', label: 'Tous', count: stats.total, color: 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100', icon: Users },
-          { key: 'PENDING', label: 'À Traiter', count: stats.pending, color: 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100/70', icon: Shield },
+          { key: 'PENDING', label: 'À Traiter', count: stats.pending, color: 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100/70', icon: Shield },
           { key: 'PENDING_EMAIL', label: 'Emails', count: stats.pendingEmail, color: 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100/70', icon: Mail },
           ...(showIdentity ? [{ key: 'PENDING_KYC', label: 'KYC', count: stats.pendingKyc, color: 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100/70', icon: ShieldCheck }] : []),
           ...(showBank ? [{ key: 'PENDING_BANK', label: 'RIB Banque', count: stats.pendingBank, color: 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100/70', icon: Landmark }] : []),
