@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi, BACKEND_URL } from '../../lib/api';
+import { useAuth } from '../../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { 
   ShieldCheck, 
@@ -110,6 +111,10 @@ export function resolveSocialPlatform(
 
 export default function AdminVerifications() {
   const queryClient = useQueryClient();
+  const { platformSettings } = useAuth();
+  const showIdentity = platformSettings?.showIdentityVerification !== false;
+  const showBank = platformSettings?.showBankVerification !== false;
+  const showContract = platformSettings?.showContractVerification !== false;
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'ALL' | 'PENDING' | 'PENDING_EMAIL' | 'PENDING_KYC' | 'PENDING_BANK' | 'PENDING_CONTRACT'>('ALL');
@@ -332,9 +337,9 @@ export default function AdminVerifications() {
           { key: 'ALL', label: 'Tous', count: stats.total, color: 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100', icon: Users },
           { key: 'PENDING', label: 'À Traiter', count: stats.pending, color: 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100/70', icon: Shield },
           { key: 'PENDING_EMAIL', label: 'Emails', count: stats.pendingEmail, color: 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100/70', icon: Mail },
-          { key: 'PENDING_KYC', label: 'KYC', count: stats.pendingKyc, color: 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100/70', icon: ShieldCheck },
-          { key: 'PENDING_BANK', label: 'RIB Banque', count: stats.pendingBank, color: 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100/70', icon: Landmark },
-          { key: 'PENDING_CONTRACT', label: 'Contrats', count: stats.pendingContract, color: 'bg-teal-50 border-teal-200 text-teal-700 hover:bg-teal-100/70', icon: FileText },
+          ...(showIdentity ? [{ key: 'PENDING_KYC', label: 'KYC', count: stats.pendingKyc, color: 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100/70', icon: ShieldCheck }] : []),
+          ...(showBank ? [{ key: 'PENDING_BANK', label: 'RIB Banque', count: stats.pendingBank, color: 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100/70', icon: Landmark }] : []),
+          ...(showContract ? [{ key: 'PENDING_CONTRACT', label: 'Contrats', count: stats.pendingContract, color: 'bg-teal-50 border-teal-200 text-teal-700 hover:bg-teal-100/70', icon: FileText }] : []),
         ].map((item) => {
           const Icon = item.icon;
           const isSelected = activeTab === item.key;
@@ -376,7 +381,6 @@ export default function AdminVerifications() {
               { key: 'ALL', label: 'Tous' },
               { key: 'SELLER', label: 'Sellers' },
               { key: 'INFLUENCER', label: 'Influencers' },
-              { key: 'VENDOR', label: 'Wholesalers' },
             ].map((role) => (
               <button
                 key={role.key}
@@ -451,11 +455,14 @@ export default function AdminVerifications() {
                       {user.emailVerifiedAt ? 'Email ✓' : 'Email ✗'}
                     </div>
                     {/* KYC */}
+                    {showIdentity && (
                     <div className={`flex items-center gap-2 px-4 py-2 rounded-2xl border text-xs font-black uppercase tracking-widest ${getStatusColor(user.kycStatus)}`}>
                       <ShieldCheck size={14} />
                       KYC: {getStatusLabel(user.kycStatus)}
                     </div>
+                    )}
                     {/* Bank */}
+                    {showBank && (
                     <div className={`flex items-center gap-2 px-4 py-2 rounded-2xl border text-xs font-black uppercase tracking-widest ${
                       hasApprovedBank ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
                       : hasPendingBank ? 'bg-amber-50 text-amber-600 border-amber-200'
@@ -464,6 +471,7 @@ export default function AdminVerifications() {
                       <CreditCard size={14} />
                       {hasApprovedBank ? 'Banque ✓' : hasPendingBank ? 'Banque ⏳' : 'Pas de RIB'}
                     </div>
+                    )}
                     {/* Subdomain */}
                     <div className={`flex items-center gap-2 px-4 py-2 rounded-2xl border text-xs font-black uppercase tracking-widest ${
                       user.subdomain ? 'bg-primary-50 text-primary-600 border-primary-200' : 'bg-slate-50 text-slate-400 border-slate-200'
@@ -498,9 +506,9 @@ export default function AdminVerifications() {
                         {[
                           { label: 'Compte Créé', desc: format(new Date(user.createdAt), 'dd/MM/yyyy'), done: true, pending: false },
                           { label: 'Email Vérifié', desc: user.emailVerifiedAt ? format(new Date(user.emailVerifiedAt), 'dd/MM/yyyy') : 'En attente', done: !!user.emailVerifiedAt, pending: !user.emailVerifiedAt },
-                          { label: 'KYC Approuvé', desc: user.kycStatus === 'APPROVED' ? 'Approuvé' : (user.kycStatus === 'UNDER_REVIEW' ? 'En cours de revue' : 'Non approuvé'), done: user.kycStatus === 'APPROVED', pending: ['PENDING', 'UNDER_REVIEW'].includes(user.kycStatus) },
-                          { label: 'Banque Approuvée', desc: hasApprovedBank ? 'RIB Validé' : (hasPendingBank ? 'RIB En attente' : 'Non configuré'), done: hasApprovedBank, pending: hasPendingBank },
-                          { label: 'Contrat Signé', desc: user.contractAccepted ? 'Signé ✓' : 'En attente', done: user.contractAccepted, pending: !user.contractAccepted && hasApprovedBank && user.kycStatus === 'APPROVED' },
+                          ...(showIdentity ? [{ label: 'KYC Approuvé', desc: user.kycStatus === 'APPROVED' ? 'Approuvé' : (user.kycStatus === 'UNDER_REVIEW' ? 'En cours de revue' : 'Non approuvé'), done: user.kycStatus === 'APPROVED', pending: ['PENDING', 'UNDER_REVIEW'].includes(user.kycStatus) }] : []),
+                          ...(showBank ? [{ label: 'Banque Approuvée', desc: hasApprovedBank ? 'RIB Validé' : (hasPendingBank ? 'RIB En attente' : 'Non configuré'), done: hasApprovedBank, pending: hasPendingBank }] : []),
+                          ...(showContract ? [{ label: 'Contrat Signé', desc: user.contractAccepted ? 'Signé ✓' : 'En attente', done: user.contractAccepted, pending: !user.contractAccepted && hasApprovedBank && user.kycStatus === 'APPROVED' }] : []),
                         ].map((step, idx) => {
                           return (
                             <div key={idx} className={`flex flex-col p-4 rounded-2xl border transition-all ${
@@ -751,6 +759,7 @@ export default function AdminVerifications() {
                       </div>
 
                       {/* KYC Verification */}
+                      {showIdentity && (
                       <div className="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm space-y-4">
                         <div className="flex items-center gap-3">
                           <div className={`p-2.5 rounded-xl ${user.kycStatus === 'APPROVED' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
@@ -921,8 +930,10 @@ export default function AdminVerifications() {
                           </div>
                         )}
                       </div>
+                      )}
 
                       {/* Bank Account Verification */}
+                      {showBank && (
                       <div className="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm space-y-4">
                         <div className="flex items-center gap-3">
                           <div className={`p-2.5 rounded-xl ${hasApprovedBank ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-100 text-indigo-600'}`}>
@@ -1012,8 +1023,10 @@ export default function AdminVerifications() {
                           </div>
                         )}
                       </div>
+                      )}
 
                       {/* Contract & Engagement */}
+                      {showContract && (
                       <div className="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm space-y-4 flex flex-col justify-between">
                         <div className="space-y-4">
                           <div className="flex items-center gap-3">
@@ -1073,6 +1086,7 @@ export default function AdminVerifications() {
                           )}
                         </div>
                       </div>
+                      )}
                     </div>
 
                     {/* Subdomain Management */}
