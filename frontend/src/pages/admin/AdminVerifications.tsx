@@ -118,7 +118,7 @@ export default function AdminVerifications() {
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'ALL' | 'PENDING' | 'PENDING_EMAIL' | 'PENDING_KYC' | 'PENDING_BANK' | 'PENDING_CONTRACT'>('ALL');
-  const [roleFilter, setRoleFilter] = useState<'ALL' | 'SELLER' | 'INFLUENCER' | 'VENDOR'>('ALL');
+  const [roleFilter, setRoleFilter] = useState<'ALL' | 'VENDOR' | 'INFLUENCER'>('ALL');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
@@ -379,7 +379,7 @@ export default function AdminVerifications() {
           <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/50 w-full sm:w-auto justify-around">
             {[
               { key: 'ALL', label: 'Tous' },
-              { key: 'SELLER', label: 'Sellers' },
+              { key: 'VENDOR', label: 'Sellers' },
               { key: 'INFLUENCER', label: 'Influencers' },
             ].map((role) => (
               <button
