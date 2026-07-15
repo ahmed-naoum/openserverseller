@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { checkAndActivateUser } from '../utils/verification.js';
+import { fetchMaintenanceSettings } from '../middleware/maintenance.js';
 import { decrypt, encrypt } from '../utils/crypto.js';
 import { getBlockedIPsList, unblockIP } from '../middleware/security.js';
 import fs from 'fs';
@@ -835,16 +836,58 @@ router.get(
     const baseWhere = andConditions.length > 0 ? { AND: andConditions } : {};
     const statsWhere = { ...baseWhere };
 
-    const filterConditions = [...andConditions];
-    if (filter === 'PENDING') {
-      filterConditions.push({
+    const settings = await fetchMaintenanceSettings();
+    const showIdentity = settings.showIdentityVerification !== false;
+    const showBank = settings.showBankVerification !== false;
+    const showContract = settings.showContractVerification !== false;
+
+    // Prerequisite: Steps 1, 2, 3 must be complete
+    // Step 1: subdomain is set
+    // Step 2: emailVerifiedAt is set
+    // Step 3:
+    // - if showIdentity: kycStatus is APPROVED
+    // - if !showIdentity and showBank: Bank is APPROVED
+    // - if !showIdentity and !showBank and showContract: Contract is signed
+    const step123Conditions: any[] = [
+      { subdomain: { not: null } },
+      { subdomain: { not: '' } },
+      { emailVerifiedAt: { not: null } }
+    ];
+    if (showIdentity) {
+      step123Conditions.push({ kycStatus: 'APPROVED' });
+    } else if (showBank) {
+      step123Conditions.push({ bankAccounts: { some: { status: 'APPROVED' } } });
+    } else if (showContract) {
+      step123Conditions.push({ contractAccepted: true });
+    }
+
+    // Pending review/action condition
+    const pendingReviewConditions: any[] = [];
+    if (showIdentity) {
+      pendingReviewConditions.push({ kycStatus: 'UNDER_REVIEW' });
+    }
+    if (showBank) {
+      pendingReviewConditions.push({
         OR: [
-          { emailVerifiedAt: null },
-          { kycStatus: { in: ['PENDING', 'UNDER_REVIEW'] } },
           { bankAccounts: { some: { status: 'PENDING' } } },
-          { contractAccepted: false }
+          { bankAccounts: { none: { status: 'APPROVED' } } }
         ]
       });
+    }
+    if (showContract) {
+      pendingReviewConditions.push({ contractAccepted: false });
+    }
+
+    const pendingQueryCondition = {
+      AND: [
+        ...step123Conditions,
+        pendingReviewConditions.length > 0 ? { OR: pendingReviewConditions } : {}
+      ]
+    };
+
+    const filterConditions = [...andConditions];
+    if (filter === 'PENDING') {
+      filterConditions.push(pendingQueryCondition);
     } else if (filter === 'PENDING_EMAIL') {
       filterConditions.push({ emailVerifiedAt: null });
     } else if (filter === 'PENDING_KYC') {
@@ -868,7 +911,7 @@ router.get(
       usersWithVerifications
     ] = await Promise.all([
       prisma.user.count({ where: statsWhere }),
-      prisma.user.count({ where: { AND: [...(statsWhere.AND ? (statsWhere.AND as any[]) : []), { OR: [ { emailVerifiedAt: null }, { kycStatus: { in: ['PENDING', 'UNDER_REVIEW'] } }, { bankAccounts: { some: { status: 'PENDING' } } }, { contractAccepted: false } ] } ] } }),
+      prisma.user.count({ where: { AND: [...(statsWhere.AND ? (statsWhere.AND as any[]) : []), pendingQueryCondition] } }),
       prisma.user.count({ where: { AND: [...(statsWhere.AND ? (statsWhere.AND as any[]) : []), { emailVerifiedAt: null } ] } }),
       prisma.user.count({ where: { AND: [...(statsWhere.AND ? (statsWhere.AND as any[]) : []), { kycStatus: { in: ['PENDING', 'UNDER_REVIEW'] } } ] } }),
       prisma.user.count({ where: { AND: [...(statsWhere.AND ? (statsWhere.AND as any[]) : []), { bankAccounts: { some: { status: 'PENDING' } } } ] } }),
