@@ -1,28 +1,23 @@
-import { prisma } from './lib/prisma.js';
-
+import { PrismaClient } from '@prisma/client';
+const prisma = new PrismaClient();
 
 async function main() {
   const users = await prisma.user.findMany({
     where: {
-      OR: [
-        { email: { contains: 'yous' } },
-        { email: { contains: 'contact' } },
-        { email: { contains: 'gmail' } },
-      ]
-    },
-    select: {
-      id: true,
-      email: true,
-      phone: true,
-      isActive: true,
-      role: {
-        select: {
-          name: true
-        }
+      email: {
+        in: [
+          'dimaruby1@gmail.com',
+          '123yassine.chaib@gmail.com',
+          'naoum00007@gmail.com'
+        ]
       }
+    },
+    include: {
+      bankAccounts: true,
+      role: true
     }
   });
-  console.log('USERS FOUND MATCHING SEARCH:', JSON.stringify(users, null, 2));
+  console.log('TARGET USERS DATA:', JSON.stringify(users, null, 2));
 }
 
 main()

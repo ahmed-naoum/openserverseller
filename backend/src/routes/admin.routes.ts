@@ -841,47 +841,28 @@ router.get(
     const showBank = settings.showBankVerification !== false;
     const showContract = settings.showContractVerification !== false;
 
-    // Prerequisite: Steps 1, 2, 3 must be complete
+    // Prerequisite: Steps 1, 2, 3 must be complete (submitted / ready)
     // Step 1: subdomain is set
     // Step 2: emailVerifiedAt is set
     // Step 3:
-    // - if showIdentity: kycStatus is APPROVED
-    // - if !showIdentity and showBank: Bank is APPROVED
-    // - if !showIdentity and !showBank and showContract: Contract is signed
+    // - if showIdentity: kycStatus is APPROVED or UNDER_REVIEW
+    // - if !showIdentity and showBank: has at least one bank account
+    // - if !showIdentity and !showBank and showContract: no extra condition (just pending contract)
     const step123Conditions: any[] = [
       { subdomain: { not: null } },
       { subdomain: { not: '' } },
       { emailVerifiedAt: { not: null } }
     ];
     if (showIdentity) {
-      step123Conditions.push({ kycStatus: 'APPROVED' });
+      step123Conditions.push({ kycStatus: { in: ['APPROVED', 'UNDER_REVIEW'] } });
     } else if (showBank) {
-      step123Conditions.push({ bankAccounts: { some: { status: 'APPROVED' } } });
-    } else if (showContract) {
-      step123Conditions.push({ contractAccepted: true });
-    }
-
-    // Pending review/action condition
-    const pendingReviewConditions: any[] = [];
-    if (showIdentity) {
-      pendingReviewConditions.push({ kycStatus: 'UNDER_REVIEW' });
-    }
-    if (showBank) {
-      pendingReviewConditions.push({
-        OR: [
-          { bankAccounts: { some: { status: 'PENDING' } } },
-          { bankAccounts: { none: { status: 'APPROVED' } } }
-        ]
-      });
-    }
-    if (showContract) {
-      pendingReviewConditions.push({ contractAccepted: false });
+      step123Conditions.push({ bankAccounts: { some: {} } });
     }
 
     const pendingQueryCondition = {
       AND: [
-        ...step123Conditions,
-        pendingReviewConditions.length > 0 ? { OR: pendingReviewConditions } : {}
+        { isActive: false },
+        ...step123Conditions
       ]
     };
 
@@ -891,11 +872,11 @@ router.get(
     } else if (filter === 'PENDING_EMAIL') {
       filterConditions.push({ emailVerifiedAt: null });
     } else if (filter === 'PENDING_KYC') {
-      filterConditions.push({ kycStatus: { in: ['PENDING', 'UNDER_REVIEW'] } });
+      filterConditions.push(showIdentity ? { kycStatus: { in: ['PENDING', 'UNDER_REVIEW'] } } : { id: -1 });
     } else if (filter === 'PENDING_BANK') {
-      filterConditions.push({ bankAccounts: { some: { status: 'PENDING' } } });
+      filterConditions.push(showBank ? { bankAccounts: { some: { status: 'PENDING' } } } : { id: -1 });
     } else if (filter === 'PENDING_CONTRACT') {
-      filterConditions.push({ contractAccepted: false });
+      filterConditions.push(showContract ? { contractAccepted: false } : { id: -1 });
     }
 
     const filterWhere = filterConditions.length > 0 ? { AND: filterConditions } : {};
@@ -913,9 +894,9 @@ router.get(
       prisma.user.count({ where: statsWhere }),
       prisma.user.count({ where: { AND: [...(statsWhere.AND ? (statsWhere.AND as any[]) : []), pendingQueryCondition] } }),
       prisma.user.count({ where: { AND: [...(statsWhere.AND ? (statsWhere.AND as any[]) : []), { emailVerifiedAt: null } ] } }),
-      prisma.user.count({ where: { AND: [...(statsWhere.AND ? (statsWhere.AND as any[]) : []), { kycStatus: { in: ['PENDING', 'UNDER_REVIEW'] } } ] } }),
-      prisma.user.count({ where: { AND: [...(statsWhere.AND ? (statsWhere.AND as any[]) : []), { bankAccounts: { some: { status: 'PENDING' } } } ] } }),
-      prisma.user.count({ where: { AND: [...(statsWhere.AND ? (statsWhere.AND as any[]) : []), { contractAccepted: false } ] } }),
+      showIdentity ? prisma.user.count({ where: { AND: [...(statsWhere.AND ? (statsWhere.AND as any[]) : []), { kycStatus: { in: ['PENDING', 'UNDER_REVIEW'] } } ] } }) : Promise.resolve(0),
+      showBank ? prisma.user.count({ where: { AND: [...(statsWhere.AND ? (statsWhere.AND as any[]) : []), { bankAccounts: { some: { status: 'PENDING' } } } ] } }) : Promise.resolve(0),
+      showContract ? prisma.user.count({ where: { AND: [...(statsWhere.AND ? (statsWhere.AND as any[]) : []), { contractAccepted: false } ] } }) : Promise.resolve(0),
       prisma.user.count({ where: filterWhere }),
       prisma.user.findMany({
         where: filterWhere,
