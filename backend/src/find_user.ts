@@ -2,22 +2,19 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  const users = await prisma.user.findMany({
+  const products = await prisma.product.findMany({
     where: {
-      email: {
-        in: [
-          'dimaruby1@gmail.com',
-          '123yassine.chaib@gmail.com',
-          'naoum00007@gmail.com'
-        ]
-      }
-    },
-    include: {
-      bankAccounts: true,
-      role: true
+      OR: [
+        { id: 142 },
+        { longDescription: { contains: 'زيت مبتكر' } },
+        { longDescription: { contains: 'المكونات' } }
+      ]
     }
   });
-  console.log('TARGET USERS DATA:', JSON.stringify(users, null, 2));
+  console.log('FOUND PRODUCTS:', products.map(p => ({ id: p.id, nameFr: p.nameFr, longDescLength: p.longDescription?.length })));
+  if (products.length > 0) {
+    console.log('FIRST PRODUCT LONG DESC:', products[0].longDescription);
+  }
 }
 
 main()

@@ -673,7 +673,11 @@ function ProductTabs({ product }: { product: any }) {
 
         {activeTab === 'ingredients' && (
           <div className={`${textAlign} text-sm text-slate-600 font-medium font-arabic leading-relaxed bg-slate-50 p-6 rounded-2xl`}>
-            {product.longDescription || (language === 'ar' ? 'مكمل غذائي متطور يهدف إلى تعزيز الصحة العامة بفضل احتوائه على مستخلص أوراق المورينجا بتركيز فعال. تعرف المورينجا بخصائصها الغنية بالمغذيات الطبيعية والفيتامينات والمعادن، مما يساعد على تحسين مستويات الطاقة، دعم الجهاز المناعي، وتعزيز صحة البشرة والشعر. مع الاستخدام المنتظم، يمنح الجسم التوازن الغذائي والشعور بالحيوية. يدعم الصحة العامة ويعزز مستويات الطاقة يعزز صحة الجهاز المناعي ويحارب الإجهاد التأكسدي يساعد في تحسين نسيج البشرة وإشراقتها' : language === 'en' ? 'An advanced supplement designed to promote overall health with an effective concentration of Moringa leaf extract. Moringa is known for its rich profile of natural nutrients, vitamins, and minerals, helping to boost energy levels, support the immune system, and promote healthy skin and hair. With regular use, it gives the body nutritional balance and a feeling of vitality.' : 'Un complément alimentaire avancé visant à améliorer la santé globale grâce à sa concentration efficace en extrait de feuilles de moringa. Le moringa est reconnu pour ses propriétés riches en nutriments naturels, vitamines et minéraux, contribuant à optimiser les niveaux d\'énergie, soutenir le système immunitaire et favoriser l\'éclat de la peau et des cheveux.')}
+            {product.longDescription && typeof product.longDescription === 'string' && /<[a-z][\s\S]*>/i.test(product.longDescription) ? (
+              <div dangerouslySetInnerHTML={{ __html: product.longDescription }} />
+            ) : (
+              product.longDescription || (language === 'ar' ? 'مكمل غذائي متطور يهدف إلى تعزيز الصحة العامة بفضل احتوائه على مستخلص أوراق المورينجا بتركيز فعال. تعرف المورينجا بخصائصها الغنية بالمغذيات الطبيعية والفيتامينات والمعادن، مما يساعد على تحسين مستويات الطاقة، دعم الجهاز المناعي، وتعزيز صحة البشرة والشعر. مع الاستخدام المنتظم، يمنح الجسم التوازن الغذائي والشعور بالحيوية. يدعم الصحة العامة ويعزز مستويات الطاقة يعزز صحة الجهاز المناعي ويحارب الإجهاد التأكسدي يساعد في تحسين نسيج البشرة وإشراقتها' : language === 'en' ? 'An advanced supplement designed to promote overall health with an effective concentration of Moringa leaf extract. Moringa is known for its rich profile of natural nutrients, vitamins, and minerals, helping to boost energy levels, support the immune system, and promote healthy skin and hair. With regular use, it gives the body nutritional balance and a feeling of vitality.' : 'Un complément alimentaire avancé visant à améliorer la santé globale grâce à sa concentration efficace en extrait de feuilles de moringa. Le moringa est reconnu pour ses propriétés riches en nutriments naturels, vitamines et minéraux, contribuant à optimiser les niveaux d\'énergie, soutenir le système immunitaire et favoriser l\'éclat de la peau et des cheveux.')
+            )}
           </div>
         )}
       </div>
@@ -684,14 +688,23 @@ function ProductTabs({ product }: { product: any }) {
 function DescRow({ title, content, isWarning }: any) {
   const { language } = useLanguage();
   const textAlign = language === 'ar' ? 'text-right' : 'text-left';
+  const hasHtml = typeof content === 'string' && /<[a-z][\s\S]*>/i.test(content);
+
   return (
     <div className={`flex flex-col md:flex-row items-start gap-4 border-b border-slate-50 pb-6 last:border-0 last:pb-0 ${textAlign}`}>
        <div className="md:w-1/4 font-black text-slate-900 text-sm font-arabic mt-1 shrink-0">{title}</div>
        <div className={`md:w-3/4 flex items-start justify-start gap-3 w-full`}>
          {!isWarning ? <Check size={16} className="text-slate-400 shrink-0 mt-0.5" /> : <Info size={16} className="text-red-500 shrink-0 mt-0.5" />}
-         <div className={`text-xs font-medium leading-relaxed font-arabic whitespace-pre-line ${isWarning ? 'text-red-500' : 'text-slate-600'}`}>
-           {content}
-         </div>
+         {hasHtml ? (
+           <div 
+             className="text-xs font-medium leading-relaxed font-arabic text-slate-600 w-full"
+             dangerouslySetInnerHTML={{ __html: content }}
+           />
+         ) : (
+           <div className={`text-xs font-medium leading-relaxed font-arabic whitespace-pre-line ${isWarning ? 'text-red-500' : 'text-slate-600'}`}>
+             {content}
+           </div>
+         )}
        </div>
     </div>
   );
