@@ -111,14 +111,14 @@ export function resolveSocialPlatform(
 
 export default function AdminVerifications() {
   const queryClient = useQueryClient();
-  const { platformSettings } = useAuth();
+  const { user, platformSettings } = useAuth();
   const showIdentity = platformSettings?.showIdentityVerification !== false;
   const showBank = platformSettings?.showBankVerification !== false;
   const showContract = platformSettings?.showContractVerification !== false;
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'ALL' | 'PENDING' | 'PENDING_EMAIL' | 'PENDING_KYC' | 'PENDING_BANK' | 'PENDING_CONTRACT'>('ALL');
-  const [roleFilter, setRoleFilter] = useState<'ALL' | 'VENDOR' | 'INFLUENCER'>('ALL');
+  const [roleFilter, setRoleFilter] = useState<string>('ALL');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
@@ -376,15 +376,23 @@ export default function AdminVerifications() {
           </div>
 
           {/* Role Filter */}
-          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/50 w-full sm:w-auto justify-around">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/50 w-full sm:w-auto justify-around flex-wrap">
             {[
               { key: 'ALL', label: 'Tous' },
               { key: 'VENDOR', label: 'Sellers' },
               { key: 'INFLUENCER', label: 'Influencers' },
+              ...(user?.role !== 'CONFIRMATION_AGENT' ? [
+                { key: 'GROSSELLER', label: 'Grossistes' },
+                { key: 'CONFIRMATION_AGENT', label: 'Confirmation' },
+                { key: 'CALL_CENTER_AGENT', label: 'Call Center' },
+                { key: 'FINANCE_ADMIN', label: 'Admin Finance' },
+                { key: 'HELPER', label: 'Helpers' },
+                { key: 'SYSTEM_SUPPORT', label: 'Support' },
+              ] : []),
             ].map((role) => (
               <button
                 key={role.key}
-                onClick={() => setRoleFilter(role.key as any)}
+                onClick={() => setRoleFilter(role.key)}
                 className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
                   roleFilter === role.key ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'
                 }`}

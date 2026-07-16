@@ -40,6 +40,7 @@ import {
   ScanLine,
   LogIn,
   Trash2,
+  LayoutTemplate,
   Loader2
 } from 'lucide-react';
 
@@ -923,6 +924,33 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
                         </select>
                       </div>
                     </div>
+
+                    {/* Influencer Permissions */}
+                    {formData.role === 'INFLUENCER' && (
+                      <div className="mt-6 border-t border-slate-100 pt-6 space-y-4">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Droits de l'Influenceur</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="flex items-center justify-between p-3 bg-purple-50/50 rounded-2xl border border-purple-100/50">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-2 bg-white rounded-xl text-purple-600 shadow-sm">
+                                <LayoutTemplate size={16} />
+                              </div>
+                              <div>
+                                <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Constructeur de Page</h4>
+                                <p className="text-[8px] font-bold text-purple-400 uppercase tracking-tighter">Autoriser la modification des landing pages</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setFormData({ ...formData, canManageInfluencerLinks: !formData.canManageInfluencerLinks })}
+                              className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageInfluencerLinks ? 'bg-purple-500' : 'bg-slate-200'}`}
+                            >
+                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageInfluencerLinks ? 'left-[22px]' : 'left-0.5'}`} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Helper & Admin Impersonation Permissions */}
                     {formData.role === 'HELPER' && (

@@ -18,7 +18,9 @@ import {
   Info,
   ArrowRight,
   Download,
-  MessageSquare
+  MessageSquare,
+  MessageCircle,
+  CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -109,6 +111,7 @@ export default function ProductDetail() {
   const [tempPdfUrl, setTempPdfUrl] = useState<string | null>(null);
   const [showWholesaleBadge, setShowWholesaleBadge] = useState(false);
   const [isBrandingModalOpen, setIsBrandingModalOpen] = useState(false);
+  const [isThanksModalOpen, setIsThanksModalOpen] = useState(false);
   const [brandingData, setBrandingData] = useState({
     brandName: '',
     quantity: 20,
@@ -173,7 +176,7 @@ export default function ProductDetail() {
     }
 
     if (product.userStatus?.isPending) {
-      toast.error('You already have a pending request for this product.');
+      setIsThanksModalOpen(true);
       return;
     }
 
@@ -238,15 +241,13 @@ export default function ProductDetail() {
       });
       const convId = convRes.data.data.conversationId;
 
-      toast.success('Demande envoyée بنجاح. Ouverture du chat...');
+      toast.success(language === 'ar' ? 'تم إرسال الطلب بنجاح.' : 'Demande envoyée avec succès.');
       
       setShowWholesaleBadge(true);
       localStorage.setItem(`wholesale_badge_${id}`, 'true');
       setIsBrandingModalOpen(false);
+      setIsThanksModalOpen(true);
       await fetchProduct(id!);
-
-      const basePath = user?.role === 'INFLUENCER' ? '/influencer' : '/dashboard';
-      navigate(`${basePath}/chat?convId=${convId}`);
 
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Error occurred during request.');
@@ -453,8 +454,12 @@ export default function ProductDetail() {
               <div className="grid grid-cols-2 gap-3" dir={direction}>
                 <button
                   onClick={handleAction}
-                  disabled={isSubmitting || isCurrentlyPending || isBought || isClaimed || (!isAffiliateClaimable && !tempPdfUrl)}
-                  className="w-full py-3.5 bg-[#FF6B4A] hover:bg-[#ff5733] text-white text-[12px] font-black rounded-xl shadow-lg shadow-orange-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  disabled={isSubmitting || isBought || isClaimed || (!isCurrentlyPending && !isAffiliateClaimable && !tempPdfUrl)}
+                  className={`w-full py-3.5 text-[12px] font-black rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 ${
+                    isCurrentlyPending 
+                      ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20' 
+                      : 'bg-[#FF6B4A] hover:bg-[#ff5733] text-white shadow-orange-500/20'
+                  } disabled:opacity-50`}
                 >
                   {isCurrentlyPending ? t('pending_approval', 'marketplace') : 
                    (isBought || isClaimed) ? (language === 'ar' ? 'تمت الإضافة' : language === 'en' ? 'Added' : 'Ajouté') : 
@@ -547,6 +552,10 @@ export default function ProductDetail() {
          onSubmit={submitBrandingRequest}
          isSubmitting={isSubmitting}
          showLandingPage={user?.role !== 'INFLUENCER'}
+       />
+       <BrandingThanksModal 
+         isOpen={isThanksModalOpen}
+         onClose={() => setIsThanksModalOpen(false)}
        />
       </div>
     </div>
@@ -824,6 +833,117 @@ function BrandingInfoModal({ isOpen, onClose, data, setData, onSubmit, isSubmitt
             >
               {isSubmitting ? t('pd_modal_submitting', 'marketplace') : t('pd_modal_confirm', 'marketplace')}
             </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function BrandingThanksModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const { language } = useLanguage();
+  
+  if (!isOpen) return null;
+
+  const getTranslation = (key: string) => {
+    const translations: Record<string, Record<string, string>> = {
+      ar: {
+        title: "شكراً على طلبك!",
+        subtitle: "تم إرسال الطلب بنجاح",
+        message: "تم تسجيل طلبك لتصميم الهوية التجارية بنجاح. يرجى الانتظار لحين مراجعته وقبوله من طرف الإدارة.",
+        whatsappText: "لتسريع عملية معالجة وتأكيد طلبك، يمكنك التواصل معنا مباشرة عبر الواتساب:",
+        whatsappBtn: "تواصل عبر الواتساب",
+        closeBtn: "إغلاق"
+      },
+      fr: {
+        title: "Merci pour votre commande !",
+        subtitle: "Demande envoyée avec succès",
+        message: "Votre demande de branding a été enregistrée avec succès. Veuillez patienter pendant l'approbation de l'administration.",
+        whatsappText: "Pour accélérer le traitement et l'activation de votre marque, vous pouvez nous contacter directement sur WhatsApp :",
+        whatsappBtn: "Contacter sur WhatsApp",
+        closeBtn: "Fermer"
+      },
+      en: {
+        title: "Thanks for your order!",
+        subtitle: "Request submitted successfully",
+        message: "Your branding request has been registered successfully. Please wait for administration approval.",
+        whatsappText: "To speed up the processing and activation of your brand, you can contact us directly on WhatsApp:",
+        whatsappBtn: "Contact on WhatsApp",
+        closeBtn: "Close"
+      }
+    };
+    const lang = (language === 'ar' || language === 'fr' || language === 'en') ? language : 'fr';
+    return translations[lang][key] || translations['fr'][key];
+  };
+
+  const supportNumber = "0660517679";
+  const cleanNumber = "212660517679";
+  const prefilledMessage = encodeURIComponent(
+    language === 'ar' 
+      ? "مرحباً، لقد قمت للتو بتقديم طلب الهوية التجارية لمنتجي على المنصة وأود تسريع عملية التفعيل." 
+      : "Bonjour, je viens de soumettre ma demande de branding produit sur la plateforme et je souhaite accélérer son activation."
+  );
+  const whatsappUrl = `https://wa.me/${cleanNumber}?text=${prefilledMessage}`;
+
+  const isRtl = language === 'ar';
+  const direction = isRtl ? 'rtl' : 'ltr';
+  const textAlign = isRtl ? 'text-right' : 'text-left';
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm" dir={direction}>
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="bg-white w-full max-w-lg rounded-[2.5rem] p-10 shadow-2xl relative overflow-hidden"
+      >
+        {/* Glow decorative element */}
+        <div className="absolute top-0 left-0 w-32 h-32 bg-emerald-500/5 rounded-full -ml-16 -mt-16" />
+        <div className="absolute bottom-0 right-0 w-32 h-32 bg-orange-500/5 rounded-full -mr-16 -mb-16" />
+
+        <div className="relative flex flex-col items-center text-center">
+          {/* Animated checkmark icon */}
+          <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-500 mb-6 shadow-sm">
+            <CheckCircle2 size={36} className="animate-bounce" />
+          </div>
+
+          <h3 className="text-2xl font-black text-slate-900 leading-tight uppercase tracking-tight">
+            {getTranslation('title')}
+          </h3>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 mb-6">
+            {getTranslation('subtitle')}
+          </p>
+
+          <p className="text-sm font-medium text-slate-500 leading-relaxed mb-8">
+            {getTranslation('message')}
+          </p>
+
+          {/* WhatsApp Connect Box */}
+          <div className="w-full bg-slate-50 border border-slate-100 rounded-3xl p-6 mb-8 text-center">
+            <p className="text-xs font-bold text-slate-600 leading-relaxed mb-4">
+              {getTranslation('whatsappText')}
+            </p>
+            <div className="inline-flex items-center justify-center gap-2 text-sm font-black text-slate-800 bg-white border border-slate-100 rounded-2xl px-5 py-3 shadow-sm select-all">
+              <MessageCircle size={18} className="text-emerald-500 shrink-0" />
+              <span>{supportNumber}</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
+            <button 
+              onClick={onClose}
+              className="w-full sm:flex-1 py-4 text-[11px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-all bg-slate-50 rounded-2xl"
+            >
+              {getTranslation('closeBtn')}
+            </button>
+            <a 
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full sm:flex-[2] py-4 bg-[#25D366] text-white text-[11px] font-black uppercase tracking-widest rounded-2xl shadow-lg shadow-emerald-500/20 hover:bg-[#20ba56] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+              <MessageCircle size={16} />
+              {getTranslation('whatsappBtn')}
+            </a>
           </div>
         </div>
       </motion.div>

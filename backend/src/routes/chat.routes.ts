@@ -339,6 +339,9 @@ router.post(
                         path: ['productId'],
                         equals: metadata.productId
                     }
+                },
+                orderBy: {
+                    id: 'desc'
                 }
             });
 

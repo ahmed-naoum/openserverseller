@@ -2,19 +2,35 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  const products = await prisma.product.findMany({
+  const usersWithNotifs = await prisma.user.findMany({
     where: {
-      OR: [
-        { id: 142 },
-        { longDescription: { contains: 'زيت مبتكر' } },
-        { longDescription: { contains: 'المكونات' } }
-      ]
+      notifications: {
+        some: {}
+      }
+    },
+    include: {
+      role: true,
+      _count: {
+        select: { notifications: true }
+      }
     }
   });
-  console.log('FOUND PRODUCTS:', products.map(p => ({ id: p.id, nameFr: p.nameFr, longDescLength: p.longDescription?.length })));
-  if (products.length > 0) {
-    console.log('FIRST PRODUCT LONG DESC:', products[0].longDescription);
+  console.log('USERS WITH NOTIFICATIONS IN DB:');
+  for (const u of usersWithNotifs) {
+    console.log(`- User ID: ${u.id}, Email: ${u.email}, Role: ${u.role.name}, Notification Count: ${u._count.notifications}`);
   }
+
+  const latestNotifs = await prisma.notification.findMany({
+    orderBy: { createdAt: 'desc' },
+    take: 5,
+    include: {
+      user: {
+        select: { email: true, role: { select: { name: true } } }
+      }
+    }
+  });
+  console.log('\nLATEST 5 NOTIFICATIONS IN DB:');
+  console.log(JSON.stringify(latestNotifs, null, 2));
 }
 
 main()

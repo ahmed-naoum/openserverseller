@@ -412,20 +412,48 @@ export default function DashboardLayout() {
     }
   }, [user?.id]);
 
+  const getRolePrefix = () => {
+    if (!user) return '';
+    const role = user.role;
+    if (['SUPER_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_SUPPORT'].includes(role)) {
+      return '/admin';
+    }
+    if (role === 'VENDOR') {
+      return '/dashboard';
+    }
+    if (role === 'INFLUENCER') {
+      return '/influencer';
+    }
+    if (role === 'CALL_CENTER_AGENT') {
+      return '/agent';
+    }
+    if (role === 'CONFIRMATION_AGENT') {
+      return '/confirmation';
+    }
+    if (role === 'HELPER') {
+      return '/helper';
+    }
+    if (role === 'GROSSELLER') {
+      return '/grosseller';
+    }
+    return '';
+  };
+
   const getNotificationRedirect = (type: string) => {
+    const prefix = getRolePrefix();
     switch (type) {
       case 'PRODUCT_CLAIM_STATUS':
-        return '/influencer/inventory';
+        return `${prefix}/inventory`;
       case 'REFERRAL_LINK_STATUS':
       case 'REFERRAL_LINK_CLICKS':
-        return '/influencer/links';
+        return `${prefix}/links`;
       case 'PAYOUT_REQUEST_STATUS':
-        return '/influencer/wallet';
+        return `${prefix}/wallet`;
       case 'NEW_LEAD':
       case 'LEAD_STATUS_CHANGED':
-        return '/influencer/leads';
+        return `${prefix}/leads`;
       default:
-        return '/influencer/notifications';
+        return `${prefix}/notifications`;
     }
   };
 
@@ -1480,7 +1508,7 @@ export default function DashboardLayout() {
                       {notifications.length > 0 && (
                         <div className="px-4 py-3 bg-slate-50/50 border-t border-slate-50 text-center">
                           <Link
-                            to="/influencer/notifications"
+                            to={`${getRolePrefix()}/notifications`}
                             onClick={() => setShowNotificationsMenu(false)}
                             className="inline-flex items-center gap-1.5 text-[10px] font-black text-slate-600 hover:text-primary-600 transition-colors uppercase tracking-wider"
                           >

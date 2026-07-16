@@ -845,6 +845,8 @@ export default function InfluencerLinks() {
                                   <tbody className="divide-y divide-slate-100">
                                     {group.links.map((link: any) => {
                                       const ctr = link.clicks > 0 ? ((link.conversions / link.clicks) * 100).toFixed(1) : '0.0';
+                                      const role = user?.roleName || user?.role;
+                                      const showBuilder = role === 'SUPER_ADMIN' || role === 'HELPER' || role === 'VENDOR' || (role === 'INFLUENCER' && user?.canManageInfluencerLinks);
                                       return (
                                         <tr 
                                           key={link.id}
@@ -940,14 +942,24 @@ export default function InfluencerLinks() {
                                               >
                                                 <Copy size={12} />
                                               </button>
-                                              <button 
-                                                onClick={() => navigate(`/helper/links/${link.id}/builder`)} 
-                                                disabled={link.status === 'SUSPENDED'}
-                                                className="p-2 bg-slate-50 text-slate-400 hover:text-purple-600 hover:bg-purple-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-all" 
-                                                title={t('tooltip_builder', 'links') || "Constructeur de Page"}
-                                              >
-                                                <Wand2 size={12} />
-                                              </button>
+                                              {showBuilder && (
+                                                <button 
+                                                  onClick={() => {
+                                                    const role = user?.roleName || user?.role;
+                                                    const targetPath = role === 'VENDOR' 
+                                                      ? `/dashboard/links/${link.id}/builder` 
+                                                      : role === 'INFLUENCER' 
+                                                        ? `/influencer/links/${link.id}/builder` 
+                                                        : `/helper/links/${link.id}/builder`;
+                                                    navigate(targetPath);
+                                                  }} 
+                                                  disabled={link.status === 'SUSPENDED'}
+                                                  className="p-2 bg-slate-50 text-slate-400 hover:text-purple-600 hover:bg-purple-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-all" 
+                                                  title={t('tooltip_builder', 'links') || "Constructeur de Page"}
+                                                >
+                                                  <Wand2 size={12} />
+                                                </button>
+                                              )}
                                               <button 
                                                 onClick={() => { setSelectedLink(link); setShowQrModal(true); }} 
                                                 disabled={link.status === 'SUSPENDED'}

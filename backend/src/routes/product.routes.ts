@@ -42,6 +42,148 @@ const checkProductPermission = asyncHandler(async (req: Request, _res: Response,
   throw new AppException(403, 'Permission denied');
 });
 
+async function grantProductToOwner(productId: number, ownerId: number, ownerMode: string) {
+  if (!ownerId) return;
+
+  const ownerUser = await prisma.user.findUnique({
+    where: { id: ownerId },
+    include: { role: true }
+  });
+
+  if (!ownerUser) return;
+
+  const ownerRole = ownerUser.role.name;
+  const product = await prisma.product.findUnique({
+    where: { id: productId }
+  });
+  if (!product) return;
+
+  const targetMode = ownerMode === 'SELLER' ? 'SELLER' : 'AFFILIATE';
+
+  if (ownerRole === 'INFLUENCER') {
+    // Influencers can only be in AFFILIATE mode (and optionally INFLUENCER if configured)
+    await prisma.affiliateClaim.deleteMany({
+      where: { userId: ownerId, productId: product.id, userMode: 'SELLER' }
+    });
+    await prisma.productInventory.deleteMany({
+      where: { userId: ownerId, productId: product.id }
+    });
+
+    const existingClaim = await prisma.affiliateClaim.findUnique({
+      where: {
+        userId_productId_userMode: {
+          userId: ownerId,
+          productId: product.id,
+          userMode: 'AFFILIATE'
+        }
+      }
+    });
+    if (!existingClaim) {
+      await prisma.affiliateClaim.create({
+        data: {
+          userId: ownerId,
+          productId: product.id,
+          status: 'APPROVED',
+          userMode: 'AFFILIATE'
+        }
+      });
+    }
+
+    if (product.visibility.includes('INFLUENCER')) {
+      const existingClaimInfluencer = await prisma.affiliateClaim.findUnique({
+        where: {
+          userId_productId_userMode: {
+            userId: ownerId,
+            productId: product.id,
+            userMode: 'INFLUENCER'
+          }
+        }
+      });
+      if (!existingClaimInfluencer) {
+        await prisma.affiliateClaim.create({
+          data: {
+            userId: ownerId,
+            productId: product.id,
+            status: 'APPROVED',
+            userMode: 'INFLUENCER'
+          }
+        });
+      }
+    }
+  } else if (ownerRole === 'VENDOR') {
+    if (targetMode === 'SELLER') {
+      // Create SELLER claim, delete AFFILIATE claim
+      await prisma.affiliateClaim.deleteMany({
+        where: { userId: ownerId, productId: product.id, userMode: 'AFFILIATE' }
+      });
+      
+      const existingClaim = await prisma.affiliateClaim.findUnique({
+        where: {
+          userId_productId_userMode: {
+            userId: ownerId,
+            productId: product.id,
+            userMode: 'SELLER'
+          }
+        }
+      });
+      if (!existingClaim) {
+        await prisma.affiliateClaim.create({
+          data: {
+            userId: ownerId,
+            productId: product.id,
+            status: 'APPROVED',
+            userMode: 'SELLER'
+          }
+        });
+      }
+
+      const existingInventory = await prisma.productInventory.findFirst({
+        where: {
+          userId: ownerId,
+          productId: product.id
+        }
+      });
+      if (!existingInventory) {
+        await prisma.productInventory.create({
+          data: {
+            userId: ownerId,
+            productId: product.id,
+            quantity: product.stockQuantity || 0
+          }
+        });
+      }
+    } else {
+      // Create AFFILIATE claim, delete SELLER claim and inventory
+      await prisma.affiliateClaim.deleteMany({
+        where: { userId: ownerId, productId: product.id, userMode: 'SELLER' }
+      });
+      await prisma.productInventory.deleteMany({
+        where: { userId: ownerId, productId: product.id }
+      });
+
+      const existingClaim = await prisma.affiliateClaim.findUnique({
+        where: {
+          userId_productId_userMode: {
+            userId: ownerId,
+            productId: product.id,
+            userMode: 'AFFILIATE'
+          }
+        }
+      });
+      if (!existingClaim) {
+        await prisma.affiliateClaim.create({
+          data: {
+            userId: ownerId,
+            productId: product.id,
+            status: 'APPROVED',
+            userMode: 'AFFILIATE'
+          }
+        });
+      }
+    }
+  }
+}
+
 router.get(
   '/',
   optionalAuth,
@@ -102,6 +244,9 @@ router.get(
             where: { isPrimary: true },
             take: 1,
           },
+          claims: {
+            select: { userId: true, userMode: true }
+          }
         },
         skip: (Number(page) - 1) * Number(limit),
         take: Number(limit),
@@ -127,8 +272,9 @@ router.get(
           minProductionDays: p.minProductionDays,
           visibility: p.visibility,
           status: p.status,
-          ownerId: p.ownerId,
+           ownerId: p.ownerId,
           ownerName: (p as any).owner?.profile?.fullName || 'SILACOD',
+          ownerMode: (p as any).claims?.find((c: any) => c.userId === p.ownerId && c.userMode === 'SELLER') ? 'SELLER' : 'AFFILIATE',
           categories: (p as any).categories, // Bypass strict types if necessary since include was used
           primaryImage: (p as any).images?.[0]?.imageUrl,
           createdAt: p.createdAt,
@@ -160,6 +306,9 @@ router.get(
         include: {
           categories: true,
           images: { orderBy: { sortOrder: 'asc' } },
+          claims: {
+            select: { userId: true, userMode: true }
+          }
         },
       }),
       req.user ? prisma.productInventory.findFirst({
@@ -221,7 +370,8 @@ router.get(
       data: {
         product: {
           ...product,
-          category: product?.categories?.[0] || null
+          category: product?.categories?.[0] || null,
+          ownerMode: (product as any).claims?.find((c: any) => c.userId === product.ownerId && c.userMode === 'SELLER') ? 'SELLER' : 'AFFILIATE'
         },
         userStatus: {
           isBought: !!inventory,
@@ -259,7 +409,7 @@ router.post(
       throw new AppException(400, 'Validation failed', errors.array());
     }
 
-    const { sku, nameAr, nameFr, nameEn, description, longDescription, categoryIds, baseCostMad, retailPriceMad, affiliatePriceMad, influencerPriceMad, isCustomizable, minProductionDays, stockQuantity, imageUrl, imageUrls, isActive, showInHomepage, visibility, status, videoUrls, landingPageUrls, commissionMad, canvaLink } = req.body;
+    const { sku, nameAr, nameFr, nameEn, description, longDescription, categoryIds, baseCostMad, retailPriceMad, affiliatePriceMad, influencerPriceMad, isCustomizable, minProductionDays, stockQuantity, imageUrl, imageUrls, isActive, showInHomepage, visibility, status, videoUrls, landingPageUrls, commissionMad, canvaLink, ownerMode } = req.body;
 
     const existingProduct = await prisma.product.findUnique({
       where: { sku },
@@ -322,6 +472,10 @@ router.post(
       include: { categories: true, images: { orderBy: { sortOrder: 'asc' } } },
     });
 
+    if (finalOwnerId) {
+      await grantProductToOwner(product.id, finalOwnerId, ownerMode || 'AFFILIATE');
+    }
+
     res.status(201).json({
       status: 'success',
       message: 'Product created successfully',
@@ -368,6 +522,7 @@ router.patch(
       categoryIds, 
       categoryId, // extracting to prevent it from going into rest
       ownerId, 
+      ownerMode,
       videoUrlsInput, 
       landingPageUrlsInput, 
       videoUrls, 
@@ -447,6 +602,11 @@ router.patch(
       data: updateData,
       include: { categories: true, images: { orderBy: { sortOrder: 'asc' } } },
     });
+
+    const targetOwnerId = ownerId || product.ownerId;
+    if (targetOwnerId) {
+      await grantProductToOwner(product.id, Number(targetOwnerId), ownerMode || 'AFFILIATE');
+    }
 
     res.json({
       status: 'success',

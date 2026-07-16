@@ -11,8 +11,6 @@ import {
   CreditCard, 
   Users, 
   X,
-  ChevronRight,
-  Filter,
   Check
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -20,13 +18,15 @@ import { useNavigate } from 'react-router-dom';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { translateNotification } from '../../utils/notificationTranslator';
+import { useAuth } from '../../contexts/AuthContext';
 
-export default function InfluencerNotifications() {
+export default function Notifications() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const { socket } = useSocket();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const { t, language } = useLanguage();
 
@@ -37,6 +37,135 @@ export default function InfluencerNotifications() {
     message: '',
     onConfirm: () => {}
   });
+
+  const getRoleTheme = () => {
+    const path = window.location.pathname;
+    if (path.startsWith('/admin')) {
+      return {
+        primary: 'bg-rose-600 hover:bg-rose-700 shadow-rose-100',
+        text: 'text-rose-600',
+        border: 'border-rose-100 focus:border-rose-200 focus:ring-rose-200',
+        hoverBg: 'hover:bg-rose-50',
+        hoverBorder: 'hover:border-rose-200',
+        accentBg: 'bg-rose-50',
+        spinBorder: 'border-rose-200 border-t-rose-600',
+        gradient: 'from-rose-500 to-red-500',
+        activeTab: 'bg-rose-600 text-white shadow-md shadow-rose-100/50',
+        indicator: 'bg-rose-500/5'
+      };
+    }
+    if (path.startsWith('/agent')) {
+      return {
+        primary: 'bg-blue-600 hover:bg-blue-700 shadow-blue-100',
+        text: 'text-blue-600',
+        border: 'border-blue-100 focus:border-blue-200 focus:ring-blue-200',
+        hoverBg: 'hover:bg-blue-50',
+        hoverBorder: 'hover:border-blue-200',
+        accentBg: 'bg-blue-50',
+        spinBorder: 'border-blue-200 border-t-blue-600',
+        gradient: 'from-blue-500 to-indigo-500',
+        activeTab: 'bg-blue-600 text-white shadow-md shadow-blue-100/50',
+        indicator: 'bg-blue-500/5'
+      };
+    }
+    if (path.startsWith('/grosseller')) {
+      return {
+        primary: 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100',
+        text: 'text-emerald-600',
+        border: 'border-emerald-100 focus:border-emerald-200 focus:ring-emerald-200',
+        hoverBg: 'hover:bg-emerald-50',
+        hoverBorder: 'hover:border-emerald-200',
+        accentBg: 'bg-emerald-50',
+        spinBorder: 'border-emerald-200 border-t-emerald-600',
+        gradient: 'from-emerald-500 to-teal-500',
+        activeTab: 'bg-emerald-600 text-white shadow-md shadow-emerald-100/50',
+        indicator: 'bg-emerald-500/5'
+      };
+    }
+    if (path.startsWith('/influencer')) {
+      return {
+        primary: 'bg-influencer-600 hover:bg-influencer-700 shadow-influencer-100',
+        text: 'text-influencer-600',
+        border: 'border-influencer-100 focus:border-influencer-200 focus:ring-influencer-200',
+        hoverBg: 'hover:bg-influencer-50',
+        hoverBorder: 'hover:border-influencer-200',
+        accentBg: 'bg-influencer-50',
+        spinBorder: 'border-influencer-200 border-t-influencer-600',
+        gradient: 'from-influencer-500 to-purple-500',
+        activeTab: 'bg-influencer-600 text-white shadow-md shadow-influencer-100/50',
+        indicator: 'bg-influencer-50/5'
+      };
+    }
+    if (path.startsWith('/confirmation')) {
+      return {
+        primary: 'bg-teal-600 hover:bg-teal-700 shadow-teal-100',
+        text: 'text-teal-600',
+        border: 'border-teal-100 focus:border-teal-200 focus:ring-teal-200',
+        hoverBg: 'hover:bg-teal-50',
+        hoverBorder: 'hover:border-teal-200',
+        accentBg: 'bg-teal-50',
+        spinBorder: 'border-teal-200 border-t-teal-600',
+        gradient: 'from-teal-500 to-cyan-500',
+        activeTab: 'bg-teal-600 text-white shadow-md shadow-teal-100/50',
+        indicator: 'bg-teal-50/5'
+      };
+    }
+    if (path.startsWith('/helper')) {
+      return {
+        primary: 'bg-orange-600 hover:bg-orange-700 shadow-orange-100',
+        text: 'text-orange-600',
+        border: 'border-orange-100 focus:border-orange-200 focus:ring-orange-200',
+        hoverBg: 'hover:bg-orange-50',
+        hoverBorder: 'hover:border-orange-200',
+        accentBg: 'bg-orange-50',
+        spinBorder: 'border-orange-200 border-t-orange-600',
+        gradient: 'from-orange-500 to-amber-500',
+        activeTab: 'bg-orange-600 text-white shadow-md shadow-orange-100/50',
+        indicator: 'bg-orange-50/5'
+      };
+    }
+    // Default (Vendor / Dashboard layout)
+    return {
+      primary: 'bg-primary-600 hover:bg-primary-700 shadow-primary-100',
+      text: 'text-primary-600',
+      border: 'border-primary-100 focus:border-primary-200 focus:ring-primary-200',
+      hoverBg: 'hover:bg-primary-50',
+      hoverBorder: 'hover:border-primary-200',
+      accentBg: 'bg-primary-50',
+      spinBorder: 'border-primary-200 border-t-primary-600',
+      gradient: 'from-primary-500 to-indigo-500',
+      activeTab: 'bg-primary-600 text-white shadow-md shadow-primary-100/50',
+      indicator: 'bg-primary-50/5'
+    };
+  };
+
+  const theme = getRoleTheme();
+
+  const getNotificationRedirect = (type: string) => {
+    const path = window.location.pathname;
+    let prefix = '/dashboard';
+    if (path.startsWith('/admin')) prefix = '/admin';
+    else if (path.startsWith('/agent')) prefix = '/agent';
+    else if (path.startsWith('/grosseller')) prefix = '/grosseller';
+    else if (path.startsWith('/influencer')) prefix = '/influencer';
+    else if (path.startsWith('/confirmation')) prefix = '/confirmation';
+    else if (path.startsWith('/helper')) prefix = '/helper';
+
+    switch (type) {
+      case 'PRODUCT_CLAIM_STATUS':
+        return `${prefix}/inventory`;
+      case 'REFERRAL_LINK_STATUS':
+      case 'REFERRAL_LINK_CLICKS':
+        return `${prefix}/links`;
+      case 'PAYOUT_REQUEST_STATUS':
+        return `${prefix}/wallet`;
+      case 'NEW_LEAD':
+      case 'LEAD_STATUS_CHANGED':
+        return `${prefix}/leads`;
+      default:
+        return prefix;
+    }
+  };
 
   const fetchNotifications = async () => {
     try {
@@ -69,23 +198,6 @@ export default function InfluencerNotifications() {
       socket.off('new-notification', handleNewNotification);
     };
   }, [socket]);
-
-  const getNotificationRedirect = (type: string) => {
-    switch (type) {
-      case 'PRODUCT_CLAIM_STATUS':
-        return '/influencer/inventory';
-      case 'REFERRAL_LINK_STATUS':
-      case 'REFERRAL_LINK_CLICKS':
-        return '/influencer/links';
-      case 'PAYOUT_REQUEST_STATUS':
-        return '/influencer/wallet';
-      case 'NEW_LEAD':
-      case 'LEAD_STATUS_CHANGED':
-        return '/influencer/leads';
-      default:
-        return '/influencer';
-    }
-  };
 
   const handleNotificationClick = async (notif: any) => {
     try {
@@ -193,7 +305,7 @@ export default function InfluencerNotifications() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-4 border-influencer-200 border-t-influencer-600 rounded-full animate-spin" />
+        <div className={`w-8 h-8 border-4 rounded-full animate-spin ${theme.spinBorder}`} />
       </div>
     );
   }
@@ -202,10 +314,10 @@ export default function InfluencerNotifications() {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white/80 backdrop-blur-md p-6 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-influencer-100/30 rounded-full blur-2xl pointer-events-none" />
+        <div className={`absolute top-0 right-0 w-32 h-32 ${theme.accentBg}/20 rounded-full blur-2xl pointer-events-none`} />
         <div>
           <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
-            <div className="p-2 bg-influencer-50 rounded-xl text-influencer-600">
+            <div className={`p-2 ${theme.accentBg} rounded-xl ${theme.text}`}>
               <Bell size={20} className="animate-pulse" />
             </div>
             {t('title', 'notifications', 'Historique des Notifications')}
@@ -251,7 +363,7 @@ export default function InfluencerNotifications() {
               onClick={() => setActiveFilter(tab.id)}
               className={`px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all duration-300 active:scale-95 ${
                 activeFilter === tab.id
-                  ? 'bg-influencer-600 text-white shadow-md shadow-influencer-100/50'
+                  ? theme.activeTab
                   : 'bg-white text-slate-500 hover:text-slate-800 border border-slate-100 hover:bg-slate-50'
               }`}
             >
@@ -267,7 +379,7 @@ export default function InfluencerNotifications() {
             placeholder={t('search_placeholder', 'notifications', 'Rechercher une notification...')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-100 hover:border-slate-200 focus:border-influencer-200 focus:ring-1 focus:ring-influencer-200 rounded-xl text-xs font-bold text-slate-700 outline-none transition-all shadow-sm"
+            className={`w-full pl-10 pr-4 py-2.5 bg-white border border-slate-100 hover:border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none transition-all shadow-sm focus:ring-1 ${theme.border}`}
           />
           <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           {searchQuery && (
@@ -308,12 +420,12 @@ export default function InfluencerNotifications() {
                 key={notif.id}
                 onClick={() => handleNotificationClick(notif)}
                 className={`flex items-start gap-4 p-5 hover:bg-slate-50/70 cursor-pointer transition-all duration-300 relative group ${
-                  !notif.isRead ? 'bg-influencer-50/10' : ''
+                  !notif.isRead ? theme.indicator : ''
                 }`}
               >
                 {/* Active Indicator Accent Line */}
                 {!notif.isRead && (
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-influencer-500 to-indigo-500" />
+                  <div className={`absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b ${theme.gradient}`} />
                 )}
 
                 {/* Styled Icon */}

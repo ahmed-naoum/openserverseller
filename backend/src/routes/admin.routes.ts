@@ -814,9 +814,9 @@ router.get(
     const currentUserRole = (req.user as any)?.roleName;
 
     if (currentUserRole === 'CONFIRMATION_AGENT') {
-      andConditions.push({ role: { name: { in: ['VENDOR', 'INFLUENCER', 'GROSSELLER'] } } });
+      andConditions.push({ role: { name: { in: ['VENDOR', 'INFLUENCER'] } } });
     } else {
-      andConditions.push({ role: { name: { notIn: ['SUPER_ADMIN', 'FINANCE_ADMIN'] } } });
+      andConditions.push({ role: { name: { notIn: ['SUPER_ADMIN'] } } });
     }
 
     if (role !== 'ALL') {

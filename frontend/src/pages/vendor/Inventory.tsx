@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { influencerApi } from '../../lib/api';
 import { 
   Package, 
@@ -17,7 +18,8 @@ import {
   Target,
   DollarSign,
   Copy,
-  QrCode
+  QrCode,
+  Wand2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
@@ -31,6 +33,7 @@ type ClaimStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'BUILDING';
 export default function VendorInventory() {
   const { t } = useLanguage();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [claims, setClaims] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ClaimStatus | 'ALL'>('ALL');
@@ -653,6 +656,13 @@ export default function VendorInventory() {
                               title={t('btn_copy', 'links', 'Copier le lien')}
                             >
                               <Copy size={14} />
+                            </button>
+                            <button
+                              onClick={() => navigate(`/dashboard/links/${link.id}/builder`)}
+                              className="p-2.5 bg-white text-slate-400 hover:text-purple-600 border border-slate-100 rounded-xl transition-all shadow-sm"
+                              title={t('tooltip_builder', 'links') || "Constructeur de Page"}
+                            >
+                              <Wand2 size={14} />
                             </button>
                             <button
                               onClick={() => {

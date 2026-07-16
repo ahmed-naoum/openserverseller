@@ -17,6 +17,15 @@ export default function SiteBuilder() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  // Block influencer if they do not have builder permission enabled
+  useEffect(() => {
+    const role = user?.roleName || user?.role;
+    if (role === 'INFLUENCER' && !user?.canManageInfluencerLinks) {
+      toast.error("Vous n'avez pas l'autorisation d'accéder au constructeur de page.");
+      navigate('/influencer/links');
+    }
+  }, [user, navigate]);
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -853,7 +862,22 @@ export default function SiteBuilder() {
                  {activeBlock.type === 'button' && (
                   <div className="space-y-4">
                     <Field label="Texte du bouton" type="text" value={activeBlock.content.text} onChange={(v: any) => updateBlockContent('text', v)} />
-                    <Field label="Couleur de fond" type="color" value={activeBlock.content.bgColor} onChange={(v: any) => updateBlockContent('bgColor', v)} />
+                    <div className="grid grid-cols-2 gap-4">
+                      <Field label="Couleur de fond" type="color" value={activeBlock.content.bgColor} onChange={(v: any) => updateBlockContent('bgColor', v)} />
+                      <Field label="Couleur du texte" type="color" value={activeBlock.content.textColor || '#ffffff'} onChange={(v: any) => updateBlockContent('textColor', v)} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <Field label="Taille du texte (px)" type="number" value={activeBlock.content.textSize} onChange={(v: number) => updateBlockContent('textSize', v)} placeholder="Ex: 20" />
+                      <Field label="Rayon Bordure (px)" type="number" value={activeBlock.content.buttonBorderRadius ?? 16} onChange={(v: number) => updateBlockContent('buttonBorderRadius', v)} placeholder="Ex: 16" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <Field label="Padding Vert. (px)" type="number" value={activeBlock.content.buttonPaddingY} onChange={(v: number) => updateBlockContent('buttonPaddingY', v)} placeholder="Ex: 16" />
+                      <Field label="Padding Horiz. (px)" type="number" value={activeBlock.content.buttonPaddingX} onChange={(v: number) => updateBlockContent('buttonPaddingX', v)} placeholder="Ex: 40" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <Field label="Épaisseur Bordure" type="number" value={activeBlock.content.buttonBorderWidth ?? 0} onChange={(v: number) => updateBlockContent('buttonBorderWidth', v)} placeholder="Ex: 0" />
+                      <Field label="Couleur de bordure" type="color" value={activeBlock.content.buttonBorderColor || '#ffffff'} onChange={(v: string) => updateBlockContent('buttonBorderColor', v)} />
+                    </div>
                     
                     <div className="pt-2 border-t border-gray-100">
                       <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Comportement</label>
@@ -1794,7 +1818,18 @@ export default function SiteBuilder() {
                       <Field label="Titre du formulaire" type="text" value={activeBlock.content.title} onChange={(v: string) => updateBlockContent('title', v)} />
                       <Field label="Description" type="textarea" value={activeBlock.content.subtitle} onChange={(v: string) => updateBlockContent('subtitle', v)} />
                       <Field label="Texte du bouton" type="text" value={activeBlock.content.buttonText} onChange={(v: string) => updateBlockContent('buttonText', v)} />
-                      <Field label="Couleur du bouton" type="color" value={activeBlock.content.themeColor} onChange={(v: string) => updateBlockContent('themeColor', v)} />
+                      <div className="grid grid-cols-2 gap-4">
+                        <Field label="Couleur du bouton" type="color" value={activeBlock.content.themeColor} onChange={(v: string) => updateBlockContent('themeColor', v)} />
+                        <Field label="Couleur du texte" type="color" value={activeBlock.content.buttonTextColor || '#ffffff'} onChange={(v: string) => updateBlockContent('buttonTextColor', v)} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <Field label="Taille (px)" type="number" value={activeBlock.content.buttonSize} onChange={(v: number) => updateBlockContent('buttonSize', v)} placeholder="Ex: 18" />
+                        <Field label="Rayon Bordure (px)" type="number" value={activeBlock.content.buttonBorderRadius ?? 12} onChange={(v: number) => updateBlockContent('buttonBorderRadius', v)} placeholder="Ex: 12" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <Field label="Épaisseur Bordure" type="number" value={activeBlock.content.buttonBorderWidth ?? 0} onChange={(v: number) => updateBlockContent('buttonBorderWidth', v)} placeholder="Ex: 0" />
+                        <Field label="Couleur de bordure" type="color" value={activeBlock.content.buttonBorderColor || '#ffffff'} onChange={(v: string) => updateBlockContent('buttonBorderColor', v)} />
+                      </div>
                       
                       <div className="pt-2 border-t border-gray-200">
                         <div className="flex items-center justify-between mb-4 mt-2">
@@ -2475,8 +2510,14 @@ const CheckoutPreview = ({ content, product }: any) => {
         ))}
 
         <div 
-          className="w-full text-white font-black text-lg p-4 rounded-xl shadow-lg flex items-center justify-center gap-2 mt-6 cursor-default"
-          style={{ backgroundColor: content.themeColor || '#f97316' }}
+          className="w-full font-black p-4 shadow-lg flex items-center justify-center gap-2 mt-6 cursor-default"
+          style={{ 
+            backgroundColor: content.themeColor || '#f97316',
+            color: content.buttonTextColor || '#ffffff',
+            fontSize: content.buttonSize ? `${content.buttonSize}px` : '18px',
+            border: content.buttonBorderWidth !== undefined && content.buttonBorderWidth !== '' ? `${content.buttonBorderWidth}px solid ${content.buttonBorderColor || '#f97316'}` : 'none',
+            borderRadius: content.buttonBorderRadius !== undefined && content.buttonBorderRadius !== '' ? `${content.buttonBorderRadius}px` : '12px',
+          }}
         >
           {content.buttonText || 'Confirmer ma commande'}
         </div>

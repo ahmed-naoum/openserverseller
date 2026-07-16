@@ -77,7 +77,7 @@ import InfluencerCampaigns from './pages/influencer/Campaigns';
 import InfluencerLeads from './pages/influencer/Leads';
 const InfluencerMarketplace = lazy(() => import('./pages/influencer/Marketplace'));
 import InfluencerInventory from './pages/influencer/Inventory';
-import InfluencerNotifications from './pages/influencer/Notifications';
+import Notifications from './pages/common/Notifications';
 import ConfirmationDashboard from './pages/confirmation/Dashboard';
 import HelperDashboard from './pages/helper/Dashboard';
 import HelperLeads from './pages/helper/Leads';
@@ -267,6 +267,7 @@ function App() {
           <Route path="pixels/snapchat" element={<UserPixels platform="SNAPCHAT" />} />
           <Route path="links" element={<InfluencerLinks />} />
           <Route path="verification" element={<ProfileVerification />} />
+          <Route path="notifications" element={<Notifications />} />
         </Route>
 
         {/* Influencer Dashboard */}
@@ -282,7 +283,7 @@ function App() {
           <Route path="campaigns" element={<InfluencerCampaigns />} />
           <Route path="leads" element={<InfluencerLeads />} />
           <Route path="inventory" element={<InfluencerInventory />} />
-          <Route path="notifications" element={<InfluencerNotifications />} />
+          <Route path="notifications" element={<Notifications />} />
           <Route path="marketplace" element={
             <Suspense fallback={<PageLoader />}>
               <InfluencerMarketplace />
@@ -307,6 +308,7 @@ function App() {
           <Route index element={<AdminVerifications />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="verification" element={<ProfileVerification />} />
+          <Route path="notifications" element={<Notifications />} />
         </Route>
 
         {/* Vendor Dashboard (Seller-Affiliate with mode switching) */}
@@ -343,6 +345,7 @@ function App() {
           <Route path="invoices" element={<UserInvoices />} />
           <Route path="support" element={<SupportTickets />} />
           <Route path="verification" element={<ProfileVerification />} />
+          <Route path="notifications" element={<Notifications />} />
         </Route>
 
         {/* Agent Dashboard */}
@@ -365,10 +368,23 @@ function App() {
           <Route path="support" element={<SupportTickets />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="verification" element={<ProfileVerification />} />
+          <Route path="notifications" element={<Notifications />} />
         </Route>
 
         <Route path="/helper/links/:id/builder" element={
           <RoleGuard allowedRoles={['SUPER_ADMIN', 'HELPER', 'VENDOR', 'INFLUENCER']}>
+            <SiteBuilder />
+          </RoleGuard>
+        } />
+
+        <Route path="/dashboard/links/:id/builder" element={
+          <RoleGuard allowedRoles={['VENDOR']}>
+            <SiteBuilder />
+          </RoleGuard>
+        } />
+
+        <Route path="/influencer/links/:id/builder" element={
+          <RoleGuard allowedRoles={['INFLUENCER']}>
             <SiteBuilder />
           </RoleGuard>
         } />
@@ -394,6 +410,7 @@ function App() {
           <Route path="products" element={<AdminProducts />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="verification" element={<ProfileVerification />} />
+          <Route path="notifications" element={<Notifications />} />
         </Route>
 
         {/* Admin Dashboard */}
@@ -437,6 +454,7 @@ function App() {
           <Route path="settings" element={<SettingsPage />} />
 
           <Route path="verification" element={<ProfileVerification />} />
+          <Route path="notifications" element={<Notifications />} />
         </Route>
 
           {/* Catch-all 404 Route */}

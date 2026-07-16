@@ -455,8 +455,14 @@ export default function ReferralForm() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full text-white font-black text-lg p-4 rounded-xl shadow-lg transition-all disabled:opacity-50 mt-6"
-                style={{ backgroundColor: blockContent.themeColor || landingPage?.themeColor || '#f97316' }}
+                className="w-full font-black p-4 shadow-lg transition-all disabled:opacity-50 mt-6"
+                style={{ 
+                  backgroundColor: blockContent.themeColor || landingPage?.themeColor || '#f97316',
+                  color: blockContent.buttonTextColor || '#ffffff',
+                  fontSize: blockContent.buttonSize ? `${blockContent.buttonSize}px` : '18px',
+                  border: blockContent.buttonBorderWidth !== undefined && blockContent.buttonBorderWidth !== '' ? `${blockContent.buttonBorderWidth}px solid ${blockContent.buttonBorderColor || blockContent.themeColor || landingPage?.themeColor || '#f97316'}` : 'none',
+                  borderRadius: blockContent.buttonBorderRadius !== undefined && blockContent.buttonBorderRadius !== '' ? `${blockContent.buttonBorderRadius}px` : '12px',
+                }}
               >
                 {isSubmitting ? (
                   <span className="flex items-center justify-center gap-2">

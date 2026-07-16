@@ -231,12 +231,20 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
               >
                 <motion.button 
                   {...animationProps}
-                  className={`inline-flex items-center justify-center px-10 py-4 text-white font-black text-xl rounded-2xl shadow-xl transition-all cursor-pointer ${
+                  className={`inline-flex items-center justify-center font-black shadow-xl transition-all cursor-pointer ${
                     !isEditor && isStickyMobile ? 'w-full md:w-auto' : 'w-auto'
                   }`}
                   style={{ 
                     backgroundColor: content.bgColor || '#f97316',
+                    color: content.textColor || '#ffffff',
                     boxShadow: `0 10px 30px ${content.bgColor || '#f97316'}44`,
+                    fontSize: content.textSize ? `${content.textSize}px` : '20px',
+                    paddingTop: content.buttonPaddingY !== undefined && content.buttonPaddingY !== '' ? `${content.buttonPaddingY}px` : '16px',
+                    paddingBottom: content.buttonPaddingY !== undefined && content.buttonPaddingY !== '' ? `${content.buttonPaddingY}px` : '16px',
+                    paddingLeft: content.buttonPaddingX !== undefined && content.buttonPaddingX !== '' ? `${content.buttonPaddingX}px` : '40px',
+                    paddingRight: content.buttonPaddingX !== undefined && content.buttonPaddingX !== '' ? `${content.buttonPaddingX}px` : '40px',
+                    border: content.buttonBorderWidth !== undefined && content.buttonBorderWidth !== '' ? `${content.buttonBorderWidth}px solid ${content.buttonBorderColor || '#f97316'}` : 'none',
+                    borderRadius: content.buttonBorderRadius !== undefined && content.buttonBorderRadius !== '' ? `${content.buttonBorderRadius}px` : '16px',
                   }}
                   onClick={handleClick}
                 >

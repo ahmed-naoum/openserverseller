@@ -21,7 +21,8 @@ import {
   AlertCircle,
   ChevronUp,
   ChevronDown,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Search
 } from 'lucide-react';
 
 interface UploadedImage {
@@ -77,11 +78,25 @@ export default function AddProductModal({ isOpen, onClose, onSuccess, isAdmin = 
       canvaLink: editProduct?.canvaLink || '',
       longDescription: editProduct?.longDescription || '',
       showInHomepage: editProduct?.showInHomepage || false,
+      ownerMode: editProduct?.ownerMode || 'AFFILIATE',
     };
   }, [editProduct]);
 
   const [formData, setFormData] = useState(getInitialFormData());
   const [images, setImages] = useState<UploadedImage[]>([]);
+  const [ownerSearch, setOwnerSearch] = useState('');
+  const [isOwnerDropdownOpen, setIsOwnerDropdownOpen] = useState(false);
+  const ownerDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (ownerDropdownRef.current && !ownerDropdownRef.current.contains(event.target as Node)) {
+        setIsOwnerDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -629,23 +644,126 @@ export default function AddProductModal({ isOpen, onClose, onSuccess, isAdmin = 
                   >
                     <SectionHeader icon={ShieldCheck} title="Paramètres Administrateur" isAdminOnly currentStep={3} maxSteps={totalSteps} />
                     <div className="grid grid-cols-2 gap-5">
-                      <div className="space-y-1.5">
+                      <div className="space-y-1.5 relative" ref={ownerDropdownRef}>
                         <label className="label text-primary-700">Propriétaire du produit</label>
                         <div className="relative">
                           <User size={16} className="absolute left-3 top-3 text-primary-400" />
-                          <select
-                            className="input pl-10 border-primary-200 focus:ring-primary-500/20 focus:border-primary-500"
-                            autoFocus
-                            value={formData.ownerId}
-                            onChange={(e) => setFormData({ ...formData, ownerId: e.target.value })}
+                          <button
+                            type="button"
+                            onClick={() => setIsOwnerDropdownOpen(!isOwnerDropdownOpen)}
+                            className="w-full input pl-10 pr-10 border-primary-200 focus:ring-primary-500/20 focus:border-primary-500 text-left flex items-center justify-between bg-white"
                           >
-                            <option value="">L'administrateur (SILACOD)</option>
-                            {vendors.map((vendor: any) => (
-                              <option key={vendor.id} value={vendor.id}>
-                                {vendor.fullName} {vendor.role ? `(${vendor.role === 'VENDOR' ? 'Vendeur' : vendor.role === 'INFLUENCER' ? 'Influenceur' : vendor.role})` : ''}
-                              </option>
-                            ))}
-                          </select>
+                            <span className="truncate">
+                              {formData.ownerId
+                                ? (() => {
+                                    const selected = vendors.find(v => v.id.toString() === formData.ownerId);
+                                    return selected 
+                                      ? `${selected.fullName} — ${selected.email} (${selected.role === 'VENDOR' ? 'Vendeur' : selected.role === 'INFLUENCER' ? 'Influenceur' : selected.role})` 
+                                      : "L'administrateur (SILACOD)";
+                                  })()
+                                : "L'administrateur (SILACOD)"}
+                            </span>
+                            {isOwnerDropdownOpen ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+                          </button>
+                        </div>
+
+                        {isOwnerDropdownOpen && (
+                          <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden animate-in fade-in duration-100 max-h-60 flex flex-col">
+                            <div className="p-2 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
+                              <Search size={14} className="text-slate-400 flex-shrink-0" />
+                              <input
+                                type="text"
+                                placeholder="Rechercher par nom ou email..."
+                                value={ownerSearch}
+                                onChange={(e) => setOwnerSearch(e.target.value)}
+                                className="w-full bg-transparent text-xs font-bold text-slate-700 outline-none placeholder:text-slate-400"
+                                autoFocus
+                              />
+                            </div>
+                            <div className="overflow-y-auto flex-1 divide-y divide-slate-50">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFormData({ ...formData, ownerId: '', ownerMode: 'AFFILIATE' });
+                                  setIsOwnerDropdownOpen(false);
+                                  setOwnerSearch('');
+                                }}
+                                className={`w-full text-left px-4 py-2.5 text-xs font-bold transition-all hover:bg-slate-50 flex flex-col ${
+                                  !formData.ownerId ? 'bg-primary-50/50 text-primary-700' : 'text-slate-600'
+                                }`}
+                              >
+                                <span>L'administrateur (SILACOD)</span>
+                              </button>
+                              {vendors
+                                .filter((vendor: any) => {
+                                  const searchLower = ownerSearch.toLowerCase();
+                                  return (
+                                    (vendor.fullName || '').toLowerCase().includes(searchLower) ||
+                                    (vendor.email || '').toLowerCase().includes(searchLower)
+                                  );
+                                })
+                                .map((vendor: any) => (
+                                  <button
+                                    key={vendor.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setFormData({ 
+                                        ...formData, 
+                                        ownerId: vendor.id.toString(),
+                                        ownerMode: vendor.role === 'INFLUENCER' ? 'AFFILIATE' : formData.ownerMode 
+                                      });
+                                      setIsOwnerDropdownOpen(false);
+                                      setOwnerSearch('');
+                                    }}
+                                    className={`w-full text-left px-4 py-2.5 text-xs transition-all hover:bg-slate-50 flex flex-col gap-0.5 ${
+                                      formData.ownerId === vendor.id.toString() ? 'bg-primary-50/50 text-primary-700' : 'text-slate-600'
+                                    }`}
+                                  >
+                                    <span className="font-bold">{vendor.fullName}</span>
+                                    <span className="text-[10px] text-slate-400 font-medium font-mono">{vendor.email}</span>
+                                    <span className="text-[9px] uppercase tracking-wider font-extrabold text-primary-500/80">
+                                      {vendor.role === 'VENDOR' ? 'Vendeur' : vendor.role === 'INFLUENCER' ? 'Influenceur' : vendor.role}
+                                    </span>
+                                  </button>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="label text-primary-700">Type de Propriété (Pour Vendeur)</label>
+                        <div className="grid grid-cols-2 gap-2 bg-slate-50 p-1 rounded-2xl border border-slate-100 h-[42px] items-center">
+                          <button
+                            type="button"
+                            disabled={!formData.ownerId || (() => {
+                              const v = vendors.find((x: any) => x.id.toString() === formData.ownerId);
+                              return v?.role !== 'VENDOR';
+                            })()}
+                            onClick={() => setFormData({ ...formData, ownerMode: 'AFFILIATE' })}
+                            className={`h-full rounded-xl text-xs font-black tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                              formData.ownerMode === 'AFFILIATE'
+                                ? 'bg-white text-primary-700 shadow-sm border border-slate-100'
+                                : 'text-slate-400 hover:text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed'
+                            }`}
+                          >
+                            <span>Products (Affilié)</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!formData.ownerId || (() => {
+                              const v = vendors.find((x: any) => x.id.toString() === formData.ownerId);
+                              return v?.role !== 'VENDOR';
+                            })()}
+                            onClick={() => setFormData({ ...formData, ownerMode: 'SELLER' })}
+                            className={`h-full rounded-xl text-xs font-black tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                              formData.ownerMode === 'SELLER'
+                                ? 'bg-white text-primary-700 shadow-sm border border-slate-100'
+                                : 'text-slate-400 hover:text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed'
+                            }`}
+                          >
+                            <span>Products (Vendeur)</span>
+                          </button>
                         </div>
                       </div>
                     </div>

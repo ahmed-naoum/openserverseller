@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { influencerApi } from '../../lib/api';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { buildReferralUrl } from '../../utils/referral';
 import { containsBlockedWord } from '../../utils/blockedWords';
-import { RefreshCw, Copy, QrCode, Power, Plus, Package, AlertCircle } from 'lucide-react';
+import { RefreshCw, Copy, QrCode, Power, Plus, Package, AlertCircle, Wand2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export interface LinksManagerConfig {
@@ -29,6 +30,7 @@ export default function LinksManagerModal({
 }: LinksManagerModalProps) {
   const { t } = useLanguage();
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   // Mode state: 'manage' or 'create'
   const [currentMode, setCurrentMode] = useState<'manage' | 'create'>('manage');
@@ -333,6 +335,8 @@ export default function LinksManagerModal({
                   <div className="max-h-[350px] overflow-y-auto space-y-4 pr-1">
                     {modalLinks.map((link) => {
                       const ctr = link.clicks > 0 ? ((link.conversions / link.clicks) * 100).toFixed(1) : '0.0';
+                      const role = user?.roleName || user?.role;
+                      const showBuilder = role === 'SUPER_ADMIN' || role === 'HELPER' || role === 'VENDOR' || (role === 'INFLUENCER' && user?.canManageInfluencerLinks);
                       return (
                         <div key={link.id} className="bg-slate-50/50 border border-slate-100/70 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                           <div className="space-y-2 flex-1">
@@ -388,6 +392,23 @@ export default function LinksManagerModal({
                             >
                               <Copy size={14} />
                             </button>
+                            {showBuilder && (
+                              <button
+                                onClick={() => {
+                                  const role = user?.roleName || user?.role;
+                                  const targetPath = role === 'VENDOR' 
+                                    ? `/dashboard/links/${link.id}/builder` 
+                                    : role === 'INFLUENCER' 
+                                      ? `/influencer/links/${link.id}/builder` 
+                                      : `/helper/links/${link.id}/builder`;
+                                  navigate(targetPath);
+                                }}
+                                className="p-2.5 bg-white text-slate-400 hover:text-purple-600 border border-slate-100 rounded-xl transition-all shadow-sm"
+                                title={t('tooltip_builder', 'links') || "Constructeur de Page"}
+                              >
+                                <Wand2 size={14} />
+                              </button>
+                            )}
                             <button
                               onClick={() => {
                                 setSelectedLinkForQr(link);
