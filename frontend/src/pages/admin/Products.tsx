@@ -41,6 +41,8 @@ export default function AdminProducts() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
+  const [productToDelete, setProductToDelete] = useState<any>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const limit = 10;
@@ -94,6 +96,22 @@ export default function AdminProducts() {
       setEditingProduct(response.data.data.product);
     } catch (error) {
       setEditingProduct(product);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!productToDelete) return;
+    setIsDeleting(true);
+    try {
+      await productsApi.delete(productToDelete.id.toString());
+      toast.success('Produit supprimé avec succès');
+      setProductToDelete(null);
+      refetch();
+    } catch (error: any) {
+      const errMsg = error.response?.data?.message || 'Erreur lors de la suppression du produit';
+      toast.error(errMsg);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -371,6 +389,14 @@ export default function AdminProducts() {
                             <Pencil size={16} className="group-hover/btn2:rotate-12 transition-transform" />
                           </button>
 
+                          <button 
+                            onClick={() => setProductToDelete(product)}
+                            className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all group/btn3"
+                            title="Supprimer"
+                          >
+                            <Trash2 size={16} className="group-hover/btn3:scale-110 transition-transform" />
+                          </button>
+
              
                         </div>
                       </td>
@@ -413,6 +439,47 @@ export default function AdminProducts() {
           )}
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {productToDelete && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 sm:p-6">
+          <div 
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300"
+            onClick={() => setProductToDelete(null)}
+          />
+          <div className="relative w-full max-w-md bg-white rounded-[2rem] shadow-2xl p-6 animate-in zoom-in-95 duration-200 border border-slate-100">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center text-rose-500 mb-4 animate-bounce">
+                <Trash2 size={28} />
+              </div>
+              <h3 className="text-xl font-black text-slate-900 mb-2">Supprimer le produit</h3>
+              <p className="text-sm text-slate-500 mb-6">
+                Êtes-vous sûr de vouloir supprimer <span className="font-bold text-slate-800">{productToDelete.nameFr}</span> ? Cette action est irréversible.
+              </p>
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setProductToDelete(null)}
+                  disabled={isDeleting}
+                  className="flex-1 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black transition-colors"
+                >
+                  ANNULER
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  disabled={isDeleting}
+                  className="flex-1 py-3.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black transition-colors flex items-center justify-center gap-2"
+                >
+                  {isDeleting ? (
+                    <span className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    'CONFIRMER'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modals remain same logic but could be updated too if needed */}
       <AddProductModal 

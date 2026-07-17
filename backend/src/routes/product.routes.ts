@@ -670,15 +670,118 @@ router.delete(
   authenticate,
   checkProductPermission,
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const productId = Number(req.params.id);
 
-    await prisma.product.delete({
-      where: { id: Number(id) },
+    await prisma.$transaction(async (tx) => {
+      // 1. Find all referral links for this product
+      const referralLinks = await tx.referralLink.findMany({
+        where: { productId },
+        select: { id: true }
+      });
+      const referralLinkIds = referralLinks.map(rl => rl.id);
+
+      // 2. Find all order items for this product
+      const orderItems = await tx.orderItem.findMany({
+        where: { productId },
+        select: { orderId: true }
+      });
+      const orderIds = Array.from(new Set(orderItems.map(item => item.orderId)));
+
+      // 3. Find orders linked to those order items to get their lead IDs
+      const orders = await tx.order.findMany({
+        where: { id: { in: orderIds } },
+        select: { id: true, leadId: true }
+      });
+      const leadIdsFromOrders = orders.map(o => o.leadId).filter(Boolean) as number[];
+
+      // 4. Find leads linked to the referral links
+      const leadsFromReferrals = await tx.lead.findMany({
+        where: { referralLinkId: { in: referralLinkIds } },
+        select: { id: true }
+      });
+      const leadIdsFromReferrals = leadsFromReferrals.map(l => l.id);
+
+      // 5. Combine all unique lead IDs
+      const leadIds = Array.from(new Set([...leadIdsFromOrders, ...leadIdsFromReferrals]));
+
+      // 6. Find all order IDs connected to the leads (to clean up orders completely)
+      const additionalOrders = await tx.order.findMany({
+        where: { leadId: { in: leadIds } },
+        select: { id: true }
+      });
+      const allOrderIdsToDelete = Array.from(new Set([
+        ...orderIds,
+        ...additionalOrders.map(o => o.id)
+      ]));
+
+      // 7. Clean up Order-related dependent tables
+      if (allOrderIdsToDelete.length > 0) {
+        // a. Production jobs
+        await tx.productionJob.deleteMany({ where: { orderId: { in: allOrderIdsToDelete } } });
+        
+        // b. Shipments and tracking
+        const shipments = await tx.shipment.findMany({
+          where: { orderId: { in: allOrderIdsToDelete } },
+          select: { id: true }
+        });
+        const shipmentIds = shipments.map(s => s.id);
+        if (shipmentIds.length > 0) {
+          await tx.shipmentTrackingEvent.deleteMany({ where: { shipmentId: { in: shipmentIds } } });
+          await tx.shipmentDeliveryProof.deleteMany({ where: { shipmentId: { in: shipmentIds } } });
+        }
+        await tx.shipment.deleteMany({ where: { orderId: { in: allOrderIdsToDelete } } });
+
+        // c. Order returns
+        await tx.orderReturn.deleteMany({ where: { orderId: { in: allOrderIdsToDelete } } });
+
+        // d. Wallet transactions referencing these orders
+        await tx.walletTransaction.deleteMany({ where: { orderId: { in: allOrderIdsToDelete } } });
+
+        // e. Influencer commissions referencing these orders
+        await tx.influencerCommission.deleteMany({ where: { orderId: { in: allOrderIdsToDelete } } });
+
+        // f. Order status histories
+        await tx.orderStatusHistory.deleteMany({ where: { orderId: { in: allOrderIdsToDelete } } });
+
+        // g. Order items
+        await tx.orderItem.deleteMany({ where: { orderId: { in: allOrderIdsToDelete } } });
+
+        // h. Orders
+        await tx.order.deleteMany({ where: { id: { in: allOrderIdsToDelete } } });
+      }
+
+      // 8. Clean up Lead-related dependent tables
+      if (leadIds.length > 0) {
+        await tx.leadStatusHistory.deleteMany({ where: { leadId: { in: leadIds } } });
+        await tx.callLog.deleteMany({ where: { leadId: { in: leadIds } } });
+        await tx.leadAssignment.deleteMany({ where: { leadId: { in: leadIds } } });
+        await tx.lead.deleteMany({ where: { id: { in: leadIds } } });
+      }
+
+      // 9. Clean up ReferralLink dependent tables
+      if (referralLinkIds.length > 0) {
+        await tx.influencerCommission.deleteMany({ where: { referralLinkId: { in: referralLinkIds } } });
+        await tx.referralLink.deleteMany({ where: { id: { in: referralLinkIds } } });
+      }
+
+      // 10. Clean up product relationships
+      await tx.productImage.deleteMany({ where: { productId } });
+      await tx.wholesalePriceTier.deleteMany({ where: { productId } });
+      await tx.favorite.deleteMany({ where: { productId } });
+      await tx.supportRequest.updateMany({ where: { productId }, data: { productId: null } });
+      await tx.inventory.deleteMany({ where: { productId } });
+      await tx.productInventory.deleteMany({ where: { productId } });
+      await tx.affiliateClaim.deleteMany({ where: { productId } });
+
+      // 11. Finally delete the product
+      await tx.product.delete({
+        where: { id: productId },
+      });
     });
 
     res.json({
       status: 'success',
-      message: 'Product deleted successfully',
+      message: 'Product and all associated leads, orders, and assignments deleted successfully',
     });
   })
 );

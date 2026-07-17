@@ -7,7 +7,7 @@ import { ReferralLink, InfluencerCommission } from '../../types';
 import {
   DollarSign, TrendingUp, Zap, MousePointerClick, ArrowUpRight, Crown,
   Plus, ShoppingBag, Wallet, Activity, BarChart3, CheckCircle2, Truck, ExternalLink, Eye, RefreshCw,
-  MessageCircle
+  MessageCircle, Mail, Smartphone, Copy
 } from 'lucide-react';
 import { ProCard } from '../../components/common/ProCard';
 import { TierProgressBanner } from '../../components/influencer/TierProgressBanner';
@@ -39,6 +39,7 @@ export default function InfluencerDashboard() {
     whatsappClicks: 0
   });
   const [leadCountsByLink, setLeadCountsByLink] = useState<any[]>([]);
+  const [helpers, setHelpers] = useState<any[]>([]);
   const [dateRange, setDateRange] = useState<number | 'custom' | 'all'>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -87,6 +88,7 @@ export default function InfluencerDashboard() {
       setWalletTransactions(dashboardRes.data.walletTransactions || []);
       setStats(dashboardRes.data.stats || { conversions: 0, confirmed: 0, delivered: 0 });
       setLeadCountsByLink(dashboardRes.data.leadCountsByLink || []);
+      setHelpers(dashboardRes.data.helpers || []);
 
       const commissionsData = customersRes.data?.data?.commissions || customersRes.data?.commissions || [];
       setAllCommissions(commissionsData);
@@ -219,6 +221,101 @@ export default function InfluencerDashboard() {
 
       {/* Tier Progress Banner */}
       <TierProgressBanner totalEarned={wallet?.totalEarnedMad || 0} />
+
+      {/* Helpers / Account Managers Info */}
+      {helpers && helpers.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-xs font-black uppercase tracking-widest text-slate-400">
+            {helpers.length > 1 ? 'SILACOD MANAGERS' : 'SILACOD MANAGER'}
+          </h2>
+          <div className={`grid grid-cols-1 ${helpers.length > 1 ? 'lg:grid-cols-2' : ''} gap-4`}>
+            {helpers.map((h: any, idx: number) => (
+              <div key={idx} className="bg-slate-900 rounded-3xl p-[2px] text-white shadow-xl relative overflow-hidden group border border-slate-800">
+                {/* Inner glowing background or animated border */}
+                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-emerald-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-xl"></div>
+                
+                <div className="bg-slate-900 rounded-[22px] p-6 relative z-10 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-inner h-full">
+                  <div className="flex flex-col sm:flex-row items-center gap-5 w-full">
+                    {/* Avatar with ring and online dot */}
+                    <div className="relative shrink-0">
+                      <div className="w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center text-white font-black text-xl uppercase shadow-lg shadow-indigo-500/30 ring-2 ring-white/5 group-hover:ring-indigo-500/50 transition-all duration-300">
+                        {h.fullName?.charAt(0) || '?'}
+                      </div>
+                      <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-slate-900 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
+                    </div>
+                    
+                    <div className="text-center sm:text-left w-full">
+                      <div className="flex items-center gap-2 justify-center sm:justify-start">
+                        <h3 className="text-lg font-black tracking-tight text-white">{h.fullName}</h3>
+                        <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[9px] font-black uppercase tracking-widest border border-indigo-500/20">
+                          SILACOD MANAGER
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 font-medium mt-1">Dédié à votre réussite. Contactez-moi à tout moment.</p>
+                      
+                      {/* Contact info text with copy buttons */}
+                      <div className="flex flex-wrap items-center gap-3 mt-3 justify-center sm:justify-start">
+                        {h.email && (
+                          <div className="flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-lg border border-white/5 hover:border-white/20 transition-colors">
+                            <Mail className="w-3 h-3 text-slate-400" />
+                            <span className="text-[10.5px] text-slate-200 font-bold tracking-wide">{h.email}</span>
+                            <button 
+                              onClick={() => { navigator.clipboard.writeText(h.email); toast.success('Email copié !'); }}
+                              className="p-1 hover:bg-white/10 rounded-md transition-colors text-slate-400 hover:text-white"
+                              title="Copier l'email"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
+                        {h.phone && (
+                          <div className="flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-lg border border-white/5 hover:border-white/20 transition-colors">
+                            <Smartphone className="w-3 h-3 text-slate-400" />
+                            <span className="text-[10.5px] text-slate-200 font-bold tracking-wide">{h.phone}</span>
+                            <button 
+                              onClick={() => { navigator.clipboard.writeText(h.phone); toast.success('Numéro copié !'); }}
+                              className="p-1 hover:bg-white/10 rounded-md transition-colors text-slate-400 hover:text-white"
+                              title="Copier le numéro"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex gap-2 w-full sm:w-auto shrink-0 mt-4 sm:mt-0 flex-col sm:flex-row">
+                    {h.email && (
+                      <a
+                        href={`mailto:${h.email}`}
+                        className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all"
+                      >
+                        <Mail className="w-4 h-4 text-indigo-400" />
+                        <span>Email</span>
+                      </a>
+                    )}
+                    {h.phone && (
+                      <a
+                        href={h.phone.replace(/[^0-9]/g, '').startsWith('0') ? `https://wa.me/212${h.phone.replace(/[^0-9]/g, '').slice(1)}` : `https://wa.me/${h.phone.replace(/[^0-9]/g, '')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-3 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 hover:border-emerald-500/40 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all text-emerald-400 hover:text-emerald-300"
+                      >
+                        <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                          <path d="M12.012 2c-5.506 0-9.975 4.47-9.975 9.977 0 1.762.457 3.483 1.332 5.002L2 22l5.176-1.36c1.467.8 3.12 1.22 4.828 1.22 5.507 0 9.976-4.47 9.976-9.978C21.988 6.47 17.52 2 12.012 2zm5.727 13.917c-.244.692-1.2 1.258-1.656 1.31-.418.048-.962.072-1.564-.122-.38-.122-.862-.288-1.464-.537-2.585-1.07-4.25-3.69-4.378-3.864-.128-.172-.942-1.257-.942-2.398 0-1.14.59-1.702.825-1.93.243-.227.534-.287.712-.287.177 0 .355.002.51.01.164.008.384-.06.602.463.226.54.776 1.897.842 2.032.067.136.11.293.02.474-.09.18-.135.293-.27.452-.136.16-.285.358-.407.48-.136.136-.28.286-.12.56.16.273.714 1.18 1.53 1.91.815.73 1.5.95 1.716 1.062.215.112.34.093.466-.053.126-.146.544-.633.69-.85.145-.218.292-.18.497-.103.204.077 1.3.614 1.527.728.225.114.375.17.43.266.057.095.057.553-.187 1.245z"/>
+                        </svg>
+                        <span>WhatsApp</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Stats Quick Cards: Grid of 7 */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 xl:gap-6">

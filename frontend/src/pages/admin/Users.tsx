@@ -41,6 +41,7 @@ import {
   LogIn,
   Trash2,
   LayoutTemplate,
+  LayoutDashboard,
   Loader2
 } from 'lucide-react';
 
@@ -672,6 +673,7 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
     canManageInfluencerLinks: false,
     canManageTickets: false,
     canScanReturns: false,
+    canDisplayOnDashboard: true,
     city: '',
     address: '',
     cinNumber: '',
@@ -721,6 +723,7 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
         canManageInfluencerLinks: fullUser.canManageInfluencerLinks || false,
         canManageTickets: fullUser.canManageTickets || false,
         canScanReturns: fullUser.canScanReturns || false,
+        canDisplayOnDashboard: fullUser.canDisplayOnDashboard ?? true,
         city: fullUser.city || '',
         address: fullUser.address || '',
         cinNumber: fullUser.cinNumber || '',
@@ -1068,6 +1071,25 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
                               className={`w-10 h-5 rounded-full transition-all relative ${formData.canScanReturns ? 'bg-indigo-500' : 'bg-slate-200'}`}
                             >
                               <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canScanReturns ? 'left-[22px]' : 'left-0.5'}`} />
+                            </button>
+                          </div>
+
+                          <div className="flex items-center justify-between p-3 bg-rose-50/50 rounded-2xl border border-rose-100/50">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-2 bg-white rounded-xl text-rose-600 shadow-sm">
+                                <LayoutDashboard size={16} />
+                              </div>
+                              <div>
+                                <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Tableau de bord</h4>
+                                <p className="text-[8px] font-bold text-rose-400 uppercase tracking-tighter">Afficher sur le Tableau de bord</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setFormData({ ...formData, canDisplayOnDashboard: !formData.canDisplayOnDashboard })}
+                              className={`w-10 h-5 rounded-full transition-all relative ${formData.canDisplayOnDashboard ? 'bg-rose-500' : 'bg-slate-200'}`}
+                            >
+                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canDisplayOnDashboard ? 'left-[22px]' : 'left-0.5'}`} />
                             </button>
                           </div>
                         </div>

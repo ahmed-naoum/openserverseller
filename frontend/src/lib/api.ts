@@ -14,6 +14,7 @@ export interface User {
   canManageLeads?: boolean;
   canManageOrders?: boolean;
   canManageTickets?: boolean;
+  canDisplayOnDashboard?: boolean;
   avatarUrl?: string;
   customDomain?: string | null;
   customDomainStatus?: string | null;
@@ -686,4 +687,23 @@ export const domainApi = {
   refresh: () => api.post('/domain/refresh'),
   disconnect: () => api.delete('/domain/disconnect'),
 };
+
+export const customProductsApi = {
+  createRequest: (data: { name: string; category: string; productLink?: string | null; quantity: number; description: string; imageUrl?: string | null }) =>
+    api.post('/custom-products', data),
+  listRequests: (params?: { status?: string }) =>
+    api.get('/custom-products', { params }),
+  updateStatus: (id: number, status: 'APPROVED' | 'REJECTED' | 'PENDING') =>
+    api.patch(`/custom-products/${id}/status`, { status }),
+  uploadImage: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/upload/image', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+};
+
 

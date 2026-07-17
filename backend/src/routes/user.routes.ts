@@ -85,6 +85,7 @@ router.get(
           canManageInfluencerLinks: u.canManageInfluencerLinks,
           canManageTickets: u.canManageTickets,
           canScanReturns: u.canScanReturns,
+          canDisplayOnDashboard: u.canDisplayOnDashboard,
           cguAccepted: u.cguAccepted,
           cguAcceptedAt: u.cguAcceptedAt,
           createdAt: u.createdAt,
@@ -267,7 +268,7 @@ router.patch(
     const { uuid } = req.params;
     const {
       fullName, email, phone, role, isActive, kycStatus,
-      canImpersonate, canManageProducts, canManageLeads, canManageOrders, canManageInfluencerLinks, canManageTickets, canScanReturns,
+      canImpersonate, canManageProducts, canManageLeads, canManageOrders, canManageInfluencerLinks, canManageTickets, canScanReturns, canDisplayOnDashboard,
       city, address, cinNumber, birthDate, language, avatarUrl,
       instagramUsername, tiktokUsername, facebookUsername, xUsername, youtubeUsername, snapchatUsername,
       instagramUrl, tiktokUrl, facebookUrl, youtubeUrl, snapchatUrl,
@@ -377,6 +378,7 @@ router.patch(
         canManageInfluencerLinks: typeof canManageInfluencerLinks === 'boolean' ? canManageInfluencerLinks : undefined,
         canManageTickets: typeof canManageTickets === 'boolean' ? canManageTickets : undefined,
         canScanReturns: typeof canScanReturns === 'boolean' ? canScanReturns : undefined,
+        canDisplayOnDashboard: typeof canDisplayOnDashboard === 'boolean' ? canDisplayOnDashboard : undefined,
         platformFeeRate: platformFeeRate !== undefined ? Number(platformFeeRate) : undefined,
         saisieFeeMad: saisieFeeMad !== undefined ? Number(saisieFeeMad) : undefined,
       },
@@ -471,6 +473,7 @@ router.get(
           canManageInfluencerLinks: user.canManageInfluencerLinks,
           canManageTickets: user.canManageTickets,
           canScanReturns: user.canScanReturns,
+          canDisplayOnDashboard: user.canDisplayOnDashboard,
           platformFeeRate: user.platformFeeRate,
           saisieFeeMad: user.saisieFeeMad,
           cguAccepted: user.cguAccepted,

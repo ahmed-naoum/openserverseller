@@ -33,6 +33,7 @@ export interface User {
   canManageInfluencerLinks?: boolean;
   canManageTickets?: boolean;
   canScanReturns?: boolean;
+  canDisplayOnDashboard?: boolean;
 }
 
 export type UserRole =

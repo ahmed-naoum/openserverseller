@@ -72,6 +72,7 @@ export const authenticate = async (
       canManageLeads: user.canManageLeads,
       canManageOrders: user.canManageOrders,
       canManageInfluencerLinks: user.canManageInfluencerLinks,
+      canDisplayOnDashboard: user.canDisplayOnDashboard,
       isImpersonated: decoded.isImpersonated || false,
     };
 
@@ -169,6 +170,7 @@ export const optionalAuth = async (
         canManageLeads: user.canManageLeads,
         canManageOrders: user.canManageOrders,
         canManageInfluencerLinks: user.canManageInfluencerLinks,
+        canDisplayOnDashboard: user.canDisplayOnDashboard,
         isImpersonated: decoded.isImpersonated || false,
       };
     }

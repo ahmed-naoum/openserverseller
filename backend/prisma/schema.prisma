@@ -78,6 +78,7 @@ model User {
   canManageInfluencerLinks Boolean @default(false)
   canManageTickets       Boolean @default(false)
   canScanReturns         Boolean @default(false)
+  canDisplayOnDashboard  Boolean @default(true)
 
   // Tracking
   registrationIp String?
@@ -118,6 +119,7 @@ model User {
   inventory       ProductInventory[]
   claims          AffiliateClaim[]
   supportRequests SupportRequest[]
+  customProductRequests CustomProductRequest[]
 
   conversations ConversationParticipant[]
   claimedConversations Conversation[] @relation("ClaimedConversations")
@@ -1174,3 +1176,19 @@ model TrafficLog {
   @@map("traffic_logs")
 }
 
+model CustomProductRequest {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+  name        String
+  category    String   @default("Général")
+  productLink String?
+  quantity    Int
+  description String
+  imageUrl    String?
+  status      String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("custom_product_requests")
+}

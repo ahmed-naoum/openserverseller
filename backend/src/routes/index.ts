@@ -33,6 +33,8 @@ import invoiceRoutes from './invoice.routes.js';
 import backupRoutes from './admin/backup.routes.js';
 import pixelRoutes from './pixel.routes.js';
 import domainRoutes from './domain.routes.js';
+import customProductRoutes from './customProduct.routes.js';
+
 
 const router = Router();
 
@@ -87,5 +89,7 @@ router.use('/youcan', auditLog, youcanRoutes);
 router.use('/support', auditLog, supportRoutes);
 router.use('/user-pixels', auditLog, pixelRoutes);
 router.use('/domain', auditLog, domainRoutes);
+router.use('/custom-products', auditLog, customProductRoutes);
+
 
 export default router;

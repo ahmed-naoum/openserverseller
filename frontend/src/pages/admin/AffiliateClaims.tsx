@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { adminApi, uploadApi } from '../../lib/api';
+import { adminApi, uploadApi, customProductsApi } from '../../lib/api';
 import { 
   CheckCircle2, 
   XCircle, 
@@ -39,6 +39,15 @@ export default function AdminAffiliateClaims() {
   const [statusFilter, setStatusFilter] = useState('PENDING');
   const [search, setSearch] = useState('');
 
+  // Custom Product Requests state
+  const [activeTab, setActiveTab] = useState<'CLAIMS' | 'CUSTOM_PRODUCTS'>('CLAIMS');
+  const [customRequests, setCustomRequests] = useState<any[]>([]);
+  const [isCustomLoading, setIsCustomLoading] = useState(false);
+  const [customSearch, setCustomSearch] = useState('');
+  const [customStatusFilter, setCustomStatusFilter] = useState('PENDING');
+  const [selectedImageForPreview, setSelectedImageForPreview] = useState<string | null>(null);
+  const [actionInProgressId, setActionInProgressId] = useState<number | null>(null);
+
   // Clone Modal State
   const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
   const [selectedClaimForClone, setSelectedClaimForClone] = useState<any>(null);
@@ -55,6 +64,39 @@ export default function AdminAffiliateClaims() {
   useEffect(() => {
     fetchClaims();
   }, [statusFilter]);
+
+  useEffect(() => {
+    if (activeTab === 'CUSTOM_PRODUCTS') {
+      fetchCustomRequests();
+    }
+  }, [activeTab, customStatusFilter]);
+
+  const fetchCustomRequests = async () => {
+    try {
+      setIsCustomLoading(true);
+      const res = await customProductsApi.listRequests({ 
+        status: customStatusFilter === 'ALL' ? undefined : customStatusFilter 
+      });
+      setCustomRequests(res.data.data);
+    } catch (error) {
+      toast.error('Erreur lors du chargement des demandes de produits personnalisés');
+    } finally {
+      setIsCustomLoading(false);
+    }
+  };
+
+  const handleUpdateCustomStatus = async (id: number, status: 'APPROVED' | 'REJECTED' | 'PENDING') => {
+    try {
+      setActionInProgressId(id);
+      await customProductsApi.updateStatus(id, status);
+      toast.success(`Demande ${status === 'APPROVED' ? 'approuvée' : 'refusée'} avec succès`);
+      fetchCustomRequests();
+    } catch (error) {
+      toast.error('Erreur lors de la mise à jour de la demande');
+    } finally {
+      setActionInProgressId(null);
+    }
+  };
 
   const fetchClaims = async () => {
     try {
@@ -217,45 +259,300 @@ export default function AdminAffiliateClaims() {
     claim.product?.nameFr?.toLowerCase().includes(search.toLowerCase())
   );
 
+  const filteredCustomRequests = customRequests.filter(req => 
+    req.user?.profile?.fullName?.toLowerCase().includes(customSearch.toLowerCase()) ||
+    req.name.toLowerCase().includes(customSearch.toLowerCase()) ||
+    req.user?.email?.toLowerCase().includes(customSearch.toLowerCase()) ||
+    req.user?.phone?.toLowerCase().includes(customSearch.toLowerCase())
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Demande Produit & Stock</h1>
-          <p className="text-sm text-gray-500 mt-1">Approuvez ou refusez les demandes des partenaires pour promouvoir ou stocker des produits.</p>
+          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Demandes Partenaires & Production</h1>
+          <p className="text-sm text-gray-500 mt-1">Approuvez ou refusez les demandes des partenaires pour promouvoir des produits ou lancer des productions personnalisées.</p>
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Rechercher par influenceur ou produit..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-          />
-        </div>
-        <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-gray-200">
-          {['ALL', 'PENDING', 'APPROVED', 'REJECTED'].map((status) => (
-            <button
-              key={status}
-              onClick={() => setStatusFilter(status)}
-              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                statusFilter === status 
-                  ? 'bg-gray-900 text-white shadow-md' 
-                  : 'text-gray-500 hover:bg-gray-50'
-              }`}
-            >
-              {status === 'ALL' ? 'Tous' : status === 'PENDING' ? 'En attente' : status === 'APPROVED' ? 'Approuvés' : 'Refusés'}
-            </button>
-          ))}
-        </div>
+      {/* Tabs */}
+      <div className="border-b border-gray-100 flex gap-6">
+        <button
+          onClick={() => setActiveTab('CLAIMS')}
+          className={`pb-4 text-sm font-bold border-b-2 transition-all ${
+            activeTab === 'CLAIMS'
+              ? 'border-blue-600 text-blue-600 font-extrabold'
+              : 'border-transparent text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          Demandes d'Affiliation & Stock
+        </button>
+        <button
+          onClick={() => setActiveTab('CUSTOM_PRODUCTS')}
+          className={`pb-4 text-sm font-bold border-b-2 transition-all ${
+            activeTab === 'CUSTOM_PRODUCTS'
+              ? 'border-blue-600 text-blue-600 font-extrabold'
+              : 'border-transparent text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          Demandes de Produits Personnalisés
+        </button>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+      {activeTab === 'CUSTOM_PRODUCTS' ? (
+        <>
+          {/* Custom Search & Status Filter */}
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Rechercher par partenaire ou produit..."
+                value={customSearch}
+                onChange={(e) => setCustomSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+              />
+            </div>
+            <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-gray-200">
+              {['ALL', 'PENDING', 'APPROVED', 'REJECTED'].map((status) => (
+                <button
+                  key={status}
+                  onClick={() => setCustomStatusFilter(status)}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    customStatusFilter === status 
+                      ? 'bg-gray-900 text-white shadow-md' 
+                      : 'text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  {status === 'ALL' ? 'Tous' : status === 'PENDING' ? 'En attente' : status === 'APPROVED' ? 'Approuvés' : 'Refusés'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Custom Requests Table */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-gray-50/50 border-b border-gray-100">
+                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Partenaire</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Produit Demandé</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Quantité</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Image</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Date Demande</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Statut</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  <AnimatePresence mode="popLayout">
+                    {isCustomLoading ? (
+                      [...Array(5)].map((_, i) => (
+                        <tr key={i} className="animate-pulse">
+                          <td colSpan={7} className="px-6 py-4"><div className="h-12 bg-gray-50 rounded-xl" /></td>
+                        </tr>
+                      ))
+                    ) : filteredCustomRequests.length > 0 ? (
+                      filteredCustomRequests.map((req) => {
+                        const userRole = req.user?.role?.name;
+                        const userMode = req.user?.mode;
+                        const getRoleBadge = () => {
+                          if (userRole === 'INFLUENCER') return { label: 'Influenceur', color: 'bg-pink-100 text-pink-700 border-pink-200' };
+                          if (userMode === 'AFFILIATE') return { label: 'Affilié', color: 'bg-purple-100 text-purple-700 border-purple-200' };
+                          if (userMode === 'SELLER' || userMode === 'VENDOR' || userRole === 'VENDOR') return { label: 'Vendeur', color: 'bg-blue-100 text-blue-700 border-blue-200' };
+                          return { label: userRole || 'Utilisateur', color: 'bg-gray-100 text-gray-600 border-gray-200' };
+                        };
+                        const badge = getRoleBadge();
+
+                        return (
+                          <motion.tr
+                            layout
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            key={req.id}
+                            className="hover:bg-gray-50/50 transition-colors"
+                          >
+                            {/* Partenaire Column */}
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 font-bold overflow-hidden border border-blue-100 flex-shrink-0">
+                                  {req.user?.profile?.avatarUrl ? (
+                                    <img src={req.user.profile.avatarUrl} alt="" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <UserIcon className="w-5 h-5" />
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="text-sm font-bold text-gray-900 truncate">{req.user?.profile?.fullName || 'Utilisateur'}</div>
+                                  <div className="text-xs text-gray-500 truncate">{req.user?.phone || req.user?.email}</div>
+                                  <span className={`mt-1 inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider border ${badge.color}`}>
+                                    {badge.label}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Product Info */}
+                            <td className="px-6 py-4 max-w-xs">
+                              <div className="text-sm font-bold text-gray-900 truncate">{req.name}</div>
+                              
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                {req.category && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[9px] font-bold uppercase tracking-wider">
+                                    {req.category}
+                                  </span>
+                                )}
+
+                                {req.productLink && (
+                                  <a 
+                                    href={req.productLink} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 transition-all hover:underline"
+                                  >
+                                    <ExternalLink className="w-3 h-3" /> Source
+                                  </a>
+                                )}
+                              </div>
+
+                              <div className="text-xs text-gray-500 line-clamp-2 mt-1.5" title={req.description}>
+                                {req.description}
+                              </div>
+                            </td>
+
+                            {/* Quantity */}
+                            <td className="px-6 py-4">
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                {req.quantity}
+                              </span>
+                            </td>
+
+                            {/* Image Thumbnail */}
+                            <td className="px-6 py-4">
+                              {req.imageUrl ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedImageForPreview(req.imageUrl)}
+                                  className="w-12 h-12 rounded-lg bg-gray-100 border border-gray-200 overflow-hidden hover:scale-105 hover:border-blue-500 transition-all flex items-center justify-center"
+                                  title="Agrandir l'image"
+                                >
+                                  <img src={req.imageUrl} alt="" className="w-full h-full object-cover" />
+                                </button>
+                              ) : (
+                                <span className="text-xs text-gray-400 font-semibold italic">Aucune image</span>
+                              )}
+                            </td>
+
+                            {/* Date */}
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
+                                <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
+                                {format(new Date(req.createdAt), 'dd MMM yyyy', { locale: fr })}
+                                <span className="text-gray-300 ml-1">
+                                  <Clock className="w-3.5 h-3.5 inline" /> {format(new Date(req.createdAt), 'HH:mm')}
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* Status */}
+                            <td className="px-6 py-4">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                req.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
+                                req.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
+                                'bg-amber-100 text-amber-700'
+                              }`}>
+                                {req.status === 'PENDING' ? 'En attente' : 
+                                 req.status === 'APPROVED' ? 'Approuvé' : 
+                                 req.status === 'REJECTED' ? 'Refusé' : req.status}
+                              </span>
+                            </td>
+
+                            {/* Actions */}
+                            <td className="px-6 py-4 text-right">
+                              {req.status === 'PENDING' && (
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    onClick={() => handleUpdateCustomStatus(req.id, 'REJECTED')}
+                                    disabled={actionInProgressId === req.id}
+                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                                    title="Refuser"
+                                  >
+                                    <XCircle className="w-5 h-5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleUpdateCustomStatus(req.id, 'APPROVED')}
+                                    disabled={actionInProgressId === req.id}
+                                    className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
+                                    title="Approuver"
+                                  >
+                                    <CheckCircle2 className="w-5 h-5" />
+                                  </button>
+                                </div>
+                              )}
+                              {req.status !== 'PENDING' && (
+                                <button
+                                  onClick={() => handleUpdateCustomStatus(req.id, 'PENDING')}
+                                  disabled={actionInProgressId === req.id}
+                                  className="text-[10px] font-bold text-gray-400 hover:text-blue-600 transition-colors uppercase disabled:opacity-50"
+                                >
+                                  Réinitialiser
+                                </button>
+                              )}
+                            </td>
+                          </motion.tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                          <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <Filter className="w-6 h-6 text-gray-300" />
+                          </div>
+                          <p className="font-bold">Aucune demande trouvée</p>
+                          <p className="text-xs">Les demandes de produits personnalisés des partenaires s'afficheront ici.</p>
+                        </td>
+                      </tr>
+                    )}
+                  </AnimatePresence>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Rechercher par influenceur ou produit..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+              />
+            </div>
+            <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-gray-200">
+              {['ALL', 'PENDING', 'APPROVED', 'REJECTED'].map((status) => (
+                <button
+                  key={status}
+                  onClick={() => setStatusFilter(status)}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    statusFilter === status 
+                      ? 'bg-gray-900 text-white shadow-md' 
+                      : 'text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  {status === 'ALL' ? 'Tous' : status === 'PENDING' ? 'En attente' : status === 'APPROVED' ? 'Approuvés' : 'Refusés'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="bg-gray-50/50 border-b border-gray-100">
@@ -494,6 +791,30 @@ export default function AdminAffiliateClaims() {
           </table>
         </div>
       </div>
+      </>
+      )}
+
+      {/* Custom Request Image Preview Modal */}
+      {selectedImageForPreview && (
+        <div 
+          onClick={() => setSelectedImageForPreview(null)}
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-200"
+        >
+          <div className="relative max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl" onClick={(e) => e.stopPropagation()}>
+            <button 
+              onClick={() => setSelectedImageForPreview(null)}
+              className="absolute top-4 right-4 p-2 bg-black/65 hover:bg-black/85 text-white rounded-full transition-all"
+            >
+              <XCircle className="w-6 h-6" />
+            </button>
+            <img 
+              src={selectedImageForPreview} 
+              alt="Reference Agrandie" 
+              className="max-w-full max-h-[85vh] object-contain shadow-2xl"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Clone Product Modal */}
       {isCloneModalOpen && selectedClaimForClone && (

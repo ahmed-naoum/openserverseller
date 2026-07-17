@@ -26,6 +26,7 @@ export interface AuthUser {
   canManageInfluencerLinks?: boolean;
   canManageTickets?: boolean;
   canScanReturns?: boolean;
+  canDisplayOnDashboard?: boolean;
   avatarUrl?: string;
   [key: string]: any;
 }

@@ -5,7 +5,7 @@ import {
   Send, Search, Plus, MessageSquare, CheckCheck,
   ChevronLeft, ChevronRight, Headphones, MoreVertical, Smile, Paperclip, Clock,
   FileText, Download, Image as ImageIcon,
-  CheckCircle, UserPlus, X, RotateCcw, Ticket
+  CheckCircle, UserPlus, X, RotateCcw, Ticket, Eye
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSocket } from '../../contexts/SocketContext';
@@ -100,6 +100,32 @@ export default function Chat() {
   const [showActionMenu, setShowActionMenu] = useState(false);
   const actionMenuRef = useRef<HTMLDivElement>(null);
   const [showLogsModal, setShowLogsModal] = useState(false);
+  const [pdfModalUrl, setPdfModalUrl] = useState<string | null>(null);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  // Fetch PDF as blob to bypass X-Frame-Options: DENY
+  useEffect(() => {
+    if (!pdfModalUrl) {
+      if (pdfBlobUrl) {
+        URL.revokeObjectURL(pdfBlobUrl);
+        setPdfBlobUrl(null);
+      }
+      return;
+    }
+    setPdfLoading(true);
+    fetch(pdfModalUrl)
+      .then(res => res.blob())
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        setPdfBlobUrl(url);
+      })
+      .catch(() => toast.error('Failed to load PDF'))
+      .finally(() => setPdfLoading(false));
+    return () => {
+      if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
+    };
+  }, [pdfModalUrl]);
 
   const getSupportRoute = () => {
     const role = user?.role || user?.roleName;
@@ -946,14 +972,12 @@ export default function Chat() {
                       })()}
                   </div>
                   {selectedConv.metadata.brandingLabelPrintUrl && (
-                     <a 
-                       href={selectedConv.metadata.brandingLabelPrintUrl.startsWith('http') ? selectedConv.metadata.brandingLabelPrintUrl : `${BACKEND_URL}${selectedConv.metadata.brandingLabelPrintUrl}`}
-                       target="_blank"
-                       rel="noopener noreferrer"
+                     <button 
+                       onClick={() => setPdfModalUrl(selectedConv.metadata.brandingLabelPrintUrl.startsWith('http') ? selectedConv.metadata.brandingLabelPrintUrl : `${BACKEND_URL}${selectedConv.metadata.brandingLabelPrintUrl}`)}
                        className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-black hover:bg-violet-600 transition-all flex items-center gap-2 uppercase tracking-widest shrink-0"
                      >
                        <Paperclip size={14} /> PDF Label
-                     </a>
+                     </button>
                   )}
                 </div>
               </div>
@@ -1173,6 +1197,73 @@ export default function Chat() {
           </div>
         )}
       </div>
+
+      {/* PDF Label Modal */}
+      {pdfModalUrl && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+          <div 
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300"
+            onClick={() => setPdfModalUrl(null)}
+          />
+          <div className="relative w-full max-w-4xl bg-white rounded-[2rem] shadow-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
+            <div className="flex-shrink-0 p-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-violet-50 rounded-xl flex items-center justify-center">
+                  <Eye size={18} className="text-violet-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900">Branding Label</h3>
+                  <p className="text-xs text-slate-400 font-medium">{/\.(png|jpe?g|webp|gif|svg)$/i.test(pdfModalUrl || '') ? 'Image preview' : 'PDF preview'}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={pdfModalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-2"
+                >
+                  <Download size={14} /> Télécharger
+                </a>
+                <button 
+                  onClick={() => setPdfModalUrl(null)}
+                  className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-hidden p-4">
+              {pdfLoading ? (
+                <div className="w-full flex items-center justify-center" style={{ minHeight: '70vh' }}>
+                  <div className="w-10 h-10 border-4 border-violet-100 border-t-violet-500 rounded-full animate-spin" />
+                </div>
+              ) : pdfBlobUrl ? (
+                /\.(png|jpe?g|webp|gif|svg)$/i.test(pdfModalUrl || '') ? (
+                  <div className="w-full flex items-center justify-center bg-slate-50 rounded-xl border border-slate-200 overflow-auto" style={{ minHeight: '70vh' }}>
+                    <img
+                      src={pdfBlobUrl}
+                      alt="Branding Label"
+                      className="max-w-full max-h-[75vh] object-contain"
+                    />
+                  </div>
+                ) : (
+                  <iframe
+                    src={pdfBlobUrl}
+                    className="w-full h-full rounded-xl border border-slate-200"
+                    style={{ minHeight: '70vh' }}
+                    title="PDF Label Preview"
+                  />
+                )
+              ) : (
+                <div className="w-full flex items-center justify-center text-slate-400 text-sm" style={{ minHeight: '70vh' }}>
+                  Failed to load file
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Logs Modal */}
       {showLogsModal && (
