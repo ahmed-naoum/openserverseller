@@ -816,6 +816,22 @@ export default function SiteBuilder() {
                       </label>
                     </div>
 
+                    {!!activeBlock.content.autoplay && (
+                      <div className="pl-4 py-2 border-l-2 border-orange-200 space-y-3">
+                        <h5 className="text-[10px] font-bold text-gray-400 uppercase">Overlay "Activer le son"</h5>
+                        <Field label="Texte du bouton" type="text" value={activeBlock.content.unmuteText ?? 'برك باش تسمع الصوت'} onChange={(v: string) => updateBlockContent('unmuteText', v)} />
+                        <div className="grid grid-cols-2 gap-3">
+                          <Field label="Couleur texte" type="color" value={activeBlock.content.unmuteTextColor || '#ffffff'} onChange={(v: string) => updateBlockContent('unmuteTextColor', v)} />
+                          <Field label="Couleur bouton" type="color" value={activeBlock.content.unmuteBtnColor || '#ef4444'} onChange={(v: string) => updateBlockContent('unmuteBtnColor', v)} />
+                        </div>
+                        <Field label="Taille du texte (px)" type="number" value={activeBlock.content.unmuteTextSize || 20} onChange={(v: number) => updateBlockContent('unmuteTextSize', Number(v))} />
+                        <div className="flex items-center justify-between pt-2 border-t border-orange-100">
+                          <span className="text-[11px] font-bold text-gray-600 leading-tight pr-4">Recommencer la vidéo du début lors du clic</span>
+                          <Field type="switch" value={!!activeBlock.content.restartOnUnmute} onChange={(v: boolean) => updateBlockContent('restartOnUnmute', v)} />
+                        </div>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-2 gap-2">
                       <Field label="Largeur (%)" type="number" value={activeBlock.content.width || 100} onChange={(v: any) => updateBlockContent('width', v)} />
                       <Field label="Hauteur Max (px)" type="number" value={activeBlock.content.maxHeight || ''} onChange={(v: any) => updateBlockContent('maxHeight', v)} placeholder="Infini" />
@@ -910,8 +926,8 @@ export default function SiteBuilder() {
                     </div>
 
                     <div className="pt-2 border-t border-gray-100">
-                      <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-3">Animation</h4>
-                      <div className="grid grid-cols-2 gap-2">
+                      <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-3">Animation & Affichage Conditionnel</h4>
+                      <div className="grid grid-cols-2 gap-2 mb-3">
                         <div>
                           <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Layout</label>
                           <select value={activeBlock.content.animationLayout || 'none'} onChange={(e) => updateBlockContent('animationLayout', e.target.value)} className="w-full text-xs border p-2 rounded">
@@ -933,6 +949,19 @@ export default function SiteBuilder() {
                             <option value="ease-in-out">ease-in-out</option>
                           </select>
                         </div>
+                      </div>
+                      
+                      <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl space-y-2">
+                        <label className="block text-[10px] font-bold text-blue-500 uppercase">Délai d'affichage via Vidéo</label>
+                        <Field 
+                          label="Temps en secondes (0 = immédiat)" 
+                          type="number" 
+                          value={activeBlock.content.showAfterVideoSeconds || 0} 
+                          onChange={(v: number) => updateBlockContent('showAfterVideoSeconds', Number(v))} 
+                        />
+                        <p className="text-[9px] text-blue-400 font-medium leading-tight mt-1">
+                          Le bouton restera invisible jusqu'à ce que la première vidéo de la page atteigne ce temps de lecture.
+                        </p>
                       </div>
                     </div>
 

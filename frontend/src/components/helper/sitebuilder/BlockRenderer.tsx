@@ -180,78 +180,7 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
             );
 
           case 'button':
-            const isStickyMobile = !!content.stickyMobile;
-            const isStickyDesktop = !!content.stickyDesktop;
-
-            const handleClick = () => {
-              if (content.behavior === 'checkout') {
-                const checkout = document.getElementById('express-checkout-block');
-                if (checkout) {
-                  checkout.scrollIntoView({ behavior: 'smooth' });
-                }
-              } else if (content.link) {
-                window.open(content.link, '_blank');
-              }
-            };
-
-            const animationProps = (() => {
-              const timing = content.animationTiming || 'ease-in-out';
-              switch (content.animationLayout) {
-                case 'bounceHorizontal': return { animate: { x: [0, 12, 0] }, transition: { duration: 1.5, repeat: Infinity, ease: timing } };
-                case 'bounceVertical': return { animate: { y: [0, -12, 0] }, transition: { duration: 1.5, repeat: Infinity, ease: timing } };
-                case 'rotate': return { animate: { rotate: [0, 5, -5, 0] }, transition: { duration: 2, repeat: Infinity, ease: timing } };
-                case 'scale': return { animate: { scale: [1, 1.05, 1] }, transition: { duration: 1.5, repeat: Infinity, ease: timing } };
-                case 'fade': return { animate: { opacity: [0.6, 1, 0.6] }, transition: { duration: 2, repeat: Infinity, ease: timing } };
-                case 'appear': return { initial: { opacity: 0, scale: 0.85 }, animate: { opacity: 1, scale: 1 }, transition: { duration: 0.5, ease: timing } };
-                default: return {};
-              }
-            })();
-
-            return (
-              <div 
-                key={id} 
-                className={`w-full flex justify-center transition-opacity duration-300 ${
-                  !isEditor && isStickyMobile 
-                    ? 'fixed bottom-4 left-0 right-0 px-4 z-[9999]' 
-                    : 'relative'
-                } ${
-                  !isEditor && isStickyDesktop 
-                    ? 'md:!fixed md:!bottom-8 md:!right-8 md:!left-auto md:!w-auto md:!px-0' 
-                    : 'md:!relative md:!bottom-0'
-                }`}
-                style={{ 
-                  paddingTop: `${content.paddingTop ?? 24}px`,
-                  paddingBottom: `${content.paddingBottom ?? 24}px`,
-                  marginTop: `${content.marginTop ?? 0}px`,
-                  marginBottom: `${content.marginBottom ?? 0}px`,
-                  opacity: !isEditor && (isStickyMobile || isStickyDesktop) && isCheckoutInView ? 0 : 1,
-                  visibility: !isEditor && (isStickyMobile || isStickyDesktop) && isCheckoutInView ? 'hidden' : 'visible',
-                  pointerEvents: !isEditor && (isStickyMobile || isStickyDesktop) && isCheckoutInView ? 'none' : 'auto',
-                }}
-              >
-                <motion.button 
-                  {...animationProps}
-                  className={`inline-flex items-center justify-center font-black shadow-xl transition-all cursor-pointer ${
-                    !isEditor && isStickyMobile ? 'w-full md:w-auto' : 'w-auto'
-                  }`}
-                  style={{ 
-                    backgroundColor: content.bgColor || '#f97316',
-                    color: content.textColor || '#ffffff',
-                    boxShadow: `0 10px 30px ${content.bgColor || '#f97316'}44`,
-                    fontSize: content.textSize ? `${content.textSize}px` : '20px',
-                    paddingTop: content.buttonPaddingY !== undefined && content.buttonPaddingY !== '' ? `${content.buttonPaddingY}px` : '16px',
-                    paddingBottom: content.buttonPaddingY !== undefined && content.buttonPaddingY !== '' ? `${content.buttonPaddingY}px` : '16px',
-                    paddingLeft: content.buttonPaddingX !== undefined && content.buttonPaddingX !== '' ? `${content.buttonPaddingX}px` : '40px',
-                    paddingRight: content.buttonPaddingX !== undefined && content.buttonPaddingX !== '' ? `${content.buttonPaddingX}px` : '40px',
-                    border: content.buttonBorderWidth !== undefined && content.buttonBorderWidth !== '' ? `${content.buttonBorderWidth}px solid ${content.buttonBorderColor || '#f97316'}` : 'none',
-                    borderRadius: content.buttonBorderRadius !== undefined && content.buttonBorderRadius !== '' ? `${content.buttonBorderRadius}px` : '16px',
-                  }}
-                  onClick={handleClick}
-                >
-                  {content.text || 'Commander Maintenant'}
-                </motion.button>
-              </div>
-            );
+            return <ButtonBlockComponent key={id} content={content} isEditor={isEditor} isCheckoutInView={isCheckoutInView} />;
 
           case 'whatsapp':
             if (isEditor) {
@@ -1300,6 +1229,18 @@ interface VideoBlockComponentProps {
 function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  
+  // Browsers enforce muted for autoplay.
+  // If autoplay is true, we force muted to true initially, otherwise fallback to content.muted
+  const [isMuted, setIsMuted] = useState(!!content.autoplay || !!content.muted);
+  
+  // We show the unmute overlay only if autoplay is active and we are currently muted
+  const [showUnmuteOverlay, setShowUnmuteOverlay] = useState(!!content.autoplay);
+
+  useEffect(() => {
+    setIsMuted(!!content.autoplay || !!content.muted);
+    setShowUnmuteOverlay(!!content.autoplay);
+  }, [content.autoplay, content.muted]);
 
   const handlePlayToggle = () => {
     if (!videoRef.current) return;
@@ -1307,6 +1248,22 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
       videoRef.current.play().catch(err => console.log("Play failed:", err));
     } else {
       videoRef.current.pause();
+    }
+  };
+
+  const handleUnmute = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (videoRef.current) {
+      videoRef.current.muted = false;
+      setIsMuted(false);
+      setShowUnmuteOverlay(false);
+      
+      if (content.restartOnUnmute) {
+        videoRef.current.currentTime = 0;
+      }
+      
+      // Ensure it continues playing after user interaction
+      videoRef.current.play().catch(err => console.log("Play failed after unmute:", err));
     }
   };
 
@@ -1321,20 +1278,64 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
       <video 
         ref={videoRef}
         src={resolveUrl(content.url)} 
-        controls={content.controls !== false}
+        controls={content.controls !== false && !showUnmuteOverlay}
         autoPlay={!!content.autoplay}
         loop={!!content.loop}
-        muted={!!content.muted}
+        muted={isMuted}
         playsInline
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
         onEnded={() => setIsPlaying(false)}
+        onVolumeChange={(e) => {
+          if (!e.currentTarget.muted) {
+            setIsMuted(false);
+            setShowUnmuteOverlay(false);
+          }
+        }}
+        onTimeUpdate={(e) => {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('video-time-update', { 
+              detail: { currentTime: e.currentTarget.currentTime } 
+            }));
+          }
+        }}
         className="h-auto w-full object-contain"
         style={{ 
           maxHeight: content.maxHeight ? `${content.maxHeight}px` : 'none',
         }}
       />
-      {!isPlaying && (
+
+      {/* Unmute Overlay for Autoplay Videos */}
+      {showUnmuteOverlay && isPlaying && (
+        <div 
+          onClick={handleUnmute}
+          className="absolute inset-0 flex items-center justify-center bg-transparent cursor-pointer z-10"
+        >
+          <div 
+            className="backdrop-blur-sm px-5 py-3 rounded-xl flex items-center justify-center gap-3 shadow-2xl transform hover:scale-105 transition-all"
+            style={{
+              backgroundColor: content.unmuteBtnColor || 'rgba(239, 68, 68, 0.95)',
+              color: content.unmuteTextColor || '#ffffff'
+            }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <line x1="23" y1="9" x2="17" y2="15"></line>
+              <line x1="17" y1="9" x2="23" y2="15"></line>
+            </svg>
+            <span 
+              className="font-black" 
+              dir="rtl"
+              style={{ fontSize: content.unmuteTextSize ? `${content.unmuteTextSize}px` : '20px' }}
+            >
+              {content.unmuteText ?? 'برك باش تسمع الصوت'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Play button overlay when paused */}
+      {!isPlaying && !showUnmuteOverlay && (
         <div 
           onClick={handlePlayToggle}
           className="absolute inset-0 flex items-center justify-center bg-black/20 cursor-pointer transition-opacity duration-300 hover:bg-black/35"
@@ -1355,6 +1356,106 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// --------------- Button Block Component ---------------
+function ButtonBlockComponent({ content, isEditor, isCheckoutInView }: { content: any, isEditor: boolean, isCheckoutInView: boolean }) {
+  const isStickyMobile = !!content.stickyMobile;
+  const isStickyDesktop = !!content.stickyDesktop;
+
+  const [isVisible, setIsVisible] = useState(() => {
+    if (isEditor || !content.showAfterVideoSeconds || content.showAfterVideoSeconds <= 0) return true;
+    return false;
+  });
+
+  useEffect(() => {
+    if (isEditor || !content.showAfterVideoSeconds || content.showAfterVideoSeconds <= 0) {
+      setIsVisible(true);
+      return;
+    }
+    
+    setIsVisible(false);
+
+    const handleVideoTime = (e: any) => {
+      if (e.detail.currentTime >= content.showAfterVideoSeconds) {
+        setIsVisible(true);
+      }
+    };
+
+    window.addEventListener('video-time-update', handleVideoTime);
+    return () => window.removeEventListener('video-time-update', handleVideoTime);
+  }, [isEditor, content.showAfterVideoSeconds]);
+
+  const handleClick = () => {
+    if (content.behavior === 'checkout') {
+      const checkout = document.getElementById('express-checkout-block');
+      if (checkout) {
+        checkout.scrollIntoView({ behavior: 'smooth' });
+      }
+    } else if (content.link) {
+      window.open(content.link, '_blank');
+    }
+  };
+
+  const animationProps = (() => {
+    const timing = content.animationTiming || 'ease-in-out';
+    switch (content.animationLayout) {
+      case 'bounceHorizontal': return { animate: { x: [0, 12, 0] }, transition: { duration: 1.5, repeat: Infinity, ease: timing } };
+      case 'bounceVertical': return { animate: { y: [0, -12, 0] }, transition: { duration: 1.5, repeat: Infinity, ease: timing } };
+      case 'rotate': return { animate: { rotate: [0, 5, -5, 0] }, transition: { duration: 2, repeat: Infinity, ease: timing } };
+      case 'scale': return { animate: { scale: [1, 1.05, 1] }, transition: { duration: 1.5, repeat: Infinity, ease: timing } };
+      case 'fade': return { animate: { opacity: [0.6, 1, 0.6] }, transition: { duration: 2, repeat: Infinity, ease: timing } };
+      case 'appear': return { initial: { opacity: 0, scale: 0.85 }, animate: { opacity: 1, scale: 1 }, transition: { duration: 0.5, ease: timing } };
+      default: return {};
+    }
+  })();
+
+  if (!isVisible && !isEditor) return null;
+
+  return (
+    <div 
+      className={`w-full flex justify-center transition-opacity duration-300 ${
+        !isEditor && isStickyMobile 
+          ? 'fixed bottom-4 left-0 right-0 px-4 z-[9999]' 
+          : 'relative'
+      } ${
+        !isEditor && isStickyDesktop 
+          ? 'md:!fixed md:!bottom-8 md:!right-8 md:!left-auto md:!w-auto md:!px-0' 
+          : 'md:!relative md:!bottom-0'
+      }`}
+      style={{ 
+        paddingTop: `${content.paddingTop ?? 24}px`,
+        paddingBottom: `${content.paddingBottom ?? 24}px`,
+        marginTop: `${content.marginTop ?? 0}px`,
+        marginBottom: `${content.marginBottom ?? 0}px`,
+        opacity: !isEditor && (isStickyMobile || isStickyDesktop) && isCheckoutInView ? 0 : 1,
+        visibility: !isEditor && (isStickyMobile || isStickyDesktop) && isCheckoutInView ? 'hidden' : 'visible',
+        pointerEvents: !isEditor && (isStickyMobile || isStickyDesktop) && isCheckoutInView ? 'none' : 'auto',
+      }}
+    >
+      <motion.button 
+        {...animationProps}
+        className={`inline-flex items-center justify-center font-black shadow-xl transition-all cursor-pointer ${
+          !isEditor && isStickyMobile ? 'w-full md:w-auto' : 'w-auto'
+        }`}
+        style={{ 
+          backgroundColor: content.bgColor || '#f97316',
+          color: content.textColor || '#ffffff',
+          boxShadow: `0 10px 30px ${content.bgColor || '#f97316'}44`,
+          fontSize: content.textSize ? `${content.textSize}px` : '20px',
+          paddingTop: content.buttonPaddingY !== undefined && content.buttonPaddingY !== '' ? `${content.buttonPaddingY}px` : '16px',
+          paddingBottom: content.buttonPaddingY !== undefined && content.buttonPaddingY !== '' ? `${content.buttonPaddingY}px` : '16px',
+          paddingLeft: content.buttonPaddingX !== undefined && content.buttonPaddingX !== '' ? `${content.buttonPaddingX}px` : '40px',
+          paddingRight: content.buttonPaddingX !== undefined && content.buttonPaddingX !== '' ? `${content.buttonPaddingX}px` : '40px',
+          border: content.buttonBorderWidth !== undefined && content.buttonBorderWidth !== '' ? `${content.buttonBorderWidth}px solid ${content.buttonBorderColor || '#f97316'}` : 'none',
+          borderRadius: content.buttonBorderRadius !== undefined && content.buttonBorderRadius !== '' ? `${content.buttonBorderRadius}px` : '16px',
+        }}
+        onClick={handleClick}
+      >
+        {content.text || 'Commander Maintenant'}
+      </motion.button>
     </div>
   );
 }
