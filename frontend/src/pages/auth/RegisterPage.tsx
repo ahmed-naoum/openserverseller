@@ -47,6 +47,26 @@ interface FormDataType {
   facebookUrl: string;
   youtubeUrl: string;
   snapchatUrl: string;
+  // Questionnaire fields
+  sellingOnline: string;
+  budget: string;
+  ordersPerDay: string;
+  experienceYears: string;
+  markets: string[];
+  totalSpend: string;
+  niches: string[];
+  biggestAchievement: string;
+  biggestChallenge: string;
+  partnerPriorities: string[];
+  interviewAvailability: string;
+  additionalNotes: string;
+  // Influencer Questionnaire fields
+  followersCount: string;
+  contentType: string[];
+  hasPriorExperience: string;
+  desiredProductTypes: string;
+  initialBudget: string;
+  motivation: string;
 }
 
 const normalizePhone = (phone: string): string => {
@@ -132,6 +152,26 @@ export default function RegisterPage() {
     facebookUrl: '',
     youtubeUrl: '',
     snapchatUrl: '',
+    // Questionnaire fields default values
+    sellingOnline: '',
+    budget: '',
+    ordersPerDay: '',
+    experienceYears: '',
+    markets: [],
+    totalSpend: '',
+    niches: [],
+    biggestAchievement: '',
+    biggestChallenge: '',
+    partnerPriorities: [],
+    interviewAvailability: '',
+    additionalNotes: '',
+    // Influencer Questionnaire fields default values
+    followersCount: '',
+    contentType: [],
+    hasPriorExperience: '',
+    desiredProductTypes: '',
+    initialBudget: '',
+    motivation: '',
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
@@ -140,6 +180,7 @@ export default function RegisterPage() {
   const submittedRef = useRef(false);
   const [step, setStep] = useState(1);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [selectionConfirmed, setSelectionConfirmed] = useState(false);
   const turnstileRef = useRef<TurnstileInstance>(null);
 
   // Update role dynamically if URL changes without remounting the component
@@ -148,6 +189,7 @@ export default function RegisterPage() {
     if (formData.role !== newRole) {
       setFormData(prev => ({ ...prev, role: newRole }));
       setStep(1);
+      setSelectionConfirmed(false);
       setTurnstileToken(null);
     }
   }, [pathname]);
@@ -229,7 +271,7 @@ export default function RegisterPage() {
     }
 
     fieldsToValidate.forEach(field => {
-      const error = validateField(field, formData[field as keyof typeof formData], formData);
+      const error = validateField(field, formData[field as keyof typeof formData] as string, formData);
       if (error) {
         newErrors[field as keyof FormErrors] = error;
         isValid = false;
@@ -285,23 +327,25 @@ export default function RegisterPage() {
         newErrors.phone = 'phone_required'; isValid = false;
       }
     } else if (step === 2) {
-      const socialFields = ['instagramUsername', 'tiktokUsername', 'facebookUsername', 'youtubeUsername', 'snapchatUsername'];
-      let hasAtLeastOne = false;
-      socialFields.forEach(field => {
-        const val = formData[field as keyof typeof formData] as string;
-        if (val) {
-          hasAtLeastOne = true;
-          const err = validateField(field, val, formData);
-          if (err) {
-            newErrors[field as keyof FormErrors] = err;
-            isValid = false;
+      if (formData.role === 'INFLUENCER') {
+        const socialFields = ['instagramUsername', 'tiktokUsername', 'facebookUsername', 'youtubeUsername', 'snapchatUsername'];
+        let hasAtLeastOne = false;
+        socialFields.forEach(field => {
+          const val = formData[field as keyof typeof formData] as string;
+          if (val) {
+            hasAtLeastOne = true;
+            const err = validateField(field, val, formData);
+            if (err) {
+              newErrors[field as keyof FormErrors] = err;
+              isValid = false;
+            }
+            newTouched[field] = true;
           }
-          newTouched[field] = true;
+        });
+        if (!hasAtLeastOne) {
+          toast.error(t('social_media_required'));
+          isValid = false;
         }
-      });
-      if (!hasAtLeastOne) {
-        toast.error(t('social_media_required'));
-        isValid = false;
       }
     }
 
@@ -354,6 +398,12 @@ export default function RegisterPage() {
             snapchatUrl: formData.snapchatUrl || undefined,
             cguAccepted: true,
             turnstileToken,
+            followersCount: formData.followersCount || undefined,
+            contentType: formData.contentType,
+            hasPriorExperience: formData.hasPriorExperience || undefined,
+            desiredProductTypes: formData.desiredProductTypes || undefined,
+            initialBudget: formData.initialBudget || undefined,
+            motivation: formData.motivation || undefined,
         });
         toast.success('Compte créateur créé avec succès ! Bienvenue 🎉');
         navigate('/verify-email', { state: { email: formData.email } });
@@ -366,6 +416,18 @@ export default function RegisterPage() {
             role: 'VENDOR',
             cguAccepted: true,
             turnstileToken,
+            sellingOnline: formData.sellingOnline || undefined,
+            budget: formData.budget || undefined,
+            ordersPerDay: formData.ordersPerDay || undefined,
+            experienceYears: formData.experienceYears || undefined,
+            markets: formData.markets,
+            totalSpend: formData.totalSpend || undefined,
+            niches: formData.niches,
+            biggestAchievement: formData.biggestAchievement || undefined,
+            biggestChallenge: formData.biggestChallenge || undefined,
+            partnerPriorities: formData.partnerPriorities,
+            interviewAvailability: formData.interviewAvailability || undefined,
+            additionalNotes: formData.additionalNotes || undefined
         });
         toast.success('Compte créé avec succès !');
         navigate('/verify-email', { state: { email: formData.email } });
@@ -453,56 +515,151 @@ export default function RegisterPage() {
                 <p className="text-[17px] font-medium text-[#ff5722]">{t('register_subtitle')}</p>
             </div>
 
-            {/* Role Toggle Switch */}
-            <div className="flex bg-[#f4f5f7] p-1 rounded-2xl mb-6 relative max-w-[340px] mx-auto">
-                <button
-                    type="button"
-                    onClick={() => { setFormData({ ...formData, role: 'INFLUENCER' }); setStep(1); }}
-                    className={`flex-1 py-3 rounded-xl text-[13px] font-bold transition-all duration-300 ${
-                        formData.role === 'INFLUENCER' ? 'bg-[#ff5722] text-white shadow-md' : 'text-[#2e315e] hover:bg-slate-200/50'
-                    }`}
-                >
-                    {t('im_an_influencer')}
-                </button>
-                <button
-                    type="button"
-                    onClick={() => { setFormData({ ...formData, role: 'VENDOR' }); setStep(1); }}
-                    className={`flex-1 py-3 rounded-xl text-[13px] font-bold transition-all duration-300 ${
-                        formData.role === 'VENDOR' ? 'bg-[#ff5722] text-white shadow-md' : 'text-[#2e315e] hover:bg-slate-200/50'
-                    }`}
-                >
-                    {t('im_a_seller')}
-                </button>
-            </div>
-
           <div className="bg-white rounded-[2rem] p-8 sm:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)]" dir={language === 'ar' ? 'rtl' : 'ltr'}>
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {formData.role === 'INFLUENCER' && (
+            {!selectionConfirmed ? (
+              <div className="space-y-6">
+                {/* Selection Cards */}
+                <div className="space-y-4">
+                  {/* Influencer Card */}
+                  <div
+                    onClick={() => setFormData({ ...formData, role: 'INFLUENCER' })}
+                    className={`cursor-pointer p-5 rounded-2xl border-2 transition-all duration-300 flex items-center gap-4 relative overflow-hidden group ${
+                      formData.role === 'INFLUENCER'
+                        ? 'border-[#ff5722] bg-[#ff5722]/5 shadow-md shadow-[#ff5722]/10 scale-[1.01]'
+                        : 'border-slate-100 bg-[#f8f9fa] hover:border-slate-200 hover:bg-slate-100/50'
+                    }`}
+                  >
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all ${
+                      formData.role === 'INFLUENCER' ? 'bg-[#ff5722] text-white shadow-md shadow-[#ff5722]/20' : 'bg-white text-slate-500'
+                    }`}>
+                      <Sparkles className="w-5 h-5" />
+                    </div>
+                    <div className={`min-w-0 flex-1 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                      <h3 className={`text-[15px] font-extrabold transition-colors ${
+                        formData.role === 'INFLUENCER' ? 'text-[#ff5722]' : 'text-[#2e315e]'
+                      }`}>
+                        {t('im_an_influencer')}
+                      </h3>
+                      <p className="text-[11px] text-slate-400 font-medium mt-0.5 leading-normal">
+                        {language === 'ar' 
+                          ? 'حققي أرباحاً من جمهورك، روجي للمنتجات، واكسبي عمولات'
+                          : language === 'fr'
+                          ? 'Monétisez votre audience, faites la promotion de produits et gagnez des commissions'
+                          : 'Monetize your audience, promote products, and earn commissions'}
+                      </p>
+                    </div>
+                    {formData.role === 'INFLUENCER' && (
+                      <div className={`absolute top-3 ${language === 'ar' ? 'left-3' : 'right-3'} w-2.5 h-2.5 rounded-full bg-[#ff5722]`} />
+                    )}
+                  </div>
+
+                  {/* Seller Card */}
+                  <div
+                    onClick={() => setFormData({ ...formData, role: 'VENDOR' })}
+                    className={`cursor-pointer p-5 rounded-2xl border-2 transition-all duration-300 flex items-center gap-4 relative overflow-hidden group ${
+                      formData.role === 'VENDOR'
+                        ? 'border-[#ff5722] bg-[#ff5722]/5 shadow-md shadow-[#ff5722]/10 scale-[1.01]'
+                        : 'border-slate-100 bg-[#f8f9fa] hover:border-slate-200 hover:bg-slate-100/50'
+                    }`}
+                  >
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all ${
+                      formData.role === 'VENDOR' ? 'bg-[#ff5722] text-white shadow-md shadow-[#ff5722]/20' : 'bg-white text-slate-500'
+                    }`}>
+                      <Store className="w-5 h-5" />
+                    </div>
+                    <div className={`min-w-0 flex-1 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                      <h3 className={`text-[15px] font-extrabold transition-colors ${
+                        formData.role === 'VENDOR' ? 'text-[#ff5722]' : 'text-[#2e315e]'
+                      }`}>
+                        {t('im_a_seller')}
+                      </h3>
+                      <p className="text-[11px] text-slate-400 font-medium mt-0.5 leading-normal">
+                        {language === 'ar' 
+                          ? 'أنتج منتجات مخصصة، أدر مخزونك وضاعف مبيعاتك'
+                          : language === 'fr'
+                          ? 'Produisez des produits personnalisés, gérez vos stocks et développez vos ventes'
+                          : 'Produce custom products, manage inventory, and grow your sales'}
+                      </p>
+                    </div>
+                    {formData.role === 'VENDOR' && (
+                      <div className={`absolute top-3 ${language === 'ar' ? 'left-3' : 'right-3'} w-2.5 h-2.5 rounded-full bg-[#ff5722]`} />
+                    )}
+                  </div>
+                </div>
+
+                {/* Next Button */}
+                <button
+                  type="button"
+                  onClick={() => setSelectionConfirmed(true)}
+                  className="w-full bg-[#ff5722] text-white font-bold py-3 rounded-xl hover:bg-[#e64a19] transition-all text-sm shadow-[0_4px_14px_0_rgba(255,87,34,0.39)] flex items-center justify-center gap-2"
+                >
+                  {t('next_btn')}
+                </button>
+
+                {/* Google Login & Sign In Link */}
+                <div className="mt-6 flex flex-col items-center gap-4 border-t border-slate-100 pt-6">
+                  <div className="w-full flex justify-center">
+                    <GoogleLogin 
+                      onSuccess={handleGoogleSuccess} 
+                      onError={() => toast.error(t('google_login_failed'))}
+                      useOneTap
+                      theme="outline"
+                      shape="pill"
+                      size="large"
+                      width="100%"
+                    />
+                  </div>
+                  <p className="text-[13px] font-semibold text-slate-500 mt-2">
+                    {t('already_have_account')}{' '}
+                    <Link to="/login" className="text-[#ff5722] hover:text-[#e64a19] transition-colors font-bold">
+                      {t('sign_in_link')}
+                    </Link>
+                  </p>
+                </div>
+
+                <div className="mt-6 text-center">
+                  <p className="text-[11px] font-semibold text-slate-400">
+                    <Link to="/privacy" target="_blank" className="hover:text-[#ff5722] transition-colors">{t('privacy_notice')}</Link>
+                    {' | '}
+                    <Link to="/terms" target="_blank" className="hover:text-[#ff5722] transition-colors font-semibold">{t('terms_of_service')}</Link>
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-5">
+                {/* Onboarding steps progress bar */}
                 <div className="mb-6 w-full max-w-[360px] mx-auto relative px-2">
                     {/* Background line */}
                     <div className="absolute top-3.5 left-[10%] w-[80%] h-1.5 bg-[#f4f5f7] rounded-full -z-10"></div>
                     
                     {/* Active line */}
-                    <div className="absolute top-3.5 left-[10%] h-1.5 bg-[#ff5722] rounded-full -z-10 transition-all duration-500" style={{ width: step === 1 ? '0%' : step === 2 ? '40%' : '80%' }}></div>
+                    <div className="absolute top-3.5 left-[10%] h-1.5 bg-[#ff5722] rounded-full -z-10 transition-all duration-500" style={{ width: step === 1 ? '0%' : step === 2 ? '33.33%' : step === 3 ? '66.66%' : '100%' }}></div>
                     
                     <div className="flex justify-between relative">
                         <div className="flex flex-col items-center">
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${step >= 1 ? 'bg-[#ff5722] text-white shadow-[0_0_0_4px_#fff]' : 'bg-[#e2e8f0] text-slate-400'}`}>1</div>
-                            <span className={`text-[14px] font-bold mt-2 ${step >= 1 ? 'text-[#ff5722]' : 'text-slate-300'}`}>{t('step_account')}</span>
+                            <span className={`text-[11px] font-bold mt-2 ${step >= 1 ? 'text-[#ff5722]' : 'text-slate-300'}`}>{t('step_account')}</span>
                         </div>
                         <div className="flex flex-col items-center">
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${step >= 2 ? 'bg-[#ff5722] text-white shadow-[0_0_0_4px_#fff]' : 'bg-[#e2e8f0] text-slate-400'}`}>2</div>
-                            <span className={`text-[14px] font-bold mt-2 ${step >= 2 ? 'text-slate-400' : 'text-slate-300'}`}>{t('step_social')}</span>
+                            <span className={`text-[11px] font-bold mt-2 ${step >= 2 ? 'text-[#ff5722]' : 'text-slate-300'}`}>
+                              {formData.role === 'VENDOR' ? t('step_activity') : t('step_social')}
+                            </span>
                         </div>
                         <div className="flex flex-col items-center">
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${step >= 3 ? 'bg-[#ff5722] text-white shadow-[0_0_0_4px_#fff]' : 'bg-[#e2e8f0] text-slate-400'}`}>3</div>
-                            <span className={`text-[14px] font-bold mt-2 ${step >= 3 ? 'text-slate-400' : 'text-slate-300'}`}>{t('step_password')}</span>
+                            <span className={`text-[11px] font-bold mt-2 ${step >= 3 ? 'text-[#ff5722]' : 'text-slate-300'}`}>
+                              {t('step_questionnaire')}
+                            </span>
+                        </div>
+                        <div className="flex flex-col items-center">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${step >= 4 ? 'bg-[#ff5722] text-white shadow-[0_0_0_4px_#fff]' : 'bg-[#e2e8f0] text-slate-400'}`}>4</div>
+                            <span className={`text-[11px] font-bold mt-2 ${step >= 4 ? 'text-slate-400' : 'text-slate-300'}`}>{t('step_password')}</span>
                         </div>
                     </div>
                 </div>
-              )}
               
-              {(formData.role === 'VENDOR' || step === 1) && (
+              {step === 1 && (
                 <>
                   <div className="space-y-1.5">
                     <label className={`text-xs font-bold text-slate-700 flex justify-between ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>
@@ -705,11 +862,601 @@ export default function RegisterPage() {
                                 </div>
                             )}
                         </div>
+                        </div>
+                </motion.div>
+              )}
+
+              {/* Influencer Specific Onboarding Questionnaire Step 3 */}
+              {formData.role === 'INFLUENCER' && step === 3 && (
+                <motion.div 
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-4 px-1"
+                >
+                    <div className="py-2 mt-2 pt-4 space-y-4 px-2">
+                        <div className="text-center mb-1">
+                            <h3 className="text-xs font-black text-[#2e315e] uppercase tracking-widest flex items-center justify-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5 text-[#ff5722] animate-pulse" />
+                              {language === 'ar' ? 'معلومات صانع المحتوى' : language === 'fr' ? 'Informations Créateur' : 'Creator Information'}
+                            </h3>
+                            <p className="text-[9px] text-slate-400 font-bold mt-1">
+                              {language === 'ar' ? 'ساعدنا في فهم احتياجاتك لتسريع معالجة حسابك' : language === 'fr' ? 'Aidez-nous à comprendre vos besoins pour accélérer le traitement' : 'Help us understand your needs to accelerate approval'}
+                            </p>
+                        </div>
+
+                        <div className="space-y-4 max-h-[50vh] overflow-y-auto px-1 py-1 custom-scrollbar">
+                            {/* Question 1: followersCount */}
+                            <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2.5 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                              <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
+                                <span>{language === 'ar' ? 'كم عدد المتابعين لديك في حسابك الرئيسي؟' : language === 'fr' ? "Combien d'abonnés avez-vous sur votre compte principal ?" : 'How many followers do you have on your main account?'}</span>
+                              </label>
+                              <div className="grid grid-cols-2 gap-2">
+                                {[
+                                  { key: 'less_5k', ar: 'أقل من 5,000 متابع', fr: 'Moins de 5k abonnés', en: 'Less than 5k followers' },
+                                  { key: '5k_50k', ar: '5,000 - 50,000 متابع', fr: '5k - 50k abonnés', en: '5k - 50k followers' },
+                                  { key: '50k_100k', ar: '50,000 - 100,000 متابع', fr: '50k - 100k abonnés', en: '50k - 100k followers' },
+                                  { key: '100k_500k', ar: '100,000 - 500,000 متابع', fr: '100k - 500k abonnés', en: '100k - 500k followers' },
+                                  { key: '1m_plus', ar: 'أكثر من مليون متابع', fr: 'Plus de 1M abonnés', en: 'More than 1M followers' }
+                                ].map((item) => {
+                                  const label = language === 'ar' ? item.ar : language === 'fr' ? item.fr : item.en;
+                                  return (
+                                    <button
+                                      key={item.key}
+                                      type="button"
+                                      onClick={() => setFormData({ ...formData, followersCount: item.key })}
+                                      className={`py-2 px-2 rounded-xl border text-[10px] font-extrabold text-center transition-all duration-200 active:scale-[0.98] ${
+                                        item.key === '1m_plus' ? 'col-span-2' : ''
+                                      } ${
+                                        formData.followersCount === item.key
+                                          ? 'border-[#ff5722] bg-[#ff5722]/5 text-[#ff5722] shadow-sm font-black'
+                                          : 'border-slate-100 bg-[#f8f9fa] text-slate-500 hover:border-slate-200 hover:bg-slate-100/50'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Question 2: contentType (multiple selection) */}
+                            <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2.5 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                              <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
+                                <span>{language === 'ar' ? 'ما هو نوع المحتوى الذي تقدمه لجمهورك؟ (اختر كل ما ينطبق)' : language === 'fr' ? "Quel type de contenu proposez-vous à votre audience ? (Plusieurs choix possibles)" : 'What type of content do you offer? (Select all that apply)'}</span>
+                              </label>
+                              <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
+                                {[
+                                  { key: 'comedy', ar: 'كوميديا وترفيه (Comedy & Entertainment)', fr: 'Humour & Divertissement', en: 'Comedy & Entertainment' },
+                                  { key: 'lifestyle', ar: 'لايف ستايل ويوميات (Lifestyle & Vlogs)', fr: 'Style de vie & Vlogs', en: 'Lifestyle & Vlogs' },
+                                  { key: 'beauty', ar: 'الجمال والموضة (Beauty & Fashion)', fr: 'Beauté & Mode', en: 'Beauty & Fashion' },
+                                  { key: 'health', ar: 'الصحة والرياضة (Health & Fitness)', fr: 'Santé & Sport', en: 'Health & Fitness' },
+                                  { key: 'tech', ar: 'تقنية ومعلومات (Tech & Education)', fr: 'Tech & Éducation', en: 'Tech & Education' },
+                                  { key: 'other', ar: 'أخرى (Other)', fr: 'Autre', en: 'Other' },
+                                ].map((item) => {
+                                  const isChecked = formData.contentType.includes(item.key);
+                                  const label = language === 'ar' ? item.ar : language === 'fr' ? item.fr : item.en;
+                                  return (
+                                    <label
+                                      key={item.key}
+                                      className={`flex items-center gap-2 cursor-pointer group ${language === 'ar' ? 'flex-row-reverse text-right' : ''}`}
+                                      onClick={() => {
+                                        const newTypes = isChecked
+                                          ? formData.contentType.filter(x => x !== item.key)
+                                          : [...formData.contentType, item.key];
+                                        setFormData({ ...formData, contentType: newTypes });
+                                      }}
+                                    >
+                                      <div className={`w-4.5 h-4.5 min-w-[18px] min-h-[18px] rounded border-2 flex items-center justify-center transition-all duration-200 ${
+                                        isChecked
+                                          ? 'bg-[#ff5722] border-[#ff5722] text-white shadow-sm'
+                                          : 'bg-white border-slate-300 group-hover:border-slate-400'
+                                      }`}>
+                                        {isChecked && (
+                                          <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                          </svg>
+                                        )}
+                                      </div>
+                                      <span className={`text-[9px] font-semibold leading-tight ${isChecked ? 'text-slate-800' : 'text-slate-600'}`}>
+                                        {label}
+                                      </span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Question 3: hasPriorExperience */}
+                            <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2.5 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                              <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
+                                <span>{language === 'ar' ? 'هل سبق لك الترويج لمنتجات أو خدمة او العمل كمسوق بالعمولة من قبل؟' : language === 'fr' ? 'Avez-vous déjà promu des produits/services ou travaillé comme affilié ?' : 'Have you ever promoted products/services or worked as an affiliate?'}</span>
+                              </label>
+                              <div className="grid grid-cols-2 gap-2">
+                                {[
+                                  { key: 'YES', ar: 'نعم، لدي خبرة سابقة', fr: 'Oui, j\'ai de l\'expérience', en: 'Yes, I have experience' },
+                                  { key: 'NO', ar: 'لا، هذه أول مرة سأبيع فيها منتجات عبر حسابي', fr: 'Non, c\'est ma première fois', en: 'No, this is my first time' }
+                                ].map((item) => {
+                                  const label = language === 'ar' ? item.ar : language === 'fr' ? item.fr : item.en;
+                                  return (
+                                    <button
+                                      key={item.key}
+                                      type="button"
+                                      onClick={() => setFormData({ ...formData, hasPriorExperience: item.key })}
+                                      className={`py-2 px-2 rounded-xl border text-[10px] font-extrabold text-center transition-all duration-200 active:scale-[0.98] ${
+                                        formData.hasPriorExperience === item.key
+                                          ? 'border-[#ff5722] bg-[#ff5722]/5 text-[#ff5722] shadow-sm font-black'
+                                          : 'border-slate-100 bg-[#f8f9fa] text-slate-500 hover:border-slate-200 hover:bg-slate-100/50'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Question 4: desiredProductTypes */}
+                            <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2.5 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                              <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
+                                <span>{language === 'ar' ? 'ما هو نوع المنتجات التي ترغب في إطلاق علامتك التجارية عليها؟' : language === 'fr' ? 'Sur quel type de produits souhaitez-vous lancer votre marque ?' : 'What type of products do you want to launch your brand on?'}</span>
+                              </label>
+                              <div className="grid grid-cols-2 gap-2">
+                                {[
+                                  { key: 'cosmetics', ar: 'مواد التجميل والمكملات الغذائية', fr: 'Cosmétiques & Compléments', en: 'Cosmetics & Supplements' },
+                                  { key: 'other', ar: 'منتجات أخرى', fr: 'Autres produits', en: 'Other products' }
+                                ].map((item) => {
+                                  const label = language === 'ar' ? item.ar : language === 'fr' ? item.fr : item.en;
+                                  return (
+                                    <button
+                                      key={item.key}
+                                      type="button"
+                                      onClick={() => setFormData({ ...formData, desiredProductTypes: item.key })}
+                                      className={`py-2 px-2 rounded-xl border text-[10px] font-extrabold text-center transition-all duration-200 active:scale-[0.98] ${
+                                        formData.desiredProductTypes === item.key
+                                          ? 'border-[#ff5722] bg-[#ff5722]/5 text-[#ff5722] shadow-sm font-black'
+                                          : 'border-slate-100 bg-[#f8f9fa] text-slate-500 hover:border-slate-200 hover:bg-slate-100/50'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Question 5: initialBudget */}
+                            <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2.5 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                              <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
+                                <span>{language === 'ar' ? 'إطلاق علامتك التجارية يتطلب ميزانية أولية للسلعة، ما هي الميزانية التي خصصتها للبدء؟' : language === 'fr' ? 'Le lancement de votre marque nécessite un budget initial. Quel budget avez-vous alloué ?' : 'Launching your brand requires an initial budget. What budget have you allocated?'}</span>
+                              </label>
+                              <div className="grid grid-cols-2 gap-2">
+                                {[
+                                  { key: '1500_3000', ar: '1,500 - 3,000 درهم', fr: '1 500 - 3 000 DH', en: '1,500 - 3,000 DH' },
+                                  { key: '3000_5000', ar: '3,000 - 5,000 درهم', fr: '3 000 - 5 000 DH', en: '3,000 - 5,000 DH' },
+                                  { key: '5000_10000', ar: '5,000 - 10,000 درهم', fr: '5 000 - 10 000 DH', en: '5,000 - 10,000 DH' },
+                                  { key: '10000_plus', ar: 'أكثر من 10,000 درهم', fr: 'Plus de 10 000 DH', en: 'More than 10,000 DH' }
+                                ].map((item) => {
+                                  const label = language === 'ar' ? item.ar : language === 'fr' ? item.fr : item.en;
+                                  return (
+                                    <button
+                                      key={item.key}
+                                      type="button"
+                                      onClick={() => setFormData({ ...formData, initialBudget: item.key })}
+                                      className={`py-2 px-2 rounded-xl border text-[10px] font-extrabold text-center transition-all duration-200 active:scale-[0.98] ${
+                                        formData.initialBudget === item.key
+                                          ? 'border-[#ff5722] bg-[#ff5722]/5 text-[#ff5722] shadow-sm font-black'
+                                          : 'border-slate-100 bg-[#f8f9fa] text-slate-500 hover:border-slate-200 hover:bg-slate-100/50'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Question 6: motivation */}
+                            <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                              <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
+                                <span>{language === 'ar' ? 'لماذا قررت إنشاء علامة تجارية خاصة بك ؟' : language === 'fr' ? 'Pourquoi avez-vous décidé de créer votre propre marque ?' : 'Why did you decide to create your own brand?'}</span>
+                              </label>
+                              <span className="block text-[9px] text-slate-400 font-bold -mt-1.5 text-slate-500">
+                                {language === 'ar' ? 'نريد أن نعرف طموحك وجديتك في بناء مشروعك الخاص' : language === 'fr' ? 'Nous voulons connaître votre ambition et votre sérieux' : 'We want to know your ambition and dedication'}
+                              </span>
+                              <textarea
+                                rows={2}
+                                value={formData.motivation}
+                                onChange={(e) => setFormData({ ...formData, motivation: e.target.value })}
+                                className={`w-full bg-[#f8f9fa] focus:bg-white border focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2 px-3 outline-none text-[11px] text-slate-700 font-medium resize-none border-slate-150 transition-all duration-200 ${language === 'ar' ? 'text-right' : 'text-left'}`}
+                                placeholder={language === 'ar' ? 'اكتب طموحك هنا...' : language === 'fr' ? 'Écrivez votre ambition ici...' : 'Write your motivation here...'}
+                              />
+                            </div>
+                        </div>
                     </div>
                 </motion.div>
               )}
- 
-              {(formData.role === 'VENDOR' || step === 3) && (
+
+              {/* Seller Onboarding Questionnaire Step 2 */}
+              {formData.role === 'VENDOR' && step === 2 && (
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="space-y-4 px-1"
+                >
+                  <div className="text-center mb-1">
+                    <h3 className="text-xs font-black text-[#2e315e] uppercase tracking-widest flex items-center justify-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-[#ff5722] animate-pulse" />
+                      {language === 'ar' ? 'معلومات النشاط التجاري' : language === 'fr' ? 'Informations Commerciales' : 'Business Information'}
+                    </h3>
+                    <p className="text-[9px] text-slate-400 font-bold mt-1">
+                      {language === 'ar' ? 'ساعدنا في فهم احتياجاتك لتسريع معالجة حسابك' : language === 'fr' ? 'Aidez-nous à comprendre vos besoins pour accélérer le traitement' : 'Help us understand your needs to accelerate approval'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-4 max-h-[50vh] overflow-y-auto px-3.5 py-1.5 -mx-3.5 custom-scrollbar">
+                    {/* Question 1: sellingOnline */}
+                    <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2.5 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                      <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
+                        <span>{language === 'ar' ? 'هل تبيع عبر الإنترنت؟' : language === 'fr' ? 'Vendez-vous en ligne ?' : 'Do you sell online?'}</span>
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {['Oui', 'Non'].map((opt) => {
+                          const val = opt === 'Oui' ? 'YES' : 'NO';
+                          const label = language === 'ar' ? (opt === 'Oui' ? 'نعم' : 'لا') : language === 'en' ? (opt === 'Oui' ? 'Yes' : 'No') : opt;
+                          return (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => setFormData({ ...formData, sellingOnline: val })}
+                              className={`py-2 px-3 rounded-xl border text-[11px] font-extrabold transition-all text-center duration-200 active:scale-[0.98] ${
+                                formData.sellingOnline === val
+                                  ? 'border-[#ff5722] bg-[#ff5722]/5 text-[#ff5722] shadow-sm font-black'
+                                  : 'border-slate-100 bg-[#f8f9fa] text-slate-500 hover:border-slate-200 hover:bg-slate-100/50'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Question 2: budget */}
+                    <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2.5 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                      <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
+                        <span>{language === 'ar' ? 'ما هي ميزانيتك لبدء هذا المشروع؟' : language === 'fr' ? 'Quel est votre budget pour démarrer ce projet ?' : 'What\'s the budget to start this project?'}</span>
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {['0', '< 1,000 DH', '1,000 - 5,000 DH', '5,000 - 20,000 DH', '20,000 DH+'].map((b) => (
+                          <button
+                            key={b}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, budget: b })}
+                            className={`py-2 px-2.5 rounded-xl border text-[10px] font-extrabold text-center transition-all duration-200 active:scale-[0.98] ${b === '20,000 DH+' ? 'col-span-2' : ''} ${
+                              formData.budget === b
+                                ? 'border-[#ff5722] bg-[#ff5722]/5 text-[#ff5722] shadow-sm font-black'
+                                : 'border-slate-100 bg-[#f8f9fa] text-slate-500 hover:border-slate-200 hover:bg-slate-100/50'
+                            }`}
+                          >
+                            {b}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Question 3: ordersPerDay */}
+                    <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2.5 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                      <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
+                        <span>{language === 'ar' ? 'عدد الطلبيات اليومية؟' : language === 'fr' ? 'Commandes par jour ?' : 'Orders per day?'}</span>
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {['0', '1-10', '11-50', '51-200', '200+'].map((o) => (
+                          <button
+                            key={o}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, ordersPerDay: o })}
+                            className={`flex-1 min-w-[55px] py-2 px-1.5 rounded-xl border text-[10px] font-extrabold text-center transition-all duration-200 active:scale-[0.98] ${
+                              formData.ordersPerDay === o
+                                ? 'border-[#ff5722] bg-[#ff5722]/5 text-[#ff5722] shadow-sm font-black'
+                                : 'border-slate-100 bg-[#f8f9fa] text-slate-500 hover:border-slate-200 hover:bg-slate-100/50'
+                            }`}
+                          >
+                            {o}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Question 4: experienceYears */}
+                    <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2.5 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                      <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
+                        <span>{language === 'ar' ? 'سنوات الخبرة في التجارة الإلكترونية؟' : language === 'fr' ? "Années d'expérience ?" : 'Years of experience?'}</span>
+                      </label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {['Not yet', '< 1 year', '1-3 years', '3+ years'].map((y) => {
+                          const label = language === 'ar'
+                            ? (y === 'Not yet' ? 'لا توجد بعد' : y === '< 1 year' ? 'أقل من سنة' : y === '1-3 years' ? '1-3 سنوات' : 'أكثر من 3')
+                            : language === 'fr'
+                            ? (y === 'Not yet' ? 'Pas encore' : y === '< 1 year' ? 'Moins d\'un an' : y === '1-3 years' ? '1-3 ans' : 'Plus de 3 ans')
+                            : y;
+                          return (
+                            <button
+                              key={y}
+                              type="button"
+                              onClick={() => setFormData({ ...formData, experienceYears: y })}
+                              className={`py-2 px-1.5 rounded-xl border text-[9px] font-extrabold text-center transition-all duration-200 active:scale-[0.98] ${
+                                formData.experienceYears === y
+                                  ? 'border-[#ff5722] bg-[#ff5722]/5 text-[#ff5722] shadow-sm font-black'
+                                  : 'border-slate-100 bg-[#f8f9fa] text-slate-500 hover:border-slate-200 hover:bg-slate-100/50'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Question 5: markets */}
+                    <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2.5 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                      <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
+                        <span>{language === 'ar' ? 'في أي أسواق عملت؟ (اختر كل ما ينطبق)' : language === 'fr' ? 'Dans quels marchés avez-vous travaillé ? (Sélectionnez tout ce qui s\'applique)' : 'Which markets have you worked in? (Select all that apply)'}</span>
+                      </label>
+                      <div className="flex flex-wrap gap-x-4 gap-y-2.5">
+                        {[
+                          { key: 'Morocco', en: 'Morocco', fr: 'Maroc', ar: 'المغرب' },
+                          { key: 'Africa', en: 'Africa', fr: 'Afrique', ar: 'إفريقيا' },
+                          { key: 'GCC', en: 'GCC (Gulf countries)', fr: 'GCC (Pays du Golfe)', ar: 'دول الخليج (GCC)' },
+                          { key: 'Europe', en: 'Europe', fr: 'Europe', ar: 'أوروبا' },
+                          { key: 'US', en: 'USA', fr: 'États-Unis', ar: 'الولايات المتحدة' },
+                          { key: 'Other', en: 'Other', fr: 'Autre', ar: 'أخرى' },
+                        ].map((item) => {
+                          const isChecked = formData.markets.includes(item.key);
+                          const label = language === 'ar' ? item.ar : language === 'fr' ? item.fr : item.en;
+                          return (
+                            <label
+                              key={item.key}
+                              className={`flex items-center gap-2 cursor-pointer group ${language === 'ar' ? 'flex-row-reverse' : ''}`}
+                              onClick={() => {
+                                const newMarkets = isChecked
+                                  ? formData.markets.filter(x => x !== item.key)
+                                  : [...formData.markets, item.key];
+                                setFormData({ ...formData, markets: newMarkets });
+                              }}
+                            >
+                              <div className={`w-4.5 h-4.5 min-w-[18px] min-h-[18px] rounded border-2 flex items-center justify-center transition-all duration-200 ${
+                                isChecked
+                                  ? 'bg-[#ff5722] border-[#ff5722] text-white shadow-sm'
+                                  : 'bg-white border-slate-300 group-hover:border-slate-400'
+                              }`}>
+                                {isChecked && (
+                                  <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </div>
+                              <span className={`text-[10px] font-semibold leading-tight ${isChecked ? 'text-slate-800' : 'text-slate-600'}`}>
+                                {label}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Question 6: totalSpend */}
+                    <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2.5 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                      <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
+                        <span>{language === 'ar' ? 'إجمالي الإنفاق الإعلاني؟' : language === 'fr' ? 'Dépenses publicitaires totales ?' : 'Total ad spend?'}</span>
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {['0', '< 5,000 DH', '5,000 - 20,000 DH', '20,000 - 100,000 DH', '100,000 DH+'].map((ts) => (
+                          <button
+                            key={ts}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, totalSpend: ts })}
+                            className={`py-2 px-2.5 rounded-xl border text-[10px] font-extrabold text-center transition-all duration-200 active:scale-[0.98] ${ts === '100,000 DH+' ? 'col-span-2' : ''} ${
+                              formData.totalSpend === ts
+                                ? 'border-[#ff5722] bg-[#ff5722]/5 text-[#ff5722] shadow-sm font-black'
+                                : 'border-slate-100 bg-[#f8f9fa] text-slate-500 hover:border-slate-200 hover:bg-slate-100/50'
+                            }`}
+                          >
+                            {ts}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Seller Onboarding Questionnaire Step 3 */}
+              {formData.role === 'VENDOR' && step === 3 && (
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="space-y-4 px-1"
+                >
+                  <div className="text-center mb-1">
+                    <h3 className="text-xs font-black text-[#2e315e] uppercase tracking-widest flex items-center justify-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-[#ff5722] animate-pulse" />
+                      {language === 'ar' ? 'أهداف وأولويات النشاط' : language === 'fr' ? 'Objectifs & Priorités' : 'Goals & Priorities'}
+                    </h3>
+                    <p className="text-[9px] text-slate-400 font-bold mt-1">
+                      {language === 'ar' ? 'ساعدنا في فهم احتياجاتك لتسريع معالجة حسابك' : language === 'fr' ? 'Aidez-nous à comprendre vos besoins pour accélérer le traitement' : 'Help us understand your needs to accelerate approval'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-4 max-h-[50vh] overflow-y-auto px-3.5 py-1.5 -mx-3.5 custom-scrollbar">
+                    {/* Question 7: niches */}
+                    <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2.5 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                      <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
+                        <span>{language === 'ar' ? 'المجالات المهتم بها؟' : language === 'fr' ? "Niches d'intérêt ?" : 'Niches of interest?'}</span>
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {['Beauty', 'Electronics', 'Fashion', 'Home', 'Health', 'Other'].map((n) => {
+                          const label = language === 'ar'
+                            ? (n === 'Beauty' ? 'التجميل' : n === 'Electronics' ? 'الإلكترونيات' : n === 'Fashion' ? 'الموضة' : n === 'Home' ? 'المنزل' : n === 'Health' ? 'الصحة' : 'أخرى')
+                            : language === 'fr'
+                            ? (n === 'Beauty' ? 'Beauté' : n === 'Electronics' ? 'Électronique' : n === 'Fashion' ? 'Mode' : n === 'Home' ? 'Maison' : n === 'Health' ? 'Santé' : 'Autre')
+                            : n;
+                          const isSelected = formData.niches.includes(n);
+                          return (
+                            <button
+                              key={n}
+                              type="button"
+                              onClick={() => {
+                                const newNiches = isSelected
+                                  ? formData.niches.filter(x => x !== n)
+                                  : [...formData.niches, n];
+                                setFormData({ ...formData, niches: newNiches });
+                              }}
+                              className={`py-1.5 px-3 rounded-xl border text-[10px] font-extrabold text-center transition-all duration-200 active:scale-[0.98] ${
+                                isSelected
+                                  ? 'border-[#ff5722] bg-[#ff5722]/5 text-[#ff5722] shadow-sm font-black'
+                                  : 'border-slate-100 bg-[#f8f9fa] text-slate-500 hover:border-slate-200 hover:bg-slate-100/50'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Question 8: biggestAchievement */}
+                    <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                      <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
+                        <span>{language === 'ar' ? 'ما هو أكبر إنجاز لك في التجارة الإلكترونية؟' : language === 'fr' ? 'Votre plus grande réussite en e-commerce ?' : 'What is your biggest eCommerce/affiliate achievement?'}</span>
+                      </label>
+                      <select
+                        value={formData.biggestAchievement}
+                        onChange={(e) => setFormData({ ...formData, biggestAchievement: e.target.value })}
+                        className={`w-full bg-[#f8f9fa] focus:bg-white border focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-3 outline-none text-[11px] text-slate-700 font-medium border-slate-150 transition-all duration-200 appearance-none cursor-pointer ${language === 'ar' ? 'text-right' : 'text-left'} ${!formData.biggestAchievement ? 'text-slate-400' : 'text-slate-700'}`}
+                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: language === 'ar' ? 'left 12px center' : 'right 12px center', paddingRight: language === 'ar' ? '12px' : '32px', paddingLeft: language === 'ar' ? '32px' : '12px' }}
+                      >
+                        <option value="">{language === 'ar' ? 'اختر خياراً' : language === 'fr' ? 'Sélectionnez une option' : 'Select an option'}</option>
+                        <option value="10k+ sales">{language === 'ar' ? 'تحقيق مبيعات +10k$' : language === 'fr' ? 'Généré +10k$ de CA' : 'Generated $10k+ in sales'}</option>
+                        <option value="loyal_customers">{language === 'ar' ? 'بناء قاعدة عملاء وفية' : language === 'fr' ? 'Construit une base clients fidèle' : 'Built a loyal customer base'}</option>
+                        <option value="multiple_markets">{language === 'ar' ? 'التوسع في أسواق متعددة' : language === 'fr' ? 'Expansion sur plusieurs marchés' : 'Scaled to multiple markets'}</option>
+                        <option value="product_line">{language === 'ar' ? 'إطلاق خط منتجات ناجح' : language === 'fr' ? 'Lancé une gamme de produits réussie' : 'Launched a successful product line'}</option>
+                        <option value="brand_building">{language === 'ar' ? 'بناء علامة تجارية قوية' : language === 'fr' ? 'Construit une marque forte' : 'Built a strong brand'}</option>
+                        <option value="none_yet">{language === 'ar' ? 'لا يوجد بعد' : language === 'fr' ? 'Pas encore' : 'None yet'}</option>
+                      </select>
+                    </div>
+
+                    {/* Question 9: biggestChallenge */}
+                    <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                      <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
+                        <span>{language === 'ar' ? 'ما هو أكبر تحدٍّ يواجهك حالياً؟' : language === 'fr' ? 'Votre plus grand défi en e-commerce ?' : 'What is your biggest challenge in eCommerce/affiliate?'}</span>
+                      </label>
+                      <select
+                        value={formData.biggestChallenge}
+                        onChange={(e) => setFormData({ ...formData, biggestChallenge: e.target.value })}
+                        className={`w-full bg-[#f8f9fa] focus:bg-white border focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-3 outline-none text-[11px] text-slate-700 font-medium border-slate-150 transition-all duration-200 appearance-none cursor-pointer ${language === 'ar' ? 'text-right' : 'text-left'} ${!formData.biggestChallenge ? 'text-slate-400' : 'text-slate-700'}`}
+                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: language === 'ar' ? 'left 12px center' : 'right 12px center', paddingRight: language === 'ar' ? '12px' : '32px', paddingLeft: language === 'ar' ? '32px' : '12px' }}
+                      >
+                        <option value="">{language === 'ar' ? 'اختر خياراً' : language === 'fr' ? 'Sélectionnez une option' : 'Select an option'}</option>
+                        <option value="finding_suppliers">{language === 'ar' ? 'العثور على موردين موثوقين' : language === 'fr' ? 'Trouver des fournisseurs fiables' : 'Finding reliable suppliers'}</option>
+                        <option value="inventory">{language === 'ar' ? 'إدارة المخزون' : language === 'fr' ? 'Gestion des stocks' : 'Managing inventory/stock'}</option>
+                        <option value="marketing">{language === 'ar' ? 'التسويق والإعلانات' : language === 'fr' ? 'Marketing & publicité' : 'Marketing & advertising'}</option>
+                        <option value="shipping">{language === 'ar' ? 'الشحن واللوجستيك' : language === 'fr' ? 'Expédition & logistique' : 'Shipping & logistics'}</option>
+                        <option value="customer_service">{language === 'ar' ? 'خدمة العملاء' : language === 'fr' ? 'Service client' : 'Customer service'}</option>
+                        <option value="competition">{language === 'ar' ? 'المنافسة الشديدة' : language === 'fr' ? 'Concurrence intense' : 'High competition'}</option>
+                        <option value="cashflow">{language === 'ar' ? 'التدفق النقدي' : language === 'fr' ? 'Trésorerie' : 'Cash flow'}</option>
+                      </select>
+                    </div>
+
+                    {/* Question 10: partnerPriorities */}
+                    <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2.5 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                      <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
+                        <span>{language === 'ar' ? 'ما الذي تبحث عنه في شريك/منصة جديدة؟ (اختر أولوياتك)' : language === 'fr' ? 'Que recherchez-vous chez un nouveau partenaire/plateforme ? (Priorités)' : 'What are you looking for in a new partner/platform? (Pick top priorities)'}</span>
+                      </label>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
+                        {[
+                          { key: 'more_products', en: 'More products to sell', fr: 'Plus de produits à vendre', ar: 'منتجات أكثر للبيع' },
+                          { key: 'logistics', en: 'Done-for-you logistics/fulfillment', fr: 'Logistique/fulfillment clé en main', ar: 'لوجستيك جاهز' },
+                          { key: 'call_center', en: 'Call center/order confirmation', fr: 'Centre d\'appel/confirmation', ar: 'مركز اتصال/تأكيد الطلبات' },
+                          { key: 'fast_delivery', en: 'Faster & more reliable delivery', fr: 'Livraison plus rapide et fiable', ar: 'توصيل أسرع وموثوق' },
+                          { key: 'cod', en: 'Better cash collection (COD)', fr: 'Meilleur encaissement (COD)', ar: 'تحصيل نقدي أفضل (COD)' },
+                          { key: 'commissions', en: 'Higher commission rates', fr: 'Commissions plus élevées', ar: 'عمولات أعلى' },
+                          { key: 'community', en: 'Community/support', fr: 'Communauté/support', ar: 'مجتمع/دعم' },
+                          { key: 'automation', en: 'Automation/less manual work', fr: 'Automatisation/moins de travail manuel', ar: 'أتمتة/عمل يدوي أقل' },
+                          { key: 'transparency', en: 'Transparency/reporting', fr: 'Transparence/reporting', ar: 'شفافية/تقارير' },
+                          { key: 'other', en: 'Other', fr: 'Autre', ar: 'أخرى' },
+                        ].map((item) => {
+                          const isChecked = formData.partnerPriorities.includes(item.key);
+                          const label = language === 'ar' ? item.ar : language === 'fr' ? item.fr : item.en;
+                          return (
+                            <label
+                              key={item.key}
+                              className={`flex items-center gap-2 cursor-pointer group ${language === 'ar' ? 'flex-row-reverse text-right' : ''}`}
+                              onClick={() => {
+                                const newPriorities = isChecked
+                                  ? formData.partnerPriorities.filter(x => x !== item.key)
+                                  : [...formData.partnerPriorities, item.key];
+                                setFormData({ ...formData, partnerPriorities: newPriorities });
+                              }}
+                            >
+                              <div className={`w-4.5 h-4.5 min-w-[18px] min-h-[18px] rounded border-2 flex items-center justify-center transition-all duration-200 ${
+                                isChecked
+                                  ? 'bg-[#ff5722] border-[#ff5722] text-white shadow-sm'
+                                  : 'bg-white border-slate-300 group-hover:border-slate-400'
+                              }`}>
+                                {isChecked && (
+                                  <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </div>
+                              <span className={`text-[10px] font-semibold leading-tight ${isChecked ? 'text-slate-800' : 'text-slate-600'}`}>
+                                {label}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+
+                    {/* Question 12: additionalNotes */}
+                    <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                      <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
+                        <span>{language === 'ar' ? 'ملاحظات إضافية؟' : language === 'fr' ? 'Notes additionnelles ?' : 'Additional notes?'}</span>
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={formData.additionalNotes}
+                        onChange={(e) => setFormData({ ...formData, additionalNotes: e.target.value })}
+                        className={`w-full bg-[#f8f9fa] focus:bg-white border focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2 px-3 outline-none text-[11px] text-slate-700 font-medium resize-none border-slate-150 transition-all duration-200 ${language === 'ar' ? 'text-right' : 'text-left'}`}
+                        placeholder={language === 'ar' ? 'أي معلومات أخرى تود مشاركتها...' : language === 'fr' ? 'Toute autre information que vous souhaitez partager...' : 'Any other information you want to share...'}
+                      />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {step === 4 && (
                 <div className="space-y-5 pt-2">
                     <div className="space-y-1.5">
                       <label className={`text-sm font-bold text-slate-700 ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>{t('password_label')} <span className="text-[#ff5722]">*</span></label>
@@ -800,7 +1547,7 @@ export default function RegisterPage() {
                 </div>
               )}
 
-              {(formData.role === 'VENDOR' || step === 3) && (
+              {step === 4 && (
                 <div className={`flex items-start gap-2.5 px-1 py-1 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
                   <input
                     type="checkbox"
@@ -828,7 +1575,7 @@ export default function RegisterPage() {
                 </div>
               )}
  
-              {(formData.role === 'VENDOR' || step === 3) && (
+              {step === 4 && (
                 <div className="flex justify-center mt-6">
                   <Turnstile
                     ref={turnstileRef}
@@ -842,17 +1589,22 @@ export default function RegisterPage() {
               )}
 
               <div className="pt-3 flex gap-3">
-                {formData.role === 'INFLUENCER' && step > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setStep(step - 1)}
-                    className="w-[120px] bg-slate-100 text-slate-600 font-bold py-2.5 rounded-xl hover:bg-slate-200 transition-all text-sm"
-                  >
-                    {t('back_btn')}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => {
+                    if (step > 1) {
+                      setStep(step - 1);
+                    } else {
+                      setSelectionConfirmed(false);
+                    }
+                  }}
+                  className="w-[120px] bg-slate-100 text-slate-600 font-bold py-2.5 rounded-xl hover:bg-slate-200 transition-all text-sm disabled:opacity-50"
+                >
+                  {t('back_btn')}
+                </button>
                 
-                {formData.role === 'INFLUENCER' && step < 3 ? (
+                {step < 4 ? (
                   <button
                     type="button"
                     onClick={handleNextStep}
@@ -871,34 +1623,7 @@ export default function RegisterPage() {
                 )}
               </div>
             </form>
- 
-            <div className="mt-8 flex flex-col items-center gap-4">
-              <div className="w-full flex justify-center">
-                <GoogleLogin 
-                  onSuccess={handleGoogleSuccess} 
-                  onError={() => toast.error(t('google_login_failed'))}
-                  useOneTap
-                  theme="outline"
-                  shape="pill"
-                  size="large"
-                  width="100%"
-                />
-              </div>
-              <p className="text-[13px] font-semibold text-slate-500 mt-2">
-                {t('already_have_account')}{' '}
-                <Link to="/login" className="text-[#ff5722] hover:text-[#e64a19] transition-colors font-bold">
-                  {t('sign_in_link')}
-                </Link>
-              </p>
-            </div>
-            
-            <div className="mt-8 text-center">
-              <p className="text-[11px] font-semibold text-slate-400">
-                <Link to="/privacy" target="_blank" className="hover:text-[#ff5722] transition-colors">{t('privacy_notice')}</Link>
-                {' | '}
-                <Link to="/terms" target="_blank" className="hover:text-[#ff5722] transition-colors font-semibold">{t('terms_of_service')}</Link>
-              </p>
-            </div>
+            )}
           </div>
         </div>
       </div>

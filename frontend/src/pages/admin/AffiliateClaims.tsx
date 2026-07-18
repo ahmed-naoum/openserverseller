@@ -396,7 +396,18 @@ export default function AdminAffiliateClaims() {
 
                             {/* Product Info */}
                             <td className="px-6 py-4 max-w-xs">
-                              <div className="text-sm font-bold text-gray-900 truncate">{req.name}</div>
+                              <div className="text-sm font-bold text-gray-900 truncate flex items-center gap-2">
+                                <span>{req.name}</span>
+                                {req.userType && (
+                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border ${
+                                    req.userType === 'INFLUENCER' 
+                                      ? 'bg-pink-100 text-pink-700 border-pink-200' 
+                                      : 'bg-blue-100 text-blue-700 border-blue-200'
+                                  }`}>
+                                    {req.userType === 'INFLUENCER' ? 'Influenceur' : 'Vendeur'}
+                                  </span>
+                                )}
+                              </div>
                               
                               <div className="flex flex-wrap items-center gap-1.5 mt-1">
                                 {req.category && (

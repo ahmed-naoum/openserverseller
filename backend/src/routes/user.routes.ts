@@ -427,6 +427,8 @@ router.get(
         wallet: true,
         kycDocuments: true,
         bankAccounts: true,
+        questionnaire: true,
+        influencerQuestionnaire: true,
       },
     });
 
@@ -482,6 +484,8 @@ router.get(
           subdomain: user.subdomain,
           customDomain: user.customDomain,
           customDomainStatus: user.customDomainStatus,
+          questionnaire: user.questionnaire,
+          influencerQuestionnaire: (user as any).influencerQuestionnaire,
         },
       },
     });

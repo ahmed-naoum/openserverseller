@@ -6,6 +6,8 @@
   "step_account": "الحساب",
   "step_social": "وسائل التواصل الاجتماعي",
   "step_password": "كلمة المرور",
+  "step_activity": "النشاط",
+  "step_questionnaire": "الاستبيان",
   "full_name_label": "الاسم الكامل",
   "full_name_placeholder": "اسمك الكامل",
   "phone_label": "رقم الهاتف",

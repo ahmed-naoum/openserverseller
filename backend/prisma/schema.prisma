@@ -106,6 +106,8 @@ model User {
   language       String            @default("ar") @db.VarChar(5)
 
   profile        UserProfile?
+  questionnaire  SellerQuestionnaire?
+  influencerQuestionnaire InfluencerQuestionnaire?
   kycDocuments   KycDocument[]
   leadImports    LeadImportBatch[]
   leads          Lead[]
@@ -1187,8 +1189,49 @@ model CustomProductRequest {
   description String
   imageUrl    String?
   status      String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  userType    String?  // INFLUENCER, SELLER
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@map("custom_product_requests")
 }
+
+model SellerQuestionnaire {
+  id                    Int      @id @default(autoincrement())
+  userId                Int      @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sellingOnline         String   // "Yes" or "No"
+  budget                String   // allocated budget option
+  ordersPerDay          String   // shipping orders per day option
+  experienceYears       String   // experience option
+  markets               Json     // array of selected markets
+  totalSpend            String   // total eCommerce/ads spend option
+  niches                Json     // array of selected niches
+  biggestAchievement    String   // achievement option
+  biggestChallenge      String   // challenge option
+  partnerPriorities     Json     // array of selected priorities
+  interviewAvailability String   // "YES" or "NO"
+  additionalNotes       String?  // textarea notes
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("seller_questionnaires")
+}
+
+model InfluencerQuestionnaire {
+  id                    Int      @id @default(autoincrement())
+  userId                Int      @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  followersCount        String   // "5,000 - 50,000", "50,000 - 100,000", "100,000 - 500,000", "1,000,000+"
+  contentType           Json     // array of selected content types
+  hasPriorExperience    String   // "YES" or "NO"
+  desiredProductTypes   String   // "cosmetics" or "other"
+  initialBudget         String   // "1,500 - 3,000 DH", "3,000 - 5,000 DH", etc.
+  motivation            String   // text block describing motivation
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("influencer_questionnaires")
+}
+
+

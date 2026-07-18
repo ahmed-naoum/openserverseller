@@ -125,7 +125,7 @@ api.interceptors.response.use(
 export const authApi = {
   login: (data: { email?: string; phone?: string; password: string }) =>
     api.post('/auth/login', data),
-  register: (data: { email?: string; phone?: string; password: string; fullName: string; role?: string }) =>
+  register: (data: { email?: string; phone?: string; password: string; fullName: string; role?: string; [key: string]: any }) =>
     api.post('/auth/register', data),
   registerInfluencer: (data: any) =>
     api.post('/auth/register-influencer', data),
@@ -689,7 +689,7 @@ export const domainApi = {
 };
 
 export const customProductsApi = {
-  createRequest: (data: { name: string; category: string; productLink?: string | null; quantity: number; description: string; imageUrl?: string | null }) =>
+  createRequest: (data: { name: string; category: string; productLink?: string | null; quantity: number; description: string; imageUrl?: string | null; userType?: string | null }) =>
     api.post('/custom-products', data),
   listRequests: (params?: { status?: string }) =>
     api.get('/custom-products', { params }),

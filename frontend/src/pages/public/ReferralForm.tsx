@@ -74,6 +74,54 @@ export default function ReferralForm() {
     }
   }, [data]);
 
+  // Client-side Cloaking & Redirect Filters
+  useEffect(() => {
+    if (data?.landingPage?.customStructure) {
+      const structure = data.landingPage.customStructure;
+      const settings = Array.isArray(structure) ? null : structure?.settings;
+      if (settings?.cloaking?.enabled) {
+        const c = settings.cloaking;
+
+        // 1. Bot & Crawler Filtering
+        if (c.filterBots) {
+          const botPattern = /bot|crawler|spider|crawling|scraper|snippet|curl|wget|python|postman|axios|node-fetch|httpclient|headless|puppeteer|phantomjs|selenium|cypress|facebookexternalhit|facebookplatform|facebookcatalog|facebookbot|googlebot|bingbot|slurp|yahoo|adbot|lighthouse|duckduckbot|baiduspider|yandexbot|sogou|exabot|facebot|ia_archiver|linkedinbot|twitterbot|slackbot|telegrambot|applebot|whatsapp|skypeuripreview|ahrefsbot|semrushbot|mj12bot|dotbot|rogerbot|moz|majestics12|seznambot|pingdom|archive\.org_bot|discordbot|pinterest|vkshare|redditbot|tumblr|flipboardproxy|feedfetcher|amazonbot|bytespider|ccbot|chatgpt-user|claudebot|coccocbot|dataminr|go-http-client|grapeshot|java|libwww|lwp-trivial|mail\.ru|megaindex|petalsearch|qwantify|screaming\sfrog|soso|tencenttraveler|zite|zoominfo|ahrefs|alexa|appinsights|archive|ask\sjeeves|bubing|catchpoint|cloudflare|criteo|datadog|duckduckgo|fastly|feedburner|flipboard|hubspot|incapsula|instagram|linkedin|majestic|monitor|msn|naver|nuzzel|outbrain|pagespeed|quora|reddit|semrush|skype|slack|snapchat|statuscake|telegram|updown|uptimerobot|vkontakte|yelp|youtube|zillow|zmeu/i;
+          if (botPattern.test(navigator.userAgent)) {
+            window.location.replace(c.botRedirectUrl || 'https://wikipedia.org');
+            return;
+          }
+        }
+
+        // 2. Direct Visits Filtering (No referrer)
+        if (c.filterDirect) {
+          if (!document.referrer) {
+            window.location.replace(c.directRedirectUrl || 'https://google.com');
+            return;
+          }
+        }
+
+        // 3. Desktop redirection (Mobile only mode)
+        if (c.redirectDesktop) {
+          const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+          if (!isMobile) {
+            window.location.replace(c.desktopRedirectUrl || 'https://www.silacod.com');
+            return;
+          }
+        }
+
+        // 4. Browser Language Filtering
+        if (c.filterLanguage && c.allowedLanguages) {
+          const userLang = (navigator.language || (navigator as any).userLanguage || '').toLowerCase();
+          const allowedList = c.allowedLanguages.split(',').map((l: string) => l.trim().toLowerCase());
+          const isAllowed = allowedList.some((lang: string) => userLang.includes(lang));
+          if (!isAllowed) {
+            window.location.replace(c.languageRedirectUrl || 'https://google.com');
+            return;
+          }
+        }
+      }
+    }
+  }, [data]);
+
   const activePixels = useMemo(() => {
     if (!data?.pixels || !Array.isArray(data.pixels)) return [];
     
@@ -355,11 +403,30 @@ export default function ReferralForm() {
                             {opt.name || `Pack ${i + 1}`}
                           </div>
                         </div>
-                        <div 
-                          className="text-2xl font-black transition-colors"
-                          style={{ color: isSelected ? accentColor : '#111827' }}
-                        >
-                          {opt.price} <span className="text-[11px] opacity-60 uppercase ml-1">MAD</span>
+                        <div className="flex items-center gap-1.5">
+                          {opt.oldPrice && (
+                            <>
+                              <span 
+                                className="font-bold line-through opacity-50"
+                                style={{ 
+                                  color: opt.oldPriceColor || blockContent.oldPriceColor || '#9ca3af',
+                                  fontSize: opt.oldPriceSize ? `${opt.oldPriceSize}px` : (blockContent.oldPriceSize ? `${blockContent.oldPriceSize}px` : '24px')
+                                }}
+                              >
+                                {opt.oldPrice}
+                              </span>
+                              <span className="text-gray-300 font-bold text-xl mx-0.5">/</span>
+                            </>
+                          )}
+                          <div 
+                            className="font-black transition-colors"
+                            style={{ 
+                              color: opt.priceColor || (isSelected ? accentColor : '#111827'),
+                              fontSize: opt.priceSize ? `${opt.priceSize}px` : (blockContent.priceSize ? `${blockContent.priceSize}px` : '24px')
+                            }}
+                          >
+                            {opt.price} <span className="text-[11px] opacity-60 uppercase ml-1">MAD</span>
+                          </div>
                         </div>
                       </div>
                     );

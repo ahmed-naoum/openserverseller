@@ -10,7 +10,7 @@ router.post(
   '/',
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
-    const { name, category, productLink, quantity, description, imageUrl } = req.body;
+    const { name, category, productLink, quantity, description, imageUrl, userType } = req.body;
 
     if (!name || typeof name !== 'string' || name.trim() === '') {
       throw new AppException(400, 'Le nom du produit est requis.');
@@ -24,6 +24,9 @@ router.post(
     if (!description || typeof description !== 'string' || description.trim() === '') {
       throw new AppException(400, 'La description est requise.');
     }
+    if (userType && !['INFLUENCER', 'SELLER'].includes(userType)) {
+      throw new AppException(400, 'Le type de profil est invalide.');
+    }
 
     const request = await prisma.customProductRequest.create({
       data: {
@@ -34,6 +37,7 @@ router.post(
         quantity: Math.floor(Number(quantity)),
         description: description.trim(),
         imageUrl: imageUrl || null,
+        userType: userType || null,
         status: 'PENDING'
       },
       include: {
@@ -59,8 +63,9 @@ router.post(
       if (admins.length > 0) {
         const { createNotification } = await import('../utils/notification.js');
         const submitterName = req.user?.email || 'Un utilisateur';
-        const notifTitle = '📦 Nouvelle Demande de Produit';
-        const notifBody = `${submitterName} a soumis une demande de produit personnalisé "${name.trim()}" (${category.trim()}).`;
+        const userTypeLabel = userType === 'INFLUENCER' ? 'Influenceur' : userType === 'SELLER' ? 'Vendeur' : '';
+        const notifTitle = userTypeLabel ? `📦 Nouvelle Demande (${userTypeLabel})` : '📦 Nouvelle Demande de Produit';
+        const notifBody = `${submitterName} (${userTypeLabel || 'Utilisateur'}) a soumis une demande de produit personnalisé "${name.trim()}" (${category.trim()}).`;
 
         for (const admin of admins) {
           await createNotification(admin.id, 'CUSTOM_PRODUCT_REQUEST', notifTitle, notifBody);

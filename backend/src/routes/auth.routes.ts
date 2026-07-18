@@ -145,6 +145,18 @@ router.post(
     }),
     body('turnstileToken').notEmpty().withMessage('CAPTCHA verification is required'),
     body('cguAccepted').custom((value) => value === true || value === 'true' || value === 1 || value === '1').withMessage("Veuillez accepter les Conditions Générales d'Utilisation (CGU)"),
+    body('sellingOnline').optional().isString(),
+    body('budget').optional().isString(),
+    body('ordersPerDay').optional().isString(),
+    body('experienceYears').optional().isString(),
+    body('markets').optional().isArray(),
+    body('totalSpend').optional().isString(),
+    body('niches').optional().isArray(),
+    body('biggestAchievement').optional().isString(),
+    body('biggestChallenge').optional().isString(),
+    body('partnerPriorities').optional().isArray(),
+    body('interviewAvailability').optional().isString(),
+    body('additionalNotes').optional().isString(),
   ],
   asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
@@ -159,7 +171,12 @@ router.post(
       throw new AppException(400, 'CAPTCHA verification failed. Please try again.');
     }
 
-    const { email, phone, password, fullName, language = 'ar' } = req.body;
+    const {
+      email, phone, password, fullName, language = 'ar',
+      sellingOnline, budget, ordersPerDay, experienceYears, markets,
+      totalSpend, niches, biggestAchievement, biggestChallenge,
+      partnerPriorities, interviewAvailability, additionalNotes
+    } = req.body;
     const role = 'VENDOR'; // Hardcoded — only VENDOR can register via this route
     const normalizedPhone = phone ? normalizePhoneNumber(phone) : undefined;
     const langCode = ['en', 'fr', 'ar'].includes(language) ? language : 'ar';
@@ -233,10 +250,29 @@ router.post(
               language: langCode,
             } as any,
           },
+          ...(sellingOnline !== undefined ? {
+            questionnaire: {
+              create: {
+                sellingOnline,
+                budget: budget || '',
+                ordersPerDay: ordersPerDay || '',
+                experienceYears: experienceYears || '',
+                markets: markets || [],
+                totalSpend: totalSpend || '',
+                niches: niches || [],
+                biggestAchievement: biggestAchievement || '',
+                biggestChallenge: biggestChallenge || '',
+                partnerPriorities: partnerPriorities || [],
+                interviewAvailability: interviewAvailability || 'NO',
+                additionalNotes: additionalNotes || null
+              }
+            }
+          } : {})
         },
         include: {
           profile: true,
           role: true,
+          questionnaire: true,
         },
       })) as any;
     } catch (error: any) {
@@ -353,6 +389,12 @@ router.post(
     body('snapchatUsername').optional().trim().escape(),
     body('turnstileToken').notEmpty().withMessage('CAPTCHA verification is required'),
     body('cguAccepted').custom((value) => value === true || value === 'true' || value === 1 || value === '1').withMessage("Veuillez accepter les Conditions Générales d'Utilisation (CGU)"),
+    body('followersCount').optional().isString(),
+    body('contentType').optional().isArray(),
+    body('hasPriorExperience').optional().isString(),
+    body('desiredProductTypes').optional().isString(),
+    body('initialBudget').optional().isString(),
+    body('motivation').optional().isString(),
   ],
   asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
@@ -367,7 +409,11 @@ router.post(
       throw new AppException(400, 'CAPTCHA verification failed. Please try again.');
     }
 
-    const { email, phone, password, fullName, instagramUsername, tiktokUsername, facebookUsername, xUsername, youtubeUsername, snapchatUsername, instagramUrl, tiktokUrl, facebookUrl, youtubeUrl, snapchatUrl, language = 'ar' } = req.body;
+    const {
+      email, phone, password, fullName, instagramUsername, tiktokUsername, facebookUsername, xUsername, youtubeUsername, snapchatUsername,
+      instagramUrl, tiktokUrl, facebookUrl, youtubeUrl, snapchatUrl, language = 'ar',
+      followersCount, contentType, hasPriorExperience, desiredProductTypes, initialBudget, motivation
+    } = req.body;
     const normalizedPhone = phone ? normalizePhoneNumber(phone) : undefined;
     const langCode = ['en', 'fr', 'ar'].includes(language) ? language : 'ar';
 
@@ -464,10 +510,23 @@ router.post(
               }
             },
           },
+          ...(followersCount !== undefined ? {
+            influencerQuestionnaire: {
+              create: {
+                followersCount,
+                contentType: contentType || [],
+                hasPriorExperience: hasPriorExperience || '',
+                desiredProductTypes: desiredProductTypes || '',
+                initialBudget: initialBudget || '',
+                motivation: motivation || '',
+              }
+            }
+          } : {})
         },
         include: {
           profile: true,
           role: true,
+          influencerQuestionnaire: true,
         },
       })) as any;
     } catch (error: any) {

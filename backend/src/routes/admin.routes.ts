@@ -905,6 +905,8 @@ router.get(
           role: true,
           kycDocuments: true,
           bankAccounts: true,
+          questionnaire: true,
+          influencerQuestionnaire: true,
         },
         orderBy: { createdAt: 'desc' },
         skip,

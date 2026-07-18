@@ -656,7 +656,7 @@ function AddUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
 
 function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: () => void; user: any }) {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'access' | 'personal' | 'bank' | 'social'>('access');
+  const [activeTab, setActiveTab] = useState<'access' | 'personal' | 'bank' | 'social' | 'questionnaire'>('access');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
@@ -837,6 +837,20 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
             <Globe size={16} />
             Réseaux Sociaux
           </button>
+          {formData.role === 'VENDOR' && fullUser?.questionnaire && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('questionnaire')}
+              className={`flex-1 flex items-center justify-center gap-2 py-3 text-[10px] font-black uppercase tracking-wider rounded-2xl transition-all duration-300 ${
+                activeTab === 'questionnaire'
+                  ? 'bg-white text-indigo-600 shadow-md shadow-indigo-100/50'
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'
+              }`}
+            >
+              <FileText size={16} />
+              Questionnaire
+            </button>
+          )}
         </div>
 
         {/* Content & Form */}
@@ -1571,6 +1585,139 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
                             </div>
                           </div>
                         </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 5. Tab: QUESTIONNAIRE */}
+                {activeTab === 'questionnaire' && fullUser?.questionnaire && (
+                  <div className="space-y-6 animate-in fade-in duration-300">
+                    <div className="bg-indigo-50/30 border border-indigo-100 rounded-3xl p-5 mb-4">
+                      <h4 className="text-xs font-black text-indigo-950 uppercase tracking-wider mb-1 flex items-center gap-2">
+                        <FileText size={18} className="text-indigo-600" />
+                        Réponses de l'Onboarding Vendeur
+                      </h4>
+                      <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">
+                        Soumis lors de l'inscription pour évaluer l'activité du e-commerçant.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Q1: sellingOnline */}
+                      <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">1. Vente en ligne active ?</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-black px-2.5 py-1 rounded-lg uppercase tracking-wider ${
+                            fullUser.questionnaire.sellingOnline === 'YES'
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-rose-100 text-rose-700'
+                          }`}>
+                            {fullUser.questionnaire.sellingOnline === 'YES' ? 'Oui' : 'Non'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Q2: budget */}
+                      <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">2. Budget sourcing mensuel</span>
+                        <span className="text-xs font-bold text-slate-800">{fullUser.questionnaire.budget || 'Non spécifié'}</span>
+                      </div>
+
+                      {/* Q3: ordersPerDay */}
+                      <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">3. Commandes par jour</span>
+                        <span className="text-xs font-bold text-slate-800">{fullUser.questionnaire.ordersPerDay || 'Non spécifié'}</span>
+                      </div>
+
+                      {/* Q4: experienceYears */}
+                      <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">4. Années d'expérience</span>
+                        <span className="text-xs font-bold text-slate-800">{fullUser.questionnaire.experienceYears || 'Non spécifié'}</span>
+                      </div>
+
+                      {/* Q5: markets */}
+                      <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between col-span-2">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">5. Marchés cibles</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {Array.isArray(fullUser.questionnaire.markets) && fullUser.questionnaire.markets.length > 0 ? (
+                            fullUser.questionnaire.markets.map((m: string) => (
+                              <span key={m} className="text-[10px] font-bold px-2 py-0.5 bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-lg">
+                                {m}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-[10px] font-bold text-slate-400">Aucun marché spécifié</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Q6: totalSpend */}
+                      <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">6. Dépenses publicitaires totales</span>
+                        <span className="text-xs font-bold text-slate-800">{fullUser.questionnaire.totalSpend || 'Non spécifié'}</span>
+                      </div>
+
+                      {/* Q7: niches */}
+                      <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between col-span-2">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">7. Niches d'intérêt</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {Array.isArray(fullUser.questionnaire.niches) && fullUser.questionnaire.niches.length > 0 ? (
+                            fullUser.questionnaire.niches.map((n: string) => (
+                              <span key={n} className="text-[10px] font-bold px-2 py-0.5 bg-purple-50 border border-purple-100 text-purple-700 rounded-lg">
+                                {n}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-[10px] font-bold text-slate-400">Aucune niche spécifiée</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Q8: biggestAchievement */}
+                      <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl col-span-2">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">8. Plus grande réussite</span>
+                        <p className="text-xs text-slate-700 font-medium whitespace-pre-line bg-white p-3 rounded-xl border border-slate-100">
+                          {fullUser.questionnaire.biggestAchievement || 'Non spécifié'}
+                        </p>
+                      </div>
+
+                      {/* Q9: biggestChallenge */}
+                      <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl col-span-2">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">9. Plus grand défi actuel</span>
+                        <p className="text-xs text-slate-700 font-medium whitespace-pre-line bg-white p-3 rounded-xl border border-slate-100">
+                          {fullUser.questionnaire.biggestChallenge || 'Non spécifié'}
+                        </p>
+                      </div>
+
+                      {/* Q10: partnerPriorities */}
+                      <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between col-span-2">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">10. Priorités chez un partenaire</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {Array.isArray(fullUser.questionnaire.partnerPriorities) && fullUser.questionnaire.partnerPriorities.length > 0 ? (
+                            fullUser.questionnaire.partnerPriorities.map((p: string) => (
+                              <span key={p} className="text-[10px] font-bold px-2 py-0.5 bg-amber-50 border border-amber-100 text-amber-700 rounded-lg">
+                                {p}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-[10px] font-bold text-slate-400">Aucune priorité spécifiée</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Q11: interviewAvailability */}
+                      <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">11. Disponibilité appel court</span>
+                        <span className="text-xs font-bold text-slate-800">{fullUser.questionnaire.interviewAvailability || 'Non spécifié'}</span>
+                      </div>
+
+                      {/* Q12: additionalNotes */}
+                      <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl col-span-2">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">12. Remarques additionnelles</span>
+                        <p className="text-xs text-slate-700 font-medium whitespace-pre-line bg-white p-3 rounded-xl border border-slate-100">
+                          {fullUser.questionnaire.additionalNotes || 'Aucune remarque'}
+                        </p>
                       </div>
                     </div>
                   </div>

@@ -122,6 +122,7 @@ export default function AdminVerifications() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [expandedQuestionnaire, setExpandedQuestionnaire] = useState<string | null>(null);
   const [imageModal, setImageModal] = useState<{ url: string; title: string } | null>(null);
   const [editingSubdomainUuid, setEditingSubdomainUuid] = useState<string | null>(null);
   const [subdomainInput, setSubdomainInput] = useState('');
@@ -581,6 +582,287 @@ export default function AdminVerifications() {
                         {!user.detectedCity && !user.profile?.city && <p className="text-sm font-bold text-slate-300">—</p>}
                       </div>
                     </div>
+
+                    {/* Onboarding Responses */}
+                    {user.questionnaire && (() => {
+                      const isOpen = expandedQuestionnaire === user.uuid;
+                      return (
+                        <div className="rounded-3xl bg-white border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
+                          {/* Header / Toggle Button */}
+                          <button
+                            onClick={() => setExpandedQuestionnaire(isOpen ? null : user.uuid)}
+                            className="w-full text-left p-5 bg-[#2c2f74]/5 hover:bg-[#2c2f74]/10 border-b border-[#2c2f74]/10 transition-all flex items-center justify-between gap-4"
+                          >
+                            <div className="space-y-1">
+                              <h4 className="text-xs font-black text-[#2c2f74] uppercase tracking-wider flex items-center gap-2">
+                                <FileText size={18} className="text-[#2c2f74]" />
+                                Réponses de l'Onboarding Vendeur
+                              </h4>
+                              <p className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">
+                                Soumis lors de l'inscription pour évaluer l'activité du e-commerçant (Cliquez pour déplier).
+                              </p>
+                            </div>
+                            <div className="p-2 rounded-xl bg-white border border-[#2c2f74]/10 text-[#2c2f74] shadow-sm">
+                              {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </div>
+                          </button>
+
+                          {/* Collapsible Content */}
+                          {isOpen && (
+                            <div className="p-6 space-y-6 bg-white animate-in slide-in-from-top-2 fade-in duration-300">
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {/* Q1: sellingOnline */}
+                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">1. Vente en ligne active ?</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-xs font-black px-2.5 py-1 rounded-lg uppercase tracking-wider ${
+                                      user.questionnaire.sellingOnline === 'YES'
+                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                        : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                    }`}>
+                                      {user.questionnaire.sellingOnline === 'YES' ? 'Oui' : 'Non'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Q2: budget */}
+                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">2. Budget de départ</span>
+                                  <span className="text-xs font-bold text-slate-850">{user.questionnaire.budget || 'Non spécifié'}</span>
+                                </div>
+
+                                {/* Q3: ordersPerDay */}
+                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">3. Commandes par jour</span>
+                                  <span className="text-xs font-bold text-slate-850">{user.questionnaire.ordersPerDay || 'Non spécifié'}</span>
+                                </div>
+
+                                {/* Q4: experienceYears */}
+                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">4. Années d'expérience</span>
+                                  <span className="text-xs font-bold text-slate-850">
+                                    {user.questionnaire.experienceYears === 'Not yet' ? 'Pas encore / Non défini' : (user.questionnaire.experienceYears || 'Non spécifié')}
+                                  </span>
+                                </div>
+
+                                {/* Q5: totalSpend */}
+                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">5. Dépenses publicitaires totales</span>
+                                  <span className="text-xs font-bold text-slate-850">{user.questionnaire.totalSpend || 'Non spécifié'}</span>
+                                </div>
+
+                                {/* Q6: markets */}
+                                <div className="bg-slate-55 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between col-span-1 md:col-span-2 lg:col-span-3">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">6. Marchés cibles</span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {Array.isArray(user.questionnaire.markets) && user.questionnaire.markets.length > 0 ? (
+                                      user.questionnaire.markets.map((m: string) => {
+                                        const label = m === 'US' ? 'USA' : m;
+                                        return (
+                                          <span key={m} className="text-[10px] font-bold px-2 py-0.5 bg-[#2c2f74]/5 border border-[#2c2f74]/10 text-[#2c2f74] rounded-lg">
+                                            {label}
+                                          </span>
+                                        );
+                                      })
+                                    ) : (
+                                      <span className="text-[10px] font-bold text-slate-400">Aucun marché spécifié</span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Q7: niches */}
+                                <div className="bg-slate-55 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between col-span-1 md:col-span-2 lg:col-span-3">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">7. Niches d'intérêt</span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {Array.isArray(user.questionnaire.niches) && user.questionnaire.niches.length > 0 ? (
+                                      user.questionnaire.niches.map((n: string) => (
+                                        <span key={n} className="text-[10px] font-bold px-2 py-0.5 bg-purple-50 border border-purple-100 text-purple-750 rounded-lg">
+                                          {n}
+                                        </span>
+                                      ))
+                                    ) : (
+                                      <span className="text-[10px] font-bold text-slate-400">Aucune niche spécifiée</span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Q8: biggestAchievement */}
+                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl col-span-1 md:col-span-2 lg:col-span-3">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">8. Plus grande réussite</span>
+                                  <p className="text-xs text-slate-700 font-medium whitespace-pre-line bg-white p-3 rounded-xl border border-slate-100">
+                                    {user.questionnaire.biggestAchievement || 'Non spécifié'}
+                                  </p>
+                                </div>
+
+                                {/* Q9: biggestChallenge */}
+                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl col-span-1 md:col-span-2 lg:col-span-3">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">9. Plus grand défi actuel</span>
+                                  <p className="text-xs text-slate-700 font-medium whitespace-pre-line bg-white p-3 rounded-xl border border-slate-100">
+                                    {user.questionnaire.biggestChallenge || 'Non spécifié'}
+                                  </p>
+                                </div>
+
+                                {/* Q10: partnerPriorities */}
+                                <div className="bg-slate-55 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between col-span-1 md:col-span-2 lg:col-span-3">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">10. Priorités chez un partenaire</span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {Array.isArray(user.questionnaire.partnerPriorities) && user.questionnaire.partnerPriorities.length > 0 ? (
+                                      user.questionnaire.partnerPriorities.map((p: string) => {
+                                        let label = p;
+                                        if (p === 'more_products') label = 'Plus de produits à vendre';
+                                        else if (p === 'logistics') label = 'Logistique/fulfillment clé en main';
+                                        else if (p === 'call_center') label = 'Centre d\'appel/confirmation';
+                                        else if (p === 'fast_delivery') label = 'Livraison plus rapide et fiable';
+                                        else if (p === 'cod') label = 'Meilleur encaissement (COD)';
+                                        else if (p === 'commissions') label = 'Commissions plus élevées';
+                                        else if (p === 'community') label = 'Communauté/support';
+                                        else if (p === 'automation') label = 'Automatisation/moins de travail manuel';
+                                        else if (p === 'transparency') label = 'Transparence/reporting';
+                                        else if (p === 'other') label = 'Autre';
+                                        return (
+                                          <span key={p} className="text-[10px] font-bold px-2 py-0.5 bg-amber-50 border border-amber-100 text-amber-700 rounded-lg">
+                                            {label}
+                                          </span>
+                                        );
+                                      })
+                                    ) : (
+                                      <span className="text-[10px] font-bold text-slate-400">Aucune priorité spécifiée</span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Q11: additionalNotes */}
+                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl col-span-1 md:col-span-2 lg:col-span-3">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">11. Remarques additionnelles</span>
+                                  <p className="text-xs text-slate-700 font-medium whitespace-pre-line bg-white p-3 rounded-xl border border-slate-100">
+                                    {user.questionnaire.additionalNotes || 'Aucune remarque'}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Influencer Onboarding Responses */}
+                    {user.influencerQuestionnaire && (() => {
+                      const isOpen = expandedQuestionnaire === `inf_${user.uuid}`;
+                      return (
+                        <div className="rounded-3xl bg-white border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
+                          {/* Header / Toggle Button */}
+                          <button
+                            onClick={() => setExpandedQuestionnaire(isOpen ? null : `inf_${user.uuid}`)}
+                            className="w-full text-left p-5 bg-[#2c2f74]/5 hover:bg-[#2c2f74]/10 border-b border-[#2c2f74]/10 transition-all flex items-center justify-between gap-4"
+                          >
+                            <div className="space-y-1">
+                              <h4 className="text-xs font-black text-[#2c2f74] uppercase tracking-wider flex items-center gap-2">
+                                <FileText size={18} className="text-[#2c2f74]" />
+                                Réponses de l'Onboarding Influenceur
+                              </h4>
+                              <p className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">
+                                Soumis lors de l'inscription pour évaluer l'activité du créateur (Cliquez pour déplier).
+                              </p>
+                            </div>
+                            <div className="p-2 rounded-xl bg-white border border-[#2c2f74]/10 text-[#2c2f74] shadow-sm">
+                              {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </div>
+                          </button>
+
+                          {/* Collapsible Content */}
+                          {isOpen && (
+                            <div className="p-6 space-y-6 bg-white animate-in slide-in-from-top-2 fade-in duration-300">
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {/* Q1: followersCount */}
+                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">1. Nombre d'abonnés</span>
+                                  <span className="text-xs font-bold text-slate-850">
+                                    {user.influencerQuestionnaire.followersCount === '5k_50k' ? '5,000 - 50,000 abonnés'
+                                      : user.influencerQuestionnaire.followersCount === '50k_100k' ? '50,000 - 100,000 abonnés'
+                                      : user.influencerQuestionnaire.followersCount === '100k_500k' ? '100,000 - 500,000 abonnés'
+                                      : user.influencerQuestionnaire.followersCount === '1m_plus' ? 'Plus de 1M abonnés'
+                                      : user.influencerQuestionnaire.followersCount || 'Non spécifié'}
+                                  </span>
+                                </div>
+
+                                {/* Q2: hasPriorExperience */}
+                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">2. Expérience affiliation / vente</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-xs font-black px-2.5 py-1 rounded-lg uppercase tracking-wider ${
+                                      user.influencerQuestionnaire.hasPriorExperience === 'YES'
+                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                        : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                    }`}>
+                                      {user.influencerQuestionnaire.hasPriorExperience === 'YES'
+                                        ? 'Oui, avec expérience'
+                                        : 'Non, première fois'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Q3: desiredProductTypes */}
+                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">3. Produits d'intérêt pour marque</span>
+                                  <span className="text-xs font-bold text-slate-850">
+                                    {user.influencerQuestionnaire.desiredProductTypes === 'cosmetics'
+                                      ? 'Cosmétiques & Compléments'
+                                      : user.influencerQuestionnaire.desiredProductTypes === 'other'
+                                      ? 'Autres produits'
+                                      : user.influencerQuestionnaire.desiredProductTypes || 'Non spécifié'}
+                                  </span>
+                                </div>
+
+                                {/* Q4: initialBudget */}
+                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">4. Budget alloué initial</span>
+                                  <span className="text-xs font-bold text-slate-850">
+                                    {user.influencerQuestionnaire.initialBudget === '1500_3000' ? '1 500 - 3 000 DH'
+                                      : user.influencerQuestionnaire.initialBudget === '3000_5000' ? '3 000 - 5 000 DH'
+                                      : user.influencerQuestionnaire.initialBudget === '5000_10000' ? '5 000 - 10 000 DH'
+                                      : user.influencerQuestionnaire.initialBudget === '10000_plus' ? 'Plus de 10 000 DH'
+                                      : user.influencerQuestionnaire.initialBudget || 'Non spécifié'}
+                                  </span>
+                                </div>
+
+                                {/* Q5: contentType */}
+                                <div className="bg-slate-55 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between col-span-1 md:col-span-2 lg:col-span-3">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">5. Type de contenu / Niche</span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {Array.isArray(user.influencerQuestionnaire.contentType) && user.influencerQuestionnaire.contentType.length > 0 ? (
+                                      user.influencerQuestionnaire.contentType.map((c: string) => {
+                                        let label = c;
+                                        if (c === 'comedy') label = 'Humour & Divertissement';
+                                        else if (c === 'lifestyle') label = 'Lifestyle & Vlogs';
+                                        else if (c === 'beauty') label = 'Mode & Beauté';
+                                        else if (c === 'health') label = 'Sport & Santé';
+                                        else if (c === 'tech') label = 'Tech & Éducation';
+                                        else if (c === 'other') label = 'Autre';
+                                        return (
+                                          <span key={c} className="text-[10px] font-bold px-2 py-0.5 bg-[#2c2f74]/5 border border-[#2c2f74]/10 text-[#2c2f74] rounded-lg">
+                                            {label}
+                                          </span>
+                                        );
+                                      })
+                                    ) : (
+                                      <span className="text-[10px] font-bold text-slate-400">Aucun type spécifié</span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Q6: motivation */}
+                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl col-span-1 md:col-span-2 lg:col-span-3">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">6. Motivation & Ambition</span>
+                                  <p className="text-xs text-slate-700 font-medium whitespace-pre-line bg-white p-3 rounded-xl border border-slate-100">
+                                    {user.influencerQuestionnaire.motivation || 'Non spécifiée'}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* Social Media Accounts */}
                     {(user.profile?.instagramUsername || user.profile?.tiktokUsername || user.profile?.facebookUsername || user.profile?.youtubeUsername || user.profile?.xUsername || user.profile?.snapchatUsername || user.profile?.metadata) && (() => {

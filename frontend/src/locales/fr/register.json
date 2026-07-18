@@ -6,6 +6,8 @@
   "step_account": "Compte",
   "step_social": "Réseaux Sociaux",
   "step_password": "Mot de passe",
+  "step_activity": "Activité",
+  "step_questionnaire": "Questionnaire",
   "full_name_label": "Nom complet",
   "full_name_placeholder": "Votre nom complet",
   "phone_label": "Numéro de téléphone",

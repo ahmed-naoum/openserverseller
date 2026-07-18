@@ -7,7 +7,7 @@ import WhatsAppWidget, { IconRenderer } from '../../components/public/WhatsAppWi
 import { 
   Type, Image as ImageIcon, Heading, LayoutTemplate, Link as LinkIcon, 
   ShoppingCart, ArrowUp, ArrowDown, Trash2, Save, ChevronLeft, Loader2,
-  Clock, Space, Upload, ShieldCheck, Plus, ExternalLink, Code, Copy, Download, MessageSquare,
+  Clock, Space, Upload, ShieldCheck, ShieldAlert, Plus, ExternalLink, Code, Copy, Download, MessageSquare,
   Layers, GripVertical, Undo2, Redo2, ShoppingBag, Music, Video
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -1867,7 +1867,7 @@ export default function SiteBuilder() {
                         <h4 className="text-[10px] font-bold text-gray-400 uppercase">Options du Produit</h4>
                         <button 
                           onClick={() => {
-                            const newOptions = [...(activeBlock.content.options || []), { id: Math.random().toString(36).substr(2, 9), name: '', price: '', color: '' }];
+                            const newOptions = [...(activeBlock.content.options || []), { id: Math.random().toString(36).substr(2, 9), name: '', price: '', priceColor: '', priceSize: '', oldPrice: '', oldPriceColor: '', oldPriceSize: '', color: '' }];
                             updateBlockContent('options', newOptions);
                           }}
                           className="p-1 hover:bg-orange-50 text-orange-600 rounded-lg transition-all"
@@ -1907,6 +1907,66 @@ export default function SiteBuilder() {
                                 updateBlockContent('options', newOptions);
                               }} 
                             />
+                            {opt.price && (
+                              <div className="grid grid-cols-2 gap-4">
+                                <Field 
+                                  label="Couleur du Prix" 
+                                  type="color" 
+                                  value={opt.priceColor || activeBlock.content.priceColor || '#111827'} 
+                                  onChange={(v: string) => {
+                                    const newOptions = [...activeBlock.content.options];
+                                    newOptions[index].priceColor = v;
+                                    updateBlockContent('options', newOptions);
+                                  }} 
+                                />
+                                <Field 
+                                  label="Taille du Prix (px)" 
+                                  type="number" 
+                                  value={opt.priceSize || ''} 
+                                  onChange={(v: number) => {
+                                    const newOptions = [...activeBlock.content.options];
+                                    newOptions[index].priceSize = v;
+                                    updateBlockContent('options', newOptions);
+                                  }} 
+                                  placeholder="Ex: 18"
+                                />
+                              </div>
+                            )}
+                            <Field 
+                              label="Ancien Prix (MAD)" 
+                              type="number" 
+                              value={opt.oldPrice || ''} 
+                              onChange={(v: number) => {
+                                const newOptions = [...activeBlock.content.options];
+                                newOptions[index].oldPrice = v;
+                                updateBlockContent('options', newOptions);
+                              }} 
+                            />
+                            {opt.oldPrice && (
+                              <div className="grid grid-cols-2 gap-4">
+                                <Field 
+                                  label="Couleur Ancien Prix" 
+                                  type="color" 
+                                  value={opt.oldPriceColor || activeBlock.content.oldPriceColor || '#9ca3af'} 
+                                  onChange={(v: string) => {
+                                    const newOptions = [...activeBlock.content.options];
+                                    newOptions[index].oldPriceColor = v;
+                                    updateBlockContent('options', newOptions);
+                                  }} 
+                                />
+                                <Field 
+                                  label="Taille Ancien Prix (px)" 
+                                  type="number" 
+                                  value={opt.oldPriceSize || ''} 
+                                  onChange={(v: number) => {
+                                    const newOptions = [...activeBlock.content.options];
+                                    newOptions[index].oldPriceSize = v;
+                                    updateBlockContent('options', newOptions);
+                                  }} 
+                                  placeholder="Ex: 16"
+                                />
+                              </div>
+                            )}
                             <Field 
                               label="Couleur du Pack" 
                               type="color" 
@@ -2369,6 +2429,160 @@ export default function SiteBuilder() {
                   value={pageSettings.backgroundColor} 
                   onChange={(v: string) => setPageSettings((prev: any) => ({ ...prev, backgroundColor: v }))} 
                 />
+
+                <div className="pt-6 border-t border-gray-100 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4 text-orange-500" />
+                    <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Cloaking (Redirections & Filtres)</h4>
+                  </div>
+                  <p className="text-[10px] text-gray-400 font-medium leading-relaxed">
+                    Protégez votre page en filtrant les visiteurs et en redirigeant les bots ou les utilisateurs PC.
+                  </p>
+
+                  <div className="space-y-3 bg-white p-3 rounded-xl border border-gray-200/60 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-gray-600">Activer le Cloaking</span>
+                      <input 
+                        type="checkbox"
+                        checked={pageSettings.cloaking?.enabled ?? false}
+                        onChange={(e) => setPageSettings((prev: any) => ({
+                          ...prev,
+                          cloaking: { ...prev.cloaking, enabled: e.target.checked }
+                        }))}
+                        className="rounded text-orange-500 focus:ring-orange-500 w-4 h-4 border-gray-300 cursor-pointer"
+                      />
+                    </div>
+
+                    {pageSettings.cloaking?.enabled && (
+                      <div className="space-y-4 pt-3 border-t border-dashed border-gray-100">
+                        {/* 1. Device Redirect */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-gray-600">Mobile Uniquement (Rediriger PC)</span>
+                            <input 
+                              type="checkbox"
+                              checked={pageSettings.cloaking?.redirectDesktop ?? false}
+                              onChange={(e) => setPageSettings((prev: any) => ({
+                                ...prev,
+                                cloaking: { ...prev.cloaking, redirectDesktop: e.target.checked }
+                              }))}
+                              className="rounded text-orange-500 focus:ring-orange-500 w-3.5 h-3.5 border-gray-300 cursor-pointer"
+                            />
+                          </div>
+                          {pageSettings.cloaking?.redirectDesktop && (
+                            <Field 
+                              label="URL de redirection Bureau" 
+                              type="text" 
+                              value={pageSettings.cloaking?.desktopRedirectUrl || ''} 
+                              placeholder="Ex: https://www.silacod.com"
+                              onChange={(v: string) => setPageSettings((prev: any) => ({
+                                ...prev,
+                                cloaking: { ...prev.cloaking, desktopRedirectUrl: v }
+                              }))} 
+                            />
+                          )}
+                        </div>
+
+                        {/* 2. Bot/Crawler Filter */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-gray-600">Filtrer Bots & Inspecteurs</span>
+                            <input 
+                              type="checkbox"
+                              checked={pageSettings.cloaking?.filterBots ?? false}
+                              onChange={(e) => setPageSettings((prev: any) => ({
+                                ...prev,
+                                cloaking: { ...prev.cloaking, filterBots: e.target.checked }
+                              }))}
+                              className="rounded text-orange-500 focus:ring-orange-500 w-3.5 h-3.5 border-gray-300 cursor-pointer"
+                            />
+                          </div>
+                          {pageSettings.cloaking?.filterBots && (
+                            <Field 
+                              label="URL pour les Bots (Page safe)" 
+                              type="text" 
+                              value={pageSettings.cloaking?.botRedirectUrl || ''} 
+                              placeholder="Ex: https://wikipedia.org"
+                              onChange={(v: string) => setPageSettings((prev: any) => ({
+                                ...prev,
+                                cloaking: { ...prev.cloaking, botRedirectUrl: v }
+                              }))} 
+                            />
+                          )}
+                        </div>
+
+                        {/* 3. Direct Visits Filter */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-gray-600">Rediriger Visites Directes (Sans Referrer)</span>
+                            <input 
+                              type="checkbox"
+                              checked={pageSettings.cloaking?.filterDirect ?? false}
+                              onChange={(e) => setPageSettings((prev: any) => ({
+                                ...prev,
+                                cloaking: { ...prev.cloaking, filterDirect: e.target.checked }
+                              }))}
+                              className="rounded text-orange-500 focus:ring-orange-500 w-3.5 h-3.5 border-gray-300 cursor-pointer"
+                            />
+                          </div>
+                          {pageSettings.cloaking?.filterDirect && (
+                            <Field 
+                              label="URL pour Visites Directes" 
+                              type="text" 
+                              value={pageSettings.cloaking?.directRedirectUrl || ''} 
+                              placeholder="Ex: https://google.com"
+                              onChange={(v: string) => setPageSettings((prev: any) => ({
+                                ...prev,
+                                cloaking: { ...prev.cloaking, directRedirectUrl: v }
+                              }))} 
+                            />
+                          )}
+                        </div>
+
+                        {/* 4. Language Restriction */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-gray-600">Restreindre par Langue</span>
+                            <input 
+                              type="checkbox"
+                              checked={pageSettings.cloaking?.filterLanguage ?? false}
+                              onChange={(e) => setPageSettings((prev: any) => ({
+                                ...prev,
+                                cloaking: { ...prev.cloaking, filterLanguage: e.target.checked }
+                              }))}
+                              className="rounded text-orange-500 focus:ring-orange-500 w-3.5 h-3.5 border-gray-300 cursor-pointer"
+                            />
+                          </div>
+                          {pageSettings.cloaking?.filterLanguage && (
+                            <>
+                              <Field 
+                                label="Langues autorisées (Ex: ar, fr)" 
+                                type="text" 
+                                value={pageSettings.cloaking?.allowedLanguages || ''} 
+                                placeholder="ar, fr"
+                                onChange={(v: string) => setPageSettings((prev: any) => ({
+                                  ...prev,
+                                  cloaking: { ...prev.cloaking, allowedLanguages: v }
+                                }))} 
+                              />
+                              <Field 
+                                label="URL de redirection langue non-autorisée" 
+                                type="text" 
+                                value={pageSettings.cloaking?.languageRedirectUrl || ''} 
+                                placeholder="Ex: https://google.com"
+                                onChange={(v: string) => setPageSettings((prev: any) => ({
+                                  ...prev,
+                                  cloaking: { ...prev.cloaking, languageRedirectUrl: v }
+                                }))} 
+                              />
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <div className="pt-6 border-t border-gray-100">
                   <div className="flex items-center gap-2 mb-2">
                     <Code className="w-4 h-4 text-purple-500" />
@@ -2485,8 +2699,30 @@ const CheckoutPreview = ({ content, product }: any) => {
                   <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Option {i + 1}</div>
                   <div className="font-black text-gray-900" style={isFirst ? { color: optionColor } : {}}>{opt.name || `Pack ${i + 1}`}</div>
                 </div>
-                <div className="text-lg font-black" style={{ color: isFirst ? optionColor : '#111827' }}>
-                  {opt.price || '...'} <span className="text-[10px] opacity-60">MAD</span>
+                <div className="flex items-center gap-1.5">
+                  {opt.oldPrice && (
+                    <>
+                      <span 
+                        className="font-bold line-through opacity-50"
+                        style={{ 
+                          color: opt.oldPriceColor || content.oldPriceColor || '#9ca3af',
+                          fontSize: opt.oldPriceSize ? `${opt.oldPriceSize}px` : (content.oldPriceSize ? `${content.oldPriceSize}px` : '16px')
+                        }}
+                      >
+                        {opt.oldPrice}
+                      </span>
+                      <span className="text-gray-300 font-bold text-sm mx-0.5">/</span>
+                    </>
+                  )}
+                  <div 
+                    className="font-black" 
+                    style={{ 
+                      color: opt.priceColor || (isFirst ? optionColor : '#111827'),
+                      fontSize: opt.priceSize ? `${opt.priceSize}px` : (content.priceSize ? `${content.priceSize}px` : '18px')
+                    }}
+                  >
+                    {opt.price || '...'} <span className="text-[10px] opacity-60">MAD</span>
+                  </div>
                 </div>
               </div>
             );
