@@ -607,9 +607,9 @@ router.get(
       if (referralLinkId) {
         whereOldest.id = parseInt(referralLinkId as string);
       } else if (mode === 'SELLER') {
-        whereOldest.product = { vendorId: userId };
+        whereOldest.product = { ownerId: userId };
       } else if (mode === 'AFFILIATE') {
-        whereOldest.product = { vendorId: { not: userId } };
+        whereOldest.product = { ownerId: { not: userId } };
       }
       const oldestLink = await prisma.referralLink.findFirst({
         where: whereOldest,
@@ -634,9 +634,9 @@ router.get(
     if (referralLinkId) {
       whereBase.id = parseInt(referralLinkId as string);
     } else if (mode === 'SELLER') {
-      whereBase.product = { vendorId: userId };
+      whereBase.product = { ownerId: userId };
     } else if (mode === 'AFFILIATE') {
-      whereBase.product = { vendorId: { not: userId } };
+      whereBase.product = { ownerId: { not: userId } };
     }
 
     const [clicks, leads, commissions] = await Promise.all([

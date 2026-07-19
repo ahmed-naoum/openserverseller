@@ -355,6 +355,11 @@ router.get(
         data: {
           product: {
             id: product.id,
+            sku: product.sku,
+            description: product.description,
+            longDescription: product.longDescription,
+            isCustomizable: product.isCustomizable,
+            minProductionDays: product.minProductionDays,
             nameFr: product.nameFr,
             nameAr: product.nameAr,
             retailPriceMad: product.retailPriceMad,
