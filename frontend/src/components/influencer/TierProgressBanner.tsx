@@ -77,7 +77,7 @@ export const TierProgressBanner = ({
         </div>
 
         {/* Badges Container */}
-        <div className="flex justify-between items-end mb-6 relative px-4 md:px-8">
+        <div className={`flex justify-between items-end mb-6 relative px-4 md:px-8 ${isRtl ? 'flex-row-reverse' : ''}`}>
           {tiers.map((tier, index) => {
             const isUnlocked = totalEarned >= tier.min;
             const isCurrent = totalEarned >= tier.min && totalEarned < tier.max;
@@ -121,9 +121,9 @@ export const TierProgressBanner = ({
         {/* Progress Bar Container */}
         <div className="relative mt-12 px-4 md:px-8">
           {/* Base empty track */}
-          <div className="h-4 bg-slate-800 rounded-full w-full overflow-hidden flex shadow-inner">
+          <div className={`h-4 bg-slate-800 rounded-full w-full overflow-hidden flex shadow-inner ${isRtl ? 'flex-row-reverse' : ''}`}>
             {tiers.map((tier, index) => (
-              <div key={tier.id} className="h-full flex-1 border-r border-slate-700/50 last:border-0" />
+              <div key={tier.id} className={`h-full flex-1 ${isRtl ? 'border-l border-slate-700/50 last:border-0' : 'border-r border-slate-700/50 last:border-0'}`} />
             ))}
           </div>
 
@@ -133,10 +133,10 @@ export const TierProgressBanner = ({
               initial={{ width: 0 }}
               animate={{ width: `${overallPercentage}%` }}
               transition={{ duration: 1.5, ease: "easeOut" }}
-              className="h-full flex"
+              className={`h-full flex ${isRtl ? 'justify-end' : ''}`}
             >
               {/* Colored segments that match the tiers */}
-              <div className="h-full flex" style={{ width: `${(100 / overallPercentage) * 100}%` }}>
+              <div className={`h-full flex ${isRtl ? 'flex-row-reverse' : ''}`} style={{ width: `${(100 / overallPercentage) * 100}%` }}>
                 <div className="h-full w-1/4 bg-orange-700" />
                 <div className="h-full w-1/4 bg-gray-400" />
                 <div className="h-full w-1/4 bg-yellow-500" />
@@ -167,19 +167,19 @@ export const TierProgressBanner = ({
           </motion.div>
 
           {/* Markers / Labels */}
-          <div className="flex justify-between mt-4 relative z-10">
-            <div className="flex flex-col items-start w-1/4">
-               <span className="text-[10px] md:text-xs font-black text-slate-500 tracking-wider -ml-2">0 DH</span>
+          <div className={`flex justify-between mt-4 relative z-10 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <div className={`flex flex-col w-1/4 ${isRtl ? 'items-end' : 'items-start'}`}>
+               <span className={`text-[10px] md:text-xs font-black text-slate-500 tracking-wider ${isRtl ? '-mr-2' : '-ml-2'}`}>0 DH</span>
             </div>
             <div className="flex flex-col items-center w-1/4 relative">
-               <span className="text-[10px] md:text-xs font-black text-slate-500 tracking-wider absolute -left-4">100K</span>
+               <span className={`text-[10px] md:text-xs font-black text-slate-500 tracking-wider absolute ${isRtl ? '-right-4' : '-left-4'}`}>100K</span>
             </div>
             <div className="flex flex-col items-center w-1/4 relative">
-               <span className="text-[10px] md:text-xs font-black text-slate-500 tracking-wider absolute -left-3">1M</span>
+               <span className={`text-[10px] md:text-xs font-black text-slate-500 tracking-wider absolute ${isRtl ? '-right-3' : '-left-3'}`}>1M</span>
             </div>
-            <div className="flex flex-col items-end w-1/4 relative">
-               <span className="text-[10px] md:text-xs font-black text-slate-500 tracking-wider absolute -left-4">10M</span>
-               <span className="text-[10px] md:text-xs font-black text-slate-500 tracking-wider -mr-2">+</span>
+            <div className={`flex flex-col w-1/4 relative ${isRtl ? 'items-start' : 'items-end'}`}>
+               <span className={`text-[10px] md:text-xs font-black text-slate-500 tracking-wider absolute ${isRtl ? '-right-4' : '-left-4'}`}>10M</span>
+               <span className={`text-[10px] md:text-xs font-black text-slate-500 tracking-wider ${isRtl ? '-ml-2' : '-mr-2'}`}>+</span>
             </div>
           </div>
         </div>
