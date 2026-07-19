@@ -2647,4 +2647,258 @@ router.delete(
   })
 );
 
+// --- Professional Email Management ---
+
+// Helper function for system commands (with mock for non-linux/windows)
+import { spawn } from 'child_process';
+
+const runSystemCommand = (command: string, args: string[], stdinInput?: string): Promise<{ stdout: string; stderr: string }> => {
+  return new Promise((resolve, reject) => {
+    if (process.platform === 'win32') {
+      console.log(`[Mock System Command] ${command} ${args.join(' ')}`);
+      return resolve({ stdout: '', stderr: '' });
+    }
+
+    const child = spawn('sudo', [command, ...args]);
+    let stdout = '';
+    let stderr = '';
+
+    if (stdinInput && child.stdin) {
+      child.stdin.write(stdinInput);
+      child.stdin.end();
+    }
+
+    child.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    child.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+      } else {
+        reject(new Error(`Command failed with code ${code}: ${stderr}`));
+      }
+    });
+
+    child.on('error', (err) => {
+      reject(err);
+    });
+  });
+};
+
+// Sync existing mail users from /etc/passwd if running on Linux
+const syncExistingUsers = async () => {
+  try {
+    if (process.platform === 'win32') return;
+    if (!fs.existsSync('/etc/passwd')) return;
+
+    const content = fs.readFileSync('/etc/passwd', 'utf8');
+    const lines = content.split('\n');
+    const systemUsers: string[] = [];
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const parts = line.split(':');
+      if (parts.length < 7) continue;
+
+      const username = parts[0];
+      const home = parts[5];
+      const shell = parts[6].trim();
+
+      // Check if shell is nologin/false and home starts with /home/
+      if ((shell === '/usr/sbin/nologin' || shell === '/bin/false' || shell.endsWith('nologin')) && home.startsWith('/home/')) {
+        systemUsers.push(username);
+      }
+    }
+
+    if (systemUsers.length === 0) return;
+
+    const dbEmails = await prisma.professionalEmail.findMany({
+      select: { username: true },
+    });
+    const dbUsernames = new Set(dbEmails.map((e) => e.username));
+
+    const newUsers = systemUsers.filter((u) => !dbUsernames.has(u));
+
+    if (newUsers.length > 0) {
+      console.log(`Syncing ${newUsers.length} existing mail users from system to DB...`);
+      await prisma.professionalEmail.createMany({
+        data: newUsers.map((u) => ({
+          username: u,
+          email: `${u}@silacod.com`,
+        })),
+        skipDuplicates: true,
+      });
+    }
+  } catch (error) {
+    console.error('Failed to sync existing professional email users:', error);
+  }
+};
+
+// Get all professional emails
+router.get(
+  '/professional-emails',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    // Sync first
+    await syncExistingUsers();
+
+    const emails = await prisma.professionalEmail.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({
+      status: 'success',
+      data: emails,
+    });
+  })
+);
+
+// Create professional email
+router.post(
+  '/professional-emails',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      res.status(400).json({ status: 'error', message: 'Nom d\'utilisateur et mot de passe sont requis' });
+      return;
+    }
+
+    // Validate username format
+    const usernameRegex = /^[a-z0-9._-]+$/;
+    if (!usernameRegex.test(username) || username.length < 2 || username.length > 32) {
+      res.status(400).json({ 
+        status: 'error', 
+        message: 'Nom d\'utilisateur invalide. Utilisez uniquement des minuscules, chiffres, points, tirets et underscores (2-32 caractères).' 
+      });
+      return;
+    }
+
+    const email = `${username}@silacod.com`;
+
+    // Check if email already exists in DB
+    const existing = await prisma.professionalEmail.findUnique({
+      where: { username },
+    });
+    if (existing) {
+      res.status(400).json({ status: 'error', message: 'Cet email professionnel existe déjà.' });
+      return;
+    }
+
+    try {
+      // 1. Create system user
+      await runSystemCommand('useradd', ['-m', '-s', '/usr/sbin/nologin', username]);
+
+      // 2. Set temporary password
+      await runSystemCommand('chpasswd', [], `${username}:${password}\n`);
+
+      // 3. Save to database
+      const newEmail = await prisma.professionalEmail.create({
+        data: {
+          username,
+          email,
+        },
+      });
+
+      res.status(201).json({
+        status: 'success',
+        message: 'Compte email professionnel créé avec succès',
+        data: newEmail,
+      });
+    } catch (err: any) {
+      console.error('Failed to create professional email:', err);
+      res.status(500).json({ 
+        status: 'error', 
+        message: `Erreur lors de la création de l'email: ${err.message || err}` 
+      });
+    }
+  })
+);
+
+// Change password of professional email
+router.post(
+  '/professional-emails/change-password',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      res.status(400).json({ status: 'error', message: 'Nom d\'utilisateur et nouveau mot de passe sont requis' });
+      return;
+    }
+
+    const existing = await prisma.professionalEmail.findUnique({
+      where: { username },
+    });
+    if (!existing) {
+      res.status(404).json({ status: 'error', message: 'Email professionnel non trouvé.' });
+      return;
+    }
+
+    try {
+      // Change password
+      await runSystemCommand('chpasswd', [], `${username}:${password}\n`);
+
+      res.json({
+        status: 'success',
+        message: 'Mot de passe modifié avec succès',
+      });
+    } catch (err: any) {
+      console.error('Failed to change password:', err);
+      res.status(500).json({ 
+        status: 'error', 
+        message: `Erreur lors de la modification du mot de passe: ${err.message || err}` 
+      });
+    }
+  })
+);
+
+// Delete professional email
+router.delete(
+  '/professional-emails/:username',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const username = req.params.username as string;
+
+    const existing = await prisma.professionalEmail.findUnique({
+      where: { username },
+    });
+    if (!existing) {
+      res.status(404).json({ status: 'error', message: 'Email professionnel non trouvé.' });
+      return;
+    }
+
+    try {
+      // 1. Delete system user (and their home directory/mail spool)
+      await runSystemCommand('userdel', ['-r', username]);
+
+      // 2. Delete from database
+      await prisma.professionalEmail.delete({
+        where: { username },
+      });
+
+      res.json({
+        status: 'success',
+        message: 'Email professionnel supprimé avec succès',
+      });
+    } catch (err: any) {
+      console.error('Failed to delete professional email:', err);
+      res.status(500).json({ 
+        status: 'error', 
+        message: `Erreur lors de la suppression de l'email: ${err.message || err}` 
+      });
+    }
+  })
+);
+
 export default router;

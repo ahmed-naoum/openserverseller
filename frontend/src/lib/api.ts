@@ -450,6 +450,14 @@ export const adminApi = {
     api.patch(`/admin/contact-messages/${id}/status`, { status }),
   deleteContactMessage: (id: number) =>
     api.delete(`/admin/contact-messages/${id}`),
+  // Professional Emails
+  getProfessionalEmails: () => api.get('/admin/professional-emails'),
+  createProfessionalEmail: (data: { username: string; password?: string }) =>
+    api.post('/admin/professional-emails', data),
+  changeProfessionalEmailPassword: (data: { username: string; password?: string }) =>
+    api.post('/admin/professional-emails/change-password', data),
+  deleteProfessionalEmail: (username: string) =>
+    api.delete(`/admin/professional-emails/${username}`),
 };
 
 export const chatApi = {
