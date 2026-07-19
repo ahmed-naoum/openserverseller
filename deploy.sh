@@ -16,7 +16,7 @@ echo ">>> Building backend..."
 cd /var/www/openseller/backend
 npm install
 npx prisma generate
-npx prisma db push --accept-db-write-losing-data
+npx prisma db push --accept-data-loss
 npm run build
 pm2 restart silacod-api
 
