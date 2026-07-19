@@ -182,6 +182,7 @@ export default function RegisterPage() {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [selectionConfirmed, setSelectionConfirmed] = useState(false);
   const turnstileRef = useRef<TurnstileInstance>(null);
+  const [googleCredential, setGoogleCredential] = useState<string | null>(null);
 
   // Update role dynamically if URL changes without remounting the component
   useEffect(() => {
@@ -359,13 +360,17 @@ export default function RegisterPage() {
     e.preventDefault();
     if (!validateForm() || submittedRef.current) return;
 
-    if (!cguAccepted) {
-      const msg = language === 'ar' 
-        ? 'يرجى قبول شروط الاستخدام العامة (CGU) للمتابعة.'
-        : language === 'fr'
-        ? "Veuillez accepter les Conditions Générales d'Utilisation (CGU) pour continuer."
-        : 'Please accept the General Conditions of Use (CGU) to proceed.';
-      toast.error(msg);
+
+    if (step < 4) return;
+
+    const errorKeys = Object.keys(errors);
+    if (errorKeys.length > 0) {
+      const firstErrorField = errorKeys[0];
+      const element = document.getElementsByName(firstErrorField)[0];
+      if (element) {
+        element.focus();
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       return;
     }
 
@@ -378,59 +383,116 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
-      if (formData.role === 'INFLUENCER') {
-        if (!registerInfluencer) throw new Error("registerInfluencer endpoint missing");
+      if (googleCredential) {
+        const payload = {
+          credential: googleCredential,
+          role: formData.role,
+          phone: formData.phone || undefined,
+          fullName: formData.fullName,
+          instagramUsername: formData.instagramUsername || undefined,
+          tiktokUsername: formData.tiktokUsername || undefined,
+          facebookUsername: formData.facebookUsername || undefined,
+          youtubeUsername: formData.youtubeUsername || undefined,
+          snapchatUsername: formData.snapchatUsername || undefined,
+          instagramUrl: formData.instagramUrl || undefined,
+          tiktokUrl: formData.tiktokUrl || undefined,
+          facebookUrl: formData.facebookUrl || undefined,
+          youtubeUrl: formData.youtubeUrl || undefined,
+          snapchatUrl: formData.snapchatUrl || undefined,
+          sellingOnline: formData.sellingOnline || undefined,
+          budget: formData.budget || undefined,
+          ordersPerDay: formData.ordersPerDay || undefined,
+          experienceYears: formData.experienceYears || undefined,
+          markets: formData.markets,
+          totalSpend: formData.totalSpend || undefined,
+          niches: formData.niches,
+          biggestAchievement: formData.biggestAchievement || undefined,
+          biggestChallenge: formData.biggestChallenge || undefined,
+          partnerPriorities: formData.partnerPriorities,
+          interviewAvailability: formData.interviewAvailability || undefined,
+          additionalNotes: formData.additionalNotes || undefined,
+          followersCount: formData.followersCount || undefined,
+          contentType: formData.contentType,
+          hasPriorExperience: formData.hasPriorExperience || undefined,
+          desiredProductTypes: formData.desiredProductTypes || undefined,
+          initialBudget: formData.initialBudget || undefined,
+          motivation: formData.motivation || undefined,
+        };
+        const userRes = await googleAuth(payload);
+        toast.success(language === 'ar' ? 'تم إنشاء الحساب بنجاح!' : 'Compte créé avec succès !');
         
-        await registerInfluencer({
-            email: formData.email,
-            phone: formData.phone || undefined,
-            password: formData.password,
-            fullName: formData.fullName,
-            instagramUsername: formData.instagramUsername || undefined,
-            tiktokUsername: formData.tiktokUsername || undefined,
-            facebookUsername: formData.facebookUsername || undefined,
-            youtubeUsername: formData.youtubeUsername || undefined,
-            snapchatUsername: formData.snapchatUsername || undefined,
-            instagramUrl: formData.instagramUrl || undefined,
-            tiktokUrl: formData.tiktokUrl || undefined,
-            facebookUrl: formData.facebookUrl || undefined,
-            youtubeUrl: formData.youtubeUrl || undefined,
-            snapchatUrl: formData.snapchatUrl || undefined,
-            cguAccepted: true,
-            turnstileToken,
-            followersCount: formData.followersCount || undefined,
-            contentType: formData.contentType,
-            hasPriorExperience: formData.hasPriorExperience || undefined,
-            desiredProductTypes: formData.desiredProductTypes || undefined,
-            initialBudget: formData.initialBudget || undefined,
-            motivation: formData.motivation || undefined,
-        });
-        toast.success('Compte créateur créé avec succès ! Bienvenue 🎉');
-        navigate('/verify-email', { state: { email: formData.email } });
+        const user = userRes.user || userRes;
+        if (user?.roleName === 'SUPER_ADMIN' || user?.roleName === 'FINANCE_ADMIN') navigate('/admin');
+        else if (user?.roleName === 'CALL_CENTER_AGENT') navigate('/agent');
+        else if (user?.roleName === 'GROSSELLER') navigate('/grosseller');
+        else if (user?.roleName === 'INFLUENCER' || user?.isInfluencer) {
+          if (user.kycStatus !== 'APPROVED') {
+            navigate('/influencer/verification');
+          } else {
+            navigate('/influencer');
+          }
+        } else {
+          if (user?.kycStatus !== 'APPROVED') {
+            navigate('/dashboard/verification');
+          } else {
+            navigate('/dashboard');
+          }
+        }
       } else {
-        const user = await register({
-            email: formData.email,
-            phone: formData.phone || undefined,
-            password: formData.password,
-            fullName: formData.fullName,
-            role: 'VENDOR',
-            cguAccepted: true,
-            turnstileToken,
-            sellingOnline: formData.sellingOnline || undefined,
-            budget: formData.budget || undefined,
-            ordersPerDay: formData.ordersPerDay || undefined,
-            experienceYears: formData.experienceYears || undefined,
-            markets: formData.markets,
-            totalSpend: formData.totalSpend || undefined,
-            niches: formData.niches,
-            biggestAchievement: formData.biggestAchievement || undefined,
-            biggestChallenge: formData.biggestChallenge || undefined,
-            partnerPriorities: formData.partnerPriorities,
-            interviewAvailability: formData.interviewAvailability || undefined,
-            additionalNotes: formData.additionalNotes || undefined
-        });
-        toast.success('Compte créé avec succès !');
-        navigate('/verify-email', { state: { email: formData.email } });
+        if (formData.role === 'INFLUENCER') {
+          if (!registerInfluencer) throw new Error("registerInfluencer endpoint missing");
+          
+          await registerInfluencer({
+              email: formData.email,
+              phone: formData.phone || undefined,
+              password: formData.password,
+              fullName: formData.fullName,
+              instagramUsername: formData.instagramUsername || undefined,
+              tiktokUsername: formData.tiktokUsername || undefined,
+              facebookUsername: formData.facebookUsername || undefined,
+              youtubeUsername: formData.youtubeUsername || undefined,
+              snapchatUsername: formData.snapchatUsername || undefined,
+              instagramUrl: formData.instagramUrl || undefined,
+              tiktokUrl: formData.tiktokUrl || undefined,
+              facebookUrl: formData.facebookUrl || undefined,
+              youtubeUrl: formData.youtubeUrl || undefined,
+              snapchatUrl: formData.snapchatUrl || undefined,
+              cguAccepted: true,
+              turnstileToken,
+              followersCount: formData.followersCount || undefined,
+              contentType: formData.contentType,
+              hasPriorExperience: formData.hasPriorExperience || undefined,
+              desiredProductTypes: formData.desiredProductTypes || undefined,
+              initialBudget: formData.initialBudget || undefined,
+              motivation: formData.motivation || undefined,
+          });
+          toast.success('Compte créateur créé avec succès ! Bienvenue 🎉');
+          navigate('/verify-email', { state: { email: formData.email } });
+        } else {
+          const user = await register({
+              email: formData.email,
+              phone: formData.phone || undefined,
+              password: formData.password,
+              fullName: formData.fullName,
+              role: 'VENDOR',
+              cguAccepted: true,
+              turnstileToken,
+              sellingOnline: formData.sellingOnline || undefined,
+              budget: formData.budget || undefined,
+              ordersPerDay: formData.ordersPerDay || undefined,
+              experienceYears: formData.experienceYears || undefined,
+              markets: formData.markets,
+              totalSpend: formData.totalSpend || undefined,
+              niches: formData.niches,
+              biggestAchievement: formData.biggestAchievement || undefined,
+              biggestChallenge: formData.biggestChallenge || undefined,
+              partnerPriorities: formData.partnerPriorities,
+              interviewAvailability: formData.interviewAvailability || undefined,
+              additionalNotes: formData.additionalNotes || undefined
+          });
+          toast.success('Compte créé avec succès !');
+          navigate('/verify-email', { state: { email: formData.email } });
+        }
       }
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Erreur lors de l'inscription");
@@ -449,26 +511,24 @@ export default function RegisterPage() {
       const userRes = await googleAuth({ credential: response.credential, role: formData.role });
       
       if (userRes && userRes.status === 'needs_completion') {
-        toast.success('Veuillez compléter vos informations.');
-        navigate('/register/complete-google', { 
-          state: { 
-            credential: response.credential,
-            email: userRes.email,
-            fullName: userRes.fullName,
-            avatarUrl: userRes.avatarUrl,
-            googleId: userRes.googleId,
-            role: userRes.role || formData.role
-          } 
-        });
+        toast.success(language === 'ar' ? 'الرجاء إكمال الاستبيان للمتابعة' : 'Veuillez compléter le questionnaire pour continuer.');
+        setGoogleCredential(response.credential);
+        setFormData(prev => ({ 
+          ...prev, 
+          email: userRes.email || '', 
+          fullName: userRes.fullName || '' 
+        }));
+        setSelectionConfirmed(true);
+        setStep(2); // Skip Step 1 and go straight to Questionnaire!
         return;
       }
 
       toast.success('Compte Google connecté avec succès !');
-      const user = userRes.user;
+      const user = userRes.user || userRes;
       if (user?.roleName === 'SUPER_ADMIN' || user?.roleName === 'FINANCE_ADMIN') navigate('/admin');
       else if (user?.roleName === 'CALL_CENTER_AGENT') navigate('/agent');
       else if (user?.roleName === 'GROSSELLER') navigate('/grosseller');
-      else if (user?.roleName === 'INFLUENCER') {
+      else if (user?.roleName === 'INFLUENCER' || user?.isInfluencer) {
         if (user.kycStatus !== 'APPROVED') {
           navigate('/influencer/verification');
         } else {
@@ -482,7 +542,7 @@ export default function RegisterPage() {
         }
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Erreur lors de l\'inscription avec Google');
+      toast.error(error.response?.data?.message || 'Erreur Google Login');
     } finally {
       setIsLoading(false);
     }
@@ -888,13 +948,17 @@ export default function RegisterPage() {
                         <div className="space-y-4 max-h-[50vh] overflow-y-auto px-1 py-1 custom-scrollbar">
                             {/* Question 1: followersCount */}
                             <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2.5 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
-                              <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
-                                <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
-                                <span>{language === 'ar' ? 'كم عدد المتابعين لديك في حسابك الرئيسي؟' : language === 'fr' ? "Combien d'abonnés avez-vous sur votre compte principal ?" : 'How many followers do you have on your main account?'}</span>
-                              </label>
+                              <div>
+                                <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
+                                  <span>{language === 'ar' ? 'كم عدد المتابعين لديك في حسابك الرئيسي؟' : language === 'fr' ? "Combien d'abonnés avez-vous sur votre compte principal ?" : 'How many followers do you have on your main account?'}</span>
+                                </label>
+                                <p className={`text-[9px] font-bold text-[#ff5722]/80 mt-1 px-3 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                                  * {language === 'ar' ? 'عذراً، لا نقبل الحسابات التي يقل عدد متابعيها عن 5,000' : language === 'fr' ? 'Nous n\'acceptons pas les comptes avec moins de 5 000 abonnés' : 'We do not accept accounts with less than 5,000 followers'}
+                                </p>
+                              </div>
                               <div className="grid grid-cols-2 gap-2">
                                 {[
-                                  { key: 'less_5k', ar: 'أقل من 5,000 متابع', fr: 'Moins de 5k abonnés', en: 'Less than 5k followers' },
                                   { key: '5k_50k', ar: '5,000 - 50,000 متابع', fr: '5k - 50k abonnés', en: '5k - 50k followers' },
                                   { key: '50k_100k', ar: '50,000 - 100,000 متابع', fr: '50k - 100k abonnés', en: '50k - 100k followers' },
                                   { key: '100k_500k', ar: '100,000 - 500,000 متابع', fr: '100k - 500k abonnés', en: '100k - 500k followers' },
@@ -907,8 +971,6 @@ export default function RegisterPage() {
                                       type="button"
                                       onClick={() => setFormData({ ...formData, followersCount: item.key })}
                                       className={`py-2 px-2 rounded-xl border text-[10px] font-extrabold text-center transition-all duration-200 active:scale-[0.98] ${
-                                        item.key === '1m_plus' ? 'col-span-2' : ''
-                                      } ${
                                         formData.followersCount === item.key
                                           ? 'border-[#ff5722] bg-[#ff5722]/5 text-[#ff5722] shadow-sm font-black'
                                           : 'border-slate-100 bg-[#f8f9fa] text-slate-500 hover:border-slate-200 hover:bg-slate-100/50'
@@ -1137,7 +1199,7 @@ export default function RegisterPage() {
                         <span>{language === 'ar' ? 'ما هي ميزانيتك لبدء هذا المشروع؟' : language === 'fr' ? 'Quel est votre budget pour démarrer ce projet ?' : 'What\'s the budget to start this project?'}</span>
                       </label>
                       <div className="grid grid-cols-2 gap-2">
-                        {['0', '< 1,000 DH', '1,000 - 5,000 DH', '5,000 - 20,000 DH', '20,000 DH+'].map((b) => (
+                        {['1,000 - 5,000 DH', '5,000 - 20,000 DH', '20,000 DH+'].map((b) => (
                           <button
                             key={b}
                             type="button"
@@ -1158,10 +1220,10 @@ export default function RegisterPage() {
                     <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2.5 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
                       <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
                         <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
-                        <span>{language === 'ar' ? 'عدد الطلبيات اليومية؟' : language === 'fr' ? 'Commandes par jour ?' : 'Orders per day?'}</span>
+                        <span>{language === 'ar' ? 'عدد الطلبات التي سبق لك تحقيقها يومياً؟' : language === 'fr' ? 'Combien de commandes avez-vous déjà réalisées par jour ?' : 'How many orders have you fulfilled per day?'}</span>
                       </label>
                       <div className="flex flex-wrap gap-2">
-                        {['0', '1-10', '11-50', '51-200', '200+'].map((o) => (
+                        {['1-10', '11-50', '51-200', '200+'].map((o) => (
                           <button
                             key={o}
                             type="button"
@@ -1182,7 +1244,7 @@ export default function RegisterPage() {
                     <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2.5 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
                       <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
                         <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
-                        <span>{language === 'ar' ? 'سنوات الخبرة في التجارة الإلكترونية؟' : language === 'fr' ? "Années d'expérience ?" : 'Years of experience?'}</span>
+                        <span>{language === 'ar' ? 'كم سنوات الخبرة لديك في التجارة الالكترونية؟' : language === 'fr' ? "Combien d'années d'expérience avez-vous en e-commerce ?" : 'How many years of e-commerce experience do you have?'}</span>
                       </label>
                       <div className="grid grid-cols-2 gap-1.5">
                         {['Not yet', '< 1 year', '1-3 years', '3+ years'].map((y) => {
@@ -1261,15 +1323,15 @@ export default function RegisterPage() {
                     <div className="bg-slate-50/40 border border-slate-100/80 p-3.5 rounded-2xl space-y-2.5 transition-all hover:bg-white hover:border-[#ff5722]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
                       <label className={`block text-[11px] font-extrabold text-slate-700 tracking-wide flex items-center gap-2 ${language === 'ar' ? 'text-right justify-start' : 'text-left justify-start'}`}>
                         <span className="w-1.5 h-1.5 rounded-full bg-[#ff5722] flex-shrink-0" />
-                        <span>{language === 'ar' ? 'إجمالي الإنفاق الإعلاني؟' : language === 'fr' ? 'Dépenses publicitaires totales ?' : 'Total ad spend?'}</span>
+                        <span>{language === 'ar' ? 'كم إجمالي انفاقك في الإعلانات؟' : language === 'fr' ? 'Quel est votre total de dépenses publicitaires ?' : 'What is your total ad spend?'}</span>
                       </label>
                       <div className="grid grid-cols-2 gap-2">
-                        {['0', '< 5,000 DH', '5,000 - 20,000 DH', '20,000 - 100,000 DH', '100,000 DH+'].map((ts) => (
+                        {['< 5,000 DH', '5,000 - 20,000 DH', '20,000 - 100,000 DH', '100,000 DH+'].map((ts) => (
                           <button
                             key={ts}
                             type="button"
                             onClick={() => setFormData({ ...formData, totalSpend: ts })}
-                            className={`py-2 px-2.5 rounded-xl border text-[10px] font-extrabold text-center transition-all duration-200 active:scale-[0.98] ${ts === '100,000 DH+' ? 'col-span-2' : ''} ${
+                            className={`py-2 px-2.5 rounded-xl border text-[10px] font-extrabold text-center transition-all duration-200 active:scale-[0.98] ${
                               formData.totalSpend === ts
                                 ? 'border-[#ff5722] bg-[#ff5722]/5 text-[#ff5722] shadow-sm font-black'
                                 : 'border-slate-100 bg-[#f8f9fa] text-slate-500 hover:border-slate-200 hover:bg-slate-100/50'
@@ -1458,92 +1520,98 @@ export default function RegisterPage() {
 
               {step === 4 && (
                 <div className="space-y-5 pt-2">
-                    <div className="space-y-1.5">
-                      <label className={`text-sm font-bold text-slate-700 ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>{t('password_label')} <span className="text-[#ff5722]">*</span></label>
-                      <div className="relative group/input">
-                        <div className={`absolute ${language === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${formData.password.length > 0 && isPasswordStrong ? 'text-green-500' : 'text-slate-400'}`}>
-                          <Lock size={20} />
-                        </div>
-                        <input
-                          type={showPassword ? 'text' : 'password'}
-                          name="password"
-                          className={`w-full bg-transparent focus:bg-transparent border focus:ring-4 rounded-xl py-2.5 px-4 ${language === 'ar' ? 'pr-12 pl-11' : 'pl-12 pr-11'} transition-all outline-none text-[13px] font-medium ${formData.password.length > 0 && isPasswordStrong ? 'border-green-500 focus:ring-green-500/10 text-green-500' : 'border-slate-200 focus:border-[#ff5722] focus:ring-[#ff5722]/10 text-slate-700'} placeholder:text-slate-400 ${touched.password && errors.password ? '!border-red-300 !ring-red-500/10 !text-red-500 placeholder:!text-red-400' : ''}`}
-                          placeholder={t('password_label')}
-                          value={formData.password}
-                          onChange={handleChange}
-                          onBlur={handleBlur}
-                          required
-                          minLength={8}
-                        />
-                        <button
-                          type="button"
-                          className={`absolute ${language === 'ar' ? 'left-4' : 'right-4'} top-1/2 -translate-y-1/2 transition-colors ${formData.password.length > 0 && isPasswordStrong ? 'text-green-500/60 hover:text-green-500' : 'text-slate-400 hover:text-slate-600'}`}
-                          onClick={() => setShowPassword(!showPassword)}
-                        >
-                          {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                        </button>
-                      </div>
-                      {touched.password && errors.password && (
-                        <p className="text-red-500 text-[10px] font-bold mt-1 ml-1">{t(errors.password)}</p>
-                      )}
- 
-                      <div className="bg-[#f8f9fa] rounded-xl p-4 mt-2">
-                        <div className="flex flex-wrap items-center gap-2 text-xs font-bold mb-2">
-                          <span className={hasLength ? 'text-green-500' : 'text-slate-400'}>{t('criteria_chars')}</span>
-                          <span className="text-slate-200">|</span>
-                          <span className={hasUppercase ? 'text-green-500' : 'text-slate-400'}>A-Z</span>
-                          <span className="text-slate-200">|</span>
-                          <span className={hasLowercase ? 'text-green-500' : 'text-slate-400'}>a-z</span>
-                          <span className="text-slate-200">|</span>
-                          <span className={hasNumber ? 'text-green-500' : 'text-slate-400'}>0-9</span>
-                          <span className="text-slate-200">|</span>
-                          <span className={hasSymbol ? 'text-green-500' : 'text-slate-400'}>{t('criteria_symbols')}</span>
-                        </div>
-                        
-                        <div className={`text-xs font-bold mb-2 ${isPasswordStrong ? 'text-green-500' : (formData.password.length > 0 ? 'text-orange-500' : 'text-slate-400')}`}>
-                          {isPasswordStrong ? t('password_strength_good') : (formData.password.length > 0 ? t('password_strength_weak') : ' ')}
-                        </div>
-                        
-                        <div className="flex h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                          <div className={`h-full transition-all duration-300 ${isPasswordStrong ? 'bg-[#51a729]' : (formData.password.length > 0 ? 'bg-[#ff9800]' : 'bg-transparent')}`} style={{ width: `${getStrengthPercentage()}%` }}></div>
-                        </div>
- 
-                        {isPasswordStrong && (
-                          <div className="text-xs text-slate-600 mt-3 flex items-center gap-1">
-                            {t('password_strength_desc')}
+                    {!googleCredential && (
+                      <>
+                        <div className="space-y-1.5">
+                          <label className={`text-sm font-bold text-slate-700 ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>{t('password_label')} <span className="text-[#ff5722]">*</span></label>
+                          <div className="relative group/input">
+                            <div className={`absolute ${language === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${formData.password.length > 0 && isPasswordStrong ? 'text-green-500' : 'text-slate-400'}`}>
+                              <Lock size={20} />
+                            </div>
+                            <input
+                              type={showPassword ? 'text' : 'password'}
+                              name="password"
+                              className={`w-full bg-transparent focus:bg-transparent border focus:ring-4 rounded-xl py-2.5 px-4 ${language === 'ar' ? 'pr-12 pl-11' : 'pl-12 pr-11'} transition-all outline-none text-[13px] font-medium ${formData.password.length > 0 && isPasswordStrong ? 'border-green-500 focus:ring-green-500/10 text-green-500' : 'border-slate-200 focus:border-[#ff5722] focus:ring-[#ff5722]/10 text-slate-700'} placeholder:text-slate-400 ${touched.password && errors.password ? '!border-red-300 !ring-red-500/10 !text-red-500 placeholder:!text-red-400' : ''}`}
+                              placeholder={t('password_label')}
+                              value={formData.password}
+                              onChange={handleChange}
+                              onBlur={handleBlur}
+                              required={!googleCredential}
+                              minLength={8}
+                            />
+                            <button
+                              type="button"
+                              className={`absolute ${language === 'ar' ? 'left-4' : 'right-4'} top-1/2 -translate-y-1/2 transition-colors ${formData.password.length > 0 && isPasswordStrong ? 'text-green-500/60 hover:text-green-500' : 'text-slate-400 hover:text-slate-600'}`}
+                              onClick={() => setShowPassword(!showPassword)}
+                            >
+                              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                            </button>
                           </div>
+                          {touched.password && errors.password && (
+                            <p className="text-red-500 text-[10px] font-bold mt-1 ml-1">{t(errors.password)}</p>
+                          )}
+                        </div>
+
+                        <div className="bg-[#f8f9fa] rounded-xl p-4 mt-2">
+                          <div className="flex flex-wrap items-center gap-2 text-xs font-bold mb-2">
+                            <span className={hasLength ? 'text-green-500' : 'text-slate-400'}>{t('criteria_chars')}</span>
+                            <span className="text-slate-200">|</span>
+                            <span className={hasUppercase ? 'text-green-500' : 'text-slate-400'}>A-Z</span>
+                            <span className="text-slate-200">|</span>
+                            <span className={hasLowercase ? 'text-green-500' : 'text-slate-400'}>a-z</span>
+                            <span className="text-slate-200">|</span>
+                            <span className={hasNumber ? 'text-green-500' : 'text-slate-400'}>0-9</span>
+                            <span className="text-slate-200">|</span>
+                            <span className={hasSymbol ? 'text-green-500' : 'text-slate-400'}>{t('criteria_symbols')}</span>
+                          </div>
+                          
+                          <div className={`text-xs font-bold mb-2 ${isPasswordStrong ? 'text-green-500' : (formData.password.length > 0 ? 'text-orange-500' : 'text-slate-400')}`}>
+                            {isPasswordStrong ? t('password_strength_good') : (formData.password.length > 0 ? t('password_strength_weak') : ' ')}
+                          </div>
+                          
+                          <div className="flex h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                            <div className={`h-full transition-all duration-300 ${isPasswordStrong ? 'bg-[#51a729]' : (formData.password.length > 0 ? 'bg-[#ff9800]' : 'bg-transparent')}`} style={{ width: `${getStrengthPercentage()}%` }}></div>
+                          </div>
+
+                          {isPasswordStrong && (
+                            <div className="text-xs text-slate-600 mt-3 flex items-center gap-1">
+                              {t('password_strength_desc')}
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+ 
+                    {!googleCredential && (
+                      <div className="space-y-1.5">
+                        <label className={`text-sm font-bold text-slate-700 ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>{t('repeat_password_label')} <span className="text-[#ff5722]">*</span></label>
+                        <div className="relative group/input">
+                          <div className={`absolute ${language === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${formData.confirmPassword.length > 0 && formData.confirmPassword === formData.password ? 'text-green-500' : 'text-slate-400'}`}>
+                            <Lock size={20} />
+                          </div>
+                          <input
+                            type={showConfirmPassword ? 'text' : 'password'}
+                            name="confirmPassword"
+                            className={`w-full bg-transparent focus:bg-transparent border focus:ring-4 rounded-xl py-2.5 px-4 ${language === 'ar' ? 'pr-12 pl-11' : 'pl-12 pr-11'} transition-all outline-none text-[13px] font-medium ${formData.confirmPassword.length > 0 && formData.confirmPassword === formData.password ? 'border-green-500 focus:ring-green-500/10 text-green-500' : 'border-slate-200 focus:border-[#ff5722] focus:ring-[#ff5722]/10 text-slate-700'} placeholder:text-slate-400 ${touched.confirmPassword && errors.confirmPassword ? '!border-red-300 !ring-red-500/10 !text-red-500 placeholder:!text-red-400' : ''}`}
+                            placeholder={t('password_label')}
+                            value={formData.confirmPassword}
+                            onChange={handleChange}
+                            onBlur={handleBlur}
+                            required={!googleCredential}
+                          />
+                          <button
+                            type="button"
+                            className={`absolute ${language === 'ar' ? 'left-4' : 'right-4'} top-1/2 -translate-y-1/2 transition-colors ${formData.confirmPassword.length > 0 && formData.confirmPassword === formData.password ? 'text-green-500/60 hover:text-green-500' : 'text-slate-400 hover:text-slate-600'}`}
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          >
+                            {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                          </button>
+                        </div>
+                        {touched.confirmPassword && errors.confirmPassword && (
+                          <p className="text-red-500 text-[10px] font-bold mt-1 ml-1">{t(errors.confirmPassword)}</p>
                         )}
                       </div>
-                    </div>
- 
-                    <div className="space-y-1.5">
-                      <label className={`text-sm font-bold text-slate-700 ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>{t('repeat_password_label')} <span className="text-[#ff5722]">*</span></label>
-                      <div className="relative group/input">
-                        <div className={`absolute ${language === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${formData.confirmPassword.length > 0 && formData.confirmPassword === formData.password ? 'text-green-500' : 'text-slate-400'}`}>
-                          <Lock size={20} />
-                        </div>
-                        <input
-                          type={showConfirmPassword ? 'text' : 'password'}
-                          name="confirmPassword"
-                          className={`w-full bg-transparent focus:bg-transparent border focus:ring-4 rounded-xl py-2.5 px-4 ${language === 'ar' ? 'pr-12 pl-11' : 'pl-12 pr-11'} transition-all outline-none text-[13px] font-medium ${formData.confirmPassword.length > 0 && formData.confirmPassword === formData.password ? 'border-green-500 focus:ring-green-500/10 text-green-500' : 'border-slate-200 focus:border-[#ff5722] focus:ring-[#ff5722]/10 text-slate-700'} placeholder:text-slate-400 ${touched.confirmPassword && errors.confirmPassword ? '!border-red-300 !ring-red-500/10 !text-red-500 placeholder:!text-red-400' : ''}`}
-                          placeholder={t('password_label')}
-                          value={formData.confirmPassword}
-                          onChange={handleChange}
-                          onBlur={handleBlur}
-                          required
-                        />
-                        <button
-                          type="button"
-                          className={`absolute ${language === 'ar' ? 'left-4' : 'right-4'} top-1/2 -translate-y-1/2 transition-colors ${formData.confirmPassword.length > 0 && formData.confirmPassword === formData.password ? 'text-green-500/60 hover:text-green-500' : 'text-slate-400 hover:text-slate-600'}`}
-                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        >
-                          {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                        </button>
-                      </div>
-                      {touched.confirmPassword && errors.confirmPassword && (
-                        <p className="text-red-500 text-[10px] font-bold mt-1 ml-1">{t(errors.confirmPassword)}</p>
-                      )}
-                    </div>
+                    )}
                 </div>
               )}
 

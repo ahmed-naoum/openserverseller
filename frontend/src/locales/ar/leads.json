@@ -125,5 +125,6 @@
   "range_days": "{count} يوم",
   "date_separator": "إلى",
   "yes": "نعم",
-  "no": "لا"
+  "no": "لا",
+  "new_lead": "إضافة طلب جديد"
 }

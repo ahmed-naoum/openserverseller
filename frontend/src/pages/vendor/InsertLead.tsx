@@ -531,10 +531,10 @@ export default function VendorInsertLead() {
             </button>
             <div>
               <div className="inline-flex items-center gap-1 px-3 py-1 bg-white/20 rounded-full text-xs font-black uppercase tracking-wider mb-2">
-                {currentMode === 'SELLER' ? 'Mode Vendeur' : 'Mode Affilié'}
+                {currentMode === 'SELLER' ? (t('lead_mode_seller', 'dashboard') || 'Mode Vendeur') : (t('lead_mode_affiliate', 'dashboard') || 'Mode Affilié')}
               </div>
               <h1 className="text-xl md:text-2xl font-black tracking-tight flex items-center gap-2">
-                Insérer un Nouveau Lead
+                {t('lead_insert_new', 'dashboard') || 'Insérer un Nouveau Lead'}
               </h1>
             </div>
           </div>
@@ -544,14 +544,14 @@ export default function VendorInsertLead() {
               type="button"
               onClick={() => setShowImportModal(true)}
               className="bg-white/20 hover:bg-white/30 text-white p-2.5 rounded-2xl transition-all shadow-md active:scale-95 flex items-center justify-center"
-              title="Voir le modèle d'importation Excel"
+              title={t('lead_import_template_title', 'dashboard') || "Voir le modèle d'importation Excel"}
             >
               <HelpCircle className="w-5 h-5" />
             </button>
             
             <label className="bg-white/20 hover:bg-white/30 text-white px-4 py-2.5 rounded-2xl transition-all shadow-md active:scale-95 flex items-center gap-2 cursor-pointer text-xs font-black uppercase tracking-wider">
               <FileSpreadsheet className="w-4 h-4" />
-              Importer Excel
+              {t('lead_import_excel', 'dashboard') || 'Importer Excel'}
               <input
                 type="file"
                 accept=".xlsx,.xls,.csv"
@@ -573,12 +573,12 @@ export default function VendorInsertLead() {
               <div className="space-y-4">
                 <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5 border-b border-gray-100 pb-2">
                   <Package className={`w-4 h-4 ${currentMode === 'SELLER' ? 'text-emerald-500' : 'text-indigo-500'}`} />
-                  1. Sélection du Produit
+                  {t('lead_section_product', 'dashboard') || '1. Sélection du Produit'}
                 </h2>
                 
                 <div className="grid grid-cols-1 gap-4">
                   <div>
-                    <label className="block text-xs font-black text-gray-500 uppercase mb-1">Associer un Produit</label>
+                    <label className="block text-xs font-black text-gray-500 uppercase mb-1">{t('lead_associate_product', 'dashboard') || 'Associer un Produit'}</label>
                     {loadingProducts ? (
                       <div className="h-11 bg-gray-50 border border-gray-100 rounded-xl animate-pulse"></div>
                     ) : (
@@ -589,8 +589,8 @@ export default function VendorInsertLead() {
                         }))}
                         value={selectedProductId}
                         onChange={(val) => setSelectedProductId(val as number)}
-                        placeholder={products.length === 0 ? "Aucun produit disponible" : "Choisissez le produit..."}
-                        searchPlaceholder="Rechercher un produit ou SKU..."
+                        placeholder={products.length === 0 ? (t('lead_no_product_avail', 'dashboard') || "Aucun produit disponible") : (t('lead_choose_product', 'dashboard') || "Choisissez le produit...")}
+                        searchPlaceholder={t('lead_search_product', 'dashboard') || "Rechercher un produit ou SKU..."}
                         error={!!formErrors.product}
                       />
                     )}
@@ -626,13 +626,13 @@ export default function VendorInsertLead() {
                 {/* Custom pricing, pack name and quantity configuration */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
                   <div>
-                    <label className="block text-xs font-black text-gray-500 uppercase mb-1">Nom du Pack</label>
+                    <label className="block text-xs font-black text-gray-500 uppercase mb-1">{t('lead_pack_name', 'dashboard') || 'Nom du Pack'}</label>
                     <input
                       type="text"
                       disabled={!selectedProductId}
                       value={packName}
                       onChange={(e) => setPackName(e.target.value)}
-                      placeholder={selectedProductId ? "Ex: Pack 2 + 1 Gratuit..." : "Sélectionnez un produit d'abord"}
+                      placeholder={selectedProductId ? (t('lead_pack_placeholder', 'dashboard') || "Ex: Pack 2 + 1 Gratuit...") : (t('lead_select_product_first', 'dashboard') || "Sélectionnez un produit d'abord")}
                       className={`w-full h-11 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 outline-none text-sm font-semibold shadow-sm ${
                         !selectedProductId ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : ''
                       } ${currentMode === 'SELLER' ? 'focus:ring-emerald-400' : 'focus:ring-indigo-400'}`}
@@ -640,7 +640,7 @@ export default function VendorInsertLead() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-black text-gray-500 uppercase mb-1">Quantité</label>
+                    <label className="block text-xs font-black text-gray-500 uppercase mb-1">{t('lead_quantity', 'dashboard') || 'Quantité'}</label>
                     <input
                       type="number"
                       min="1"
@@ -648,7 +648,7 @@ export default function VendorInsertLead() {
                       disabled={!selectedProductId}
                       value={qte}
                       onChange={(e) => setQte(Math.max(1, parseInt(e.target.value) || 1))}
-                      placeholder="Quantité"
+                      placeholder={t('lead_quantity', 'dashboard') || "Quantité"}
                       className={`w-full h-11 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 outline-none text-sm font-semibold shadow-sm ${
                         !selectedProductId ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : ''
                       } ${currentMode === 'SELLER' ? 'focus:ring-emerald-400' : 'focus:ring-indigo-400'}`}
@@ -656,7 +656,7 @@ export default function VendorInsertLead() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-black text-gray-500 uppercase mb-1">Prix (MAD)</label>
+                    <label className="block text-xs font-black text-gray-500 uppercase mb-1">{t('lead_price_mad', 'dashboard') || 'Prix (MAD)'}</label>
                     <input
                       type="number"
                       step="0.01"
@@ -666,8 +666,8 @@ export default function VendorInsertLead() {
                       onChange={(e) => setCustomPrice(e.target.value)}
                       placeholder={
                         selectedProductId 
-                          ? `Standard: ${Number((products.find(p => p.id === selectedProductId)?.retailPriceMad || 0) * qte).toFixed(2)} MAD` 
-                          : "Sélectionnez un produit d'abord"
+                          ? `${t('lead_price_standard', 'dashboard') || 'Standard'}: ${Number((products.find(p => p.id === selectedProductId)?.retailPriceMad || 0) * qte).toFixed(2)} MAD` 
+                          : (t('lead_select_product_first', 'dashboard') || "Sélectionnez un produit d'abord")
                       }
                       className={`w-full h-11 px-4 py-2.5 border rounded-xl focus:ring-2 outline-none text-sm font-semibold shadow-sm ${
                         !selectedProductId ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : ''
@@ -686,12 +686,12 @@ export default function VendorInsertLead() {
               <div className="space-y-4">
                 <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5 border-b border-gray-100 pb-2">
                   <Phone className={`w-4 h-4 ${currentMode === 'SELLER' ? 'text-emerald-500' : 'text-indigo-500'}`} />
-                  2. Informations du Client
+                  {t('lead_section_customer', 'dashboard') || '2. Informations du Client'}
                 </h2>
                 
                 <div className="grid grid-cols-1 gap-4">
                   <div>
-                    <label className="block text-xs font-black text-gray-500 uppercase mb-1">Nom complet du client</label>
+                    <label className="block text-xs font-black text-gray-500 uppercase mb-1">{t('lead_customer_name', 'dashboard') || 'Nom complet du client'}</label>
                     <div className="relative">
                       <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
                         <User className="w-4 h-4" />
@@ -701,7 +701,7 @@ export default function VendorInsertLead() {
                         required
                         value={fullName}
                         onChange={(e) => setFullName(e.target.value)}
-                        placeholder="Ex: Ahmed Naoum"
+                        placeholder={t('lead_customer_name_placeholder', 'dashboard') || "Ex: Ahmed Naoum"}
                         className={`w-full pl-9 pr-4 h-11 py-2.5 border rounded-xl focus:ring-2 outline-none text-sm font-semibold shadow-sm ${
                           formErrors.fullName ? 'border-red-300 bg-red-50 focus:ring-red-400' : 'border-gray-200'
                         } ${currentMode === 'SELLER' ? 'focus:ring-emerald-400' : 'focus:ring-indigo-400'}`}
@@ -711,7 +711,7 @@ export default function VendorInsertLead() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-black text-gray-500 uppercase mb-1">N° de Téléphone</label>
+                    <label className="block text-xs font-black text-gray-500 uppercase mb-1">{t('lead_phone', 'dashboard') || 'N° de Téléphone'}</label>
                       <div className="flex gap-2">
                         <div className="relative flex-1">
                           <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
@@ -722,7 +722,7 @@ export default function VendorInsertLead() {
                             required
                             value={phone}
                             onChange={(e) => handlePhoneChange(e.target.value)}
-                            placeholder="Ex: 0612345678"
+                            placeholder={t('lead_phone_placeholder', 'dashboard') || "Ex: 0612345678"}
                             className={`w-full pl-9 pr-4 h-11 py-2.5 border rounded-xl focus:ring-2 outline-none text-sm font-semibold shadow-sm ${
                               formErrors.phone ? 'border-red-300 bg-red-50 focus:ring-red-400' : 'border-gray-200'
                             } ${currentMode === 'SELLER' ? 'focus:ring-emerald-400' : 'focus:ring-indigo-400'}`}
@@ -741,9 +741,9 @@ export default function VendorInsertLead() {
                                 <Info className="w-5 h-5" />
                               </div>
                               <div>
-                                <h4 className="font-black text-gray-900 text-xs">Nouveau Client</h4>
+                                <h4 className="font-black text-gray-900 text-xs">{t('lead_new_client', 'dashboard') || 'Nouveau Client'}</h4>
                                 <p className="text-[10px] text-gray-500 mt-0.5 font-medium leading-tight">
-                                  Ce numéro n'a aucun historique de commande.
+                                  {t('lead_new_client_desc', 'dashboard') || 'Ce numéro n\'a aucun historique de commande.'}
                                 </p>
                               </div>
                             </div>
@@ -774,11 +774,11 @@ export default function VendorInsertLead() {
                               <ShieldAlert className="w-5 h-5" />
                             </div>
                             <div>
-                              <h4 className="font-black text-gray-900 text-xs">Score de Confiance: {score}%</h4>
+                              <h4 className="font-black text-gray-900 text-xs">{t('lead_trust_score', 'dashboard') || 'Score de Confiance:'} {score}%</h4>
                               <p className="text-[10px] text-gray-500 mt-0.5 font-medium leading-tight">
-                                {score >= 70 ? 'Client très fiable. Priorité haute.' :
-                                 score < 40 ? 'Attention : Historique problématique.' :
-                                 'Client avec un historique modéré.'}
+                                {score >= 70 ? (t('lead_trust_high', 'dashboard') || 'Client très fiable. Priorité haute.') :
+                                 score < 40 ? (t('lead_trust_low', 'dashboard') || 'Attention : Historique problématique.') :
+                                 (t('lead_trust_med', 'dashboard') || 'Client avec un historique modéré.')}
                               </p>
                             </div>
                           </div>
@@ -790,7 +790,7 @@ export default function VendorInsertLead() {
                         return isComplete ? (
                           <div className="flex items-center gap-2 text-xs font-bold text-gray-400 animate-pulse h-[66px] px-3">
                             <div className="w-4 h-4 border-2 border-gray-200 border-t-gray-500 rounded-full animate-spin"></div>
-                            Analyse de l'historique...
+                            {t('lead_analyzing_history', 'dashboard') || 'Analyse de l\'historique...'}
                           </div>
                         ) : null;
                       })()}
@@ -800,11 +800,11 @@ export default function VendorInsertLead() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                   <div>
-                    <label className="block text-xs font-black text-gray-500 uppercase mb-1">Ville (Sélection Coliaty)</label>
+                    <label className="block text-xs font-black text-gray-500 uppercase mb-1">{t('lead_city_label', 'dashboard') || 'Ville (Sélection Coliaty)'}</label>
                     <div className="relative">
                       {loadingCities ? (
                         <div className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl animate-pulse text-xs font-bold text-gray-400">
-                          Chargement des villes...
+                          {t('lead_city_loading', 'dashboard') || 'Chargement des villes...'}
                         </div>
                       ) : (
                         <SearchableSelect
@@ -815,8 +815,8 @@ export default function VendorInsertLead() {
                           }))}
                           value={city}
                           onChange={(val) => setCity(val as string)}
-                          placeholder="Sélectionner une ville..."
-                          searchPlaceholder="Rechercher une ville..."
+                          placeholder={t('lead_city_placeholder', 'dashboard') || "Sélectionner une ville..."}
+                          searchPlaceholder={t('lead_city_search', 'dashboard') || "Rechercher une ville..."}
                           error={!!formErrors.city}
                         />
                       )}
@@ -826,7 +826,7 @@ export default function VendorInsertLead() {
                   
                   {/* Colis de Remplacement UI */}
                   <div className="flex flex-col justify-start">
-                    <label className="block text-xs font-black text-gray-500 uppercase mb-1">Options d'expédition</label>
+                    <label className="block text-xs font-black text-gray-500 uppercase mb-1">{t('lead_shipping_options', 'dashboard') || 'Options d\'expédition'}</label>
                     <div className={`rounded-xl border transition-all ${packageReplacement ? 'border-gray-200 bg-gray-50' : 'border-gray-100 bg-gray-50 hover:bg-gray-100'}`}>
                       <label className="flex items-center gap-3 cursor-pointer p-3 select-none">
                         <input
@@ -841,7 +841,7 @@ export default function VendorInsertLead() {
                           }`}
                         />
                         <div>
-                          <span className="text-xs font-black text-gray-700 block">Colis de remplacement ?</span>
+                          <span className="text-xs font-black text-gray-700 block">{t('lead_package_replacement', 'dashboard') || 'Colis de remplacement ?'}</span>
                         </div>
                       </label>
                       
@@ -851,7 +851,7 @@ export default function VendorInsertLead() {
                             type="text"
                             value={packageOldTracking}
                             onChange={(e) => setPackageOldTracking(e.target.value)}
-                            placeholder="N° suivi à remplacer (ex: CO123456789)"
+                            placeholder={t('lead_package_replacement_placeholder', 'dashboard') || "N° suivi à remplacer (ex: CO123456789)"}
                             className={`w-full px-4 py-2 border rounded-lg focus:ring-2 outline-none text-xs font-semibold shadow-sm ${
                               formErrors.packageOldTracking ? 'border-red-300 bg-red-50 focus:ring-red-400' : 'border-gray-200 bg-white'
                             } ${currentMode === 'SELLER' ? 'focus:ring-emerald-400' : 'focus:ring-indigo-400'}`}
@@ -866,12 +866,12 @@ export default function VendorInsertLead() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-black text-gray-500 uppercase mb-1">Adresse détaillée</label>
+                  <label className="block text-xs font-black text-gray-500 uppercase mb-1">{t('lead_address_detailed', 'dashboard') || 'Adresse détaillée'}</label>
                   <textarea
                     rows={2}
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
-                    placeholder="Indiquez le quartier, rue, n° de porte, etc. (Min. 8 caractères)"
+                    placeholder={t('lead_address_placeholder', 'dashboard') || "Indiquez le quartier, rue, n° de porte, etc. (Min. 8 caractères)"}
                     className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 outline-none text-xs font-semibold shadow-sm resize-none ${
                       formErrors.address ? 'border-red-300 bg-red-50 focus:ring-red-400' : 'border-gray-200'
                     } ${currentMode === 'SELLER' ? 'focus:ring-emerald-400' : 'focus:ring-indigo-400'}`}
@@ -880,12 +880,12 @@ export default function VendorInsertLead() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-black text-gray-500 uppercase mb-1">Notes (Internes & Livraison)</label>
+                  <label className="block text-xs font-black text-gray-500 uppercase mb-1">{t('lead_notes_label', 'dashboard') || 'Notes (Internes & Livraison)'}</label>
                   <textarea
                     rows={3}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Ex: Ne pas ouvrir avant de payer, livrer après 18h..."
+                    placeholder={t('lead_notes_placeholder', 'dashboard') || "Ex: Ne pas ouvrir avant de payer, livrer après 18h..."}
                     className={`w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 outline-none text-sm font-semibold shadow-sm resize-none ${
                       currentMode === 'SELLER' ? 'focus:ring-emerald-400' : 'focus:ring-indigo-400'
                     }`}
@@ -907,7 +907,7 @@ export default function VendorInsertLead() {
                 }}
                 className="flex-1 py-3 px-4 border border-gray-200 text-gray-500 hover:bg-gray-50 active:scale-95 transition-all text-xs font-black tracking-widest rounded-2xl"
               >
-                {editingDraftId ? 'ANNULER MODIF' : 'ANNULER'}
+                {editingDraftId ? (t('lead_btn_cancel_edit', 'dashboard') || 'ANNULER MODIF') : (t('lead_btn_cancel', 'dashboard') || 'ANNULER')}
               </button>
               
               <button
@@ -918,7 +918,7 @@ export default function VendorInsertLead() {
                     : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
                 }`}
               >
-                {editingDraftId ? 'METTRE À JOUR LE LEAD' : 'AJOUTER À LA LISTE D\'ATTENTE'}
+                {editingDraftId ? (t('lead_btn_update', 'dashboard') || 'METTRE À JOUR LE LEAD') : (t('lead_btn_add_draft', 'dashboard') || 'AJOUTER À LA LISTE D\'ATTENTE')}
               </button>
             </div>
           </form>
@@ -930,13 +930,13 @@ export default function VendorInsertLead() {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-sm font-black text-gray-900 tracking-tight flex items-center gap-2">
                 <Truck className={`w-5 h-5 ${currentMode === 'SELLER' ? 'text-emerald-500' : 'text-indigo-500'}`} />
-                Liste d'attente
+                {t('lead_waiting_list', 'dashboard') || 'Liste d\'attente'}
               </h2>
               <div className="flex items-center gap-3">
                  <span className={`px-3 py-1 rounded-full text-xs font-black ${
                     currentMode === 'SELLER' ? 'bg-emerald-50 text-emerald-600' : 'bg-indigo-50 text-indigo-600'
                  }`}>
-                   {draftLeads.length} en attente
+                   {draftLeads.length} {t('lead_waiting_count', 'dashboard') || 'en attente'}
                  </span>
 
                  {draftLeads.length > 0 && (
@@ -944,7 +944,7 @@ export default function VendorInsertLead() {
                       onClick={() => updateDraftLeads([])}
                       className="text-[10px] font-bold text-red-500 hover:text-red-600 transition-colors uppercase tracking-widest"
                    >
-                     Tout vider
+                     {t('lead_empty_all', 'dashboard') || 'Tout vider'}
                    </button>
                  )}
               </div>
@@ -954,18 +954,18 @@ export default function VendorInsertLead() {
               <table className="w-full text-left text-xs">
                 <thead className="bg-gray-50/80 sticky top-0 backdrop-blur-sm z-10">
                   <tr>
-                    <th className="py-3 px-4 font-black text-gray-400 uppercase tracking-widest text-[10px]">Client</th>
-                    <th className="py-3 px-4 font-black text-gray-400 uppercase tracking-widest text-[10px]">Contact</th>
-                    <th className="py-3 px-4 font-black text-gray-400 uppercase tracking-widest text-[10px]">Produit & Vendeur</th>
-                    <th className="py-3 px-4 font-black text-gray-400 uppercase tracking-widest text-[10px]">Prix</th>
-                    <th className="py-3 px-4 font-black text-gray-400 uppercase tracking-widest text-[10px] text-right">Actions</th>
+                    <th className="py-3 px-4 font-black text-gray-400 uppercase tracking-widest text-[10px]">{t('lead_table_client', 'dashboard') || 'Client'}</th>
+                    <th className="py-3 px-4 font-black text-gray-400 uppercase tracking-widest text-[10px]">{t('lead_table_contact', 'dashboard') || 'Contact'}</th>
+                    <th className="py-3 px-4 font-black text-gray-400 uppercase tracking-widest text-[10px]">{t('lead_table_product', 'dashboard') || 'Produit & Vendeur'}</th>
+                    <th className="py-3 px-4 font-black text-gray-400 uppercase tracking-widest text-[10px]">{t('lead_table_price', 'dashboard') || 'Prix'}</th>
+                    <th className="py-3 px-4 font-black text-gray-400 uppercase tracking-widest text-[10px] text-right">{t('lead_table_actions', 'dashboard') || 'Actions'}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {draftLeads.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="py-12 text-center text-gray-400 font-medium text-xs">
-                        Aucun lead en attente d'expédition.
+                        {t('lead_no_waiting', 'dashboard') || 'Aucun lead en attente d\'expédition.'}
                       </td>
                     </tr>
                   ) : (
@@ -1018,7 +1018,7 @@ export default function VendorInsertLead() {
                                     : 'text-indigo-600 bg-indigo-50'
                                   : 'text-gray-400 hover:text-blue-500 hover:bg-blue-50'
                               }`}
-                              title="Modifier ce lead"
+                              title={t('lead_edit_tooltip', 'dashboard') || "Modifier ce lead"}
                             >
                               <Pencil className="w-4 h-4" />
                             </button>
@@ -1026,7 +1026,7 @@ export default function VendorInsertLead() {
                               type="button"
                               onClick={() => removeDraft(draft.id)}
                               className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all inline-flex"
-                              title="Supprimer ce lead"
+                              title={t('lead_delete_tooltip', 'dashboard') || "Supprimer ce lead"}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -1053,10 +1053,10 @@ export default function VendorInsertLead() {
                 }`}
               >
                 {isInsertingAll ? (
-                  <>⏳ INSERTION EN COURS...</>
+                  <>{t('lead_inserting', 'dashboard') || '⏳ INSERTION EN COURS...'}</>
                 ) : (
                   <>
-                    CONFIRMER ET INSÉRER {draftLeads.length > 0 ? `(${draftLeads.length})` : ''}
+                    {t('lead_confirm_insert', 'dashboard') || 'CONFIRMER ET INSÉRER'} {draftLeads.length > 0 ? `(${draftLeads.length})` : ''}
                   </>
                 )}
               </button>
@@ -1068,11 +1068,10 @@ export default function VendorInsertLead() {
       {showImportModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-6 relative overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
-            {/* Modal Header */}
             <div className="flex items-center justify-between pb-4 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <FileSpreadsheet className={`w-5 h-5 ${currentMode === 'SELLER' ? 'text-emerald-500' : 'text-indigo-500'}`} />
-                <h3 className="text-lg font-black text-gray-900">Structure du fichier d'importation</h3>
+                <h3 className="text-lg font-black text-gray-900">{t('lead_import_modal_title', 'dashboard') || 'Structure du fichier d\'importation'}</h3>
               </div>
               <button
                 onClick={() => setShowImportModal(false)}
@@ -1085,7 +1084,7 @@ export default function VendorInsertLead() {
             {/* Modal Content */}
             <div className="flex-1 overflow-y-auto py-6 space-y-4 text-sm text-gray-600 leading-relaxed">
               <p>
-                Pour importer vos leads avec succès, assurez-vous que votre fichier Excel (<code>.xlsx</code>, <code>.xls</code>) ou CSV contient les colonnes suivantes :
+                {t('lead_import_modal_desc', 'dashboard') || 'Pour importer vos leads avec succès, assurez-vous que votre fichier Excel (.xlsx, .xls) ou CSV contient les colonnes suivantes :'}
               </p>
               
               <div className="border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
@@ -1160,9 +1159,9 @@ export default function VendorInsertLead() {
               <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 text-xs text-blue-700 flex items-start gap-2.5 mt-2">
                 <Info className="w-4 h-4 shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-bold">Astuce de flexibilité :</p>
+                  <p className="font-bold">{t('lead_import_hint_title', 'dashboard') || 'Astuce de flexibilité :'}</p>
                   <p className="mt-0.5">
-                    L'importateur accepte les variations courantes pour les en-têtes (ex: "Nom Complet" ou "Nom" ou "Name", "Téléphone" ou "Phone" ou "Contact").
+                    {t('lead_import_hint_desc', 'dashboard') || 'L\'importateur accepte les variations courantes pour les en-têtes (ex: "Nom Complet" ou "Nom" ou "Name", "Téléphone" ou "Phone" ou "Contact").'}
                   </p>
                 </div>
               </div>
@@ -1179,14 +1178,14 @@ export default function VendorInsertLead() {
                     : 'bg-gradient-to-r from-indigo-500 to-indigo-600 shadow-indigo-200 hover:opacity-95'
                 }`}
               >
-                📥 TÉLÉCHARGER LE MODÈLE EXCEL
+                {t('lead_import_download', 'dashboard') || '📥 TÉLÉCHARGER LE MODÈLE EXCEL'}
               </button>
               <button
                 type="button"
                 onClick={() => setShowImportModal(false)}
                 className="py-3 px-6 border border-gray-200 text-gray-500 hover:bg-gray-50 transition-all text-xs font-black tracking-widest rounded-2xl"
               >
-                FERMER
+                {t('lead_import_close', 'dashboard') || 'FERMER'}
               </button>
             </div>
           </div>

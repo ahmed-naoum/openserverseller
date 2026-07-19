@@ -147,8 +147,8 @@ export const TierProgressBanner = ({
 
           {/* Runner Icon */}
           <motion.div 
-            initial={isRtl ? { right: '0%' } : { left: '0%' }}
-            animate={isRtl ? { right: `${overallPercentage}%` } : { left: `${overallPercentage}%` }}
+            initial={isRtl ? { right: '0%', left: 'auto' } : { left: '0%', right: 'auto' }}
+            animate={isRtl ? { right: `${overallPercentage}%`, left: 'auto' } : { left: `${overallPercentage}%`, right: 'auto' }}
             transition={{ duration: 1.5, ease: "easeOut" }}
             className={`absolute top-1/2 -translate-y-1/2 z-20 group cursor-pointer ${isRtl ? '-mr-3 md:-mr-4' : '-ml-3 md:-ml-4'}`}
           >

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Activity, Plus, Trash2, CheckCircle2, XCircle, Target, ChevronDown, Globe, Music, Ghost, Facebook } from 'lucide-react';
 import { userPixelApi, influencerApi, productsApi } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import toast from 'react-hot-toast';
 
 interface UserPixel {
@@ -67,6 +68,7 @@ const PLATFORM_DETAILS = {
 
 export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [pixels, setPixels] = useState<UserPixel[]>([]);
   const [links, setLinks] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -160,10 +162,10 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
         <div>
           <h1 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-2">
             <PlatformIcon className={`w-8 h-8 ${details.colorClass}`} />
-            {details.title}
+            {t(`pixel_${platform.toLowerCase()}_title`, 'dashboard') || details.title}
           </h1>
           <p className="text-gray-500 font-medium mt-1 text-sm">
-            {details.description}
+            {t(`pixel_${platform.toLowerCase()}_desc`, 'dashboard') || details.description}
           </p>
         </div>
         <button
@@ -174,7 +176,7 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
           className={`flex items-center gap-2 px-6 py-3 text-white rounded-xl font-bold transition-all shadow-lg ${details.btnClass}`}
         >
           <Plus className="w-5 h-5" />
-          Ajouter un Pixel
+          {t('pixel_add', 'dashboard') || 'Ajouter un Pixel'}
         </button>
       </div>
 
@@ -187,16 +189,18 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
           <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 ${details.bgClass} ${details.colorClass}`}>
             <Target className="w-10 h-10" />
           </div>
-          <h3 className="text-xl font-black text-gray-900 mb-2">Aucun Pixel Actif</h3>
+          <h3 className="text-xl font-black text-gray-900 mb-2">
+            {t('pixel_no_active', 'dashboard') || 'Aucun Pixel Actif'}
+          </h3>
           <p className="text-gray-500 mb-8 max-w-md mx-auto">
-            Commencez à tracker vos visites et conversions en ajoutant votre premier Pixel {details.title.split(' ')[0]}.
+            {t('pixel_start_tracking', 'dashboard') || 'Commencez à tracker vos visites et conversions en ajoutant votre premier Pixel.'}
           </p>
           <button
             onClick={() => setIsModalOpen(true)}
             className={`inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-colors ${details.bgClass} ${details.colorClass} hover:opacity-80`}
           >
             <Plus className="w-5 h-5" />
-            Ajouter mon premier Pixel
+            {t('pixel_add_first', 'dashboard') || 'Ajouter mon premier Pixel'}
           </button>
         </div>
       ) : (
@@ -263,7 +267,7 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
           <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="p-6 sm:p-8">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-black text-gray-900">Nouveau Pixel</h2>
+                <h2 className="text-2xl font-black text-gray-900">{t('pixel_new', 'dashboard') || 'Nouveau Pixel'}</h2>
                 <button 
                   onClick={() => setIsModalOpen(false)}
                   className="p-2 text-gray-400 hover:text-gray-600 bg-gray-50 rounded-full"
@@ -274,19 +278,19 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
 
               <div className="space-y-6">
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Nom de l'intégration</label>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">{t('pixel_integration_name', 'dashboard') || "Nom de l'intégration"}</label>
                   <input
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Ex: Mon Pixel Principal"
+                    placeholder={t('pixel_placeholder_name', 'dashboard') || "Ex: Mon Pixel Principal"}
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:border-blue-600 transition-all font-medium"
                     style={{ '--tw-ring-color': `rgba(59, 130, 246, 0.2)` } as any}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">{details.label}</label>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">{t(`pixel_${platform.toLowerCase()}_label`, 'dashboard') || details.label}</label>
                   <input
                     type="text"
                     value={pixelId}
@@ -298,7 +302,7 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Mode d'application</label>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">{t('pixel_apply_mode', 'dashboard') || "Mode d'application"}</label>
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       onClick={() => setType('GLOBAL')}
@@ -306,8 +310,8 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
                         type === 'GLOBAL' ? 'border-blue-600 bg-blue-50/50' : 'border-gray-100 hover:border-gray-200'
                       }`}
                     >
-                      <div className="font-bold text-gray-900 mb-1">Global</div>
-                      <div className="text-xs text-gray-500 font-medium">Toutes vos pages</div>
+                      <div className="font-bold text-gray-900 mb-1">{t('pixel_global', 'dashboard') || 'Global'}</div>
+                      <div className="text-xs text-gray-500 font-medium">{t('pixel_all_pages', 'dashboard') || 'Toutes vos pages'}</div>
                     </button>
                     <button
                       onClick={() => setType('SINGLE')}
@@ -315,15 +319,15 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
                         type === 'SINGLE' ? 'border-blue-600 bg-blue-50/50' : 'border-gray-100 hover:border-gray-200'
                       }`}
                     >
-                      <div className="font-bold text-gray-900 mb-1">Single Page</div>
-                      <div className="text-xs text-gray-500 font-medium">Page spécifique</div>
+                      <div className="font-bold text-gray-900 mb-1">{t('pixel_single_page', 'dashboard') || 'Single Page'}</div>
+                      <div className="text-xs text-gray-500 font-medium">{t('pixel_specific_page', 'dashboard') || 'Page spécifique'}</div>
                     </button>
                   </div>
                 </div>
 
                 {type === 'SINGLE' && (
                   <div className="animate-in slide-in-from-top-2">
-                    <label className="block text-sm font-bold text-gray-700 mb-2">Sélectionnez la page</label>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">{t('pixel_select_page', 'dashboard') || 'Sélectionnez la page'}</label>
                     <div className="relative">
                       <select
                         value={targetId}
@@ -331,9 +335,9 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl appearance-none focus:bg-white focus:ring-2 focus:border-blue-600 transition-all font-medium"
                         style={{ '--tw-ring-color': `rgba(59, 130, 246, 0.2)` } as any}
                       >
-                        <option value="">Choisir la cible...</option>
+                        <option value="">{t('pixel_choose_target', 'dashboard') || 'Choisir la cible...'}</option>
                         {links.length > 0 && (
-                          <optgroup label={user?.role === 'INFLUENCER' ? "Liens de Parrainage" : "Liens de Parrainage (Affilié)"}>
+                          <optgroup label={user?.role === 'INFLUENCER' ? (t('pixel_ref_links', 'dashboard') || "Liens de Parrainage") : (t('pixel_ref_links_affiliate', 'dashboard') || "Liens de Parrainage (Affilié)")}>
                             {links.map(link => (
                               <option key={`link-${link.id}`} value={link.code}>
                                 {link.product?.nameFr || 'Produit'} (Code: {link.code})
@@ -342,7 +346,7 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
                           </optgroup>
                         )}
                         {products.length > 0 && user?.role !== 'INFLUENCER' && (
-                          <optgroup label="Mes Produits (Vendeur)">
+                          <optgroup label={t('pixel_my_products', 'dashboard') || "Mes Produits (Vendeur)"}>
                             {products.map(product => (
                               <option key={`prod-${product.id}`} value={product.id.toString()}>
                                 {product.nameFr || product.nameEn || 'Produit'} (SKU: {product.sku})
@@ -357,7 +361,7 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
                 )}
 
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Événement de conversion</label>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">{t('pixel_conversion_event', 'dashboard') || 'Événement de conversion'}</label>
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       onClick={() => setConversionEvent('Lead')}
@@ -365,7 +369,7 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
                         conversionEvent === 'Lead' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-100 text-gray-600 hover:bg-gray-50'
                       }`}
                     >
-                      Lead (Prospect)
+                      {t('pixel_lead', 'dashboard') || 'Lead (Prospect)'}
                     </button>
                     <button
                       onClick={() => setConversionEvent('Purchase')}
@@ -373,7 +377,7 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
                         conversionEvent === 'Purchase' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-100 text-gray-600 hover:bg-gray-50'
                       }`}
                     >
-                      Purchase (Achat)
+                      {t('pixel_purchase', 'dashboard') || 'Purchase (Achat)'}
                     </button>
                   </div>
                 </div>
@@ -383,7 +387,7 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
                   disabled={isSubmitting || !name || !pixelId || (type === 'SINGLE' && !targetId)}
                   className={`w-full py-4 text-white rounded-xl font-black text-lg transition-colors disabled:opacity-50 shadow-lg ${details.btnClass}`}
                 >
-                  {isSubmitting ? 'Enregistrement...' : 'Sauvegarder le Pixel'}
+                  {isSubmitting ? (t('pixel_saving', 'dashboard') || 'Enregistrement...') : (t('pixel_save', 'dashboard') || 'Sauvegarder le Pixel')}
                 </button>
               </div>
             </div>

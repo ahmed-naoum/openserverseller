@@ -68,8 +68,6 @@ export default function InfluencerMarketplace() {
 
   // Custom Product Requests Modal State
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
-  const [customStep, setCustomStep] = useState<1 | 2>(1);
-  const [customUserType, setCustomUserType] = useState<'INFLUENCER' | 'SELLER' | null>(null);
   const [customName, setCustomName] = useState('');
   const [customCategory, setCustomCategory] = useState('');
   const [customProductLink, setCustomProductLink] = useState('');
@@ -83,8 +81,6 @@ export default function InfluencerMarketplace() {
 
   const closeCustomModal = () => {
     setIsCustomModalOpen(false);
-    setCustomStep(1);
-    setCustomUserType(null);
     setCustomName('');
     setCustomCategory('');
     setCustomProductLink('');
@@ -141,7 +137,7 @@ export default function InfluencerMarketplace() {
         quantity: customQty,
         description: customDescription.trim(),
         imageUrl: customImageUrl || undefined,
-        userType: customUserType
+        userType: user?.role === 'INFLUENCER' ? 'INFLUENCER' : 'SELLER'
       });
 
       toast.success('Votre demande de production personnalisée a été soumise avec succès');
@@ -641,263 +637,177 @@ export default function InfluencerMarketplace() {
                   </button>
                 </div>
 
-                {customStep === 1 ? (
-                  <div className="p-6 space-y-6 overflow-y-auto flex-1 flex flex-col justify-between" dir={language === 'ar' ? 'rtl' : 'ltr'}>
-                    <div className="space-y-4">
-                      <h4 className="text-sm font-bold text-slate-700 text-center uppercase tracking-wider mb-2">
-                        {language === 'ar' ? 'اختر نوع حسابك' : language === 'en' ? 'Select your profile type' : 'Sélectionnez votre type de profil'}
-                      </h4>
-                      
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {/* Influencer Card */}
-                        <div
-                          onClick={() => setCustomUserType('INFLUENCER')}
-                          className={`relative p-5 rounded-2xl border-2 cursor-pointer transition-all duration-300 flex flex-col items-center text-center gap-3 ${
-                            customUserType === 'INFLUENCER'
-                              ? 'border-pink-500 bg-pink-50/20 shadow-md shadow-pink-500/5'
-                              : 'border-slate-100 bg-slate-50/50 hover:border-slate-200 hover:bg-slate-50'
-                          }`}
-                        >
-                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${
-                            customUserType === 'INFLUENCER' ? 'bg-pink-500 text-white' : 'bg-slate-100 text-slate-500'
-                          }`}>
-                            <Sparkles className="w-6 h-6" />
-                          </div>
-                          <div>
-                            <h5 className="font-black text-sm text-slate-800">
-                              {language === 'ar' ? 'أنا مؤثر' : language === 'en' ? "I'm an Influencer" : 'Je suis un Influenceur'}
-                            </h5>
-                            <p className="text-[10px] text-slate-400 font-bold mt-1 leading-relaxed">
-                              {language === 'ar' ? 'أرغب في إنشاء أو توفير منتجات لجمهوري.' : language === 'en' ? 'I want to create or source products for my community.' : 'Je souhaite créer ou sourcer des produits pour ma communauté.'}
-                            </p>
-                          </div>
-                        </div>
+                <form onSubmit={handleCustomSubmit} className="p-6 space-y-5 overflow-y-auto flex-1 min-h-0 custom-scrollbar" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+                  {/* Product Name */}
+                  <div>
+                    <label className={`block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                      {language === 'ar' ? 'اسم المنتج *' : language === 'en' ? 'Product Name *' : 'Nom du produit *'}
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder={language === 'ar' ? 'مثال: قميص قطني عضوي مطبوع' : language === 'en' ? 'e.g. Printed organic cotton t-shirt' : 'Ex: T-shirt en coton bio imprimé'}
+                      value={customName}
+                      onChange={(e) => setCustomName(e.target.value)}
+                      disabled={isSubmittingCustom}
+                      className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all disabled:opacity-50 ${language === 'ar' ? 'text-right' : 'text-left'}`}
+                    />
+                  </div>
 
-                        {/* Seller Card */}
-                        <div
-                          onClick={() => setCustomUserType('SELLER')}
-                          className={`relative p-5 rounded-2xl border-2 cursor-pointer transition-all duration-300 flex flex-col items-center text-center gap-3 ${
-                            customUserType === 'SELLER'
-                              ? 'border-indigo-500 bg-indigo-50/20 shadow-md shadow-indigo-500/5'
-                              : 'border-slate-100 bg-slate-50/50 hover:border-slate-200 hover:bg-slate-50'
-                          }`}
-                        >
-                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${
-                            customUserType === 'SELLER' ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-500'
-                          }`}>
-                            <Package className="w-6 h-6" />
-                          </div>
-                          <div>
-                            <h5 className="font-black text-sm text-slate-800">
-                              {language === 'ar' ? 'أنا بائع' : language === 'en' ? "I'm a Seller" : 'Je suis un Vendeur'}
-                            </h5>
-                            <p className="text-[10px] text-slate-400 font-bold mt-1 leading-relaxed">
-                              {language === 'ar' ? 'أرغب في توفير منتجات بالجملة لمتجري الإلكتروني.' : language === 'en' ? 'I want to source bulk products for my e-commerce.' : 'Je souhaite sourcer des produits en gros pour mon e-commerce.'}
-                            </p>
-                          </div>
+                  {/* Category Name */}
+                  <div>
+                    <label className={`block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                      {language === 'ar' ? 'فئة المنتج *' : language === 'en' ? 'Product Category *' : 'Catégorie du produit *'}
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder={language === 'ar' ? 'مثال: ملابس، إلكترونيات، تجميل...' : language === 'en' ? 'e.g. Clothing, Electronics, Beauty...' : 'Ex: Vêtements, Électronique, Beauté...'}
+                      value={customCategory}
+                      onChange={(e) => setCustomCategory(e.target.value)}
+                      disabled={isSubmittingCustom}
+                      className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all disabled:opacity-50 ${language === 'ar' ? 'text-right' : 'text-left'}`}
+                    />
+                  </div>
+
+                  {/* Product Source Link */}
+                  <div>
+                    <label className={`block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                      {language === 'ar' ? 'رابط مصدر المنتج' : language === 'en' ? 'Product source link' : 'Lien source du produit'} <span className="text-slate-400 font-medium">({language === 'ar' ? 'اختياري' : language === 'en' ? 'Optional' : 'Optionnel'})</span>
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="Ex: https://alibaba.com/product-detail/..."
+                      value={customProductLink}
+                      onChange={(e) => setCustomProductLink(e.target.value)}
+                      disabled={isSubmittingCustom}
+                      className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all disabled:opacity-50 ${language === 'ar' ? 'text-left' : 'text-left'}`}
+                    />
+                  </div>
+
+                  {/* Quantity */}
+                  <div>
+                    <label className={`block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                      {language === 'ar' ? 'الكمية المطلوبة *' : language === 'en' ? 'Desired Quantity *' : 'Quantité souhaitée *'}
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      value={customQty}
+                      onChange={(e) => setCustomQty(Math.max(1, parseInt(e.target.value) || 1))}
+                      disabled={isSubmittingCustom}
+                      className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all disabled:opacity-50 ${language === 'ar' ? 'text-right' : 'text-left'}`}
+                    />
+                  </div>
+
+                  {/* Description */}
+                  <div>
+                    <label className={`block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                      {language === 'ar' ? 'الوصف والمواصفات *' : language === 'en' ? 'Description & Specifications *' : 'Description & Spécifications *'}
+                    </label>
+                    <textarea
+                      required
+                      rows={4}
+                      placeholder={language === 'ar' ? 'صف المواد، الأبعاد، الألوان، التعبئة والتغليف أو أي تعليمات هامة أخرى...' : language === 'en' ? 'Describe the materials, dimensions, colors, packaging, or any other important instructions...' : 'Décrivez les matériaux, dimensions, couleurs, emballage ou toute autre consigne importante...'}
+                      value={customDescription}
+                      onChange={(e) => setCustomDescription(e.target.value)}
+                      disabled={isSubmittingCustom}
+                      className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all disabled:opacity-50 resize-none ${language === 'ar' ? 'text-right' : 'text-left'}`}
+                    />
+                  </div>
+
+                  {/* Image Upload */}
+                  <div>
+                    <label className={`block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                      {language === 'ar' ? 'صورة مرجعية / نموذج' : language === 'en' ? 'Reference Image / Mockup' : 'Image de référence / Maquette'}
+                    </label>
+                    
+                    {!customImageUrl ? (
+                      <div
+                        onClick={() => !isUploadingCustomImage && fileInputRefCustom.current?.click()}
+                        className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all duration-200 ${
+                          isUploadingCustomImage
+                            ? 'border-indigo-400 bg-indigo-50/20'
+                            : 'border-slate-200 bg-slate-50/50 hover:border-indigo-300 hover:bg-indigo-50/10'
+                        }`}
+                      >
+                        <input
+                          ref={fileInputRefCustom}
+                          type="file"
+                          accept=".png,.jpg,.jpeg,.webp"
+                          className="hidden"
+                          onChange={handleCustomFileUpload}
+                          disabled={isUploadingCustomImage || isSubmittingCustom}
+                        />
+                        <div className="flex flex-col items-center gap-2">
+                          {isUploadingCustomImage ? (
+                            <div className="flex flex-col items-center gap-2">
+                              <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                              <p className="text-xs text-indigo-600 font-bold">
+                                {language === 'ar' ? `جاري الرفع... ${uploadProgressCustomImage}%` : language === 'en' ? `Uploading... ${uploadProgressCustomImage}%` : `Importation en cours... ${uploadProgressCustomImage}%`}
+                              </p>
+                            </div>
+                          ) : (
+                            <>
+                              <Upload className="w-8 h-8 text-slate-400" />
+                              <p className="text-xs font-bold text-slate-600">
+                                {language === 'ar' ? 'اسحب وأسقط أو انقر للاستيراد' : language === 'en' ? 'Drag and drop or click to upload' : 'Glisser-déposer ou cliquer pour importer'}
+                              </p>
+                              <p className="text-[10px] text-slate-400 font-medium">PNG, JPG, JPEG, WEBP</p>
+                            </>
+                          )}
                         </div>
                       </div>
-                    </div>
-
-                    <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3 flex-shrink-0">
-                      <button
-                        type="button"
-                        onClick={closeCustomModal}
-                        className="px-5 py-2.5 border border-slate-200 rounded-xl text-xs font-black uppercase tracking-wider text-slate-600 hover:bg-slate-50 transition-all"
-                      >
-                        {language === 'ar' ? 'إلغاء' : language === 'en' ? 'Cancel' : 'Annuler'}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!customUserType}
-                        onClick={() => setCustomStep(2)}
-                        className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-indigo-600/10 hover:shadow-indigo-600/20 disabled:opacity-50"
-                      >
-                        {language === 'ar' ? 'التالي' : language === 'en' ? 'Next' : 'Suivant'}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <form onSubmit={handleCustomSubmit} className="p-6 space-y-5 overflow-y-auto flex-1 min-h-0 custom-scrollbar" dir={language === 'ar' ? 'rtl' : 'ltr'}>
-                    {/* Product Name */}
-                    <div>
-                      <label className={`block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
-                        {language === 'ar' ? 'اسم المنتج *' : language === 'en' ? 'Product Name *' : 'Nom du produit *'}
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder={language === 'ar' ? 'مثال: قميص قطني عضوي مطبوع' : language === 'en' ? 'e.g. Printed organic cotton t-shirt' : 'Ex: T-shirt en coton bio imprimé'}
-                        value={customName}
-                        onChange={(e) => setCustomName(e.target.value)}
-                        disabled={isSubmittingCustom}
-                        className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all disabled:opacity-50 ${language === 'ar' ? 'text-right' : 'text-left'}`}
-                      />
-                    </div>
-
-                    {/* Category Name */}
-                    <div>
-                      <label className={`block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
-                        {language === 'ar' ? 'فئة المنتج *' : language === 'en' ? 'Product Category *' : 'Catégorie du produit *'}
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder={language === 'ar' ? 'مثال: ملابس، إلكترونيات، تجميل...' : language === 'en' ? 'e.g. Clothing, Electronics, Beauty...' : 'Ex: Vêtements, Électronique, Beauté...'}
-                        value={customCategory}
-                        onChange={(e) => setCustomCategory(e.target.value)}
-                        disabled={isSubmittingCustom}
-                        className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all disabled:opacity-50 ${language === 'ar' ? 'text-right' : 'text-left'}`}
-                      />
-                    </div>
-
-                    {/* Product Source Link */}
-                    <div>
-                      <label className={`block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
-                        {language === 'ar' ? 'رابط مصدر المنتج' : language === 'en' ? 'Product source link' : 'Lien source du produit'} <span className="text-slate-400 font-medium">({language === 'ar' ? 'اختياري' : language === 'en' ? 'Optional' : 'Optionnel'})</span>
-                      </label>
-                      <input
-                        type="url"
-                        placeholder="Ex: https://alibaba.com/product-detail/..."
-                        value={customProductLink}
-                        onChange={(e) => setCustomProductLink(e.target.value)}
-                        disabled={isSubmittingCustom}
-                        className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all disabled:opacity-50 ${language === 'ar' ? 'text-left' : 'text-left'}`}
-                      />
-                    </div>
-
-                    {/* Quantity */}
-                    <div>
-                      <label className={`block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
-                        {language === 'ar' ? 'الكمية المطلوبة *' : language === 'en' ? 'Desired Quantity *' : 'Quantité souhaitée *'}
-                      </label>
-                      <input
-                        type="number"
-                        required
-                        min="1"
-                        value={customQty}
-                        onChange={(e) => setCustomQty(Math.max(1, parseInt(e.target.value) || 1))}
-                        disabled={isSubmittingCustom}
-                        className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all disabled:opacity-50 ${language === 'ar' ? 'text-right' : 'text-left'}`}
-                      />
-                    </div>
-
-                    {/* Description */}
-                    <div>
-                      <label className={`block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
-                        {language === 'ar' ? 'الوصف والمواصفات *' : language === 'en' ? 'Description & Specifications *' : 'Description & Spécifications *'}
-                      </label>
-                      <textarea
-                        required
-                        rows={4}
-                        placeholder={language === 'ar' ? 'صف المواد، الأبعاد، الألوان، التعبئة والتغليف أو أي تعليمات هامة أخرى...' : language === 'en' ? 'Describe the materials, dimensions, colors, packaging, or any other important instructions...' : 'Décrivez les matériaux, dimensions, couleurs, emballage ou toute autre consigne importante...'}
-                        value={customDescription}
-                        onChange={(e) => setCustomDescription(e.target.value)}
-                        disabled={isSubmittingCustom}
-                        className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all disabled:opacity-50 resize-none ${language === 'ar' ? 'text-right' : 'text-left'}`}
-                      />
-                    </div>
-
-                    {/* Image Upload */}
-                    <div>
-                      <label className={`block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
-                        {language === 'ar' ? 'صورة مرجعية / نموذج' : language === 'en' ? 'Reference Image / Mockup' : 'Image de référence / Maquette'}
-                      </label>
-                      
-                      {!customImageUrl ? (
-                        <div
-                          onClick={() => !isUploadingCustomImage && fileInputRefCustom.current?.click()}
-                          className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all duration-200 ${
-                            isUploadingCustomImage
-                              ? 'border-indigo-400 bg-indigo-50/20'
-                              : 'border-slate-200 bg-slate-50/50 hover:border-indigo-300 hover:bg-indigo-50/10'
-                          }`}
+                    ) : (
+                      <div className="relative border border-slate-200 rounded-2xl p-3 bg-slate-50 flex items-center justify-between group">
+                        <div className="flex items-center gap-3">
+                          <div className="w-16 h-16 rounded-xl bg-white border overflow-hidden flex-shrink-0 flex items-center justify-center">
+                            <img
+                              src={customImageUrl}
+                              alt="Custom Product Reference"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div className="min-w-0 text-left">
+                            <p className="text-xs font-bold text-slate-800 truncate">
+                              {language === 'ar' ? 'الصورة المرجعية' : language === 'en' ? 'Reference Image' : 'Image de référence'}
+                            </p>
+                            <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 mt-0.5">
+                              {language === 'ar' ? '✓ تم الاستيراد بنجاح' : language === 'en' ? '✓ Successfully Uploaded' : '✓ Importé avec succès'}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setCustomImageUrl(null)}
+                          disabled={isSubmittingCustom}
+                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all disabled:opacity-50"
                         >
-                          <input
-                            ref={fileInputRefCustom}
-                            type="file"
-                            accept=".png,.jpg,.jpeg,.webp"
-                            className="hidden"
-                            onChange={handleCustomFileUpload}
-                            disabled={isUploadingCustomImage || isSubmittingCustom}
-                          />
-                          <div className="flex flex-col items-center gap-2">
-                            {isUploadingCustomImage ? (
-                              <div className="flex flex-col items-center gap-2">
-                                <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-                                <p className="text-xs text-indigo-600 font-bold">
-                                  {language === 'ar' ? `جاري الرفع... ${uploadProgressCustomImage}%` : language === 'en' ? `Uploading... ${uploadProgressCustomImage}%` : `Importation en cours... ${uploadProgressCustomImage}%`}
-                                </p>
-                              </div>
-                            ) : (
-                              <>
-                                <Upload className="w-8 h-8 text-slate-400" />
-                                <p className="text-xs font-bold text-slate-600">
-                                  {language === 'ar' ? 'اسحب وأسقط أو انقر للاستيراد' : language === 'en' ? 'Drag and drop or click to upload' : 'Glisser-déposer ou cliquer pour importer'}
-                                </p>
-                                <p className="text-[10px] text-slate-400 font-medium">PNG, JPG, JPEG, WEBP</p>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="relative border border-slate-200 rounded-2xl p-3 bg-slate-50 flex items-center justify-between group">
-                          <div className="flex items-center gap-3">
-                            <div className="w-16 h-16 rounded-xl bg-white border overflow-hidden flex-shrink-0 flex items-center justify-center">
-                              <img
-                                src={customImageUrl}
-                                alt="Custom Product Reference"
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                            <div className="min-w-0 text-left">
-                              <p className="text-xs font-bold text-slate-800 truncate">
-                                {language === 'ar' ? 'الصورة المرجعية' : language === 'en' ? 'Reference Image' : 'Image de référence'}
-                              </p>
-                              <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 mt-0.5">
-                                {language === 'ar' ? '✓ تم الاستيراد بنجاح' : language === 'en' ? '✓ Successfully Uploaded' : '✓ Importé avec succès'}
-                              </p>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setCustomImageUrl(null)}
-                            disabled={isSubmittingCustom}
-                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all disabled:opacity-50"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
-                    {/* Footer Buttons */}
-                    <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3 flex-shrink-0" dir={language === 'ar' ? 'rtl' : 'ltr'}>
-                      <button
-                        type="button"
-                        onClick={() => setCustomStep(1)}
-                        disabled={isSubmittingCustom || isUploadingCustomImage}
-                        className="px-5 py-2.5 border border-slate-200 rounded-xl text-xs font-black uppercase tracking-wider text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-50"
-                      >
-                        {language === 'ar' ? 'رجوع' : language === 'en' ? 'Back' : 'Retour'}
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={isSubmittingCustom || isUploadingCustomImage}
-                        className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-indigo-600/10 hover:shadow-indigo-600/20 disabled:opacity-50 flex items-center gap-2"
-                      >
-                        {isSubmittingCustom ? (
-                          <>
-                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            {language === 'ar' ? 'جاري الإرسال...' : language === 'en' ? 'Submitting...' : 'Soumission...'}
-                          </>
-                        ) : (
-                          language === 'ar' ? 'إرسال الطلب' : language === 'en' ? 'Submit Request' : 'Soumettre la demande'
-                        )}
-                      </button>
-                    </div>
-                  </form>
-                )}
+                  {/* Footer Buttons */}
+                  <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3 flex-shrink-0" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingCustom || isUploadingCustomImage}
+                      className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-indigo-600/10 hover:shadow-indigo-600/20 disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {isSubmittingCustom ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          {language === 'ar' ? 'جاري الإرسال...' : language === 'en' ? 'Submitting...' : 'Soumission...'}
+                        </>
+                      ) : (
+                        language === 'ar' ? 'إرسال الطلب' : language === 'en' ? 'Submit Request' : 'Soumettre la demande'
+                      )}
+                    </button>
+                  </div>
+                </form>
               </motion.div>
             </div>
           </>

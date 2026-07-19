@@ -125,5 +125,6 @@
   "range_days": "{count}j",
   "date_separator": "au",
   "yes": "Oui",
-  "no": "Non"
+  "no": "Non",
+  "new_lead": "Nouveau Lead"
 }

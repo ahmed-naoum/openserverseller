@@ -121,8 +121,8 @@ export default function Domains() {
           <Globe size={28} />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Intégration de Domaine</h1>
-          <p className="text-gray-500">Gérez vos liens avec un sous-domaine gratuit ou votre propre domaine personnalisé.</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('domain_integration_title', 'dashboard') || 'Intégration de Domaine'}</h1>
+          <p className="text-gray-500">{t('domain_integration_desc', 'dashboard') || 'Gérez vos liens avec un sous-domaine gratuit ou votre propre domaine personnalisé.'}</p>
         </div>
       </div>
 
@@ -135,7 +135,7 @@ export default function Domains() {
             }`}
           >
             <Server size={18} />
-            Sous-domaine Silacod
+            {t('domain_subdomain_tab', 'dashboard') || 'Sous-domaine Silacod'}
             {activeTab === 'subdomain' && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600" />
             )}
@@ -147,7 +147,7 @@ export default function Domains() {
             }`}
           >
             <LinkIcon size={18} />
-            Domaine Personnalisé
+            {t('domain_custom_tab', 'dashboard') || 'Domaine Personnalisé'}
             {activeTab === 'custom' && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600" />
             )}
@@ -302,15 +302,15 @@ export default function Domains() {
               <div className="relative z-10 space-y-5 max-w-md mx-auto">
                 <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest bg-indigo-50 text-indigo-600 border border-indigo-100">
                   <svg className="w-3 h-3 animate-spin" style={{ animationDuration: '3s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-                  Bientôt disponible
+                  {t('domain_soon', 'dashboard') || 'Bientôt disponible'}
                 </span>
 
                 <h3 className="text-xl md:text-2xl font-extrabold text-slate-900 tracking-tight leading-tight pt-1">
-                  Domaine personnalisé en préparation
+                  {t('domain_custom_prep', 'dashboard') || 'Domaine personnalisé en préparation'}
                 </h3>
 
                 <p className="text-slate-500 text-sm leading-relaxed max-w-sm mx-auto">
-                  Bientôt, vous pourrez connecter votre propre nom de domaine (ex: myshop.ma) à vos pages de vente et liens de parrainage. Restez connecté !
+                  {t('domain_custom_prep_desc', 'dashboard') || 'Bientôt, vous pourrez connecter votre propre nom de domaine (ex: myshop.ma) à vos pages de vente et liens de parrainage. Restez connecté !'}
                 </p>
               </div>
             </div>

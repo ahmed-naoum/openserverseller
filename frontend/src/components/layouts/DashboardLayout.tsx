@@ -67,8 +67,7 @@ import {
 
 const navigation = {
   vendor: [
-    
-    { name: 'Tableau de bord', href: '/dashboard', icon: Home },
+    { name: 'nav_dashboard', href: '/dashboard', icon: Home },
     { 
       name: 'nav_youcan_integration', 
       icon: Webhook,
@@ -77,48 +76,48 @@ const navigation = {
         { name: 'nav_youcan_leads', href: '/dashboard/youcan-leads', icon: Globe },
       ]
     },
-    { name: 'Inventaire', href: '/dashboard/inventory', icon: Package },
+    { name: 'nav_inventory', href: '/dashboard/inventory', icon: Package },
     { 
-      name: 'Gestion Vendeur', 
+      name: 'nav_seller_management', 
       icon: Users,
       children: [
-        { name: 'Mes Commandes', href: '/dashboard/leads?mode=SELLER', icon: ShoppingCart },
-        { name: 'Insérer un Lead', href: '/dashboard/leads/new?mode=SELLER', icon: Plus },
-        { name: 'Mes Liens', href: '/dashboard/links', icon: Link2 },
+        { name: 'nav_my_orders', href: '/dashboard/leads?mode=SELLER', icon: ShoppingCart },
+        { name: 'nav_insert_lead', href: '/dashboard/leads/new?mode=SELLER', icon: Plus },
+        { name: 'nav_my_links', href: '/dashboard/links', icon: Link2 },
       ]
     },
     { 
-      name: 'Gestion Affilié', 
+      name: 'nav_affiliate_management', 
       icon: Users,
       children: [
-        { name: 'Mes Commandes', href: '/dashboard/leads?mode=AFFILIATE', icon: ShoppingCart },
-        { name: 'Insérer un Lead', href: '/dashboard/leads/new?mode=AFFILIATE', icon: Plus },
-        { name: 'Mes Liens', href: '/dashboard/links', icon: Link2 },
+        { name: 'nav_my_orders', href: '/dashboard/leads?mode=AFFILIATE', icon: ShoppingCart },
+        { name: 'nav_insert_lead', href: '/dashboard/leads/new?mode=AFFILIATE', icon: Plus },
+        { name: 'nav_my_links', href: '/dashboard/links', icon: Link2 },
       ]
     },
-    { name: 'Domaines', href: '/dashboard/domains', icon: Globe },
-    { name: 'Portefeuille', href: '/dashboard/wallet', icon: CreditCard },
-    { name: 'Factures', href: '/dashboard/invoices', icon: FileText },
-    { name: 'Marché Public', href: '/dashboard/marketplace', icon: ShoppingCart },
+    { name: 'nav_domains', href: '/dashboard/domains', icon: Globe },
+    { name: 'nav_wallet', href: '/dashboard/wallet', icon: CreditCard },
+    { name: 'nav_invoices', href: '/dashboard/invoices', icon: FileText },
+    { name: 'nav_public_market', href: '/dashboard/marketplace', icon: ShoppingCart },
     { 
-      name: 'Support & Messages', 
+      name: 'nav_support_messages', 
       icon: MessageSquare,
       children: [
-        { name: 'Support & Tickets', href: '/dashboard/support', icon: MessageSquare },
-        { name: 'Messages', href: '/dashboard/chat', icon: MessageSquare },
+        { name: 'nav_support_tickets', href: '/dashboard/support', icon: MessageSquare },
+        { name: 'nav_messages', href: '/dashboard/chat', icon: MessageSquare },
       ]
     },
     { 
-      name: 'Pixels', 
+      name: 'nav_pixels', 
       icon: Target,
       children: [
-        { name: 'Meta Pixels', href: '/dashboard/pixels/meta', icon: Target },
-        { name: 'Google Pixels', href: '/dashboard/pixels/google', icon: Globe },
-        { name: 'Tiktok Pixels', href: '/dashboard/pixels/tiktok', icon: Music },
-        { name: 'Snapchat Pixels', href: '/dashboard/pixels/snapchat', icon: Ghost },
+        { name: 'nav_meta_pixels', href: '/dashboard/pixels/meta', icon: Target },
+        { name: 'nav_google_pixels', href: '/dashboard/pixels/google', icon: Globe },
+        { name: 'nav_tiktok_pixels', href: '/dashboard/pixels/tiktok', icon: Music },
+        { name: 'nav_snapchat_pixels', href: '/dashboard/pixels/snapchat', icon: Ghost },
       ]
     },
-    { name: 'Paramètres', href: '/dashboard/settings', icon: Settings },
+    { name: 'nav_settings', href: '/dashboard/settings', icon: Settings },
   ],
   grosseller: [
     { name: 'Vue d\'ensemble', href: '/grosseller', icon: Home },
@@ -740,8 +739,8 @@ export default function DashboardLayout() {
       if (item.href === '/admin/backups' && user?.role !== 'SUPER_ADMIN') return false;
       // Filter by mode for vendor dashboard
       if (isVendorDashboard) {
-        if (item.name === 'Gestion Vendeur') return currentMode === 'SELLER';
-        if (item.name === 'Gestion Affilié') return currentMode === 'AFFILIATE';
+        if (item.name === 'nav_seller_management') return currentMode === 'SELLER';
+        if (item.name === 'nav_affiliate_management') return currentMode === 'AFFILIATE';
       }
       return true;
     });

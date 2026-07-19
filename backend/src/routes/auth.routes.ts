@@ -1067,7 +1067,14 @@ router.post(
       tiktokUrl,
       facebookUrl,
       youtubeUrl,
-      snapchatUrl
+      snapchatUrl,
+      // Vendor Questionnaire
+      sellingOnline, budget, ordersPerDay, experienceYears, markets,
+      totalSpend, niches, biggestAchievement, biggestChallenge,
+      partnerPriorities, interviewAvailability, additionalNotes,
+      // Influencer Questionnaire
+      followersCount, contentType, hasPriorExperience, desiredProductTypes,
+      initialBudget, motivation
     } = req.body;
 
     if (!role) {
@@ -1162,6 +1169,36 @@ router.post(
             } : null,
           },
         },
+        ...(role === 'VENDOR' && sellingOnline !== undefined ? {
+          questionnaire: {
+            create: {
+              sellingOnline,
+              budget: budget || '',
+              ordersPerDay: ordersPerDay || '',
+              experienceYears: experienceYears || '',
+              markets: markets || [],
+              totalSpend: totalSpend || '',
+              niches: niches || [],
+              biggestAchievement: biggestAchievement || '',
+              biggestChallenge: biggestChallenge || '',
+              partnerPriorities: partnerPriorities || [],
+              interviewAvailability: interviewAvailability || 'NO',
+              additionalNotes: additionalNotes || null
+            }
+          }
+        } : {}),
+        ...(role === 'INFLUENCER' && followersCount !== undefined ? {
+          influencerQuestionnaire: {
+            create: {
+              followersCount,
+              contentType: contentType || [],
+              hasPriorExperience: hasPriorExperience || '',
+              desiredProductTypes: desiredProductTypes || '',
+              initialBudget: initialBudget || '',
+              motivation: motivation || null
+            }
+          }
+        } : {})
       } as any,
       include: { profile: true, role: true },
     });

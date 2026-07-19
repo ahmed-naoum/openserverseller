@@ -24,7 +24,7 @@ import toast from 'react-hot-toast';
 
 export default function VendorDashboard() {
   const { user } = useAuth();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [referralLinks, setReferralLinks] = useState<ReferralLink[]>([]);
   const [commissions, setCommissions] = useState<InfluencerCommission[]>([]);
   const [allCommissions, setAllCommissions] = useState<InfluencerCommission[]>([]);
@@ -270,16 +270,16 @@ export default function VendorDashboard() {
       {/* Header with Mode Badge */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-          Tableau de bord
-          {currentMode === 'SELLER' && <span className="ml-2 text-emerald-600 text-lg font-bold">(Vendeur)</span>}
-          {currentMode === 'AFFILIATE' && <span className="ml-2 text-indigo-600 text-lg font-bold">(Affilié)</span>}
+          {t('dashboard', 'dashboard')}
+          {currentMode === 'SELLER' && <span className="ml-2 text-emerald-600 text-lg font-bold">({t('dashboard_seller_short', 'dashboard')})</span>}
+          {currentMode === 'AFFILIATE' && <span className="ml-2 text-indigo-600 text-lg font-bold">({t('dashboard_affiliate_short', 'dashboard')})</span>}
         </h1>
       </div>
 
       {/* Tier Progress Banner */}
       <TierProgressBanner 
         totalEarned={wallet?.totalEarnedMad || 0} 
-        title={currentMode === 'SELLER' ? 'Tableau de Bord Vendeur' : 'Tableau de Bord Affilié'}
+        title={currentMode === 'SELLER' ? t('dashboard_seller', 'dashboard') : t('dashboard_affiliate', 'dashboard')}
         productsUrl="/dashboard/inventory"
         marketplaceUrl="/dashboard/marketplace"
       />
@@ -288,11 +288,11 @@ export default function VendorDashboard() {
       {helpers && helpers.length > 0 && (
         <div className="space-y-4">
           <h2 className="text-xs font-black uppercase tracking-widest text-slate-400">
-            {helpers.length > 1 ? 'SILACOD MANAGERS' : 'SILACOD MANAGER'}
+            {helpers.length > 1 ? t('silacod_managers', 'dashboard') : t('silacod_manager', 'dashboard')}
           </h2>
           <div className={`grid grid-cols-1 ${helpers.length > 1 ? 'lg:grid-cols-2' : ''} gap-4`}>
             {helpers.map((h: any, idx: number) => (
-              <div key={idx} className="bg-slate-900 rounded-3xl p-[2px] text-white shadow-xl relative overflow-hidden group border border-slate-800">
+              <div key={idx} className="bg-slate-900 rounded-3xl p-[2px] text-white shadow-xl relative overflow-hidden group border border-slate-800" dir={language === 'ar' ? 'rtl' : 'ltr'}>
                 {/* Inner glowing background or animated border */}
                 <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-emerald-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-xl"></div>
                 
@@ -306,14 +306,16 @@ export default function VendorDashboard() {
                       <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-slate-900 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
                     </div>
                     
-                    <div className="text-center sm:text-left w-full">
+                    <div className="text-center sm:text-start w-full">
                       <div className="flex items-center gap-2 justify-center sm:justify-start">
                         <h3 className="text-lg font-black tracking-tight text-white">{h.fullName}</h3>
                         <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[9px] font-black uppercase tracking-widest border border-indigo-500/20">
-                          SILACOD MANAGER
+                          {t('silacod_manager', 'dashboard')}
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-400 font-medium mt-1">Dédié à votre réussite. Contactez-moi à tout moment.</p>
+                      <p className="text-[11px] text-slate-400 font-medium mt-1">
+                        {language === 'ar' ? 'مكرس لنجاحك. تواصل معي في أي وقت.' : language === 'en' ? 'Dedicated to your success. Contact me at any time.' : 'Dédié à votre réussite. Contactez-moi à tout moment.'}
+                      </p>
                       
                       {/* Contact info text with copy buttons */}
                       <div className="flex flex-wrap items-center gap-3 mt-3 justify-center sm:justify-start">
