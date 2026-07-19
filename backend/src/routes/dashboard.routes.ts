@@ -59,7 +59,8 @@ router.get(
               phone: true,
               profile: {
                 select: {
-                  fullName: true
+                  fullName: true,
+                  avatarUrl: true
                 }
               }
             }
@@ -79,7 +80,8 @@ router.get(
       helpers: (helperAssignments || []).map((ha: any) => ({
         email: ha.helper.email,
         phone: ha.helper.phone,
-        fullName: ha.helper.profile?.fullName || 'N/A'
+        fullName: ha.helper.profile?.fullName || 'N/A',
+        avatarUrl: ha.helper.profile?.avatarUrl || null
       }))
     });
   })
@@ -420,7 +422,8 @@ router.get(
               phone: true,
               profile: {
                 select: {
-                  fullName: true
+                  fullName: true,
+                  avatarUrl: true
                 }
               }
             }
@@ -491,7 +494,8 @@ router.get(
       helpers: (helperAssignments || []).map((ha: any) => ({
         email: ha.helper.email,
         phone: ha.helper.phone,
-        fullName: ha.helper.profile?.fullName || 'N/A'
+        fullName: ha.helper.profile?.fullName || 'N/A',
+        avatarUrl: ha.helper.profile?.avatarUrl || null
       }))
     });
   })

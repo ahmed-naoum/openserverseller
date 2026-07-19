@@ -300,8 +300,12 @@ export default function VendorDashboard() {
                   <div className="flex flex-col sm:flex-row items-center gap-5 w-full">
                     {/* Avatar with ring and online dot */}
                     <div className="relative shrink-0">
-                      <div className="w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center text-white font-black text-xl uppercase shadow-lg shadow-indigo-500/30 ring-2 ring-white/5 group-hover:ring-indigo-500/50 transition-all duration-300">
-                        {h.fullName?.charAt(0) || '?'}
+                      <div className="w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center text-white font-black text-xl uppercase shadow-lg shadow-indigo-500/30 ring-2 ring-white/5 group-hover:ring-indigo-500/50 transition-all duration-300 overflow-hidden">
+                        {h.avatarUrl ? (
+                          <img src={h.avatarUrl} alt={h.fullName} className="w-full h-full object-cover" />
+                        ) : (
+                          h.fullName?.charAt(0) || '?'
+                        )}
                       </div>
                       <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-slate-900 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
                     </div>
