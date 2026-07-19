@@ -1234,4 +1234,15 @@ model InfluencerQuestionnaire {
   @@map("influencer_questionnaires")
 }
 
+model ProfessionalEmail {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("professional_emails")
+}
+
+
 

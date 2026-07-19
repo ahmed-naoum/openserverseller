@@ -250,6 +250,7 @@ const navigation = {
       icon: Shield,
       children: [
         { name: 'Annonces', href: '/admin/announcements', icon: Bell },
+        { name: 'Emails Professionnels', href: '/admin/professional-emails', icon: Mail },
         { name: 'Scanner Retour', href: '/admin/scanner', icon: ScanLine },
         { name: 'Webhooks Coliaty', href: '/admin/webhook-logs', icon: Webhook },
         { name: 'Journaux d\'Activité', href: '/admin/activity-logs', icon: History },

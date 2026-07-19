@@ -47,6 +47,8 @@ import InfluencerInspector from './pages/admin/InfluencerInspector';
 import SupportInspector from './pages/admin/SupportInspector';
 import ContactMessages from './pages/admin/ContactMessages';
 import AdminLinks from './pages/admin/Links';
+import AdminProfessionalEmails from './pages/admin/ProfessionalEmails';
+
 
 import YouCanCallback from './pages/vendor/YouCanCallback';
 import VendorInsertLead from './pages/vendor/InsertLead';
@@ -432,6 +434,11 @@ function App() {
           <Route path="campaigns" element={<AdminCampaigns />} />
           <Route path="verifications" element={<AdminVerifications />} />
           <Route path="platform-settings" element={<PlatformSettings />} />
+          <Route path="professional-emails" element={
+            <RoleGuard allowedRoles={['SUPER_ADMIN']}>
+              <AdminProfessionalEmails />
+            </RoleGuard>
+          } />
           <Route path="security" element={<SecurityFirewall />} />
           <Route path="webhook-logs" element={<WebhookLogs />} />
           <Route path="webhook-tester" element={<WebhookTester />} />
