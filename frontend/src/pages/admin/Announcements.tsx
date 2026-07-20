@@ -30,6 +30,8 @@ export default function AdminAnnouncements() {
   const [targetUserId, setTargetUserId] = useState('');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [actionUrl, setActionUrl] = useState('');
+  const [actionText, setActionText] = useState('');
 
   // Users for specific targeting
   const [users, setUsers] = useState<any[]>([]);
@@ -86,7 +88,9 @@ export default function AdminAnnouncements() {
         targetRole: type === 'ROLE' ? targetRole : undefined,
         targetUserId: type === 'USER' ? targetUserId : undefined,
         title,
-        content
+        content,
+        actionUrl: actionUrl.trim() || null,
+        actionText: actionText.trim() || null
       };
 
       if (editingAnnouncement) {
@@ -138,6 +142,8 @@ export default function AdminAnnouncements() {
     setTargetUserId(announcement.targetUserId?.toString() || '');
     setTitle(announcement.title);
     setContent(announcement.content);
+    setActionUrl(announcement.actionUrl || '');
+    setActionText(announcement.actionText || '');
     setIsModalOpen(true);
   };
 
@@ -151,6 +157,8 @@ export default function AdminAnnouncements() {
     setTargetUserId('');
     setTitle('');
     setContent('');
+    setActionUrl('');
+    setActionText('');
   };
 
   const getSeverityLabel = (sev: string) => {
@@ -160,7 +168,7 @@ export default function AdminAnnouncements() {
       case 'WARNING':
         return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">Attention</span>;
       case 'IMPORTANT':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">Important</span>;
+        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">Warning</span>;
       default:
         return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">{sev}</span>;
     }
@@ -245,6 +253,11 @@ export default function AdminAnnouncements() {
                     <td className="px-6 py-4 max-w-sm">
                       <div className="font-bold text-gray-900">{announcement.title}</div>
                       <div className="text-sm text-gray-500 truncate mt-1">{announcement.content}</div>
+                      {announcement.actionUrl && (
+                        <div className="text-[10px] text-primary-600 font-bold mt-1.5 truncate">
+                          Lien : {announcement.actionText || 'En savoir plus'} ({announcement.actionUrl})
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       {getTargetLabel(announcement)}
@@ -349,7 +362,7 @@ export default function AdminAnnouncements() {
                   {[
                     { id: 'INFO', color: 'blue', label: 'Info' },
                     { id: 'WARNING', color: 'amber', label: 'Attention' },
-                    { id: 'IMPORTANT', color: 'red', label: 'Important' }
+                    { id: 'IMPORTANT', color: 'red', label: 'Warning' }
                   ].map((s) => (
                     <button
                       key={s.id}
@@ -448,6 +461,7 @@ export default function AdminAnnouncements() {
                 <input
                   type="text"
                   required
+                  dir="auto"
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
                   placeholder="Titre de l'annonce..."
                   value={title}
@@ -460,11 +474,35 @@ export default function AdminAnnouncements() {
                 <textarea
                   required
                   rows={4}
+                  dir="auto"
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
                   placeholder="Contenu de votre annonce..."
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                 />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Lien URL (Optionnel)</label>
+                  <input
+                    type="url"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
+                    placeholder="https://example.com/page..."
+                    value={actionUrl}
+                    onChange={(e) => setActionUrl(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Texte du bouton (Optionnel)</label>
+                  <input
+                    type="text"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
+                    placeholder="En savoir plus, Cliquez ici..."
+                    value={actionText}
+                    onChange={(e) => setActionText(e.target.value)}
+                  />
+                </div>
               </div>
 
               <div className="pt-4 flex items-center justify-end gap-3 border-t border-gray-100">

@@ -677,6 +677,8 @@ model Announcement {
   targetUser   User?    @relation("TargetedAnnouncements", fields: [targetUserId], references: [id], onDelete: Cascade)
   title        String
   content      String   @db.Text
+  actionUrl    String?
+  actionText   String?
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
