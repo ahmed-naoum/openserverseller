@@ -5,7 +5,7 @@ import { Request, Response } from 'express';
 // Create an announcement (Admin Only)
 export const createAnnouncement = async (req: Request, res: Response) => {
   try {
-    const { type, severity, priority, placement, targetRole, targetUserId, title, content } = req.body;
+    const { type, severity, priority, placement, targetRole, targetUserId, title, content, actionUrl, actionText } = req.body;
 
     if (!['GLOBAL', 'ROLE', 'USER'].includes(type)) {
       res.status(400).json({ success: false, message: 'Invalid announcement type' });
@@ -41,7 +41,9 @@ export const createAnnouncement = async (req: Request, res: Response) => {
         targetRole,
         targetUserId: targetUserId ? parseInt(targetUserId) : null,
         title,
-        content
+        content,
+        actionUrl: actionUrl || null,
+        actionText: actionText || null
       }
     });
 
@@ -142,7 +144,7 @@ export const deleteAnnouncement = async (req: Request, res: Response) => {
 export const updateAnnouncement = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { type, severity, priority, placement, targetRole, targetUserId, title, content } = req.body;
+    const { type, severity, priority, placement, targetRole, targetUserId, title, content, actionUrl, actionText } = req.body;
 
     if (type && !['GLOBAL', 'ROLE', 'USER'].includes(type)) {
       res.status(400).json({ success: false, message: 'Invalid announcement type' });
@@ -167,7 +169,9 @@ export const updateAnnouncement = async (req: Request, res: Response) => {
       priority: priority !== undefined ? parseInt(priority) : undefined,
       placement,
       targetRole: type === 'ROLE' ? targetRole : (type ? null : undefined),
-      targetUserId: type === 'USER' ? (targetUserId ? parseInt(targetUserId as string) : null) : (type ? null : undefined)
+      targetUserId: type === 'USER' ? (targetUserId ? parseInt(targetUserId as string) : null) : (type ? null : undefined),
+      actionUrl: actionUrl !== undefined ? actionUrl : undefined,
+      actionText: actionText !== undefined ? actionText : undefined
     };
 
     // Remove undefined fields to avoid overwriting with null if they weren't provided in partial update

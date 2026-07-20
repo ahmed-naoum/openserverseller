@@ -49,6 +49,7 @@ export default function AnnouncementBanner({ position = 'TOP' }: { position?: 'T
             initial={{ opacity: 0, y: -20, height: 0 }}
             animate={{ opacity: 1, y: 0, height: 'auto' }}
             exit={{ opacity: 0, scale: 0.95, height: 0 }}
+            dir="ltr"
             className={`relative overflow-hidden rounded-xl border p-4 shadow-sm flex items-start gap-3 ${
               announcement.severity === 'WARNING'
                 ? 'bg-amber-50 border-amber-200 text-amber-900'
@@ -64,8 +65,26 @@ export default function AnnouncementBanner({ position = 'TOP' }: { position?: 'T
             </div>
             
             <div className="flex-1 pr-6">
-              <h3 className="text-sm font-bold mb-1">{announcement.title}</h3>
-              <p className="text-sm opacity-90">{announcement.content}</p>
+              <h3 className="text-sm font-bold mb-1" dir="auto">{announcement.title}</h3>
+              <p className="text-sm opacity-90 whitespace-pre-line" dir="auto">{announcement.content}</p>
+              {announcement.actionUrl && (
+                <div className="mt-3">
+                  <a
+                    href={announcement.actionUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`inline-flex items-center px-4 py-2 text-xs font-bold rounded-lg transition-all hover:scale-[1.02] active:scale-[0.98] ${
+                      announcement.severity === 'WARNING'
+                        ? 'bg-amber-600 text-white hover:bg-amber-700 shadow-sm shadow-amber-600/10'
+                        : announcement.severity === 'IMPORTANT'
+                        ? 'bg-red-600 text-white hover:bg-red-700 shadow-sm shadow-red-600/10'
+                        : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm shadow-blue-600/10'
+                    }`}
+                  >
+                    {announcement.actionText || 'En savoir plus'}
+                  </a>
+                </div>
+              )}
             </div>
 
             {announcement.severity !== 'IMPORTANT' && (
