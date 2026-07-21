@@ -667,6 +667,7 @@ export const settingsApi = {
   updateMaintenanceSettings: (data: { enabled: boolean; secret: string; registrationBlocked: boolean; influencerRegistrationBlocked: boolean; showIdentityVerification?: boolean; showBankVerification?: boolean; showContractVerification?: boolean }) => api.put('/settings/maintenance', data),
   getCacheVersion: () => api.get('/public/version'),
   refreshCache: () => api.post('/admin/cache-refresh'),
+  resetRankLevels: () => api.post('/admin/reset-rank-levels'),
 };
 
 export const webhooksApi = {

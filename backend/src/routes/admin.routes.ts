@@ -38,6 +38,24 @@ router.post(
   })
 );
 
+router.post(
+  '/reset-rank-levels',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (_req: Request, res: Response) => {
+    const result = await prisma.wallet.updateMany({
+      data: {
+        totalEarnedMad: 0,
+      },
+    });
+
+    res.json({
+      status: 'success',
+      message: `Niveaux de rang réinitialisés avec succès pour tous les utilisateurs. (${result.count} portefeuilles mis à jour)`,
+    });
+  })
+);
+
 router.get(
   '/dashboard',
   authenticate,
