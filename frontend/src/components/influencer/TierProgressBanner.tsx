@@ -107,7 +107,7 @@ export const TierProgressBanner = ({
                 </motion.div>
                 
                 {isActuallyCurrent && (
-                  <div className="absolute -bottom-10 md:-bottom-12">
+                  <div className="absolute -bottom-8 md:-bottom-10">
                     <span className="px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-white text-[10px] font-bold border border-white/20 whitespace-nowrap animate-pulse">
                       {t('tier_banner_current_position', 'dashboard')}
                     </span>
@@ -155,17 +155,32 @@ export const TierProgressBanner = ({
           </div>
 
           {/* Runner Track (same left/right offsets as the filled track) */}
-          <div className="absolute top-0 bottom-0 left-4 right-4 md:left-8 md:right-8 pointer-events-none">
+          <div className="absolute top-0 h-4 left-4 right-4 md:left-8 md:right-8 pointer-events-none">
             {/* Runner Icon */}
             <motion.div 
               initial={{ left: '0%' }}
               animate={{ left: `${overallPercentage}%` }}
               transition={{ duration: 1.5, ease: "easeOut" }}
-              className="absolute top-1/2 -translate-y-1/2 z-20 group cursor-pointer -ml-3 md:-ml-4 pointer-events-auto"
+              className="absolute top-1/2 -translate-y-1/2 z-20 group cursor-pointer -ml-2.5 md:-ml-3 pointer-events-auto"
             >
-              <div className="w-6 h-6 md:w-8 md:h-8 bg-white rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(255,255,255,0.3)] border-[3px] border-slate-900">
-                <Flame className="w-3 h-3 md:w-4 md:h-4 text-orange-500" />
-              </div>
+              <motion.div 
+                animate={{
+                  boxShadow: [
+                    "0 0 6px rgba(249,115,22,0.4)",
+                    "0 0 16px rgba(249,115,22,0.9)",
+                    "0 0 6px rgba(249,115,22,0.4)"
+                  ],
+                  scale: [1, 1.12, 1]
+                }}
+                transition={{
+                  duration: 2.2,
+                  repeat: Infinity,
+                  ease: "easeInOut"
+                }}
+                className="w-5 h-5 md:w-6 md:h-6 bg-white rounded-full flex items-center justify-center border-[2px] border-orange-500"
+              >
+                <Flame className="w-2.5 h-2.5 md:w-3.5 md:h-3.5 text-orange-500 fill-orange-500 animate-pulse" />
+              </motion.div>
 
               {/* Tooltip */}
               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-30">
