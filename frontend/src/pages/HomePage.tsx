@@ -13,6 +13,7 @@ import LiveTicker from '../components/home/LiveTicker';
 import ProfitSimulator from '../components/home/ProfitSimulator';
 import SuccessStories from '../components/home/SuccessStories';
 import FAQ from '../components/home/FAQ';
+import BrandMockupStudioModal from '../components/brand/BrandMockupStudioModal';
 import { publicApi, BACKEND_URL } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -53,6 +54,8 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState<'confirmation' | 'tracking' | 'products' | 'profits' | 'orders'>('confirmation');
   const [customLogoSelected, setCustomLogoSelected] = useState(false);
   const [uploadedLogo, setUploadedLogo] = useState<string | null>(null);
+  const [isBrandStudioOpen, setIsBrandStudioOpen] = useState(false);
+  const [selectedMockupProductId, setSelectedMockupProductId] = useState<number | undefined>();
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -849,9 +852,22 @@ export default function HomePage() {
                       </div>
                     </div>
 
-                    <Link to="/register" className="mt-5 block text-center py-3 bg-[#ff5722] hover:bg-[#e04a1b] text-white rounded-xl text-xs font-bold active:scale-[0.98] transition-all">
-                      {t('order_now')}
-                    </Link>
+                    <div className="mt-5 grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => {
+                          setSelectedMockupProductId(prod.id);
+                          setIsBrandStudioOpen(true);
+                        }}
+                        className="py-3 px-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-600 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1 active:scale-[0.98]"
+                      >
+                        <Sparkles size={13} className="text-amber-500 fill-amber-400" />
+                        <span>Simuler Ma Marque</span>
+                      </button>
+
+                      <Link to="/register" className="py-3 px-2 bg-[#ff5722] hover:bg-[#e04a1b] text-white text-center rounded-xl text-[11px] font-bold active:scale-[0.98] transition-all flex items-center justify-center">
+                        {t('order_now')}
+                      </Link>
+                    </div>
                   </motion.div>
                 );
               })
@@ -860,13 +876,15 @@ export default function HomePage() {
           </div>
 
           {/* Interactive branding engine preview */}
-          <div className="bg-gradient-to-br from-slate-900 via-primary-950 to-slate-950 border border-slate-800 rounded-[3rem] p-8 sm:p-12 max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8 shadow-2xl relative overflow-hidden text-white mt-12">
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-primary-500/10 rounded-full blur-[90px] pointer-events-none" />
+          <div className="bg-gradient-to-br from-slate-900 via-primary-950 to-slate-950 border border-amber-500/30 rounded-[3rem] p-8 sm:p-12 max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8 shadow-2xl relative overflow-hidden text-white mt-12 group">
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-amber-500/10 rounded-full blur-[90px] pointer-events-none" />
             
             <div className="text-right space-y-3 relative z-10">
               <div className="flex items-center justify-start gap-2">
                 <span className="px-3 py-1 bg-primary-500/20 border border-primary-500/30 rounded-lg text-[9px] font-black text-primary-400 uppercase tracking-widest">{t('brand_badge')}</span>
-                <span className="px-3 py-1 bg-amber-500/20 border border-amber-500/30 rounded-lg text-[9px] font-black text-amber-400 uppercase tracking-widest animate-pulse">{t('coming_soon')}</span>
+                <span className="px-3 py-1 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/40 rounded-lg text-[9px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-1 animate-pulse">
+                  <Sparkles size={12} className="fill-amber-400" /> GEMINI AI STUDIO
+                </span>
               </div>
               <h4 className="text-2xl font-black">{t('brand_preview_title')}</h4>
               <p className="text-slate-400 text-xs sm:text-sm leading-relaxed max-w-lg">
@@ -875,12 +893,13 @@ export default function HomePage() {
             </div>
 
             <div className="flex-shrink-0 flex items-center gap-4 relative z-10 w-full sm:w-auto">
-              <div
-                className="w-full sm:w-auto text-center px-8 py-4 bg-slate-800/80 border border-slate-700/50 text-slate-300 rounded-xl text-xs font-black uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 cursor-not-allowed select-none"
+              <button
+                onClick={() => setIsBrandStudioOpen(true)}
+                className="w-full sm:w-auto text-center px-8 py-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black rounded-2xl text-xs uppercase tracking-wider shadow-xl shadow-amber-500/20 flex items-center justify-center gap-2 transition-all hover:scale-105 active:scale-95 cursor-pointer"
               >
-                <Lock className="w-4 h-4 text-slate-400" />
-                <span>{t('coming_soon')}</span>
-              </div>
+                <Sparkles className="w-4 h-4 fill-slate-950" />
+                <span>Simuler Ma Marque (AI Studio)</span>
+              </button>
             </div>
           </div>
 
@@ -1026,6 +1045,13 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
+
+      {/* Brand Mockup Studio Modal (Gemini AI Powered) */}
+      <BrandMockupStudioModal
+        isOpen={isBrandStudioOpen}
+        onClose={() => setIsBrandStudioOpen(false)}
+        initialProductId={selectedMockupProductId}
+      />
 
     </div>
   );
