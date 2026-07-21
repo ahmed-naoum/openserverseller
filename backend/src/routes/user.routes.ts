@@ -79,6 +79,8 @@ router.get(
           saisieFeeMad: u.saisieFeeMad,
           autoAssignInfluencers: u.autoAssignInfluencers,
           autoAssignHelperUsers: u.autoAssignHelperUsers,
+          autoAssignHelperVendors: u.autoAssignHelperVendors,
+          autoAssignHelperInfluencers: u.autoAssignHelperInfluencers,
           canManageProducts: u.canManageProducts,
           canManageLeads: u.canManageLeads,
           canManageOrders: u.canManageOrders,
@@ -226,11 +228,17 @@ router.post(
       }
     }
 
-    // Auto-assign new user to helpers with autoAssignHelperUsers enabled
+    // Auto-assign new user to helpers with autoAssignHelperUsers/vendors/influencers enabled
+    const isVendor = role === 'VENDOR';
+    const isInfluencer = role === 'INFLUENCER';
     const globalHelpers = await prisma.user.findMany({
       where: {
         role: { name: 'HELPER' },
-        autoAssignHelperUsers: true
+        OR: [
+          { autoAssignHelperUsers: true },
+          ...(isVendor ? [{ autoAssignHelperVendors: true }] : []),
+          ...(isInfluencer ? [{ autoAssignHelperInfluencers: true }] : []),
+        ]
       }
     });
 
@@ -468,6 +476,9 @@ router.get(
           youtubeUsername: user.profile?.youtubeUsername,
           snapchatUsername: user.profile?.snapchatUsername,
           autoAssignInfluencers: user.autoAssignInfluencers,
+          autoAssignHelperUsers: user.autoAssignHelperUsers,
+          autoAssignHelperVendors: user.autoAssignHelperVendors,
+          autoAssignHelperInfluencers: user.autoAssignHelperInfluencers,
           canImpersonate: user.canImpersonate,
           canManageProducts: user.canManageProducts,
           canManageLeads: user.canManageLeads,

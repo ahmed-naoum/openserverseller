@@ -42,7 +42,9 @@ import {
   Trash2,
   LayoutTemplate,
   LayoutDashboard,
-  Loader2
+  Loader2,
+  Store,
+  Sparkles
 } from 'lucide-react';
 
 export function parseSocialInput(val: string, platform: 'instagram' | 'tiktok' | 'facebook' | 'youtube' | 'x' | 'snapchat') {
@@ -303,9 +305,12 @@ function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; 
   const queryClient = useQueryClient();
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
   const [autoAssign, setAutoAssign] = useState(helper?.autoAssignHelperUsers || false);
+  const [autoAssignVendors, setAutoAssignVendors] = useState(helper?.autoAssignHelperVendors || false);
+  const [autoAssignInfluencers, setAutoAssignInfluencers] = useState(helper?.autoAssignHelperInfluencers || false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [roleFilter, setRoleFilter] = useState<'ALL' | 'VENDOR' | 'INFLUENCER'>('ALL');
 
   useEffect(() => {
     if (!isOpen || !helper) return;
@@ -322,6 +327,8 @@ function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; 
       const currentIds = (assignRes.data?.data || []).map((a: any) => a.targetUserId);
       setSelectedUsers(currentIds);
       setAutoAssign(helper.autoAssignHelperUsers || false);
+      setAutoAssignVendors(helper.autoAssignHelperVendors || false);
+      setAutoAssignInfluencers(helper.autoAssignHelperInfluencers || false);
     }).catch(() => {
       toast.error('Erreur lors du chargement');
     }).finally(() => setLoading(false));
@@ -330,12 +337,14 @@ function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await adminApi.setHelperUserAssignments(helper.id, selectedUsers, autoAssign);
-      toast.success(
-        autoAssign 
-          ? `Auto-assignation activée pour ${helper.fullName || 'ce helper'}`
-          : `${selectedUsers.length} utilisateur(s) assigné(s) à ${helper.fullName || 'ce helper'}`
+      await adminApi.setHelperUserAssignments(
+        helper.id, 
+        selectedUsers, 
+        autoAssign, 
+        autoAssignVendors, 
+        autoAssignInfluencers
       );
+      toast.success('Assignations mises à jour avec succès');
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
       queryClient.invalidateQueries({ queryKey: ['users'] });
       onClose();
@@ -352,11 +361,25 @@ function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; 
     );
   };
 
+  const filteredUsers = allUsers.filter(u => {
+    if (roleFilter === 'ALL') return true;
+    return u.role === roleFilter;
+  });
+
+  const visibleIds = filteredUsers.map(u => u.id);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedUsers.includes(id));
+
   const toggleAll = () => {
-    if (selectedUsers.length === allUsers.length) {
-      setSelectedUsers([]);
+    if (allVisibleSelected) {
+      setSelectedUsers(prev => prev.filter(id => !visibleIds.includes(id)));
     } else {
-      setSelectedUsers(allUsers.map(u => u.id));
+      setSelectedUsers(prev => {
+        const next = [...prev];
+        visibleIds.forEach(id => {
+          if (!next.includes(id)) next.push(id);
+        });
+        return next;
+      });
     }
   };
 
@@ -381,41 +404,124 @@ function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; 
         </div>
 
         <div className="p-8 overflow-y-auto flex-1 bg-white/50">
-          {/* Auto-assign toggle */}
-          <div className={`mb-6 p-4 rounded-3xl border-2 transition-all duration-300 ${
-            autoAssign 
-              ? 'border-indigo-500 bg-indigo-50/50 shadow-lg shadow-indigo-100' 
-              : 'border-slate-100 bg-slate-50/50'
-          }`}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-colors ${
-                  autoAssign ? 'bg-indigo-600 text-white' : 'bg-white text-slate-400 border border-slate-100'
-                }`}>
-                  <ShieldAlert size={20} />
+          {/* Toggles Container */}
+          <div className="space-y-3 mb-6">
+            {/* Global Auto-assign Toggle */}
+            <div className={`p-4 rounded-3xl border-2 transition-all duration-300 ${
+              autoAssign 
+                ? 'border-indigo-500 bg-indigo-50/50 shadow-lg shadow-indigo-100' 
+                : 'border-slate-100 bg-slate-50/50'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-colors ${
+                    autoAssign ? 'bg-indigo-600 text-white' : 'bg-white text-slate-400 border border-slate-100'
+                  }`}>
+                    <ShieldAlert size={20} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-slate-800 tracking-tight">Auto-assignation globale</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Tous les utilisateurs (présents & futurs)</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-black text-slate-800 tracking-tight">Auto-assignation globale</p>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Tous les utilisateurs (présents & futurs)</p>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setAutoAssign(!autoAssign)}
+                  className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${
+                    autoAssign ? 'bg-indigo-600' : 'bg-slate-200'
+                  }`}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-300 transform ${
+                    autoAssign ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setAutoAssign(!autoAssign)}
-                className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${
-                  autoAssign ? 'bg-indigo-600' : 'bg-slate-200'
-                }`}
-              >
-                <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-300 transform ${
-                  autoAssign ? 'translate-x-6' : 'translate-x-0'
-                }`} />
-              </button>
+              {autoAssign && (
+                <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mt-3 animate-pulse">
+                  ✨ Mode Helper Global Activé
+                </p>
+              )}
             </div>
-            {autoAssign && (
-              <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mt-3 animate-pulse">
-                ✨ Mode Helper Global Activé
-              </p>
-            )}
+
+            {/* Vendor Auto-assign Toggle */}
+            <div className={`p-4 rounded-3xl border-2 transition-all duration-300 ${
+              autoAssignVendors && !autoAssign
+                ? 'border-emerald-500 bg-emerald-50/30 shadow-lg shadow-emerald-100' 
+                : autoAssign
+                ? 'border-slate-100 bg-slate-50/30 opacity-60'
+                : 'border-slate-100 bg-slate-50/50'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-colors ${
+                    autoAssignVendors || autoAssign ? 'bg-emerald-600 text-white' : 'bg-white text-slate-400 border border-slate-100'
+                  }`}>
+                    <Store size={20} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-slate-800 tracking-tight">Auto-assignation VENDOR</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Tous les vendeurs (présents & futurs)</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={autoAssign}
+                  onClick={() => setAutoAssignVendors(!autoAssignVendors)}
+                  className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${
+                    autoAssignVendors || autoAssign ? 'bg-emerald-600' : 'bg-slate-200'
+                  } ${autoAssign ? 'cursor-not-allowed opacity-50' : ''}`}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-300 transform ${
+                    autoAssignVendors || autoAssign ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+              {(autoAssignVendors || autoAssign) && (
+                <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mt-3 animate-pulse">
+                  ✨ Auto-assignation Vendeurs Active
+                </p>
+              )}
+            </div>
+
+            {/* Influencer Auto-assign Toggle */}
+            <div className={`p-4 rounded-3xl border-2 transition-all duration-300 ${
+              autoAssignInfluencers && !autoAssign
+                ? 'border-purple-500 bg-purple-50/30 shadow-lg shadow-purple-100' 
+                : autoAssign
+                ? 'border-slate-100 bg-slate-50/30 opacity-60'
+                : 'border-slate-100 bg-slate-50/50'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-colors ${
+                    autoAssignInfluencers || autoAssign ? 'bg-purple-600 text-white' : 'bg-white text-slate-400 border border-slate-100'
+                  }`}>
+                    <Sparkles size={20} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-slate-800 tracking-tight">Auto-assignation INFLUENCER</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Tous les influenceurs (présents & futurs)</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={autoAssign}
+                  onClick={() => setAutoAssignInfluencers(!autoAssignInfluencers)}
+                  className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${
+                    autoAssignInfluencers || autoAssign ? 'bg-purple-600' : 'bg-slate-200'
+                  } ${autoAssign ? 'cursor-not-allowed opacity-50' : ''}`}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-300 transform ${
+                    autoAssignInfluencers || autoAssign ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+              {(autoAssignInfluencers || autoAssign) && (
+                <p className="text-[10px] font-bold text-purple-600 uppercase tracking-widest mt-3 animate-pulse">
+                  ✨ Auto-assignation Influenceurs Active
+                </p>
+              )}
+            </div>
           </div>
 
           {loading ? (
@@ -429,9 +535,46 @@ function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; 
             </div>
           ) : (
             <div className="space-y-3">
+              {/* Role filter tabbed selector */}
+              <div className="flex items-center gap-2 mb-6 bg-slate-100/80 p-1.5 rounded-2xl">
+                <button
+                  type="button"
+                  onClick={() => setRoleFilter('ALL')}
+                  className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${
+                    roleFilter === 'ALL'
+                      ? 'bg-white text-slate-800 shadow-sm shadow-slate-200/50'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Tous
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRoleFilter('VENDOR')}
+                  className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${
+                    roleFilter === 'VENDOR'
+                      ? 'bg-white text-slate-800 shadow-sm shadow-slate-200/50'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Vendeurs
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRoleFilter('INFLUENCER')}
+                  className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${
+                    roleFilter === 'INFLUENCER'
+                      ? 'bg-white text-slate-800 shadow-sm shadow-slate-200/50'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Influenceurs
+                </button>
+              </div>
+
               <div className="flex items-center justify-between mb-4">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  {selectedUsers.length} d'entre eux sélectionnés
+                  {filteredUsers.filter(u => selectedUsers.includes(u.id)).length} sur {filteredUsers.length} sélectionnés
                 </p>
                 <div className="h-px flex-1 mx-4 bg-slate-100" />
                 <button
@@ -439,10 +582,11 @@ function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; 
                   onClick={toggleAll}
                   className="text-[10px] font-black text-primary-600 uppercase tracking-widest hover:text-primary-800 transition-colors"
                 >
-                  {selectedUsers.length === allUsers.length ? 'Tout désélectionner' : 'Tout sélectionner'}
+                  {allVisibleSelected ? 'Tout désélectionner' : 'Tout sélectionner'}
                 </button>
               </div>
-              {allUsers.map((u) => (
+
+              {filteredUsers.map((u) => (
                 <label
                   key={u.id}
                   className={`flex items-center gap-4 p-4 rounded-2xl border transition-all duration-300 group cursor-pointer ${
@@ -469,7 +613,14 @@ function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; 
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-black tracking-tight underline">{u.fullName}</p>
-                    <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">{u.role} - {u.email}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md uppercase tracking-wider ${
+                        u.role === 'VENDOR' ? 'bg-emerald-100 text-emerald-800' : 'bg-purple-100 text-purple-800'
+                      }`}>
+                        {u.role}
+                      </span>
+                      <span className="text-[10px] font-bold opacity-60 tracking-tight">{u.email}</span>
+                    </div>
                   </div>
                 </label>
               ))}

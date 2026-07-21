@@ -5,7 +5,7 @@ import { marketplaceApi, influencerApi, publicApi, customProductsApi } from '../
 import {
   Search, Package, Link as LinkIcon, Copy, CheckCircle2, Eye,
   ChevronLeft, ChevronRight, Sparkles, TrendingUp, Zap, SlidersHorizontal,
-  Upload, X
+  Upload, X, Wand2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
@@ -65,6 +65,11 @@ export default function InfluencerMarketplace() {
   const [sortBy, setSortBy] = useState('newest');
   const [linksConfig, setLinksConfig] = useState<LinksManagerConfig | null>(null);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+
+  // Builder Selection Modal States
+  const [isBuilderSelectOpen, setIsBuilderSelectOpen] = useState(false);
+  const [builderSelectLinks, setBuilderSelectLinks] = useState<any[]>([]);
+  const [builderSelectProductName, setBuilderSelectProductName] = useState('');
 
   // Custom Product Requests Modal State
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
@@ -237,6 +242,42 @@ export default function InfluencerMarketplace() {
     setSelectedCategories([]); setSortBy('newest'); setPriceMin(''); setPriceMax(''); setStatusFilter('all'); setPage(1);
   };
 
+  const handleOpenBuilderSelection = async (productId: number, productName: string) => {
+    const loadingToast = toast.loading(t('loading_links', 'inventory', 'Chargement des liens...'));
+    try {
+      const res = await influencerApi.getLinks();
+      const allLinks = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      const productLinks = allLinks.filter((l: any) => l.productId === productId);
+      
+      toast.dismiss(loadingToast);
+      
+      if (productLinks.length === 0) {
+        toast.error(t('no_links_exist', 'inventory', 'Veuillez d\'abord générer un lien pour ce produit.'));
+        return;
+      }
+      
+      if (productLinks.length === 1) {
+        const link = productLinks[0];
+        const role = user?.roleName || user?.role;
+        const targetPath = role === 'VENDOR' 
+          ? `/dashboard/links/${link.id}/builder` 
+          : role === 'INFLUENCER' 
+            ? `/influencer/links/${link.id}/builder` 
+            : `/helper/links/${link.id}/builder`;
+        navigate(targetPath);
+        return;
+      }
+      
+      setBuilderSelectLinks(productLinks);
+      setBuilderSelectProductName(productName);
+      setIsBuilderSelectOpen(true);
+    } catch (err) {
+      toast.dismiss(loadingToast);
+      toast.error(t('error_loading_links', 'inventory', 'Impossible de charger les liens'));
+      console.error(err);
+    }
+  };
+
   const getClaimStatus = (product: any) => {
     const claim = (claims || []).find((c: any) => c.productId === product.id);
     if (!claim) return 'available';
@@ -257,17 +298,32 @@ export default function InfluencerMarketplace() {
     if (claim.status === 'REJECTED') return <div className="w-full py-2.5 bg-rose-50 text-rose-600 rounded-xl text-xs font-black text-center border border-rose-200/50">{t('request_rejected', 'marketplace')}</div>;
     if (claim.status === 'APPROVED') {
       return (
-        <button onClick={(e) => { 
-          e.stopPropagation(); 
-          setLinksConfig({
-            isOpen: true,
-            mode: 'manage',
-            productId: product.id,
-            productName: product.nameFr || product.nameEn
-          });
-        }} className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#FF6B4A] text-white rounded-xl text-xs font-black hover:bg-[#e55a3a] transition-all hover:shadow-lg hover:shadow-orange-500/20">
-          <LinkIcon className="w-3.5 h-3.5" /> {t('manage_links', 'inventory')}
-        </button>
+        <div className="flex items-center gap-2 w-full">
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenBuilderSelection(product.id, product.nameFr || product.nameEn);
+            }}
+            className="p-2.5 bg-purple-50 text-purple-600 hover:text-white hover:bg-purple-600 border border-purple-100 hover:border-purple-600 rounded-xl transition-all shadow-sm flex items-center justify-center animate-pulse"
+            title={t('tooltip_builder', 'links') || "Constructeur de Page"}
+          >
+            <Wand2 className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={(e) => { 
+              e.stopPropagation(); 
+              setLinksConfig({
+                isOpen: true,
+                mode: 'manage',
+                productId: product.id,
+                productName: product.nameFr || product.nameEn
+              });
+            }} 
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#FF6B4A] text-white rounded-xl text-xs font-black hover:bg-[#e55a3a] transition-all hover:shadow-lg hover:shadow-orange-500/20"
+          >
+            <LinkIcon className="w-3.5 h-3.5" /> {t('manage_links', 'inventory')}
+          </button>
+        </div>
       );
     }
     return null;
@@ -594,6 +650,86 @@ export default function InfluencerMarketplace() {
         config={linksConfig}
         onClose={() => setLinksConfig(null)}
       />
+
+      {/* Builder Link Selection Modal */}
+      {isBuilderSelectOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[130] p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">{t('select_landing_title', 'inventory', 'Sélectionner une landing')}</h2>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
+                    {t('product_for', 'inventory', 'Produit')}: {builderSelectProductName}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => {
+                    setIsBuilderSelectOpen(false);
+                    setBuilderSelectLinks([]);
+                  }}
+                  className="text-slate-400 hover:text-slate-600 transition-colors text-sm font-black p-2 hover:bg-slate-50 rounded-xl"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
+                {builderSelectLinks.map((link) => (
+                  <div 
+                    key={link.id}
+                    className="bg-slate-50/50 border border-slate-100/70 p-4 rounded-2xl flex items-center justify-between gap-4 hover:bg-slate-100/30 transition-all"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="px-2.5 py-0.5 bg-white border border-slate-100 text-slate-700 rounded-lg text-xs font-mono font-bold shadow-sm">
+                          {link.code}
+                        </span>
+                        {!link.isActive && (
+                          <span className="px-2 py-0.5 bg-slate-100 text-slate-400 rounded-md text-[9px] font-black uppercase tracking-wider">
+                            {t('status_paused', 'links', 'Suspendu')}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase truncate">
+                        URL: {buildReferralUrl(link.code, user?.subdomain, user?.customDomain, user?.customDomainStatus)}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        const role = user?.roleName || user?.role;
+                        const targetPath = role === 'VENDOR' 
+                          ? `/dashboard/links/${link.id}/builder` 
+                          : role === 'INFLUENCER' 
+                            ? `/influencer/links/${link.id}/builder` 
+                            : `/helper/links/${link.id}/builder`;
+                        navigate(targetPath);
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors text-xs font-bold shadow-md shadow-purple-100"
+                    >
+                      <Wand2 className="w-3.5 h-3.5" />
+                      {t('open_builder', 'inventory', 'Modifier')}
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-6 mt-6 border-t border-slate-100 flex justify-end">
+                <button
+                  onClick={() => {
+                    setIsBuilderSelectOpen(false);
+                    setBuilderSelectLinks([]);
+                  }}
+                  className="px-6 py-3 bg-slate-50 hover:bg-slate-100 text-slate-400 rounded-2xl text-xs font-black uppercase tracking-widest transition-all"
+                >
+                  {t('btn_close', 'links', 'Fermer')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <AnimatePresence>
         {isCustomModalOpen && (

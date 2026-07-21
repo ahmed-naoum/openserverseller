@@ -407,8 +407,20 @@ export const adminApi = {
   // Helper-User Assignments
   getHelperUserAssignments: (helperId?: number) =>
     api.get('/admin/helper-user-assignments', { params: helperId ? { helperId } : {} }),
-  setHelperUserAssignments: (helperId: number, targetUserIds: number[], autoAssign?: boolean) =>
-    api.post('/admin/helper-user-assignments', { helperId, targetUserIds, autoAssign }),
+  setHelperUserAssignments: (
+    helperId: number,
+    targetUserIds: number[],
+    autoAssign?: boolean,
+    autoAssignVendors?: boolean,
+    autoAssignInfluencers?: boolean
+  ) =>
+    api.post('/admin/helper-user-assignments', {
+      helperId,
+      targetUserIds,
+      autoAssign,
+      autoAssignVendors,
+      autoAssignInfluencers,
+    }),
   getPaymentMonitoring: () => api.get('/admin/payment-monitoring'),
   getUserPaymentMonitoring: (id: number) => api.get(`/admin/payment-monitoring/user/${id}`),
   bulkUpdatePaymentSituation: (data: { leadIds: number[]; situation: string }) => 
