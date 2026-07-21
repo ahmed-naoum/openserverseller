@@ -844,8 +844,8 @@ export default function HomePage() {
                       </div>
 
                       <div className="py-4 border-t border-slate-150/60 flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('wholesale_price')}</span>
-                        <span className="font-mono text-slate-900 font-black text-2xl">{prod.baseCostMad} Dh</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('retail_price')}</span>
+                        <span className="font-mono text-slate-900 font-black text-2xl">{prod.retailPriceMad} Dh</span>
                       </div>
                     </div>
 

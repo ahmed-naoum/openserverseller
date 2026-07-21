@@ -195,7 +195,7 @@ export const authApi = {
 
 
 export const productsApi = {
-  list: (params?: { category?: string; search?: string; page?: number; limit?: number; status?: string; myProducts?: string }) =>
+  list: (params?: { category?: string; search?: string; page?: number; limit?: number; status?: string; myProducts?: string; showInHomepage?: boolean | string }) =>
     api.get('/products', { params }),
   get: (id: string) => api.get(`/products/${id}`),
   create: (data: any) => api.post('/products', data),
