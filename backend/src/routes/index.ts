@@ -34,10 +34,9 @@ import backupRoutes from './admin/backup.routes.js';
 import pixelRoutes from './pixel.routes.js';
 import domainRoutes from './domain.routes.js';
 import customProductRoutes from './customProduct.routes.js';
-import aiBrandMockupRoutes from './aiBrandMockup.routes.js';
+
 
 const router = Router();
-
 
 // Honeypots to auto-block and record scanning attempts
 router.use(['/admin-old', '/wp-admin', '/phpmyadmin', '/.env'], honeypotTrap);
@@ -91,6 +90,6 @@ router.use('/support', auditLog, supportRoutes);
 router.use('/user-pixels', auditLog, pixelRoutes);
 router.use('/domain', auditLog, domainRoutes);
 router.use('/custom-products', auditLog, customProductRoutes);
-router.use('/brand-mockup', aiBrandMockupRoutes);
+
 
 export default router;

@@ -209,24 +209,6 @@ export const productsApi = {
     api.patch(`/products/${id}/branding`, data),
 };
 
-export const brandMockupApi = {
-  analyze: (data: { productImageUrl: string; logoDataUrl?: string; productName?: string }) =>
-    api.post('/brand-mockup/analyze', data),
-  renderMockup: (data: {
-    productImageUrl: string;
-    logoDataUrl: string;
-    xPercent?: number;
-    yPercent?: number;
-    widthPercent?: number;
-    opacity?: number;
-    blendMode?: string;
-    rotation?: number;
-  }) => api.post('/brand-mockup/render-mockup', data),
-  geminiStudio: (data: { productName?: string; productCategory?: string; brandName?: string; logoStyle?: string }) =>
-    api.post('/brand-mockup/gemini-studio', data),
-};
-
-
 export const leadsApi = {
   list: (params?: { status?: string; page?: number; limit?: number; search?: string; viewMode?: string; mode?: string; vendorId?: string; productId?: string; isSuspicious?: boolean; city?: string; coliatyPackageCode?: string; accountId?: string; agentId?: string }) =>
     api.get('/leads', { params }),
