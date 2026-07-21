@@ -119,67 +119,79 @@ export const TierProgressBanner = ({
         </div>
 
         {/* Progress Bar Container */}
-        <div className="relative mt-12 px-4 md:px-8">
+        <div className="relative mt-12 px-4 md:px-8" style={{ direction: 'ltr' }}>
           {/* Base empty track */}
-          <div className={`h-4 bg-slate-800 rounded-full w-full overflow-hidden flex shadow-inner ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <div className="h-4 bg-slate-800 rounded-full w-full overflow-hidden flex shadow-inner">
             {tiers.map((tier, index) => (
-              <div key={tier.id} className={`h-full flex-1 ${isRtl ? 'border-l border-slate-700/50 last:border-0' : 'border-r border-slate-700/50 last:border-0'}`} />
+              <div key={tier.id} className="h-full flex-1 border-r border-slate-700/50 last:border-0" />
             ))}
           </div>
 
           {/* Filled track */}
-          <div className={`absolute top-0 left-4 right-4 md:left-8 md:right-8 h-4 rounded-full overflow-hidden pointer-events-none flex ${isRtl ? 'justify-end' : 'justify-start'}`}>
+          <div className="absolute top-0 left-4 right-4 md:left-8 md:right-8 h-4 rounded-full overflow-hidden pointer-events-none flex">
+            {tiers.map((tier, index) => {
+              const minPercent = index * 25;
+              const maxPercent = (index + 1) * 25;
+              let slotPercentage = 0;
+              if (overallPercentage >= maxPercent) {
+                slotPercentage = 100;
+              } else if (overallPercentage <= minPercent) {
+                slotPercentage = 0;
+              } else {
+                slotPercentage = ((overallPercentage - minPercent) / 25) * 100;
+              }
+
+              return (
+                <div key={tier.id} className="h-full flex-1 relative overflow-hidden">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${slotPercentage}%` }}
+                    transition={{ duration: 1.5, ease: "easeOut" }}
+                    className={`h-full ${tier.bg}`}
+                  />
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Runner Track (same left/right offsets as the filled track) */}
+          <div className="absolute top-0 bottom-0 left-4 right-4 md:left-8 md:right-8 pointer-events-none">
+            {/* Runner Icon */}
             <motion.div 
-              initial={{ width: 0 }}
-              animate={{ width: `${overallPercentage}%` }}
+              initial={{ left: '0%' }}
+              animate={{ left: `${overallPercentage}%` }}
               transition={{ duration: 1.5, ease: "easeOut" }}
-              className={`h-full flex ${isRtl ? 'justify-end' : ''}`}
+              className="absolute top-1/2 -translate-y-1/2 z-20 group cursor-pointer -ml-3 md:-ml-4 pointer-events-auto"
             >
-              {/* Colored segments that match the tiers */}
-              <div className={`h-full flex ${isRtl ? 'flex-row-reverse' : ''}`} style={{ width: `${(100 / overallPercentage) * 100}%` }}>
-                <div className="h-full w-1/4 bg-orange-700" />
-                <div className="h-full w-1/4 bg-gray-400" />
-                <div className="h-full w-1/4 bg-yellow-500" />
-                <div className="h-full w-1/4 bg-indigo-500" />
+              <div className="w-6 h-6 md:w-8 md:h-8 bg-white rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(255,255,255,0.3)] border-[3px] border-slate-900">
+                <Flame className="w-3 h-3 md:w-4 md:h-4 text-orange-500" />
+              </div>
+
+              {/* Tooltip */}
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-30">
+                <div className="bg-slate-800 text-white text-[10px] font-bold py-1.5 px-3 rounded-lg whitespace-nowrap shadow-xl border border-slate-700">
+                  {totalEarned.toLocaleString()} DH
+                  {/* Tooltip Arrow */}
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-slate-800" />
+                </div>
               </div>
             </motion.div>
           </div>
 
-          {/* Runner Icon */}
-          <motion.div 
-            initial={isRtl ? { right: '0%', left: 'auto' } : { left: '0%', right: 'auto' }}
-            animate={isRtl ? { right: `${overallPercentage}%`, left: 'auto' } : { left: `${overallPercentage}%`, right: 'auto' }}
-            transition={{ duration: 1.5, ease: "easeOut" }}
-            className={`absolute top-1/2 -translate-y-1/2 z-20 group cursor-pointer ${isRtl ? '-mr-3 md:-mr-4' : '-ml-3 md:-ml-4'}`}
-          >
-            <div className="w-6 h-6 md:w-8 md:h-8 bg-white rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(255,255,255,0.3)] border-[3px] border-slate-900">
-              <Flame className="w-3 h-3 md:w-4 md:h-4 text-orange-500" />
-            </div>
-
-            {/* Tooltip */}
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-30">
-              <div className="bg-slate-800 text-white text-[10px] font-bold py-1.5 px-3 rounded-lg whitespace-nowrap shadow-xl border border-slate-700">
-                {totalEarned.toLocaleString()} DH
-                {/* Tooltip Arrow */}
-                <div className="absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-slate-800" />
-              </div>
-            </div>
-          </motion.div>
-
           {/* Markers / Labels */}
-          <div className={`flex justify-between mt-4 relative z-10 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <div className={`flex flex-col w-1/4 ${isRtl ? 'items-end' : 'items-start'}`}>
-               <span className={`text-[10px] md:text-xs font-black text-slate-500 tracking-wider ${isRtl ? '-mr-2' : '-ml-2'}`}>0 DH</span>
+          <div className="flex justify-between mt-4 relative z-10">
+            <div className="flex flex-col w-1/4 items-start">
+               <span className="text-[10px] md:text-xs font-black text-slate-500 tracking-wider -ml-2">0 DH</span>
             </div>
             <div className="flex flex-col items-center w-1/4 relative">
-               <span className={`text-[10px] md:text-xs font-black text-slate-500 tracking-wider absolute ${isRtl ? '-right-4' : '-left-4'}`}>100K</span>
+               <span className="text-[10px] md:text-xs font-black text-slate-500 tracking-wider absolute -left-4">100K</span>
             </div>
             <div className="flex flex-col items-center w-1/4 relative">
-               <span className={`text-[10px] md:text-xs font-black text-slate-500 tracking-wider absolute ${isRtl ? '-right-3' : '-left-3'}`}>1M</span>
+               <span className="text-[10px] md:text-xs font-black text-slate-500 tracking-wider absolute -left-3">1M</span>
             </div>
-            <div className={`flex flex-col w-1/4 relative ${isRtl ? 'items-start' : 'items-end'}`}>
-               <span className={`text-[10px] md:text-xs font-black text-slate-500 tracking-wider absolute ${isRtl ? '-right-4' : '-left-4'}`}>10M</span>
-               <span className={`text-[10px] md:text-xs font-black text-slate-500 tracking-wider ${isRtl ? '-ml-2' : '-mr-2'}`}>+</span>
+            <div className="flex flex-col w-1/4 relative items-end">
+               <span className="text-[10px] md:text-xs font-black text-slate-500 tracking-wider absolute -left-4">10M</span>
+               <span className="text-[10px] md:text-xs font-black text-slate-500 tracking-wider -mr-2">+</span>
             </div>
           </div>
         </div>
