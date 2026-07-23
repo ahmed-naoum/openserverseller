@@ -105,6 +105,11 @@ model User {
   youcanStoreDomain String?
   youcanSyncActive  Boolean   @default(true)
 
+  // Shopify Integration
+  shopifyAccessToken String?
+  shopifyStoreDomain String?
+  shopifySyncActive  Boolean   @default(true)
+
   language       String            @default("ar") @db.VarChar(5)
 
   profile        UserProfile?

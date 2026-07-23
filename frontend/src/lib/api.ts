@@ -736,4 +736,12 @@ export const youcanApi = {
   getCustomers: (params?: any) => api.get('/youcan/customers', { params }),
 };
 
+export const shopifyApi = {
+  getStatus: () => api.get('/shopify/status'),
+  exchangeToken: (data: { code: string; shop: string }) => api.post('/shopify/token', data),
+  saveToken: (data: { storeDomain: string; accessToken?: string }) => api.post('/shopify/save-token', data),
+  toggleSync: (active: boolean) => api.post('/shopify/toggle-sync', { active }),
+  getOrders: (params?: any) => api.get('/shopify/orders', { params }),
+};
+
 
