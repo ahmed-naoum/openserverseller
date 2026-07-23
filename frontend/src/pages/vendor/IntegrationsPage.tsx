@@ -83,11 +83,12 @@ export default function IntegrationsPage() {
     setLoadingYouCanStatus(true);
     try {
       const res = await youcanApi.getStatus();
-      if (res.data) {
+      const statusData = res.data?.data || res.data;
+      if (statusData) {
         setYoucanStatus({
-          isConnected: !!res.data.isConnected,
-          autoSyncActive: res.data.autoSyncActive ?? true,
-          storeDomain: res.data.storeDomain || null,
+          isConnected: !!statusData.isConnected,
+          autoSyncActive: statusData.autoSyncActive ?? true,
+          storeDomain: statusData.storeDomain || null,
         });
       }
     } catch (err) {
