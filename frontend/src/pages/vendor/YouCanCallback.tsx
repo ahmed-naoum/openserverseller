@@ -19,24 +19,24 @@ export default function YouCanCallback() {
 
       if (error) {
         toast.error('L\'autorisation YouCan a été refusée ou a échoué.');
-        navigate('/dashboard/settings?tab=integrations');
+        navigate('/dashboard/integrations');
         return;
       }
 
       if (!code) {
         toast.error('Code d\'autorisation manquant. Veuillez réessayer.');
-        navigate('/dashboard/settings?tab=integrations');
+        navigate('/dashboard/integrations');
         return;
       }
 
       try {
         await api.post('/youcan/token', { code });
         toast.success('Boutique YouCan connectée avec succès !');
-        navigate('/dashboard/settings?tab=integrations');
+        navigate('/dashboard/integrations');
       } catch (err: any) {
         console.error('YouCan Callback Error:', err);
         toast.error(err.response?.data?.message || 'Erreur lors de la connexion à YouCan.');
-        navigate('/dashboard/settings?tab=integrations');
+        navigate('/dashboard/integrations');
       }
     };
 

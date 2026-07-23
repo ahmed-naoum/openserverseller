@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { influencerApi } from '../../lib/api';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -206,11 +207,11 @@ export default function LinksManagerModal({
 
   if (!config || !config.isOpen) return null;
 
-  return (
+  return createPortal(
     <>
       {/* Create Link Modal */}
       {currentMode === 'create' && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[999999] p-4 animate-in fade-in duration-300">
           <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
             <div className="p-8">
               <div className="flex justify-between items-center mb-6">
@@ -260,8 +261,8 @@ export default function LinksManagerModal({
                     )}
                   </div>
                   <div className="flex justify-between items-center px-1">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase truncate max-w-[70%]">
-                      {t('final_url_prefix', 'links', 'URL FINALE')}: {buildReferralUrl(customName || t('name_placeholder', 'links', 'NOM'), user?.subdomain, user?.customDomain, user?.customDomainStatus)}
+                    <span className="text-[10px] text-slate-400 font-bold uppercase truncate max-w-[280px]">
+                      URL: {buildReferralUrl(customName || 'nom', user?.subdomain, user?.customDomain, user?.customDomainStatus)}
                     </span>
                     <span className={`text-[10px] font-black uppercase ${customName.length >= 3 && customName.length <= 20 ? 'text-slate-400' : 'text-amber-500'}`}>
                       {customName.length}/20 chars
@@ -308,183 +309,139 @@ export default function LinksManagerModal({
 
       {/* Links List Modal */}
       {currentMode === 'manage' && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
-            <div className="p-8">
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">{t('product_links_title', 'inventory', 'Liens de Parrainage')}</h2>
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
-                    {t('selected_product', 'inventory', 'Produit')}: {config.productName}
-                  </p>
-                </div>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[999999] p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between flex-shrink-0 bg-slate-50/50">
+              <div>
+                <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <Package className="w-5 h-5 text-indigo-600" />
+                  {config.productName}
+                </h2>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
+                  {t('manage_modal_subtitle', 'links', 'GESTION DES LIENS D\'AFFILIATION')}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setCurrentMode('create')}
+                  disabled={modalLinks.length >= 5}
+                  className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
+                >
+                  <Plus className="w-4 h-4" />
+                  {t('btn_create', 'links', 'Créer')}
+                </button>
                 <button 
                   onClick={onClose}
-                  className="text-slate-400 hover:text-slate-600 transition-colors text-sm font-black p-2 hover:bg-slate-50 rounded-xl"
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-white rounded-xl transition-all"
                 >
                   ✕
                 </button>
               </div>
+            </div>
 
+            <div className="p-6 overflow-y-auto flex-1 space-y-3">
               {isModalLinksLoading ? (
-                <div className="flex items-center justify-center py-20">
-                  <RefreshCw className="w-8 h-8 text-slate-400 animate-spin" />
+                <div className="space-y-3 py-6">
+                  {[1, 2].map(i => (
+                    <div key={i} className="h-16 bg-slate-50 rounded-2xl animate-pulse" />
+                  ))}
+                </div>
+              ) : modalLinks.length === 0 ? (
+                <div className="p-12 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                  <Package className="w-10 h-10 mx-auto text-slate-300 mb-3" />
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
+                    {t('no_links_modal', 'links', 'Aucun lien créé pour ce produit.')}
+                  </p>
+                  <button
+                    onClick={() => setCurrentMode('create')}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-slate-800 transition-all shadow-md"
+                  >
+                    <Plus className="w-4 h-4" />
+                    {t('btn_create_first', 'links', 'Créer mon 1er lien')}
+                  </button>
                 </div>
               ) : (
-                <div className="space-y-6">
-                  <div className="max-h-[350px] overflow-y-auto space-y-4 pr-1">
-                    {modalLinks.map((link) => {
-                      const ctr = link.clicks > 0 ? ((link.conversions / link.clicks) * 100).toFixed(1) : '0.0';
-                      const role = user?.roleName || user?.role;
-                      const showBuilder = role === 'SUPER_ADMIN' || role === 'HELPER' || role === 'VENDOR' || (role === 'INFLUENCER' && user?.canManageInfluencerLinks);
-                      return (
-                        <div key={link.id} className="bg-slate-50/50 border border-slate-100/70 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                          <div className="space-y-2 flex-1">
-                            <div className="flex items-center gap-3">
-                              <span className="px-3 py-1 bg-white border border-slate-100 text-slate-700 rounded-xl text-xs font-mono font-bold shadow-sm">
-                                {link.code}
-                              </span>
-                              
-                              <button
-                                onClick={() => handleToggleStatus(link)}
-                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
-                                  link.isActive ? 'bg-emerald-50 text-emerald-600 border border-emerald-100/50' : 'bg-slate-100 text-slate-400 border border-slate-200/50'
-                                }`}
-                              >
-                                <Power className={`w-2.5 h-2.5 ${link.isActive ? 'text-emerald-500' : 'text-slate-400'}`} />
-                                {link.isActive ? t('status_active', 'links', 'Actif') : t('status_paused', 'links', 'Suspendu')}
-                              </button>
-                            </div>
-                            
-                            <p className="text-[10px] text-slate-400 font-bold uppercase truncate max-w-[280px]">
-                              URL: {buildReferralUrl(link.code, user?.subdomain, user?.customDomain, user?.customDomainStatus)}
-                            </p>
-
-                            <div className="grid grid-cols-4 gap-2 pt-2 border-t border-slate-100/50">
-                              <div>
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('views', 'links', 'Vues')}</p>
-                                <p className="text-xs font-black text-slate-800">{(link.rawClicks || link.clicks).toLocaleString()}</p>
-                              </div>
-                              <div>
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('visitors', 'links', 'Visiteurs')}</p>
-                                <p className="text-xs font-black text-slate-800">{link.clicks.toLocaleString()}</p>
-                              </div>
-                              <div>
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('sales', 'links', 'Ventes')}</p>
-                                <p className="text-xs font-black text-slate-800">{link.conversions.toLocaleString()}</p>
-                              </div>
-                              <div>
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('ctr', 'links', 'Taux')}</p>
-                                <p className="text-xs font-black text-indigo-600">{ctr}%</p>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 self-end sm:self-center">
-                            <button
-                              onClick={() => {
-                                const fullUrl = buildReferralUrl(link.code, user?.subdomain, user?.customDomain, user?.customDomainStatus);
-                                navigator.clipboard.writeText(fullUrl);
-                                toast.success(t('copied_success', 'inventory', 'Lien copié dans le presse-papiers !'));
-                              }}
-                              className="p-2.5 bg-white text-slate-400 hover:text-slate-900 border border-slate-100 rounded-xl transition-all shadow-sm"
-                              title={t('btn_copy', 'links', 'Copier le lien')}
-                            >
-                              <Copy size={14} />
-                            </button>
-                            {showBuilder && (
-                              <button
-                                onClick={() => {
-                                  const role = user?.roleName || user?.role;
-                                  const targetPath = role === 'VENDOR' 
-                                    ? `/dashboard/links/${link.id}/builder` 
-                                    : role === 'INFLUENCER' 
-                                      ? `/influencer/links/${link.id}/builder` 
-                                      : `/helper/links/${link.id}/builder`;
-                                  navigate(targetPath);
-                                }}
-                                className="p-2.5 bg-white text-slate-400 hover:text-purple-600 border border-slate-100 rounded-xl transition-all shadow-sm"
-                                title={t('tooltip_builder', 'links') || "Constructeur de Page"}
-                              >
-                                <Wand2 size={14} />
-                              </button>
-                            )}
-                            <button
-                              onClick={() => {
-                                setSelectedLinkForQr(link);
-                                setShowQrModal(true);
-                              }}
-                              className="p-2.5 bg-white text-slate-400 hover:text-purple-600 border border-slate-100 rounded-xl transition-all shadow-sm"
-                              title={t('btn_qr', 'links', 'Code QR')}
-                            >
-                              <QrCode size={14} />
-                            </button>
-                          </div>
+                modalLinks.map(link => {
+                  const role = user?.roleName || user?.role;
+                  const showBuilder = role === 'SUPER_ADMIN' || role === 'HELPER' || role === 'VENDOR' || (role === 'INFLUENCER' && user?.canManageInfluencerLinks);
+                  return (
+                    <div 
+                      key={link.id} 
+                      className="p-4 bg-white rounded-2xl border border-slate-100 hover:border-slate-200 transition-all shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-mono font-black border border-slate-200">
+                            {link.code}
+                          </span>
+                          <button
+                            onClick={() => handleToggleStatus(link)}
+                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                              link.isActive 
+                                ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' 
+                                : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                            }`}
+                          >
+                            <Power className={`w-3 h-3 ${link.isActive ? 'text-emerald-500' : 'text-slate-400'}`} />
+                            {link.isActive ? t('status_active', 'links', 'Actif') : t('status_paused', 'links', 'En pause')}
+                          </button>
                         </div>
-                      );
-                    })}
-
-                    {modalLinks.length === 0 && (
-                      <div className="p-10 text-center bg-slate-50 border border-dashed border-slate-100 rounded-2xl">
-                        <Package className="w-12 h-12 mx-auto text-slate-300 mb-2 opacity-55" />
-                        <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">
-                          {t('no_links_created', 'inventory', 'Aucun lien généré pour le moment')}
+                        <p className="text-[10px] text-slate-400 font-bold uppercase truncate max-w-xs sm:max-w-sm">
+                          URL: {buildReferralUrl(link.code, user?.subdomain, user?.customDomain, user?.customDomainStatus)}
                         </p>
                       </div>
-                    )}
-                  </div>
 
-                  <div className="pt-4 border-t border-slate-100/80 flex justify-between items-center gap-4">
-                    <button
-                      onClick={() => setCurrentMode('create')}
-                      disabled={modalLinks.length >= 5}
-                      className="flex-1 py-3.5 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-lg shadow-slate-200 flex items-center justify-center gap-2"
-                    >
-                      <Plus className="w-4 h-4" /> {t('btn_create_another_link', 'inventory', 'Créer un autre lien')} ({modalLinks.length}/5)
-                    </button>
-                    <button
-                      onClick={onClose}
-                      className="px-6 py-3.5 bg-slate-50 hover:bg-slate-100 text-slate-400 rounded-2xl text-xs font-black uppercase tracking-widest transition-all"
-                    >
-                      {t('btn_close', 'links', 'Fermer')}
-                    </button>
-                  </div>
-                </div>
+                      <div className="flex items-center gap-2 self-end sm:self-center">
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(buildReferralUrl(link.code, user?.subdomain, user?.customDomain, user?.customDomainStatus));
+                            toast.success(t('toast_copied', 'links', 'Lien copié !'));
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-black uppercase tracking-wider transition-all"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          {t('btn_copy', 'links', 'Copier')}
+                        </button>
+                        {showBuilder && (
+                          <button
+                            onClick={() => {
+                              onClose();
+                              const targetPath = role === 'VENDOR' 
+                                ? `/dashboard/links/${link.id}/builder` 
+                                : role === 'INFLUENCER' 
+                                  ? `/influencer/links/${link.id}/builder` 
+                                  : `/helper/links/${link.id}/builder`;
+                              navigate(targetPath);
+                            }}
+                            className="p-2 bg-slate-50 hover:bg-purple-50 text-slate-400 hover:text-purple-600 rounded-xl transition-all"
+                            title={t('tooltip_builder', 'links', "Constructeur de Page")}
+                          >
+                            <Wand2 className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => {
+                            setSelectedLinkForQr(link);
+                            setShowQrModal(true);
+                          }}
+                          className="p-2 bg-slate-50 hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 rounded-xl transition-all"
+                          title={t('btn_qr', 'links', 'Code QR')}
+                        >
+                          <QrCode className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
-          </div>
-        </div>
-      )}
 
-      {/* QR Code Modal */}
-      {showQrModal && selectedLinkForQr && (
-        <div className="fixed inset-0 z-[110] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-10 text-center animate-in zoom-in-95 duration-300">
-            <h2 className="text-2xl font-black text-slate-900 mb-2">{t('qr_title', 'links', 'Code QR du lien')}</h2>
-            <p className="text-sm text-slate-400 font-medium mb-8">{t('qr_subtitle', 'links', 'Scannez ou téléchargez le code QR')}</p>
-            <div className="bg-white p-6 rounded-2xl border-4 border-dashed border-slate-100 inline-block mb-8">
-              <img 
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(buildReferralUrl(selectedLinkForQr?.code, user?.subdomain, user?.customDomain, user?.customDomainStatus))}`}
-                alt="QR Code"
-                className="w-48 h-48 mx-auto"
-              />
-            </div>
-            <div className="flex flex-col gap-3">
+            <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400 font-bold uppercase tracking-wider flex-shrink-0">
+              <span>{modalLinks.length}/5 {t('links_used', 'links', 'liens utilisés')}</span>
               <button
-                onClick={() => {
-                  const link = document.createElement('a');
-                  link.href = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(buildReferralUrl(selectedLinkForQr?.code, user?.subdomain, user?.customDomain, user?.customDomainStatus))}`;
-                  link.download = `qr-link-${selectedLinkForQr?.code}.png`;
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-                  toast.success(t('toast_qr_ready', 'links', 'Téléchargement lancé !'));
-                }}
-                className="w-full py-4 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl"
+                onClick={onClose}
+                className="px-5 py-2 bg-white hover:bg-slate-100 text-slate-600 rounded-xl font-black border border-slate-200 transition-all"
               >
-                {t('btn_download_hd', 'links', 'Télécharger HD')}
-              </button>
-              <button onClick={() => setShowQrModal(false)} className="w-full py-4 bg-slate-50 text-slate-400 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-100 transition-all">
                 {t('btn_close', 'links', 'Fermer')}
               </button>
             </div>
@@ -492,10 +449,51 @@ export default function LinksManagerModal({
         </div>
       )}
 
-      {/* Confirmation Modal */}
+      {/* QR Code Sub-Modal */}
+      {showQrModal && selectedLinkForQr && (
+        <div className="fixed inset-0 z-[1000000] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-8 text-center animate-in zoom-in-95 duration-300">
+            <h2 className="text-xl font-black text-slate-900 mb-1">{t('qr_title', 'links', 'Code QR du Lien')}</h2>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-6">{selectedLinkForQr.code}</p>
+            
+            <div className="bg-white p-4 rounded-2xl border-2 border-dashed border-slate-200 inline-block mb-6 shadow-inner">
+              <img 
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(buildReferralUrl(selectedLinkForQr.code, user?.subdomain, user?.customDomain, user?.customDomainStatus))}`}
+                alt="QR Code"
+                className="w-44 h-44 mx-auto"
+              />
+            </div>
+
+            <div className="flex flex-col gap-2.5">
+              <button
+                onClick={() => {
+                  const link = document.createElement('a');
+                  link.href = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(buildReferralUrl(selectedLinkForQr.code, user?.subdomain, user?.customDomain, user?.customDomainStatus))}`;
+                  link.download = `qr-link-${selectedLinkForQr.code}.png`;
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  toast.success(t('toast_qr_ready', 'links', 'QR Code prêt à être téléchargé'));
+                }}
+                className="w-full py-3.5 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg"
+              >
+                {t('btn_download_hd', 'links', 'Télécharger HD')}
+              </button>
+              <button 
+                onClick={() => setShowQrModal(false)} 
+                className="w-full py-3.5 bg-slate-50 text-slate-400 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-100 transition-all"
+              >
+                {t('btn_close', 'links', 'Fermer')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Sub-Modal */}
       {confirmModal.isOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[120] p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[1000000] p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
             <div className="p-8 text-center">
               <div className="w-20 h-20 rounded-full mx-auto mb-6 flex items-center justify-center bg-slate-50">
                 {confirmModal.icon}
@@ -531,6 +529,7 @@ export default function LinksManagerModal({
           </div>
         </div>
       )}
-    </>
+    </>,
+    document.body
   );
 }

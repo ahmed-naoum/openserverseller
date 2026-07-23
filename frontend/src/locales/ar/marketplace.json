@@ -132,7 +132,7 @@
   "pd_modal_subtitle": "معلومات الإنتاج",
   "pd_modal_brand_name": "اسم العلامة التجارية",
   "pd_modal_brand_placeholder": "مثال: علامتي التجارية",
-  "pd_modal_quantity": "الكمية (على الأقل 20)",
+  "pd_modal_quantity": "الكمية (على الأقل 50)",
   "pd_modal_landing_url": "رابط صفحة الهبوط (اختياري)",
   "pd_modal_description": "وصف / تعليمات خاصة",
   "pd_modal_desc_placeholder": "أي تعليمات إضافية...",

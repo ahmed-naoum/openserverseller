@@ -132,7 +132,7 @@
   "pd_modal_subtitle": "Informations de production",
   "pd_modal_brand_name": "Nom de la marque",
   "pd_modal_brand_placeholder": "ex : Ma Marque",
-  "pd_modal_quantity": "Quantité (minimum 20)",
+  "pd_modal_quantity": "Quantité (minimum 50)",
   "pd_modal_landing_url": "URL de la page de vente (optionnel)",
   "pd_modal_description": "Description / Instructions spéciales",
   "pd_modal_desc_placeholder": "Instructions supplémentaires...",

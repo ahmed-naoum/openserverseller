@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
@@ -472,13 +473,16 @@ export default function AdminProducts() {
       </div>
 
       {/* Delete Confirmation Modal */}
-      {productToDelete && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 sm:p-6">
+      {productToDelete && createPortal(
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 sm:p-6">
           <div 
-            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300"
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-md cursor-pointer animate-in fade-in duration-300"
             onClick={() => setProductToDelete(null)}
           />
-          <div className="relative w-full max-w-md bg-white rounded-[2rem] shadow-2xl p-6 animate-in zoom-in-95 duration-200 border border-slate-100">
+          <div 
+            className="relative z-10 w-full max-w-md bg-white rounded-[2rem] shadow-2xl p-6 animate-in zoom-in-95 duration-200 border border-slate-100 cursor-default"
+            style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
+          >
             <div className="flex flex-col items-center text-center">
               <div className="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center text-rose-500 mb-4 animate-bounce">
                 <Trash2 size={28} />
@@ -509,7 +513,8 @@ export default function AdminProducts() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modals remain same logic but could be updated too if needed */}

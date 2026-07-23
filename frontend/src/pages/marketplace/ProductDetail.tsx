@@ -1,5 +1,6 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { productsApi, chatApi, influencerApi, uploadApi, BACKEND_URL } from '../../lib/api';
 import { getVerificationStatus } from '../common/ProfileVerification';
@@ -20,7 +21,8 @@ import {
   Download,
   MessageSquare,
   MessageCircle,
-  CheckCircle2
+  CheckCircle2,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -114,7 +116,7 @@ export default function ProductDetail() {
   const [isThanksModalOpen, setIsThanksModalOpen] = useState(false);
   const [brandingData, setBrandingData] = useState({
     brandName: '',
-    quantity: 20,
+    quantity: 50,
     landingPageUrl: '',
     description: ''
   });
@@ -417,9 +419,6 @@ export default function ProductDetail() {
                 <div className="flex flex-col gap-1 shrink-0 items-start">
                   <span className="px-3 py-1 bg-[#21c55d] text-white text-[9px] font-black rounded-full flex items-center gap-1.5 shadow-sm shadow-green-500/20">
                     {t('pd_available', 'marketplace')} <div className="w-1.5 h-1.5 rounded-full bg-white" />
-                  </span>
-                  <span className="px-3 py-1 bg-[#21c55d] text-white text-[9px] font-black rounded-full shadow-sm shadow-green-500/20">
-                    {language === 'ar' ? '30 كبسولة' : '30 Capsules'}
                   </span>
                 </div>
               </div>
@@ -754,15 +753,27 @@ function BrandingInfoModal({ isOpen, onClose, data, setData, onSubmit, isSubmitt
   const textAlign = language === 'ar' ? 'text-right' : 'text-left';
 
   if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm" dir={direction}>
+  return createPortal(
+    <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4" dir={direction}>
+      <div 
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-md cursor-pointer"
+        onClick={onClose}
+      />
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="bg-white w-full max-w-lg rounded-[2.5rem] p-10 shadow-2xl relative overflow-hidden"
+        className="relative z-10 bg-white w-full max-w-lg rounded-[2.5rem] p-10 shadow-2xl overflow-hidden cursor-default"
+        style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
       >
         <div className="absolute top-0 left-0 w-32 h-32 bg-[#FF6B4A]/5 rounded-full -ml-16 -mt-16" />
         
+        <button 
+          onClick={onClose}
+          className="absolute top-6 right-6 p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors z-20"
+        >
+          <X size={20} />
+        </button>
+
         <div className="relative">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center text-[#FF6B4A]">
@@ -789,7 +800,7 @@ function BrandingInfoModal({ isOpen, onClose, data, setData, onSubmit, isSubmitt
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">{t('pd_modal_quantity', 'marketplace')}</label>
               <input 
                 type="number" 
-                min="20"
+                min="50"
                 value={data.quantity}
                 onChange={(e) => setData({ ...data, quantity: Number(e.target.value) })}
                 className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-[#FF6B4A] transition-all"
@@ -828,7 +839,7 @@ function BrandingInfoModal({ isOpen, onClose, data, setData, onSubmit, isSubmitt
             </button>
             <button 
               onClick={() => onSubmit()}
-              disabled={isSubmitting || !data.brandName || data.quantity < 20}
+              disabled={isSubmitting || !data.brandName || data.quantity < 50}
               className="flex-[2] py-4 bg-[#FF6B4A] text-white text-[11px] font-black uppercase tracking-widest rounded-2xl shadow-lg shadow-orange-500/20 hover:bg-orange-600 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:grayscale"
             >
               {isSubmitting ? t('pd_modal_submitting', 'marketplace') : t('pd_modal_confirm', 'marketplace')}
@@ -836,7 +847,8 @@ function BrandingInfoModal({ isOpen, onClose, data, setData, onSubmit, isSubmitt
           </div>
         </div>
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -889,16 +901,28 @@ function BrandingThanksModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
   const direction = isRtl ? 'rtl' : 'ltr';
   const textAlign = isRtl ? 'text-right' : 'text-left';
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm" dir={direction}>
+  return createPortal(
+    <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4" dir={direction}>
+      <div 
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-md cursor-pointer"
+        onClick={onClose}
+      />
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="bg-white w-full max-w-lg rounded-[2.5rem] p-10 shadow-2xl relative overflow-hidden"
+        className="relative z-10 bg-white w-full max-w-lg rounded-[2.5rem] p-10 shadow-2xl overflow-hidden cursor-default"
+        style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
       >
         {/* Glow decorative element */}
         <div className="absolute top-0 left-0 w-32 h-32 bg-emerald-500/5 rounded-full -ml-16 -mt-16" />
         <div className="absolute bottom-0 right-0 w-32 h-32 bg-orange-500/5 rounded-full -mr-16 -mb-16" />
+
+        <button 
+          onClick={onClose}
+          className="absolute top-6 right-6 p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors z-20"
+        >
+          <X size={20} />
+        </button>
 
         <div className="relative flex flex-col items-center text-center">
           {/* Animated checkmark icon */}
@@ -947,6 +971,7 @@ function BrandingThanksModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
           </div>
         </div>
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 }

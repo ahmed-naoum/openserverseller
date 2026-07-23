@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { adminApi, uploadApi, customProductsApi } from '../../lib/api';
 import { 
   CheckCircle2, 
@@ -46,6 +47,7 @@ export default function AdminAffiliateClaims() {
   const [customSearch, setCustomSearch] = useState('');
   const [customStatusFilter, setCustomStatusFilter] = useState('PENDING');
   const [selectedImageForPreview, setSelectedImageForPreview] = useState<string | null>(null);
+  const [selectedDocumentForPreview, setSelectedDocumentForPreview] = useState<{ url: string; type: 'image' | 'pdf' } | null>(null);
   const [actionInProgressId, setActionInProgressId] = useState<number | null>(null);
 
   // Clone Modal State
@@ -689,30 +691,32 @@ export default function AdminAffiliateClaims() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           {claim.brandingLabelMockupUrl ? (
-                            <a 
-                              href={claim.brandingLabelMockupUrl} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
+                            <button 
+                              onClick={() => setSelectedDocumentForPreview({ 
+                                url: claim.brandingLabelMockupUrl, 
+                                type: claim.brandingLabelMockupUrl.toLowerCase().includes('.pdf') ? 'pdf' : 'image' 
+                              })}
                               className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                              title="Maquette Logo"
+                              title="Aperçu Maquette"
                             >
                               <ImageIcon size={16} />
-                            </a>
+                            </button>
                           ) : (
-                            <span className="w-8 h-8 rounded-lg bg-gray-50 border border-dashed border-gray-200" />
+                            <span className="w-8 h-8 rounded-lg bg-gray-50 border border-dashed border-gray-200 inline-block" />
                           )}
                           {claim.brandingLabelPrintUrl ? (
-                            <a 
-                              href={claim.brandingLabelPrintUrl} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
+                            <button 
+                              onClick={() => setSelectedDocumentForPreview({ 
+                                url: claim.brandingLabelPrintUrl, 
+                                type: claim.brandingLabelPrintUrl.toLowerCase().includes('.pdf') ? 'pdf' : 'image' 
+                              })}
                               className="p-1.5 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"
-                              title="PDF Impression"
+                              title="Aperçu Impression"
                             >
                               <ExternalLink size={16} />
-                            </a>
+                            </button>
                           ) : (
-                            <span className="w-8 h-8 rounded-lg bg-gray-50 border border-dashed border-gray-200" />
+                            <span className="w-8 h-8 rounded-lg bg-gray-50 border border-dashed border-gray-200 inline-block" />
                           )}
                           {claim.conversationId ? (
                             <Link
@@ -805,32 +809,60 @@ export default function AdminAffiliateClaims() {
       </>
       )}
 
-      {/* Custom Request Image Preview Modal */}
-      {selectedImageForPreview && (
+      {/* Document/Image Preview Modal */}
+      {(selectedImageForPreview || selectedDocumentForPreview) && createPortal(
         <div 
-          onClick={() => setSelectedImageForPreview(null)}
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-200"
+          className="fixed inset-0 z-[999999] flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-200"
         >
-          <div className="relative max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl" onClick={(e) => e.stopPropagation()}>
+          <div 
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            onClick={() => {
+              setSelectedImageForPreview(null);
+              setSelectedDocumentForPreview(null);
+            }}
+          />
+          <div className="relative z-10 w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-2xl cursor-default flex flex-col" onClick={(e) => e.stopPropagation()} style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}>
             <button 
-              onClick={() => setSelectedImageForPreview(null)}
-              className="absolute top-4 right-4 p-2 bg-black/65 hover:bg-black/85 text-white rounded-full transition-all"
+              onClick={() => {
+                setSelectedImageForPreview(null);
+                setSelectedDocumentForPreview(null);
+              }}
+              className="absolute top-4 right-4 p-2 bg-black/65 hover:bg-black/85 text-white rounded-full transition-all z-50"
             >
               <XCircle className="w-6 h-6" />
             </button>
-            <img 
-              src={selectedImageForPreview} 
-              alt="Reference Agrandie" 
-              className="max-w-full max-h-[85vh] object-contain shadow-2xl"
-            />
+            
+            <div className="w-full h-full flex items-center justify-center bg-black/40 p-2 min-h-[50vh]">
+              {(selectedDocumentForPreview?.type === 'pdf') ? (
+                <iframe 
+                  src={selectedDocumentForPreview.url} 
+                  className="w-full h-[85vh] rounded-xl bg-white"
+                  title="PDF Preview"
+                />
+              ) : (
+                <img 
+                  src={selectedImageForPreview || selectedDocumentForPreview?.url} 
+                  alt="Reference Agrandie" 
+                  className="max-w-full max-h-[85vh] object-contain shadow-2xl rounded-xl"
+                />
+              )}
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Clone Product Modal */}
-      {isCloneModalOpen && selectedClaimForClone && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+      {isCloneModalOpen && selectedClaimForClone && createPortal(
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm cursor-pointer"
+            onClick={() => setIsCloneModalOpen(false)}
+          />
+          <div 
+            className="relative z-10 bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl cursor-default"
+            style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
+          >
             <div className="sticky top-0 bg-white border-b border-gray-100 p-6 flex items-center justify-between z-10">
               <div>
                 <h2 className="text-xl font-bold">Personnaliser le Produit Clôné</h2>
@@ -1049,7 +1081,8 @@ export default function AdminAffiliateClaims() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

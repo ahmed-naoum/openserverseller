@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Landmark, X, Search, ChevronDown, Check } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 
@@ -31,7 +32,6 @@ export default function BankSelect({ value, onChange }: BankSelectProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [customBank, setCustomBank] = useState('');
 
-  const isPredefinedBank = MOROCCAN_BANKS.some((b) => b.name === value);
   const displayValue = value || t('select_bank_placeholder', 'dashboard');
   
   // Find selected bank object for logo display in the trigger button
@@ -93,8 +93,8 @@ export default function BankSelect({ value, onChange }: BankSelectProps) {
       </div>
 
       {/* Modal */}
-      {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" style={{ direction: dir }}>
+      {isOpen && createPortal(
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" style={{ direction: dir }}>
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col relative animate-in zoom-in-95 duration-200">
             
             {/* Header */}
@@ -150,7 +150,7 @@ export default function BankSelect({ value, onChange }: BankSelectProps) {
                         <img 
                           src={bank.logo} 
                           alt={bank.name} 
-                          className="max-h-8 max-w-full object-contain transition-transform group-hover:scale-105"
+                          className="max-h-14 max-w-[85%] object-contain transition-transform group-hover:scale-105"
                           onError={(e) => {
                             e.currentTarget.style.display = 'none';
                             if (e.currentTarget.nextElementSibling) {
@@ -203,7 +203,8 @@ export default function BankSelect({ value, onChange }: BankSelectProps) {
 
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

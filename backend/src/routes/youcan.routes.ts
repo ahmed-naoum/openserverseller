@@ -28,35 +28,79 @@ router.post(
     }
 
     try {
-      // Dynamically determine redirect_uri to match what the frontend used
+      const clientId = (process.env.YOUCAN_CLIENT_ID || '').trim();
+      const clientSecret = (process.env.YOUCAN_CLIENT_SECRET || '').trim();
       const origin = req.headers.origin || process.env.FRONTEND_URL || 'https://silacod.com';
-      const redirect_uri = `${origin.replace(/\/$/, '')}/dashboard/youcan-callback`;
 
-      console.log('YouCan Token Exchange Request:', {
-        client_id: process.env.YOUCAN_CLIENT_ID,
-        redirect_uri,
-        grant_type: 'authorization_code'
-      });
+      const possibleRedirectUris = Array.from(new Set([
+        `${origin.replace(/\/$/, '')}/dashboard/youcan-callback`,
+        `${origin.replace(/\/$/, '')}`,
+        `${origin.replace(/\/$/, '')}/`,
+        'https://silacod.com/dashboard/youcan-callback',
+        'https://silacod.com',
+        'https://silacod.com/'
+      ]));
 
-      // Exchange code for access token via YouCan
-      const response = await axios.post(
+      const possibleEndpoints = Array.from(new Set([
         process.env.YOUCAN_TOKEN_URL || 'https://seller-area.youcan.shop/oauth/token',
-        new URLSearchParams({
-          client_id: process.env.YOUCAN_CLIENT_ID || '',
-          client_secret: process.env.YOUCAN_CLIENT_SECRET || '',
-          grant_type: 'authorization_code',
-          redirect_uri,
-          code,
-        }),
-        {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            Accept: 'application/json',
-          },
-        }
-      );
+        'https://api.youcan.shop/oauth/token',
+        'https://seller-area.youcan.shop/admin/oauth/token'
+      ]));
 
-      const data = response.data;
+      let responseData: any = null;
+      let lastError: any = null;
+
+      // Try combination of endpoints, redirect_uris and auth header formats
+      outerLoop:
+      for (const endpoint of possibleEndpoints) {
+        for (const uri of possibleRedirectUris) {
+          for (const useBasicAuth of [false, true]) {
+            try {
+              const bodyParams = new URLSearchParams({
+                client_id: clientId,
+                client_secret: clientSecret,
+                grant_type: 'authorization_code',
+                redirect_uri: uri,
+                code,
+              });
+
+              const headers: Record<string, string> = {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                Accept: 'application/json',
+              };
+
+              if (useBasicAuth) {
+                const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+                headers['Authorization'] = `Basic ${basicAuth}`;
+              }
+
+              console.log(`[YouCan Token Exchange] Attempting: ${endpoint} | redirect_uri: ${uri} | basicAuth: ${useBasicAuth}`);
+
+              const res = await axios.post(endpoint, bodyParams, { headers, timeout: 10000 });
+              if (res.data && res.data.access_token) {
+                responseData = res.data;
+                console.log(`[YouCan Token Exchange] SUCCESS via ${endpoint} (${uri})`);
+                break outerLoop;
+              }
+            } catch (err: any) {
+              lastError = err;
+              console.log(`[YouCan Token Exchange] Failed (${endpoint} | ${uri}):`, err.response?.data || err.message);
+            }
+          }
+        }
+      }
+
+      if (!responseData || !responseData.access_token) {
+        const errorDetail = lastError?.response?.data || lastError?.message || 'Token exchange failed';
+        console.error('YouCan Token Exchange Error Details:', errorDetail);
+        res.status(400).json({
+          success: false,
+          message: typeof errorDetail === 'object' ? (errorDetail.error_description || errorDetail.message || errorDetail.error || 'Erreur lors de l\'échange de jeton YouCan') : String(errorDetail)
+        });
+        return;
+      }
+
+      const data = responseData;
 
       if (!data.access_token) {
         throw new Error('Failed to retrieve access token: No token in response');

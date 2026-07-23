@@ -108,6 +108,7 @@ import UserWallet from './pages/common/UserWallet';
 import UserPixels from './pages/common/UserPixels';
 import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
+import FaqPage from './pages/FaqPage';
 import ContactPage from './pages/ContactPage';
 import AboutPage from './pages/AboutPage';
 import CareersPage from './pages/CareersPage';
@@ -146,6 +147,20 @@ function PageTracker() {
       body: JSON.stringify({ path: location.pathname }),
     }).catch(() => {});
   }, [location.pathname, navigate]);
+
+  return null;
+}
+
+function YouCanQueryRedirector() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('code') && (location.pathname === '/' || location.pathname === '')) {
+      navigate(`/dashboard/youcan-callback${location.search}`, { replace: true });
+    }
+  }, [location, navigate]);
 
   return null;
 }
@@ -201,6 +216,7 @@ function App() {
   return (
     <>
       <ScrollToTop />
+      <YouCanQueryRedirector />
       <PageTracker />
       {loading && <PageLoader onComplete={() => setLoading(false)} />}
     <AuthProvider>
@@ -226,6 +242,9 @@ function App() {
           <Route path="/pending-verification" element={<PendingVerificationPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/privacy-policy" element={<PrivacyPage />} />
+          <Route path="/faq" element={<FaqPage />} />
+          <Route path="/faqs" element={<FaqPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/careers" element={<CareersPage />} />

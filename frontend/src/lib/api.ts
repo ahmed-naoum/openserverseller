@@ -727,4 +727,11 @@ export const customProductsApi = {
   },
 };
 
+export const youcanApi = {
+  getStatus: () => api.get('/youcan/status'),
+  syncNow: () => api.post('/youcan/sync'),
+  toggleSync: (active: boolean) => api.post('/youcan/toggle-sync', { active }),
+  exchangeToken: (code: string) => api.post('/youcan/token', { code }),
+};
+
 

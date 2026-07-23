@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { forwardRef } from 'react';
 
 interface ProCardProps {
   children: React.ReactNode;
@@ -8,13 +8,13 @@ interface ProCardProps {
   hoverable?: boolean;
 }
 
-const ProCard: React.FC<ProCardProps> = ({ 
+const ProCard = forwardRef<HTMLDivElement, ProCardProps>(({ 
   children, 
   className = '', 
   variant = 'glass',
   padding = 'md',
   hoverable = true
-}) => {
+}, ref) => {
   const baseStyles = "relative overflow-hidden transition-all duration-500 ease-out";
   
   const variantStyles = {
@@ -35,13 +35,16 @@ const ProCard: React.FC<ProCardProps> = ({
     : "";
 
   return (
-    <div className={`
-      ${baseStyles} 
-      ${variantStyles[variant]} 
-      ${paddingStyles[padding]} 
-      ${hoverStyles} 
-      ${className}
-    `}>
+    <div 
+      ref={ref}
+      className={`
+        ${baseStyles} 
+        ${variantStyles[variant]} 
+        ${paddingStyles[padding]} 
+        ${hoverStyles} 
+        ${className}
+      `}
+    >
       {/* Decorative Gradient Blob */}
       <div className="absolute -top-24 -right-24 w-48 h-48 bg-primary-500/5 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-accent-500/5 rounded-full blur-3xl pointer-events-none" />
@@ -51,6 +54,8 @@ const ProCard: React.FC<ProCardProps> = ({
       </div>
     </div>
   );
-};
+});
+
+ProCard.displayName = 'ProCard';
 
 export { ProCard };

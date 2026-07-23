@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { supportApi, adminApi, chatApi, BACKEND_URL } from '../../lib/api';
 import { 
   Search, 
@@ -30,6 +31,7 @@ const CATEGORIES = ['General', 'Payment', 'Delivery', 'Product Issue', 'Bug', 'A
 
 export default function SupportTickets() {
   const { t, language } = useLanguage();
+  console.log('[SupportTickets] Loaded successfully, createPortal available:', !!createPortal);
   const direction = language === 'ar' ? 'rtl' : 'ltr';
   const textAlign = language === 'ar' ? 'text-right' : 'text-left';
   const [tickets, setTickets] = useState<any[]>([]);
@@ -443,117 +445,120 @@ export default function SupportTickets() {
           </AnimatePresence>
         </div>
       </div>
-
       {/* Create Ticket Modal */}
-      <AnimatePresence>
-        {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsModalOpen(false)}
-              className="absolute inset-0 bg-slate-900/40 backdrop-blur-md"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-xl bg-white border border-slate-200/60 rounded-2xl shadow-xl overflow-hidden"
-            >
-              {/* Decorative Accent */}
-              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-primary-500 via-violet-500 to-emerald-500" />
-              
-              <div className="p-8 sm:p-12 space-y-10">
-                <div className="flex justify-between items-start">
-                  <div className="space-y-2">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-50 border border-slate-100 mb-1">
-                      <Plus className="w-3 h-3 text-slate-500" />
-                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{t('modal_new_request', 'support')}</span>
+      {createPortal(
+        <AnimatePresence>
+          {isModalOpen && (
+            <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 sm:p-6 cursor-pointer">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsModalOpen(false)}
+                className="absolute inset-0 bg-slate-900/65 backdrop-blur-md"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                onClick={(e) => e.stopPropagation()}
+                className="relative w-full max-w-xl bg-white border border-slate-200/60 rounded-2xl shadow-xl overflow-hidden cursor-default z-10"
+              >
+                {/* Decorative Accent */}
+                <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-primary-500 via-violet-500 to-emerald-500" />
+                
+                <div className="p-8 sm:p-12 space-y-10">
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-2">
+                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-50 border border-slate-100 mb-1">
+                        <Plus className="w-3 h-3 text-slate-500" />
+                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{t('modal_new_request', 'support')}</span>
+                      </div>
+                      <h2 className="text-3xl font-black tracking-tight text-slate-900 leading-none">{t('modal_title', 'support')}</h2>
                     </div>
-                    <h2 className="text-3xl font-black tracking-tight text-slate-900 leading-none">{t('modal_title', 'support')}</h2>
+                    <button 
+                      onClick={() => setIsModalOpen(false)} 
+                      className="p-3 bg-slate-50 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-2xl transition-all active:scale-90"
+                    >
+                      <X size={20} strokeWidth={3} />
+                    </button>
                   </div>
-                  <button 
-                    onClick={() => setIsModalOpen(false)} 
-                    className="p-3 bg-slate-50 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-2xl transition-all active:scale-90"
-                  >
-                    <X size={20} strokeWidth={3} />
-                  </button>
+
+                  <form onSubmit={handleCreateTicket} className="space-y-8" dir={direction}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2.5">
+                        <label className={`text-[10px] font-black text-slate-400 uppercase tracking-widest block ${language === 'ar' ? 'pr-2' : 'pl-2'}`}>{t('modal_subject', 'support')}</label>
+                        <div className="relative group">
+                          <input
+                            type="text"
+                            placeholder={t('modal_subject_placeholder', 'support')}
+                            required
+                            dir={direction}
+                            className={`w-full bg-slate-50/50 border border-slate-200/60 rounded-2xl py-4 px-6 text-sm font-bold focus:outline-none focus:border-primary-500 focus:bg-white focus:ring-4 focus:ring-primary-500/5 transition-all ${textAlign}`}
+                            value={newTicket.subject}
+                            onChange={(e) => setNewTicket({ ...newTicket, subject: e.target.value })}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2.5">
+                        <label className={`text-[10px] font-black text-slate-400 uppercase tracking-widest block ${language === 'ar' ? 'pr-2' : 'pl-2'}`}>{t('modal_category', 'support')}</label>
+                        <div className="relative group">
+                          <select
+                            dir={direction}
+                            className={`w-full bg-slate-50/50 border border-slate-200/60 rounded-2xl py-4 ${language === 'ar' ? 'pr-6 pl-12' : 'pl-6 pr-12'} text-sm font-bold focus:outline-none focus:border-primary-500 focus:bg-white focus:ring-4 focus:ring-primary-500/5 transition-all appearance-none cursor-pointer ${textAlign}`}
+                            value={newTicket.category}
+                            onChange={(e) => setNewTicket({ ...newTicket, category: e.target.value })}
+                          >
+                            {CATEGORIES.map(c => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
+                          </select>
+                          <ChevronDown size={16} className={`absolute ${language === 'ar' ? 'left-5' : 'right-5'} top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-focus-within:text-primary-500 transition-colors`} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      <label className={`text-[10px] font-black text-slate-400 uppercase tracking-widest block ${language === 'ar' ? 'pr-2' : 'pl-2'}`}>{t('modal_details', 'support')}</label>
+                      <textarea
+                        placeholder={t('modal_details_placeholder', 'support')}
+                        required
+                        rows={5}
+                        dir={direction}
+                        className={`w-full bg-slate-50/50 border border-slate-200/60 rounded-2xl py-4 px-6 text-sm font-medium focus:outline-none focus:border-primary-500/50 focus:bg-white focus:ring-2 focus:ring-primary-500/5 transition-all resize-none text-slate-600 leading-relaxed ${textAlign}`}
+                        value={newTicket.description}
+                        onChange={(e) => setNewTicket({ ...newTicket, description: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="pt-4 flex flex-col sm:flex-row gap-4">
+                      <button
+                        type="button"
+                        onClick={() => setIsModalOpen(false)}
+                        className="flex-1 px-6 py-4 bg-slate-50 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-100 hover:text-slate-900 transition-all active:scale-95"
+                      >
+                        {t('modal_cancel', 'support')}
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="flex-[2] bg-slate-900 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-primary-600 shadow-md hover:-translate-y-0.5 active:scale-95 transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
+                      >
+                        {isSubmitting ? t('modal_submitting', 'support') : t('modal_submit', 'support')}
+                        {language === 'ar' ? (
+                          <ChevronLeft size={18} strokeWidth={3} className="group-hover:-translate-x-1 transition-transform" />
+                        ) : (
+                          <ChevronRight size={18} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" />
+                        )}
+                      </button>
+                    </div>
+                  </form>
                 </div>
-
-                <form onSubmit={handleCreateTicket} className="space-y-8" dir={direction}>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2.5">
-                      <label className={`text-[10px] font-black text-slate-400 uppercase tracking-widest block ${language === 'ar' ? 'pr-2' : 'pl-2'}`}>{t('modal_subject', 'support')}</label>
-                      <div className="relative group">
-                        <input
-                          type="text"
-                          placeholder={t('modal_subject_placeholder', 'support')}
-                          required
-                          dir={direction}
-                          className={`w-full bg-slate-50/50 border border-slate-200/60 rounded-2xl py-4 px-6 text-sm font-bold focus:outline-none focus:border-primary-500 focus:bg-white focus:ring-4 focus:ring-primary-500/5 transition-all ${textAlign}`}
-                          value={newTicket.subject}
-                          onChange={(e) => setNewTicket({ ...newTicket, subject: e.target.value })}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2.5">
-                      <label className={`text-[10px] font-black text-slate-400 uppercase tracking-widest block ${language === 'ar' ? 'pr-2' : 'pl-2'}`}>{t('modal_category', 'support')}</label>
-                      <div className="relative group">
-                        <select
-                          dir={direction}
-                          className={`w-full bg-slate-50/50 border border-slate-200/60 rounded-2xl py-4 ${language === 'ar' ? 'pr-6 pl-12' : 'pl-6 pr-12'} text-sm font-bold focus:outline-none focus:border-primary-500 focus:bg-white focus:ring-4 focus:ring-primary-500/5 transition-all appearance-none cursor-pointer ${textAlign}`}
-                          value={newTicket.category}
-                          onChange={(e) => setNewTicket({ ...newTicket, category: e.target.value })}
-                        >
-                          {CATEGORIES.map(c => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
-                        </select>
-                        <ChevronDown size={16} className={`absolute ${language === 'ar' ? 'left-5' : 'right-5'} top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-focus-within:text-primary-500 transition-colors`} />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2.5">
-                    <label className={`text-[10px] font-black text-slate-400 uppercase tracking-widest block ${language === 'ar' ? 'pr-2' : 'pl-2'}`}>{t('modal_details', 'support')}</label>
-                    <textarea
-                      placeholder={t('modal_details_placeholder', 'support')}
-                      required
-                      rows={5}
-                      dir={direction}
-                      className={`w-full bg-slate-50/50 border border-slate-200/60 rounded-2xl py-4 px-6 text-sm font-medium focus:outline-none focus:border-primary-500/50 focus:bg-white focus:ring-2 focus:ring-primary-500/5 transition-all resize-none text-slate-600 leading-relaxed ${textAlign}`}
-                      value={newTicket.description}
-                      onChange={(e) => setNewTicket({ ...newTicket, description: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="pt-4 flex flex-col sm:flex-row gap-4">
-                    <button
-                      type="button"
-                      onClick={() => setIsModalOpen(false)}
-                      className="flex-1 px-6 py-4 bg-slate-50 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-100 hover:text-slate-900 transition-all active:scale-95"
-                    >
-                      {t('modal_cancel', 'support')}
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="flex-[2] bg-slate-900 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-primary-600 shadow-md hover:-translate-y-0.5 active:scale-95 transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
-                    >
-                      {isSubmitting ? t('modal_submitting', 'support') : t('modal_submit', 'support')}
-                      {language === 'ar' ? (
-                        <ChevronLeft size={18} strokeWidth={3} className="group-hover:-translate-x-1 transition-transform" />
-                      ) : (
-                        <ChevronRight size={18} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" />
-                      )}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   );
 }

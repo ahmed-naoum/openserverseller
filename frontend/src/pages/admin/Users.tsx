@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../lib/api';
 import toast from 'react-hot-toast';
@@ -157,9 +158,16 @@ function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; o
 
   if (!isOpen || !agent) return null;
 
-  return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xl flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
-      <div className="bg-white rounded-[2rem] w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col shadow-2xl border border-white/20 scale-in-center transition-transform duration-500">
+  return createPortal(
+    <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 animate-in fade-in duration-300">
+      <div 
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-md cursor-pointer"
+        onClick={onClose}
+      />
+      <div 
+        className="relative z-10 bg-white rounded-[2rem] w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col shadow-2xl border border-white/20 scale-in-center transition-transform duration-500 cursor-default"
+        style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
+      >
         <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-gradient-to-br from-primary-50/50 to-indigo-50/30">
           <div>
             <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
@@ -297,7 +305,8 @@ function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; o
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -385,9 +394,16 @@ function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; 
 
   if (!isOpen || !helper) return null;
 
-  return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xl flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
-      <div className="bg-white rounded-[2rem] w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col shadow-2xl border border-white/20 scale-in-center transition-transform duration-500">
+  return createPortal(
+    <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 animate-in fade-in duration-300">
+      <div 
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-md cursor-pointer"
+        onClick={onClose}
+      />
+      <div 
+        className="relative z-10 bg-white rounded-[2rem] w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col shadow-2xl border border-white/20 scale-in-center transition-transform duration-500 cursor-default"
+        style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
+      >
         <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-gradient-to-br from-primary-50/50 to-indigo-50/30">
           <div>
             <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
@@ -644,7 +660,8 @@ function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; 
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -676,9 +693,16 @@ function AddUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xl flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
-      <div className="bg-white rounded-[2.5rem] w-full max-w-lg max-h-[90vh] overflow-hidden shadow-2xl border border-white/20 flex flex-col">
+  return createPortal(
+    <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 animate-in fade-in duration-300">
+      <div 
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-md cursor-pointer"
+        onClick={onClose}
+      />
+      <div 
+        className="relative z-10 bg-white rounded-[2.5rem] w-full max-w-lg max-h-[90vh] overflow-hidden shadow-2xl border border-white/20 flex flex-col cursor-default"
+        style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
+      >
         <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-gradient-to-br from-primary-50/50 to-indigo-50/30 shrink-0">
           <div>
             <h2 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-3">
@@ -801,7 +825,8 @@ function AddUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -918,9 +943,16 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
 
   if (!isOpen || !user) return null;
 
-  return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xl flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
-      <div className="bg-white rounded-[2.5rem] w-full max-w-3xl max-h-[90vh] overflow-hidden shadow-2xl border border-white/20 flex flex-col scale-in-center transition-transform duration-500">
+  return createPortal(
+    <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 animate-in fade-in duration-300">
+      <div 
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-md cursor-pointer"
+        onClick={onClose}
+      />
+      <div 
+        className="relative z-10 bg-white rounded-[2.5rem] w-full max-w-3xl max-h-[90vh] overflow-hidden shadow-2xl border border-white/20 flex flex-col scale-in-center transition-transform duration-500 cursor-default"
+        style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
+      >
         
         {/* Header */}
         <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-gradient-to-br from-indigo-50/50 to-purple-50/30 shrink-0">
@@ -1908,7 +1940,8 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
           </div>
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -2744,9 +2777,16 @@ export default function AdminUsers() {
         />
       )}
 
-      {generatedPasswordData && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xl flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-[2rem] w-full max-w-sm overflow-hidden shadow-2xl border border-white/20 flex flex-col scale-in-center transition-transform duration-500">
+      {generatedPasswordData && createPortal(
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-md cursor-pointer"
+            onClick={() => setGeneratedPasswordData(null)}
+          />
+          <div 
+            className="relative z-10 bg-white rounded-[2rem] w-full max-w-sm overflow-hidden shadow-2xl border border-white/20 flex flex-col scale-in-center transition-transform duration-500 cursor-default"
+            style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
+          >
             <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-gradient-to-br from-indigo-50/50 to-purple-50/30">
               <div>
                 <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
@@ -2786,12 +2826,20 @@ export default function AdminUsers() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {confirmResetPasswordUser && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xl flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl border border-white/20 flex flex-col scale-in-center transition-transform duration-500">
+      {confirmResetPasswordUser && createPortal(
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-md cursor-pointer"
+            onClick={() => setConfirmResetPasswordUser(null)}
+          />
+          <div 
+            className="relative z-10 bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl border border-white/20 flex flex-col scale-in-center transition-transform duration-500 cursor-default"
+            style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
+          >
             <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-gradient-to-br from-indigo-50/50 to-purple-50/30">
               <div>
                 <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
@@ -2833,12 +2881,20 @@ export default function AdminUsers() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {confirmDeleteUser && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xl flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl border border-white/20 flex flex-col scale-in-center transition-transform duration-500">
+      {confirmDeleteUser && createPortal(
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-md cursor-pointer"
+            onClick={() => setConfirmDeleteUser(null)}
+          />
+          <div 
+            className="relative z-10 bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl border border-white/20 flex flex-col scale-in-center transition-transform duration-500 cursor-default"
+            style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
+          >
             <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-gradient-to-br from-rose-50/50 to-red-50/30">
               <div>
                 <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
@@ -2876,7 +2932,8 @@ export default function AdminUsers() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

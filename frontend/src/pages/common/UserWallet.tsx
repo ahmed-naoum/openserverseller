@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { walletApi, payoutsApi } from '../../lib/api';
@@ -333,9 +334,15 @@ export default function UserWallet() {
       </div>
 
       {/* Withdraw Modal */}
-      {isWithdrawModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      {isWithdrawModalOpen && createPortal(
+        <div 
+          className="fixed inset-0 bg-slate-900/65 backdrop-blur-md z-[999999] flex items-center justify-center p-4 cursor-pointer animate-in fade-in duration-200"
+          onClick={() => setIsWithdrawModalOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-6 border-b border-gray-50 flex justify-between items-center">
               <div>
                 <h3 className="text-xl font-black text-gray-900 tracking-tight">{t('request_withdrawal', 'wallet')}</h3>
@@ -382,12 +389,12 @@ export default function UserWallet() {
                   <input
                     type="number"
                     required
-                    min="200"
-                    max={wallet?.balanceMad}
+                    min={200}
+                    max={wallet?.balanceMad || 0}
                     value={withdrawForm.amountMad}
                     onChange={e => setWithdrawForm({...withdrawForm, amountMad: e.target.value})}
                     className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all outline-none"
-                    placeholder={t('min_amount_placeholder', 'wallet')}
+                    placeholder="Min. 200 MAD"
                   />
                 </div>
               </div>
@@ -405,12 +412,12 @@ export default function UserWallet() {
                         value={withdrawForm.bankName}
                         onChange={e => setWithdrawForm({...withdrawForm, bankName: e.target.value})}
                         className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all outline-none"
-                        placeholder={t('bank_name_placeholder', 'wallet')}
+                        placeholder="ex: CIH, Attijariwafa"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">{t('rib_field', 'wallet')}</label>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">{t('rib_account', 'wallet')}</label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <CreditCard size={16} className="text-gray-400" />
@@ -439,7 +446,8 @@ export default function UserWallet() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

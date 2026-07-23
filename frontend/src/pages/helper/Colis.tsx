@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-// Rebuild trigger
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { leadsApi, ordersApi } from '../../lib/api';
@@ -736,9 +736,15 @@ export default function HelperColis() {
       {/* Edit modal removed for helper */}
 
       {/* History Modal */}
-      {historyParcel && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[85vh] overflow-hidden shadow-2xl relative animate-slide-up flex flex-col">
+      {historyParcel && createPortal(
+        <div 
+          className="fixed inset-0 z-[999999] bg-slate-900/65 backdrop-blur-md flex items-center justify-center p-4 cursor-pointer animate-in fade-in duration-200"
+          onClick={() => setHistoryParcel(null)}
+        >
+          <div 
+            className="bg-white rounded-3xl max-w-lg w-full max-h-[85vh] overflow-hidden shadow-2xl relative flex flex-col cursor-default animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-indigo-50/30">
               <div>
                 <h3 className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
@@ -847,7 +853,8 @@ export default function HelperColis() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

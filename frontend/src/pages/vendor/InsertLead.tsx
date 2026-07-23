@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -125,10 +126,13 @@ export default function VendorInsertLead() {
 
         // Filter products based on current mode
         const filteredProducts = allProducts.filter((p: any) => {
+          const isOwned = Number(p.ownerId) === Number(user?.id);
           if (currentMode === 'SELLER') {
-            return p.ownerId === user.id; // Only products they own
+            // Sell owned products or products imported in inventory
+            return isOwned || p.hasInventory === true;
           } else {
-            return p.ownerId !== user.id; // Only products they don't own (affiliate)
+            // Affiliate mode: only claimed products that are NOT owned by the vendor
+            return !isOwned && (p.isClaimed === true || (p.isClaimed === undefined && Number(p.ownerId) !== Number(user?.id)));
           }
         });
 
@@ -1065,9 +1069,15 @@ export default function VendorInsertLead() {
         </div>
       </div>
 
-      {showImportModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 relative overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+      {showImportModal && createPortal(
+        <div 
+          className="fixed inset-0 bg-slate-900/65 backdrop-blur-md z-[999999] flex items-center justify-center p-4 cursor-pointer animate-in fade-in duration-200"
+          onClick={() => setShowImportModal(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl max-w-2xl w-full p-6 relative overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh] cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-4 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <FileSpreadsheet className={`w-5 h-5 ${currentMode === 'SELLER' ? 'text-emerald-500' : 'text-indigo-500'}`} />
@@ -1189,8 +1199,10 @@ export default function VendorInsertLead() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
+
     </div>
   );
 }

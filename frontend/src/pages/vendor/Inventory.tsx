@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { influencerApi } from '../../lib/api';
 import { 
@@ -512,9 +513,20 @@ export default function VendorInventory() {
       </div>
 
       {/* Create Link Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
+      {showCreateModal && createPortal(
+        <div 
+          className="fixed inset-0 bg-slate-900/65 backdrop-blur-md flex items-center justify-center z-[999999] p-4 animate-in fade-in duration-300 cursor-pointer"
+          onClick={() => {
+            setShowCreateModal(false);
+            setCustomName('');
+            setCustomNameError('');
+            setSelectedProductId(null);
+          }}
+        >
+          <div 
+            className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200 cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-8">
               <div className="flex justify-between items-center mb-6">
                 <div>
@@ -612,13 +624,24 @@ export default function VendorInventory() {
               </form>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Links List Modal */}
-      {isLinksModalOpen && selectedProductForLinks && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
+      {isLinksModalOpen && selectedProductForLinks && createPortal(
+        <div 
+          className="fixed inset-0 bg-slate-900/65 backdrop-blur-md flex items-center justify-center z-[999999] p-4 animate-in fade-in duration-300 cursor-pointer"
+          onClick={() => {
+            setIsLinksModalOpen(false);
+            setSelectedProductForLinks(null);
+            setModalLinks([]);
+          }}
+        >
+          <div 
+            className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200 cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-8">
               <div className="flex justify-between items-center mb-6">
                 <div>
@@ -770,13 +793,20 @@ export default function VendorInventory() {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* QR Code Modal */}
-      {showQrModal && selectedLinkForQr && (
-        <div className="fixed inset-0 z-[110] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-10 text-center animate-in zoom-in-95 duration-300">
+      {showQrModal && selectedLinkForQr && createPortal(
+        <div 
+          className="fixed inset-0 z-[999999] bg-slate-900/65 backdrop-blur-md flex items-center justify-center p-4 cursor-pointer"
+          onClick={() => setShowQrModal(false)}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-10 text-center animate-in zoom-in-95 duration-300 cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="text-2xl font-black text-slate-900 mb-2">{t('qr_title', 'links', 'Code QR du lien')}</h2>
             <p className="text-sm text-slate-400 font-medium mb-8">{t('qr_subtitle', 'links', 'Scannez ou téléchargez le code QR')}</p>
             <div className="bg-white p-6 rounded-2xl border-4 border-dashed border-slate-100 inline-block mb-8">
@@ -806,13 +836,20 @@ export default function VendorInventory() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Confirmation Modal */}
-      {confirmModal.isOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[120] p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200">
+      {confirmModal.isOpen && createPortal(
+        <div 
+          className="fixed inset-0 bg-slate-900/65 backdrop-blur-md flex items-center justify-center z-[999999] p-4 animate-in fade-in duration-300 cursor-pointer"
+          onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        >
+          <div 
+            className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200 cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-8 text-center">
               <div className="w-20 h-20 rounded-full mx-auto mb-6 flex items-center justify-center bg-slate-50">
                 {confirmModal.icon}
@@ -846,13 +883,23 @@ export default function VendorInventory() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Builder Link Selection Modal */}
-      {isBuilderSelectOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[130] p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
+      {isBuilderSelectOpen && createPortal(
+        <div 
+          className="fixed inset-0 bg-slate-900/65 backdrop-blur-md flex items-center justify-center z-[999999] p-4 animate-in fade-in duration-300 cursor-pointer"
+          onClick={() => {
+            setIsBuilderSelectOpen(false);
+            setBuilderSelectLinks([]);
+          }}
+        >
+          <div 
+            className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200 cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-8">
               <div className="flex justify-between items-center mb-6">
                 <div>
@@ -926,8 +973,10 @@ export default function VendorInventory() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
+
     </div>
   );
 }

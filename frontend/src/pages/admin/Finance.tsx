@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi, walletApi, payoutsApi } from '../../lib/api';
 import toast from 'react-hot-toast';
@@ -732,11 +733,18 @@ export default function AdminFinance() {
       )}
 
       {/* History Modal */}
-      {historyModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-300">
+      {historyModalOpen && createPortal(
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
+            onClick={() => setHistoryModalOpen(false)}
+          />
+          <div 
+            className="relative z-10 bg-white rounded-[32px] shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-300 overflow-hidden cursor-default"
+            style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
+          >
             {/* Modal Header */}
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 shrink-0">
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-violet-600 text-white rounded-2xl shadow-lg shadow-violet-200">
                   <History size={24} />
@@ -986,13 +994,21 @@ export default function AdminFinance() {
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Status Change Modal */}
-      {statusModalOpen && selectedPayoutForStatus && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-300">
+      {statusModalOpen && selectedPayoutForStatus && createPortal(
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
+            onClick={() => setStatusModalOpen(false)}
+          />
+          <div 
+            className="relative z-10 bg-white rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-300 cursor-default"
+            style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
+          >
             <div className="p-6 border-b border-gray-50 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-black text-gray-900">Gérer le statut</h2>
@@ -1050,7 +1066,8 @@ export default function AdminFinance() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

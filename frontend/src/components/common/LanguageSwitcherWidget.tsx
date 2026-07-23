@@ -37,10 +37,10 @@ export default function LanguageSwitcherWidget({ variant = 'header' }: LanguageS
     : "flex items-center gap-2 px-4 h-[42px] rounded-[10px] bg-slate-50 hover:bg-slate-100 border border-slate-200/60 text-slate-700 font-semibold text-sm transition-all shadow-sm focus:outline-none";
 
   const dropdownClasses = variant === 'footer'
-    ? `absolute bottom-full mb-2 w-36 rounded-2xl bg-white border border-slate-150 shadow-xl z-[100] overflow-hidden focus:outline-none ${
+    ? `absolute bottom-full mb-2 w-36 rounded-2xl bg-white border border-slate-150 shadow-xl z-[1000] overflow-hidden focus:outline-none ${
         language === 'ar' ? 'left-0 origin-bottom-left' : 'right-0 origin-bottom-right'
       }`
-    : `absolute mt-2 w-36 rounded-2xl bg-white border border-slate-150 shadow-xl z-[100] overflow-hidden focus:outline-none ${
+    : `absolute mt-2 w-36 rounded-2xl bg-white border border-slate-150 shadow-xl z-[1000] overflow-hidden focus:outline-none ${
         language === 'ar' ? 'left-0 origin-top-left' : 'right-0 origin-top-right'
       }`;
 

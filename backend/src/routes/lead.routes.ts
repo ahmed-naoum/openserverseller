@@ -995,7 +995,7 @@ router.get(
 
     const products = await prisma.product.findMany({
       where: {
-        isActive: true,
+        status: 'APPROVED',
         OR: [
           { ownerId: Number(vendorId) },
           { inventories: { some: { userId: Number(vendorId) } } },
@@ -1006,6 +1006,12 @@ router.get(
         images: {
           where: { isPrimary: true },
           take: 1,
+        },
+        inventories: {
+          where: { userId: Number(vendorId) }
+        },
+        claims: {
+          where: { userId: Number(vendorId) }
         }
       },
       orderBy: {
@@ -1022,6 +1028,8 @@ router.get(
         retailPriceMad: p.retailPriceMad,
         image: p.images[0]?.imageUrl || null,
         ownerId: p.ownerId,
+        hasInventory: p.inventories.length > 0,
+        isClaimed: p.claims.some(c => ['APPROVED', 'ACTIVE'].includes(c.status))
       }))
     });
   })

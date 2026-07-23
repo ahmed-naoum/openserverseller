@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Activity, Plus, Trash2, CheckCircle2, XCircle, Target, ChevronDown, Globe, Music, Ghost, Facebook } from 'lucide-react';
 import { userPixelApi, influencerApi, productsApi } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -261,10 +262,15 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
         </div>
       )}
 
-      {/* Add Pixel Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      {isModalOpen && createPortal(
+        <div 
+          className="fixed inset-0 bg-slate-900/65 backdrop-blur-md z-[999999] flex items-center justify-center p-4 cursor-pointer animate-in fade-in duration-200"
+          onClick={() => setIsModalOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-6 sm:p-8">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-black text-gray-900">{t('pixel_new', 'dashboard') || 'Nouveau Pixel'}</h2>
@@ -302,60 +308,47 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">{t('pixel_apply_mode', 'dashboard') || "Mode d'application"}</label>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">{t('pixel_type', 'dashboard') || "Type d'intégration"}</label>
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       onClick={() => setType('GLOBAL')}
-                      className={`p-4 rounded-xl border-2 text-left transition-all ${
-                        type === 'GLOBAL' ? 'border-blue-600 bg-blue-50/50' : 'border-gray-100 hover:border-gray-200'
+                      className={`p-3 rounded-xl border-2 transition-all font-bold ${
+                        type === 'GLOBAL' ? 'border-blue-600 bg-blue-50/50 text-blue-700' : 'border-gray-100 text-gray-600 hover:bg-gray-50'
                       }`}
                     >
-                      <div className="font-bold text-gray-900 mb-1">{t('pixel_global', 'dashboard') || 'Global'}</div>
-                      <div className="text-xs text-gray-500 font-medium">{t('pixel_all_pages', 'dashboard') || 'Toutes vos pages'}</div>
+                      {t('pixel_type_global', 'dashboard') || 'Global'}
+                      <span className="block text-[10px] font-normal text-gray-400 mt-0.5">{t('pixel_type_global_desc', 'dashboard') || 'Toutes vos pages'}</span>
                     </button>
                     <button
                       onClick={() => setType('SINGLE')}
-                      className={`p-4 rounded-xl border-2 text-left transition-all ${
-                        type === 'SINGLE' ? 'border-blue-600 bg-blue-50/50' : 'border-gray-100 hover:border-gray-200'
+                      className={`p-3 rounded-xl border-2 transition-all font-bold ${
+                        type === 'SINGLE' ? 'border-blue-600 bg-blue-50/50 text-blue-700' : 'border-gray-100 text-gray-600 hover:bg-gray-50'
                       }`}
                     >
-                      <div className="font-bold text-gray-900 mb-1">{t('pixel_single_page', 'dashboard') || 'Single Page'}</div>
-                      <div className="text-xs text-gray-500 font-medium">{t('pixel_specific_page', 'dashboard') || 'Page spécifique'}</div>
+                      {t('pixel_type_single', 'dashboard') || 'Single Page'}
+                      <span className="block text-[10px] font-normal text-gray-400 mt-0.5">{t('pixel_type_single_desc', 'dashboard') || 'Page spécifique'}</span>
                     </button>
                   </div>
                 </div>
 
                 {type === 'SINGLE' && (
-                  <div className="animate-in slide-in-from-top-2">
-                    <label className="block text-sm font-bold text-gray-700 mb-2">{t('pixel_select_page', 'dashboard') || 'Sélectionnez la page'}</label>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">{t('pixel_select_link', 'dashboard') || 'Sélectionner un lien'}</label>
                     <div className="relative">
                       <select
                         value={targetId}
                         onChange={(e) => setTargetId(e.target.value)}
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl appearance-none focus:bg-white focus:ring-2 focus:border-blue-600 transition-all font-medium"
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:border-blue-600 transition-all font-semibold outline-none appearance-none cursor-pointer pr-10"
                         style={{ '--tw-ring-color': `rgba(59, 130, 246, 0.2)` } as any}
                       >
-                        <option value="">{t('pixel_choose_target', 'dashboard') || 'Choisir la cible...'}</option>
-                        {links.length > 0 && (
-                          <optgroup label={user?.role === 'INFLUENCER' ? (t('pixel_ref_links', 'dashboard') || "Liens de Parrainage") : (t('pixel_ref_links_affiliate', 'dashboard') || "Liens de Parrainage (Affilié)")}>
-                            {links.map(link => (
-                              <option key={`link-${link.id}`} value={link.code}>
-                                {link.product?.nameFr || 'Produit'} (Code: {link.code})
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                        {products.length > 0 && user?.role !== 'INFLUENCER' && (
-                          <optgroup label={t('pixel_my_products', 'dashboard') || "Mes Produits (Vendeur)"}>
-                            {products.map(product => (
-                              <option key={`prod-${product.id}`} value={product.id.toString()}>
-                                {product.nameFr || product.nameEn || 'Produit'} (SKU: {product.sku})
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
+                        <option value="">{t('pixel_choose_link', 'dashboard') || 'Choisir un lien...'}</option>
+                        {links.map((link) => (
+                          <option key={link.id} value={link.code}>
+                            {link.product?.nameFr || 'Produit'} ({link.code})
+                          </option>
+                        ))}
                       </select>
-                      <ChevronDown className="absolute right-4 top-3.5 w-5 h-5 text-gray-400 pointer-events-none" />
+                      <ChevronDown className="w-5 h-5 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
                   </div>
                 )}
@@ -392,7 +385,8 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -403,3 +403,69 @@
     transform: rotate(360deg);
   }
 }
+
+/* ==========================================================================
+   GLOBAL PLATFORM MODAL SYSTEM (UNIFIED DARK BLUR BACKDROP & TOP Z-INDEX)
+   ========================================================================== */
+
+/* Unconditional Top Z-Index and Unified Dark Blur Backdrop for all Modals */
+div[class*="fixed"][class*="inset-0"][class*="bg-"],
+.modal-overlay,
+.fixed.inset-0.bg-black\/60,
+.fixed.inset-0.bg-slate-900\/60,
+.fixed.inset-0.bg-gray-900\/60,
+.fixed.inset-0.bg-slate-950\/80 {
+  z-index: 999999 !important;
+  background-color: rgba(15, 23, 42, 0.65) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+}
+
+/* Ensure modal wrapper containers (centering flex wrappers) have top z-index without double-blurring */
+div[class*="fixed"][class*="inset-0"]:not([class*="bg-"]),
+div[class*="fixed"][class*="inset-0"].pointer-events-none {
+  z-index: 1000000 !important;
+  background-color: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Stacked / Nested modals (e.g. OTP inside modal or confirmation dialog) */
+div[class*="fixed"][class*="inset-0"] ~ div[class*="fixed"][class*="inset-0"],
+div[class*="fixed"][class*="inset-0"] div[class*="fixed"][class*="inset-0"] {
+  z-index: 1000001 !important;
+}
+
+/* Toast notifications remain above all modals */
+#toast-container,
+.go2134789531, 
+.react-hot-toast,
+div[aria-live="polite"] {
+  z-index: 1000002 !important;
+}
+
+/* Full Screen Mobile Viewports (< 640px) */
+@media (max-width: 640px) {
+  /* Container spans entire screen without margin/padding cutoffs */
+  div[class*="fixed"][class*="inset-0"] {
+    padding: 0 !important;
+  }
+
+  /* Modal cards expand full width and full height on mobile screens */
+  div[class*="fixed"][class*="inset-0"] > div[class*="bg-white"],
+  div[class*="fixed"][class*="inset-0"] > div[class*="bg-slate"],
+  div[class*="fixed"][class*="inset-0"] > div[class*="bg-gray"],
+  div[class*="fixed"][class*="inset-0"] > div[class*="bg-black"],
+  div[class*="fixed"][class*="inset-0"] > div[class*="bg-neutral"] {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+    height: 100% !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+}

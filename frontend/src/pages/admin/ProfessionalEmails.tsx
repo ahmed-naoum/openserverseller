@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { adminApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { 
@@ -16,7 +17,8 @@ import {
   Copy,
   Check,
   Lock,
-  Server
+  Server,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -353,193 +355,212 @@ export default function ProfessionalEmails() {
       </div>
 
       {/* CREATE MODAL */}
-      <AnimatePresence>
-        {showCreateModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl p-8 border border-slate-100 shadow-2xl max-w-md w-full space-y-6"
-            >
-              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-primary-500" />
-                  Créer un compte email
-                </h3>
-                <button
-                  onClick={() => setShowCreateModal(false)}
-                  className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-xl transition-all"
-                >
-                  Fermer
-                </button>
-              </div>
-
-              <form onSubmit={handleCreate} className="space-y-4">
-                {/* Username */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Adresse mail</label>
-                  <div className="flex items-center bg-slate-50 border-2 border-transparent focus-within:border-primary-500 rounded-2xl px-4 py-3 outline-none transition-all">
-                    <input
-                      type="text"
-                      placeholder="nom.prenom"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
-                      className="bg-transparent flex-1 outline-none text-sm font-semibold text-slate-700 w-full"
-                      required
-                    />
-                    <span className="text-sm font-bold text-slate-400 pl-2 border-l border-slate-200">@silacod.com</span>
-                  </div>
-                  <p className="text-[10px] text-slate-400 font-medium leading-normal px-2">
-                    Lettres minuscules, chiffres, points, tirets et underscores uniquement.
-                  </p>
-                </div>
-
-                {/* Password */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Mot de passe</label>
-                    <button
-                      type="button"
-                      onClick={() => generateRandomPassword(false)}
-                      className="text-xs text-primary-600 hover:text-primary-700 font-black flex items-center gap-1"
-                    >
-                      Générer
-                    </button>
-                  </div>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-                      <Lock size={16} />
-                    </div>
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder="Mot de passe fort"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full pl-10 pr-10 py-3.5 bg-slate-50 border-2 border-transparent focus:border-primary-500 rounded-2xl outline-none transition-all text-sm font-semibold text-slate-700"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600"
-                    >
-                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="pt-4 flex justify-end gap-2 border-t border-slate-50">
+      {createPortal(
+        <AnimatePresence>
+          {showCreateModal && (
+            <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
+              <div 
+                className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm cursor-pointer"
+                onClick={() => setShowCreateModal(false)}
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="relative z-10 bg-white rounded-3xl p-8 border border-slate-100 shadow-2xl max-w-md w-full space-y-6 cursor-default"
+                style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
+              >
+                <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-primary-500" />
+                    Créer un compte email
+                  </h3>
                   <button
-                    type="button"
                     onClick={() => setShowCreateModal(false)}
-                    className="px-5 py-3 text-slate-500 hover:text-slate-700 font-bold rounded-2xl transition-all text-sm"
+                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-xl transition-all"
                   >
-                    Annuler
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="flex items-center gap-2 px-6 py-3 bg-slate-950 hover:bg-primary-600 text-white font-bold rounded-2xl transition-all shadow-xl shadow-slate-950/10 active:scale-95 text-sm"
-                  >
-                    {submitting && <Loader2 size={16} className="animate-spin" />}
-                    Créer le compte
+                    <X size={20} />
                   </button>
                 </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+
+                <form onSubmit={handleCreate} className="space-y-4">
+                  {/* Username */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Adresse mail</label>
+                    <div className="flex items-center bg-slate-50 border-2 border-transparent focus-within:border-primary-500 rounded-2xl px-4 py-3 outline-none transition-all">
+                      <input
+                        type="text"
+                        placeholder="nom.prenom"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
+                        className="bg-transparent flex-1 outline-none text-sm font-semibold text-slate-700 w-full"
+                        required
+                      />
+                      <span className="text-sm font-bold text-slate-400 pl-2 border-l border-slate-200">@silacod.com</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 font-medium leading-normal px-2">
+                      Lettres minuscules, chiffres, points, tirets et underscores uniquement.
+                    </p>
+                  </div>
+
+                  {/* Password */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Mot de passe</label>
+                      <button
+                        type="button"
+                        onClick={() => generateRandomPassword(false)}
+                        className="text-xs text-primary-600 hover:text-primary-700 font-black flex items-center gap-1"
+                      >
+                        Générer
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+                        <Lock size={16} />
+                      </div>
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="Mot de passe fort"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full pl-10 pr-10 py-3.5 bg-slate-50 border-2 border-transparent focus:border-primary-500 rounded-2xl outline-none transition-all text-sm font-semibold text-slate-700"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600"
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 flex justify-end gap-2 border-t border-slate-50">
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateModal(false)}
+                      className="px-5 py-3 text-slate-500 hover:text-slate-700 font-bold rounded-2xl transition-all text-sm"
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="flex items-center gap-2 px-6 py-3 bg-slate-950 hover:bg-primary-600 text-white font-bold rounded-2xl transition-all shadow-xl shadow-slate-950/10 active:scale-95 text-sm"
+                    >
+                      {submitting && <Loader2 size={16} className="animate-spin" />}
+                      Créer le compte
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
       {/* CHANGE PASSWORD MODAL */}
-      <AnimatePresence>
-        {showChangePasswordModal && selectedEmail && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl p-8 border border-slate-100 shadow-2xl max-w-md w-full space-y-6"
-            >
-              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                <div>
-                  <h3 className="text-lg font-black text-slate-900">
-                    Modifier le mot de passe
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-1 font-semibold">{selectedEmail.email}</p>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowChangePasswordModal(false);
-                    setSelectedEmail(null);
-                  }}
-                  className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-xl transition-all"
-                >
-                  Fermer
-                </button>
-              </div>
-
-              <form onSubmit={handleChangePassword} className="space-y-4">
-                {/* New Password */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Nouveau mot de passe</label>
-                    <button
-                      type="button"
-                      onClick={() => generateRandomPassword(true)}
-                      className="text-xs text-primary-600 hover:text-primary-700 font-black flex items-center gap-1"
-                    >
-                      Générer
-                    </button>
+      {createPortal(
+        <AnimatePresence>
+          {showChangePasswordModal && selectedEmail && (
+            <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
+              <div 
+                className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm cursor-pointer"
+                onClick={() => {
+                  setShowChangePasswordModal(false);
+                  setSelectedEmail(null);
+                }}
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="relative z-10 bg-white rounded-3xl p-8 border border-slate-100 shadow-2xl max-w-md w-full space-y-6 cursor-default"
+                style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
+              >
+                <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900">
+                      Modifier le mot de passe
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1 font-semibold">{selectedEmail.email}</p>
                   </div>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-                      <Lock size={16} />
-                    </div>
-                    <input
-                      type={showNewPassword ? 'text' : 'password'}
-                      placeholder="Saisissez un mot de passe sécurisé"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      className="w-full pl-10 pr-10 py-3.5 bg-slate-50 border-2 border-transparent focus:border-primary-500 rounded-2xl outline-none transition-all text-sm font-semibold text-slate-700"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowNewPassword(!showNewPassword)}
-                      className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600"
-                    >
-                      {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="pt-4 flex justify-end gap-2 border-t border-slate-50">
                   <button
-                    type="button"
                     onClick={() => {
                       setShowChangePasswordModal(false);
                       setSelectedEmail(null);
                     }}
-                    className="px-5 py-3 text-slate-500 hover:text-slate-700 font-bold rounded-2xl transition-all text-sm"
+                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-xl transition-all"
                   >
-                    Annuler
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="flex items-center gap-2 px-6 py-3 bg-slate-950 hover:bg-primary-600 text-white font-bold rounded-2xl transition-all shadow-xl shadow-slate-950/10 active:scale-95 text-sm"
-                  >
-                    {submitting && <Loader2 size={16} className="animate-spin" />}
-                    Mettre à jour
+                    <X size={20} />
                   </button>
                 </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+
+                <form onSubmit={handleChangePassword} className="space-y-4">
+                  {/* New Password */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Nouveau mot de passe</label>
+                      <button
+                        type="button"
+                        onClick={() => generateRandomPassword(true)}
+                        className="text-xs text-primary-600 hover:text-primary-700 font-black flex items-center gap-1"
+                      >
+                        Générer
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+                        <Lock size={16} />
+                      </div>
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        placeholder="Saisissez un mot de passe sécurisé"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="w-full pl-10 pr-10 py-3.5 bg-slate-50 border-2 border-transparent focus:border-primary-500 rounded-2xl outline-none transition-all text-sm font-semibold text-slate-700"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600"
+                      >
+                        {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 flex justify-end gap-2 border-t border-slate-50">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowChangePasswordModal(false);
+                        setSelectedEmail(null);
+                      }}
+                      className="px-5 py-3 text-slate-500 hover:text-slate-700 font-bold rounded-2xl transition-all text-sm"
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="flex items-center gap-2 px-6 py-3 bg-slate-950 hover:bg-primary-600 text-white font-bold rounded-2xl transition-all shadow-xl shadow-slate-950/10 active:scale-95 text-sm"
+                    >
+                      {submitting && <Loader2 size={16} className="animate-spin" />}
+                      Mettre à jour
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   );
 }
