@@ -31,90 +31,50 @@ router.post(
       const clientId = (process.env.YOUCAN_CLIENT_ID || '').trim();
       const clientSecret = (process.env.YOUCAN_CLIENT_SECRET || '').trim();
       const origin = req.headers.origin || process.env.FRONTEND_URL || 'https://silacod.com';
+      const redirectUri = `${origin.replace(/\/$/, '')}/dashboard/youcan-callback`;
+      const tokenEndpoint = process.env.YOUCAN_TOKEN_URL || 'https://api.youcan.shop/oauth/token';
 
-      const possibleRedirectUris = Array.from(new Set([
-        `${origin.replace(/\/$/, '')}/dashboard/youcan-callback`,
-        `${origin.replace(/\/$/, '')}`,
-        `${origin.replace(/\/$/, '')}/`,
-        'https://silacod.com/dashboard/youcan-callback',
-        'https://silacod.com',
-        'https://silacod.com/'
-      ]));
+      console.log(`[YouCan Token Exchange] Exchanging code via ${tokenEndpoint} | redirect_uri: ${redirectUri}`);
 
-      const possibleEndpoints = Array.from(new Set([
-        process.env.YOUCAN_TOKEN_URL || 'https://seller-area.youcan.shop/oauth/token',
-        'https://api.youcan.shop/oauth/token',
-        'https://seller-area.youcan.shop/admin/oauth/token'
-      ]));
+      const bodyParams = new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'authorization_code',
+        redirect_uri: redirectUri,
+        code,
+      });
 
-      let responseData: any = null;
-      let lastError: any = null;
+      const response = await axios.post(tokenEndpoint, bodyParams, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
+        timeout: 15000,
+      });
 
-      // Try combination of endpoints, redirect_uris and auth header formats
-      outerLoop:
-      for (const endpoint of possibleEndpoints) {
-        for (const uri of possibleRedirectUris) {
-          for (const useBasicAuth of [false, true]) {
-            try {
-              const bodyParams = new URLSearchParams({
-                client_id: clientId,
-                client_secret: clientSecret,
-                grant_type: 'authorization_code',
-                redirect_uri: uri,
-                code,
-              });
+      const data = response.data;
 
-              const headers: Record<string, string> = {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                Accept: 'application/json',
-              };
-
-              if (useBasicAuth) {
-                const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-                headers['Authorization'] = `Basic ${basicAuth}`;
-              }
-
-              console.log(`[YouCan Token Exchange] Attempting: ${endpoint} | redirect_uri: ${uri} | basicAuth: ${useBasicAuth}`);
-
-              const res = await axios.post(endpoint, bodyParams, { headers, timeout: 10000 });
-              if (res.data && res.data.access_token) {
-                responseData = res.data;
-                console.log(`[YouCan Token Exchange] SUCCESS via ${endpoint} (${uri})`);
-                break outerLoop;
-              }
-            } catch (err: any) {
-              lastError = err;
-              console.log(`[YouCan Token Exchange] Failed (${endpoint} | ${uri}):`, err.response?.data || err.message);
-            }
-          }
-        }
-      }
-
-      if (!responseData || !responseData.access_token) {
-        const errorDetail = lastError?.response?.data || lastError?.message || 'Token exchange failed';
-        console.error('YouCan Token Exchange Error Details:', errorDetail);
+      if (!data || !data.access_token) {
         res.status(400).json({
           success: false,
-          message: typeof errorDetail === 'object' ? (errorDetail.error_description || errorDetail.message || errorDetail.error || 'Erreur lors de l\'échange de jeton YouCan') : String(errorDetail)
+          message: 'Échec de la récupération du jeton d\'accès YouCan.',
         });
         return;
       }
 
-      const data = responseData;
-
-      if (!data.access_token) {
-        throw new Error('Failed to retrieve access token: No token in response');
+      // Fetch store info (non-fatal if /me fails)
+      let storeDomain: string | null = null;
+      try {
+        const storeResponse = await axios.get(`${process.env.YOUCAN_API_URL || 'https://api.youcan.shop'}/me`, {
+          headers: {
+            Authorization: `Bearer ${data.access_token}`,
+            Accept: 'application/json',
+          },
+        });
+        storeDomain = storeResponse.data?.domain || storeResponse.data?.slug || null;
+      } catch (storeErr: any) {
+        console.warn('[YouCan OAuth] Non-fatal /me fetch error:', storeErr.message);
       }
-
-      // Fetch store info to get the domain
-      const storeResponse = await axios.get(`${process.env.YOUCAN_API_URL || 'https://api.youcan.shop'}/me`, {
-        headers: {
-          Authorization: `Bearer ${data.access_token}`,
-          Accept: 'application/json',
-        },
-      });
-
-      const storeDomain = storeResponse.data?.domain || storeResponse.data?.slug || null;
 
       // Save token and domain to DB
       await prisma.user.update({
@@ -128,24 +88,127 @@ router.post(
 
       res.json({
         success: true,
-        message: 'Successfully connected to YouCan',
+        message: 'Boutique YouCan connectée avec succès !',
       });
     } catch (error: any) {
       const errorData = error.response?.data;
-      const errorMessage = errorData?.message || errorData?.error || error.message;
+      const errorMessage = typeof errorData === 'object' 
+        ? (errorData?.error_description || errorData?.message || errorData?.error || error.message)
+        : String(errorData || error.message);
 
       console.error('YouCan OAuth Error Details:', {
         status: error.response?.status,
-        statusText: error.response?.statusText,
         data: errorData,
         message: error.message,
-        redirect_uri_used: `${(req.headers.origin || process.env.FRONTEND_URL || 'https://silacod.com').replace(/\/$/, '')}/dashboard/youcan-callback`
       });
 
+      res.status(400).json({
+        success: false,
+        message: 'Échec de l\'authentification YouCan',
+        error: errorMessage,
+      });
+    }
+  })
+);
+
+/**
+ * GET /api/v1/youcan/orders
+ * Fetch live orders with customer information from YouCan API
+ */
+router.get(
+  '/orders',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const vendorId = req.user?.id;
+    if (!vendorId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const vendor = await prisma.user.findUnique({
+      where: { id: vendorId },
+      select: { youcanAccessToken: true, youcanStoreDomain: true },
+    });
+
+    if (!vendor || !vendor.youcanAccessToken) {
+      res.status(400).json({ success: false, message: 'YouCan store is not connected' });
+      return;
+    }
+
+    try {
+      const response = await axios.get(`${process.env.YOUCAN_API_URL || 'https://api.youcan.shop'}/orders`, {
+        params: {
+          include: 'customer',
+          ...req.query
+        },
+        headers: {
+          Authorization: `Bearer ${vendor.youcanAccessToken}`,
+          Accept: 'application/json',
+        },
+        timeout: 15000,
+      });
+
+      res.json({
+        success: true,
+        data: response.data?.data || response.data || [],
+        meta: response.data?.meta || null,
+      });
+    } catch (error: any) {
+      console.error('YouCan Orders API Error:', error.response?.data || error.message);
       res.status(error.response?.status || 500).json({
         success: false,
-        message: 'Failed to authenticate with YouCan',
-        error: errorMessage,
+        message: 'Failed to fetch orders from YouCan API',
+        error: error.response?.data || error.message,
+      });
+    }
+  })
+);
+
+/**
+ * GET /api/v1/youcan/customers
+ * Fetch customers directly from YouCan API
+ */
+router.get(
+  '/customers',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const vendorId = req.user?.id;
+    if (!vendorId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const vendor = await prisma.user.findUnique({
+      where: { id: vendorId },
+      select: { youcanAccessToken: true },
+    });
+
+    if (!vendor || !vendor.youcanAccessToken) {
+      res.status(400).json({ success: false, message: 'YouCan store is not connected' });
+      return;
+    }
+
+    try {
+      const response = await axios.get(`${process.env.YOUCAN_API_URL || 'https://api.youcan.shop'}/customers`, {
+        params: req.query,
+        headers: {
+          Authorization: `Bearer ${vendor.youcanAccessToken}`,
+          Accept: 'application/json',
+        },
+        timeout: 15000,
+      });
+
+      res.json({
+        success: true,
+        data: response.data?.data || response.data || [],
+        meta: response.data?.meta || null,
+      });
+    } catch (error: any) {
+      console.error('YouCan Customers API Error:', error.response?.data || error.message);
+      res.status(error.response?.status || 500).json({
+        success: false,
+        message: 'Failed to fetch customers from YouCan API',
+        error: error.response?.data || error.message,
       });
     }
   })

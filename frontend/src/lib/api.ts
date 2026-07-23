@@ -732,6 +732,8 @@ export const youcanApi = {
   syncNow: () => api.post('/youcan/sync'),
   toggleSync: (active: boolean) => api.post('/youcan/toggle-sync', { active }),
   exchangeToken: (code: string) => api.post('/youcan/token', { code }),
+  getOrders: (params?: any) => api.get('/youcan/orders', { params }),
+  getCustomers: (params?: any) => api.get('/youcan/customers', { params }),
 };
 
 
