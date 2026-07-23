@@ -869,6 +869,24 @@ export default function IntegrationsPage() {
                 </p>
               </div>
 
+              <div className="space-y-1.5">
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider">
+                  {isRtl ? 'رمز الوصول (Admin Access Token - اختيارى)' : 'Admin API Access Token (shpat_...) (Optionnel)'}
+                </label>
+                <div className="flex items-center bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 focus-within:border-emerald-600 transition-all">
+                  <input
+                    type="password"
+                    placeholder="shpat_1234567890abcdef..."
+                    value={shopifyDraft.accessToken}
+                    onChange={(e) => setShopifyDraft(prev => ({ ...prev, accessToken: e.target.value }))}
+                    className="w-full bg-transparent text-xs font-mono font-bold text-slate-800 outline-none"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 font-medium px-1">
+                  {isRtl ? 'أدخل Token الخاص بتطبيقك الخاص أو اتركه فارغاً للربط المباشر' : 'Entrez votre token si vous utilisez une App Privée, ou laissez vide pour la connexion OAuth.'}
+                </p>
+              </div>
+
               {/* Status and Auto Sync */}
               <div className="p-4 bg-slate-50 rounded-2xl space-y-3 border border-slate-100">
                 <div className="flex items-center justify-between">
