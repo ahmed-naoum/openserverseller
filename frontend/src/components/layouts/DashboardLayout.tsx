@@ -17,6 +17,7 @@ import {
   Tag, 
   Users, 
   ShoppingCart, 
+  ShoppingBag,
   CreditCard, 
   DollarSign, 
   Clock, 
@@ -75,6 +76,7 @@ const navigation = {
       children: [
         { name: 'nav_youcan_connect', href: '/dashboard/integrations', icon: Link2 },
         { name: 'nav_youcan_leads', href: '/dashboard/youcan-leads', icon: Globe },
+        { name: 'nav_shopify_leads', href: '/dashboard/shopify-leads', icon: ShoppingBag },
       ]
     },
     { name: 'nav_inventory', href: '/dashboard/inventory', icon: Package },
