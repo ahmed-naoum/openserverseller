@@ -188,9 +188,13 @@ router.get(
   '/',
   optionalAuth,
   asyncHandler(async (req: Request, res: Response) => {
-    const { page = 1, limit = 20, category, search, status, myProducts, visibility } = req.query;
+    const { page = 1, limit = 20, category, search, status, myProducts, visibility, showInHomepage } = req.query;
 
     const where: any = { isActive: true };
+
+    if (showInHomepage === 'true') {
+      where.showInHomepage = true;
+    }
 
     // Filter by visibility: REGULAR, AFFILIATE, or both
     const userRole = req.user?.roleName;
@@ -277,6 +281,7 @@ router.get(
           ownerMode: (p as any).claims?.find((c: any) => c.userId === p.ownerId && c.userMode === 'SELLER') ? 'SELLER' : 'AFFILIATE',
           categories: (p as any).categories, // Bypass strict types if necessary since include was used
           primaryImage: (p as any).images?.[0]?.imageUrl,
+          showInHomepage: p.showInHomepage,
           createdAt: p.createdAt,
         })),
         pagination: {

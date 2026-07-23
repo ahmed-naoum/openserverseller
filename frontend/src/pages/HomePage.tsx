@@ -6,7 +6,7 @@ import {
   Package, Star, Users, Banknote,
   Crown, Zap, Shield, Globe, ChevronDown, Play, Menu, X,
   Instagram, Youtube, BarChart3, Wallet, Gift, Award, Heart,
-  MousePointerClick, Lock, Phone, Box, Check, RefreshCw, CheckCircle2,
+  MousePointerClick, Phone, Box, Check, RefreshCw, CheckCircle2,
   ChevronLeft, ChevronRight, MessageCircle, HelpCircle, LogIn
 } from 'lucide-react';
 import LiveTicker from '../components/home/LiveTicker';
@@ -844,8 +844,8 @@ export default function HomePage() {
                       </div>
 
                       <div className="py-4 border-t border-slate-150/60 flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('wholesale_price')}</span>
-                        <span className="font-mono text-slate-900 font-black text-2xl">{prod.baseCostMad} Dh</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('retail_price')}</span>
+                        <span className="font-mono text-slate-900 font-black text-2xl">{prod.retailPriceMad} Dh</span>
                       </div>
                     </div>
 
@@ -857,31 +857,6 @@ export default function HomePage() {
               })
             )}
           </div>
-          </div>
-
-          {/* Interactive branding engine preview */}
-          <div className="bg-gradient-to-br from-slate-900 via-primary-950 to-slate-950 border border-slate-800 rounded-[3rem] p-8 sm:p-12 max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8 shadow-2xl relative overflow-hidden text-white mt-12">
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-primary-500/10 rounded-full blur-[90px] pointer-events-none" />
-            
-            <div className="text-right space-y-3 relative z-10">
-              <div className="flex items-center justify-start gap-2">
-                <span className="px-3 py-1 bg-primary-500/20 border border-primary-500/30 rounded-lg text-[9px] font-black text-primary-400 uppercase tracking-widest">{t('brand_badge')}</span>
-                <span className="px-3 py-1 bg-amber-500/20 border border-amber-500/30 rounded-lg text-[9px] font-black text-amber-400 uppercase tracking-widest animate-pulse">{t('coming_soon')}</span>
-              </div>
-              <h4 className="text-2xl font-black">{t('brand_preview_title')}</h4>
-              <p className="text-slate-400 text-xs sm:text-sm leading-relaxed max-w-lg">
-                {t('brand_preview_desc')}
-              </p>
-            </div>
-
-            <div className="flex-shrink-0 flex items-center gap-4 relative z-10 w-full sm:w-auto">
-              <div
-                className="w-full sm:w-auto text-center px-8 py-4 bg-slate-800/80 border border-slate-700/50 text-slate-300 rounded-xl text-xs font-black uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 cursor-not-allowed select-none"
-              >
-                <Lock className="w-4 h-4 text-slate-400" />
-                <span>{t('coming_soon')}</span>
-              </div>
-            </div>
           </div>
 
 

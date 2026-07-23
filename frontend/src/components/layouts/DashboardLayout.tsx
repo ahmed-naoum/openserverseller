@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -1200,93 +1201,104 @@ export default function DashboardLayout() {
       </aside>
 
       {/* Search Modal / Command Palette */}
-      {searchOpen && (
-        <>
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60]" onClick={() => { setSearchOpen(false); setSearchQuery(''); }} />
-          <div className="fixed top-[20%] left-1/2 -translate-x-1/2 w-full max-w-lg z-[70] px-4">
-            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
-              <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
-                <Search size={20} className="text-slate-400 flex-shrink-0" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="Rechercher une page..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="flex-1 bg-transparent outline-none text-sm font-medium text-slate-800 placeholder-slate-400"
-                  autoFocus
-                />
-                <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 text-[10px] font-bold text-slate-400 border border-slate-200">
+      {searchOpen && createPortal(
+        <div 
+          className="fixed inset-0 bg-slate-900/65 backdrop-blur-md z-[999999] flex items-start justify-center pt-20 sm:pt-28 px-4 cursor-pointer animate-in fade-in duration-200"
+          onClick={() => { setSearchOpen(false); setSearchQuery(''); }}
+        >
+          <div 
+            className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden cursor-default animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+              <Search size={20} className="text-primary-500 flex-shrink-0" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                placeholder={t('search_placeholder', 'dashboard', 'Rechercher une page...')}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1 bg-transparent outline-none text-sm font-semibold text-slate-800 placeholder-slate-400"
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => { setSearchOpen(false); setSearchQuery(''); }}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/50 transition-colors"
+              >
+                <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white text-[10px] font-bold text-slate-400 border border-slate-200 shadow-sm">
                   ESC
                 </kbd>
-              </div>
-              <div className="max-h-72 overflow-y-auto">
-                {searchQuery ? (
-                  filteredNavItems.length > 0 ? (
-                    filteredNavItems.map((item) => {
-                      const Icon = item.icon;
-                      return (
-                        <button
-                          key={item.href}
-                          onClick={() => item.href && handleSearchNav(item.href)}
-                          className="w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-slate-50 transition-colors group"
-                        >
-                          <div className="p-2 rounded-xl bg-slate-100 group-hover:bg-primary-50 group-hover:text-primary-600 text-slate-400 transition-colors">
-                            <Icon size={16} />
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-slate-700">{item.name}</p>
-                            <p className="text-[11px] text-slate-400">{item.href}</p>
-                          </div>
-                          <ChevronRight size={14} className="ml-auto text-slate-300" />
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <div className="px-5 py-8 text-center">
-                      <Search size={32} className="mx-auto text-slate-200 mb-3" />
-                      <p className="text-sm text-slate-400 font-medium">Aucun résultat pour "{searchQuery}"</p>
-                    </div>
-                  )
+              </button>
+            </div>
+            <div className="max-h-72 overflow-y-auto divide-y divide-slate-50">
+              {searchQuery ? (
+                filteredNavItems.length > 0 ? (
+                  filteredNavItems.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.href}
+                        onClick={() => item.href && handleSearchNav(item.href)}
+                        className="w-full flex items-center gap-3 px-5 py-3.5 text-left hover:bg-slate-50 transition-colors group"
+                      >
+                        <div className="p-2 rounded-xl bg-slate-100 group-hover:bg-primary-50 group-hover:text-primary-600 text-slate-400 transition-colors">
+                          <Icon size={16} />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-slate-800">{item.name}</p>
+                          <p className="text-[11px] text-slate-400 font-mono">{item.href}</p>
+                        </div>
+                        <ChevronRight size={14} className="ml-auto text-slate-300 group-hover:text-primary-500 group-hover:translate-x-0.5 transition-all" />
+                      </button>
+                    );
+                  })
                 ) : (
-                  <div className="px-5 py-6">
-                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">Navigation rapide</p>
-                    {(() => {
-                      switch (user?.role) {
-                        case 'VENDOR':
-                          return navigation.vendor;
-                        case 'GROSSELLER':
-                          return navigation.grosseller;
-                        case 'SUPER_ADMIN':
-                        case 'FINANCE_ADMIN':
-                          return navigation.admin;
-                        case 'SYSTEM_SUPPORT':
-                          return navigation.system_support;
-                        case 'CALL_CENTER_AGENT':
-                          return navigation.agent;
-                        default:
-                          return navItems;
-                      }
-                    })().slice(0, 5).map((item) => {
-                      const Icon = item.icon;
-                      return (
-                        <button
-                          key={item.href}
-                          onClick={() => item.href && handleSearchNav(item.href)}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-slate-50 rounded-xl transition-colors group"
-                        >
-                          <Icon size={16} className="text-slate-400 group-hover:text-primary-500 transition-colors" />
-                          <span className="text-sm font-medium text-slate-600">{item.name}</span>
-                        </button>
-                      );
-                    })}
+                  <div className="px-5 py-8 text-center">
+                    <Search size={32} className="mx-auto text-slate-200 mb-3" />
+                    <p className="text-sm text-slate-400 font-medium">Aucun résultat pour "{searchQuery}"</p>
                   </div>
-                )}
-              </div>
+                )
+              ) : (
+                <div className="px-5 py-6">
+                  <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider mb-3">Navigation rapide</p>
+                  {(() => {
+                    switch (user?.role) {
+                      case 'VENDOR':
+                        return navigation.vendor;
+                      case 'GROSSELLER':
+                        return navigation.grosseller;
+                      case 'SUPER_ADMIN':
+                      case 'FINANCE_ADMIN':
+                        return navigation.admin;
+                      case 'SYSTEM_SUPPORT':
+                        return navigation.system_support;
+                      case 'CALL_CENTER_AGENT':
+                        return navigation.agent;
+                      default:
+                        return navItems;
+                    }
+                  })().slice(0, 5).map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.href}
+                        onClick={() => item.href && handleSearchNav(item.href)}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-slate-50 rounded-xl transition-colors group"
+                      >
+                        <Icon size={16} className="text-slate-400 group-hover:text-primary-500 transition-colors" />
+                        <span className="text-sm font-semibold text-slate-700">{item.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
-        </>
+        </div>,
+        document.body
       )}
+
 
       {/* Main content */}
       <div className={`min-h-screen transition-all duration-300 ease-in-out ${
@@ -1295,7 +1307,7 @@ export default function DashboardLayout() {
           : (sidebarCollapsed ? 'lg:pl-20 pr-0' : 'lg:pl-56 pr-0')
       }`}>
         {/* Header */}
-        <header className="sticky top-0 h-14 bg-[#F8FAFC]/80 backdrop-blur-xl border-b border-slate-200/50 z-20">
+        <header className="sticky top-0 h-14 bg-[#F8FAFC]/80 backdrop-blur-xl border-b border-slate-200/50 z-[500]">
           <div className="flex items-center justify-between h-full px-3 sm:px-4 lg:px-6">
             {/* Left section */}
             <div className="flex items-center gap-3">
@@ -1394,8 +1406,8 @@ export default function DashboardLayout() {
 
                 {showNotificationsMenu && (
                   <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowNotificationsMenu(false)}></div>
-                    <div className={`absolute ${language === 'ar' ? 'left-0 origin-top-left' : 'right-0 origin-top-right'} mt-3 w-80 sm:w-[420px] bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300`}>
+                    <div className="fixed inset-0 z-[990]" onClick={() => setShowNotificationsMenu(false)}></div>
+                    <div className={`absolute ${language === 'ar' ? 'left-0 origin-top-left' : 'right-0 origin-top-right'} mt-3 w-80 sm:w-[420px] bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-[1000] overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300`}>
                       {/* Tray Header */}
                       <div className="px-5 py-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between">
                         <div>
@@ -1550,8 +1562,8 @@ export default function DashboardLayout() {
 
                 {showProfileMenu && (
                   <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowProfileMenu(false)}></div>
-                    <div className={`absolute ${language === 'ar' ? 'left-0 origin-top-left' : 'right-0 origin-top-right'} mt-3 w-64 bg-white rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300`}>
+                    <div className="fixed inset-0 z-[990]" onClick={() => setShowProfileMenu(false)}></div>
+                    <div className={`absolute ${language === 'ar' ? 'left-0 origin-top-left' : 'right-0 origin-top-right'} mt-3 w-64 bg-white rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-[1000] overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300`}>
                       <div className="px-6 py-6 border-b border-slate-50 bg-slate-50/50 flex items-center">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-black text-slate-900 truncate">{user?.fullName}</p>
@@ -1606,14 +1618,16 @@ export default function DashboardLayout() {
         </header>
 
         {/* Page content */}
-        <div className="flex-1 relative px-3 sm:px-4 lg:px-6 py-3 sm:py-4 min-h-[calc(100vh-56px)]">
+        <div className="flex-1 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 min-h-[calc(100vh-56px)]">
           {/* Background Mesh for content area */}
-          <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40">
-            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary-400/5 rounded-full blur-[100px]" />
-            <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-accent-400/5 rounded-full blur-[120px]" />
+          <div className="relative pointer-events-none">
+            <div className="absolute inset-0 overflow-hidden opacity-40">
+              <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary-400/5 rounded-full blur-[100px]" />
+              <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-accent-400/5 rounded-full blur-[120px]" />
+            </div>
           </div>
 
-          <div className="relative z-10 max-w-[1600px] mx-auto">
+          <div className="relative max-w-[1600px] mx-auto">
             <AnnouncementBanner position="TOP" />
             <ProfileProgressBanner />
             <Outlet />

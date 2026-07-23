@@ -10,7 +10,8 @@ import {
   Construction,
   Save,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  Flame
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -18,6 +19,8 @@ export default function PlatformSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [refreshingCache, setRefreshingCache] = useState(false);
+  const [resettingLevels, setResettingLevels] = useState(false);
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [settings, setSettings] = useState({
     enabled: false,
     secret: 'silacod-admin',
@@ -37,6 +40,19 @@ export default function PlatformSettings() {
       toast.error('Erreur lors de la réactualisation générale');
     } finally {
       setRefreshingCache(false);
+    }
+  };
+
+  const handleResetLevels = async () => {
+    try {
+      setResettingLevels(true);
+      const res = await settingsApi.resetRankLevels();
+      toast.success(res.data?.message || 'Niveaux de rang réinitialisés avec succès !');
+      setIsResetModalOpen(false);
+    } catch (error) {
+      toast.error('Erreur lors de la réinitialisation des niveaux');
+    } finally {
+      setResettingLevels(false);
     }
   };
 
@@ -309,8 +325,99 @@ export default function PlatformSettings() {
               Vider le cache général
             </button>
           </div>
+
+          {/* Reset Rank Levels Card */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xl shadow-slate-200/40 relative overflow-hidden">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2.5 bg-rose-50 text-rose-600 rounded-xl">
+                <Flame size={20} className={resettingLevels ? 'animate-pulse text-rose-500' : ''} />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-900 leading-none">Réinitialiser les Rangs</h3>
+                <p className="text-[10px] text-slate-400 mt-1 uppercase font-bold tracking-widest leading-none">Niveaux de progression</p>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-500 leading-relaxed mb-4">
+              Réinitialisez instantanément la progression des grades (Bronze, Argent, Or, Platine) de tous les utilisateurs en remettant leurs gains cumulés à 0.
+            </p>
+
+            <button
+              onClick={() => setIsResetModalOpen(true)}
+              disabled={resettingLevels}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl transition-all shadow-md active:scale-[0.98] disabled:opacity-50 text-xs"
+            >
+              {resettingLevels ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Flame size={14} />
+              )}
+              Réinitialiser tous les grades
+            </button>
+          </div>
         </div>
 
+      </div>
+
+      <ConfirmResetModal 
+        isOpen={isResetModalOpen} 
+        onClose={() => setIsResetModalOpen(false)} 
+        onConfirm={handleResetLevels} 
+        loading={resettingLevels} 
+      />
+    </div>
+  );
+}
+
+function ConfirmResetModal({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  loading 
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  onConfirm: () => void; 
+  loading: boolean; 
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/45 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+      <div className="bg-white rounded-[2.5rem] w-full max-w-md overflow-hidden flex flex-col shadow-2xl border border-slate-100/50 p-8 text-center relative">
+        <div className="mx-auto w-16 h-16 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center mb-6">
+          <AlertCircle size={32} className="animate-bounce" />
+        </div>
+
+        <h2 className="text-xl font-black text-slate-800 tracking-tight mb-3">
+          Réinitialiser tous les Rangs ?
+        </h2>
+
+        <p className="text-sm text-slate-500 font-medium leading-relaxed mb-8 px-2">
+          Êtes-vous sûr de vouloir réinitialiser les niveaux de rang (total des gains cumulés) pour <strong className="text-slate-800">TOUS</strong> les utilisateurs ? Cette action est définitive et irréversible.
+        </p>
+
+        <div className="flex gap-4">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl transition-all disabled:opacity-50"
+          >
+            Annuler
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className="flex-1 py-4 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-rose-600/20 flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {loading ? (
+              <Loader2 size={18} className="animate-spin" />
+            ) : (
+              <Flame size={18} />
+            )}
+            Confirmer
+          </button>
+        </div>
       </div>
     </div>
   );

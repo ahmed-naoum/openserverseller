@@ -38,6 +38,24 @@ router.post(
   })
 );
 
+router.post(
+  '/reset-rank-levels',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (_req: Request, res: Response) => {
+    const result = await prisma.wallet.updateMany({
+      data: {
+        totalEarnedMad: 0,
+      },
+    });
+
+    res.json({
+      status: 'success',
+      message: `Niveaux de rang réinitialisés avec succès pour tous les utilisateurs. (${result.count} portefeuilles mis à jour)`,
+    });
+  })
+);
+
 router.get(
   '/dashboard',
   authenticate,
@@ -639,13 +657,12 @@ router.get(
   })
 );
 
-// Set assignments for a helper (replaces all existing)
 router.post(
   '/helper-user-assignments',
   authenticate,
   authorize('SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { helperId, targetUserIds, autoAssign } = req.body;
+    const { helperId, targetUserIds, autoAssign, autoAssignVendors, autoAssignInfluencers } = req.body;
 
     if (!helperId || !Array.isArray(targetUserIds)) {
       res.status(400).json({ status: 'error', message: 'helperId and targetUserIds[] are required' });
@@ -663,24 +680,42 @@ router.post(
 
     let finalTargetUserIds = [...targetUserIds];
 
-    // If autoAssign is requested, assign all non-admin users
-    if (autoAssign) {
-      const allUsers = await prisma.user.findMany({
-        where: {
-          role: { name: { notIn: ['SUPER_ADMIN', 'FINANCE_ADMIN'] } },
-          id: { not: Number(helperId) },
-        },
-        select: { id: true }
-      });
-      finalTargetUserIds = allUsers.map(u => u.id);
+    // If autoAssign, autoAssignVendors, or autoAssignInfluencers is true, fetch the corresponding users
+    if (autoAssign || autoAssignVendors || autoAssignInfluencers) {
+      const orConditions: any[] = [];
+      if (autoAssign) {
+        orConditions.push({ role: { name: { notIn: ['SUPER_ADMIN', 'FINANCE_ADMIN'] } } });
+      } else {
+        if (autoAssignVendors) {
+          orConditions.push({ role: { name: 'VENDOR' } });
+        }
+        if (autoAssignInfluencers) {
+          orConditions.push({ role: { name: 'INFLUENCER' } });
+        }
+      }
+
+      if (orConditions.length > 0) {
+        const matchingUsers = await prisma.user.findMany({
+          where: {
+            OR: orConditions,
+            id: { not: Number(helperId) },
+          },
+          select: { id: true }
+        });
+        finalTargetUserIds = matchingUsers.map(u => u.id);
+      }
     }
 
-    // Transaction: update autoAssign flag, delete old assignments, create new ones
+    // Transaction: update autoAssign flags, delete old assignments, create new ones
     await (prisma as any).$transaction(async (tx: any) => {
-      // Update autoAssignHelperUsers flag on user
+      // Update autoAssignHelper flags on user
       await tx.user.update({
         where: { id: Number(helperId) },
-        data: { autoAssignHelperUsers: !!autoAssign }
+        data: { 
+          autoAssignHelperUsers: !!autoAssign,
+          autoAssignHelperVendors: !!autoAssignVendors,
+          autoAssignHelperInfluencers: !!autoAssignInfluencers,
+        }
       });
 
       await tx.helperUserAssignment.deleteMany({
@@ -699,9 +734,9 @@ router.post(
 
     res.json({
       status: 'success',
-      message: autoAssign
-        ? `Helper marked for auto-assignment and linked to all ${finalTargetUserIds.length} users`
-        : `Assigned ${finalTargetUserIds.length} user(s) to helper`,
+      message: (autoAssign || autoAssignVendors || autoAssignInfluencers)
+        ? `Helper configuré pour l'auto-assignation et lié à ${finalTargetUserIds.length} utilisateur(s)`
+        : `Assignation de ${finalTargetUserIds.length} utilisateur(s) au helper effectuée avec succès`,
     });
   })
 );

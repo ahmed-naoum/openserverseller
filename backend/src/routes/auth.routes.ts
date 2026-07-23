@@ -282,11 +282,14 @@ router.post(
       throw error;
     }
 
-    // Auto-assign new user to helpers with autoAssignHelperUsers enabled
+    // Auto-assign new user to helpers with autoAssignHelperUsers or autoAssignHelperVendors enabled
     const globalHelpers = await prisma.user.findMany({
       where: {
         role: { name: 'HELPER' },
-        autoAssignHelperUsers: true
+        OR: [
+          { autoAssignHelperUsers: true },
+          { autoAssignHelperVendors: true }
+        ]
       }
     });
 
@@ -553,11 +556,14 @@ router.post(
       });
     }
 
-    // Auto-assign new user to helpers with autoAssignHelperUsers enabled
+    // Auto-assign new user to helpers with autoAssignHelperUsers or autoAssignHelperInfluencers enabled
     const globalHelpers = await prisma.user.findMany({
       where: {
         role: { name: 'HELPER' },
-        autoAssignHelperUsers: true
+        OR: [
+          { autoAssignHelperUsers: true },
+          { autoAssignHelperInfluencers: true }
+        ]
       }
     });
 
@@ -1203,11 +1209,17 @@ router.post(
       include: { profile: true, role: true },
     });
 
-    // Auto-assign new user to helpers with autoAssignHelperUsers enabled
+    // Auto-assign new user to helpers with autoAssignHelperUsers/vendors/influencers enabled
+    const isVendor = user.role.name === 'VENDOR';
+    const isInfluencer = user.role.name === 'INFLUENCER';
     const globalHelpers = await prisma.user.findMany({
       where: {
         role: { name: 'HELPER' },
-        autoAssignHelperUsers: true
+        OR: [
+          { autoAssignHelperUsers: true },
+          ...(isVendor ? [{ autoAssignHelperVendors: true }] : []),
+          ...(isInfluencer ? [{ autoAssignHelperInfluencers: true }] : []),
+        ]
       }
     });
 

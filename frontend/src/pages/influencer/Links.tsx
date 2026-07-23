@@ -1,4 +1,5 @@
 import { useState, useEffect, Fragment } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { influencerApi, inventoryApi } from '../../lib/api';
 import { ReferralLink } from '../../types';
@@ -404,14 +405,14 @@ export default function InfluencerLinks() {
   }
 
   return (
-    <div className="max-w-[1600px] mx-auto space-y-6">
+    <div className="max-w-[1600px] mx-auto space-y-4 sm:space-y-6 px-1 sm:px-0">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight">{t('title', 'links')}</h1>
-          <p className="text-slate-500 font-medium mt-1">{t('subtitle', 'links')}</p>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">{t('title', 'links')}</h1>
+          <p className="text-slate-500 font-medium text-xs sm:text-sm mt-1">{t('subtitle', 'links')}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3">
           <button
             onClick={async () => {
               setLoading(true);
@@ -425,84 +426,85 @@ export default function InfluencerLinks() {
               }
             }}
             disabled={loading || isStatsLoading}
-            className="flex items-center justify-center p-3.5 bg-white border border-slate-100 text-slate-600 rounded-2xl hover:bg-slate-50 transition-all shadow-sm disabled:opacity-50"
+            className="flex items-center justify-center p-3 sm:p-3.5 bg-white border border-slate-100 text-slate-600 rounded-2xl hover:bg-slate-50 transition-all shadow-sm disabled:opacity-50 shrink-0"
             title={t('tooltip_refresh', 'links')}
           >
-            <RefreshCw className={`w-5 h-5 ${(loading || isStatsLoading) ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${(loading || isStatsLoading) ? 'animate-spin' : ''}`} />
           </button>
           <button
             onClick={() => {
               setShowCreateModal(true);
               fetchApprovedClaims();
             }}
-            className="flex items-center gap-2 px-8 py-3.5 bg-slate-900 text-white rounded-2xl text-sm font-black hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 sm:px-8 py-3 sm:py-3.5 bg-slate-900 text-white rounded-2xl text-xs sm:text-sm font-black hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
           >
             <Plus className="w-4 h-4" /> {t('btn_create_link', 'links')}
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 xl:grid-cols-7 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('stat_total_views', 'links')}</p>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-3 sm:gap-4">
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-100 shadow-sm">
+          <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('stat_total_views', 'links')}</p>
           <div className="flex items-center justify-between">
-            <h3 className="text-2xl font-black text-slate-900">{totalRawClicks.toLocaleString()}</h3>
-            <div className="p-2 bg-violet-50 text-violet-600 rounded-xl"><Eye className="w-4 h-4" /></div>
+            <h3 className="text-xl sm:text-2xl font-black text-slate-900">{totalRawClicks.toLocaleString()}</h3>
+            <div className="p-1.5 sm:p-2 bg-violet-50 text-violet-600 rounded-xl"><Eye className="w-4 h-4" /></div>
           </div>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('stat_unique_visitors', 'links')}</p>
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-100 shadow-sm">
+          <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('stat_unique_visitors', 'links')}</p>
           <div className="flex items-center justify-between">
-            <h3 className="text-2xl font-black text-slate-900">{totalClicks.toLocaleString()}</h3>
-            <div className="p-2 bg-blue-50 text-blue-600 rounded-xl"><MousePointerClick className="w-4 h-4" /></div>
+            <h3 className="text-xl sm:text-2xl font-black text-slate-900">{totalClicks.toLocaleString()}</h3>
+            <div className="p-1.5 sm:p-2 bg-blue-50 text-blue-600 rounded-xl"><MousePointerClick className="w-4 h-4" /></div>
           </div>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('stat_total_sales', 'links')}</p>
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-100 shadow-sm">
+          <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('stat_total_sales', 'links')}</p>
           <div className="flex items-center justify-between">
-            <h3 className="text-2xl font-black text-slate-900">{totalConversions.toLocaleString()}</h3>
-            <div className="p-2 bg-purple-50 text-purple-600 rounded-xl"><Zap className="w-4 h-4" /></div>
+            <h3 className="text-xl sm:text-2xl font-black text-slate-900">{totalConversions.toLocaleString()}</h3>
+            <div className="p-1.5 sm:p-2 bg-purple-50 text-purple-600 rounded-xl"><Zap className="w-4 h-4" /></div>
           </div>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('stat_whatsapp_clicks', 'links')}</p>
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-100 shadow-sm">
+          <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('stat_whatsapp_clicks', 'links')}</p>
           <div className="flex items-center justify-between">
-            <h3 className="text-2xl font-black text-slate-900">{totalWhatsappClicks.toLocaleString()}</h3>
-            <div className="p-2 bg-green-50 text-green-600 rounded-xl"><MessageCircle className="w-4 h-4" /></div>
+            <h3 className="text-xl sm:text-2xl font-black text-slate-900">{totalWhatsappClicks.toLocaleString()}</h3>
+            <div className="p-1.5 sm:p-2 bg-green-50 text-green-600 rounded-xl"><MessageCircle className="w-4 h-4" /></div>
           </div>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('stat_conv_rate', 'links')}</p>
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-100 shadow-sm">
+          <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('stat_conv_rate', 'links')}</p>
           <div className="flex items-center justify-between">
-            <h3 className="text-2xl font-black text-indigo-600">{globalCTR.toFixed(1)}%</h3>
-            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><Target className="w-4 h-4" /></div>
+            <h3 className="text-xl sm:text-2xl font-black text-indigo-600">{globalCTR.toFixed(1)}%</h3>
+            <div className="p-1.5 sm:p-2 bg-indigo-50 text-indigo-600 rounded-xl"><Target className="w-4 h-4" /></div>
           </div>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('stat_active_links', 'links')}</p>
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-100 shadow-sm">
+          <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('stat_active_links', 'links')}</p>
           <div className="flex items-center justify-between">
-            <h3 className="text-2xl font-black text-emerald-600">{activeLinksCount}</h3>
-            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl"><Power className="w-4 h-4" /></div>
+            <h3 className="text-xl sm:text-2xl font-black text-emerald-600">{activeLinksCount}</h3>
+            <div className="p-1.5 sm:p-2 bg-emerald-50 text-emerald-600 rounded-xl"><Power className="w-4 h-4" /></div>
           </div>
         </div>
-        <div className="bg-slate-900 p-4 rounded-xl shadow-md">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('stat_total_links', 'links')}</p>
+        <div className="col-span-2 sm:col-span-1 bg-slate-900 p-3.5 sm:p-4 rounded-2xl shadow-md">
+          <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('stat_total_links', 'links')}</p>
           <div className="flex items-center justify-between">
-            <h3 className="text-2xl font-black text-white">{totalLinksCount}</h3>
-            <div className="p-2 bg-white/10 text-white rounded-xl"><LinkIcon className="w-4 h-4" /></div>
+            <h3 className="text-xl sm:text-2xl font-black text-white">{totalLinksCount}</h3>
+            <div className="p-1.5 sm:p-2 bg-white/10 text-white rounded-xl"><LinkIcon className="w-4 h-4" /></div>
           </div>
         </div>
       </div>
 
       {/* Performance Chart Section */}
-      <div id="performance-chart" className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
+      <div id="performance-chart" className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm">
+        <div className="flex flex-col gap-4 mb-6">
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                <Activity className="w-5 h-5 text-influencer-500" /> {t('chart_title', 'links')} ({dateRange === 'custom' ? t('range_custom', 'links') : dateRange === 'all' ? t('range_all', 'links') : `${dateRange}j`})
+              <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-influencer-500 shrink-0" /> {t('chart_title', 'links')} ({dateRange === 'custom' ? t('range_custom', 'links') : dateRange === 'all' ? t('range_all', 'links') : `${dateRange}j`})
               </h3>
-              <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">
+              <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase mt-1">
                 {selectedLinkIdForChart 
                   ? `${t('chart_single_prefix', 'links')}: ${links.find(l => l.id === selectedLinkIdForChart)?.product?.nameFr}` 
                   : t('chart_global_desc', 'links')}
@@ -511,18 +513,19 @@ export default function InfluencerLinks() {
             {selectedLinkIdForChart && (
               <button 
                 onClick={() => setSelectedLinkIdForChart(null)}
-                className="px-3 py-1 bg-red-50 text-red-500 text-[10px] font-black rounded-lg border border-red-100 hover:bg-red-100 transition-all flex items-center gap-2"
+                className="px-2.5 py-1 bg-red-50 text-red-500 text-[9px] sm:text-[10px] font-black rounded-lg border border-red-100 hover:bg-red-100 transition-all flex items-center gap-1.5 shrink-0"
               >
                 <AlertCircle size={12} /> {t('btn_clear_filter', 'links')}
               </button>
             )}
           </div>
-          <div className="flex flex-col lg:flex-row lg:items-center gap-6">
-            <div className="flex flex-wrap items-center gap-4">
+          
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full lg:w-auto">
               <select
                 value={selectedLinkIdForChart || ''}
                 onChange={(e) => setSelectedLinkIdForChart(e.target.value ? Number(e.target.value) : null)}
-                className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-1.5 text-[10px] font-bold outline-none focus:border-slate-900 transition-all"
+                className="bg-slate-50 border border-slate-100 rounded-xl px-3 sm:px-4 py-2 text-[10px] sm:text-xs font-bold outline-none focus:border-slate-900 transition-all w-full sm:w-auto"
               >
                 <option value="">{t('option_all_links', 'links')}</option>
                 {links.map(l => (
@@ -530,10 +533,10 @@ export default function InfluencerLinks() {
                 ))}
               </select>
 
-              <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100">
+              <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100 overflow-x-auto max-w-full scrollbar-none">
                 <button
                   onClick={() => setDateRange('all')}
-                  className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                  className={`px-3 sm:px-4 py-1.5 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
                     dateRange === 'all'
                       ? 'bg-white text-slate-900 shadow-sm'
                       : 'text-slate-400 hover:text-slate-600'
@@ -545,18 +548,18 @@ export default function InfluencerLinks() {
                   <button
                     key={days}
                     onClick={() => setDateRange(days)}
-                    className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                    className={`px-3 sm:px-4 py-1.5 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
                       dateRange === days
                         ? 'bg-white text-slate-900 shadow-sm'
                         : 'text-slate-400 hover:text-slate-600'
-                  }`}
+                    }`}
                   >
                     {days === 1 ? t('range_today', 'links') : `${days}j`}
                   </button>
                 ))}
                 <button
                   onClick={() => setDateRange('custom')}
-                  className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                  className={`px-3 sm:px-4 py-1.5 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
                     dateRange === 'custom'
                       ? 'bg-white text-slate-900 shadow-sm'
                       : 'text-slate-400 hover:text-slate-600'
@@ -567,36 +570,35 @@ export default function InfluencerLinks() {
               </div>
 
               {dateRange === 'custom' && (
-                <div className="flex items-center gap-2 animate-in slide-in-from-left-2 duration-300">
+                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
                   <input 
                     type="date" 
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-1.5 text-[10px] font-bold outline-none focus:border-slate-900 transition-all"
+                    className="bg-slate-50 border border-slate-100 rounded-xl px-2.5 py-1.5 text-[10px] font-bold outline-none focus:border-slate-900 transition-all flex-1"
                   />
                   <span className="text-[10px] font-black text-slate-300">{t('date_separator', 'links')}</span>
                   <input 
                     type="date" 
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-1.5 text-[10px] font-bold outline-none focus:border-slate-900 transition-all"
+                    className="bg-slate-50 border border-slate-100 rounded-xl px-2.5 py-1.5 text-[10px] font-bold outline-none focus:border-slate-900 transition-all flex-1"
                   />
                 </div>
               )}
             </div>
-            <div className="hidden lg:block h-8 w-[1px] bg-slate-100" />
-            <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+            <div className="flex items-center justify-between sm:justify-start gap-4 text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-slate-500 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-50">
               <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-blue-500 rounded-full" /> {t('views_visitors', 'links')}</div>
               <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-violet-500 rounded-full" /> {t('views_total', 'links')}</div>
             </div>
           </div>
         </div>
         
-        <div className="h-72 w-full">
+        <div className="h-60 sm:h-72 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart 
               data={dailyStats} 
-              margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+              margin={{ top: 10, right: 10, left: -25, bottom: 0 }}
             >
               <defs>
                 <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
@@ -626,12 +628,12 @@ export default function InfluencerLinks() {
                 yAxisId="left"
                 axisLine={false} 
                 tickLine={false} 
-                tick={{fontSize: 10, fontWeight: 700, fill: '#64748b'}} 
+                tick={{fontSize: 9, fontWeight: 700, fill: '#64748b'}} 
               />
               <RechartsTooltip 
-                contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '15px' }}
-                itemStyle={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase' }}
-                labelStyle={{ marginBottom: '10px', fontSize: '12px', fontWeight: 900, color: '#1e293b' }}
+                contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
+                itemStyle={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase' }}
+                labelStyle={{ marginBottom: '8px', fontSize: '11px', fontWeight: 900, color: '#1e293b' }}
                 cursor={{ stroke: '#f1f5f9', strokeWidth: 2 }}
                 labelFormatter={(label) => {
                   const d = new Date(label);
@@ -648,8 +650,8 @@ export default function InfluencerLinks() {
                 stroke="#8b5cf6" 
                 strokeWidth={3}
                 fillOpacity={1} 
-                dot={{ r: 4, fill: '#8b5cf6', strokeWidth: 2, stroke: '#fff' }}
-                activeDot={{ r: 6, strokeWidth: 0, fill: '#8b5cf6' }}
+                dot={{ r: 3, fill: '#8b5cf6', strokeWidth: 2, stroke: '#fff' }}
+                activeDot={{ r: 5, strokeWidth: 0, fill: '#8b5cf6' }}
                 fill="url(#colorRawViews)" 
                 name={t('views_total', 'links')}
               />
@@ -665,33 +667,31 @@ export default function InfluencerLinks() {
                 fill="url(#colorViews)" 
                 name={t('views_visitors', 'links')}
               />
-
             </ComposedChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-
       {/* Filters & Actions */}
-      <div className="flex flex-col md:flex-row items-center gap-4">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
         <div className="flex-1 relative w-full">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
-            className="w-full pl-12 pr-4 py-3.5 bg-white rounded-2xl border border-slate-100 shadow-sm focus:ring-2 focus:ring-slate-900/5 focus:border-slate-900 outline-none transition-all font-medium text-sm"
+            className="w-full pl-11 pr-4 py-3 bg-white rounded-2xl border border-slate-100 shadow-sm focus:ring-2 focus:ring-slate-900/5 focus:border-slate-900 outline-none transition-all font-medium text-xs sm:text-sm"
             placeholder={t('search_placeholder', 'links')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex items-center gap-2 bg-white p-1 rounded-2xl border border-slate-100 shadow-sm">
+        <div className="w-full sm:w-auto overflow-x-auto scrollbar-none flex items-center gap-1 sm:gap-2 bg-white p-1 rounded-2xl border border-slate-100 shadow-sm">
           {(['date', 'earnings', 'clicks', 'conversions'] as const).map((s) => (
             <button
               key={s}
               onClick={() => setSortBy(s)}
-              className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+              className={`px-3.5 sm:px-6 py-2 sm:py-2.5 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap flex-1 sm:flex-initial text-center ${
                 sortBy === s
-                  ? 'bg-slate-900 text-white shadow-lg'
+                  ? 'bg-slate-900 text-white shadow-md'
                   : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
               }`}
             >
@@ -701,332 +701,569 @@ export default function InfluencerLinks() {
         </div>
       </div>
 
-      {/* Links Pro Table */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      {/* Links List / Table Container */}
+      <div>
         {sortedGroupedProducts.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-slate-50">
-                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('th_product', 'links')}</th>
-                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">{t('th_links_count', 'links') || "Liens"}</th>
-                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">{t('th_performance_combined', 'links') || "Performance Cumulée"}</th>
-                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{t('th_earnings_combined', 'links') || "Gains Totaux"}</th>
-                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{t('th_actions', 'links')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {sortedGroupedProducts.map((group) => {
-                  const isExpanded = !!expandedProducts[group.productId];
-                  const activeCount = group.links.filter((l: any) => l.isActive).length;
-                  const combinedCtr = group.totalClicks > 0 ? ((group.totalConversions / group.totalClicks) * 100).toFixed(1) : '0.0';
-                  const isLimitReached = group.links.length >= 5;
-                  
-                  return (
-                    <Fragment key={`group-${group.productId}`}>
-                      <tr 
-                        onClick={() => toggleProductExpand(group.productId)}
-                        className={`hover:bg-slate-50/50 transition-all group cursor-pointer ${isExpanded ? 'bg-slate-50/20' : ''}`}
-                      >
-                        <td className="px-8 py-5">
-                          <div className="flex items-center gap-4">
-                            <div className="relative w-12 h-12 rounded-2xl overflow-hidden border border-slate-100 shadow-sm flex-shrink-0">
-                              {group.product?.images?.[0]?.imageUrl ? (
-                                <img src={group.product.images[0].imageUrl} alt="" className="w-full h-full object-cover" />
-                              ) : (
-                                <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-400"><Eye size={16} /></div>
-                              )}
-                            </div>
-                            <div>
-                              <p className="text-sm font-black text-slate-900 truncate max-w-[200px]">{group.product?.nameFr || t('default_product', 'links')}</p>
-                              <p className="text-[10px] font-bold text-slate-400 uppercase">SKU: {group.product?.sku}</p>
-                            </div>
+          <>
+            {/* Mobile View Card List (< lg) */}
+            <div className="block lg:hidden space-y-4">
+              {sortedGroupedProducts.map((group) => {
+                const isExpanded = !!expandedProducts[group.productId];
+                const activeCount = group.links.filter((l: any) => l.isActive).length;
+                const combinedCtr = group.totalClicks > 0 ? ((group.totalConversions / group.totalClicks) * 100).toFixed(1) : '0.0';
+                const isLimitReached = group.links.length >= 5;
+
+                return (
+                  <div key={`mobile-group-${group.productId}`} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden transition-all">
+                    {/* Product Card Header */}
+                    <div className="p-4 space-y-3">
+                      <div className="flex items-center gap-3">
+                        <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-slate-100 shadow-sm flex-shrink-0">
+                          {group.product?.images?.[0]?.imageUrl ? (
+                            <img src={group.product.images[0].imageUrl} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-400"><Eye size={16} /></div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-sm font-black text-slate-900 truncate">{group.product?.nameFr || t('default_product', 'links')}</h4>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">SKU: {group.product?.sku}</p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <span className="text-sm font-black text-slate-900 block">{group.totalEarnings.toLocaleString()} MAD</span>
+                          <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md inline-block">
+                            {activeCount}/{group.links.length} {t('active_label', 'links') || "actifs"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Combined Metrics Grid (Mobile) */}
+                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 pt-2 border-t border-slate-50">
+                        <div className="bg-slate-50/80 p-2 rounded-xl text-center">
+                          <div className="flex items-center justify-center gap-1 mb-0.5">
+                            <Eye size={10} className="text-violet-500" />
+                            <span className="text-[8px] font-bold text-slate-400 uppercase">{t('perf_views', 'links')}</span>
                           </div>
-                        </td>
-                        <td className="px-8 py-5 text-center">
-                          <div className="flex flex-col items-center justify-center gap-1">
-                            <span className="px-2.5 py-1 bg-slate-50 text-slate-700 rounded-xl text-xs font-bold border border-slate-100">
-                              {group.links.length} {group.links.length > 1 ? t('links_plural', 'links') || "liens" : t('links_singular', 'links') || "lien"}
-                            </span>
-                            <span className="text-[9px] font-bold text-emerald-600">
-                              {activeCount} {t('active_label', 'links') || "actifs"}
-                            </span>
+                          <p className="text-xs font-black text-slate-900">{group.totalRawClicks.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-slate-50/80 p-2 rounded-xl text-center">
+                          <div className="flex items-center justify-center gap-1 mb-0.5">
+                            <MousePointerClick size={10} className="text-blue-500" />
+                            <span className="text-[8px] font-bold text-slate-400 uppercase">{t('perf_visitors', 'links')}</span>
                           </div>
-                        </td>
-                        <td className="px-8 py-5">
-                          <div className="flex items-center justify-center">
-                            <div className="flex items-center gap-6">
-                              <div className="text-center">
-                                <p className="text-xs font-black text-slate-900 mb-0.5">{group.totalRawClicks.toLocaleString()}</p>
-                                <div className="flex items-center justify-center gap-1">
-                                  <Eye size={10} className="text-violet-500" />
-                                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_views', 'links')}</p>
-                                </div>
-                              </div>
-                              <div className="text-center">
-                                <p className="text-xs font-black text-slate-900 mb-0.5">{group.totalClicks.toLocaleString()}</p>
-                                <div className="flex items-center justify-center gap-1">
-                                  <MousePointerClick size={10} className="text-blue-500" />
-                                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_visitors', 'links')}</p>
-                                </div>
-                              </div>
-                              <div className="text-center">
-                                <p className="text-xs font-black text-slate-900 mb-0.5">{group.totalConversions.toLocaleString()}</p>
-                                <div className="flex items-center justify-center gap-1">
-                                  <Zap size={10} className="text-purple-500" />
-                                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_sales', 'links')}</p>
-                                </div>
-                              </div>
-                              <div className="text-center">
-                                <p className="text-xs font-black text-slate-900 mb-0.5">{group.totalWhatsappClicks.toLocaleString()}</p>
-                                <div className="flex items-center justify-center gap-1">
-                                  <MessageCircle size={10} className="text-green-500" />
-                                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_whatsapp', 'links')}</p>
-                                </div>
-                              </div>
-                              <div className="text-center">
-                                <p className="text-xs font-black text-indigo-600 mb-0.5">{combinedCtr}%</p>
-                                <div className="flex items-center justify-center gap-1">
-                                  <Target size={10} className="text-indigo-500" />
-                                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_ctr', 'links')}</p>
-                                </div>
-                              </div>
-                            </div>
+                          <p className="text-xs font-black text-slate-900">{group.totalClicks.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-slate-50/80 p-2 rounded-xl text-center">
+                          <div className="flex items-center justify-center gap-1 mb-0.5">
+                            <Zap size={10} className="text-purple-500" />
+                            <span className="text-[8px] font-bold text-slate-400 uppercase">{t('perf_sales', 'links')}</span>
                           </div>
-                        </td>
-                        <td className="px-8 py-5 text-right font-black text-slate-950 text-sm">
-                          {group.totalEarnings.toLocaleString()} MAD
-                        </td>
-                        <td className="px-8 py-5 text-right">
-                          <div className="flex items-center justify-end gap-3" onClick={(e) => e.stopPropagation()}>
-                            <button
+                          <p className="text-xs font-black text-slate-900">{group.totalConversions.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-slate-50/80 p-2 rounded-xl text-center">
+                          <div className="flex items-center justify-center gap-1 mb-0.5">
+                            <MessageCircle size={10} className="text-green-500" />
+                            <span className="text-[8px] font-bold text-slate-400 uppercase">{t('perf_whatsapp', 'links')}</span>
+                          </div>
+                          <p className="text-xs font-black text-slate-900">{group.totalWhatsappClicks.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-indigo-50/60 p-2 rounded-xl text-center col-span-2 sm:col-span-1">
+                          <div className="flex items-center justify-center gap-1 mb-0.5">
+                            <Target size={10} className="text-indigo-500" />
+                            <span className="text-[8px] font-bold text-indigo-400 uppercase">{t('perf_ctr', 'links')}</span>
+                          </div>
+                          <p className="text-xs font-black text-indigo-600">{combinedCtr}%</p>
+                        </div>
+                      </div>
+
+                      {/* Action Row */}
+                      <div className="flex items-center justify-between gap-2 pt-1">
+                        <button
+                          onClick={() => {
+                            setSelectedProductId(group.productId);
+                            setCustomName('');
+                            setCustomNameError('');
+                            setShowCreateModal(true);
+                            fetchApprovedClaims();
+                          }}
+                          disabled={isLimitReached}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 bg-slate-900 hover:bg-slate-800 disabled:opacity-30 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          {t('btn_create', 'links') || "Créer"}
+                        </button>
+                        <button
+                          onClick={() => toggleProductExpand(group.productId)}
+                          className="flex items-center justify-center gap-1.5 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all"
+                        >
+                          <span>{group.links.length} {group.links.length > 1 ? "liens" : "lien"}</span>
+                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Expanded Links Cards for Mobile */}
+                    {isExpanded && (
+                      <div className="bg-slate-50/80 p-3 sm:p-4 border-t border-slate-100 space-y-3">
+                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
+                          {t('links_details_title', 'links') || "Détails des Liens"}
+                        </div>
+                        {group.links.map((link: any) => {
+                          const ctr = link.clicks > 0 ? ((link.conversions / link.clicks) * 100).toFixed(1) : '0.0';
+                          const role = user?.roleName || user?.role;
+                          const showBuilder = role === 'SUPER_ADMIN' || role === 'HELPER' || role === 'VENDOR' || (role === 'INFLUENCER' && user?.canManageInfluencerLinks);
+
+                          return (
+                            <div 
+                              key={link.id} 
                               onClick={() => {
-                                setSelectedProductId(group.productId);
-                                setCustomName('');
-                                setCustomNameError('');
-                                setShowCreateModal(true);
-                                fetchApprovedClaims();
+                                setSelectedLinkIdForChart(link.id);
+                                const chartEl = document.getElementById('performance-chart');
+                                if (chartEl) {
+                                  window.scrollTo({ top: chartEl.getBoundingClientRect().top + window.scrollY - 100, behavior: 'smooth' });
+                                }
                               }}
-                              disabled={isLimitReached}
-                              className="flex items-center gap-1 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm"
+                              className={`bg-white p-3 sm:p-4 rounded-xl border border-slate-100 shadow-sm space-y-2.5 transition-all ${
+                                selectedLinkIdForChart === link.id ? 'ring-2 ring-influencer-400 bg-influencer-50/10' : ''
+                              }`}
                             >
-                              <Plus className="w-3.5 h-3.5" />
-                              {t('btn_create', 'links') || "Créer"}
-                            </button>
-                            <button
-                              onClick={() => toggleProductExpand(group.productId)}
-                              className="p-2 bg-slate-50 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all"
-                            >
-                              {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                      
-                      {isExpanded && (
-                        <tr key={`expanded-${group.productId}`}>
-                          <td colSpan={5} className="bg-slate-50/50 px-8 py-6 border-b border-slate-100">
-                            <div className="space-y-4">
-                              <div className="flex items-center justify-between">
-                                <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest">
-                                  {t('links_details_title', 'links') || "Détails des Liens pour"} {group.product?.nameFr}
-                                </h4>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="px-2.5 py-1 bg-slate-50 text-slate-800 rounded-lg text-xs font-mono font-bold border border-slate-100">
+                                  {link.code}
+                                </span>
+                                <div>
+                                  {link.status === 'SUSPENDED' ? (
+                                    <span className="px-2 py-0.5 bg-rose-50 text-rose-600 rounded-md text-[9px] font-black uppercase tracking-wider border border-rose-100">Bloqué</span>
+                                  ) : link.status === 'BUILDING' ? (
+                                    <span className="px-2 py-0.5 bg-amber-50 text-amber-600 rounded-md text-[9px] font-black uppercase tracking-wider">{t('status_building', 'links')}</span>
+                                  ) : (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleToggleStatus(link); }}
+                                      disabled={isToggling === link.id}
+                                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
+                                        link.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'
+                                      }`}
+                                    >
+                                      <Power className={`w-2.5 h-2.5 ${link.isActive ? 'text-emerald-500' : 'text-slate-400'}`} />
+                                      <span>{link.isActive ? t('status_active', 'links') : t('status_paused', 'links')}</span>
+                                    </button>
+                                  )}
+                                </div>
                               </div>
-                              <div className="bg-white rounded-xl border border-slate-100/70 overflow-hidden shadow-sm">
-                                <table className="w-full text-left">
-                                  <thead>
-                                    <tr className="border-b border-slate-100 bg-slate-50/30">
-                                      <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">{t('th_code', 'links')}</th>
-                                      <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">{t('th_performance', 'links')}</th>
-                                      <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">{t('th_status', 'links')}</th>
-                                      <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">{t('th_actions', 'links')}</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-100">
-                                    {group.links.map((link: any) => {
-                                      const ctr = link.clicks > 0 ? ((link.conversions / link.clicks) * 100).toFixed(1) : '0.0';
+
+                              <p className="text-[9px] text-slate-400 font-mono truncate bg-slate-50 p-1.5 rounded-lg border border-slate-100/50">
+                                {buildReferralUrl(link.code, user?.subdomain)}
+                              </p>
+
+                              <div className="grid grid-cols-5 gap-1 text-center bg-slate-50/50 p-2 rounded-xl">
+                                <div>
+                                  <p className="text-[7px] font-bold text-slate-400 uppercase">{t('perf_views', 'links')}</p>
+                                  <p className="text-xs font-black text-slate-900">{(link.rawClicks || link.clicks).toLocaleString()}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[7px] font-bold text-slate-400 uppercase">{t('perf_visitors', 'links')}</p>
+                                  <p className="text-xs font-black text-slate-900">{link.clicks.toLocaleString()}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[7px] font-bold text-slate-400 uppercase">{t('perf_sales', 'links')}</p>
+                                  <p className="text-xs font-black text-slate-900">{link.conversions.toLocaleString()}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[7px] font-bold text-slate-400 uppercase">{t('perf_whatsapp', 'links')}</p>
+                                  <p className="text-xs font-black text-slate-900">{link.whatsappClicks || 0}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[7px] font-bold text-slate-400 uppercase">{t('perf_ctr', 'links')}</p>
+                                  <p className="text-xs font-black text-indigo-600">{ctr}%</p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-50" onClick={(e) => e.stopPropagation()}>
+                                <button 
+                                  onClick={() => copyLink(link.code)} 
+                                  disabled={link.status === 'SUSPENDED'}
+                                  className="flex items-center gap-1 px-3 py-1.5 bg-slate-50 text-slate-700 hover:bg-slate-100 disabled:opacity-30 rounded-lg text-[10px] font-bold transition-all" 
+                                >
+                                  <Copy size={12} /> {t('btn_copy', 'links')}
+                                </button>
+                                {showBuilder && (
+                                  <button 
+                                    onClick={() => {
                                       const role = user?.roleName || user?.role;
-                                      const showBuilder = role === 'SUPER_ADMIN' || role === 'HELPER' || role === 'VENDOR' || (role === 'INFLUENCER' && user?.canManageInfluencerLinks);
-                                      return (
-                                        <tr 
-                                          key={link.id}
-                                          onClick={() => {
-                                            setSelectedLinkIdForChart(link.id);
-                                            const chartEl = document.getElementById('performance-chart');
-                                            if (chartEl) {
-                                              window.scrollTo({ top: chartEl.getBoundingClientRect().top + window.scrollY - 100, behavior: 'smooth' });
-                                            }
-                                          }}
-                                          className={`hover:bg-slate-50/30 transition-all cursor-pointer ${selectedLinkIdForChart === link.id ? 'bg-influencer-50/20' : ''}`}
-                                        >
-                                          <td className="px-6 py-4">
-                                            <div className="space-y-1">
-                                              <span className="px-2.5 py-1 bg-slate-50 text-slate-600 rounded-lg text-xs font-mono font-bold border border-slate-100 inline-block">
-                                                {link.code}
-                                              </span>
-                                              <p className="text-[9px] text-slate-400 font-bold uppercase truncate max-w-[200px]">
-                                                URL: {buildReferralUrl(link.code, user?.subdomain)}
-                                              </p>
-                                            </div>
-                                          </td>
-                                          <td className="px-6 py-4">
-                                            <div className="flex items-center justify-center gap-4">
-                                              <div className="text-center">
-                                                <p className="text-xs font-black text-slate-900 mb-0.5">{(link.rawClicks || link.clicks).toLocaleString()}</p>
-                                                <div className="flex items-center justify-center gap-0.5">
-                                                  <Eye size={8} className="text-violet-500" />
-                                                  <span className="text-[7px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_views', 'links')}</span>
-                                                </div>
-                                              </div>
-                                              <div className="text-center">
-                                                <p className="text-xs font-black text-slate-900 mb-0.5">{link.clicks.toLocaleString()}</p>
-                                                <div className="flex items-center justify-center gap-0.5">
-                                                  <MousePointerClick size={8} className="text-blue-500" />
-                                                  <span className="text-[7px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_visitors', 'links')}</span>
-                                                </div>
-                                              </div>
-                                              <div className="text-center">
-                                                <p className="text-xs font-black text-slate-900 mb-0.5">{link.conversions.toLocaleString()}</p>
-                                                <div className="flex items-center justify-center gap-0.5">
-                                                  <Zap size={8} className="text-purple-500" />
-                                                  <span className="text-[7px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_sales', 'links')}</span>
-                                                </div>
-                                              </div>
-                                              <div className="text-center">
-                                                <p className="text-xs font-black text-slate-900 mb-0.5">{link.whatsappClicks || 0}</p>
-                                                <div className="flex items-center justify-center gap-0.5">
-                                                  <MessageCircle size={8} className="text-green-500" />
-                                                  <span className="text-[7px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_whatsapp', 'links')}</span>
-                                                </div>
-                                              </div>
-                                              <div className="text-center">
-                                                <p className="text-xs font-black text-indigo-600 mb-0.5">{ctr}%</p>
-                                                <div className="flex items-center justify-center gap-0.5">
-                                                  <Target size={8} className="text-indigo-500" />
-                                                  <span className="text-[7px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_ctr', 'links')}</span>
-                                                </div>
-                                              </div>
-                                            </div>
-                                          </td>
-                                          <td className="px-6 py-4">
-                                            {link.status === 'SUSPENDED' ? (
-                                              <div className="flex items-center gap-1.5 px-2 py-1 bg-rose-50 text-rose-600 rounded-lg w-fit border border-rose-100">
-                                                <AlertCircle size={10} className="text-rose-500" />
-                                                <span className="text-[9px] font-black uppercase tracking-wider">Bloqué</span>
-                                              </div>
-                                            ) : link.status === 'BUILDING' ? (
-                                              <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 text-amber-600 rounded-lg w-fit">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                                                <span className="text-[9px] font-black uppercase tracking-wider">{t('status_building', 'links')}</span>
-                                              </div>
-                                            ) : (
-                                              <button
-                                                onClick={(e) => { e.stopPropagation(); handleToggleStatus(link); }}
-                                                disabled={isToggling === link.id}
-                                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all ${
-                                                  link.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'
-                                                }`}
-                                              >
-                                                <Power className={`w-2.5 h-2.5 ${link.isActive ? 'text-emerald-500' : 'text-slate-400'}`} />
-                                                <span className="text-[9px] font-black uppercase tracking-wider">{link.isActive ? t('status_active', 'links') : t('status_paused', 'links')}</span>
-                                              </button>
-                                            )}
-                                          </td>
-                                          <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                                              <button 
-                                                onClick={() => copyLink(link.code)} 
-                                                disabled={link.status === 'SUSPENDED'}
-                                                className="p-2 bg-slate-50 text-slate-400 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-all" 
-                                                title={t('btn_copy', 'links')}
-                                              >
-                                                <Copy size={12} />
-                                              </button>
-                                              {showBuilder && (
-                                                <button 
-                                                  onClick={() => {
-                                                    const role = user?.roleName || user?.role;
-                                                    const targetPath = role === 'VENDOR' 
-                                                      ? `/dashboard/links/${link.id}/builder` 
-                                                      : role === 'INFLUENCER' 
-                                                        ? `/influencer/links/${link.id}/builder` 
-                                                        : `/helper/links/${link.id}/builder`;
-                                                    navigate(targetPath);
-                                                  }} 
-                                                  disabled={link.status === 'SUSPENDED'}
-                                                  className="p-2 bg-slate-50 text-slate-400 hover:text-purple-600 hover:bg-purple-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-all" 
-                                                  title={t('tooltip_builder', 'links') || "Constructeur de Page"}
-                                                >
-                                                  <Wand2 size={12} />
-                                                </button>
-                                              )}
-                                              <button 
-                                                onClick={() => { setSelectedLink(link); setShowQrModal(true); }} 
-                                                disabled={link.status === 'SUSPENDED'}
-                                                className="p-2 bg-slate-50 text-slate-400 hover:text-purple-600 hover:bg-purple-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-all" 
-                                                title={t('btn_qr', 'links')}
-                                              >
-                                                <QrCode size={12} />
-                                              </button>
-                                              <button 
-                                                onClick={() => handleRegenerateCode(link)} 
-                                                disabled={link.status === 'SUSPENDED'}
-                                                className="p-2 bg-red-50/30 text-red-300 hover:text-red-500 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-all" 
-                                                title={t('tooltip_regenerate', 'links')}
-                                              >
-                                                <RefreshCw size={12} />
-                                              </button>
-                                            </div>
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
+                                      const targetPath = role === 'VENDOR' 
+                                        ? `/dashboard/links/${link.id}/builder` 
+                                        : role === 'INFLUENCER' 
+                                          ? `/influencer/links/${link.id}/builder` 
+                                          : `/helper/links/${link.id}/builder`;
+                                      navigate(targetPath);
+                                    }} 
+                                    disabled={link.status === 'SUSPENDED'}
+                                    className="p-2 bg-slate-50 text-slate-500 hover:text-purple-600 hover:bg-purple-50 disabled:opacity-30 rounded-lg transition-all" 
+                                    title={t('tooltip_builder', 'links') || "Constructeur de Page"}
+                                  >
+                                    <Wand2 size={12} />
+                                  </button>
+                                )}
+                                <button 
+                                  onClick={() => { setSelectedLink(link); setShowQrModal(true); }} 
+                                  disabled={link.status === 'SUSPENDED'}
+                                  className="p-2 bg-slate-50 text-slate-500 hover:text-purple-600 hover:bg-purple-50 disabled:opacity-30 rounded-lg transition-all" 
+                                  title={t('btn_qr', 'links')}
+                                >
+                                  <QrCode size={12} />
+                                </button>
+                                <button 
+                                  onClick={() => handleRegenerateCode(link)} 
+                                  disabled={link.status === 'SUSPENDED'}
+                                  className="p-2 bg-red-50/50 text-red-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-30 rounded-lg transition-all" 
+                                  title={t('tooltip_regenerate', 'links')}
+                                >
+                                  <RefreshCw size={12} />
+                                </button>
                               </div>
                             </div>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table View (>= lg) */}
+            <div className="hidden lg:block bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-slate-50">
+                      <th className="px-6 xl:px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('th_product', 'links')}</th>
+                      <th className="px-6 xl:px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">{t('th_links_count', 'links') || "Liens"}</th>
+                      <th className="px-6 xl:px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">{t('th_performance_combined', 'links') || "Performance Cumulée"}</th>
+                      <th className="px-6 xl:px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{t('th_earnings_combined', 'links') || "Gains Totaux"}</th>
+                      <th className="px-6 xl:px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{t('th_actions', 'links')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {sortedGroupedProducts.map((group) => {
+                      const isExpanded = !!expandedProducts[group.productId];
+                      const activeCount = group.links.filter((l: any) => l.isActive).length;
+                      const combinedCtr = group.totalClicks > 0 ? ((group.totalConversions / group.totalClicks) * 100).toFixed(1) : '0.0';
+                      const isLimitReached = group.links.length >= 5;
+                      
+                      return (
+                        <Fragment key={`group-${group.productId}`}>
+                          <tr 
+                            onClick={() => toggleProductExpand(group.productId)}
+                            className={`hover:bg-slate-50/50 transition-all group cursor-pointer ${isExpanded ? 'bg-slate-50/20' : ''}`}
+                          >
+                            <td className="px-6 xl:px-8 py-5">
+                              <div className="flex items-center gap-4">
+                                <div className="relative w-12 h-12 rounded-2xl overflow-hidden border border-slate-100 shadow-sm flex-shrink-0">
+                                  {group.product?.images?.[0]?.imageUrl ? (
+                                    <img src={group.product.images[0].imageUrl} alt="" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-400"><Eye size={16} /></div>
+                                  )}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-black text-slate-900 truncate max-w-[200px]">{group.product?.nameFr || t('default_product', 'links')}</p>
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase">SKU: {group.product?.sku}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 xl:px-8 py-5 text-center">
+                              <div className="flex flex-col items-center justify-center gap-1">
+                                <span className="px-2.5 py-1 bg-slate-50 text-slate-700 rounded-xl text-xs font-bold border border-slate-100">
+                                  {group.links.length} {group.links.length > 1 ? t('links_plural', 'links') || "liens" : t('links_singular', 'links') || "lien"}
+                                </span>
+                                <span className="text-[9px] font-bold text-emerald-600">
+                                  {activeCount} {t('active_label', 'links') || "actifs"}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-6 xl:px-8 py-5">
+                              <div className="flex items-center justify-center">
+                                <div className="flex items-center gap-4 xl:gap-6">
+                                  <div className="text-center">
+                                    <p className="text-xs font-black text-slate-900 mb-0.5">{group.totalRawClicks.toLocaleString()}</p>
+                                    <div className="flex items-center justify-center gap-1">
+                                      <Eye size={10} className="text-violet-500" />
+                                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_views', 'links')}</p>
+                                    </div>
+                                  </div>
+                                  <div className="text-center">
+                                    <p className="text-xs font-black text-slate-900 mb-0.5">{group.totalClicks.toLocaleString()}</p>
+                                    <div className="flex items-center justify-center gap-1">
+                                      <MousePointerClick size={10} className="text-blue-500" />
+                                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_visitors', 'links')}</p>
+                                    </div>
+                                  </div>
+                                  <div className="text-center">
+                                    <p className="text-xs font-black text-slate-900 mb-0.5">{group.totalConversions.toLocaleString()}</p>
+                                    <div className="flex items-center justify-center gap-1">
+                                      <Zap size={10} className="text-purple-500" />
+                                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_sales', 'links')}</p>
+                                    </div>
+                                  </div>
+                                  <div className="text-center">
+                                    <p className="text-xs font-black text-slate-900 mb-0.5">{group.totalWhatsappClicks.toLocaleString()}</p>
+                                    <div className="flex items-center justify-center gap-1">
+                                      <MessageCircle size={10} className="text-green-500" />
+                                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_whatsapp', 'links')}</p>
+                                    </div>
+                                  </div>
+                                  <div className="text-center">
+                                    <p className="text-xs font-black text-indigo-600 mb-0.5">{combinedCtr}%</p>
+                                    <div className="flex items-center justify-center gap-1">
+                                      <Target size={10} className="text-indigo-500" />
+                                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_ctr', 'links')}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 xl:px-8 py-5 text-right font-black text-slate-950 text-sm">
+                              {group.totalEarnings.toLocaleString()} MAD
+                            </td>
+                            <td className="px-6 xl:px-8 py-5 text-right">
+                              <div className="flex items-center justify-end gap-3" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  onClick={() => {
+                                    setSelectedProductId(group.productId);
+                                    setCustomName('');
+                                    setCustomNameError('');
+                                    setShowCreateModal(true);
+                                    fetchApprovedClaims();
+                                  }}
+                                  disabled={isLimitReached}
+                                  className="flex items-center gap-1 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  {t('btn_create', 'links') || "Créer"}
+                                </button>
+                                <button
+                                  onClick={() => toggleProductExpand(group.productId)}
+                                  className="p-2 bg-slate-50 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all"
+                                >
+                                  {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                          
+                          {isExpanded && (
+                            <tr key={`expanded-${group.productId}`}>
+                              <td colSpan={5} className="bg-slate-50/50 px-6 xl:px-8 py-6 border-b border-slate-100">
+                                <div className="space-y-4">
+                                  <div className="flex items-center justify-between">
+                                    <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest">
+                                      {t('links_details_title', 'links') || "Détails des Liens pour"} {group.product?.nameFr}
+                                    </h4>
+                                  </div>
+                                  <div className="bg-white rounded-xl border border-slate-100/70 overflow-hidden shadow-sm">
+                                    <table className="w-full text-left">
+                                      <thead>
+                                        <tr className="border-b border-slate-100 bg-slate-50/30">
+                                          <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">{t('th_code', 'links')}</th>
+                                          <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">{t('th_performance', 'links')}</th>
+                                          <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">{t('th_status', 'links')}</th>
+                                          <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">{t('th_actions', 'links')}</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100">
+                                        {group.links.map((link: any) => {
+                                          const ctr = link.clicks > 0 ? ((link.conversions / link.clicks) * 100).toFixed(1) : '0.0';
+                                          const role = user?.roleName || user?.role;
+                                          const showBuilder = role === 'SUPER_ADMIN' || role === 'HELPER' || role === 'VENDOR' || (role === 'INFLUENCER' && user?.canManageInfluencerLinks);
+                                          return (
+                                            <tr 
+                                              key={link.id}
+                                              onClick={() => {
+                                                setSelectedLinkIdForChart(link.id);
+                                                const chartEl = document.getElementById('performance-chart');
+                                                if (chartEl) {
+                                                  window.scrollTo({ top: chartEl.getBoundingClientRect().top + window.scrollY - 100, behavior: 'smooth' });
+                                                }
+                                              }}
+                                              className={`hover:bg-slate-50/30 transition-all cursor-pointer ${selectedLinkIdForChart === link.id ? 'bg-influencer-50/20' : ''}`}
+                                            >
+                                              <td className="px-6 py-4">
+                                                <div className="space-y-1">
+                                                  <span className="px-2.5 py-1 bg-slate-50 text-slate-600 rounded-lg text-xs font-mono font-bold border border-slate-100 inline-block">
+                                                    {link.code}
+                                                  </span>
+                                                  <p className="text-[9px] text-slate-400 font-bold uppercase truncate max-w-[200px]">
+                                                    URL: {buildReferralUrl(link.code, user?.subdomain)}
+                                                  </p>
+                                                </div>
+                                              </td>
+                                              <td className="px-6 py-4">
+                                                <div className="flex items-center justify-center gap-4">
+                                                  <div className="text-center">
+                                                    <p className="text-xs font-black text-slate-900 mb-0.5">{(link.rawClicks || link.clicks).toLocaleString()}</p>
+                                                    <div className="flex items-center justify-center gap-0.5">
+                                                      <Eye size={8} className="text-violet-500" />
+                                                      <span className="text-[7px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_views', 'links')}</span>
+                                                    </div>
+                                                  </div>
+                                                  <div className="text-center">
+                                                    <p className="text-xs font-black text-slate-900 mb-0.5">{link.clicks.toLocaleString()}</p>
+                                                    <div className="flex items-center justify-center gap-0.5">
+                                                      <MousePointerClick size={8} className="text-blue-500" />
+                                                      <span className="text-[7px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_visitors', 'links')}</span>
+                                                    </div>
+                                                  </div>
+                                                  <div className="text-center">
+                                                    <p className="text-xs font-black text-slate-900 mb-0.5">{link.conversions.toLocaleString()}</p>
+                                                    <div className="flex items-center justify-center gap-0.5">
+                                                      <Zap size={8} className="text-purple-500" />
+                                                      <span className="text-[7px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_sales', 'links')}</span>
+                                                    </div>
+                                                  </div>
+                                                  <div className="text-center">
+                                                    <p className="text-xs font-black text-slate-900 mb-0.5">{link.whatsappClicks || 0}</p>
+                                                    <div className="flex items-center justify-center gap-0.5">
+                                                      <MessageCircle size={8} className="text-green-500" />
+                                                      <span className="text-[7px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_whatsapp', 'links')}</span>
+                                                    </div>
+                                                  </div>
+                                                  <div className="text-center">
+                                                    <p className="text-xs font-black text-indigo-600 mb-0.5">{ctr}%</p>
+                                                    <div className="flex items-center justify-center gap-0.5">
+                                                      <Target size={8} className="text-indigo-500" />
+                                                      <span className="text-[7px] font-bold text-slate-400 uppercase tracking-wider">{t('perf_ctr', 'links')}</span>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              </td>
+                                              <td className="px-6 py-4">
+                                                {link.status === 'SUSPENDED' ? (
+                                                  <div className="flex items-center gap-1.5 px-2 py-1 bg-rose-50 text-rose-600 rounded-lg w-fit border border-rose-100">
+                                                    <AlertCircle size={10} className="text-rose-500" />
+                                                    <span className="text-[9px] font-black uppercase tracking-wider">Bloqué</span>
+                                                  </div>
+                                                ) : link.status === 'BUILDING' ? (
+                                                  <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 text-amber-600 rounded-lg w-fit">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                                    <span className="text-[9px] font-black uppercase tracking-wider">{t('status_building', 'links')}</span>
+                                                  </div>
+                                                ) : (
+                                                  <button
+                                                    onClick={(e) => { e.stopPropagation(); handleToggleStatus(link); }}
+                                                    disabled={isToggling === link.id}
+                                                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all ${
+                                                      link.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'
+                                                    }`}
+                                                  >
+                                                    <Power className={`w-2.5 h-2.5 ${link.isActive ? 'text-emerald-500' : 'text-slate-400'}`} />
+                                                    <span className="text-[9px] font-black uppercase tracking-wider">{link.isActive ? t('status_active', 'links') : t('status_paused', 'links')}</span>
+                                                  </button>
+                                                )}
+                                              </td>
+                                              <td className="px-6 py-4 text-right">
+                                                <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                                                  <button 
+                                                    onClick={() => copyLink(link.code)} 
+                                                    disabled={link.status === 'SUSPENDED'}
+                                                    className="p-2 bg-slate-50 text-slate-400 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-all" 
+                                                    title={t('btn_copy', 'links')}
+                                                  >
+                                                    <Copy size={12} />
+                                                  </button>
+                                                  {showBuilder && (
+                                                    <button 
+                                                      onClick={() => {
+                                                        const role = user?.roleName || user?.role;
+                                                        const targetPath = role === 'VENDOR' 
+                                                          ? `/dashboard/links/${link.id}/builder` 
+                                                          : role === 'INFLUENCER' 
+                                                            ? `/influencer/links/${link.id}/builder` 
+                                                            : `/helper/links/${link.id}/builder`;
+                                                        navigate(targetPath);
+                                                      }} 
+                                                      disabled={link.status === 'SUSPENDED'}
+                                                      className="p-2 bg-slate-50 text-slate-400 hover:text-purple-600 hover:bg-purple-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-all" 
+                                                      title={t('tooltip_builder', 'links') || "Constructeur de Page"}
+                                                    >
+                                                      <Wand2 size={12} />
+                                                    </button>
+                                                  )}
+                                                  <button 
+                                                    onClick={() => { setSelectedLink(link); setShowQrModal(true); }} 
+                                                    disabled={link.status === 'SUSPENDED'}
+                                                    className="p-2 bg-slate-50 text-slate-400 hover:text-purple-600 hover:bg-purple-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-all" 
+                                                    title={t('btn_qr', 'links')}
+                                                  >
+                                                    <QrCode size={12} />
+                                                  </button>
+                                                  <button 
+                                                    onClick={() => handleRegenerateCode(link)} 
+                                                    disabled={link.status === 'SUSPENDED'}
+                                                    className="p-2 bg-red-50/30 text-red-300 hover:text-red-500 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-all" 
+                                                    title={t('tooltip_regenerate', 'links')}
+                                                  >
+                                                    <RefreshCw size={12} />
+                                                  </button>
+                                                </div>
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
         ) : (
-          <div className="p-20 text-center bg-slate-50/50">
-            <LinkIcon className="w-16 h-16 mx-auto text-slate-200 mb-4" />
+          <div className="p-12 sm:p-20 text-center bg-slate-50/50 rounded-2xl border border-slate-100">
+            <LinkIcon className="w-12 h-12 sm:w-16 sm:h-16 mx-auto text-slate-200 mb-4" />
             <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">{t('no_links_found', 'links')}</p>
           </div>
         )}
       </div>
 
       {/* OTP Verification Modal */}
-      {confirmModal.isOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200">
-            <div className="p-8 text-center">
-              <div className="w-20 h-20 rounded-full mx-auto mb-6 flex items-center justify-center bg-slate-50">
+      {confirmModal.isOpen && createPortal(
+        <div 
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[999999] p-4 animate-in fade-in duration-300 cursor-pointer"
+          onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        >
+          <div 
+            className="bg-white rounded-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200 cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 sm:p-8 text-center">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full mx-auto mb-4 sm:mb-6 flex items-center justify-center bg-slate-50">
                 {confirmModal.icon}
               </div>
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-3">
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mb-2 sm:mb-3">
                 {confirmModal.title}
               </h2>
-              <p className="text-sm text-slate-500 font-medium leading-relaxed mb-6">
+              <p className="text-xs sm:text-sm text-slate-500 font-medium leading-relaxed mb-6">
                 {confirmModal.message}
               </p>
 
               {confirmModal.step === 'verify' && (
                 <div className="animate-in slide-in-from-bottom-2 duration-300">
-                  <div className="flex justify-center gap-2 mb-4">
+                  <div className="flex justify-center gap-1.5 sm:gap-2 mb-4">
                     {[0, 1, 2, 3, 4, 5].map((i) => (
                       <input
                         key={i}
                         type="text"
                         inputMode="numeric"
                         maxLength={1}
-                        className="w-12 h-14 bg-slate-50 border-2 border-slate-200 rounded-xl text-center text-xl font-black text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                        className="w-10 sm:w-12 h-12 sm:h-14 bg-slate-50 border-2 border-slate-200 rounded-xl text-center text-lg sm:text-xl font-black text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                         value={confirmInputValue[i] || ''}
                         autoFocus={i === 0}
                         onChange={(e) => {
@@ -1036,7 +1273,6 @@ export default function InfluencerLinks() {
                           newValue[i] = val;
                           const joined = newValue.join('').slice(0, 6);
                           setConfirmInputValue(joined);
-                          // Auto-focus next input
                           if (val && i < 5) {
                             const next = e.target.parentElement?.children[i + 1] as HTMLInputElement;
                             next?.focus();
@@ -1052,7 +1288,6 @@ export default function InfluencerLinks() {
                           e.preventDefault();
                           const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
                           setConfirmInputValue(pasted);
-                          // Focus last filled input
                           const target = (e.target as HTMLElement).parentElement?.children[Math.min(pasted.length, 5)] as HTMLInputElement;
                           target?.focus();
                         }}
@@ -1065,18 +1300,18 @@ export default function InfluencerLinks() {
                 </div>
               )}
             </div>
-            <div className="p-8 bg-slate-50/50 flex gap-4">
+            <div className="p-6 sm:p-8 bg-slate-50/50 flex gap-3 sm:gap-4">
               <button
                 onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
                 disabled={confirmModal.isLoading}
-                className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-400 bg-white border border-slate-100 rounded-2xl transition-all disabled:opacity-50"
+                className="flex-1 px-4 sm:px-6 py-3.5 sm:py-4 text-xs font-black uppercase tracking-widest text-slate-400 bg-white border border-slate-100 rounded-2xl transition-all disabled:opacity-50"
               >
                 {t('btn_cancel', 'links')}
               </button>
               <button
                 onClick={confirmModal.step === 'verify' ? handleVerifyOtp : confirmModal.onConfirm}
                 disabled={confirmModal.isLoading || (confirmModal.step === 'verify' && confirmInputValue.length !== 6)}
-                className={`flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-white rounded-2xl shadow-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
+                className={`flex-1 px-4 sm:px-6 py-3.5 sm:py-4 text-xs font-black uppercase tracking-widest text-white rounded-2xl shadow-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
                   confirmModal.variant === 'danger' ? 'bg-red-500 hover:bg-red-600' : 'bg-slate-900 hover:bg-slate-800'
                 }`}
               >
@@ -1087,20 +1322,27 @@ export default function InfluencerLinks() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* QR Code Modal */}
-      {showQrModal && selectedLink && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-10 text-center animate-in zoom-in-95 duration-300">
-            <h2 className="text-2xl font-black text-slate-900 mb-2">{t('qr_title', 'links')}</h2>
-            <p className="text-sm text-slate-400 font-medium mb-8">{t('qr_subtitle', 'links')}</p>
-            <div className="bg-white p-6 rounded-2xl border-4 border-dashed border-slate-100 inline-block mb-8">
+      {showQrModal && selectedLink && createPortal(
+        <div 
+          className="fixed inset-0 z-[999999] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 cursor-pointer"
+          onClick={() => setShowQrModal(false)}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 sm:p-10 text-center animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-2">{t('qr_title', 'links')}</h2>
+            <p className="text-xs sm:text-sm text-slate-400 font-medium mb-6 sm:mb-8">{t('qr_subtitle', 'links')}</p>
+            <div className="bg-white p-4 sm:p-6 rounded-2xl border-4 border-dashed border-slate-100 inline-block mb-6 sm:mb-8">
               <img 
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(buildReferralUrl(selectedLink?.code, user?.subdomain))}`}
                 alt="QR Code"
-                className="w-48 h-48 mx-auto"
+                className="w-40 h-40 sm:w-48 sm:h-48 mx-auto"
               />
             </div>
             <div className="flex flex-col gap-3">
@@ -1114,23 +1356,36 @@ export default function InfluencerLinks() {
                   document.body.removeChild(link);
                   toast.success(t('toast_qr_ready', 'links'));
                 }}
-                className="w-full py-4 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl"
+                className="w-full py-3.5 sm:py-4 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl"
               >
                 {t('btn_download_hd', 'links')}
               </button>
-              <button onClick={() => setShowQrModal(false)} className="w-full py-4 bg-slate-50 text-slate-400 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-100 transition-all">{t('btn_close', 'links')}</button>
+              <button onClick={() => setShowQrModal(false)} className="w-full py-3.5 sm:py-4 bg-slate-50 text-slate-400 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-100 transition-all">{t('btn_close', 'links')}</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
+
       {/* Create Link Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
-            <div className="p-8">
+      {showCreateModal && createPortal(
+        <div 
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[999999] p-4 animate-in fade-in duration-300 cursor-pointer"
+          onClick={() => {
+            setShowCreateModal(false);
+            setCustomName('');
+            setCustomNameError('');
+            setSelectedProductId(null);
+          }}
+        >
+          <div 
+            className="bg-white rounded-3xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200 cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 sm:p-8">
               <div className="flex justify-between items-center mb-6">
                 <div>
-                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">{t('create_modal_title', 'links')}</h2>
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">{t('create_modal_title', 'links')}</h2>
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">{t('create_modal_subtitle', 'links')}</p>
                 </div>
                 <button 
@@ -1146,7 +1401,7 @@ export default function InfluencerLinks() {
                 </button>
               </div>
 
-              <form onSubmit={handleCreateLink} className="space-y-6">
+              <form onSubmit={handleCreateLink} className="space-y-5 sm:space-y-6">
                 {/* Product Dropdown */}
                 <div className="space-y-2">
                   <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">{t('label_select_product', 'links')}</label>
@@ -1162,7 +1417,7 @@ export default function InfluencerLinks() {
                     <select
                       value={selectedProductId || ''}
                       onChange={(e) => setSelectedProductId(Number(e.target.value) || null)}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold text-slate-700 focus:outline-none focus:border-slate-900 transition-all"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs sm:text-sm font-bold text-slate-700 focus:outline-none focus:border-slate-900 transition-all"
                       required
                     >
                       <option value="">{t('option_choose_product', 'links')}</option>
@@ -1192,7 +1447,7 @@ export default function InfluencerLinks() {
                       placeholder={t('custom_name_placeholder', 'links')}
                       value={customName}
                       onChange={(e) => handleNameChange(e.target.value)}
-                      className={`w-full px-4 py-3 bg-slate-50 border rounded-2xl text-sm font-mono font-bold text-slate-700 focus:outline-none transition-all ${
+                      className={`w-full px-4 py-3 bg-slate-50 border rounded-2xl text-xs sm:text-sm font-mono font-bold text-slate-700 focus:outline-none transition-all ${
                         customNameError 
                           ? 'border-red-300 focus:border-red-500' 
                           : customName && !isCheckingName 
@@ -1209,8 +1464,8 @@ export default function InfluencerLinks() {
                       </div>
                     )}
                   </div>
-                  <div className="flex justify-between items-center px-1">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-1 px-1">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase truncate max-w-full">
                       {t('final_url_prefix', 'links')}: {buildReferralUrl(customName || t('name_placeholder', 'links'), user?.subdomain)}
                     </span>
                     <span className={`text-[10px] font-black uppercase ${customName.length >= 3 && customName.length <= 20 ? 'text-slate-400' : 'text-amber-500'}`}>
@@ -1225,7 +1480,7 @@ export default function InfluencerLinks() {
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex gap-4 pt-4">
+                <div className="flex gap-3 sm:gap-4 pt-3 sm:pt-4">
                   <button
                     type="button"
                     onClick={() => {
@@ -1234,14 +1489,14 @@ export default function InfluencerLinks() {
                       setCustomNameError('');
                       setSelectedProductId(null);
                     }}
-                    className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-400 bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all"
+                    className="flex-1 px-4 sm:px-6 py-3.5 sm:py-4 text-xs font-black uppercase tracking-widest text-slate-400 bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all"
                   >
                     {t('btn_cancel', 'links')}
                   </button>
                   <button
                     type="submit"
                     disabled={isCreatingLink || claimsLoading || !selectedProductId || !customName || !!customNameError || isCheckingName}
-                    className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-white bg-slate-900 hover:bg-slate-800 rounded-2xl shadow-lg shadow-slate-200 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="flex-1 px-4 sm:px-6 py-3.5 sm:py-4 text-xs font-black uppercase tracking-widest text-white bg-slate-900 hover:bg-slate-800 rounded-2xl shadow-lg shadow-slate-200 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {isCreatingLink && (
                       <RefreshCw size={14} className="animate-spin" />
@@ -1252,7 +1507,8 @@ export default function InfluencerLinks() {
               </form>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { productsApi, publicApi, uploadApi } from '../../lib/api';
 import toast from 'react-hot-toast';
@@ -294,23 +295,24 @@ export default function AddProductModal({ isOpen, onClose, onSuccess, isAdmin = 
     </div>
   );
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/60 backdrop-blur-md"
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-md cursor-pointer"
           />
           
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col z-10"
+            className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col cursor-default"
+            style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
           >
             {/* Header */}
             <div className="p-6 border-b border-gray-100 bg-gray-50/50">
@@ -1001,6 +1003,7 @@ export default function AddProductModal({ isOpen, onClose, onSuccess, isAdmin = 
         </motion.div>
       </div>
     )}
-  </AnimatePresence>
-);
+    </AnimatePresence>,
+    document.body
+  );
 }

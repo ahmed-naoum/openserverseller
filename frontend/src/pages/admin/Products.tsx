@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
@@ -10,7 +11,7 @@ import {
   Trash2, Pencil, Package, ChevronLeft, ChevronRight, 
   ShieldAlert, Search, Plus, Filter, LayoutGrid, 
   List as ListIcon, Calendar, DollarSign, Tag, Eye,
-  Clock, CheckCircle
+  Clock, CheckCircle, Sparkles
 } from 'lucide-react';
 
 export default function AdminProducts() {
@@ -44,6 +45,7 @@ export default function AdminProducts() {
   const [productToDelete, setProductToDelete] = useState<any>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [search, setSearch] = useState('');
+  const [showInHomepageFilter, setShowInHomepageFilter] = useState(false);
   const [page, setPage] = useState(1);
   const limit = 10;
 
@@ -68,13 +70,14 @@ export default function AdminProducts() {
   ];
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['products', { category: selectedCategory, status: statusFilter, page, search }],
+    queryKey: ['products', { category: selectedCategory, status: statusFilter, page, search, showInHomepage: showInHomepageFilter }],
     queryFn: () => productsApi.list({ 
       category: selectedCategory || undefined, 
       status: statusFilter, 
       page, 
       limit,
-      search: search || undefined
+      search: search || undefined,
+      showInHomepage: showInHomepageFilter ? 'true' : undefined
     }),
   });
 
@@ -189,7 +192,7 @@ export default function AdminProducts() {
         </div>
 
         {/* Status Scroller */}
-        <div className="xl:col-span-8 bg-white border border-slate-200 rounded-2xl p-1.5 shadow-lg shadow-slate-100 flex items-center overflow-x-auto scrollbar-hide gap-1">
+        <div className="xl:col-span-5 bg-white border border-slate-200 rounded-2xl p-1.5 shadow-lg shadow-slate-100 flex items-center overflow-x-auto scrollbar-hide gap-1">
           {[
             { id: 'ALL', label: 'TOUS LES PRODUITS', icon: <Package size={16} /> }, 
             { id: 'PENDING', label: 'EN ATTENTE', icon: <Clock size={16} /> }, 
@@ -210,6 +213,27 @@ export default function AdminProducts() {
             </button>
           ))}
         </div>
+
+        {/* Slider d'Accueil Filter Toggle */}
+        <button
+          onClick={() => { setShowInHomepageFilter(prev => !prev); setPage(1); }}
+          className={`xl:col-span-3 flex items-center justify-between px-5 py-4 border rounded-2xl text-sm font-bold transition-all outline-none shadow-lg shadow-slate-100 ${
+            showInHomepageFilter 
+              ? 'bg-slate-900 text-white border-slate-900 shadow-slate-900/10' 
+              : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <Sparkles size={18} className={showInHomepageFilter ? 'text-amber-400 animate-pulse' : 'text-slate-400'} />
+            <div className="text-left">
+              <span className="block text-xs font-black uppercase tracking-wider leading-none">Slider d'Accueil</span>
+              <span className="text-[10px] font-bold text-slate-400 mt-1 block">Showcase page d'accueil</span>
+            </div>
+          </div>
+          <div className={`w-8 h-5 rounded-full p-0.5 transition-colors duration-200 ease-in-out ${showInHomepageFilter ? 'bg-amber-400' : 'bg-slate-200'}`}>
+            <div className={`bg-white w-4 h-4 rounded-full shadow-md transform duration-200 ease-in-out ${showInHomepageFilter ? 'translate-x-3' : 'translate-x-0'}`} />
+          </div>
+        </button>
       </div>
 
       {/* Category Scroller */}
@@ -288,7 +312,15 @@ export default function AdminProducts() {
                             )}
                           </div>
                           <div className="min-w-0">
-                            <div className="font-black text-slate-900 text-sm truncate max-w-[200px] mb-1 leading-tight">{product.nameFr}</div>
+                            <div className="font-black text-slate-900 text-sm truncate max-w-[200px] mb-1 leading-tight flex items-center gap-1.5">
+                              {product.nameFr}
+                              {product.showInHomepage && (
+                                <span className="px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-md text-[9px] font-black uppercase tracking-wider border border-amber-200 flex items-center gap-0.5" title="Affiché dans le Slider d'Accueil">
+                                  <Sparkles size={10} className="fill-amber-400 text-amber-500 animate-pulse" />
+                                  Slider
+                                </span>
+                              )}
+                            </div>
                             <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
                               <Tag size={10} /> {product.sku}
                             </div>
@@ -441,13 +473,16 @@ export default function AdminProducts() {
       </div>
 
       {/* Delete Confirmation Modal */}
-      {productToDelete && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 sm:p-6">
+      {productToDelete && createPortal(
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 sm:p-6">
           <div 
-            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300"
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-md cursor-pointer animate-in fade-in duration-300"
             onClick={() => setProductToDelete(null)}
           />
-          <div className="relative w-full max-w-md bg-white rounded-[2rem] shadow-2xl p-6 animate-in zoom-in-95 duration-200 border border-slate-100">
+          <div 
+            className="relative z-10 w-full max-w-md bg-white rounded-[2rem] shadow-2xl p-6 animate-in zoom-in-95 duration-200 border border-slate-100 cursor-default"
+            style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
+          >
             <div className="flex flex-col items-center text-center">
               <div className="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center text-rose-500 mb-4 animate-bounce">
                 <Trash2 size={28} />
@@ -478,7 +513,8 @@ export default function AdminProducts() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modals remain same logic but could be updated too if needed */}

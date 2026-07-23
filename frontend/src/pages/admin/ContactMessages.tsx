@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../lib/api';
 import { format } from 'date-fns';
@@ -272,9 +273,16 @@ export default function ContactMessages() {
       </div>
 
       {/* Details Dialog / Modal */}
-      {selectedMsg && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200">
+      {selectedMsg && createPortal(
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 animate-in fade-in zoom-in duration-200">
+          <div 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
+            onClick={() => setSelectedMsg(null)}
+          />
+          <div 
+            className="relative z-10 bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-slate-100 cursor-default"
+            style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
+          >
             {/* Modal Header */}
             <div className="px-6 py-5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -361,7 +369,8 @@ export default function ContactMessages() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -195,7 +195,7 @@ export const authApi = {
 
 
 export const productsApi = {
-  list: (params?: { category?: string; search?: string; page?: number; limit?: number; status?: string; myProducts?: string }) =>
+  list: (params?: { category?: string; search?: string; page?: number; limit?: number; status?: string; myProducts?: string; showInHomepage?: boolean | string }) =>
     api.get('/products', { params }),
   get: (id: string) => api.get(`/products/${id}`),
   create: (data: any) => api.post('/products', data),
@@ -407,8 +407,20 @@ export const adminApi = {
   // Helper-User Assignments
   getHelperUserAssignments: (helperId?: number) =>
     api.get('/admin/helper-user-assignments', { params: helperId ? { helperId } : {} }),
-  setHelperUserAssignments: (helperId: number, targetUserIds: number[], autoAssign?: boolean) =>
-    api.post('/admin/helper-user-assignments', { helperId, targetUserIds, autoAssign }),
+  setHelperUserAssignments: (
+    helperId: number,
+    targetUserIds: number[],
+    autoAssign?: boolean,
+    autoAssignVendors?: boolean,
+    autoAssignInfluencers?: boolean
+  ) =>
+    api.post('/admin/helper-user-assignments', {
+      helperId,
+      targetUserIds,
+      autoAssign,
+      autoAssignVendors,
+      autoAssignInfluencers,
+    }),
   getPaymentMonitoring: () => api.get('/admin/payment-monitoring'),
   getUserPaymentMonitoring: (id: number) => api.get(`/admin/payment-monitoring/user/${id}`),
   bulkUpdatePaymentSituation: (data: { leadIds: number[]; situation: string }) => 
@@ -655,6 +667,7 @@ export const settingsApi = {
   updateMaintenanceSettings: (data: { enabled: boolean; secret: string; registrationBlocked: boolean; influencerRegistrationBlocked: boolean; showIdentityVerification?: boolean; showBankVerification?: boolean; showContractVerification?: boolean }) => api.put('/settings/maintenance', data),
   getCacheVersion: () => api.get('/public/version'),
   refreshCache: () => api.post('/admin/cache-refresh'),
+  resetRankLevels: () => api.post('/admin/reset-rank-levels'),
 };
 
 export const webhooksApi = {
@@ -712,6 +725,13 @@ export const customProductsApi = {
       },
     });
   },
+};
+
+export const youcanApi = {
+  getStatus: () => api.get('/youcan/status'),
+  syncNow: () => api.post('/youcan/sync'),
+  toggleSync: (active: boolean) => api.post('/youcan/toggle-sync', { active }),
+  exchangeToken: (code: string) => api.post('/youcan/token', { code }),
 };
 
 
