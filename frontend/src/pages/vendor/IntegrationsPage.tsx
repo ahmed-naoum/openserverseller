@@ -580,22 +580,6 @@ export default function IntegrationsPage() {
             </div>
 
             <div className="p-6 space-y-6 text-slate-700">
-              {/* Webhook Endpoint Display */}
-              <div className="space-y-2">
-                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">
-                  {isRtl ? 'رابط Webhook لتلقي الطلبات في YouCan:' : 'URL Webhook à configurer dans YouCan:'}
-                </label>
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between font-mono text-xs">
-                  <span className="truncate pr-2 font-bold text-slate-800">{youcanWebhookUrl}</span>
-                  <button 
-                    onClick={() => copyToClipboard(youcanWebhookUrl, 'Webhook URL')}
-                    className="p-2 bg-white hover:bg-slate-100 border rounded-xl text-slate-600 shrink-0"
-                  >
-                    <Copy size={14} />
-                  </button>
-                </div>
-              </div>
-
               {/* Status and Auto Sync */}
               <div className="p-4 bg-slate-50 rounded-2xl space-y-3 border border-slate-100">
                 <div className="flex items-center justify-between">
