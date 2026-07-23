@@ -738,6 +738,7 @@ export const youcanApi = {
 
 export const shopifyApi = {
   getStatus: () => api.get('/shopify/status'),
+  syncNow: () => api.post('/shopify/sync'),
   exchangeToken: (data: { code: string; shop: string }) => api.post('/shopify/token', data),
   saveToken: (data: { storeDomain: string; accessToken?: string }) => api.post('/shopify/save-token', data),
   toggleSync: (active: boolean) => api.post('/shopify/toggle-sync', { active }),

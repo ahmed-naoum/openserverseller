@@ -252,4 +252,164 @@ router.get(
   })
 );
 
+/**
+ * POST /api/v1/shopify/sync
+ * Sync leads from Shopify API directly into database Lead records
+ */
+router.post(
+  '/sync',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const vendorId = req.user?.id;
+    if (!vendorId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const vendor = await prisma.user.findUnique({
+      where: { id: vendorId },
+      select: { shopifyAccessToken: true, shopifyStoreDomain: true },
+    });
+
+    if (!vendor || !vendor.shopifyAccessToken || !vendor.shopifyStoreDomain) {
+      res.status(400).json({ success: false, message: 'Boutique Shopify non connectée' });
+      return;
+    }
+
+    try {
+      const response = await axios.get(`https://${vendor.shopifyStoreDomain}/admin/api/2024-01/orders.json`, {
+        params: { status: 'any', limit: 50 },
+        headers: {
+          'X-Shopify-Access-Token': vendor.shopifyAccessToken,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        timeout: 15000,
+      });
+
+      const orders = response.data?.orders || [];
+      let importedCount = 0;
+
+      for (const order of orders) {
+        const phoneRaw = order.customer?.phone || order.shipping_address?.phone || order.billing_address?.phone || order.phone || '';
+        const phone = phoneRaw.replace(/[^0-9+]/g, '');
+
+        if (!phone) continue;
+
+        const firstName = order.customer?.first_name || order.shipping_address?.first_name || order.billing_address?.first_name || '';
+        const lastName = order.customer?.last_name || order.shipping_address?.last_name || order.billing_address?.last_name || '';
+        const fullName = [firstName, lastName].filter(Boolean).join(' ') || `Client Shopify #${order.order_number || order.id}`;
+
+        const existingLead = await prisma.lead.findFirst({
+          where: {
+            vendorId,
+            phone,
+          },
+        });
+
+        if (!existingLead) {
+          await prisma.lead.create({
+            data: {
+              vendorId,
+              fullName,
+              phone,
+              city: order.shipping_address?.city || order.billing_address?.city || 'Non spécifiée',
+              address: order.shipping_address?.address1 || order.billing_address?.address1 || null,
+              status: 'NEW',
+              source: 'SHOPIFY',
+              sourceId: order.id.toString(),
+              notes: `Commande Shopify #${order.order_number || order.name || order.id} (${order.total_price || 0} ${order.currency || 'MAD'})`,
+            },
+          });
+          importedCount++;
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `${importedCount} nouveau(x) prospect(s) Shopify synchronisé(s) avec succès !`,
+        count: importedCount,
+      });
+    } catch (error: any) {
+      console.error('Shopify Lead Sync Error:', error.response?.data || error.message);
+      res.status(500).json({
+        success: false,
+        message: 'Échec de la synchronisation des prospects depuis Shopify',
+        error: error.response?.data || error.message,
+      });
+    }
+  })
+);
+
+/**
+ * POST /api/v1/shopify/webhook
+ * Public endpoint to receive orders/create webhooks from Shopify
+ */
+router.post(
+  '/webhook',
+  asyncHandler(async (req, res) => {
+    const payload = req.body;
+    const shopDomain = req.headers['x-shopify-shop-domain'] || payload.domain || payload.shop_domain;
+
+    if (!shopDomain) {
+      res.status(400).json({ success: false, message: 'Store domain missing' });
+      return;
+    }
+
+    const cleanShop = (shopDomain as string).replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+    const vendor = await prisma.user.findFirst({
+      where: {
+        shopifyStoreDomain: cleanShop,
+        shopifySyncActive: true,
+        shopifyAccessToken: { not: null },
+      },
+    });
+
+    if (!vendor) {
+      res.status(200).json({ success: true, message: 'Ignored: No active connection' });
+      return;
+    }
+
+    const order = payload;
+    const phoneRaw = order.customer?.phone || order.shipping_address?.phone || order.billing_address?.phone || order.phone || '';
+    const phone = phoneRaw.replace(/[^0-9+]/g, '');
+
+    if (!phone) {
+      res.status(200).json({ success: true, message: 'Ignored: No phone number' });
+      return;
+    }
+
+    const firstName = order.customer?.first_name || order.shipping_address?.first_name || '';
+    const lastName = order.customer?.last_name || order.shipping_address?.last_name || '';
+    const fullName = [firstName, lastName].filter(Boolean).join(' ') || `Client Shopify #${order.order_number || order.id}`;
+
+    const existingLead = await prisma.lead.findFirst({
+      where: {
+        vendorId: vendor.id,
+        phone,
+      },
+    });
+
+    if (!existingLead) {
+      await prisma.lead.create({
+        data: {
+          vendorId: vendor.id,
+          fullName,
+          phone,
+          city: order.shipping_address?.city || 'Non spécifiée',
+          address: order.shipping_address?.address1 || null,
+          status: 'NEW',
+          source: 'SHOPIFY',
+          sourceId: order.id?.toString() || null,
+          notes: `Commande Webhook Shopify #${order.order_number || order.name || order.id}`,
+        },
+      });
+      console.log(`Lead automatically created for vendor ${vendor.id} from Shopify webhook`);
+    }
+
+    res.json({ success: true });
+  })
+);
+
 export default router;
