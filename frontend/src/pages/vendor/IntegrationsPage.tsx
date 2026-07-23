@@ -204,7 +204,7 @@ export default function IntegrationsPage() {
     if (!shopifyDraft.storeDomain) return;
     
     const cleanDomain = shopifyDraft.storeDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
-    const shopifyClientId = import.meta.env.VITE_SHOPIFY_CLIENT_ID || import.meta.env.VITE_SHOPIFY_API_KEY;
+    const shopifyClientId = import.meta.env.VITE_SHOPIFY_CLIENT_ID || import.meta.env.VITE_SHOPIFY_API_KEY || '027867167f30986a14fd7e5958dfbb90';
 
     // Direct OAuth authorize URL redirect if Client ID is configured
     if (shopifyClientId && !shopifyDraft.accessToken) {
