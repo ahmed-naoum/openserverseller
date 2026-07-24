@@ -1412,8 +1412,8 @@ export default function DashboardLayout() {
 
                 {showNotificationsMenu && (
                   <>
-                    <div className="fixed inset-0 z-[990]" onClick={() => setShowNotificationsMenu(false)}></div>
-                    <div className={`absolute ${language === 'ar' ? 'left-0 origin-top-left' : 'right-0 origin-top-right'} mt-3 w-80 sm:w-[420px] bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-[1000] overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300`}>
+                    <div data-dropdown-backdrop className="fixed inset-0 z-[99]" onClick={() => setShowNotificationsMenu(false)}></div>
+                    <div className={`absolute ${language === 'ar' ? 'left-0 origin-top-left' : 'right-0 origin-top-right'} mt-3 w-80 sm:w-[420px] bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-[100] overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300`}>
                       {/* Tray Header */}
                       <div className="px-5 py-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between">
                         <div>
@@ -1568,8 +1568,8 @@ export default function DashboardLayout() {
 
                 {showProfileMenu && (
                   <>
-                    <div className="fixed inset-0 z-[990]" onClick={() => setShowProfileMenu(false)}></div>
-                    <div className={`absolute ${language === 'ar' ? 'left-0 origin-top-left' : 'right-0 origin-top-right'} mt-3 w-64 bg-white rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-[1000] overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300`}>
+                    <div data-dropdown-backdrop className="fixed inset-0 z-[99]" onClick={() => setShowProfileMenu(false)}></div>
+                    <div className={`absolute ${language === 'ar' ? 'left-0 origin-top-left' : 'right-0 origin-top-right'} mt-3 w-64 bg-white rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-[100] overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300`}>
                       <div className="px-6 py-6 border-b border-slate-50 bg-slate-50/50 flex items-center">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-black text-slate-900 truncate">{user?.fullName}</p>
