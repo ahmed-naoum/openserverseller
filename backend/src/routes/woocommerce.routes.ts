@@ -44,6 +44,94 @@ router.get(
 );
 
 /**
+ * POST /api/v1/woocommerce/authorize-url
+ * Generate 1-Click WooCommerce Approval URL
+ */
+router.post(
+  '/authorize-url',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const { storeUrl } = req.body;
+    const vendorId = req.user?.id;
+
+    if (!vendorId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    if (!storeUrl) {
+      res.status(400).json({ success: false, message: 'URL de la boutique requise' });
+      return;
+    }
+
+    let cleanUrl = storeUrl.trim().toLowerCase();
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      cleanUrl = `https://${cleanUrl}`;
+    }
+    cleanUrl = cleanUrl.replace(/\/$/, '');
+
+    // Save initial store URL for vendor
+    await prisma.user.update({
+      where: { id: vendorId },
+      data: { wooCommerceUrl: cleanUrl },
+    });
+
+    const apiBaseUrl = process.env.API_BASE_URL || 'https://silacod.com/api/v1';
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+    const returnUrl = `${frontendUrl}/dashboard/woocommerce-callback`;
+    const callbackUrl = `${apiBaseUrl}/woocommerce/auth-callback`;
+
+    const authUrl = `${cleanUrl}/wc-auth/v1/authorize?app_name=${encodeURIComponent('SILACOD')}&scope=read_write&user_id=${encodeURIComponent(vendorId)}&return_url=${encodeURIComponent(returnUrl)}&callback_url=${encodeURIComponent(callbackUrl)}`;
+
+    res.json({
+      success: true,
+      data: {
+        authUrl,
+        storeUrl: cleanUrl,
+      },
+    });
+  })
+);
+
+/**
+ * POST /api/v1/woocommerce/auth-callback
+ * Public endpoint called automatically by WooCommerce after 1-Click Approve
+ */
+router.post(
+  '/auth-callback',
+  asyncHandler(async (req, res) => {
+    const { user_id, consumer_key, consumer_secret } = req.body;
+
+    if (!user_id || !consumer_key || !consumer_secret) {
+      res.status(400).json({ success: false, message: 'Invalid callback payload' });
+      return;
+    }
+
+    const vendor = await prisma.user.findUnique({
+      where: { id: user_id },
+    });
+
+    if (!vendor) {
+      res.status(404).json({ success: false, message: 'Vendor not found' });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: user_id },
+      data: {
+        wooCommerceConsumerKey: consumer_key.trim(),
+        wooCommerceConsumerSecret: consumer_secret.trim(),
+        wooCommerceSyncActive: true,
+      },
+    });
+
+    console.log(`WooCommerce 1-Click Auth completed successfully for vendor ${user_id}`);
+    res.json({ success: true, message: 'WooCommerce keys received and saved' });
+  })
+);
+
+/**
  * POST /api/v1/woocommerce/save-keys
  * Connect or update WooCommerce via Store URL, Consumer Key (ck_...), Consumer Secret (cs_...)
  */

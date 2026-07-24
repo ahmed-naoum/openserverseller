@@ -747,6 +747,7 @@ export const shopifyApi = {
 
 export const wooCommerceApi = {
   getStatus: () => api.get('/woocommerce/status'),
+  getAuthorizeUrl: (storeUrl: string) => api.post('/woocommerce/authorize-url', { storeUrl }),
   saveKeys: (data: { storeUrl: string; consumerKey: string; consumerSecret: string }) => api.post('/woocommerce/save-keys', data),
   toggleSync: (active: boolean) => api.post('/woocommerce/toggle-sync', { active }),
   getOrders: (params?: any) => api.get('/woocommerce/orders', { params }),

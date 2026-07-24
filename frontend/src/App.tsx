@@ -52,6 +52,7 @@ import AdminProfessionalEmails from './pages/admin/ProfessionalEmails';
 
 import YouCanCallback from './pages/vendor/YouCanCallback';
 import ShopifyCallback from './pages/vendor/ShopifyCallback';
+import WooCommerceCallback from './pages/vendor/WooCommerceCallback';
 import VendorInsertLead from './pages/vendor/InsertLead';
 import VendorDomains from './pages/vendor/Domains';
 import YouCanLeads from './pages/vendor/YouCanLeads';
@@ -348,6 +349,7 @@ function App() {
           <Route path="youcan-leads" element={<YouCanLeads />} />
           <Route path="shopify-leads" element={<ShopifyLeads />} />
           <Route path="woocommerce-leads" element={<WooCommerceLeads />} />
+          <Route path="woocommerce-callback" element={<WooCommerceCallback />} />
 
           <Route path="wallet" element={<UserWallet />} />
           <Route path="inventory" element={<VendorInventory />} />

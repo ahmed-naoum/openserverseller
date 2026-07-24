@@ -173,10 +173,23 @@ export default function IntegrationsPage() {
 
   const handleSaveWooCommerce = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!wooDraft.storeUrl || !wooDraft.consumerKey || !wooDraft.consumerSecret) {
-      toast.error(language === 'ar' ? 'يرجى ملء جميع الحقول' : 'Veuillez remplir tous les champs');
-      return;
+    if (!wooDraft.storeUrl) return;
+
+    // 1-Click WooCommerce OAuth Approval flow if keys are not provided manually
+    if (!wooDraft.consumerKey || !wooDraft.consumerSecret) {
+      try {
+        const res = await wooCommerceApi.getAuthorizeUrl(wooDraft.storeUrl);
+        const authUrl = res.data?.data?.authUrl || res.data?.authUrl;
+        if (authUrl) {
+          window.location.href = authUrl;
+          return;
+        }
+      } catch (err: any) {
+        toast.error(err.response?.data?.message || (language === 'ar' ? 'فشل إنشاء رابط ربط WooCommerce' : 'Échec de la génération du lien WooCommerce'));
+        return;
+      }
     }
+
     try {
       await wooCommerceApi.saveKeys({
         storeUrl: wooDraft.storeUrl,
@@ -795,8 +808,14 @@ export default function IntegrationsPage() {
                 />
               </div>
 
+              <div className="p-3 bg-purple-50 rounded-2xl border border-purple-100 text-xs text-purple-900 font-medium">
+                {isRtl 
+                  ? '💡 يمكنك الربط بنقرة واحدة بمجرد إدخال رابط متجرك والضغط على زر "الربط بنقرة واحدة"، أو إدخال المفاتيح يدوياً.'
+                  : '💡 Entrez simplement l\'URL de votre boutique puis cliquez sur le bouton pour vous connecter en 1 Clic via WooCommerce !'}
+              </div>
+
               <div className="space-y-1.5">
-                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider">Consumer Key (ck_...)</label>
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider">Consumer Key (ck_...) <span className="text-slate-400 font-normal">({isRtl ? 'اختياري' : 'Optionnel'})</span></label>
                 <input
                   type="text"
                   placeholder="ck_1234567890abcdef..."
@@ -807,7 +826,7 @@ export default function IntegrationsPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider">Consumer Secret (cs_...)</label>
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider">Consumer Secret (cs_...) <span className="text-slate-400 font-normal">({isRtl ? 'اختياري' : 'Optionnel'})</span></label>
                 <input
                   type="password"
                   placeholder="cs_1234567890abcdef..."
@@ -838,7 +857,7 @@ export default function IntegrationsPage() {
                 <button
                   type="button"
                   onClick={() => setActiveModal(null)}
-                  className="flex-1 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl text-xs font-black uppercase tracking-widest"
+                  className="py-3.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl text-xs font-black uppercase tracking-widest"
                 >
                   {isRtl ? 'إلغاء' : 'Annuler'}
                 </button>
@@ -846,7 +865,7 @@ export default function IntegrationsPage() {
                   type="submit"
                   className="flex-1 py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg hover:from-purple-700 hover:to-indigo-700"
                 >
-                  {isRtl ? 'حفظ الربط' : 'Enregistrer'}
+                  {isRtl ? '⚡ الربط بنقرة واحدة (WooCommerce)' : '⚡ Se connecter avec WooCommerce'}
                 </button>
               </div>
             </form>
