@@ -28,12 +28,15 @@ import securityRoutes from './security.routes.js';
 import webhookRoutes from './webhook.routes.js';
 import damanesignWebhookRoutes from './damanesign-webhook.routes.js';
 import youcanRoutes from './youcan.routes.js';
+import shopifyRoutes from './shopify.routes.js';
+import woocommerceRoutes from './woocommerce.routes.js';
 import supportRoutes from './support.routes.js';
 import invoiceRoutes from './invoice.routes.js';
 import backupRoutes from './admin/backup.routes.js';
 import pixelRoutes from './pixel.routes.js';
 import domainRoutes from './domain.routes.js';
 import customProductRoutes from './customProduct.routes.js';
+import eventRoutes from './event.routes.js';
 
 
 const router = Router();
@@ -86,10 +89,15 @@ router.use('/settings', auditLog, settingsRoutes);
 router.use('/webhooks/damanesign', damanesignWebhookRoutes);
 router.use('/webhooks', auditLog, webhookRoutes);
 router.use('/youcan', auditLog, youcanRoutes);
+router.use('/shopify', auditLog, shopifyRoutes);
+router.use('/woocommerce', auditLog, woocommerceRoutes);
+router.use('/integrations/woocommerce', auditLog, woocommerceRoutes);
+router.use('/integrations/shopify', auditLog, shopifyRoutes);
 router.use('/support', auditLog, supportRoutes);
 router.use('/user-pixels', auditLog, pixelRoutes);
 router.use('/domain', auditLog, domainRoutes);
 router.use('/custom-products', auditLog, customProductRoutes);
+router.use('/event', eventRoutes);
 
 
 export default router;

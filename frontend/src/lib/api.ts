@@ -216,6 +216,8 @@ export const leadsApi = {
   import: (data: { leads: any[]; sourceMode?: string }) => api.post('/leads/import', data),
   importWithProduct: (data: { productId: number; leads: any[]; sourceMode?: string }) => api.post('/leads/import', data),
   getMyProducts: (params?: { mode?: string }) => api.get('/leads/my-products', { params }),
+  pushIntegrationLeads: (data: { source: string; mode: string; productId: number; orders: any[] }) =>
+    api.post('/leads/push-integration-leads', data),
   update: (id: string, data: any) => api.patch(`/leads/${id}`, data),
   updateStatus: (id: string, data: { status: string; notes?: string; callbackAt?: string; requestedPriceMad?: number }) =>
     api.patch(`/leads/${id}/status`, data),
@@ -732,6 +734,34 @@ export const youcanApi = {
   syncNow: () => api.post('/youcan/sync'),
   toggleSync: (active: boolean) => api.post('/youcan/toggle-sync', { active }),
   exchangeToken: (code: string) => api.post('/youcan/token', { code }),
+  getOrders: (params?: any) => api.get('/youcan/orders', { params }),
+  getCustomers: (params?: any) => api.get('/youcan/customers', { params }),
+};
+
+export const shopifyApi = {
+  getStatus: () => api.get('/shopify/status'),
+  syncNow: () => api.post('/shopify/sync'),
+  exchangeToken: (data: { code: string; shop: string }) => api.post('/shopify/token', data),
+  saveToken: (data: { storeDomain: string; accessToken?: string }) => api.post('/shopify/save-token', data),
+  toggleSync: (active: boolean) => api.post('/shopify/toggle-sync', { active }),
+  getOrders: (params?: any) => api.get('/shopify/orders', { params }),
+};
+
+export const wooCommerceApi = {
+  getStatus: () => api.get('/woocommerce/status'),
+  getAuthorizeUrl: (storeUrl: string) => api.post('/woocommerce/authorize-url', { storeUrl }),
+  saveKeys: (data: { storeUrl: string; consumerKey: string; consumerSecret: string }) => api.post('/woocommerce/save-keys', data),
+  toggleSync: (active: boolean) => api.post('/woocommerce/toggle-sync', { active }),
+  getOrders: (params?: any) => api.get('/woocommerce/orders', { params }),
+  syncNow: () => api.post('/woocommerce/sync'),
+};
+
+export const eventApi = {
+  getStatus: () => api.get('/event/status'),
+  register: (data: any) => api.post('/event/register', data),
+  getAdminRegistrations: () => api.get('/event/admin/registrations'),
+  toggleAdminStatus: (enabled: boolean) => api.put('/event/admin/status', { enabled }),
+  deleteAdminRegistration: (id: number) => api.delete(`/event/admin/registrations/${id}`),
 };
 
 

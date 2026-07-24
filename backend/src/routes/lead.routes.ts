@@ -2429,4 +2429,109 @@ router.post(
   })
 );
 
+/**
+ * POST /api/v1/leads/push-integration-leads
+ * Bulk push selected WooCommerce, Shopify, or YouCan orders as Leads to Call Center
+ */
+router.post(
+  '/push-integration-leads',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const userId = req.user!.id;
+    const { source, mode, productId, orders } = req.body;
+
+    if (!Array.isArray(orders) || orders.length === 0) {
+      throw new AppException(400, 'Aucune commande sélectionnée.');
+    }
+
+    if (!productId) {
+      throw new AppException(400, 'Veuillez sélectionner un produit dans votre inventaire.');
+    }
+
+    const product = await prisma.product.findUnique({
+      where: { id: Number(productId) },
+    });
+
+    if (!product) {
+      throw new AppException(404, 'Produit introuvable.');
+    }
+
+    const isAffiliate = mode === 'AFFILIATE';
+    let referralLinkId: number | null = null;
+
+    if (isAffiliate) {
+      // Find or create referral link for this affiliate & product
+      let refLink = await prisma.referralLink.findFirst({
+        where: { influencerId: userId, productId: product.id },
+      });
+
+      if (!refLink) {
+        refLink = await prisma.referralLink.create({
+          data: {
+            influencerId: userId,
+            productId: product.id,
+            slug: `aff-${userId}-${product.id}-${Date.now().toString(36)}`,
+          },
+        });
+      }
+      referralLinkId = refLink.id;
+    }
+
+    const sourceTag = source ? String(source).toUpperCase() : 'WOOCOMMERCE';
+    let createdCount = 0;
+
+    for (const ord of orders) {
+      const phoneRaw = ord.phone || ord.billing?.phone || ord.shipping?.phone || '';
+      const phone = phoneRaw.replace(/[^0-9+]/g, '');
+
+      if (!phone) continue;
+
+      const firstName = ord.billing?.first_name || ord.shipping?.first_name || '';
+      const lastName = ord.billing?.last_name || ord.shipping?.last_name || '';
+      const fullName = ord.customerName || [firstName, lastName].filter(Boolean).join(' ') || `Client ${sourceTag} #${ord.number || ord.id}`;
+      const city = ord.city || ord.billing?.city || ord.shipping?.city || 'Non spécifiée';
+      const address = ord.address || ord.billing?.address_1 || ord.shipping?.address_1 || null;
+      const orderRef = ord.number || ord.id || '';
+      const totalAmount = Number(ord.total || 0);
+
+      // Avoid creating duplicate leads for the same source & order ID
+      const existing = await prisma.lead.findFirst({
+        where: {
+          vendorId: userId,
+          phone,
+          source: sourceTag,
+          sourceId: String(ord.id),
+        },
+      });
+
+      if (!existing) {
+        await prisma.lead.create({
+          data: {
+            vendorId: userId,
+            fullName,
+            phone,
+            city,
+            address,
+            status: 'NEW',
+            source: sourceTag,
+            sourceId: String(ord.id),
+            sourceMode: isAffiliate ? 'AFFILIATE' : 'VENDOR',
+            productVariant: product.nameFr || product.nameAr || product.name || `Produit #${product.id}`,
+            requestedPriceMad: totalAmount > 0 ? totalAmount : null,
+            referralLinkId,
+            notes: `Leads ${sourceTag} | Commande #${orderRef} | ${product.nameFr || product.nameAr}`,
+          },
+        });
+        createdCount++;
+      }
+    }
+
+    res.json({
+      status: 'success',
+      message: `${createdCount} prospect(s) ${sourceTag} envoyé(s) avec succès au Call Center !`,
+      count: createdCount,
+    });
+  })
+);
+
 export default router;

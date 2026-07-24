@@ -51,12 +51,18 @@ import AdminProfessionalEmails from './pages/admin/ProfessionalEmails';
 
 
 import YouCanCallback from './pages/vendor/YouCanCallback';
+import ShopifyCallback from './pages/vendor/ShopifyCallback';
+import WooCommerceCallback from './pages/vendor/WooCommerceCallback';
 import VendorInsertLead from './pages/vendor/InsertLead';
 import VendorDomains from './pages/vendor/Domains';
 import YouCanLeads from './pages/vendor/YouCanLeads';
+import ShopifyLeads from './pages/vendor/ShopifyLeads';
+import WooCommerceLeads from './pages/vendor/WooCommerceLeads';
 import IntegrationsPage from './pages/vendor/IntegrationsPage';
 import PlatformSettings from './pages/admin/PlatformSettings';
 import SecurityFirewall from './pages/admin/SecurityFirewall';
+import AdminEventRegistrations from './pages/admin/AdminEventRegistrations';
+import EventMasterclass from './pages/public/EventMasterclass';
 import WebhookLogs from './pages/admin/WebhookLogs';
 import WebhookTester from './pages/admin/WebhookTester';
 import GrossellerDashboard from './pages/grosseller/Dashboard';
@@ -250,6 +256,8 @@ function App() {
           <Route path="/careers" element={<CareersPage />} />
           <Route path="/blog" element={<BlogPage />} />
           <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/masterclass" element={<EventMasterclass />} />
+          <Route path="/event" element={<EventMasterclass />} />
           <Route path="/blocked" element={<BlockedPage />} />
 
         {/* Verification Route */}
@@ -343,6 +351,9 @@ function App() {
           <Route path="leads" element={<VendorLeads />} />
           <Route path="leads/new" element={<VendorInsertLead />} />
           <Route path="youcan-leads" element={<YouCanLeads />} />
+          <Route path="shopify-leads" element={<ShopifyLeads />} />
+          <Route path="woocommerce-leads" element={<WooCommerceLeads />} />
+          <Route path="woocommerce-callback" element={<WooCommerceCallback />} />
 
           <Route path="wallet" element={<UserWallet />} />
           <Route path="inventory" element={<VendorInventory />} />
@@ -363,6 +374,7 @@ function App() {
           <Route path="links" element={<InfluencerLinks />} />
           <Route path="integrations" element={<IntegrationsPage />} />
           <Route path="youcan-callback" element={<YouCanCallback />} />
+          <Route path="shopify-callback" element={<ShopifyCallback />} />
           <Route path="invoices" element={<UserInvoices />} />
           <Route path="support" element={<SupportTickets />} />
           <Route path="verification" element={<ProfileVerification />} />
@@ -452,6 +464,7 @@ function App() {
           <Route path="announcements" element={<AdminAnnouncements />} />
           <Route path="campaigns" element={<AdminCampaigns />} />
           <Route path="verifications" element={<AdminVerifications />} />
+          <Route path="event-registrations" element={<AdminEventRegistrations />} />
           <Route path="platform-settings" element={<PlatformSettings />} />
           <Route path="professional-emails" element={
             <RoleGuard allowedRoles={['SUPER_ADMIN']}>
