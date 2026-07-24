@@ -59,6 +59,7 @@ interface WooCommerceOrder {
     quantity?: number;
     price?: number | string;
     total?: number | string;
+    subtotal?: number | string;
   }>;
 }
 
