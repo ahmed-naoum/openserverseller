@@ -958,7 +958,7 @@ export default function DashboardLayout() {
                   <Icon size={15} strokeWidth={isActive ? 2.5 : 2} className={isActive ? 'text-inherit' : 'text-slate-400 group-hover:text-slate-900'} />
                 </div>
                 
-                {!sidebarCollapsed && (
+                {(!sidebarCollapsed || sidebarOpen) && (
                   <div className="flex-1 flex items-center justify-between min-w-0 animate-in fade-in duration-300">
                     <span className="transition-all duration-300 whitespace-nowrap overflow-hidden text-ellipsis">{t(item.name, 'dashboard')}</span>
                     
@@ -1002,7 +1002,7 @@ export default function DashboardLayout() {
                   </div>
                 )}
                 
-                {sidebarCollapsed && !hasChildren && (
+                {sidebarCollapsed && !sidebarOpen && !hasChildren && (
                   <div className={`hidden lg:block absolute ${isRtl ? 'right-full mr-3 translate-x-[10px]' : 'left-full ml-3 translate-x-[-10px]'} px-4 py-2 bg-slate-900 text-white text-[10px] uppercase font-black tracking-widest rounded-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-300 group-hover:translate-x-0 whitespace-nowrap z-[100] shadow-2xl`}>
                     {t(item.name, 'dashboard')}
                     {(item.href?.includes('/chat') || item.children?.some((c: any) => c.href?.includes('/chat'))) && totalUnread > 0 && (
@@ -1062,7 +1062,7 @@ export default function DashboardLayout() {
                 )}
 
                 {/* Professional Sub-navigation */}
-                {hasChildren && isExpanded && !sidebarCollapsed && (
+                {hasChildren && isExpanded && (!sidebarCollapsed || sidebarOpen) && (
                   <div className={`relative ${isRtl ? 'mr-5 pr-3 pl-0' : 'ml-5 pl-3 pr-0'} space-y-0.5 mt-0.5 animate-in slide-in-from-top-2 fade-in duration-300`}>
                     {it.children.map((child: any) => {
                       const isChildActive = location.pathname === child.href;
@@ -1108,7 +1108,7 @@ export default function DashboardLayout() {
                 )}
 
                 {/* Floating Sub-navigation for Collapsed Sidebar */}
-                {hasChildren && sidebarCollapsed && (
+                {hasChildren && sidebarCollapsed && !sidebarOpen && (
                   <div className={`absolute ${isRtl ? 'right-full pr-2 mr-0 pl-0' : 'left-full pl-2 ml-0 pr-0'} top-0 hidden peer-hover:block hover:block z-[100]`}>
                     <div className={`w-48 bg-white rounded-xl shadow-xl border border-slate-100 p-2 animate-in fade-in ${isRtl ? 'slide-in-from-right-2' : 'slide-in-from-left-2'} duration-200`}>
                       <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 pb-2 mb-1 border-b border-slate-50">
@@ -1188,7 +1188,7 @@ export default function DashboardLayout() {
                 {currentMode === 'AFFILIATE' ? 'A' : 'V'}
               </div>
               <div className={`text-left flex-1 transition-all duration-300 ${
-                sidebarCollapsed ? 'lg:hidden' : ''
+                (sidebarCollapsed && !sidebarOpen) ? 'lg:hidden' : ''
               }`}>
                 <p className="text-[9px] font-black text-slate-900 uppercase tracking-tight leading-none">
                   {currentMode === 'AFFILIATE' ? 'Affilié' : 'Vendeur'}
@@ -1196,7 +1196,7 @@ export default function DashboardLayout() {
                 <p className="text-[7px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">PRO SWITCH</p>
               </div>
               <div className={`p-1.5 bg-slate-50 rounded-xl group-hover:bg-primary-50 transition-colors ${
-                sidebarCollapsed ? 'lg:hidden' : ''
+                (sidebarCollapsed && !sidebarOpen) ? 'lg:hidden' : ''
               }`}>
                 <Zap size={12} className="text-slate-400 group-hover:text-primary-500 transition-colors" />
               </div>
