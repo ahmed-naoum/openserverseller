@@ -306,7 +306,7 @@
 
   /* Dashboard Premium Tokens */
   .glass-sidebar {
-    @apply bg-white/70 backdrop-blur-3xl border-r border-white/40 shadow-[4px_0_32px_rgba(0,0,0,0.03)];
+    @apply bg-white border-r border-slate-200/60 shadow-[4px_0_32px_rgba(0,0,0,0.05)];
   }
 
   .glass-panel {

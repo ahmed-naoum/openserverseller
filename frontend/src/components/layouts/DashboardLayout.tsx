@@ -1311,7 +1311,7 @@ export default function DashboardLayout() {
           : (sidebarCollapsed ? 'lg:pl-20 pr-0' : 'lg:pl-56 pr-0')
       }`}>
         {/* Header */}
-        <header className="sticky top-0 h-14 bg-[#F8FAFC]/80 backdrop-blur-xl border-b border-slate-200/50 z-[500]">
+        <header className="sticky top-0 h-14 bg-[#F8FAFC] border-b border-slate-200/50 z-[500]">
           <div className="flex items-center justify-between h-full px-3 sm:px-4 lg:px-6">
             {/* Left section */}
             <div className="flex items-center gap-3">
