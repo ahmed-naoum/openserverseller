@@ -2497,25 +2497,22 @@ router.post(
     }
 
     const isAffiliate = mode === 'AFFILIATE';
-    let referralLinkId: number | null = null;
+    
+    // Find or create referral link for this user & product
+    let refLink = await prisma.referralLink.findFirst({
+      where: { influencerId: userId, productId: product.id },
+    });
 
-    if (isAffiliate) {
-      // Find or create referral link for this affiliate & product
-      let refLink = await prisma.referralLink.findFirst({
-        where: { influencerId: userId, productId: product.id },
+    if (!refLink) {
+      refLink = await prisma.referralLink.create({
+        data: {
+          influencerId: userId,
+          productId: product.id,
+          slug: `${isAffiliate ? 'aff' : 'sell'}-${userId}-${product.id}-${Date.now().toString(36)}`,
+        },
       });
-
-      if (!refLink) {
-        refLink = await prisma.referralLink.create({
-          data: {
-            influencerId: userId,
-            productId: product.id,
-            slug: `aff-${userId}-${product.id}-${Date.now().toString(36)}`,
-          },
-        });
-      }
-      referralLinkId = refLink.id;
     }
+    const referralLinkId = refLink.id;
 
     const sourceTag = source ? String(source).toUpperCase() : 'WOOCOMMERCE';
     let createdCount = 0;
