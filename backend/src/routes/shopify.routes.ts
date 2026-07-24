@@ -157,12 +157,18 @@ router.post(
 
     const cleanShop = storeDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
 
+    const currentVendor = await prisma.user.findUnique({
+      where: { id: vendorId },
+      select: { shopifyConnectedAt: true },
+    });
+
     await prisma.user.update({
       where: { id: vendorId },
       data: {
         shopifyAccessToken: accessToken || null,
         shopifyStoreDomain: cleanShop,
         shopifySyncActive: true,
+        shopifyConnectedAt: currentVendor?.shopifyConnectedAt || new Date(),
       },
     });
 
@@ -204,7 +210,7 @@ router.post(
 
 /**
  * GET /api/v1/shopify/orders
- * Fetch live orders directly from Shopify Admin API
+ * Fetch live orders directly from Shopify Admin API (filtered by shopifyConnectedAt)
  */
 router.get(
   '/orders',
@@ -218,7 +224,7 @@ router.get(
 
     const vendor = await prisma.user.findUnique({
       where: { id: vendorId },
-      select: { shopifyAccessToken: true, shopifyStoreDomain: true },
+      select: { shopifyAccessToken: true, shopifyStoreDomain: true, shopifyConnectedAt: true },
     });
 
     if (!vendor || !vendor.shopifyAccessToken || !vendor.shopifyStoreDomain) {
@@ -226,9 +232,23 @@ router.get(
       return;
     }
 
+    let connectedAt = vendor.shopifyConnectedAt;
+    if (!connectedAt) {
+      connectedAt = new Date();
+      await prisma.user.update({
+        where: { id: vendorId },
+        data: { shopifyConnectedAt: connectedAt },
+      });
+    }
+
     try {
       const response = await axios.get(`https://${vendor.shopifyStoreDomain}/admin/api/2024-01/orders.json`, {
-        params: { status: 'any', limit: 50, ...req.query },
+        params: { 
+          status: 'any', 
+          limit: 250, 
+          created_at_min: connectedAt.toISOString(),
+          ...req.query 
+        },
         headers: {
           'X-Shopify-Access-Token': vendor.shopifyAccessToken,
           'Content-Type': 'application/json',
@@ -237,9 +257,11 @@ router.get(
         timeout: 15000,
       });
 
+      const orders = (response.data?.orders || []).filter((o: any) => new Date(o.created_at) >= connectedAt);
+
       res.json({
         success: true,
-        data: response.data?.orders || [],
+        data: orders,
       });
     } catch (error: any) {
       console.error('Shopify Orders API Error:', error.response?.data || error.message);
@@ -268,7 +290,7 @@ router.post(
 
     const vendor = await prisma.user.findUnique({
       where: { id: vendorId },
-      select: { shopifyAccessToken: true, shopifyStoreDomain: true },
+      select: { shopifyAccessToken: true, shopifyStoreDomain: true, shopifyConnectedAt: true },
     });
 
     if (!vendor || !vendor.shopifyAccessToken || !vendor.shopifyStoreDomain) {
@@ -276,9 +298,18 @@ router.post(
       return;
     }
 
+    let connectedAt = vendor.shopifyConnectedAt;
+    if (!connectedAt) {
+      connectedAt = new Date();
+      await prisma.user.update({
+        where: { id: vendorId },
+        data: { shopifyConnectedAt: connectedAt },
+      });
+    }
+
     try {
       const response = await axios.get(`https://${vendor.shopifyStoreDomain}/admin/api/2024-01/orders.json`, {
-        params: { status: 'any', limit: 250 },
+        params: { status: 'any', limit: 250, created_at_min: connectedAt.toISOString() },
         headers: {
           'X-Shopify-Access-Token': vendor.shopifyAccessToken,
           'Content-Type': 'application/json',
@@ -287,7 +318,7 @@ router.post(
         timeout: 15000,
       });
 
-      const orders = response.data?.orders || [];
+      const orders = (response.data?.orders || []).filter((o: any) => new Date(o.created_at) >= connectedAt);
       let importedCount = 0;
 
       for (const order of orders) {

@@ -77,12 +77,18 @@ router.post(
       }
 
       // Save token and domain to DB
+      const currentVendor = await prisma.user.findUnique({
+        where: { id: vendorId },
+        select: { youcanConnectedAt: true },
+      });
+
       await prisma.user.update({
         where: { id: vendorId },
         data: {
           youcanAccessToken: data.access_token,
           youcanStoreDomain: storeDomain,
           youcanSyncActive: true,
+          youcanConnectedAt: currentVendor?.youcanConnectedAt || new Date(),
         },
       });
 
@@ -113,7 +119,7 @@ router.post(
 
 /**
  * GET /api/v1/youcan/orders
- * Fetch live orders with customer information from YouCan API
+ * Fetch live orders with customer information from YouCan API (filtered by youcanConnectedAt)
  */
 router.get(
   '/orders',
@@ -127,12 +133,21 @@ router.get(
 
     const vendor = await prisma.user.findUnique({
       where: { id: vendorId },
-      select: { youcanAccessToken: true, youcanStoreDomain: true },
+      select: { youcanAccessToken: true, youcanStoreDomain: true, youcanConnectedAt: true },
     });
 
     if (!vendor || !vendor.youcanAccessToken) {
       res.status(400).json({ success: false, message: 'YouCan store is not connected' });
       return;
+    }
+
+    let connectedAt = vendor.youcanConnectedAt;
+    if (!connectedAt) {
+      connectedAt = new Date();
+      await prisma.user.update({
+        where: { id: vendorId },
+        data: { youcanConnectedAt: connectedAt },
+      });
     }
 
     try {
@@ -148,9 +163,12 @@ router.get(
         timeout: 15000,
       });
 
+      const rawOrders = response.data?.data || response.data || [];
+      const orders = Array.isArray(rawOrders) ? rawOrders.filter((o: any) => new Date(o.created_at || o.createdAt) >= connectedAt) : [];
+
       res.json({
         success: true,
-        data: response.data?.data || response.data || [],
+        data: orders,
         meta: response.data?.meta || null,
       });
     } catch (error: any) {
@@ -231,12 +249,21 @@ router.post(
 
     const vendor = await prisma.user.findUnique({
       where: { id: vendorId },
-      select: { youcanAccessToken: true },
+      select: { youcanAccessToken: true, youcanConnectedAt: true },
     });
 
     if (!vendor || !vendor.youcanAccessToken) {
        res.status(400).json({ success: false, message: 'YouCan is not connected' });
        return;
+    }
+
+    let connectedAt = vendor.youcanConnectedAt;
+    if (!connectedAt) {
+      connectedAt = new Date();
+      await prisma.user.update({
+        where: { id: vendorId },
+        data: { youcanConnectedAt: connectedAt },
+      });
     }
 
     try {
@@ -248,7 +275,11 @@ router.post(
         },
       });
 
-      const youcanCustomers = response.data?.data || response.data || [];
+      const rawCustomers = response.data?.data || response.data || [];
+      const youcanCustomers = Array.isArray(rawCustomers) 
+        ? rawCustomers.filter((c: any) => new Date(c.created_at || c.createdAt) >= connectedAt) 
+        : [];
+
       if (!Array.isArray(youcanCustomers)) {
          res.status(500).json({ success: false, message: 'Invalid response format from YouCan API' });
          return;

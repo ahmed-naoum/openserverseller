@@ -104,17 +104,20 @@ model User {
   youcanAccessToken String?
   youcanStoreDomain String?
   youcanSyncActive  Boolean   @default(true)
+  youcanConnectedAt DateTime?
 
   // Shopify Integration
   shopifyAccessToken String?
   shopifyStoreDomain String?
   shopifySyncActive  Boolean   @default(true)
+  shopifyConnectedAt DateTime?
 
   // WooCommerce Integration
   wooCommerceUrl            String?
   wooCommerceConsumerKey    String?
   wooCommerceConsumerSecret String?
   wooCommerceSyncActive     Boolean   @default(true)
+  wooCommerceConnectedAt    DateTime?
 
   language       String            @default("ar") @db.VarChar(5)
 

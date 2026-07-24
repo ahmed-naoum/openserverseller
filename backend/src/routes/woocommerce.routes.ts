@@ -173,6 +173,12 @@ router.post(
       // We will still allow saving if test fails due to SSL/CORS, but log warning
     }
 
+    // Save keys & set connectedAt timestamp
+    const currentVendor = await prisma.user.findUnique({
+      where: { id: vendorId },
+      select: { wooCommerceConnectedAt: true },
+    });
+
     await prisma.user.update({
       where: { id: vendorId },
       data: {
@@ -180,6 +186,7 @@ router.post(
         wooCommerceConsumerKey: consumerKey.trim(),
         wooCommerceConsumerSecret: consumerSecret.trim(),
         wooCommerceSyncActive: true,
+        wooCommerceConnectedAt: currentVendor?.wooCommerceConnectedAt || new Date(),
       },
     });
 
@@ -222,7 +229,7 @@ router.post(
 
 /**
  * GET /api/v1/woocommerce/orders
- * Fetch live orders directly from WooCommerce REST API
+ * Fetch live orders directly from WooCommerce REST API (filtered by connectedAt timestamp)
  */
 router.get(
   '/orders',
@@ -239,7 +246,8 @@ router.get(
       select: { 
         wooCommerceUrl: true, 
         wooCommerceConsumerKey: true, 
-        wooCommerceConsumerSecret: true 
+        wooCommerceConsumerSecret: true,
+        wooCommerceConnectedAt: true,
       },
     });
 
@@ -248,13 +256,23 @@ router.get(
       return;
     }
 
+    // Ensure connectedAt is set
+    let connectedAt = vendor.wooCommerceConnectedAt;
+    if (!connectedAt) {
+      connectedAt = new Date();
+      await prisma.user.update({
+        where: { id: vendorId },
+        data: { wooCommerceConnectedAt: connectedAt },
+      });
+    }
+
     try {
       let page = 1;
       let allOrders: any[] = [];
       let hasMore = true;
       let totalCount = 0;
 
-      // Fetch across ALL pages (up to 50 pages of 100 = 5,000 orders)
+      // Fetch across pages for orders created after connectedAt
       while (hasMore && page <= 50) {
         const response = await axios.get(`${vendor.wooCommerceUrl}/wp-json/wc/v3/orders`, {
           params: {
@@ -263,14 +281,13 @@ router.get(
             per_page: 100,
             page,
             status: 'any',
+            after: connectedAt.toISOString(),
           },
           timeout: 20000,
         });
 
-        const totalHeader = response.headers['x-wp-total'];
-        if (totalHeader) totalCount = Number(totalHeader);
-
-        const fetched = response.data || [];
+        const fetched = (response.data || []).filter((o: any) => new Date(o.date_created || o.date_created_gmt) >= connectedAt);
+        
         if (fetched.length === 0) {
           hasMore = false;
         } else {
@@ -282,7 +299,7 @@ router.get(
 
       res.json({
         success: true,
-        total: totalCount || allOrders.length,
+        total: allOrders.length,
         data: allOrders,
       });
     } catch (error: any) {
@@ -315,7 +332,8 @@ router.post(
       select: { 
         wooCommerceUrl: true, 
         wooCommerceConsumerKey: true, 
-        wooCommerceConsumerSecret: true 
+        wooCommerceConsumerSecret: true,
+        wooCommerceConnectedAt: true,
       },
     });
 
@@ -324,24 +342,34 @@ router.post(
       return;
     }
 
+    let connectedAt = vendor.wooCommerceConnectedAt;
+    if (!connectedAt) {
+      connectedAt = new Date();
+      await prisma.user.update({
+        where: { id: vendorId },
+        data: { wooCommerceConnectedAt: connectedAt },
+      });
+    }
+
     try {
       let page = 1;
       let orders: any[] = [];
       let hasMore = true;
 
-      // Fetch across pages (up to 5 pages of 100 = 500 orders)
-      while (hasMore && page <= 5) {
+      // Fetch orders created after connectedAt
+      while (hasMore && page <= 50) {
         const response = await axios.get(`${vendor.wooCommerceUrl}/wp-json/wc/v3/orders`, {
           params: {
             consumer_key: vendor.wooCommerceConsumerKey,
             consumer_secret: vendor.wooCommerceConsumerSecret,
             per_page: 100,
             page,
+            after: connectedAt.toISOString(),
           },
           timeout: 15000,
         });
 
-        const fetched = response.data || [];
+        const fetched = (response.data || []).filter((o: any) => new Date(o.date_created || o.date_created_gmt) >= connectedAt);
         if (fetched.length === 0) {
           hasMore = false;
         } else {
