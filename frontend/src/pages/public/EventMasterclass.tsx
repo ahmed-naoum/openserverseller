@@ -110,31 +110,13 @@ export default function EventMasterclass() {
             <div className="flex flex-col items-center space-y-1 border-t sm:border-t-0 sm:border-r border-slate-100 pt-3 sm:pt-0">
               <span className="text-xl">⏰</span>
               <span className="text-xs text-slate-500 font-semibold">التوقيت بالضبط</span>
-              <strong className="text-sm text-slate-900 font-extrabold">8:00 – 10:00 مساءً (UTC)</strong>
+              <strong className="text-sm text-slate-900 font-extrabold">8:00 مساءً (20:00)</strong>
             </div>
             <div className="flex flex-col items-center space-y-1 border-t sm:border-t-0 sm:border-r border-slate-100 pt-3 sm:pt-0">
               <span className="text-xl">💻</span>
               <span className="text-xs text-slate-500 font-semibold">طريقة الحضور</span>
-              <a 
-                href="https://meet.google.com/shm-mmgb-cqr" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-sm text-[#F05023] hover:underline font-extrabold flex items-center gap-1"
-              >
-                Google Meet 🔗
-              </a>
+              <strong className="text-sm text-slate-900 font-extrabold">Google Meet</strong>
             </div>
-          </div>
-
-          <div className="text-center pt-1">
-            <a 
-              href="https://calendar.app.google/7bvF2BVAfEHs9X4x5" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all"
-            >
-              <span>📅 إضافة الموعد إلى تقويم Google (Calendar)</span>
-            </a>
           </div>
         </div>
 
@@ -175,36 +157,14 @@ export default function EventMasterclass() {
           </div>
         ) : submitted ? (
           /* Confirmation Success Modal */
-          <div className="bg-white border border-emerald-200 rounded-3xl p-8 sm:p-12 text-center space-y-6 shadow-xl animate-in zoom-in-95 duration-200">
+          <div className="bg-white border border-emerald-200 rounded-3xl p-8 sm:p-12 text-center space-y-4 shadow-xl animate-in zoom-in-95 duration-200">
             <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
               <CheckCircle2 size={48} />
             </div>
-            <div className="space-y-2">
-              <h2 className="text-2xl sm:text-3xl font-black text-slate-900">تم حجز مقعدك بنجاح! 🚀</h2>
-              <p className="text-sm sm:text-base text-slate-600 font-medium max-w-lg mx-auto leading-relaxed">
-                شكراً لك <strong className="text-slate-900">{formData.fullName}</strong>. لقد توصلنا بمعلوماتك وسنرسل لك رابط الحضور عبر الواتساب برقم <span className="font-mono dir-ltr font-bold text-slate-900">{formData.whatsapp}</span> والبريد الإلكتروني قبل انطلاق الميتينغ.
-              </p>
-            </div>
-
-            {/* Direct Meeting Action Buttons */}
-            <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
-              <a
-                href="https://meet.google.com/shm-mmgb-cqr"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto px-6 py-3.5 bg-[#F05023] hover:bg-[#d94115] text-white rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg transition-all"
-              >
-                🎥 الانضمام عبر Google Meet
-              </a>
-              <a
-                href="https://calendar.app.google/7bvF2BVAfEHs9X4x5"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto px-6 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-xs font-black uppercase tracking-wider transition-all"
-              >
-                📅 إضافة الموعد لتقويم Google
-              </a>
-            </div>
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-900">تم حجز مقعدك بنجاح! 🚀</h2>
+            <p className="text-sm sm:text-base text-slate-600 font-medium max-w-lg mx-auto leading-relaxed">
+              شكراً لك <strong className="text-slate-900">{formData.fullName}</strong>. لقد توصلنا بمعلوماتك وسنرسل لك رابط الحضور عبر الواتساب برقم <span className="font-mono dir-ltr font-bold text-slate-900">{formData.whatsapp}</span> والبريد الإلكتروني قبل انطلاق الميتينغ.
+            </p>
           </div>
         ) : (
           /* Registration Form Card */
