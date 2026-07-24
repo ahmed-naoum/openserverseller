@@ -13,7 +13,9 @@ import {
   Phone,
   User,
   MapPin,
-  Package
+  Package,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { wooCommerceApi } from '../../lib/api';
@@ -141,6 +143,15 @@ export default function WooCommerceLeads() {
     }
   };
 
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
+
+  // Reset pagination on filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
+
   // Filtering
   const filteredOrders = orders.filter((order, idx) => {
     const ref = formatOrderRef(order, idx).toLowerCase();
@@ -153,6 +164,9 @@ export default function WooCommerceLeads() {
 
     return matchesSearch && matchesStatus;
   });
+
+  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage) || 1;
+  const paginatedOrders = filteredOrders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   // Calculate Statistics
   const totalOrdersCount = orders.length;
@@ -313,8 +327,8 @@ export default function WooCommerceLeads() {
                   </td>
                 </tr>
               ) : (
-                filteredOrders.map((order, idx) => {
-                  const ref = formatOrderRef(order, idx);
+                paginatedOrders.map((order, idx) => {
+                  const ref = formatOrderRef(order, (currentPage - 1) * itemsPerPage + idx);
                   const customerName = getCustomerName(order);
                   const phone = getCustomerPhone(order);
                   const total = getTotalAmount(order);
@@ -398,6 +412,50 @@ export default function WooCommerceLeads() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Footer */}
+        {filteredOrders.length > 0 && (
+          <div className="p-4 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-bold text-slate-600">
+            <div className="flex items-center gap-2">
+              <span>{isRtl ? 'عرض' : 'Afficher'}</span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-slate-800 font-bold focus:outline-none focus:border-purple-600"
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <span>{isRtl ? `من أصل ${filteredOrders.length} طلبية` : `sur ${filteredOrders.length} commandes`}</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                disabled={currentPage === 1}
+                className="p-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
+              >
+                {isRtl ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+              </button>
+
+              <span className="px-3.5 py-1.5 font-mono bg-white border border-slate-200 rounded-xl text-slate-800">
+                {isRtl ? `الصفحة ${currentPage} من ${totalPages}` : `Page ${currentPage} sur ${totalPages}`}
+              </span>
+
+              <button
+                onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="p-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
+              >
+                {isRtl ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Order Details Modal */}

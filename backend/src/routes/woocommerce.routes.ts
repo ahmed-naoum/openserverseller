@@ -249,19 +249,41 @@ router.get(
     }
 
     try {
-      const response = await axios.get(`${vendor.wooCommerceUrl}/wp-json/wc/v3/orders`, {
-        params: {
-          consumer_key: vendor.wooCommerceConsumerKey,
-          consumer_secret: vendor.wooCommerceConsumerSecret,
-          per_page: 100,
-          ...req.query,
-        },
-        timeout: 15000,
-      });
+      let page = 1;
+      let allOrders: any[] = [];
+      let hasMore = true;
+      let totalCount = 0;
+
+      // Fetch across ALL pages (up to 50 pages of 100 = 5,000 orders)
+      while (hasMore && page <= 50) {
+        const response = await axios.get(`${vendor.wooCommerceUrl}/wp-json/wc/v3/orders`, {
+          params: {
+            consumer_key: vendor.wooCommerceConsumerKey,
+            consumer_secret: vendor.wooCommerceConsumerSecret,
+            per_page: 100,
+            page,
+            status: 'any',
+          },
+          timeout: 20000,
+        });
+
+        const totalHeader = response.headers['x-wp-total'];
+        if (totalHeader) totalCount = Number(totalHeader);
+
+        const fetched = response.data || [];
+        if (fetched.length === 0) {
+          hasMore = false;
+        } else {
+          allOrders.push(...fetched);
+          page++;
+          if (fetched.length < 100) hasMore = false;
+        }
+      }
 
       res.json({
         success: true,
-        data: response.data || [],
+        total: totalCount || allOrders.length,
+        data: allOrders,
       });
     } catch (error: any) {
       console.error('WooCommerce Orders API Error:', error.response?.data || error.message);
