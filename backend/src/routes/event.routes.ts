@@ -70,6 +70,24 @@ router.post(
       },
     });
 
+    // Notify all admins of the new Masterclass registration
+    try {
+      const { createNotification } = await import('../utils/notification.js');
+      const admins = await prisma.user.findMany({
+        where: { role: { in: ['ADMIN', 'SUPER_ADMIN'] } },
+        select: { id: true },
+      });
+
+      const title = '🎉 تسجيل جديد فـ الميتينغ (Masterclass)';
+      const body = `تم تسجيل ${registration.fullName} (واتساب: ${registration.whatsapp}) للحضور فـ الميتينغ.`;
+
+      for (const admin of admins) {
+        await createNotification(admin.id, 'NEW_EVENT_REGISTRATION', title, body);
+      }
+    } catch (notifErr) {
+      console.error('Failed to send admin notifications for event registration:', notifErr);
+    }
+
     res.json({
       success: true,
       message: 'تم حجز مقعدك فـ الميتينغ بنجاح! سنقوم بالتواصل معك عبر الواتساب والبريد الإلكتروني.',

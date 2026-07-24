@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { 
   Users, 
   Search, 
@@ -12,7 +11,9 @@ import {
   CheckCircle2, 
   XCircle,
   Eye,
-  MessageSquare
+  MessageSquare,
+  RefreshCw,
+  BellRing
 } from 'lucide-react';
 import { eventApi } from '../../lib/api';
 import toast from 'react-hot-toast';
@@ -36,6 +37,7 @@ export default function AdminEventRegistrations() {
   const [registrations, setRegistrations] = useState<EventRegistrationItem[]>([]);
   const [enabled, setEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
   const [selectedItem, setSelectedItem] = useState<EventRegistrationItem | null>(null);
 
@@ -43,23 +45,41 @@ export default function AdminEventRegistrations() {
   const [searchTerm, setSearchTerm] = useState('');
   const [volumeFilter, setVolumeFilter] = useState('ALL');
 
-  const fetchRegistrations = async () => {
-    setLoading(true);
+  const fetchRegistrations = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     try {
       const res = await eventApi.getAdminRegistrations();
       const data = res.data?.data || res.data;
-      setRegistrations(data?.registrations || []);
+      const newItems: EventRegistrationItem[] = data?.registrations || [];
+
+      // Check if new registrations arrived
+      setRegistrations(prev => {
+        if (prev.length > 0 && newItems.length > prev.length) {
+          const diff = newItems.length - prev.length;
+          toast.success(`🎉 ${diff} تسجيل(ات) جديد(ة) فـ الميتينغ !`, {
+            duration: 5000,
+            icon: '🔔',
+          });
+        }
+        return newItems;
+      });
+
       setEnabled(data?.enabled ?? true);
     } catch (err: any) {
       console.error('Error fetching admin event registrations:', err);
-      toast.error('تعذر تحميل تسجيلات الميتينغ');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
-    fetchRegistrations();
+    fetchRegistrations(true);
+    // Poll every 10 seconds for real-time new registration notifications
+    const interval = setInterval(() => {
+      fetchRegistrations(false);
+    }, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleToggleStatus = async () => {
@@ -163,7 +183,20 @@ export default function AdminEventRegistrations() {
         </div>
 
         {/* Top Actions: Toggle Enable & CSV Export */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => {
+              setIsRefreshing(true);
+              fetchRegistrations(true);
+            }}
+            disabled={isRefreshing || loading}
+            className="flex items-center gap-2 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-xs font-extrabold transition-all shadow-sm active:scale-95 disabled:opacity-50"
+            title="تحديث التسجيلات الفوري"
+          >
+            <RefreshCw size={16} className={isRefreshing || loading ? 'animate-spin text-[#F05023]' : ''} />
+            <span>تحديث</span>
+          </button>
+
           <button
             onClick={handleToggleStatus}
             disabled={isToggling}
