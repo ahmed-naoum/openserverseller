@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { 
   ShoppingBag, 
   Search, 
@@ -15,10 +16,15 @@ import {
   MapPin,
   Package,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Send,
+  Loader2,
+  CheckSquare,
+  Square,
+  Headphones
 } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { wooCommerceApi } from '../../lib/api';
+import { wooCommerceApi, leadsApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { fr, ar } from 'date-fns/locale';
@@ -60,11 +66,26 @@ export default function WooCommerceLeads() {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
 
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const currentMode = searchParams.get('mode')?.toUpperCase() === 'AFFILIATE' ? 'AFFILIATE' : 'SELLER';
+
   const [orders, setOrders] = useState<WooCommerceOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [copiedPhoneId, setCopiedPhoneId] = useState<string | number | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<WooCommerceOrder | null>(null);
+
+  // Checkbox multi-select state
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string | number>>(new Set());
+
+  // Push to Call Center Modal state
+  const [isPushModalOpen, setIsPushModalOpen] = useState(false);
+  const [products, setProducts] = useState<any[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+  const [productSearch, setProductSearch] = useState('');
+  const [isPushing, setIsPushing] = useState(false);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -106,6 +127,69 @@ export default function WooCommerceLeads() {
     setCopiedPhoneId(id);
     toast.success(isRtl ? 'تم نسخ رقم الهاتف !' : 'Numéro copié !');
     setTimeout(() => setCopiedPhoneId(null), 2000);
+  };
+
+  const handleOpenPushModal = async () => {
+    if (selectedOrderIds.size === 0) {
+      toast.error(isRtl ? 'الرجاء تحديد طلبية واحدة على الأقل' : 'Veuillez sélectionner au moins une commande');
+      return;
+    }
+    setIsPushModalOpen(true);
+    setLoadingProducts(true);
+    try {
+      const res = await leadsApi.getMyProducts({ mode: currentMode });
+      const rawProds = res.data?.data || res.data || [];
+      setProducts(Array.isArray(rawProds) ? rawProds : []);
+      if (rawProds.length > 0) {
+        setSelectedProductId(rawProds[0].id);
+      }
+    } catch (err) {
+      console.error('Error fetching inventory products:', err);
+      toast.error(isRtl ? 'فشل تحميل قائمة المنتجات من المخزون' : 'Erreur lors du chargement des produits');
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
+
+  const handleConfirmPushLeads = async () => {
+    if (!selectedProductId) {
+      toast.error(isRtl ? 'اختر منتجاً من القائمة' : 'Veuillez sélectionner un produit');
+      return;
+    }
+    const selectedOrdersList = orders.filter(o => selectedOrderIds.has(o.id));
+    if (selectedOrdersList.length === 0) return;
+
+    setIsPushing(true);
+    try {
+      const payloadOrders = selectedOrdersList.map(o => ({
+        id: o.id,
+        number: o.number || o.id,
+        customerName: getCustomerName(o),
+        phone: getCustomerPhone(o),
+        city: o.billing?.city || o.shipping?.city || '',
+        address: o.billing?.address_1 || o.shipping?.address_1 || '',
+        total: getOrderTotalVal(o),
+        currency: o.currency || 'MAD',
+      }));
+
+      const res = await leadsApi.pushIntegrationLeads({
+        source: 'WOOCOMMERCE',
+        mode: currentMode,
+        productId: selectedProductId,
+        orders: payloadOrders,
+      });
+
+      toast.success(res.data?.message || (isRtl ? 'تم إرسال الطلبيات بنجاح إلى مركز الاتصال!' : 'Prospects envoyés au Call Center avec succès !'));
+      setIsPushModalOpen(false);
+      setSelectedOrderIds(new Set());
+      
+      // Navigate to call center leads page
+      navigate(`/dashboard/leads?mode=${currentMode}`);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || (isRtl ? 'فشل إرسال الطلبيات إلى مركز الاتصال' : 'Erreur lors de l\'envoi au Call Center'));
+    } finally {
+      setIsPushing(false);
+    }
   };
 
   // Helper formatting
@@ -299,6 +383,23 @@ export default function WooCommerceLeads() {
               <option value="PENDING">Pending / في الانتظار</option>
               <option value="CANCELLED">Cancelled / ملغى</option>
             </select>
+
+            <button
+              onClick={handleOpenPushModal}
+              disabled={selectedOrderIds.size === 0}
+              className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-black transition-all shadow-md ${
+                selectedOrderIds.size > 0
+                  ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-purple-200 scale-105'
+                  : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+              }`}
+            >
+              <Send size={15} />
+              <span>
+                {isRtl 
+                  ? `إرسال إلى مركز الاتصال (${selectedOrderIds.size})` 
+                  : `Envoyer au Call Center (${selectedOrderIds.size})`}
+              </span>
+            </button>
           </div>
         </div>
 
@@ -307,6 +408,22 @@ export default function WooCommerceLeads() {
           <table className="w-full text-left rtl:text-right border-collapse">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-100 text-[11px] font-black text-slate-400 uppercase tracking-wider">
+                <th className="py-4 px-4 text-center w-12">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500 cursor-pointer"
+                    checked={paginatedOrders.length > 0 && paginatedOrders.every(o => selectedOrderIds.has(o.id))}
+                    onChange={(e) => {
+                      const next = new Set(selectedOrderIds);
+                      if (e.target.checked) {
+                        paginatedOrders.forEach(o => next.add(o.id));
+                      } else {
+                        paginatedOrders.forEach(o => next.delete(o.id));
+                      }
+                      setSelectedOrderIds(next);
+                    }}
+                  />
+                </th>
                 <th className="py-4 px-6">Ref</th>
                 <th className="py-4 px-6">{isRtl ? 'تاريخ الإنشاء' : 'Date de Création'}</th>
                 <th className="py-4 px-6">{isRtl ? 'اسم العميل' : 'Nom du Client'}</th>
@@ -319,7 +436,7 @@ export default function WooCommerceLeads() {
             <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center text-slate-400">
+                  <td colSpan={8} className="py-16 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center space-y-3">
                       <div className="w-10 h-10 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin" />
                       <p className="font-bold">{isRtl ? 'جاري تحميل طلبيات WooCommerce...' : 'Chargement des commandes WooCommerce...'}</p>
@@ -328,7 +445,7 @@ export default function WooCommerceLeads() {
                 </tr>
               ) : filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center text-slate-400">
+                  <td colSpan={8} className="py-16 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center space-y-3">
                       <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
                         <ShoppingBag size={24} />
@@ -350,9 +467,25 @@ export default function WooCommerceLeads() {
                   const dateFormatted = formatDate(order.date_created);
 
                   const status = (order.status || 'pending').toLowerCase();
+                  const isSelected = selectedOrderIds.has(order.id);
 
                   return (
-                    <tr key={order.id || idx} className="hover:bg-purple-50/20 transition-colors group">
+                    <tr key={order.id || idx} className={`transition-colors group ${isSelected ? 'bg-purple-50/40' : 'hover:bg-purple-50/20'}`}>
+                      {/* Checkbox */}
+                      <td className="py-4 px-4 text-center">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500 cursor-pointer"
+                          checked={isSelected}
+                          onChange={() => {
+                            const next = new Set(selectedOrderIds);
+                            if (next.has(order.id)) next.delete(order.id);
+                            else next.add(order.id);
+                            setSelectedOrderIds(next);
+                          }}
+                        />
+                      </td>
+
                       {/* Ref */}
                       <td className="py-4 px-6">
                         <span className="font-mono font-black text-purple-600 bg-purple-50 border border-purple-100 px-2.5 py-1 rounded-lg">
@@ -590,6 +723,149 @@ export default function WooCommerceLeads() {
                 className="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-slate-800 transition-all"
               >
                 {isRtl ? 'إغلاق' : 'Fermer'}
+              </button>
+            </div>
+          </div>
+      {/* Push to Call Center Product Selection Modal */}
+      {isPushModalOpen && (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
+            onClick={() => !isPushing && setIsPushModalOpen(false)}
+          />
+          <div 
+            className="relative z-10 bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]"
+          >
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center font-black shadow-md shadow-purple-200">
+                  <Headphones size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    {isRtl ? `إرسال ${selectedOrderIds.size} طلبية إلى مركز الاتصال` : `Envoyer ${selectedOrderIds.size} commande(s) au Call Center`}
+                  </h3>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 uppercase">
+                      {currentMode === 'AFFILIATE' ? (isRtl ? 'وضع المسوق (Affilié)' : 'Mode Affilié') : (isRtl ? 'وضع البائع (Vendeur)' : 'Mode Vendeur')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button 
+                onClick={() => !isPushing && setIsPushModalOpen(false)}
+                className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-700 transition-all"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 overflow-y-auto space-y-4 flex-1">
+              <div>
+                <label className="text-xs font-black text-slate-700 block mb-1.5">
+                  {isRtl ? 'اختر المنتج من المخزون المتاح:' : 'Sélectionnez le produit de votre inventaire :'}
+                </label>
+
+                {/* Search Bar */}
+                <div className="relative mb-3">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 rtl:right-3 rtl:left-auto" size={16} />
+                  <input
+                    type="text"
+                    placeholder={isRtl ? 'بحث في المنتجات...' : 'Rechercher un produit...'}
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-purple-600 rtl:pr-9 rtl:pl-3"
+                  />
+                </div>
+              </div>
+
+              {loadingProducts ? (
+                <div className="py-12 text-center text-slate-400 space-y-2">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto text-purple-600" />
+                  <p className="text-xs font-bold">{isRtl ? 'جاري تحميل منتجات المخزون...' : 'Chargement de votre inventaire...'}</p>
+                </div>
+              ) : products.length === 0 ? (
+                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-2">
+                  <Package className="w-10 h-10 text-slate-300 mx-auto" />
+                  <p className="text-xs font-bold text-slate-600">
+                    {isRtl ? 'لم يتم العثور على أي منتج في المخزون المتاح لهذا الوضع.' : 'Aucun produit disponible dans votre inventaire pour ce mode.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                  {products
+                    .filter(p => (p.name || p.nameFr || p.nameAr || '').toLowerCase().includes(productSearch.toLowerCase()))
+                    .map((prod) => {
+                      const isSelected = selectedProductId === prod.id;
+                      const prodName = prod.nameFr || prod.nameAr || prod.name || `Produit #${prod.id}`;
+                      const prodImage = prod.image || prod.images?.[0]?.imageUrl;
+
+                      return (
+                        <div
+                          key={prod.id}
+                          onClick={() => setSelectedProductId(prod.id)}
+                          className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                            isSelected
+                              ? 'border-purple-600 bg-purple-50/50 ring-2 ring-purple-600/20'
+                              : 'border-slate-100 hover:border-slate-300 bg-white'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            {prodImage ? (
+                              <img src={prodImage} alt="" className="w-10 h-10 rounded-xl object-cover border border-slate-100 flex-shrink-0" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold flex-shrink-0">
+                                <Package size={18} />
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-xs font-black text-slate-900 line-clamp-1">{prodName}</p>
+                              <p className="text-[10px] font-mono text-slate-400 mt-0.5">
+                                SKU: {prod.sku || prod.id} {prod.retailPrice ? `| ${prod.retailPrice} MAD` : ''}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${
+                            isSelected ? 'bg-purple-600 border-purple-600 text-white' : 'border-slate-300'
+                          }`}>
+                            {isSelected && <Check size={12} strokeWidth={3} />}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-5 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between gap-3">
+              <button
+                onClick={() => setIsPushModalOpen(false)}
+                disabled={isPushing}
+                className="px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-black hover:bg-slate-200 transition-all"
+              >
+                {isRtl ? 'إلغاء' : 'Annuler'}
+              </button>
+
+              <button
+                onClick={handleConfirmPushLeads}
+                disabled={isPushing || !selectedProductId || products.length === 0}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-purple-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isPushing ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>{isRtl ? 'جاري الإرسال...' : 'Envoi en cours...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Send size={15} />
+                    <span>{isRtl ? `تأكيد وإرسال (${selectedOrderIds.size} طلبية)` : `Confirmer et Envoyer (${selectedOrderIds.size})`}</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

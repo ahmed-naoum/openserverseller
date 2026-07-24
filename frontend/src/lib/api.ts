@@ -216,6 +216,8 @@ export const leadsApi = {
   import: (data: { leads: any[]; sourceMode?: string }) => api.post('/leads/import', data),
   importWithProduct: (data: { productId: number; leads: any[]; sourceMode?: string }) => api.post('/leads/import', data),
   getMyProducts: (params?: { mode?: string }) => api.get('/leads/my-products', { params }),
+  pushIntegrationLeads: (data: { source: string; mode: string; productId: number; orders: any[] }) =>
+    api.post('/leads/push-integration-leads', data),
   update: (id: string, data: any) => api.patch(`/leads/${id}`, data),
   updateStatus: (id: string, data: { status: string; notes?: string; callbackAt?: string; requestedPriceMad?: number }) =>
     api.patch(`/leads/${id}/status`, data),
