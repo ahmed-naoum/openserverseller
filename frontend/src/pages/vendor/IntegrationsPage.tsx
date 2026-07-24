@@ -203,13 +203,17 @@ export default function IntegrationsPage() {
     e.preventDefault();
     if (!shopifyDraft.storeDomain) return;
     
-    const cleanDomain = shopifyDraft.storeDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    let cleanDomain = shopifyDraft.storeDomain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+    if (!cleanDomain.includes('.')) {
+      cleanDomain += '.myshopify.com';
+    }
     const shopifyClientId = import.meta.env.VITE_SHOPIFY_CLIENT_ID || import.meta.env.VITE_SHOPIFY_API_KEY || '0082791deb817d44b3ba377b4ed0f8dd';
 
     // Direct OAuth authorize URL redirect if Client ID is configured
     if (shopifyClientId && !shopifyDraft.accessToken) {
       const redirectUri = encodeURIComponent(`${window.location.origin}/dashboard/shopify-callback`);
-      window.location.href = `https://${cleanDomain}/admin/oauth/authorize?client_id=${shopifyClientId}&scope=read_orders,write_orders,read_products,read_customers&redirect_uri=${redirectUri}`;
+      const scopes = 'read_customers,read_orders,write_orders,read_products';
+      window.location.href = `https://${cleanDomain}/admin/oauth/authorize?client_id=${shopifyClientId}&scope=${scopes}&redirect_uri=${redirectUri}`;
       return;
     }
 
