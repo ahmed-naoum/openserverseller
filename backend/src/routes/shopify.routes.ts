@@ -278,7 +278,7 @@ router.post(
 
     try {
       const response = await axios.get(`https://${vendor.shopifyStoreDomain}/admin/api/2024-01/orders.json`, {
-        params: { status: 'any', limit: 50 },
+        params: { status: 'any', limit: 250 },
         headers: {
           'X-Shopify-Access-Token': vendor.shopifyAccessToken,
           'Content-Type': 'application/json',

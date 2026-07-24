@@ -253,7 +253,7 @@ router.get(
         params: {
           consumer_key: vendor.wooCommerceConsumerKey,
           consumer_secret: vendor.wooCommerceConsumerSecret,
-          per_page: 50,
+          per_page: 100,
           ...req.query,
         },
         timeout: 15000,
@@ -303,16 +303,31 @@ router.post(
     }
 
     try {
-      const response = await axios.get(`${vendor.wooCommerceUrl}/wp-json/wc/v3/orders`, {
-        params: {
-          consumer_key: vendor.wooCommerceConsumerKey,
-          consumer_secret: vendor.wooCommerceConsumerSecret,
-          per_page: 50,
-        },
-        timeout: 15000,
-      });
+      let page = 1;
+      let orders: any[] = [];
+      let hasMore = true;
 
-      const orders = response.data || [];
+      // Fetch across pages (up to 5 pages of 100 = 500 orders)
+      while (hasMore && page <= 5) {
+        const response = await axios.get(`${vendor.wooCommerceUrl}/wp-json/wc/v3/orders`, {
+          params: {
+            consumer_key: vendor.wooCommerceConsumerKey,
+            consumer_secret: vendor.wooCommerceConsumerSecret,
+            per_page: 100,
+            page,
+          },
+          timeout: 15000,
+        });
+
+        const fetched = response.data || [];
+        if (fetched.length === 0) {
+          hasMore = false;
+        } else {
+          orders.push(...fetched);
+          page++;
+          if (fetched.length < 100) hasMore = false;
+        }
+      }
       let importedCount = 0;
 
       for (const order of orders) {
