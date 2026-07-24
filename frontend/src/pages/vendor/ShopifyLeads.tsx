@@ -1,23 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { 
-  Globe, 
+  ShoppingBag, 
   Search, 
   RefreshCw, 
   Copy, 
   Check, 
   Eye, 
-  ShoppingBag, 
   DollarSign, 
   Truck, 
   Clock, 
-  AlertCircle,
   X,
   Phone,
   User,
   MapPin,
-  Calendar,
-  CreditCard,
   Package,
   ChevronLeft,
   ChevronRight,
@@ -28,15 +24,15 @@ import {
   Headphones
 } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { youcanApi, leadsApi } from '../../lib/api';
+import { shopifyApi, leadsApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { fr, ar } from 'date-fns/locale';
 
-interface YouCanOrder {
+interface ShopifyOrder {
   id: string | number;
-  ref?: string;
-  order_number?: string;
+  name?: string;
+  order_number?: string | number;
   created_at: string;
   customer?: {
     id?: number;
@@ -45,21 +41,25 @@ interface YouCanOrder {
     phone?: string;
     email?: string;
   };
-  customer_name?: string;
   phone?: string;
-  address?: {
+  shipping_address?: {
     first_name?: string;
     last_name?: string;
     phone?: string;
     address1?: string;
     city?: string;
-    country_name?: string;
+    country?: string;
   };
-  fulfillment_status?: string;
-  payment_status?: string;
-  status?: string;
+  billing_address?: {
+    first_name?: string;
+    last_name?: string;
+    phone?: string;
+    address1?: string;
+    city?: string;
+  };
+  fulfillment_status?: string | null;
+  financial_status?: string;
   total_price?: number | string;
-  grand_total?: number | string;
   currency?: string;
   line_items?: Array<{
     id?: string | number;
@@ -71,7 +71,7 @@ interface YouCanOrder {
   }>;
 }
 
-export default function YouCanLeads() {
+export default function ShopifyLeads() {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
 
@@ -79,11 +79,11 @@ export default function YouCanLeads() {
   const navigate = useNavigate();
   const currentMode = searchParams.get('mode')?.toUpperCase() === 'AFFILIATE' ? 'AFFILIATE' : 'SELLER';
 
-  const [orders, setOrders] = useState<YouCanOrder[]>([]);
+  const [orders, setOrders] = useState<ShopifyOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [copiedPhoneId, setCopiedPhoneId] = useState<string | number | null>(null);
-  const [selectedOrder, setSelectedOrder] = useState<YouCanOrder | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<ShopifyOrder | null>(null);
 
   // Checkbox multi-select state
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string | number>>(new Set());
@@ -98,17 +98,17 @@ export default function YouCanLeads() {
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
   const [paymentFilter, setPaymentFilter] = useState('ALL');
+  const [shippingFilter, setShippingFilter] = useState('ALL');
 
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const res = await youcanApi.getOrders();
+      const res = await shopifyApi.getOrders();
       const rawData = res.data?.data || res.data || [];
       setOrders(Array.isArray(rawData) ? rawData : []);
     } catch (err: any) {
-      console.error('Error loading YouCan orders:', err);
+      console.error('Error loading Shopify orders:', err);
     } finally {
       setLoading(false);
     }
@@ -121,11 +121,11 @@ export default function YouCanLeads() {
   const handleSyncNow = async () => {
     setIsSyncing(true);
     try {
-      const res = await youcanApi.syncNow();
-      toast.success(res.data?.message || (isRtl ? 'تمت مزامنة الطلبيات من YouCan بنجاح !' : 'Mise à jour YouCan effectuée avec succès !'));
+      const res = await shopifyApi.syncNow();
+      toast.success(res.data?.message || (isRtl ? 'تمت مزامنة الطلبيات والعملاء من Shopify بنجاح !' : 'Mise à jour Shopify effectuée avec succès !'));
       await fetchOrders();
     } catch (err: any) {
-      toast.error(err.response?.data?.message || (isRtl ? 'فشلت المزامنة المباشرة مع YouCan' : 'Erreur lors de la synchronisation YouCan'));
+      toast.error(err.response?.data?.message || (isRtl ? 'فشلت المزامنة المباشرة مع Shopify' : 'Erreur lors de la synchronisation Shopify'));
     } finally {
       setIsSyncing(false);
     }
@@ -173,17 +173,17 @@ export default function YouCanLeads() {
     try {
       const payloadOrders = selectedOrdersList.map(o => ({
         id: o.id,
-        number: o.ref || o.order_number || o.id,
+        number: o.order_number || o.name || o.id,
         customerName: getCustomerName(o),
         phone: getCustomerPhone(o),
-        city: o.address?.city || '',
-        address: o.address?.address1 || '',
-        total: Number(o.total_price || o.grand_total || 0),
+        city: o.shipping_address?.city || o.billing_address?.city || '',
+        address: o.shipping_address?.address1 || o.billing_address?.address1 || '',
+        total: Number(o.total_price || 0),
         currency: o.currency || 'MAD',
       }));
 
       const res = await leadsApi.pushIntegrationLeads({
-        source: 'YOUCAN',
+        source: 'SHOPIFY',
         mode: currentMode,
         productId: selectedProductId,
         orders: payloadOrders,
@@ -202,30 +202,32 @@ export default function YouCanLeads() {
   };
 
   // Helper formatting
-  const formatOrderRef = (order: YouCanOrder, index: number) => {
-    if (order.ref) return order.ref.startsWith('#') ? order.ref : `#${order.ref}`;
+  const formatOrderRef = (order: ShopifyOrder, index: number) => {
+    if (order.name) return order.name.startsWith('#') ? order.name : `#${order.name}`;
     if (order.order_number) return `#${order.order_number}`;
     if (order.id) return `#${String(order.id).slice(-4)}`;
     return `#${String(orders.length - index).padStart(3, '0')}`;
   };
 
-  const getCustomerName = (order: YouCanOrder) => {
+  const getCustomerName = (order: ShopifyOrder) => {
     if (order.customer?.first_name || order.customer?.last_name) {
       return `${order.customer.first_name || ''} ${order.customer.last_name || ''}`.trim();
     }
-    if (order.address?.first_name || order.address?.last_name) {
-      return `${order.address.first_name || ''} ${order.address.last_name || ''}`.trim();
+    if (order.shipping_address?.first_name || order.shipping_address?.last_name) {
+      return `${order.shipping_address.first_name || ''} ${order.shipping_address.last_name || ''}`.trim();
     }
-    if (order.customer_name) return order.customer_name;
+    if (order.billing_address?.first_name || order.billing_address?.last_name) {
+      return `${order.billing_address.first_name || ''} ${order.billing_address.last_name || ''}`.trim();
+    }
     return isRtl ? 'عميل غير مسمى' : 'Client Inconnu';
   };
 
-  const getCustomerPhone = (order: YouCanOrder) => {
-    return order.customer?.phone || order.address?.phone || order.phone || '';
+  const getCustomerPhone = (order: ShopifyOrder) => {
+    return order.customer?.phone || order.shipping_address?.phone || order.billing_address?.phone || order.phone || '';
   };
 
-  const getTotalAmount = (order: YouCanOrder) => {
-    const val = order.total_price ?? order.grand_total ?? 0;
+  const getTotalAmount = (order: ShopifyOrder) => {
+    const val = order.total_price ?? 0;
     const currency = order.currency || 'MAD';
     return `${Number(val).toLocaleString()} ${currency}`;
   };
@@ -246,34 +248,34 @@ export default function YouCanLeads() {
     const query = searchTerm.toLowerCase();
 
     const matchesSearch = ref.includes(query) || name.includes(query) || phone.includes(query);
-    const matchesStatus = statusFilter === 'ALL' || (order.status || 'Open').toUpperCase() === statusFilter.toUpperCase();
-    const matchesPayment = paymentFilter === 'ALL' || (order.payment_status || 'Unpaid').toUpperCase() === paymentFilter.toUpperCase();
+    const matchesPayment = paymentFilter === 'ALL' || (order.financial_status || 'pending').toUpperCase() === paymentFilter.toUpperCase();
+    const matchesShipping = shippingFilter === 'ALL' || (order.fulfillment_status || 'unfulfilled').toUpperCase() === shippingFilter.toUpperCase();
 
-    return matchesSearch && matchesStatus && matchesPayment;
+    return matchesSearch && matchesPayment && matchesShipping;
   });
 
   // Calculate Statistics
   const totalOrdersCount = orders.length;
-  const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.total_price || o.grand_total) || 0), 0);
-  const unfulfilledCount = orders.filter(o => (o.fulfillment_status || 'Unfulfilled').toLowerCase().includes('unfulfilled')).length;
-  const unpaidCount = orders.filter(o => (o.payment_status || 'Unpaid').toLowerCase().includes('unpaid')).length;
+  const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.total_price) || 0), 0);
+  const unfulfilledCount = orders.filter(o => !o.fulfillment_status || o.fulfillment_status.toLowerCase() === 'unfulfilled').length;
+  const pendingPaymentCount = orders.filter(o => (o.financial_status || 'pending').toLowerCase() !== 'paid').length;
 
   return (
     <div dir={isRtl ? 'rtl' : 'ltr'} className="space-y-6 pt-4 pb-12 animate-in fade-in duration-300">
       {/* Page Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-gradient-to-br from-amber-500 to-rose-600 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-rose-500/20 ring-4 ring-white">
-            YC
+          <div className="w-14 h-14 bg-gradient-to-br from-emerald-500 to-teal-700 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-emerald-500/20 ring-4 ring-white">
+            SF
           </div>
           <div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none uppercase">
-              {isRtl ? 'مجرى الطلبيات YouCan' : 'Flux YouCan Orders & Leads'}
+              {isRtl ? 'مجرى الطلبيات Shopify' : 'Flux Shopify Orders & Leads'}
             </h1>
             <p className="text-slate-500 text-xs sm:text-sm mt-1.5 font-medium">
               {isRtl 
-                ? 'الطلبات والعملاء المحتملون المتزامنون تلقائيًا من متجر YouCan الخاص بك في الوقت الفعلي.' 
-                : 'Commandes et prospects synchronisés automatiquement depuis votre boutique YouCan.shop.'}
+                ? 'الطلبات والعملاء المتزامنون تلقائيًا من متجر Shopify الخاص بك في الوقت الفعلي.' 
+                : 'Commandes et prospects synchronisés automatiquement depuis votre boutique Shopify.'}
             </p>
           </div>
         </div>
@@ -285,7 +287,7 @@ export default function YouCanLeads() {
             className="flex items-center gap-2 px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95 disabled:opacity-50"
           >
             <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
-            {isRtl ? 'مزامنة الآن' : 'Mise à jour YouCan'}
+            {isRtl ? 'مزامنة الآن' : 'Mise à jour Shopify'}
           </button>
         </div>
       </div>
@@ -298,7 +300,7 @@ export default function YouCanLeads() {
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{isRtl ? 'إجمالي الطلبات' : 'Total Commandes'}</p>
               <p className="text-2xl font-black text-slate-900 mt-1">{totalOrdersCount}</p>
             </div>
-            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
               <ShoppingBag size={22} />
             </div>
           </div>
@@ -332,7 +334,7 @@ export default function YouCanLeads() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{isRtl ? 'طلبات غير مدفوعة' : 'Non payées'}</p>
-              <p className="text-2xl font-black text-rose-600 mt-1">{unpaidCount}</p>
+              <p className="text-2xl font-black text-rose-600 mt-1">{pendingPaymentCount}</p>
             </div>
             <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
               <Clock size={22} />
@@ -352,30 +354,29 @@ export default function YouCanLeads() {
               placeholder={isRtl ? 'بحث حسب المرجع، اسم العميل أو الهاتف...' : 'Rechercher par ref, nom ou téléphone...'}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-11 pr-4 py-2.5 bg-white border border-slate-200 focus:border-amber-500 rounded-2xl text-xs font-semibold transition-all outline-none rtl:pr-11 rtl:pl-4"
+              className="w-full pl-11 pr-4 py-2.5 bg-white border border-slate-200 focus:border-emerald-500 rounded-2xl text-xs font-semibold transition-all outline-none rtl:pr-11 rtl:pl-4"
             />
           </div>
 
           <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
             <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-700 outline-none focus:border-amber-500 cursor-pointer"
+              value={paymentFilter}
+              onChange={(e) => setPaymentFilter(e.target.value)}
+              className="px-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-700 outline-none focus:border-emerald-500 cursor-pointer"
             >
-              <option value="ALL">{isRtl ? 'جميع الحالات' : 'Tous les statuts'}</option>
-              <option value="OPEN">Open / En attente</option>
-              <option value="CONFIRMED">Confirmed / مؤكد</option>
-              <option value="CANCELLED">Cancelled / ملغى</option>
+              <option value="ALL">{isRtl ? 'جميع حالات الأداء' : 'Paiements (Tous)'}</option>
+              <option value="PAID">Paid / مدفوع</option>
+              <option value="PENDING">Pending / غير مدفوع</option>
             </select>
 
             <select
-              value={paymentFilter}
-              onChange={(e) => setPaymentFilter(e.target.value)}
-              className="px-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-700 outline-none focus:border-amber-500 cursor-pointer"
+              value={shippingFilter}
+              onChange={(e) => setShippingFilter(e.target.value)}
+              className="px-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-700 outline-none focus:border-emerald-500 cursor-pointer"
             >
-              <option value="ALL">{isRtl ? 'جميع حالات الأداء' : 'Paiements (Tous)'}</option>
-              <option value="UNPAID">Unpaid / غير مدفوع</option>
-              <option value="PAID">Paid / مدفوع</option>
+              <option value="ALL">{isRtl ? 'جميع حالات الشحن' : 'Expédition (Tous)'}</option>
+              <option value="UNFULFILLED">Unfulfilled / غير مشحون</option>
+              <option value="FULFILLED">Fulfilled / تم الشحن</option>
             </select>
 
             <button
@@ -383,7 +384,7 @@ export default function YouCanLeads() {
               disabled={selectedOrderIds.size === 0}
               className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-black transition-all shadow-md ${
                 selectedOrderIds.size > 0
-                  ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-200 scale-105'
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200 scale-105'
                   : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
               }`}
             >
@@ -405,7 +406,7 @@ export default function YouCanLeads() {
                 <th className="py-4 px-4 text-center w-12">
                   <input
                     type="checkbox"
-                    className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                    className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
                     checked={filteredOrders.length > 0 && filteredOrders.every(o => selectedOrderIds.has(o.id))}
                     onChange={(e) => {
                       const next = new Set(selectedOrderIds);
@@ -422,7 +423,6 @@ export default function YouCanLeads() {
                 <th className="py-4 px-6">{isRtl ? 'تاريخ الإنشاء' : 'Date de Création'}</th>
                 <th className="py-4 px-6">{isRtl ? 'اسم العميل' : 'Nom du Client'}</th>
                 <th className="py-4 px-6">{isRtl ? 'الهاتف' : 'Téléphone'}</th>
-                <th className="py-4 px-6">{isRtl ? 'حالة التأكيد' : 'Confirmation'}</th>
                 <th className="py-4 px-6">{isRtl ? 'الأداء' : 'Paiement'}</th>
                 <th className="py-4 px-6">{isRtl ? 'الشحن' : 'Expédition'}</th>
                 <th className="py-4 px-6">{isRtl ? 'المجموع' : 'Total'}</th>
@@ -432,24 +432,24 @@ export default function YouCanLeads() {
             <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center text-slate-400">
+                  <td colSpan={9} className="py-16 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center space-y-3">
-                      <div className="w-10 h-10 border-4 border-amber-200 border-t-amber-600 rounded-full animate-spin" />
-                      <p className="font-bold">{isRtl ? 'جاري تحميل طلبيات YouCan...' : 'Chargement des commandes YouCan...'}</p>
+                      <div className="w-10 h-10 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
+                      <p className="font-bold">{isRtl ? 'جاري تحميل طلبيات Shopify...' : 'Chargement des commandes Shopify...'}</p>
                     </div>
                   </td>
                 </tr>
               ) : filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center text-slate-400">
+                  <td colSpan={9} className="py-16 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center space-y-3">
                       <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
                         <ShoppingBag size={24} />
                       </div>
                       <p className="font-bold text-sm text-slate-600">
-                        {searchTerm || statusFilter !== 'ALL' || paymentFilter !== 'ALL' 
+                        {searchTerm || paymentFilter !== 'ALL' || shippingFilter !== 'ALL' 
                           ? (isRtl ? 'لا توجد طلبيات تطابق الفلتر' : 'Aucune commande ne correspond aux filtres')
-                          : (isRtl ? 'لا توجد طلبيات مسجلة من YouCan حتى الآن' : 'Aucune commande YouCan synchronisée pour le moment')}
+                          : (isRtl ? 'لا توجد طلبيات مسجلة من Shopify حتى الآن' : 'Aucune commande Shopify synchronisée pour le moment')}
                       </p>
                     </div>
                   </td>
@@ -462,18 +462,17 @@ export default function YouCanLeads() {
                   const total = getTotalAmount(order);
                   const dateFormatted = formatDate(order.created_at);
 
-                  const confStatus = order.status || 'Open';
-                  const payStatus = order.payment_status || 'Unpaid';
-                  const shipStatus = order.fulfillment_status || 'Unfulfilled';
+                  const payStatus = order.financial_status || 'pending';
+                  const shipStatus = order.fulfillment_status || 'unfulfilled';
                   const isSelected = selectedOrderIds.has(order.id);
 
                   return (
-                    <tr key={order.id || idx} className={`transition-colors group ${isSelected ? 'bg-amber-50/40' : 'hover:bg-amber-50/20'}`}>
+                    <tr key={order.id || idx} className={`transition-colors group ${isSelected ? 'bg-emerald-50/40' : 'hover:bg-emerald-50/20'}`}>
                       {/* Checkbox */}
                       <td className="py-4 px-4 text-center">
                         <input
                           type="checkbox"
-                          className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                          className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
                           checked={isSelected}
                           onChange={() => {
                             const next = new Set(selectedOrderIds);
@@ -486,7 +485,7 @@ export default function YouCanLeads() {
 
                       {/* Ref */}
                       <td className="py-4 px-6">
-                        <span className="font-mono font-black text-amber-600 bg-amber-50 border border-amber-100 px-2.5 py-1 rounded-lg">
+                        <span className="font-mono font-black text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-lg">
                           {ref}
                         </span>
                       </td>
@@ -523,21 +522,10 @@ export default function YouCanLeads() {
                         )}
                       </td>
 
-                      {/* Confirmation Status */}
-                      <td className="py-4 px-6">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                          confStatus.toLowerCase().includes('confirm') ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
-                          confStatus.toLowerCase().includes('cancel') ? 'bg-rose-50 text-rose-600 border border-rose-100' :
-                          'bg-amber-50 text-amber-600 border border-amber-100'
-                        }`}>
-                          {confStatus}
-                        </span>
-                      </td>
-
                       {/* Payment Status */}
                       <td className="py-4 px-6">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                          payStatus.toLowerCase().includes('paid') && !payStatus.toLowerCase().includes('unpaid') 
+                          payStatus.toLowerCase() === 'paid' 
                             ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' 
                             : 'bg-rose-50 text-rose-600 border border-rose-100'
                         }`}>
@@ -548,7 +536,7 @@ export default function YouCanLeads() {
                       {/* Shipping Status */}
                       <td className="py-4 px-6">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                          shipStatus.toLowerCase().includes('fulfilled') && !shipStatus.toLowerCase().includes('unfulfilled')
+                          shipStatus.toLowerCase() === 'fulfilled'
                             ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
                             : 'bg-slate-100 text-slate-600 border border-slate-200'
                         }`}>
@@ -565,7 +553,7 @@ export default function YouCanLeads() {
                       <td className="py-4 px-6 text-center">
                         <button
                           onClick={() => setSelectedOrder(order)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-amber-500 hover:text-white text-slate-700 rounded-xl text-xs font-bold transition-all shadow-sm"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-emerald-600 hover:text-white text-slate-700 rounded-xl text-xs font-bold transition-all shadow-sm"
                         >
                           <Eye size={14} />
                           <span>Détails</span>
@@ -594,12 +582,12 @@ export default function YouCanLeads() {
             {/* Modal Header */}
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black">
-                  <ShoppingBag size={20} />
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black">
+                  SF
                 </div>
                 <div>
                   <h3 className="text-lg font-black text-slate-900">
-                    {isRtl ? 'تفاصيل الطلب' : 'Détails de la commande'} {formatOrderRef(selectedOrder, 0)}
+                    {isRtl ? 'تفاصيل طلبية Shopify' : 'Détails de la commande Shopify'} {formatOrderRef(selectedOrder, 0)}
                   </h3>
                   <p className="text-xs text-slate-400 font-mono mt-0.5">
                     {formatDate(selectedOrder.created_at)}
@@ -636,34 +624,29 @@ export default function YouCanLeads() {
                   </p>
                 </div>
 
-                {selectedOrder.address?.address1 && (
+                {(selectedOrder.shipping_address?.address1 || selectedOrder.billing_address?.address1) && (
                   <div className="sm:col-span-2 pt-2 border-t border-slate-200/60">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
                       {isRtl ? 'العنوان والمدينة' : 'Adresse & Ville'}
                     </span>
                     <p className="font-medium text-slate-800 flex items-center gap-1.5">
                       <MapPin size={14} className="text-slate-400" /> 
-                      {selectedOrder.address.address1}, {selectedOrder.address.city || ''} {selectedOrder.address.country_name || ''}
+                      {selectedOrder.shipping_address?.address1 || selectedOrder.billing_address?.address1}, {selectedOrder.shipping_address?.city || selectedOrder.billing_address?.city || ''} {selectedOrder.shipping_address?.country || ''}
                     </p>
                   </div>
                 )}
               </div>
 
               {/* Status Summary */}
-              <div className="grid grid-cols-3 gap-3 text-center">
-                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Confirmation</span>
-                  <span className="text-xs font-black text-amber-600">{selectedOrder.status || 'Open'}</span>
-                </div>
-
+              <div className="grid grid-cols-2 gap-3 text-center">
                 <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Paiement</span>
-                  <span className="text-xs font-black text-emerald-600">{selectedOrder.payment_status || 'Unpaid'}</span>
+                  <span className="text-xs font-black text-emerald-600">{selectedOrder.financial_status || 'pending'}</span>
                 </div>
 
                 <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Livraison</span>
-                  <span className="text-xs font-black text-slate-700">{selectedOrder.fulfillment_status || 'Unfulfilled'}</span>
+                  <span className="text-xs font-black text-slate-700">{selectedOrder.fulfillment_status || 'unfulfilled'}</span>
                 </div>
               </div>
 
@@ -726,7 +709,7 @@ export default function YouCanLeads() {
             {/* Modal Header */}
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-600 text-white flex items-center justify-center font-black shadow-md shadow-amber-200">
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black shadow-md shadow-emerald-200">
                   <Headphones size={20} />
                 </div>
                 <div>
@@ -734,7 +717,7 @@ export default function YouCanLeads() {
                     {isRtl ? `إرسال ${selectedOrderIds.size} طلبية إلى مركز الاتصال` : `Envoyer ${selectedOrderIds.size} commande(s) au Call Center`}
                   </h3>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 uppercase">
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 uppercase">
                       {currentMode === 'AFFILIATE' ? (isRtl ? 'وضع المسوق (Affilié)' : 'Mode Affilié') : (isRtl ? 'وضع البائع (Vendeur)' : 'Mode Vendeur')}
                     </span>
                   </div>
@@ -763,14 +746,14 @@ export default function YouCanLeads() {
                     placeholder={isRtl ? 'بحث في المنتجات...' : 'Rechercher un produit...'}
                     value={productSearch}
                     onChange={(e) => setProductSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-amber-600 rtl:pr-9 rtl:pl-3"
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-emerald-600 rtl:pr-9 rtl:pl-3"
                   />
                 </div>
               </div>
 
               {loadingProducts ? (
                 <div className="py-12 text-center text-slate-400 space-y-2">
-                  <Loader2 className="w-8 h-8 animate-spin mx-auto text-amber-600" />
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto text-emerald-600" />
                   <p className="text-xs font-bold">{isRtl ? 'جاري تحميل منتجات المخزون...' : 'Chargement de votre inventaire...'}</p>
                 </div>
               ) : products.length === 0 ? (
@@ -795,7 +778,7 @@ export default function YouCanLeads() {
                           onClick={() => setSelectedProductId(prod.id)}
                           className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
                             isSelected
-                              ? 'border-amber-600 bg-amber-50/50 ring-2 ring-amber-600/20'
+                              ? 'border-emerald-600 bg-emerald-50/50 ring-2 ring-emerald-600/20'
                               : 'border-slate-100 hover:border-slate-300 bg-white'
                           }`}
                         >
@@ -803,7 +786,7 @@ export default function YouCanLeads() {
                             {prodImage ? (
                               <img src={prodImage} alt="" className="w-10 h-10 rounded-xl object-cover border border-slate-100 flex-shrink-0" />
                             ) : (
-                              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold flex-shrink-0">
+                              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold flex-shrink-0">
                                 <Package size={18} />
                               </div>
                             )}
@@ -816,7 +799,7 @@ export default function YouCanLeads() {
                           </div>
 
                           <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${
-                            isSelected ? 'bg-amber-600 border-amber-600 text-white' : 'border-slate-300'
+                            isSelected ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300'
                           }`}>
                             {isSelected && <Check size={12} strokeWidth={3} />}
                           </div>
@@ -840,7 +823,7 @@ export default function YouCanLeads() {
               <button
                 onClick={handleConfirmPushLeads}
                 disabled={isPushing || !selectedProductId || products.length === 0}
-                className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-amber-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isPushing ? (
                   <>

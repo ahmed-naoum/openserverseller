@@ -20,10 +20,12 @@ import {
   AlertCircle,
   Key,
   Server,
-  FileText
+  FileText,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { youcanApi } from '../../lib/api';
+import { youcanApi, shopifyApi, wooCommerceApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 
 export default function IntegrationsPage() {
@@ -51,12 +53,19 @@ export default function IntegrationsPage() {
     isConnected: !!localStorage.getItem('silacod_woo_store_url'),
   });
 
-  // Shopify Configuration State
-  const [shopifyConfig, setShopifyConfig] = useState({
-    storeDomain: localStorage.getItem('silacod_shopify_store_domain') || '',
-    accessToken: localStorage.getItem('silacod_shopify_access_token') || '',
-    isConnected: !!localStorage.getItem('silacod_shopify_store_domain'),
+  // Shopify Status State
+  const [shopifyStatus, setShopifyStatus] = useState<{
+    isConnected: boolean;
+    autoSyncActive: boolean;
+    storeDomain: string | null;
+  }>({
+    isConnected: false,
+    autoSyncActive: true,
+    storeDomain: null,
   });
+  const [loadingShopifyStatus, setLoadingShopifyStatus] = useState(true);
+  const [isSyncingShopify, setIsSyncingShopify] = useState(false);
+  const [isTogglingShopifySync, setIsTogglingShopifySync] = useState(false);
 
   // API Key State
   const [apiKey, setApiKey] = useState(localStorage.getItem('silacod_api_key') || '');
@@ -67,27 +76,67 @@ export default function IntegrationsPage() {
   // Form Draft States
   const [wooDraft, setWooDraft] = useState({ storeUrl: '', consumerKey: '', consumerSecret: '' });
   const [shopifyDraft, setShopifyDraft] = useState({ storeDomain: '', accessToken: '' });
+  const [showWooConsumerKey, setShowWooConsumerKey] = useState(false);
+  const [showWooConsumerSecret, setShowWooConsumerSecret] = useState(false);
 
   // Webhook URLs
   const apiBaseUrl = (import.meta.env as any).VITE_API_URL || 'https://api.silacod.com/api/v1';
   const youcanWebhookUrl = `${apiBaseUrl}/youcan/webhook`;
-  const wooWebhookUrl = `${apiBaseUrl}/integrations/woocommerce/webhook`;
-  const shopifyWebhookUrl = `${apiBaseUrl}/integrations/shopify/webhook`;
+  const wooWebhookUrl = `${apiBaseUrl}/woocommerce/webhook`;
+  const shopifyWebhookUrl = `${apiBaseUrl}/shopify/webhook`;
 
-  // Fetch YouCan status on mount
+  // Fetch status on mount
   useEffect(() => {
     fetchYouCanStatus();
+    fetchShopifyStatus();
+    fetchWooCommerceStatus();
   }, []);
+
+  const fetchWooCommerceStatus = async () => {
+    try {
+      const res = await wooCommerceApi.getStatus();
+      const statusData = res.data?.data || res.data;
+      if (statusData) {
+        setWooConfig(prev => ({
+          ...prev,
+          isConnected: !!statusData.isConnected,
+          storeUrl: statusData.storeUrl || prev.storeUrl,
+        }));
+      }
+    } catch (err) {
+      console.error("Error fetching WooCommerce status:", err);
+    }
+  };
+
+  const fetchShopifyStatus = async () => {
+    setLoadingShopifyStatus(true);
+    try {
+      const res = await shopifyApi.getStatus();
+      const statusData = res.data?.data || res.data;
+      if (statusData) {
+        setShopifyStatus({
+          isConnected: !!statusData.isConnected,
+          autoSyncActive: statusData.autoSyncActive ?? true,
+          storeDomain: statusData.storeDomain || null,
+        });
+      }
+    } catch (err) {
+      console.error("Error fetching Shopify status:", err);
+    } finally {
+      setLoadingShopifyStatus(false);
+    }
+  };
 
   const fetchYouCanStatus = async () => {
     setLoadingYouCanStatus(true);
     try {
       const res = await youcanApi.getStatus();
-      if (res.data) {
+      const statusData = res.data?.data || res.data;
+      if (statusData) {
         setYoucanStatus({
-          isConnected: !!res.data.isConnected,
-          autoSyncActive: res.data.autoSyncActive ?? true,
-          storeDomain: res.data.storeDomain || null,
+          isConnected: !!statusData.isConnected,
+          autoSyncActive: statusData.autoSyncActive ?? true,
+          storeDomain: statusData.storeDomain || null,
         });
       }
     } catch (err) {
@@ -116,8 +165,8 @@ export default function IntegrationsPage() {
       await youcanApi.toggleSync(nextState);
       setYoucanStatus(prev => ({ ...prev, autoSyncActive: nextState }));
       toast.success(nextState 
-        ? (language === 'ar' ? 'تم تفعيل المزامنة التلقائية لـ YouCan' : 'Mزامنة automatique YouCan activée !')
-        : (language === 'ar' ? 'تم إيقاف المزامنة التلقائية لـ YouCan' : 'Mزامنة automatique YouCan désactivée')
+        ? (language === 'ar' ? 'تم تفعيل المزامنة التلقائية لـ YouCan' : 'Mise à jour automatique YouCan activée !')
+        : (language === 'ar' ? 'تم إيقاف المزامنة التلقائية لـ YouCan' : 'Mise à jour automatique YouCan désactivée')
       );
     } catch (err) {
       toast.error(language === 'ar' ? 'تعذر تغيير حالة المزامنة' : 'Impossible de modifier le statut de synchronisation');
@@ -126,34 +175,104 @@ export default function IntegrationsPage() {
     }
   };
 
-  const handleSaveWooCommerce = (e: React.FormEvent) => {
+  const handleSaveWooCommerce = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!wooDraft.storeUrl) return;
-    localStorage.setItem('silacod_woo_store_url', wooDraft.storeUrl);
-    localStorage.setItem('silacod_woo_consumer_key', wooDraft.consumerKey);
-    localStorage.setItem('silacod_woo_consumer_secret', wooDraft.consumerSecret);
-    setWooConfig({
-      storeUrl: wooDraft.storeUrl,
-      consumerKey: wooDraft.consumerKey,
-      consumerSecret: wooDraft.consumerSecret,
-      isConnected: true
-    });
-    setActiveModal(null);
-    toast.success(language === 'ar' ? 'تم حفظ ربط WooCommerce بنجاح !' : 'Intégration WooCommerce enregistrée avec succès !');
+
+    // 1-Click WooCommerce OAuth Approval flow if keys are not provided manually
+    if (!wooDraft.consumerKey || !wooDraft.consumerSecret) {
+      try {
+        const res = await wooCommerceApi.getAuthorizeUrl(wooDraft.storeUrl);
+        const authUrl = res.data?.data?.authUrl || res.data?.authUrl;
+        if (authUrl) {
+          window.location.href = authUrl;
+          return;
+        }
+      } catch (err: any) {
+        toast.error(err.response?.data?.message || (language === 'ar' ? 'فشل إنشاء رابط ربط WooCommerce' : 'Échec de la génération du lien WooCommerce'));
+        return;
+      }
+    }
+
+    try {
+      await wooCommerceApi.saveKeys({
+        storeUrl: wooDraft.storeUrl,
+        consumerKey: wooDraft.consumerKey,
+        consumerSecret: wooDraft.consumerSecret,
+      });
+      setWooConfig({
+        storeUrl: wooDraft.storeUrl,
+        consumerKey: wooDraft.consumerKey,
+        consumerSecret: wooDraft.consumerSecret,
+        isConnected: true
+      });
+      setActiveModal(null);
+      toast.success(language === 'ar' ? 'تم حفظ ربط WooCommerce بنجاح !' : 'Intégration WooCommerce enregistrée avec succès !');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || (language === 'ar' ? 'فشل حفظ إعدادات WooCommerce' : 'Échec de l\'enregistrement WooCommerce'));
+    }
   };
 
-  const handleSaveShopify = (e: React.FormEvent) => {
+  const handleSyncShopify = async () => {
+    setIsSyncingShopify(true);
+    try {
+      const res = await shopifyApi.getOrders();
+      toast.success(res.data?.message || (language === 'ar' ? 'تمت مزامنة الطلبيات من Shopify بنجاح !' : 'Mise à jour Shopify effectuée avec succès !'));
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || (language === 'ar' ? 'فشلت المزامنة المباشرة مع Shopify' : 'Erreur lors de la synchronisation Shopify'));
+    } finally {
+      setIsSyncingShopify(false);
+    }
+  };
+
+  const handleToggleShopifySync = async () => {
+    setIsTogglingShopifySync(true);
+    try {
+      const nextState = !shopifyStatus.autoSyncActive;
+      await shopifyApi.toggleSync(nextState);
+      setShopifyStatus(prev => ({ ...prev, autoSyncActive: nextState }));
+      toast.success(nextState 
+        ? (language === 'ar' ? 'تم تفعيل المزامنة التلقائية لـ Shopify' : 'Mise à jour automatique Shopify activée !')
+        : (language === 'ar' ? 'تم إيقاف المزامنة التلقائية لـ Shopify' : 'Mise à jour automatique Shopify désactivée')
+      );
+    } catch (err) {
+      toast.error(language === 'ar' ? 'تعذر تغيير حالة المزامنة' : 'Impossible de modifier le statut de synchronisation');
+    } finally {
+      setIsTogglingShopifySync(false);
+    }
+  };
+
+  const handleSaveShopify = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!shopifyDraft.storeDomain) return;
-    localStorage.setItem('silacod_shopify_store_domain', shopifyDraft.storeDomain);
-    localStorage.setItem('silacod_shopify_access_token', shopifyDraft.accessToken);
-    setShopifyConfig({
-      storeDomain: shopifyDraft.storeDomain,
-      accessToken: shopifyDraft.accessToken,
-      isConnected: true
-    });
-    setActiveModal(null);
-    toast.success(language === 'ar' ? 'تم حفظ ربط Shopify بنجاح !' : 'Intégration Shopify enregistrée avec succès !');
+    
+    let cleanDomain = shopifyDraft.storeDomain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+    if (!cleanDomain.includes('.')) {
+      cleanDomain += '.myshopify.com';
+    }
+    const shopifyClientId = import.meta.env.VITE_SHOPIFY_CLIENT_ID || import.meta.env.VITE_SHOPIFY_API_KEY || '18e0087f1fa3f03cdcbd5744f556443a';
+
+    // Direct OAuth authorize URL redirect if Client ID is configured
+    if (shopifyClientId && !shopifyDraft.accessToken) {
+      const redirectUri = encodeURIComponent(`${window.location.origin}/dashboard/shopify-callback`);
+      const scopes = 'read_customers,read_orders,write_orders,read_products';
+      window.location.href = `https://${cleanDomain}/admin/oauth/authorize?client_id=${shopifyClientId}&scope=${scopes}&redirect_uri=${redirectUri}`;
+      return;
+    }
+
+    try {
+      await shopifyApi.saveToken({ storeDomain: cleanDomain, accessToken: shopifyDraft.accessToken });
+      localStorage.setItem('silacod_shopify_store_domain', cleanDomain);
+      setShopifyStatus({
+        isConnected: true,
+        autoSyncActive: true,
+        storeDomain: cleanDomain,
+      });
+      setActiveModal(null);
+      toast.success(language === 'ar' ? 'تم حفظ ربط Shopify بنجاح !' : 'Boutique Shopify connectée avec succès !');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Erreur lors de la connexion Shopify');
+    }
   };
 
   const copyToClipboard = (text: string, label: string) => {
@@ -418,26 +537,28 @@ export default function IntegrationsPage() {
                 </div>
                 <div>
                   <h3 className="text-xl font-black text-slate-900 tracking-tight">Shopify</h3>
-                  <p className="text-xs font-bold text-slate-400">shopify.com</p>
+                  <p className="text-xs font-bold text-slate-400">myshopify.com</p>
                 </div>
               </div>
 
-              {shopifyConfig.isConnected ? (
+              {loadingShopifyStatus ? (
+                <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+              ) : shopifyStatus.isConnected ? (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-100">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  {isRtl ? 'مُفعل' : 'Actif'}
+                  {isRtl ? 'متصل' : 'Connecté'}
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-100">
-                  {isRtl ? 'جاهز للربط' : 'Prêt'}
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 border border-slate-200">
+                  {isRtl ? 'غير متصل' : 'Non connecté'}
                 </span>
               )}
             </div>
 
             <p className="text-slate-600 text-xs sm:text-sm font-medium leading-relaxed">
               {isRtl 
-                ? 'ربط متجر Shopify عبر Admin API Access Token أو تطبيق خاص لاستيراد طلبيات العملاء وتحديث التوصيل.'
-                : 'Connectez votre boutique Shopify via Admin Access Token pour importer vos commandes et gérer vos livraisons.'
+                ? 'ربط بنقرة واحدة مع متجر Shopify لاستيراد طلبات العملاء وتحديث التوصيل والمخزون تلقائيًا.'
+                : 'Connexion en un clic avec votre boutique Shopify pour importer automatiquement vos commandes et gérer vos livraisons.'
               }
             </p>
 
@@ -445,44 +566,67 @@ export default function IntegrationsPage() {
             <div className="space-y-2.5 pt-2 border-t border-slate-50">
               <div className="flex items-center gap-2.5 text-xs font-semibold text-slate-700">
                 <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
-                <span>{isRtl ? 'تطبيق خاص Admin Access Token' : 'App Privée Admin API Token'}</span>
+                <span>{isRtl ? 'ربط بنقرة واحدة OAuth 2.0' : 'Connexion OAuth 2.0 en 1 clic'}</span>
               </div>
               <div className="flex items-center gap-2.5 text-xs font-semibold text-slate-700">
                 <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
-                <span>{isRtl ? 'إشعار الطلبات الفوري orders/create' : 'Webhooks orders/create & fulfillment'}</span>
+                <span>{isRtl ? 'استيراد طلبات Shopify تلقائيًا' : 'Importation automatique des commandes'}</span>
               </div>
               <div className="flex items-center gap-2.5 text-xs font-semibold text-slate-700">
                 <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
-                <span>{isRtl ? 'مزامنة العناوين والمنتجات تلقائيًا' : 'Importation automatique des données'}</span>
+                <span>{isRtl ? 'تحديث حالة الشحن والطلبات' : 'Mise à jour en temps réel'}</span>
               </div>
             </div>
 
-            {shopifyConfig.isConnected && shopifyConfig.storeDomain && (
+            {shopifyStatus.isConnected && shopifyStatus.storeDomain && (
               <div className="p-3 bg-emerald-50/50 rounded-2xl border border-emerald-100 flex items-center justify-between text-xs">
                 <span className="font-bold text-slate-500">{isRtl ? 'المتجر المرتبط:' : 'Boutique Shopify:'}</span>
-                <span className="font-black text-emerald-700 font-mono truncate max-w-[150px]">{shopifyConfig.storeDomain}</span>
+                <span className="font-black text-emerald-700 font-mono truncate max-w-[170px]">{shopifyStatus.storeDomain}</span>
               </div>
             )}
           </div>
 
           {/* Action Buttons */}
-          <div className="pt-6">
-            <button
-              onClick={() => {
-                setShopifyDraft({
-                  storeDomain: shopifyConfig.storeDomain,
-                  accessToken: shopifyConfig.accessToken
-                });
-                setActiveModal('SHOPIFY');
-              }}
-              className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2"
-            >
-              <Sliders size={16} />
-              {shopifyConfig.isConnected 
-                ? (isRtl ? 'تعديل ربط Shopify' : 'Gérer Shopify')
-                : (isRtl ? 'تهيئة ربط Shopify' : 'Configurer Shopify')
-              }
-            </button>
+          <div className="pt-6 space-y-2.5">
+            {shopifyStatus.isConnected ? (
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSyncShopify}
+                  disabled={isSyncingShopify}
+                  className="flex-1 py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <RefreshCw size={14} className={isSyncingShopify ? 'animate-spin' : ''} />
+                  {isRtl ? 'مزامنة الآن' : 'Sync Maintenant'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShopifyDraft({
+                      storeDomain: shopifyStatus.storeDomain || '',
+                      accessToken: ''
+                    });
+                    setActiveModal('SHOPIFY');
+                  }}
+                  className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl transition-all"
+                  title={isRtl ? 'إعدادات Shopify' : 'Réglages Shopify'}
+                >
+                  <Sliders size={16} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  setShopifyDraft({
+                    storeDomain: shopifyStatus.storeDomain || '',
+                    accessToken: ''
+                  });
+                  setActiveModal('SHOPIFY');
+                }}
+                className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2"
+              >
+                <Link2 size={16} />
+                {isRtl ? 'ربط متجر Shopify' : 'Connecter Boutique Shopify'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -579,22 +723,6 @@ export default function IntegrationsPage() {
             </div>
 
             <div className="p-6 space-y-6 text-slate-700">
-              {/* Webhook Endpoint Display */}
-              <div className="space-y-2">
-                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">
-                  {isRtl ? 'رابط Webhook لتلقي الطلبات في YouCan:' : 'URL Webhook à configurer dans YouCan:'}
-                </label>
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between font-mono text-xs">
-                  <span className="truncate pr-2 font-bold text-slate-800">{youcanWebhookUrl}</span>
-                  <button 
-                    onClick={() => copyToClipboard(youcanWebhookUrl, 'Webhook URL')}
-                    className="p-2 bg-white hover:bg-slate-100 border rounded-xl text-slate-600 shrink-0"
-                  >
-                    <Copy size={14} />
-                  </button>
-                </div>
-              </div>
-
               {/* Status and Auto Sync */}
               <div className="p-4 bg-slate-50 rounded-2xl space-y-3 border border-slate-100">
                 <div className="flex items-center justify-between">
@@ -684,26 +812,59 @@ export default function IntegrationsPage() {
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider">Consumer Key (ck_...)</label>
-                <input
-                  type="text"
-                  placeholder="ck_1234567890abcdef..."
-                  value={wooDraft.consumerKey}
-                  onChange={(e) => setWooDraft(prev => ({ ...prev, consumerKey: e.target.value }))}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-purple-600"
-                />
+              <div className="p-3 bg-purple-50 rounded-2xl border border-purple-100 text-xs text-purple-900 font-medium space-y-1">
+                <p>
+                  {isRtl 
+                    ? '💡 يمكنك الربط بنقرة واحدة بمجرد إدخال رابط متجرك والضغط على زر "الربط بنقرة واحدة"، أو إدخال المفاتيح يدوياً.'
+                    : '💡 Entrez simplement l\'URL de votre boutique puis cliquez sur le bouton pour vous connecter en 1 Clic via WooCommerce !'}
+                </p>
+                <p className="text-[11px] text-purple-700 font-semibold pt-1 border-t border-purple-100/60">
+                  {isRtl 
+                    ? '🔑 للحصول على المفاتيح: WooCommerce 👈 إعدادات (Settings) 👈 إعدادات متقدمة (Advanced) 👈 REST API 👈 إضافة مفتاح بصلاحية (قراءة/كتابة Read/Write).'
+                    : '🔑 Pour générer les clés : WooCommerce 👈 Réglages 👈 Avancé 👈 API REST 👈 Ajouter une clé (Droits: Lecture/Écriture).'}
+                </p>
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider">Consumer Secret (cs_...)</label>
-                <input
-                  type="password"
-                  placeholder="cs_1234567890abcdef..."
-                  value={wooDraft.consumerSecret}
-                  onChange={(e) => setWooDraft(prev => ({ ...prev, consumerSecret: e.target.value }))}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-purple-600"
-                />
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider">Consumer Key (ck_...) <span className="text-slate-400 font-normal">({isRtl ? 'اختياري' : 'Optionnel'})</span></label>
+                <div className="relative">
+                  <input
+                    type={showWooConsumerKey ? "text" : "password"}
+                    placeholder="ck_1234567890abcdef..."
+                    value={wooDraft.consumerKey}
+                    onChange={(e) => setWooDraft(prev => ({ ...prev, consumerKey: e.target.value }))}
+                    className="w-full pl-4 pr-11 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-purple-600 rtl:pr-4 rtl:pl-11"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowWooConsumerKey(!showWooConsumerKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-700 transition-colors rtl:left-3 rtl:right-auto"
+                    title={showWooConsumerKey ? "Masquer" : "Afficher"}
+                  >
+                    {showWooConsumerKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider">Consumer Secret (cs_...) <span className="text-slate-400 font-normal">({isRtl ? 'اختياري' : 'Optionnel'})</span></label>
+                <div className="relative">
+                  <input
+                    type={showWooConsumerSecret ? "text" : "password"}
+                    placeholder="cs_1234567890abcdef..."
+                    value={wooDraft.consumerSecret}
+                    onChange={(e) => setWooDraft(prev => ({ ...prev, consumerSecret: e.target.value }))}
+                    className="w-full pl-4 pr-11 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-purple-600 rtl:pr-4 rtl:pl-11"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowWooConsumerSecret(!showWooConsumerSecret)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-700 transition-colors rtl:left-3 rtl:right-auto"
+                    title={showWooConsumerSecret ? "Masquer" : "Afficher"}
+                  >
+                    {showWooConsumerSecret ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
 
               {/* Webhook Endpoint Display */}
@@ -727,7 +888,7 @@ export default function IntegrationsPage() {
                 <button
                   type="button"
                   onClick={() => setActiveModal(null)}
-                  className="flex-1 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl text-xs font-black uppercase tracking-widest"
+                  className="py-3.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl text-xs font-black uppercase tracking-widest"
                 >
                   {isRtl ? 'إلغاء' : 'Annuler'}
                 </button>
@@ -735,7 +896,7 @@ export default function IntegrationsPage() {
                   type="submit"
                   className="flex-1 py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg hover:from-purple-700 hover:to-indigo-700"
                 >
-                  {isRtl ? 'حفظ الربط' : 'Enregistrer'}
+                  {isRtl ? '⚡ الربط بنقرة واحدة (WooCommerce)' : '⚡ Se connecter avec WooCommerce'}
                 </button>
               </div>
             </form>
@@ -761,67 +922,96 @@ export default function IntegrationsPage() {
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center font-black">SF</div>
                 <div>
-                  <h3 className="text-xl font-black">{isRtl ? 'إعدادات ربط Shopify' : 'Configuration Shopify'}</h3>
-                  <p className="text-xs text-white/80 font-medium">Admin API Access Token & Webhooks</p>
+                  <h3 className="text-xl font-black">{isRtl ? 'ربط متجر Shopify' : 'Connexion Shopify.com'}</h3>
+                  <p className="text-xs text-white/80 font-medium">OAuth 2.0 App Connection</p>
                 </div>
               </div>
               <button onClick={() => setActiveModal(null)} className="p-2 hover:bg-white/20 rounded-xl text-white">✕</button>
             </div>
 
-            <form onSubmit={handleSaveShopify} className="p-6 space-y-4 text-slate-700">
+            <form onSubmit={handleSaveShopify} className="p-6 space-y-5 text-slate-700">
               <div className="space-y-1.5">
-                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider">{isRtl ? 'نطاق المتجر (Store Domain)' : 'Domaine Shopify'}</label>
-                <input
-                  type="text"
-                  placeholder="your-store.myshopify.com"
-                  value={shopifyDraft.storeDomain}
-                  onChange={(e) => setShopifyDraft(prev => ({ ...prev, storeDomain: e.target.value }))}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-600"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider">Admin API Access Token (shpat_...)</label>
-                <input
-                  type="password"
-                  placeholder="shpat_1234567890abcdef..."
-                  value={shopifyDraft.accessToken}
-                  onChange={(e) => setShopifyDraft(prev => ({ ...prev, accessToken: e.target.value }))}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-emerald-600"
-                />
-              </div>
-
-              {/* Webhook Endpoint Display */}
-              <div className="space-y-1.5 pt-2">
-                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">
-                  {isRtl ? 'رابط Webhook لتلقي طلبات Shopify:' : 'URL Webhook Notification Shopify:'}
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider">
+                  {isRtl ? 'نطاق المتجر (Store Domain)' : 'Domaine de votre boutique Shopify'}
                 </label>
-                <div className="p-3 bg-emerald-50/50 border border-emerald-100 rounded-2xl flex items-center justify-between font-mono text-xs">
-                  <span className="truncate pr-2 font-bold text-emerald-900">{shopifyWebhookUrl}</span>
-                  <button 
-                    type="button"
-                    onClick={() => copyToClipboard(shopifyWebhookUrl, 'Shopify Webhook')}
-                    className="p-2 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 shrink-0"
-                  >
-                    <Copy size={14} />
-                  </button>
+                <div className="flex items-center bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 focus-within:border-emerald-600 transition-all">
+                  <input
+                    type="text"
+                    placeholder="ma-boutique.myshopify.com"
+                    value={shopifyDraft.storeDomain}
+                    onChange={(e) => setShopifyDraft(prev => ({ ...prev, storeDomain: e.target.value }))}
+                    className="w-full bg-transparent text-xs font-bold text-slate-800 outline-none"
+                    required
+                  />
                 </div>
+                <p className="text-[10px] text-slate-400 font-medium px-1">
+                  Ex: mon-magasin.myshopify.com
+                </p>
               </div>
 
-              <div className="pt-4 flex gap-3">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider">
+                  {isRtl ? 'رمز الوصول (Admin Access Token - اختيارى)' : 'Admin API Access Token (shpat_...) (Optionnel)'}
+                </label>
+                <div className="flex items-center bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 focus-within:border-emerald-600 transition-all">
+                  <input
+                    type="password"
+                    placeholder="shpat_1234567890abcdef..."
+                    value={shopifyDraft.accessToken}
+                    onChange={(e) => setShopifyDraft(prev => ({ ...prev, accessToken: e.target.value }))}
+                    className="w-full bg-transparent text-xs font-mono font-bold text-slate-800 outline-none"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 font-medium px-1">
+                  {isRtl ? 'أدخل Token الخاص بتطبيقك الخاص أو اتركه فارغاً للربط المباشر' : 'Entrez votre token si vous utilisez une App Privée, ou laissez vide pour la connexion OAuth.'}
+                </p>
+              </div>
+
+              {/* Status and Auto Sync */}
+              <div className="p-4 bg-slate-50 rounded-2xl space-y-3 border border-slate-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700">{isRtl ? 'حالة الربط المباشر:' : 'Statut de connexion:'}</span>
+                  <span className={`text-xs font-black ${shopifyStatus.isConnected ? 'text-emerald-600' : 'text-slate-400'}`}>
+                    {shopifyStatus.isConnected ? (isRtl ? 'متصل بنجاح' : 'Connecté') : (isRtl ? 'غير متصل' : 'Non connecté')}
+                  </span>
+                </div>
+
+                {shopifyStatus.isConnected && (
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                    <span className="text-xs font-bold text-slate-700">{isRtl ? 'المزامنة التلقائية:' : 'Maintien Auto-Sync:'}</span>
+                    <button
+                      type="button"
+                      onClick={handleToggleShopifySync}
+                      disabled={isTogglingShopifySync}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase transition-all ${
+                        shopifyStatus.autoSyncActive ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-600'
+                      }`}
+                    >
+                      {shopifyStatus.autoSyncActive ? (isRtl ? 'مُفعلة' : 'Activé') : (isRtl ? 'معطلة' : 'Désactivé')}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Single Button Connection */}
+              <div className="pt-2 space-y-3">
+                <button
+                  type="submit"
+                  className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2"
+                >
+                  <ExternalLink size={16} />
+                  {shopifyStatus.isConnected 
+                    ? (isRtl ? 'إعادة تسجيل الدخول إلى Shopify' : 'Reconnecter mon compte Shopify')
+                    : (isRtl ? 'تسجيل الدخول وربط متجر Shopify' : 'Se connecter avec Shopify.com')
+                  }
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setActiveModal(null)}
-                  className="flex-1 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl text-xs font-black uppercase tracking-widest"
+                  className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl text-xs font-black uppercase tracking-widest"
                 >
-                  {isRtl ? 'إلغاء' : 'Annuler'}
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg hover:from-emerald-700 hover:to-teal-700"
-                >
-                  {isRtl ? 'حفظ الربط' : 'Enregistrer'}
+                  {isRtl ? 'إغلاق' : 'Fermer'}
                 </button>
               </div>
             </form>

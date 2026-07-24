@@ -306,7 +306,7 @@
 
   /* Dashboard Premium Tokens */
   .glass-sidebar {
-    @apply bg-white/70 backdrop-blur-3xl border-r border-white/40 shadow-[4px_0_32px_rgba(0,0,0,0.03)];
+    @apply bg-white border-r border-slate-200/60 shadow-[4px_0_32px_rgba(0,0,0,0.05)];
   }
 
   .glass-panel {
@@ -409,7 +409,7 @@
    ========================================================================== */
 
 /* Unconditional Top Z-Index and Unified Dark Blur Backdrop for all Modals */
-div[class*="fixed"][class*="inset-0"][class*="bg-"],
+div[class*="fixed"][class*="inset-0"][class*="bg-"]:not([data-sidebar-overlay]),
 .modal-overlay,
 .fixed.inset-0.bg-black\/60,
 .fixed.inset-0.bg-slate-900\/60,
@@ -421,10 +421,26 @@ div[class*="fixed"][class*="inset-0"][class*="bg-"],
   -webkit-backdrop-filter: blur(8px) !important;
 }
 
+/* Mobile sidebar overlay must NOT blur */
+[data-sidebar-overlay] {
+  z-index: 9990 !important;
+  background-color: rgba(0, 0, 0, 0.25) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 /* Ensure modal wrapper containers (centering flex wrappers) have top z-index without double-blurring */
-div[class*="fixed"][class*="inset-0"]:not([class*="bg-"]),
+div[class*="fixed"][class*="inset-0"]:not([class*="bg-"]):not([data-dropdown-backdrop]):not([data-sidebar-overlay]),
 div[class*="fixed"][class*="inset-0"].pointer-events-none {
   z-index: 1000000 !important;
+  background-color: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Dropdown backdrops (profile menu, etc.) stay below their dropdowns */
+[data-dropdown-backdrop] {
+  z-index: 99 !important;
   background-color: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;

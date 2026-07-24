@@ -17,6 +17,7 @@ import {
   Tag, 
   Users, 
   ShoppingCart, 
+  ShoppingBag,
   CreditCard, 
   DollarSign, 
   Clock, 
@@ -75,6 +76,8 @@ const navigation = {
       children: [
         { name: 'nav_youcan_connect', href: '/dashboard/integrations', icon: Link2 },
         { name: 'nav_youcan_leads', href: '/dashboard/youcan-leads', icon: Globe },
+        { name: 'nav_shopify_leads', href: '/dashboard/shopify-leads', icon: ShoppingBag },
+        { name: 'nav_woocommerce_leads', href: '/dashboard/woocommerce-leads', icon: ShoppingBag },
       ]
     },
     { name: 'nav_inventory', href: '/dashboard/inventory', icon: Package },
@@ -206,6 +209,7 @@ const navigation = {
   admin: [
     { name: 'Tableau de bord', href: '/admin', icon: Home },
     { name: 'Tous les Leads', href: '/admin/leads', icon: Users },
+    { name: 'Masterclass Invitations', href: '/admin/event-registrations', icon: Users },
     { name: 'Gestion des Liens', href: '/admin/links', icon: Link2 },
     { 
       name: 'Gestion Utilisateurs', 
@@ -878,15 +882,16 @@ export default function DashboardLayout() {
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 lg:hidden transition-opacity"
+          data-sidebar-overlay
+          className="fixed inset-0 bg-black/25 z-[9990] lg:hidden transition-opacity"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed inset-y-0 ${isRtl ? 'right-0 border-l border-slate-200/50' : 'left-0 border-r border-slate-200/50'} glass-sidebar z-50 transition-all duration-300 ease-in-out
+      <aside className={`fixed inset-y-0 ${isRtl ? 'right-0 border-l border-slate-200/80' : 'left-0 border-r border-slate-200/80'} bg-white z-[9999] shadow-2xl transition-all duration-300 ease-in-out
         ${sidebarCollapsed ? 'lg:w-20' : 'lg:w-56'}
-        w-56 lg:translate-x-0
+        w-64 sm:w-72 lg:translate-x-0
         ${sidebarOpen ? 'translate-x-0' : (isRtl ? 'translate-x-full' : '-translate-x-full')}
       `}>
         {/* Sidebar Header */}
@@ -953,7 +958,7 @@ export default function DashboardLayout() {
                   <Icon size={15} strokeWidth={isActive ? 2.5 : 2} className={isActive ? 'text-inherit' : 'text-slate-400 group-hover:text-slate-900'} />
                 </div>
                 
-                {!sidebarCollapsed && (
+                {(!sidebarCollapsed || sidebarOpen) && (
                   <div className="flex-1 flex items-center justify-between min-w-0 animate-in fade-in duration-300">
                     <span className="transition-all duration-300 whitespace-nowrap overflow-hidden text-ellipsis">{t(item.name, 'dashboard')}</span>
                     
@@ -997,7 +1002,7 @@ export default function DashboardLayout() {
                   </div>
                 )}
                 
-                {sidebarCollapsed && !hasChildren && (
+                {sidebarCollapsed && !sidebarOpen && !hasChildren && (
                   <div className={`hidden lg:block absolute ${isRtl ? 'right-full mr-3 translate-x-[10px]' : 'left-full ml-3 translate-x-[-10px]'} px-4 py-2 bg-slate-900 text-white text-[10px] uppercase font-black tracking-widest rounded-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-300 group-hover:translate-x-0 whitespace-nowrap z-[100] shadow-2xl`}>
                     {t(item.name, 'dashboard')}
                     {(item.href?.includes('/chat') || item.children?.some((c: any) => c.href?.includes('/chat'))) && totalUnread > 0 && (
@@ -1057,7 +1062,7 @@ export default function DashboardLayout() {
                 )}
 
                 {/* Professional Sub-navigation */}
-                {hasChildren && isExpanded && !sidebarCollapsed && (
+                {hasChildren && isExpanded && (!sidebarCollapsed || sidebarOpen) && (
                   <div className={`relative ${isRtl ? 'mr-5 pr-3 pl-0' : 'ml-5 pl-3 pr-0'} space-y-0.5 mt-0.5 animate-in slide-in-from-top-2 fade-in duration-300`}>
                     {it.children.map((child: any) => {
                       const isChildActive = location.pathname === child.href;
@@ -1103,7 +1108,7 @@ export default function DashboardLayout() {
                 )}
 
                 {/* Floating Sub-navigation for Collapsed Sidebar */}
-                {hasChildren && sidebarCollapsed && (
+                {hasChildren && sidebarCollapsed && !sidebarOpen && (
                   <div className={`absolute ${isRtl ? 'right-full pr-2 mr-0 pl-0' : 'left-full pl-2 ml-0 pr-0'} top-0 hidden peer-hover:block hover:block z-[100]`}>
                     <div className={`w-48 bg-white rounded-xl shadow-xl border border-slate-100 p-2 animate-in fade-in ${isRtl ? 'slide-in-from-right-2' : 'slide-in-from-left-2'} duration-200`}>
                       <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 pb-2 mb-1 border-b border-slate-50">
@@ -1183,7 +1188,7 @@ export default function DashboardLayout() {
                 {currentMode === 'AFFILIATE' ? 'A' : 'V'}
               </div>
               <div className={`text-left flex-1 transition-all duration-300 ${
-                sidebarCollapsed ? 'lg:hidden' : ''
+                (sidebarCollapsed && !sidebarOpen) ? 'lg:hidden' : ''
               }`}>
                 <p className="text-[9px] font-black text-slate-900 uppercase tracking-tight leading-none">
                   {currentMode === 'AFFILIATE' ? 'Affilié' : 'Vendeur'}
@@ -1191,7 +1196,7 @@ export default function DashboardLayout() {
                 <p className="text-[7px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">PRO SWITCH</p>
               </div>
               <div className={`p-1.5 bg-slate-50 rounded-xl group-hover:bg-primary-50 transition-colors ${
-                sidebarCollapsed ? 'lg:hidden' : ''
+                (sidebarCollapsed && !sidebarOpen) ? 'lg:hidden' : ''
               }`}>
                 <Zap size={12} className="text-slate-400 group-hover:text-primary-500 transition-colors" />
               </div>
@@ -1224,11 +1229,12 @@ export default function DashboardLayout() {
               <button
                 type="button"
                 onClick={() => { setSearchOpen(false); setSearchQuery(''); }}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/50 transition-colors"
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/50 transition-colors flex items-center gap-1.5"
               >
                 <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white text-[10px] font-bold text-slate-400 border border-slate-200 shadow-sm">
                   ESC
                 </kbd>
+                <X size={18} />
               </button>
             </div>
             <div className="max-h-72 overflow-y-auto divide-y divide-slate-50">
@@ -1307,7 +1313,7 @@ export default function DashboardLayout() {
           : (sidebarCollapsed ? 'lg:pl-20 pr-0' : 'lg:pl-56 pr-0')
       }`}>
         {/* Header */}
-        <header className="sticky top-0 h-14 bg-[#F8FAFC]/80 backdrop-blur-xl border-b border-slate-200/50 z-[500]">
+        <header className="sticky top-0 h-14 bg-[#F8FAFC] border-b border-slate-200/50 z-[500]">
           <div className="flex items-center justify-between h-full px-3 sm:px-4 lg:px-6">
             {/* Left section */}
             <div className="flex items-center gap-3">
@@ -1406,8 +1412,8 @@ export default function DashboardLayout() {
 
                 {showNotificationsMenu && (
                   <>
-                    <div className="fixed inset-0 z-[990]" onClick={() => setShowNotificationsMenu(false)}></div>
-                    <div className={`absolute ${language === 'ar' ? 'left-0 origin-top-left' : 'right-0 origin-top-right'} mt-3 w-80 sm:w-[420px] bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-[1000] overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300`}>
+                    <div data-dropdown-backdrop className="fixed inset-0 z-[99]" onClick={() => setShowNotificationsMenu(false)}></div>
+                    <div className={`absolute ${language === 'ar' ? 'left-0 origin-top-left' : 'right-0 origin-top-right'} mt-3 w-80 sm:w-[420px] bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-[100] overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300`}>
                       {/* Tray Header */}
                       <div className="px-5 py-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between">
                         <div>
@@ -1562,8 +1568,8 @@ export default function DashboardLayout() {
 
                 {showProfileMenu && (
                   <>
-                    <div className="fixed inset-0 z-[990]" onClick={() => setShowProfileMenu(false)}></div>
-                    <div className={`absolute ${language === 'ar' ? 'left-0 origin-top-left' : 'right-0 origin-top-right'} mt-3 w-64 bg-white rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-[1000] overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300`}>
+                    <div data-dropdown-backdrop className="fixed inset-0 z-[99]" onClick={() => setShowProfileMenu(false)}></div>
+                    <div className={`absolute ${language === 'ar' ? 'left-0 origin-top-left' : 'right-0 origin-top-right'} mt-3 w-64 bg-white rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-[100] overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300`}>
                       <div className="px-6 py-6 border-b border-slate-50 bg-slate-50/50 flex items-center">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-black text-slate-900 truncate">{user?.fullName}</p>

@@ -1,0 +1,59 @@
+import { useEffect, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { shopifyApi } from '../../lib/api';
+import toast from 'react-hot-toast';
+import { Loader2 } from 'lucide-react';
+
+export default function ShopifyCallback() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const code = searchParams.get('code');
+  const shop = searchParams.get('shop');
+  const error = searchParams.get('error');
+  const processedRef = useRef(false);
+
+  useEffect(() => {
+    const exchangeToken = async () => {
+      // Prevent double firing in React strict mode
+      if (processedRef.current) return;
+      processedRef.current = true;
+
+      if (error) {
+        toast.error('L\'autorisation Shopify a été refusée ou a échoué.');
+        navigate('/dashboard/integrations');
+        return;
+      }
+
+      if (!code || !shop) {
+        toast.error('Informations d\'autorisation Shopify manquantes. Veuillez réessayer.');
+        navigate('/dashboard/integrations');
+        return;
+      }
+
+      try {
+        await shopifyApi.exchangeToken({ code, shop });
+        toast.success('Boutique Shopify connectée avec succès !');
+        navigate('/dashboard/integrations');
+      } catch (err: any) {
+        console.error('Shopify Callback Error:', err);
+        toast.error(err.response?.data?.message || 'Erreur lors de la connexion à Shopify.');
+        navigate('/dashboard/integrations');
+      }
+    };
+
+    exchangeToken();
+  }, [code, shop, error, navigate]);
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in p-8 text-center">
+      <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mb-6 shadow-sm border border-emerald-100">
+        <Loader2 className="w-10 h-10 animate-spin" />
+      </div>
+      <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Connexion à Shopify en cours...</h2>
+      <p className="text-gray-500 mt-3 font-medium">
+        Veuillez patienter pendant que nous sécurisons l'accès à votre boutique Shopify. <br />
+        Vous allez être redirigé automatiquement.
+      </p>
+    </div>
+  );
+}

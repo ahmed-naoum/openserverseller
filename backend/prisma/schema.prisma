@@ -104,6 +104,20 @@ model User {
   youcanAccessToken String?
   youcanStoreDomain String?
   youcanSyncActive  Boolean   @default(true)
+  youcanConnectedAt DateTime?
+
+  // Shopify Integration
+  shopifyAccessToken String?
+  shopifyStoreDomain String?
+  shopifySyncActive  Boolean   @default(true)
+  shopifyConnectedAt DateTime?
+
+  // WooCommerce Integration
+  wooCommerceUrl            String?
+  wooCommerceConsumerKey    String?
+  wooCommerceConsumerSecret String?
+  wooCommerceSyncActive     Boolean   @default(true)
+  wooCommerceConnectedAt    DateTime?
 
   language       String            @default("ar") @db.VarChar(5)
 
@@ -1246,6 +1260,22 @@ model ProfessionalEmail {
   updatedAt DateTime @updatedAt
 
   @@map("professional_emails")
+}
+
+model EventRegistration {
+  id               Int      @id @default(autoincrement())
+  fullName         String
+  phone            String
+  whatsapp         String
+  email            String
+  experience       String
+  stock            String
+  ordersVolume     String
+  biggestChallenge String?  @db.Text
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("event_registrations")
 }
 
 
