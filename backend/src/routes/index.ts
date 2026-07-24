@@ -91,6 +91,8 @@ router.use('/webhooks', auditLog, webhookRoutes);
 router.use('/youcan', auditLog, youcanRoutes);
 router.use('/shopify', auditLog, shopifyRoutes);
 router.use('/woocommerce', auditLog, woocommerceRoutes);
+router.use('/integrations/woocommerce', auditLog, woocommerceRoutes);
+router.use('/integrations/shopify', auditLog, shopifyRoutes);
 router.use('/support', auditLog, supportRoutes);
 router.use('/user-pixels', auditLog, pixelRoutes);
 router.use('/domain', auditLog, domainRoutes);

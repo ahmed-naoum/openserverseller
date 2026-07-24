@@ -82,8 +82,8 @@ export default function IntegrationsPage() {
   // Webhook URLs
   const apiBaseUrl = (import.meta.env as any).VITE_API_URL || 'https://api.silacod.com/api/v1';
   const youcanWebhookUrl = `${apiBaseUrl}/youcan/webhook`;
-  const wooWebhookUrl = `${apiBaseUrl}/integrations/woocommerce/webhook`;
-  const shopifyWebhookUrl = `${apiBaseUrl}/integrations/shopify/webhook`;
+  const wooWebhookUrl = `${apiBaseUrl}/woocommerce/webhook`;
+  const shopifyWebhookUrl = `${apiBaseUrl}/shopify/webhook`;
 
   // Fetch status on mount
   useEffect(() => {
