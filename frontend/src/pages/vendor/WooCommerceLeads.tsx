@@ -726,6 +726,9 @@ export default function WooCommerceLeads() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
       {/* Push to Call Center Product Selection Modal */}
       {isPushModalOpen && (
         <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
