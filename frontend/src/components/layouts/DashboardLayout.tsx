@@ -882,6 +882,7 @@ export default function DashboardLayout() {
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div 
+          data-sidebar-overlay
           className="fixed inset-0 bg-black/25 z-[9990] lg:hidden transition-opacity"
           onClick={() => setSidebarOpen(false)}
         />
