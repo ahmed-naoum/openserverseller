@@ -266,13 +266,15 @@ router.get(
       });
     }
 
+    // Use 2-hour buffer before connectedAt to prevent timezone/clock drift issues
+    const filterDate = new Date(connectedAt.getTime() - 2 * 60 * 60 * 1000);
+
     try {
       let page = 1;
       let allOrders: any[] = [];
       let hasMore = true;
-      let totalCount = 0;
 
-      // Fetch across pages for orders created after connectedAt
+      // Fetch across pages for orders created after filterDate
       while (hasMore && page <= 50) {
         const response = await axios.get(`${vendor.wooCommerceUrl}/wp-json/wc/v3/orders`, {
           params: {
@@ -281,12 +283,15 @@ router.get(
             per_page: 100,
             page,
             status: 'any',
-            after: connectedAt.toISOString(),
+            after: filterDate.toISOString(),
           },
           timeout: 20000,
         });
 
-        const fetched = (response.data || []).filter((o: any) => new Date(o.date_created || o.date_created_gmt) >= connectedAt);
+        const fetched = (response.data || []).filter((o: any) => {
+          const d = new Date(o.date_created_gmt || o.date_created);
+          return isNaN(d.getTime()) || d >= filterDate;
+        });
         
         if (fetched.length === 0) {
           hasMore = false;
@@ -351,12 +356,14 @@ router.post(
       });
     }
 
+    const filterDate = new Date(connectedAt.getTime() - 2 * 60 * 60 * 1000);
+
     try {
       let page = 1;
       let orders: any[] = [];
       let hasMore = true;
 
-      // Fetch orders created after connectedAt
+      // Fetch orders created after filterDate
       while (hasMore && page <= 50) {
         const response = await axios.get(`${vendor.wooCommerceUrl}/wp-json/wc/v3/orders`, {
           params: {
@@ -364,12 +371,15 @@ router.post(
             consumer_secret: vendor.wooCommerceConsumerSecret,
             per_page: 100,
             page,
-            after: connectedAt.toISOString(),
+            after: filterDate.toISOString(),
           },
           timeout: 15000,
         });
 
-        const fetched = (response.data || []).filter((o: any) => new Date(o.date_created || o.date_created_gmt) >= connectedAt);
+        const fetched = (response.data || []).filter((o: any) => {
+          const d = new Date(o.date_created_gmt || o.date_created);
+          return isNaN(d.getTime()) || d >= filterDate;
+        });
         if (fetched.length === 0) {
           hasMore = false;
         } else {

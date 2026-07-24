@@ -241,12 +241,14 @@ router.get(
       });
     }
 
+    const filterDate = new Date(connectedAt.getTime() - 2 * 60 * 60 * 1000);
+
     try {
       const response = await axios.get(`https://${vendor.shopifyStoreDomain}/admin/api/2024-01/orders.json`, {
         params: { 
           status: 'any', 
           limit: 250, 
-          created_at_min: connectedAt.toISOString(),
+          created_at_min: filterDate.toISOString(),
           ...req.query 
         },
         headers: {
@@ -257,7 +259,7 @@ router.get(
         timeout: 15000,
       });
 
-      const orders = (response.data?.orders || []).filter((o: any) => new Date(o.created_at) >= connectedAt);
+      const orders = (response.data?.orders || []).filter((o: any) => new Date(o.created_at) >= filterDate);
 
       res.json({
         success: true,
