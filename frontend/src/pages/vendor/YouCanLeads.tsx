@@ -71,6 +71,51 @@ interface YouCanOrder {
   }>;
 }
 
+// Utility functions to prevent runtime exceptions and accurately parse order totals
+export const toStatusString = (val: any, fallback = ''): string => {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object') {
+    return val.name || val.title || val.label || val.status || JSON.stringify(val);
+  }
+  return String(val);
+};
+
+export const extractOrderTotal = (order: any): number => {
+  if (!order) return 0;
+  
+  const possibleFields = [
+    order.total,
+    order.total_price,
+    order.price,
+    order.grand_total,
+    order.total_amount,
+    order.sub_total,
+    order.pricing?.total,
+    order.pricing?.total_price,
+    order.total_price_set?.shop_money?.amount,
+    order.current_total_price,
+  ];
+
+  for (const field of possibleFields) {
+    const num = Number(field);
+    if (!isNaN(num) && num > 0) {
+      return num;
+    }
+  }
+
+  if (Array.isArray(order.line_items) && order.line_items.length > 0) {
+    const itemsSum = order.line_items.reduce((sum: number, item: any) => {
+      const price = Number(item.price || item.unit_price || 0);
+      const qty = Number(item.quantity || 1);
+      return sum + (price * qty);
+    }, 0);
+    if (itemsSum > 0) return itemsSum;
+  }
+
+  return 0;
+};
+
 export default function YouCanLeads() {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
@@ -148,10 +193,11 @@ export default function YouCanLeads() {
     setLoadingProducts(true);
     try {
       const res = await leadsApi.getMyProducts({ mode: currentMode });
-      const rawProds = res.data?.data || res.data || [];
-      setProducts(Array.isArray(rawProds) ? rawProds : []);
-      if (rawProds.length > 0) {
-        setSelectedProductId(rawProds[0].id);
+      const rawProds = res.data?.data?.products || res.data?.products || res.data?.data || res.data || [];
+      const prodsList = Array.isArray(rawProds) ? rawProds : [];
+      setProducts(prodsList);
+      if (prodsList.length > 0) {
+        setSelectedProductId(prodsList[0].id);
       }
     } catch (err) {
       console.error('Error fetching inventory products:', err);
@@ -178,7 +224,7 @@ export default function YouCanLeads() {
         phone: getCustomerPhone(o),
         city: o.address?.city || '',
         address: o.address?.address1 || '',
-        total: Number(o.total_price || o.grand_total || 0),
+        total: extractOrderTotal(o),
         currency: o.currency || 'MAD',
       }));
 
@@ -225,9 +271,9 @@ export default function YouCanLeads() {
   };
 
   const getTotalAmount = (order: YouCanOrder) => {
-    const val = order.total_price ?? order.grand_total ?? 0;
+    const val = extractOrderTotal(order);
     const currency = order.currency || 'MAD';
-    return `${Number(val).toLocaleString()} ${currency}`;
+    return `${val.toLocaleString()} ${currency}`;
   };
 
   const formatDate = (dateStr: string) => {
@@ -246,17 +292,17 @@ export default function YouCanLeads() {
     const query = searchTerm.toLowerCase();
 
     const matchesSearch = ref.includes(query) || name.includes(query) || phone.includes(query);
-    const matchesStatus = statusFilter === 'ALL' || (order.status || 'Open').toUpperCase() === statusFilter.toUpperCase();
-    const matchesPayment = paymentFilter === 'ALL' || (order.payment_status || 'Unpaid').toUpperCase() === paymentFilter.toUpperCase();
+    const matchesStatus = statusFilter === 'ALL' || toStatusString(order.status, 'Open').toUpperCase() === statusFilter.toUpperCase();
+    const matchesPayment = paymentFilter === 'ALL' || toStatusString(order.payment_status, 'Unpaid').toUpperCase() === paymentFilter.toUpperCase();
 
     return matchesSearch && matchesStatus && matchesPayment;
   });
 
   // Calculate Statistics
   const totalOrdersCount = orders.length;
-  const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.total_price || o.grand_total) || 0), 0);
-  const unfulfilledCount = orders.filter(o => (o.fulfillment_status || 'Unfulfilled').toLowerCase().includes('unfulfilled')).length;
-  const unpaidCount = orders.filter(o => (o.payment_status || 'Unpaid').toLowerCase().includes('unpaid')).length;
+  const totalRevenue = orders.reduce((sum, o) => sum + extractOrderTotal(o), 0);
+  const unfulfilledCount = orders.filter(o => toStatusString(o.fulfillment_status, 'Unfulfilled').toLowerCase().includes('unfulfilled')).length;
+  const unpaidCount = orders.filter(o => toStatusString(o.payment_status, 'Unpaid').toLowerCase().includes('unpaid')).length;
 
   return (
     <div dir={isRtl ? 'rtl' : 'ltr'} className="space-y-6 pt-4 pb-12 animate-in fade-in duration-300">

@@ -71,6 +71,51 @@ interface ShopifyOrder {
   }>;
 }
 
+// Utility functions to prevent runtime exceptions and accurately parse order totals
+export const toStatusString = (val: any, fallback = ''): string => {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object') {
+    return val.name || val.title || val.label || val.status || JSON.stringify(val);
+  }
+  return String(val);
+};
+
+export const extractOrderTotal = (order: any): number => {
+  if (!order) return 0;
+  
+  const possibleFields = [
+    order.total,
+    order.total_price,
+    order.price,
+    order.grand_total,
+    order.total_amount,
+    order.sub_total,
+    order.pricing?.total,
+    order.pricing?.total_price,
+    order.total_price_set?.shop_money?.amount,
+    order.current_total_price,
+  ];
+
+  for (const field of possibleFields) {
+    const num = Number(field);
+    if (!isNaN(num) && num > 0) {
+      return num;
+    }
+  }
+
+  if (Array.isArray(order.line_items) && order.line_items.length > 0) {
+    const itemsSum = order.line_items.reduce((sum: number, item: any) => {
+      const price = Number(item.price || item.unit_price || 0);
+      const qty = Number(item.quantity || 1);
+      return sum + (price * qty);
+    }, 0);
+    if (itemsSum > 0) return itemsSum;
+  }
+
+  return 0;
+};
+
 export default function ShopifyLeads() {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
@@ -148,10 +193,11 @@ export default function ShopifyLeads() {
     setLoadingProducts(true);
     try {
       const res = await leadsApi.getMyProducts({ mode: currentMode });
-      const rawProds = res.data?.data || res.data || [];
-      setProducts(Array.isArray(rawProds) ? rawProds : []);
-      if (rawProds.length > 0) {
-        setSelectedProductId(rawProds[0].id);
+      const rawProds = res.data?.data?.products || res.data?.products || res.data?.data || res.data || [];
+      const prodsList = Array.isArray(rawProds) ? rawProds : [];
+      setProducts(prodsList);
+      if (prodsList.length > 0) {
+        setSelectedProductId(prodsList[0].id);
       }
     } catch (err) {
       console.error('Error fetching inventory products:', err);
@@ -178,7 +224,7 @@ export default function ShopifyLeads() {
         phone: getCustomerPhone(o),
         city: o.shipping_address?.city || o.billing_address?.city || '',
         address: o.shipping_address?.address1 || o.billing_address?.address1 || '',
-        total: Number(o.total_price || 0),
+        total: extractOrderTotal(o),
         currency: o.currency || 'MAD',
       }));
 
@@ -227,9 +273,9 @@ export default function ShopifyLeads() {
   };
 
   const getTotalAmount = (order: ShopifyOrder) => {
-    const val = order.total_price ?? 0;
+    const val = extractOrderTotal(order);
     const currency = order.currency || 'MAD';
-    return `${Number(val).toLocaleString()} ${currency}`;
+    return `${val.toLocaleString()} ${currency}`;
   };
 
   const formatDate = (dateStr: string) => {
@@ -248,17 +294,17 @@ export default function ShopifyLeads() {
     const query = searchTerm.toLowerCase();
 
     const matchesSearch = ref.includes(query) || name.includes(query) || phone.includes(query);
-    const matchesPayment = paymentFilter === 'ALL' || (order.financial_status || 'pending').toUpperCase() === paymentFilter.toUpperCase();
-    const matchesShipping = shippingFilter === 'ALL' || (order.fulfillment_status || 'unfulfilled').toUpperCase() === shippingFilter.toUpperCase();
+    const matchesPayment = paymentFilter === 'ALL' || toStatusString(order.financial_status, 'pending').toUpperCase() === paymentFilter.toUpperCase();
+    const matchesShipping = shippingFilter === 'ALL' || toStatusString(order.fulfillment_status, 'unfulfilled').toUpperCase() === shippingFilter.toUpperCase();
 
     return matchesSearch && matchesPayment && matchesShipping;
   });
 
   // Calculate Statistics
   const totalOrdersCount = orders.length;
-  const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.total_price) || 0), 0);
-  const unfulfilledCount = orders.filter(o => !o.fulfillment_status || o.fulfillment_status.toLowerCase() === 'unfulfilled').length;
-  const pendingPaymentCount = orders.filter(o => (o.financial_status || 'pending').toLowerCase() !== 'paid').length;
+  const totalRevenue = orders.reduce((sum, o) => sum + extractOrderTotal(o), 0);
+  const unfulfilledCount = orders.filter(o => !o.fulfillment_status || toStatusString(o.fulfillment_status).toLowerCase() === 'unfulfilled').length;
+  const pendingPaymentCount = orders.filter(o => toStatusString(o.financial_status, 'pending').toLowerCase() !== 'paid').length;
 
   return (
     <div dir={isRtl ? 'rtl' : 'ltr'} className="space-y-6 pt-4 pb-12 animate-in fade-in duration-300">

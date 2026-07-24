@@ -2241,7 +2241,7 @@ router.post(
   })
 );
 
-// Get products the current user has bought or claimed
+// Get products the current user has bought, owned, or claimed
 router.get(
   '/my-products',
   authenticate,
@@ -2250,10 +2250,11 @@ router.get(
     const { mode } = req.query;
 
     let inventoryProducts: any[] = [];
+    let ownedProducts: any[] = [];
     let claimedProducts: any[] = [];
 
     if (!mode || mode === 'SELLER') {
-      // Products from inventory (bought)
+      // 1. Products from inventory (bought)
       inventoryProducts = await prisma.productInventory.findMany({
         where: { userId },
         include: {
@@ -2262,10 +2263,16 @@ router.get(
           },
         },
       });
+
+      // 2. Products created/owned by vendor
+      ownedProducts = await prisma.product.findMany({
+        where: { ownerId: userId },
+        include: { images: { where: { isPrimary: true }, take: 1 } },
+      });
     }
 
     if (!mode || mode === 'AFFILIATE') {
-      // Products from affiliate claims (claimed & approved)
+      // 3. Products from affiliate claims (claimed & approved)
       claimedProducts = await prisma.affiliateClaim.findMany({
         where: { userId, status: 'APPROVED' },
         include: {
@@ -2292,6 +2299,19 @@ router.get(
       }
     }
 
+    for (const prod of ownedProducts) {
+      if (!productMap.has(prod.id)) {
+        productMap.set(prod.id, {
+          id: prod.id,
+          sku: prod.sku,
+          name: prod.nameFr || prod.nameAr,
+          image: prod.images[0]?.imageUrl || null,
+          retailPrice: prod.retailPriceMad,
+          source: 'OWNED',
+        });
+      }
+    }
+
     for (const claim of claimedProducts) {
       if (claim.product && !productMap.has(claim.productId)) {
         productMap.set(claim.productId, {
@@ -2301,6 +2321,26 @@ router.get(
           image: claim.product.images[0]?.imageUrl || null,
           retailPrice: claim.product.retailPriceMad,
           source: 'AFFILIATE_CLAIM',
+        });
+      }
+    }
+
+    // 4. Fallback to active catalog products if empty
+    if (productMap.size === 0) {
+      const fallbackProducts = await prisma.product.findMany({
+        where: { isPublished: true },
+        take: 20,
+        include: { images: { where: { isPrimary: true }, take: 1 } },
+      });
+
+      for (const prod of fallbackProducts) {
+        productMap.set(prod.id, {
+          id: prod.id,
+          sku: prod.sku,
+          name: prod.nameFr || prod.nameAr,
+          image: prod.images[0]?.imageUrl || null,
+          retailPrice: prod.retailPriceMad,
+          source: 'CATALOG',
         });
       }
     }
