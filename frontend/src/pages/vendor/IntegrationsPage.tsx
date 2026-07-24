@@ -20,7 +20,9 @@ import {
   AlertCircle,
   Key,
   Server,
-  FileText
+  FileText,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { youcanApi, shopifyApi, wooCommerceApi } from '../../lib/api';
@@ -74,6 +76,8 @@ export default function IntegrationsPage() {
   // Form Draft States
   const [wooDraft, setWooDraft] = useState({ storeUrl: '', consumerKey: '', consumerSecret: '' });
   const [shopifyDraft, setShopifyDraft] = useState({ storeDomain: '', accessToken: '' });
+  const [showWooConsumerKey, setShowWooConsumerKey] = useState(false);
+  const [showWooConsumerSecret, setShowWooConsumerSecret] = useState(false);
 
   // Webhook URLs
   const apiBaseUrl = (import.meta.env as any).VITE_API_URL || 'https://api.silacod.com/api/v1';
@@ -816,24 +820,44 @@ export default function IntegrationsPage() {
 
               <div className="space-y-1.5">
                 <label className="block text-xs font-black text-slate-500 uppercase tracking-wider">Consumer Key (ck_...) <span className="text-slate-400 font-normal">({isRtl ? 'اختياري' : 'Optionnel'})</span></label>
-                <input
-                  type="text"
-                  placeholder="ck_1234567890abcdef..."
-                  value={wooDraft.consumerKey}
-                  onChange={(e) => setWooDraft(prev => ({ ...prev, consumerKey: e.target.value }))}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-purple-600"
-                />
+                <div className="relative">
+                  <input
+                    type={showWooConsumerKey ? "text" : "password"}
+                    placeholder="ck_1234567890abcdef..."
+                    value={wooDraft.consumerKey}
+                    onChange={(e) => setWooDraft(prev => ({ ...prev, consumerKey: e.target.value }))}
+                    className="w-full pl-4 pr-11 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-purple-600 rtl:pr-4 rtl:pl-11"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowWooConsumerKey(!showWooConsumerKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-700 transition-colors rtl:left-3 rtl:right-auto"
+                    title={showWooConsumerKey ? "Masquer" : "Afficher"}
+                  >
+                    {showWooConsumerKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-1.5">
                 <label className="block text-xs font-black text-slate-500 uppercase tracking-wider">Consumer Secret (cs_...) <span className="text-slate-400 font-normal">({isRtl ? 'اختياري' : 'Optionnel'})</span></label>
-                <input
-                  type="password"
-                  placeholder="cs_1234567890abcdef..."
-                  value={wooDraft.consumerSecret}
-                  onChange={(e) => setWooDraft(prev => ({ ...prev, consumerSecret: e.target.value }))}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-purple-600"
-                />
+                <div className="relative">
+                  <input
+                    type={showWooConsumerSecret ? "text" : "password"}
+                    placeholder="cs_1234567890abcdef..."
+                    value={wooDraft.consumerSecret}
+                    onChange={(e) => setWooDraft(prev => ({ ...prev, consumerSecret: e.target.value }))}
+                    className="w-full pl-4 pr-11 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-purple-600 rtl:pr-4 rtl:pl-11"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowWooConsumerSecret(!showWooConsumerSecret)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-700 transition-colors rtl:left-3 rtl:right-auto"
+                    title={showWooConsumerSecret ? "Masquer" : "Afficher"}
+                  >
+                    {showWooConsumerSecret ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
 
               {/* Webhook Endpoint Display */}
