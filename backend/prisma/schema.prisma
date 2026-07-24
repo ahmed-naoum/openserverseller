@@ -110,6 +110,12 @@ model User {
   shopifyStoreDomain String?
   shopifySyncActive  Boolean   @default(true)
 
+  // WooCommerce Integration
+  wooCommerceUrl            String?
+  wooCommerceConsumerKey    String?
+  wooCommerceConsumerSecret String?
+  wooCommerceSyncActive     Boolean   @default(true)
+
   language       String            @default("ar") @db.VarChar(5)
 
   profile        UserProfile?

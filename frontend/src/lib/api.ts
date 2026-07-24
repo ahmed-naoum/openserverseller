@@ -745,4 +745,12 @@ export const shopifyApi = {
   getOrders: (params?: any) => api.get('/shopify/orders', { params }),
 };
 
+export const wooCommerceApi = {
+  getStatus: () => api.get('/woocommerce/status'),
+  saveKeys: (data: { storeUrl: string; consumerKey: string; consumerSecret: string }) => api.post('/woocommerce/save-keys', data),
+  toggleSync: (active: boolean) => api.post('/woocommerce/toggle-sync', { active }),
+  getOrders: (params?: any) => api.get('/woocommerce/orders', { params }),
+  syncNow: () => api.post('/woocommerce/sync'),
+};
+
 

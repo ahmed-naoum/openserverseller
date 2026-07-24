@@ -23,7 +23,7 @@ import {
   FileText
 } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { youcanApi, shopifyApi } from '../../lib/api';
+import { youcanApi, shopifyApi, wooCommerceApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 
 export default function IntegrationsPage() {
@@ -85,7 +85,24 @@ export default function IntegrationsPage() {
   useEffect(() => {
     fetchYouCanStatus();
     fetchShopifyStatus();
+    fetchWooCommerceStatus();
   }, []);
+
+  const fetchWooCommerceStatus = async () => {
+    try {
+      const res = await wooCommerceApi.getStatus();
+      const statusData = res.data?.data || res.data;
+      if (statusData) {
+        setWooConfig(prev => ({
+          ...prev,
+          isConnected: !!statusData.isConnected,
+          storeUrl: statusData.storeUrl || prev.storeUrl,
+        }));
+      }
+    } catch (err) {
+      console.error("Error fetching WooCommerce status:", err);
+    }
+  };
 
   const fetchShopifyStatus = async () => {
     setLoadingShopifyStatus(true);
@@ -144,8 +161,8 @@ export default function IntegrationsPage() {
       await youcanApi.toggleSync(nextState);
       setYoucanStatus(prev => ({ ...prev, autoSyncActive: nextState }));
       toast.success(nextState 
-        ? (language === 'ar' ? 'تم تفعيل المزامنة التلقائية لـ YouCan' : 'Mزامنة automatique YouCan activée !')
-        : (language === 'ar' ? 'تم إيقاف المزامنة التلقائية لـ YouCan' : 'Mزامنة automatique YouCan désactivée')
+        ? (language === 'ar' ? 'تم تفعيل المزامنة التلقائية لـ YouCan' : 'Mise à jour automatique YouCan activée !')
+        : (language === 'ar' ? 'تم إيقاف المزامنة التلقائية لـ YouCan' : 'Mise à jour automatique YouCan désactivée')
       );
     } catch (err) {
       toast.error(language === 'ar' ? 'تعذر تغيير حالة المزامنة' : 'Impossible de modifier le statut de synchronisation');
@@ -154,20 +171,29 @@ export default function IntegrationsPage() {
     }
   };
 
-  const handleSaveWooCommerce = (e: React.FormEvent) => {
+  const handleSaveWooCommerce = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!wooDraft.storeUrl) return;
-    localStorage.setItem('silacod_woo_store_url', wooDraft.storeUrl);
-    localStorage.setItem('silacod_woo_consumer_key', wooDraft.consumerKey);
-    localStorage.setItem('silacod_woo_consumer_secret', wooDraft.consumerSecret);
-    setWooConfig({
-      storeUrl: wooDraft.storeUrl,
-      consumerKey: wooDraft.consumerKey,
-      consumerSecret: wooDraft.consumerSecret,
-      isConnected: true
-    });
-    setActiveModal(null);
-    toast.success(language === 'ar' ? 'تم حفظ ربط WooCommerce بنجاح !' : 'Intégration WooCommerce enregistrée avec succès !');
+    if (!wooDraft.storeUrl || !wooDraft.consumerKey || !wooDraft.consumerSecret) {
+      toast.error(language === 'ar' ? 'يرجى ملء جميع الحقول' : 'Veuillez remplir tous les champs');
+      return;
+    }
+    try {
+      await wooCommerceApi.saveKeys({
+        storeUrl: wooDraft.storeUrl,
+        consumerKey: wooDraft.consumerKey,
+        consumerSecret: wooDraft.consumerSecret,
+      });
+      setWooConfig({
+        storeUrl: wooDraft.storeUrl,
+        consumerKey: wooDraft.consumerKey,
+        consumerSecret: wooDraft.consumerSecret,
+        isConnected: true
+      });
+      setActiveModal(null);
+      toast.success(language === 'ar' ? 'تم حفظ ربط WooCommerce بنجاح !' : 'Intégration WooCommerce enregistrée avec succès !');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || (language === 'ar' ? 'فشل حفظ إعدادات WooCommerce' : 'Échec de l\'enregistrement WooCommerce'));
+    }
   };
 
   const handleSyncShopify = async () => {

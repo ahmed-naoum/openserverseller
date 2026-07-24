@@ -56,6 +56,7 @@ import VendorInsertLead from './pages/vendor/InsertLead';
 import VendorDomains from './pages/vendor/Domains';
 import YouCanLeads from './pages/vendor/YouCanLeads';
 import ShopifyLeads from './pages/vendor/ShopifyLeads';
+import WooCommerceLeads from './pages/vendor/WooCommerceLeads';
 import IntegrationsPage from './pages/vendor/IntegrationsPage';
 import PlatformSettings from './pages/admin/PlatformSettings';
 import SecurityFirewall from './pages/admin/SecurityFirewall';
@@ -346,6 +347,7 @@ function App() {
           <Route path="leads/new" element={<VendorInsertLead />} />
           <Route path="youcan-leads" element={<YouCanLeads />} />
           <Route path="shopify-leads" element={<ShopifyLeads />} />
+          <Route path="woocommerce-leads" element={<WooCommerceLeads />} />
 
           <Route path="wallet" element={<UserWallet />} />
           <Route path="inventory" element={<VendorInventory />} />
