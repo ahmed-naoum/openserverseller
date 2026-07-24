@@ -1229,11 +1229,12 @@ export default function DashboardLayout() {
               <button
                 type="button"
                 onClick={() => { setSearchOpen(false); setSearchQuery(''); }}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/50 transition-colors"
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/50 transition-colors flex items-center gap-1.5"
               >
                 <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white text-[10px] font-bold text-slate-400 border border-slate-200 shadow-sm">
                   ESC
                 </kbd>
+                <X size={18} />
               </button>
             </div>
             <div className="max-h-72 overflow-y-auto divide-y divide-slate-50">
