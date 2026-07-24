@@ -754,4 +754,12 @@ export const wooCommerceApi = {
   syncNow: () => api.post('/woocommerce/sync'),
 };
 
+export const eventApi = {
+  getStatus: () => api.get('/event/status'),
+  register: (data: any) => api.post('/event/register', data),
+  getAdminRegistrations: () => api.get('/event/admin/registrations'),
+  toggleAdminStatus: (enabled: boolean) => api.put('/event/admin/status', { enabled }),
+  deleteAdminRegistration: (id: number) => api.delete(`/event/admin/registrations/${id}`),
+};
+
 

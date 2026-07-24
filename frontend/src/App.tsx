@@ -61,6 +61,8 @@ import WooCommerceLeads from './pages/vendor/WooCommerceLeads';
 import IntegrationsPage from './pages/vendor/IntegrationsPage';
 import PlatformSettings from './pages/admin/PlatformSettings';
 import SecurityFirewall from './pages/admin/SecurityFirewall';
+import AdminEventRegistrations from './pages/admin/AdminEventRegistrations';
+import EventMasterclass from './pages/public/EventMasterclass';
 import WebhookLogs from './pages/admin/WebhookLogs';
 import WebhookTester from './pages/admin/WebhookTester';
 import GrossellerDashboard from './pages/grosseller/Dashboard';
@@ -254,6 +256,8 @@ function App() {
           <Route path="/careers" element={<CareersPage />} />
           <Route path="/blog" element={<BlogPage />} />
           <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/masterclass" element={<EventMasterclass />} />
+          <Route path="/event" element={<EventMasterclass />} />
           <Route path="/blocked" element={<BlockedPage />} />
 
         {/* Verification Route */}
@@ -460,6 +464,7 @@ function App() {
           <Route path="announcements" element={<AdminAnnouncements />} />
           <Route path="campaigns" element={<AdminCampaigns />} />
           <Route path="verifications" element={<AdminVerifications />} />
+          <Route path="event-registrations" element={<AdminEventRegistrations />} />
           <Route path="platform-settings" element={<PlatformSettings />} />
           <Route path="professional-emails" element={
             <RoleGuard allowedRoles={['SUPER_ADMIN']}>

@@ -209,6 +209,7 @@ const navigation = {
   admin: [
     { name: 'Tableau de bord', href: '/admin', icon: Home },
     { name: 'Tous les Leads', href: '/admin/leads', icon: Users },
+    { name: 'Masterclass Invitations', href: '/admin/event-registrations', icon: Users },
     { name: 'Gestion des Liens', href: '/admin/links', icon: Link2 },
     { 
       name: 'Gestion Utilisateurs', 

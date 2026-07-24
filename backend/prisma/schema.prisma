@@ -1259,5 +1259,21 @@ model ProfessionalEmail {
   @@map("professional_emails")
 }
 
+model EventRegistration {
+  id               Int      @id @default(autoincrement())
+  fullName         String
+  phone            String
+  whatsapp         String
+  email            String
+  experience       String
+  stock            String
+  ordersVolume     String
+  biggestChallenge String?  @db.Text
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("event_registrations")
+}
+
 
 

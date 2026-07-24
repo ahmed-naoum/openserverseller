@@ -36,6 +36,7 @@ import backupRoutes from './admin/backup.routes.js';
 import pixelRoutes from './pixel.routes.js';
 import domainRoutes from './domain.routes.js';
 import customProductRoutes from './customProduct.routes.js';
+import eventRoutes from './event.routes.js';
 
 
 const router = Router();
@@ -94,6 +95,7 @@ router.use('/support', auditLog, supportRoutes);
 router.use('/user-pixels', auditLog, pixelRoutes);
 router.use('/domain', auditLog, domainRoutes);
 router.use('/custom-products', auditLog, customProductRoutes);
+router.use('/event', eventRoutes);
 
 
 export default router;
