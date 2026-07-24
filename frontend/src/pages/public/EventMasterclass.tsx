@@ -74,15 +74,11 @@ export default function EventMasterclass() {
       <div className="max-w-3xl mx-auto space-y-8">
         {/* Brand Header */}
         <div className="flex justify-center items-center">
-          <div className="inline-flex items-center gap-3 dir-ltr">
-            <svg className="h-10 w-auto" viewBox="0 0 100 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M38 102C21.4 102 8 88.6 8 72C8 55.4 21.4 42 38 42C44.8 42 51.2 44.3 56.3 48.2L45.8 62.1C43.5 60.1 40.8 59 38 59C30.8 59 25 64.8 25 72C25 79.2 30.8 85 38 85C42.8 85 47 82.4 49.3 78.3L64.5 93.5C58.4 98.8 50.4 102 38 102Z" fill="#1D1D5B"/>
-              <path d="M62 18C78.6 18 92 31.4 92 48C92 64.6 78.6 78 62 78C55.2 78 48.8 75.7 43.7 71.8L54.2 57.9C56.5 59.9 59.2 61 62 61C69.2 61 75 55.2 75 48C75 40.8 69.2 35 62 35C57.2 35 53 37.6 50.7 41.7L35.5 26.5C41.6 21.2 49.6 18 62 18Z" fill="#1D1D5B"/>
-            </svg>
-            <span className="text-3xl sm:text-4xl font-black tracking-tight">
-              <span className="text-[#1D1D5B]">Sila</span><span className="text-[#F05023]">cod</span>
-            </span>
-          </div>
+          <img 
+            src="/new logo/logo filess-25.svg" 
+            alt="SILACOD" 
+            className="h-12 sm:h-14 w-auto object-contain transition-all hover:scale-105" 
+          />
         </div>
 
         {/* Hero Section */}
@@ -94,9 +90,11 @@ export default function EventMasterclass() {
 
           <h1 className="text-2xl sm:text-4xl font-black text-[#0f172a] leading-tight tracking-tight">
             كيفاش تسلم اللوجيستيك وتسيير الطلبيات لـ{' '}
-            <span className="inline-flex items-center gap-1 dir-ltr mx-1">
-              <span className="text-[#1D1D5B]">Sila</span><span className="text-[#F05023]">cod</span>
-            </span>{' '}
+            <img 
+              src="/new logo/logo filess-25.svg" 
+              alt="SILACOD" 
+              className="h-8 sm:h-9 inline-block object-contain align-middle mx-1.5" 
+            />{' '}
             وتكبّر تجارتك الإلكترونية
           </h1>
 
@@ -347,9 +345,11 @@ export default function EventMasterclass() {
 
               <div className="text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-1.5 pt-2">
                 <span>🔒 البيانات ديالك آمنة 100% وغادي نتوصلوا بيها مباشرة فـ سيستم</span>
-                <span className="inline-flex items-center gap-0.5 dir-ltr font-black text-slate-700">
-                  <span className="text-[#1D1D5B]">Sila</span><span className="text-[#F05023]">cod</span>
-                </span>
+                <img 
+                  src="/new logo/logo filess-25.svg" 
+                  alt="SILACOD" 
+                  className="h-4.5 w-auto inline-block object-contain align-middle" 
+                />
               </div>
             </form>
           </div>
