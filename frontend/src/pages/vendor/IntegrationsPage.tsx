@@ -812,10 +812,17 @@ export default function IntegrationsPage() {
                 />
               </div>
 
-              <div className="p-3 bg-purple-50 rounded-2xl border border-purple-100 text-xs text-purple-900 font-medium">
-                {isRtl 
-                  ? '💡 يمكنك الربط بنقرة واحدة بمجرد إدخال رابط متجرك والضغط على زر "الربط بنقرة واحدة"، أو إدخال المفاتيح يدوياً.'
-                  : '💡 Entrez simplement l\'URL de votre boutique puis cliquez sur le bouton pour vous connecter en 1 Clic via WooCommerce !'}
+              <div className="p-3 bg-purple-50 rounded-2xl border border-purple-100 text-xs text-purple-900 font-medium space-y-1">
+                <p>
+                  {isRtl 
+                    ? '💡 يمكنك الربط بنقرة واحدة بمجرد إدخال رابط متجرك والضغط على زر "الربط بنقرة واحدة"، أو إدخال المفاتيح يدوياً.'
+                    : '💡 Entrez simplement l\'URL de votre boutique puis cliquez sur le bouton pour vous connecter en 1 Clic via WooCommerce !'}
+                </p>
+                <p className="text-[11px] text-purple-700 font-semibold pt-1 border-t border-purple-100/60">
+                  {isRtl 
+                    ? '🔑 للحصول على المفاتيح: WooCommerce 👈 إعدادات (Settings) 👈 إعدادات متقدمة (Advanced) 👈 REST API 👈 إضافة مفتاح بصلاحية (قراءة/كتابة Read/Write).'
+                    : '🔑 Pour générer les clés : WooCommerce 👈 Réglages 👈 Avancé 👈 API REST 👈 Ajouter une clé (Droits: Lecture/Écriture).'}
+                </p>
               </div>
 
               <div className="space-y-1.5">
