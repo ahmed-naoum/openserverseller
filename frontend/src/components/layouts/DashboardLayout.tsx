@@ -882,15 +882,15 @@ export default function DashboardLayout() {
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black/30 z-40 lg:hidden transition-opacity"
+          className="fixed inset-0 bg-black/25 z-[9990] lg:hidden transition-opacity"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed inset-y-0 ${isRtl ? 'right-0 border-l border-slate-200/50' : 'left-0 border-r border-slate-200/50'} glass-sidebar z-50 transition-all duration-300 ease-in-out
+      <aside className={`fixed inset-y-0 ${isRtl ? 'right-0 border-l border-slate-200/80' : 'left-0 border-r border-slate-200/80'} bg-white z-[9999] shadow-2xl transition-all duration-300 ease-in-out
         ${sidebarCollapsed ? 'lg:w-20' : 'lg:w-56'}
-        w-56 lg:translate-x-0
+        w-64 sm:w-72 lg:translate-x-0
         ${sidebarOpen ? 'translate-x-0' : (isRtl ? 'translate-x-full' : '-translate-x-full')}
       `}>
         {/* Sidebar Header */}
