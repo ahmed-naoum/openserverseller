@@ -1,8 +1,8 @@
+import { prisma } from '../lib/prisma.js';
 import { Router } from 'express';
-import { authenticate } from '../middleware/auth.middleware';
-import { asyncHandler } from '../utils/asyncHandler';
-import prisma from '../lib/prisma';
 import axios from 'axios';
+import { asyncHandler } from '../middleware/errorHandler.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = Router();
 
