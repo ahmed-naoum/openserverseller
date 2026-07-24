@@ -129,10 +129,25 @@ export default function WooCommerceLeads() {
     return order.billing?.phone || order.shipping?.phone || '';
   };
 
+  const getOrderTotalVal = (order: WooCommerceOrder) => {
+    if (order.line_items && order.line_items.length > 0) {
+      const lineSum = order.line_items.reduce((acc, item) => {
+        const itemVal = Number(item.total ?? item.subtotal ?? (Number(item.price || 0) * (item.quantity || 1)));
+        return acc + (isNaN(itemVal) ? 0 : itemVal);
+      }, 0);
+      const shippingVal = Number((order as any).shipping_total || 0);
+      const totalCalc = lineSum + (isNaN(shippingVal) ? 0 : shippingVal);
+      if (totalCalc > 0) return totalCalc;
+    }
+
+    const val = Number(order.total);
+    return isNaN(val) ? 0 : val;
+  };
+
   const getTotalAmount = (order: WooCommerceOrder) => {
-    const val = order.total ?? 0;
+    const val = getOrderTotalVal(order);
     const currency = order.currency || 'MAD';
-    return `${Number(val).toLocaleString()} ${currency}`;
+    return `${val.toLocaleString()} ${currency}`;
   };
 
   const formatDate = (dateStr: string) => {
@@ -170,7 +185,7 @@ export default function WooCommerceLeads() {
 
   // Calculate Statistics
   const totalOrdersCount = orders.length;
-  const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  const totalRevenue = orders.reduce((sum, o) => sum + getOrderTotalVal(o), 0);
   const processingCount = orders.filter(o => o.status === 'processing' || o.status === 'pending').length;
   const completedCount = orders.filter(o => o.status === 'completed').length;
 
@@ -542,17 +557,22 @@ export default function WooCommerceLeads() {
                   </h4>
 
                   <div className="divide-y divide-slate-100 border border-slate-100 rounded-2xl overflow-hidden">
-                    {selectedOrder.line_items.map((item, i) => (
-                      <div key={item.id || i} className="p-3 bg-white flex items-center justify-between text-xs">
-                        <div>
-                          <p className="font-bold text-slate-900">{item.name || 'Produit'}</p>
+                    {selectedOrder.line_items.map((item, i) => {
+                      const itemVal = Number(item.total ?? item.subtotal ?? (Number(item.price || 0) * (item.quantity || 1)));
+                      return (
+                        <div key={item.id || i} className="p-3 bg-white flex items-center justify-between text-xs">
+                          <div>
+                            <p className="font-bold text-slate-900">{item.name || 'Produit'}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-black text-slate-900">x{item.quantity || 1}</p>
+                            <p className="text-xs font-mono font-bold text-purple-600">
+                              {isNaN(itemVal) ? '' : `${itemVal.toLocaleString()} ${selectedOrder.currency || 'MAD'}`}
+                            </p>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className="font-black text-slate-900">x{item.quantity || 1}</p>
-                          <p className="text-[10px] font-mono text-slate-500">{item.price ? `${item.price} ${selectedOrder.currency || 'MAD'}` : ''}</p>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
