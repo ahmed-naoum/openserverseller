@@ -207,8 +207,11 @@ export default function InfluencerMarketplace() {
       ]);
       let items = productsRes.data?.data?.products || [];
       const claimsDataRaw = Array.isArray(claimsRes.data) ? claimsRes.data : (claimsRes.data?.data || []);
+      const isInfluencerUser = user?.roleName === 'INFLUENCER' || user?.role === 'INFLUENCER' || user?.isInfluencer;
       const currentMode = user?.mode || 'AFFILIATE';
-      const claimsData = claimsDataRaw.filter((c: any) => c.userMode === currentMode);
+      const claimsData = claimsDataRaw.filter((c: any) => 
+        isInfluencerUser ? (c.userMode === 'AFFILIATE' || c.userMode === 'INFLUENCER') : c.userMode === currentMode
+      );
 
       if (selectedCategories.length > 0) items = items.filter((p: any) => p.categories?.some((c: any) => selectedCategories.includes(c.slug)));
 

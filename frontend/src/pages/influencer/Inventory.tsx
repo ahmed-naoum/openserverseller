@@ -59,8 +59,12 @@ export default function InfluencerInventory() {
       // Handle potential response structure differences
       const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
       // Filter out rejected claims
+      const isInfluencerUser = user?.roleName === 'INFLUENCER' || user?.role === 'INFLUENCER' || user?.isInfluencer;
       const currentMode = user?.mode || 'AFFILIATE';
-      const activeClaims = data.filter((c: any) => c.status !== 'REJECTED' && c.userMode === currentMode);
+      const activeClaims = data.filter((c: any) => 
+        c.status !== 'REJECTED' && 
+        (isInfluencerUser ? (c.userMode === 'AFFILIATE' || c.userMode === 'INFLUENCER') : c.userMode === currentMode)
+      );
       setClaims(activeClaims);
     } catch (error) {
       toast.error(t('error_loading', 'inventory', 'Impossible de charger vos produits'));

@@ -74,7 +74,7 @@ router.post(
     try {
       const { createNotification } = await import('../utils/notification.js');
       const admins = await prisma.user.findMany({
-        where: { role: { in: ['ADMIN', 'SUPER_ADMIN'] } },
+        where: { role: { name: { in: ['ADMIN', 'SUPER_ADMIN'] } } },
         select: { id: true },
       });
 
