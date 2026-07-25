@@ -235,16 +235,18 @@ router.get(
   authorize('VENDOR', 'INFLUENCER', 'HELPER', 'SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
+    const isInfluencerUser = (req.user as any).roleName === 'INFLUENCER' || (req.user as any).isInfluencer;
     const { start, end, mode } = req.query;
 
     const whereClause: any = { influencerId: userId };
-    if (mode === 'SELLER') {
+    if (mode === 'SELLER' && !isInfluencerUser) {
       whereClause.product = { ownerId: userId };
-    } else if (mode === 'AFFILIATE') {
+    } else if (mode === 'AFFILIATE' && !isInfluencerUser) {
       whereClause.product = {
         OR: [
           { ownerId: { not: userId } },
-          { ownerId: null }
+          { ownerId: null },
+          { claims: { some: { userId, userMode: { in: ['AFFILIATE', 'INFLUENCER'] } } } }
         ]
       };
     }
@@ -598,6 +600,8 @@ router.get(
     const numDays = isAllTime ? 0 : (parseInt(days as string) || 30);
     const isHourly = numDays === 1 && !start;
 
+    const isInfluencerUser = (req.user as any).roleName === 'INFLUENCER' || (req.user as any).isInfluencer;
+
     if (start && end) {
       dateLimitStart = new Date(start as string);
       dateLimitEnd = new Date(end as string);
@@ -606,10 +610,16 @@ router.get(
       const whereOldest: any = { influencerId: userId };
       if (referralLinkId) {
         whereOldest.id = parseInt(referralLinkId as string);
-      } else if (mode === 'SELLER') {
+      } else if (mode === 'SELLER' && !isInfluencerUser) {
         whereOldest.product = { ownerId: userId };
-      } else if (mode === 'AFFILIATE') {
-        whereOldest.product = { ownerId: { not: userId } };
+      } else if (mode === 'AFFILIATE' && !isInfluencerUser) {
+        whereOldest.product = {
+          OR: [
+            { ownerId: { not: userId } },
+            { ownerId: null },
+            { claims: { some: { userId, userMode: { in: ['AFFILIATE', 'INFLUENCER'] } } } }
+          ]
+        };
       }
       const oldestLink = await prisma.referralLink.findFirst({
         where: whereOldest,
@@ -633,10 +643,16 @@ router.get(
     const whereBase: any = { influencerId: userId };
     if (referralLinkId) {
       whereBase.id = parseInt(referralLinkId as string);
-    } else if (mode === 'SELLER') {
+    } else if (mode === 'SELLER' && !isInfluencerUser) {
       whereBase.product = { ownerId: userId };
-    } else if (mode === 'AFFILIATE') {
-      whereBase.product = { ownerId: { not: userId } };
+    } else if (mode === 'AFFILIATE' && !isInfluencerUser) {
+      whereBase.product = {
+        OR: [
+          { ownerId: { not: userId } },
+          { ownerId: null },
+          { claims: { some: { userId, userMode: { in: ['AFFILIATE', 'INFLUENCER'] } } } }
+        ]
+      };
     }
 
     const [clicks, leads, commissions] = await Promise.all([
@@ -1137,15 +1153,18 @@ router.get(
       } : { isNot: null }
     };
 
-    if (mode === 'SELLER') {
+    const isInfluencerUser = (req.user as any).roleName === 'INFLUENCER' || (req.user as any).isInfluencer;
+
+    if (mode === 'SELLER' && !isInfluencerUser) {
       commissionWhereClause.referralLink = { product: { ownerId: userId } };
-    } else if (mode === 'AFFILIATE') {
+    } else if (mode === 'AFFILIATE' && !isInfluencerUser) {
       commissionWhereClause.influencerId = userId;
       commissionWhereClause.referralLink = { 
         product: { 
           OR: [
             { ownerId: { not: userId } },
-            { ownerId: null }
+            { ownerId: null },
+            { claims: { some: { userId, userMode: { in: ['AFFILIATE', 'INFLUENCER'] } } } }
           ]
         }
       };
@@ -1191,15 +1210,16 @@ router.get(
       } : {})
     };
 
-    if (mode === 'SELLER') {
+    if (mode === 'SELLER' && !isInfluencerUser) {
       leadWhereClause.referralLink = { product: { ownerId: userId } };
-    } else if (mode === 'AFFILIATE') {
+    } else if (mode === 'AFFILIATE' && !isInfluencerUser) {
       leadWhereClause.referralLink = {
         influencerId: userId,
         product: { 
           OR: [
             { ownerId: { not: userId } },
-            { ownerId: null }
+            { ownerId: null },
+            { claims: { some: { userId, userMode: { in: ['AFFILIATE', 'INFLUENCER'] } } } }
           ]
         }
       };

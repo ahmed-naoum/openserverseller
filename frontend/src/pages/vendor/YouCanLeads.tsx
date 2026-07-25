@@ -58,15 +58,23 @@ interface YouCanOrder {
   fulfillment_status?: string;
   payment_status?: string;
   status?: string;
+  total?: number | string;
   total_price?: number | string;
   grand_total?: number | string;
+  total_amount?: number | string;
+  price?: number | string;
+  amount?: number | string;
+  sub_total?: number | string;
   currency?: string;
+  currency_code?: string;
   line_items?: Array<{
     id?: string | number;
     name?: string;
     title?: string;
     quantity?: number;
     price?: number | string;
+    unit_price?: number | string;
+    total?: number | string;
     variant_title?: string;
   }>;
 }
@@ -148,10 +156,10 @@ export default function YouCanLeads() {
     setLoadingProducts(true);
     try {
       const res = await leadsApi.getMyProducts({ mode: currentMode });
-      const rawProds = res.data?.data || res.data || [];
-      setProducts(Array.isArray(rawProds) ? rawProds : []);
-      if (rawProds.length > 0) {
-        setSelectedProductId(rawProds[0].id);
+      const prodsArray = res.data?.data?.products || res.data?.products || (Array.isArray(res.data?.data) ? res.data.data : Array.isArray(res.data) ? res.data : []);
+      setProducts(prodsArray);
+      if (prodsArray.length > 0) {
+        setSelectedProductId(prodsArray[0].id);
       }
     } catch (err) {
       console.error('Error fetching inventory products:', err);
@@ -201,6 +209,19 @@ export default function YouCanLeads() {
     }
   };
 
+  const toStatusString = (val: any, fallback = ''): string => {
+    if (val === null || val === undefined) return fallback;
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object') {
+      if (typeof val.name === 'string') return val.name;
+      if (typeof val.status === 'string') return val.status;
+      if (typeof val.state === 'string') return val.state;
+      if (typeof val.title === 'string') return val.title;
+      if (typeof val.label === 'string') return val.label;
+    }
+    return String(val);
+  };
+
   // Helper formatting
   const formatOrderRef = (order: YouCanOrder, index: number) => {
     if (order.ref) return order.ref.startsWith('#') ? order.ref : `#${order.ref}`;
@@ -224,9 +245,52 @@ export default function YouCanLeads() {
     return order.customer?.phone || order.address?.phone || order.phone || '';
   };
 
+  const extractOrderTotal = (order: any): number => {
+    if (!order) return 0;
+
+    const candidates = [
+      order.total,
+      order.total_price,
+      order.price,
+      order.grand_total,
+      order.total_amount,
+      order.amount,
+      order.sub_total,
+      order.subtotal,
+      order.pricing?.total,
+      order.totals?.total,
+      order.totalPrice?.amount,
+    ];
+
+    for (const c of candidates) {
+      if (c !== undefined && c !== null && c !== '') {
+        const num = Number(c);
+        if (!isNaN(num) && num > 0) return num;
+      }
+    }
+
+    if (Array.isArray(order.line_items) && order.line_items.length > 0) {
+      const itemsSum = order.line_items.reduce((sum: number, item: any) => {
+        const itemPrice = Number(item?.price ?? item?.unit_price ?? item?.total ?? 0);
+        const itemQty = Number(item?.quantity ?? 1);
+        return sum + (isNaN(itemPrice) ? 0 : itemPrice * (isNaN(itemQty) ? 1 : itemQty));
+      }, 0);
+      if (itemsSum > 0) return itemsSum;
+    }
+
+    for (const c of candidates) {
+      if (c !== undefined && c !== null && c !== '') {
+        const num = Number(c);
+        if (!isNaN(num)) return num;
+      }
+    }
+
+    return 0;
+  };
+
   const getTotalAmount = (order: YouCanOrder) => {
-    const val = order.total_price ?? order.grand_total ?? 0;
-    const currency = order.currency || 'MAD';
+    const val = extractOrderTotal(order);
+    const currency = order.currency || order.currency_code || 'MAD';
     return `${Number(val).toLocaleString()} ${currency}`;
   };
 
@@ -246,17 +310,17 @@ export default function YouCanLeads() {
     const query = searchTerm.toLowerCase();
 
     const matchesSearch = ref.includes(query) || name.includes(query) || phone.includes(query);
-    const matchesStatus = statusFilter === 'ALL' || (order.status || 'Open').toUpperCase() === statusFilter.toUpperCase();
-    const matchesPayment = paymentFilter === 'ALL' || (order.payment_status || 'Unpaid').toUpperCase() === paymentFilter.toUpperCase();
+    const matchesStatus = statusFilter === 'ALL' || toStatusString(order.status, 'Open').toUpperCase() === statusFilter.toUpperCase();
+    const matchesPayment = paymentFilter === 'ALL' || toStatusString(order.payment_status, 'Unpaid').toUpperCase() === paymentFilter.toUpperCase();
 
     return matchesSearch && matchesStatus && matchesPayment;
   });
 
   // Calculate Statistics
   const totalOrdersCount = orders.length;
-  const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.total_price || o.grand_total) || 0), 0);
-  const unfulfilledCount = orders.filter(o => (o.fulfillment_status || 'Unfulfilled').toLowerCase().includes('unfulfilled')).length;
-  const unpaidCount = orders.filter(o => (o.payment_status || 'Unpaid').toLowerCase().includes('unpaid')).length;
+  const totalRevenue = orders.reduce((sum, o) => sum + extractOrderTotal(o), 0);
+  const unfulfilledCount = orders.filter(o => toStatusString(o.fulfillment_status, 'Unfulfilled').toLowerCase().includes('unfulfilled')).length;
+  const unpaidCount = orders.filter(o => toStatusString(o.payment_status, 'Unpaid').toLowerCase().includes('unpaid')).length;
 
   return (
     <div dir={isRtl ? 'rtl' : 'ltr'} className="space-y-6 pt-4 pb-12 animate-in fade-in duration-300">
@@ -462,9 +526,9 @@ export default function YouCanLeads() {
                   const total = getTotalAmount(order);
                   const dateFormatted = formatDate(order.created_at);
 
-                  const confStatus = order.status || 'Open';
-                  const payStatus = order.payment_status || 'Unpaid';
-                  const shipStatus = order.fulfillment_status || 'Unfulfilled';
+                  const confStatus = toStatusString(order.status, 'Open');
+                  const payStatus = toStatusString(order.payment_status, 'Unpaid');
+                  const shipStatus = toStatusString(order.fulfillment_status, 'Unfulfilled');
                   const isSelected = selectedOrderIds.has(order.id);
 
                   return (
@@ -653,17 +717,17 @@ export default function YouCanLeads() {
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Confirmation</span>
-                  <span className="text-xs font-black text-amber-600">{selectedOrder.status || 'Open'}</span>
+                  <span className="text-xs font-black text-amber-600">{toStatusString(selectedOrder.status, 'Open')}</span>
                 </div>
 
                 <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Paiement</span>
-                  <span className="text-xs font-black text-emerald-600">{selectedOrder.payment_status || 'Unpaid'}</span>
+                  <span className="text-xs font-black text-emerald-600">{toStatusString(selectedOrder.payment_status, 'Unpaid')}</span>
                 </div>
 
                 <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Livraison</span>
-                  <span className="text-xs font-black text-slate-700">{selectedOrder.fulfillment_status || 'Unfulfilled'}</span>
+                  <span className="text-xs font-black text-slate-700">{toStatusString(selectedOrder.fulfillment_status, 'Unfulfilled')}</span>
                 </div>
               </div>
 

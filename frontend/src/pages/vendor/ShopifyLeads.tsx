@@ -148,10 +148,10 @@ export default function ShopifyLeads() {
     setLoadingProducts(true);
     try {
       const res = await leadsApi.getMyProducts({ mode: currentMode });
-      const rawProds = res.data?.data || res.data || [];
-      setProducts(Array.isArray(rawProds) ? rawProds : []);
-      if (rawProds.length > 0) {
-        setSelectedProductId(rawProds[0].id);
+      const prodsArray = res.data?.data?.products || res.data?.products || (Array.isArray(res.data?.data) ? res.data.data : Array.isArray(res.data) ? res.data : []);
+      setProducts(prodsArray);
+      if (prodsArray.length > 0) {
+        setSelectedProductId(prodsArray[0].id);
       }
     } catch (err) {
       console.error('Error fetching inventory products:', err);
@@ -201,6 +201,19 @@ export default function ShopifyLeads() {
     }
   };
 
+  const toStatusString = (val: any, fallback = ''): string => {
+    if (val === null || val === undefined) return fallback;
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object') {
+      if (typeof val.name === 'string') return val.name;
+      if (typeof val.status === 'string') return val.status;
+      if (typeof val.state === 'string') return val.state;
+      if (typeof val.title === 'string') return val.title;
+      if (typeof val.label === 'string') return val.label;
+    }
+    return String(val);
+  };
+
   // Helper formatting
   const formatOrderRef = (order: ShopifyOrder, index: number) => {
     if (order.name) return order.name.startsWith('#') ? order.name : `#${order.name}`;
@@ -223,11 +236,59 @@ export default function ShopifyLeads() {
   };
 
   const getCustomerPhone = (order: ShopifyOrder) => {
-    return order.customer?.phone || order.shipping_address?.phone || order.billing_address?.phone || order.phone || '';
+    return order.customer?.phone || 
+           order.shipping_address?.phone || 
+           order.billing_address?.phone || 
+           order.phone || 
+           '';
+  };
+
+  const extractOrderTotal = (order: any): number => {
+    if (!order) return 0;
+
+    const candidates = [
+      order.total_price,
+      order.total,
+      order.price,
+      order.grand_total,
+      order.total_amount,
+      order.amount,
+      order.sub_total,
+      order.subtotal,
+      order.pricing?.total,
+      order.totals?.total,
+      order.totalPrice?.amount,
+      order.current_total_price,
+    ];
+
+    for (const c of candidates) {
+      if (c !== undefined && c !== null && c !== '') {
+        const num = Number(c);
+        if (!isNaN(num) && num > 0) return num;
+      }
+    }
+
+    if (Array.isArray(order.line_items) && order.line_items.length > 0) {
+      const itemsSum = order.line_items.reduce((sum: number, item: any) => {
+        const itemPrice = Number(item?.price ?? item?.unit_price ?? item?.total ?? 0);
+        const itemQty = Number(item?.quantity ?? 1);
+        return sum + (isNaN(itemPrice) ? 0 : itemPrice * (isNaN(itemQty) ? 1 : itemQty));
+      }, 0);
+      if (itemsSum > 0) return itemsSum;
+    }
+
+    for (const c of candidates) {
+      if (c !== undefined && c !== null && c !== '') {
+        const num = Number(c);
+        if (!isNaN(num)) return num;
+      }
+    }
+
+    return 0;
   };
 
   const getTotalAmount = (order: ShopifyOrder) => {
-    const val = order.total_price ?? 0;
+    const val = extractOrderTotal(order);
     const currency = order.currency || 'MAD';
     return `${Number(val).toLocaleString()} ${currency}`;
   };
@@ -248,17 +309,17 @@ export default function ShopifyLeads() {
     const query = searchTerm.toLowerCase();
 
     const matchesSearch = ref.includes(query) || name.includes(query) || phone.includes(query);
-    const matchesPayment = paymentFilter === 'ALL' || (order.financial_status || 'pending').toUpperCase() === paymentFilter.toUpperCase();
-    const matchesShipping = shippingFilter === 'ALL' || (order.fulfillment_status || 'unfulfilled').toUpperCase() === shippingFilter.toUpperCase();
+    const matchesPayment = paymentFilter === 'ALL' || toStatusString(order.financial_status, 'pending').toUpperCase() === paymentFilter.toUpperCase();
+    const matchesShipping = shippingFilter === 'ALL' || toStatusString(order.fulfillment_status, 'unfulfilled').toUpperCase() === shippingFilter.toUpperCase();
 
     return matchesSearch && matchesPayment && matchesShipping;
   });
 
   // Calculate Statistics
   const totalOrdersCount = orders.length;
-  const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.total_price) || 0), 0);
-  const unfulfilledCount = orders.filter(o => !o.fulfillment_status || o.fulfillment_status.toLowerCase() === 'unfulfilled').length;
-  const pendingPaymentCount = orders.filter(o => (o.financial_status || 'pending').toLowerCase() !== 'paid').length;
+  const totalRevenue = orders.reduce((sum, o) => sum + extractOrderTotal(o), 0);
+  const unfulfilledCount = orders.filter(o => toStatusString(o.fulfillment_status, 'unfulfilled').toLowerCase().includes('unfulfilled')).length;
+  const pendingPaymentCount = orders.filter(o => toStatusString(o.financial_status, 'pending').toLowerCase() !== 'paid').length;
 
   return (
     <div dir={isRtl ? 'rtl' : 'ltr'} className="space-y-6 pt-4 pb-12 animate-in fade-in duration-300">
@@ -462,8 +523,8 @@ export default function ShopifyLeads() {
                   const total = getTotalAmount(order);
                   const dateFormatted = formatDate(order.created_at);
 
-                  const payStatus = order.financial_status || 'pending';
-                  const shipStatus = order.fulfillment_status || 'unfulfilled';
+                  const payStatus = toStatusString(order.financial_status, 'pending');
+                  const shipStatus = toStatusString(order.fulfillment_status, 'unfulfilled');
                   const isSelected = selectedOrderIds.has(order.id);
 
                   return (
@@ -641,12 +702,12 @@ export default function ShopifyLeads() {
               <div className="grid grid-cols-2 gap-3 text-center">
                 <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Paiement</span>
-                  <span className="text-xs font-black text-emerald-600">{selectedOrder.financial_status || 'pending'}</span>
+                  <span className="text-xs font-black text-emerald-600">{toStatusString(selectedOrder.financial_status, 'pending')}</span>
                 </div>
 
                 <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Livraison</span>
-                  <span className="text-xs font-black text-slate-700">{selectedOrder.fulfillment_status || 'unfulfilled'}</span>
+                  <span className="text-xs font-black text-slate-700">{toStatusString(selectedOrder.fulfillment_status, 'unfulfilled')}</span>
                 </div>
               </div>
 

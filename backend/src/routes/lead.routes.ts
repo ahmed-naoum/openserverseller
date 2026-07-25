@@ -2251,6 +2251,7 @@ router.get(
 
     let inventoryProducts: any[] = [];
     let claimedProducts: any[] = [];
+    let ownedProducts: any[] = [];
 
     if (!mode || mode === 'SELLER') {
       // Products from inventory (bought)
@@ -2261,6 +2262,12 @@ router.get(
             include: { images: { where: { isPrimary: true }, take: 1 } },
           },
         },
+      });
+
+      // Products created/owned by vendor
+      ownedProducts = await prisma.product.findMany({
+        where: { ownerId: userId, isActive: true },
+        include: { images: { where: { isPrimary: true }, take: 1 } },
       });
     }
 
@@ -2284,10 +2291,29 @@ router.get(
         productMap.set(inv.productId, {
           id: inv.product.id,
           sku: inv.product.sku,
-          name: inv.product.nameFr || inv.product.nameAr,
+          name: inv.product.nameFr || inv.product.nameAr || inv.product.nameEn,
+          nameFr: inv.product.nameFr,
+          nameAr: inv.product.nameAr,
+          nameEn: inv.product.nameEn,
           image: inv.product.images[0]?.imageUrl || null,
           retailPrice: inv.product.retailPriceMad,
           source: 'INVENTORY',
+        });
+      }
+    }
+
+    for (const prod of ownedProducts) {
+      if (!productMap.has(prod.id)) {
+        productMap.set(prod.id, {
+          id: prod.id,
+          sku: prod.sku,
+          name: prod.nameFr || prod.nameAr || prod.nameEn,
+          nameFr: prod.nameFr,
+          nameAr: prod.nameAr,
+          nameEn: prod.nameEn,
+          image: prod.images[0]?.imageUrl || null,
+          retailPrice: prod.retailPriceMad,
+          source: 'OWNED',
         });
       }
     }
@@ -2297,11 +2323,40 @@ router.get(
         productMap.set(claim.productId, {
           id: claim.product.id,
           sku: claim.product.sku,
-          name: claim.product.nameFr || claim.product.nameAr,
+          name: claim.product.nameFr || claim.product.nameAr || claim.product.nameEn,
+          nameFr: claim.product.nameFr,
+          nameAr: claim.product.nameAr,
+          nameEn: claim.product.nameEn,
           image: claim.product.images[0]?.imageUrl || null,
           retailPrice: claim.product.retailPriceMad,
           source: 'AFFILIATE_CLAIM',
         });
+      }
+    }
+
+    // Fallback: If user has no specific inventory/owned/claimed products yet, provide active catalog products
+    if (productMap.size === 0) {
+      const catalogProducts = await prisma.product.findMany({
+        where: { isActive: true, status: 'APPROVED' },
+        take: 50,
+        include: { images: { where: { isPrimary: true }, take: 1 } },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      for (const prod of catalogProducts) {
+        if (!productMap.has(prod.id)) {
+          productMap.set(prod.id, {
+            id: prod.id,
+            sku: prod.sku,
+            name: prod.nameFr || prod.nameAr || prod.nameEn,
+            nameFr: prod.nameFr,
+            nameAr: prod.nameAr,
+            nameEn: prod.nameEn,
+            image: prod.images[0]?.imageUrl || null,
+            retailPrice: prod.retailPriceMad,
+            source: 'CATALOG',
+          });
+        }
       }
     }
 
@@ -2470,7 +2525,7 @@ router.post(
           data: {
             influencerId: userId,
             productId: product.id,
-            slug: `aff-${userId}-${product.id}-${Date.now().toString(36)}`,
+            code: `aff-${userId}-${product.id}-${Date.now().toString(36)}`,
           },
         });
       }
@@ -2516,7 +2571,7 @@ router.post(
             source: sourceTag,
             sourceId: String(ord.id),
             sourceMode: isAffiliate ? 'AFFILIATE' : 'VENDOR',
-            productVariant: product.nameFr || product.nameAr || product.name || `Produit #${product.id}`,
+            productVariant: product.nameFr || product.nameAr || product.nameEn || `Produit #${product.id}`,
             requestedPriceMad: totalAmount > 0 ? totalAmount : null,
             referralLinkId,
             notes: `Leads ${sourceTag} | Commande #${orderRef} | ${product.nameFr || product.nameAr}`,

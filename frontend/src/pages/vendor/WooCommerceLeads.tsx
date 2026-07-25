@@ -139,10 +139,10 @@ export default function WooCommerceLeads() {
     setLoadingProducts(true);
     try {
       const res = await leadsApi.getMyProducts({ mode: currentMode });
-      const rawProds = res.data?.data || res.data || [];
-      setProducts(Array.isArray(rawProds) ? rawProds : []);
-      if (rawProds.length > 0) {
-        setSelectedProductId(rawProds[0].id);
+      const prodsArray = res.data?.data?.products || res.data?.products || (Array.isArray(res.data?.data) ? res.data.data : Array.isArray(res.data) ? res.data : []);
+      setProducts(prodsArray);
+      if (prodsArray.length > 0) {
+        setSelectedProductId(prodsArray[0].id);
       }
     } catch (err) {
       console.error('Error fetching inventory products:', err);
