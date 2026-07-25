@@ -24,7 +24,7 @@ function ProductCardCarousel({ images, alt }: { images?: Array<{ imageUrl?: stri
     if (count <= 1) return;
     const timer = setInterval(() => {
       setCurrent(prev => (prev + 1) % count);
-    }, 3200);
+    }, 5000);
     return () => clearInterval(timer);
   }, [count]);
 
@@ -55,7 +55,7 @@ function ProductCardCarousel({ images, alt }: { images?: Array<{ imageUrl?: stri
           src={src}
           alt={`${alt || 'Product'} ${i + 1}`}
           loading={i === 0 ? "eager" : "lazy"}
-          className="absolute inset-0 w-full h-full object-cover transition-all duration-1000 ease-in-out group-hover:scale-105"
+          className="absolute inset-0 w-full h-full object-cover transition-all duration-[2000ms] ease-in-out group-hover:scale-105"
           style={{
             opacity: i === current ? 1 : 0,
             zIndex: i === current ? 1 : 0,
@@ -232,7 +232,7 @@ export default function GrossellerMarketplace() {
                 >
                   <div className="block aspect-[4/5] relative overflow-hidden bg-gray-50">
                     <ProductCardCarousel images={product.images} alt={product.nameFr} />
-                    <div className="absolute top-3 left-3 flex flex-col gap-2">
+                    <div className="absolute top-3 left-3 flex flex-col gap-2 z-30">
                        <span className="px-2.5 py-1 bg-white/90 backdrop-blur-sm rounded-lg text-[10px] font-bold tracking-wide text-gray-900 shadow-sm">
                          {product.category?.nameFr}
                        </span>
@@ -249,7 +249,7 @@ export default function GrossellerMarketplace() {
                     </div>
 
                     {/* View product detail */}
-                    <div className="absolute top-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-1 group-hover:translate-y-0">
+                    <div className="absolute top-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-1 group-hover:translate-y-0 z-30">
                       <button
                         onClick={(e) => { e.preventDefault(); navigate(`/grosseller/product/${product.id}`); }}
                         className="w-8 h-8 flex items-center justify-center bg-white/90 backdrop-blur-sm rounded-lg shadow-sm hover:bg-white hover:shadow-md hover:scale-110 transition-all text-gray-600 hover:text-grosseller-600"

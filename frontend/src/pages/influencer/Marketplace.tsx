@@ -57,7 +57,7 @@ function ProductCardCarousel({ images, alt }: { images?: Array<{ imageUrl?: stri
     if (count <= 1) return;
     const timer = setInterval(() => {
       setCurrent(prev => (prev + 1) % count);
-    }, 3200);
+    }, 5000);
     return () => clearInterval(timer);
   }, [count]);
 
@@ -88,7 +88,7 @@ function ProductCardCarousel({ images, alt }: { images?: Array<{ imageUrl?: stri
           src={src}
           alt={`${alt || 'Product'} ${i + 1}`}
           loading={i === 0 ? "eager" : "lazy"}
-          className="absolute inset-0 w-full h-full object-cover transition-all duration-1000 ease-in-out group-hover:scale-105"
+          className="absolute inset-0 w-full h-full object-cover transition-all duration-[2000ms] ease-in-out group-hover:scale-105"
           style={{
             opacity: i === current ? 1 : 0,
             zIndex: i === current ? 1 : 0,
@@ -593,7 +593,7 @@ export default function InfluencerMarketplace() {
 
                         {/* Category badge */}
                         {product.categories?.[0] && (
-                          <span className="absolute top-3 left-3 px-2.5 py-1 bg-white/90 backdrop-blur-md rounded-lg text-[9px] font-black tracking-wider text-slate-700 shadow-sm border border-white/50">
+                          <span className="absolute top-3 left-3 z-30 px-2.5 py-1 bg-white/90 backdrop-blur-md rounded-lg text-[9px] font-black tracking-wider text-slate-700 shadow-sm border border-white/50">
                             {language === 'ar' ? product.categories[0].nameAr || product.categories[0].nameFr :
                              language === 'en' ? product.categories[0].nameEn || product.categories[0].nameFr :
                              product.categories[0].nameFr}
@@ -601,7 +601,7 @@ export default function InfluencerMarketplace() {
                         )}
 
                         {/* Status dot */}
-                        <div className="absolute top-3 right-3">
+                        <div className="absolute top-3 right-3 z-30">
                           <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-black backdrop-blur-md shadow-sm border border-white/50 ${
                             status === 'claimed' ? 'bg-blue-500/90 text-white' :
                             status === 'pending' ? 'bg-amber-400/90 text-white' :
@@ -617,7 +617,7 @@ export default function InfluencerMarketplace() {
                         </div>
 
                         {/* Quick view */}
-                        <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0">
+                        <div className="absolute bottom-3 right-3 z-30 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0">
                           <button onClick={(e) => { e.stopPropagation(); navigate(`${basePath}/product/${product.id}`); }} className="w-9 h-9 flex items-center justify-center bg-white/90 backdrop-blur-md rounded-xl shadow-lg hover:scale-110 transition-all text-slate-600 hover:text-[#FF6B4A] border border-white/50" title={t('view_product_page', 'marketplace')}>
                             <Eye className="w-4 h-4" />
                           </button>
