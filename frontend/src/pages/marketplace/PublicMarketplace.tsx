@@ -73,10 +73,10 @@ function ProductCardCarousel({ images, alt }: { images: { imageUrl: string }[]; 
           key={i}
           src={img.imageUrl}
           alt={`${alt} ${i + 1}`}
-          className="absolute inset-0 w-full h-full object-cover transition-all duration-500"
+          className="absolute inset-0 w-full h-full object-cover transition-all duration-1000 ease-in-out"
           style={{
             opacity: i === current ? 1 : 0,
-            transform: i === current ? 'scale(1)' : 'scale(1.05)',
+            transform: i === current ? 'scale(1)' : 'scale(1.04)',
           }}
         />
       ))}

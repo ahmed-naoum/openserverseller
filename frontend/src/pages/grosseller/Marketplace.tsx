@@ -15,6 +15,72 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 
+function ProductCardCarousel({ images, alt }: { images?: Array<{ imageUrl?: string; url?: string }>; alt?: string }) {
+  const validImages = (images || []).map(img => typeof img === 'string' ? img : (img.imageUrl || img.url || '')).filter(Boolean);
+  const [current, setCurrent] = useState(0);
+  const count = validImages.length;
+
+  useEffect(() => {
+    if (count <= 1) return;
+    const timer = setInterval(() => {
+      setCurrent(prev => (prev + 1) % count);
+    }, 3200);
+    return () => clearInterval(timer);
+  }, [count]);
+
+  if (count === 0) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-gray-50">
+        <Package className="w-10 h-10 text-gray-300" />
+      </div>
+    );
+  }
+
+  if (count === 1) {
+    return (
+      <img
+        src={validImages[0]}
+        alt={alt || 'Product'}
+        loading="lazy"
+        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+      />
+    );
+  }
+
+  return (
+    <div className="relative w-full h-full overflow-hidden">
+      {validImages.map((src, i) => (
+        <img
+          key={`${src}-${i}`}
+          src={src}
+          alt={`${alt || 'Product'} ${i + 1}`}
+          loading={i === 0 ? "eager" : "lazy"}
+          className="absolute inset-0 w-full h-full object-cover transition-all duration-1000 ease-in-out group-hover:scale-105"
+          style={{
+            opacity: i === current ? 1 : 0,
+            zIndex: i === current ? 1 : 0,
+            transform: i === current ? 'scale(1)' : 'scale(1.04)',
+          }}
+        />
+      ))}
+
+      {/* Navigation dots indicator */}
+      <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1 z-20 pointer-events-none">
+        {validImages.map((_, i) => (
+          <div
+            key={i}
+            className={`rounded-full transition-all duration-500 ${
+              i === current
+                ? 'w-4 h-1.5 bg-white shadow-md'
+                : 'w-1.5 h-1.5 bg-white/60'
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function GrossellerMarketplace() {
   const { user, platformSettings } = useAuth();
   const navigate = useNavigate();
@@ -165,17 +231,7 @@ export default function GrossellerMarketplace() {
                   className="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl hover:shadow-grosseller-500/5 hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col"
                 >
                   <div className="block aspect-[4/5] relative overflow-hidden bg-gray-50">
-                    {product.images?.[0]?.imageUrl ? (
-                      <img 
-                        src={product.images[0].imageUrl} 
-                        alt={product.nameFr} 
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-300">
-                         <Package className="w-10 h-10" />
-                      </div>
-                    )}
+                    <ProductCardCarousel images={product.images} alt={product.nameFr} />
                     <div className="absolute top-3 left-3 flex flex-col gap-2">
                        <span className="px-2.5 py-1 bg-white/90 backdrop-blur-sm rounded-lg text-[10px] font-bold tracking-wide text-gray-900 shadow-sm">
                          {product.category?.nameFr}
