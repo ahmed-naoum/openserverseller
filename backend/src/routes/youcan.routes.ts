@@ -417,6 +417,37 @@ router.post(
 );
 
 /**
+ * POST /api/v1/youcan/disconnect
+ * Disconnect YouCan integration for vendor
+ */
+router.post(
+  '/disconnect',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const vendorId = req.user?.id;
+    if (!vendorId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: vendorId },
+      data: {
+        youcanAccessToken: null,
+        youcanStoreDomain: null,
+        youcanSyncActive: false,
+        youcanConnectedAt: null,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: 'Intégration YouCan déconnectée avec succès',
+    });
+  })
+);
+
+/**
  * POST /api/v1/youcan/webhook
  * Public endpoint to receive webhooks from YouCan
  * Note: In production, verify signature if YouCan provides one.

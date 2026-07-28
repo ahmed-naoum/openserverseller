@@ -2247,13 +2247,13 @@ router.get(
   authenticate,
   asyncHandler(async (req, res) => {
     const userId = req.user!.id;
-    const { mode } = req.query;
+    const requestedMode = mode ? String(mode).toUpperCase() : null;
 
     let inventoryProducts: any[] = [];
     let ownedProducts: any[] = [];
     let claimedProducts: any[] = [];
 
-    if (!mode || mode === 'SELLER') {
+    if (requestedMode === 'SELLER') {
       // 1. Products from inventory (bought)
       inventoryProducts = await prisma.productInventory.findMany({
         where: { userId },
@@ -2269,10 +2269,42 @@ router.get(
         where: { ownerId: userId },
         include: { images: { where: { isPrimary: true }, take: 1 } },
       });
-    }
 
-    if (!mode || mode === 'AFFILIATE') {
-      // 3. Products from affiliate claims (claimed & approved)
+      // 3. Claims specifically in SELLER mode
+      claimedProducts = await prisma.affiliateClaim.findMany({
+        where: { userId, status: 'APPROVED', userMode: 'SELLER' },
+        include: {
+          product: {
+            include: { images: { where: { isPrimary: true }, take: 1 } },
+          },
+        },
+      });
+    } else if (requestedMode === 'AFFILIATE') {
+      // Products claimed specifically in AFFILIATE mode
+      claimedProducts = await prisma.affiliateClaim.findMany({
+        where: { userId, status: 'APPROVED', userMode: 'AFFILIATE' },
+        include: {
+          product: {
+            include: { images: { where: { isPrimary: true }, take: 1 } },
+          },
+        },
+      });
+    } else {
+      // All products if no mode parameter specified
+      inventoryProducts = await prisma.productInventory.findMany({
+        where: { userId },
+        include: {
+          product: {
+            include: { images: { where: { isPrimary: true }, take: 1 } },
+          },
+        },
+      });
+
+      ownedProducts = await prisma.product.findMany({
+        where: { ownerId: userId },
+        include: { images: { where: { isPrimary: true }, take: 1 } },
+      });
+
       claimedProducts = await prisma.affiliateClaim.findMany({
         where: { userId, status: 'APPROVED' },
         include: {
@@ -2325,8 +2357,8 @@ router.get(
       }
     }
 
-    // 4. Fallback to active catalog products if empty
-    if (productMap.size === 0) {
+    // 4. Fallback ONLY if no mode parameter was specified
+    if (productMap.size === 0 && !requestedMode) {
       const fallbackProducts = await prisma.product.findMany({
         where: { isPublished: true },
         take: 20,

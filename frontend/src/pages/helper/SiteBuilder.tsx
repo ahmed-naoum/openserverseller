@@ -376,21 +376,31 @@ export default function SiteBuilder() {
     }
   };
 
+  const [uploadProgressMsg, setUploadProgressMsg] = useState<string>('');
+
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (file.size > 100 * 1024 * 1024) {
+      toast.error(`La vidéo dépasse la limite de 100 Mo (${(file.size / (1024 * 1024)).toFixed(1)} Mo). Veuillez choisir une vidéo plus légère.`);
+      return;
+    }
+
     try {
       setIsUploading(true);
+      setUploadProgressMsg('Téléchargement & conversion WebM en cours (100 Mo max)...');
+      
       const formData = new FormData();
       formData.append('file', file);
       const res = await uploadApi.cloudinaryVideo(formData);
       updateBlockContent('url', res.data.data.url);
-      toast.success('Vidéo téléchargée avec succès !');
+      toast.success('Vidéo convertie en WebM et téléchargée avec succès !');
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Erreur lors du téléchargement de la vidéo');
+      toast.error(err?.response?.data?.message || err?.message || 'Erreur lors du téléchargement de la vidéo');
     } finally {
       setIsUploading(false);
+      setUploadProgressMsg(''); 
     }
   };
 
@@ -774,19 +784,61 @@ export default function SiteBuilder() {
 
                 {activeBlock.type === 'video' && (
                   <div className="space-y-4">
-                    <Field label="URL de la vidéo" type="text" value={activeBlock.content.url} onChange={(v: any) => updateBlockContent('url', v)} placeholder="https://..." />
+                    <Field 
+                      label="URL de la vidéo (YouTube, Vimeo, Cloudinary, MP4, WebM)" 
+                      type="text" 
+                      value={activeBlock.content.url} 
+                      onChange={(v: any) => updateBlockContent('url', v)} 
+                      placeholder="https://www.youtube.com/watch?v=... ou https://..." 
+                    />
                     
+                    <div className="bg-orange-50/60 rounded-xl p-3 border border-orange-100 text-xs text-gray-600 space-y-1">
+                      <div className="font-bold text-orange-800 flex items-center gap-1.5">
+                        <span>💡</span> Support des liens YouTube & Vimeo
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-gray-500">
+                        Collez un lien YouTube (<code className="bg-white px-1 py-0.5 rounded border border-orange-200">watch?v=</code>, <code className="bg-white px-1 py-0.5 rounded border border-orange-200">youtu.be</code>, <code className="bg-white px-1 py-0.5 rounded border border-orange-200">shorts</code>) ou Vimeo. Le constructeur l'intégrera automatiquement.
+                      </p>
+                    </div>
+
                     <div className="pt-2">
-                      <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Uploader sur Cloudinary</label>
-                      <label className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-200 rounded-xl hover:border-orange-500 hover:bg-orange-50 cursor-pointer transition-all">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-xs font-bold text-gray-500 uppercase">Uploader une vidéo</label>
+                        <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Max 100 Mo</span>
+                      </div>
+                      <label className="relative flex flex-col items-center justify-center gap-3 p-5 border-2 border-dashed border-gray-200 rounded-2xl hover:border-orange-500 hover:bg-orange-50/40 cursor-pointer transition-all overflow-hidden group">
                         {isUploading ? (
-                          <Loader2 className="w-5 h-5 animate-spin text-orange-500" />
+                          <div className="flex flex-col items-center justify-center py-2 space-y-3 w-full">
+                            {/* Modern Animated Ring Progress Spinner */}
+                            <div className="relative w-12 h-12 flex items-center justify-center">
+                              <div className="absolute inset-0 rounded-full border-4 border-orange-100"></div>
+                              <div className="absolute inset-0 rounded-full border-4 border-orange-500 border-t-transparent animate-spin"></div>
+                              <Upload className="w-5 h-5 text-orange-500 animate-pulse" />
+                            </div>
+                            <div className="text-center space-y-1">
+                              <span className="block text-xs font-bold text-gray-800 animate-pulse">
+                                {uploadProgressMsg || 'Téléchargement & conversion...'}
+                              </span>
+                              <span className="block text-[10px] font-semibold text-orange-600">
+                                Conversion WebM haute performance
+                              </span>
+                            </div>
+                          </div>
                         ) : (
-                          <Upload className="w-5 h-5 text-gray-400" />
+                          <>
+                            <div className="w-10 h-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                              <Upload className="w-5 h-5" />
+                            </div>
+                            <div className="text-center space-y-0.5">
+                              <span className="block text-sm font-bold text-gray-700 group-hover:text-orange-600 transition-colors">
+                                Importer une vidéo locale
+                              </span>
+                              <span className="block text-[11px] text-gray-400 font-medium">
+                                MP4, WebM, MOV (Conversion WebM • Max 100 Mo)
+                              </span>
+                            </div>
+                          </>
                         )}
-                        <span className="text-sm font-bold text-gray-600">
-                          {isUploading ? 'Téléchargement...' : 'Choisir une vidéo'}
-                        </span>
                         <input 
                           type="file" 
                           className="hidden" 

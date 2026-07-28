@@ -405,23 +405,30 @@
 }
 
 /* ==========================================================================
-   GLOBAL PLATFORM MODAL SYSTEM (UNIFIED DARK BLUR BACKDROP & TOP Z-INDEX)
+   GLOBAL PLATFORM MODAL SYSTEM — DATA-ATTRIBUTE APPROACH
+   Uses [data-modal-portal] on outer wrappers to avoid CSS specificity wars.
    ========================================================================== */
 
-/* Unconditional Top Z-Index and Unified Dark Blur Backdrop for all Modals */
-div[class*="fixed"][class*="inset-0"][class*="bg-"]:not([data-sidebar-overlay]),
-.modal-overlay,
-.fixed.inset-0.bg-black\/60,
-.fixed.inset-0.bg-slate-900\/60,
-.fixed.inset-0.bg-gray-900\/60,
-.fixed.inset-0.bg-slate-950\/80 {
-  z-index: 999999 !important;
-  background-color: rgba(15, 23, 42, 0.65) !important;
-  backdrop-filter: blur(8px) !important;
-  -webkit-backdrop-filter: blur(8px) !important;
+/* ── Portal wrapper: sits above EVERYTHING (sidebar z-[9999], topbar, etc.) ── */
+[data-modal-portal] {
+  z-index: 2147483647 !important;   /* max 32-bit signed int — nothing beats this */
+  isolation: isolate !important;     /* force a fresh stacking context */
 }
 
-/* Mobile sidebar overlay must NOT blur */
+/* ── Dark backdrop inside portal: lowest layer ── */
+[data-modal-backdrop] {
+  z-index: 1 !important;
+  background-color: rgba(15, 23, 42, 0.65) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ── Modal dialog card inside portal: above backdrop ── */
+[data-modal-content] {
+  z-index: 10 !important;
+}
+
+/* ── Mobile sidebar overlay — stays low ── */
 [data-sidebar-overlay] {
   z-index: 9990 !important;
   background-color: rgba(0, 0, 0, 0.25) !important;
@@ -429,16 +436,7 @@ div[class*="fixed"][class*="inset-0"][class*="bg-"]:not([data-sidebar-overlay]),
   -webkit-backdrop-filter: none !important;
 }
 
-/* Ensure modal wrapper containers (centering flex wrappers) have top z-index without double-blurring */
-div[class*="fixed"][class*="inset-0"]:not([class*="bg-"]):not([data-dropdown-backdrop]):not([data-sidebar-overlay]),
-div[class*="fixed"][class*="inset-0"].pointer-events-none {
-  z-index: 1000000 !important;
-  background-color: transparent !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-/* Dropdown backdrops (profile menu, etc.) stay below their dropdowns */
+/* ── Dropdown backdrops (profile menu, etc.) — stay below their dropdowns ── */
 [data-dropdown-backdrop] {
   z-index: 99 !important;
   background-color: transparent !important;
@@ -446,18 +444,12 @@ div[class*="fixed"][class*="inset-0"].pointer-events-none {
   -webkit-backdrop-filter: none !important;
 }
 
-/* Stacked / Nested modals (e.g. OTP inside modal or confirmation dialog) */
-div[class*="fixed"][class*="inset-0"] ~ div[class*="fixed"][class*="inset-0"],
-div[class*="fixed"][class*="inset-0"] div[class*="fixed"][class*="inset-0"] {
-  z-index: 1000001 !important;
-}
-
-/* Toast notifications remain above all modals */
+/* ── Toast notifications remain above all modals ── */
 #toast-container,
-.go2134789531, 
+.go2134789531,
 .react-hot-toast,
 div[aria-live="polite"] {
-  z-index: 1000002 !important;
+  z-index: 2147483647 !important;
 }
 
 /* Full Screen Mobile Viewports (< 640px) */

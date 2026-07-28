@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, RotateCcw, Tag, ArrowUpDown, Filter, DollarSign, Check, ChevronDown, Search } from 'lucide-react';
+import { X, RotateCcw, Tag, ArrowUpDown, Filter, DollarSign, Check, ChevronDown, Search, TrendingUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface SidebarProps {
   categories: any[];
@@ -13,6 +14,10 @@ interface SidebarProps {
   setPriceMin: (v: string) => void;
   priceMax: string;
   setPriceMax: (v: string) => void;
+  commissionMin?: string;
+  setCommissionMin?: (v: string) => void;
+  commissionMax?: string;
+  setCommissionMax?: (v: string) => void;
   statusFilter: string;
   setStatusFilter: (v: string) => void;
   onReset: () => void;
@@ -28,10 +33,12 @@ export default function MarketplaceSidebar({
   categories, selectedCategories, setSelectedCategories,
   sortBy, setSortBy,
   priceMin, setPriceMin, priceMax, setPriceMax,
+  commissionMin = '', setCommissionMin, commissionMax = '', setCommissionMax,
   statusFilter, setStatusFilter,
   onReset, onPageReset, t, isMobile, isOpen, onClose
 }: SidebarProps) {
   const { language } = useLanguage();
+  const { user } = useAuth();
 
   const [catDropdownOpen, setCatDropdownOpen] = useState(false);
   const [catSearch, setCatSearch] = useState('');
@@ -77,9 +84,17 @@ export default function MarketplaceSidebar({
     { label: t('price_range_50_plus', 'marketplace'), min: '50', max: '' },
   ];
 
+  const commissionRanges = [
+    { label: language === 'ar' ? 'جميع العمولات' : language === 'en' ? 'All Commissions' : 'Toutes les commissions', min: '', max: '' },
+    { label: '0 - 30 MAD', min: '0', max: '30' },
+    { label: '30 - 100 MAD', min: '30', max: '100' },
+    { label: '100+ MAD', min: '100', max: '' },
+  ];
+
   const activeFiltersCount =
     (selectedCategories.length > 0 ? 1 : 0) +
     (priceMin || priceMax ? 1 : 0) +
+    (commissionMin || commissionMax ? 1 : 0) +
     (statusFilter !== 'all' ? 1 : 0) +
     (sortBy !== 'newest' ? 1 : 0);
 
@@ -207,6 +222,56 @@ export default function MarketplaceSidebar({
             type="number" placeholder={t('price_max', 'marketplace')} value={priceMax}
             onChange={e => { setPriceMax(e.target.value); onPageReset(); }}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-1 focus:ring-[#FF6B4A]/30 focus:border-[#FF6B4A]/30"
+          />
+        </div>
+      </div>
+
+      <div className="h-px bg-slate-100" />
+
+      {/* Commission Range (عمولة المسوق) */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <TrendingUp size={13} className="text-emerald-600" />
+          <h3 className="text-[11px] font-black text-[#232863] uppercase tracking-[0.15em]">
+            {language === 'ar' ? 'عمولة المسوق' : language === 'en' ? 'Affiliate Commission' : 'Commission Affilié'}
+          </h3>
+        </div>
+        <div className="space-y-1.5 mb-3">
+          {commissionRanges.map((r, i) => {
+            const isActive = commissionMin === r.min && commissionMax === r.max;
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => {
+                  if (setCommissionMin) setCommissionMin(isActive ? '' : r.min);
+                  if (setCommissionMax) setCommissionMax(isActive ? '' : r.max);
+                  onPageReset();
+                }}
+                className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                  isActive ? 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200' : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {r.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            placeholder={t('price_min', 'marketplace')}
+            value={commissionMin}
+            onChange={e => { if (setCommissionMin) setCommissionMin(e.target.value); onPageReset(); }}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-1 focus:ring-emerald-500/30 focus:border-emerald-500/30"
+          />
+          <span className="text-slate-300 text-xs">—</span>
+          <input
+            type="number"
+            placeholder={t('price_max', 'marketplace')}
+            value={commissionMax}
+            onChange={e => { if (setCommissionMax) setCommissionMax(e.target.value); onPageReset(); }}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-1 focus:ring-emerald-500/30 focus:border-emerald-500/30"
           />
         </div>
       </div>

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { walletApi, payoutsApi } from '../../lib/api';
-import { Wallet, ArrowUpRight, ArrowDownRight, Clock, CheckCircle2, XCircle, Building2, Banknote, CreditCard, ChevronRight, RotateCcw } from 'lucide-react';
+import { Wallet, ArrowUpRight, ArrowDownRight, Clock, CheckCircle2, XCircle, Building2, Banknote, CreditCard, ChevronRight, RotateCcw, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { fr, ar, enUS } from 'date-fns/locale';
@@ -137,7 +137,19 @@ export default function UserWallet() {
           <h1 className="text-2xl font-black text-gray-900 tracking-tight">{t('title', 'wallet')}</h1>
           <p className="text-sm text-gray-500 font-medium">{t('subtitle', 'wallet')}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span 
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+              (!wallet || wallet.balanceMad < 200)
+                ? 'bg-amber-50 text-amber-700 border-amber-200/80'
+                : 'bg-emerald-50 text-emerald-700 border-emerald-200/80'
+            }`}
+            title={t('min_withdrawal_tooltip', 'wallet', 'Solde minimum de 200 DH requis pour demander un retrait')}
+          >
+            <AlertCircle size={14} className={(!wallet || wallet.balanceMad < 200) ? 'text-amber-500' : 'text-emerald-500'} />
+            <span>{t('min_withdrawal_badge', 'wallet', 'Min. Retrait: 200 DH')}</span>
+          </span>
+
           <button 
             onClick={() => {
               queryClient.invalidateQueries({ queryKey: ['wallet'] });
@@ -169,6 +181,7 @@ export default function UserWallet() {
             }}
             disabled={!wallet || wallet.balanceMad < 200}
             className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg active:scale-[0.98]"
+            title={(!wallet || wallet.balanceMad < 200) ? t('min_withdrawal_tooltip', 'wallet') : undefined}
           >
             <Banknote size={18} /> {t('request_withdrawal', 'wallet')}
           </button>

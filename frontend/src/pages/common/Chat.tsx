@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { chatApi, adminApi, uploadApi, BACKEND_URL } from '../../lib/api';
 import {
@@ -1199,14 +1200,16 @@ export default function Chat() {
       </div>
 
       {/* PDF Label Modal */}
-      {pdfModalUrl && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+      {pdfModalUrl && createPortal(
+        <div data-modal-portal className="fixed inset-0 flex items-center justify-center p-4 sm:p-6" style={{ zIndex: 2147483647, isolation: 'isolate' }}>
           <div 
-            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300"
+            data-modal-backdrop
+            className="fixed inset-0 transition-opacity animate-in fade-in duration-200"
+            style={{ zIndex: 1, backgroundColor: 'rgba(15, 23, 42, 0.65)' }}
             onClick={() => setPdfModalUrl(null)}
           />
-          <div className="relative w-full max-w-4xl bg-white rounded-[2rem] shadow-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
-            <div className="flex-shrink-0 p-5 border-b border-slate-100 flex items-center justify-between">
+          <div data-modal-content className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 overflow-hidden border border-slate-200" style={{ zIndex: 10 }}>
+            <div className="flex-shrink-0 p-5 border-b border-slate-100 flex items-center justify-between bg-white">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-violet-50 rounded-xl flex items-center justify-center">
                   <Eye size={18} className="text-violet-600" />
@@ -1233,46 +1236,50 @@ export default function Chat() {
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-hidden p-4">
+            <div className="flex-1 overflow-hidden p-4 bg-slate-100">
               {pdfLoading ? (
-                <div className="w-full flex items-center justify-center" style={{ minHeight: '70vh' }}>
+                <div className="w-full flex flex-col items-center justify-center gap-3" style={{ minHeight: '70vh' }}>
                   <div className="w-10 h-10 border-4 border-violet-100 border-t-violet-500 rounded-full animate-spin" />
+                  <span className="text-xs font-bold text-slate-500">Chargement du document PDF...</span>
                 </div>
               ) : pdfBlobUrl ? (
                 /\.(png|jpe?g|webp|gif|svg)$/i.test(pdfModalUrl || '') ? (
-                  <div className="w-full flex items-center justify-center bg-slate-50 rounded-xl border border-slate-200 overflow-auto" style={{ minHeight: '70vh' }}>
+                  <div className="w-full flex items-center justify-center bg-white rounded-2xl border border-slate-200 overflow-auto p-4" style={{ minHeight: '70vh' }}>
                     <img
                       src={pdfBlobUrl}
                       alt="Branding Label"
-                      className="max-w-full max-h-[75vh] object-contain"
+                      className="max-w-full max-h-[75vh] object-contain shadow-md rounded-lg"
                     />
                   </div>
                 ) : (
                   <iframe
                     src={pdfBlobUrl}
-                    className="w-full h-full rounded-xl border border-slate-200"
+                    className="w-full h-full rounded-2xl border border-slate-200 bg-white shadow-inner"
                     style={{ minHeight: '70vh' }}
                     title="PDF Label Preview"
                   />
                 )
               ) : (
-                <div className="w-full flex items-center justify-center text-slate-400 text-sm" style={{ minHeight: '70vh' }}>
-                  Failed to load file
+                <div className="w-full flex items-center justify-center text-slate-400 text-sm font-bold" style={{ minHeight: '70vh' }}>
+                  Impossible de charger le fichier PDF
                 </div>
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Logs Modal */}
-      {showLogsModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+      {showLogsModal && createPortal(
+        <div data-modal-portal className="fixed inset-0 flex items-center justify-center p-4 sm:p-6" style={{ zIndex: 2147483647, isolation: 'isolate' }}>
           <div 
-            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300"
+            data-modal-backdrop
+            className="fixed inset-0 transition-opacity animate-in fade-in duration-200"
+            style={{ zIndex: 1, backgroundColor: 'rgba(15, 23, 42, 0.65)' }}
             onClick={() => setShowLogsModal(false)}
           />
-          <div className="relative w-full max-w-lg bg-white rounded-[2rem] shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+          <div data-modal-content className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200 overflow-hidden border border-slate-200" style={{ zIndex: 10 }}>
             <div className="flex-shrink-0 p-6 border-b border-slate-100 flex items-center justify-between">
               <div>
                 <h3 className="text-xl font-black text-slate-900">{t('ticket_history', 'chat')}</h3>
@@ -1351,7 +1358,8 @@ export default function Chat() {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

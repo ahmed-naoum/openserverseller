@@ -62,5 +62,7 @@
   "toast_success": "تم تقديم طلب السحب بنجاح",
   "toast_insufficient": "الرصيد غير كافٍ",
   "toast_min_amount": "الحد الأدنى للمبلغ هو 200 درهم",
-  "toast_refreshed": "تم تحديث البيانات"
+  "toast_refreshed": "تم تحديث البيانات",
+  "min_withdrawal_badge": "الحد الأدنى للسحب: 200 درهم",
+  "min_withdrawal_tooltip": "يلزم حد أدنى للرصيد قدره 200 درهم لطلب السحب"
 }

@@ -18,6 +18,8 @@ const HoverMarquee = ({ text, className = "" }: { text: string, className?: stri
   const containerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLHeadingElement>(null);
   const [isOverflowing, setIsOverflowing] = useState(false);
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
 
   useLayoutEffect(() => {
     if (containerRef.current && textRef.current) {
@@ -27,21 +29,21 @@ const HoverMarquee = ({ text, className = "" }: { text: string, className?: stri
 
   if (isOverflowing) {
     return (
-      <div className="w-full overflow-hidden whitespace-nowrap relative group/text" dir="ltr">
-        <h3 className={`${className} block overflow-hidden text-ellipsis whitespace-nowrap group-hover:hidden text-left`} dir="ltr">
+      <div className="w-full overflow-hidden whitespace-nowrap relative group/text">
+        <h3 className={`${className} block overflow-hidden text-ellipsis whitespace-nowrap group-hover:hidden ${isRtl ? 'text-right' : 'text-left'}`} dir={isRtl ? "rtl" : "ltr"}>
           {text}
         </h3>
-        <div className="hidden group-hover:flex w-max animate-marquee-loop items-center">
-          <h3 className={`${className} pr-12`}>{text}</h3>
-          <h3 className={`${className} pr-12`}>{text}</h3>
+        <div className="hidden group-hover:flex w-max animate-marquee-loop items-center" dir="ltr">
+          <span className={`${className} inline-block pr-10`}>{text}</span>
+          <span className={`${className} inline-block pr-10`}>{text}</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div ref={containerRef} className="w-full overflow-hidden text-left" dir="ltr">
-      <h3 ref={textRef} className={`${className} whitespace-nowrap`}>
+    <div ref={containerRef} className={`w-full overflow-hidden ${isRtl ? 'text-right' : 'text-left'}`} dir={isRtl ? "rtl" : "ltr"}>
+      <h3 ref={textRef} className={`${className} whitespace-nowrap inline-block`}>
         {text}
       </h3>
     </div>
@@ -222,6 +224,8 @@ export default function InfluencerMarketplace() {
 
   const [priceMin, setPriceMin] = useState('');
   const [priceMax, setPriceMax] = useState('');
+  const [commissionMin, setCommissionMin] = useState('');
+  const [commissionMax, setCommissionMax] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [limit, setLimit] = useState(10);
   const totalPages = Math.ceil(total / limit);
@@ -232,14 +236,14 @@ export default function InfluencerMarketplace() {
       ? (language === 'ar' ? 'لتجار الجملة' : 'Grossiste')
       : user?.mode === 'AFFILIATE' 
         ? (language === 'ar' ? 'للمسوقين بالعمولة' : 'Affilié') 
-        : (language === 'ar' ? 'للبائعين' : 'Vendeur');
+        : (language === 'ar' ? 'ل للبائعين' : 'Vendeur');
 
   const priceLabel = user?.role === 'INFLUENCER' 
     ? t('influencer_price', 'marketplace') 
     : user?.role === 'GROSSELLER'
       ? (language === 'ar' ? 'سعر الجملة' : 'Prix de Gros')
       : user?.mode === 'AFFILIATE' 
-        ? (language === 'ar' ? 'سعر المسوق بالعمولة' : 'Prix Affilié') 
+        ? (language === 'ar' ? 'عمولة المسوق' : 'Commission Affilié') 
         : (language === 'ar' ? 'سعر البيع' : 'Prix de Vente');
 
   useEffect(() => {
@@ -252,7 +256,7 @@ export default function InfluencerMarketplace() {
     return () => clearTimeout(timer);
   }, [search, searchParams, setSearchParams]);
 
-  useEffect(() => { fetchData(); }, [page, limit, JSON.stringify(selectedCategories), sortBy, searchParams.get('search'), priceMin, priceMax, statusFilter, user?.mode, user?.role]);
+  useEffect(() => { fetchData(); }, [page, limit, JSON.stringify(selectedCategories), sortBy, searchParams.get('search'), priceMin, priceMax, commissionMin, commissionMax, statusFilter, user?.mode, user?.role]);
 
   useEffect(() => {
     publicApi.categories().then(r => setCategories(r.data?.data?.categories || [])).catch(() => {});
@@ -285,6 +289,20 @@ export default function InfluencerMarketplace() {
       if (priceMin) items = items.filter((p: any) => Number(p.influencerPriceMad || p.retailPriceMad) >= Number(priceMin));
       if (priceMax) items = items.filter((p: any) => Number(p.influencerPriceMad || p.retailPriceMad) <= Number(priceMax));
 
+      // Commission filter
+      if (commissionMin) {
+        items = items.filter((p: any) => {
+          const comm = p.commissionMad > 0 ? p.commissionMad : Math.round((p.retailPriceMad || 0) * 0.1 * 100) / 100;
+          return Number(comm) >= Number(commissionMin);
+        });
+      }
+      if (commissionMax) {
+        items = items.filter((p: any) => {
+          const comm = p.commissionMad > 0 ? p.commissionMad : Math.round((p.retailPriceMad || 0) * 0.1 * 100) / 100;
+          return Number(comm) <= Number(commissionMax);
+        });
+      }
+
       // Status filter
       if (statusFilter !== 'all') {
         items = items.filter((p: any) => {
@@ -308,7 +326,7 @@ export default function InfluencerMarketplace() {
   const goToPage = (p: number) => { setPage(p); setSearchParams(prev => { prev.set('page', String(p)); return prev; }); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 
   const resetFilters = () => {
-    setSelectedCategories([]); setSortBy('newest'); setPriceMin(''); setPriceMax(''); setStatusFilter('all'); setPage(1);
+    setSelectedCategories([]); setSortBy('newest'); setPriceMin(''); setPriceMax(''); setCommissionMin(''); setCommissionMax(''); setStatusFilter('all'); setPage(1);
   };
 
   const handleOpenBuilderSelection = async (productId: number, productName: string) => {
@@ -366,18 +384,22 @@ export default function InfluencerMarketplace() {
     if (claim.status === 'PENDING') return <div className="w-full py-2.5 bg-amber-50 text-amber-600 rounded-xl text-xs font-black text-center border border-amber-200/50">{t('pending_approval', 'marketplace')}</div>;
     if (claim.status === 'REJECTED') return <div className="w-full py-2.5 bg-rose-50 text-rose-600 rounded-xl text-xs font-black text-center border border-rose-200/50">{t('request_rejected', 'marketplace')}</div>;
     if (claim.status === 'APPROVED') {
+      const role = user?.roleName || user?.role;
+      const showBuilder = role === 'SUPER_ADMIN' || role === 'HELPER' || role === 'VENDOR' || (role === 'INFLUENCER' && user?.canManageInfluencerLinks);
       return (
         <div className="flex items-center gap-2 w-full">
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              handleOpenBuilderSelection(product.id, product.nameFr || product.nameEn);
-            }}
-            className="p-2.5 bg-purple-50 text-purple-600 hover:text-white hover:bg-purple-600 border border-purple-100 hover:border-purple-600 rounded-xl transition-all shadow-sm flex items-center justify-center animate-pulse"
-            title={t('tooltip_builder', 'links') || "Constructeur de Page"}
-          >
-            <Wand2 className="w-4 h-4" />
-          </button>
+          {showBuilder && (
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpenBuilderSelection(product.id, product.nameFr || product.nameEn);
+              }}
+              className="p-2.5 bg-purple-50 text-purple-600 hover:text-white hover:bg-purple-600 border border-purple-100 hover:border-purple-600 rounded-xl transition-all shadow-sm flex items-center justify-center animate-pulse"
+              title={t('tooltip_builder', 'links') || "Constructeur de Page"}
+            >
+              <Wand2 className="w-4 h-4" />
+            </button>
+          )}
           <button 
             onClick={(e) => { 
               e.stopPropagation(); 
@@ -534,6 +556,7 @@ export default function InfluencerMarketplace() {
           categories={categories} selectedCategories={selectedCategories} setSelectedCategories={setSelectedCategories}
           sortBy={sortBy} setSortBy={setSortBy}
           priceMin={priceMin} setPriceMin={setPriceMin} priceMax={priceMax} setPriceMax={setPriceMax}
+          commissionMin={commissionMin} setCommissionMin={setCommissionMin} commissionMax={commissionMax} setCommissionMax={setCommissionMax}
           statusFilter={statusFilter} setStatusFilter={setStatusFilter}
           onReset={resetFilters} onPageReset={() => setPage(1)} t={t}
         />
@@ -542,6 +565,7 @@ export default function InfluencerMarketplace() {
           categories={categories} selectedCategories={selectedCategories} setSelectedCategories={setSelectedCategories}
           sortBy={sortBy} setSortBy={setSortBy}
           priceMin={priceMin} setPriceMin={setPriceMin} priceMax={priceMax} setPriceMax={setPriceMax}
+          commissionMin={commissionMin} setCommissionMin={setCommissionMin} commissionMax={commissionMax} setCommissionMax={setCommissionMax}
           statusFilter={statusFilter} setStatusFilter={setStatusFilter}
           onReset={resetFilters} onPageReset={() => setPage(1)} t={t}
           isMobile isOpen={mobileFiltersOpen} onClose={() => setMobileFiltersOpen(false)}
@@ -633,18 +657,38 @@ export default function InfluencerMarketplace() {
                           <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">SKU: {product.sku}</p>
                         </div>
                         <div className="mt-auto pt-3 border-t border-slate-50 space-y-2.5">
-                          <div className="flex justify-between items-center w-full">
-                            <div className="text-[8px] font-black text-[#FF6B4A] uppercase tracking-[0.15em]">
-                              {priceLabel}
+                          {user?.mode === 'AFFILIATE' ? (
+                            <div className="bg-gradient-to-r rtl:bg-gradient-to-l from-emerald-50/70 to-orange-50/70 rounded-xl p-2.5 border border-emerald-100/80 flex items-center justify-between">
+                              <div>
+                                <div className="text-[8px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1">
+                                  <TrendingUp size={10} className="text-emerald-500" />
+                                  {language === 'ar' ? 'عمولة المسوق' : language === 'en' ? 'Affiliate Commission' : 'Commission Affilié'}
+                                </div>
+                                <div className="text-lg font-black text-emerald-600 leading-tight">
+                                  +{(product.commissionMad > 0 ? product.commissionMad : Math.round((product.retailPriceMad || 0) * 0.1 * 100) / 100)} <span className="text-[10px] font-bold text-emerald-600/70">{language === 'ar' ? 'درهم' : 'MAD'}</span>
+                                </div>
+                              </div>
+                              <div className="text-right pl-2.5 rtl:pr-2.5 rtl:pl-0 border-l rtl:border-r rtl:border-l-0 border-slate-200/80">
+                                <div className="text-[8px] font-black text-[#FF6B4A] uppercase tracking-widest">
+                                  {language === 'ar' ? 'سعر البيع' : language === 'en' ? 'Selling Price' : 'Prix de Vente'}
+                                </div>
+                                <div className="text-sm font-black text-[#FF6B4A] leading-tight">
+                                  {product.affiliatePriceMad || product.retailPriceMad} <span className="text-[9px] font-bold text-[#FF6B4A]/70">{language === 'ar' ? 'درهم' : 'MAD'}</span>
+                                </div>
+                              </div>
                             </div>
-                            <div className="text-xl font-black text-[#232863] leading-none">
-                              {user?.role === 'INFLUENCER' 
-                                ? (product.influencerPriceMad || product.retailPriceMad)
-                                : user?.mode === 'AFFILIATE'
-                                  ? (product.affiliatePriceMad || product.retailPriceMad)
+                          ) : (
+                            <div className="flex justify-between items-center w-full">
+                              <div className="text-[8px] font-black text-[#FF6B4A] uppercase tracking-[0.15em]">
+                                {priceLabel}
+                              </div>
+                              <div className="text-xl font-black text-[#232863] leading-none">
+                                {user?.role === 'INFLUENCER' 
+                                  ? (product.influencerPriceMad || product.retailPriceMad)
                                   : product.retailPriceMad} <span className="text-[10px] font-bold text-slate-400">{language === 'ar' ? 'درهم' : 'MAD'}</span>
+                              </div>
                             </div>
-                          </div>
+                          )}
                           {renderClaimAction(product)}
                         </div>
                       </div>

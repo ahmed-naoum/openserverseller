@@ -228,6 +228,38 @@ router.post(
 );
 
 /**
+ * POST /api/v1/woocommerce/disconnect
+ * Disconnect WooCommerce integration for vendor
+ */
+router.post(
+  '/disconnect',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const vendorId = req.user?.id;
+    if (!vendorId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: vendorId },
+      data: {
+        wooCommerceUrl: null,
+        wooCommerceConsumerKey: null,
+        wooCommerceConsumerSecret: null,
+        wooCommerceSyncActive: false,
+        wooCommerceConnectedAt: null,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: 'Intégration WooCommerce déconnectée avec succès',
+    });
+  })
+);
+
+/**
  * GET /api/v1/woocommerce/orders
  * Fetch live orders directly from WooCommerce REST API (filtered by connectedAt timestamp)
  */

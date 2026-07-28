@@ -495,15 +495,15 @@ export const validateRequestSize = (maxSize: number = 1024 * 1024) => {
     const url = req.originalUrl || '';
     let allowedSize = maxSize;
 
-    if (url.includes('/upload') || url.includes('/import') || url.includes('/backups')) {
-      allowedSize = 20 * 1024 * 1024; // 20MB
+    if (url.includes('/upload') || url.includes('/cloudinary') || url.includes('/import') || url.includes('/backups')) {
+      allowedSize = 100 * 1024 * 1024; // 100MB
     }
 
     const contentLength = parseInt(req.get('content-length') || '0', 10);
     if (contentLength > allowedSize) {
       res.status(413).json({
         status: 'error',
-        message: 'Request body too large 20MB is the max',
+        message: 'Request body too large 100MB is the max',
       });
       return; 
     }

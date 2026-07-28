@@ -62,5 +62,7 @@
   "toast_success": "Demande de retrait soumise avec succes",
   "toast_insufficient": "Solde insuffisant",
   "toast_min_amount": "Le montant minimum est de 200 MAD",
-  "toast_refreshed": "Donnees actualisees"
+  "toast_refreshed": "Donnees actualisees",
+  "min_withdrawal_badge": "Min. Retrait: 200 DH",
+  "min_withdrawal_tooltip": "Solde minimum de 200 DH requis pour demander un retrait"
 }

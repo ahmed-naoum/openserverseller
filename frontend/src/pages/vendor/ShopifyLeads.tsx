@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { 
   ShoppingBag, 
@@ -24,10 +25,12 @@ import {
   Headphones
 } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { shopifyApi, leadsApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { fr, ar } from 'date-fns/locale';
+import shopifyLogo from '../../assets/shopify-logo.svg';
 
 interface ShopifyOrder {
   id: string | number;
@@ -120,9 +123,10 @@ export default function ShopifyLeads() {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
 
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const currentMode = searchParams.get('mode')?.toUpperCase() === 'AFFILIATE' ? 'AFFILIATE' : 'SELLER';
+  const currentMode = (searchParams.get('mode')?.toUpperCase() || user?.mode || 'SELLER') === 'AFFILIATE' ? 'AFFILIATE' : 'SELLER';
 
   const [orders, setOrders] = useState<ShopifyOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -311,8 +315,8 @@ export default function ShopifyLeads() {
       {/* Page Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-gradient-to-br from-emerald-500 to-teal-700 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-emerald-500/20 ring-4 ring-white">
-            SF
+          <div className="w-14 h-14 rounded-2xl p-2.5 bg-[#95BF47]/15 flex items-center justify-center shadow-lg shadow-emerald-500/20 border border-[#95BF47]/30 shrink-0">
+            <img src={shopifyLogo} alt="Shopify" className="w-full h-full object-contain" />
           </div>
           <div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none uppercase">
@@ -615,21 +619,22 @@ export default function ShopifyLeads() {
       </div>
 
       {/* Order Details Modal */}
-      {selectedOrder && (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
+      {selectedOrder && createPortal(
+        <div data-modal-portal style={{ zIndex: 2147483647 }} className="fixed inset-0 flex items-center justify-center p-4">
           <div 
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
+            data-modal-backdrop
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
             onClick={() => setSelectedOrder(null)}
           />
           <div 
+            data-modal-content
             className="relative z-10 bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 cursor-default flex flex-col max-h-[90vh]"
-            style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
           >
             {/* Modal Header */}
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black">
-                  SF
+                <div className="w-10 h-10 rounded-xl p-1.5 bg-[#95BF47]/15 flex items-center justify-center border border-[#95BF47]/30 shrink-0">
+                  <img src={shopifyLogo} alt="Shopify" className="w-full h-full object-contain" />
                 </div>
                 <div>
                   <h3 className="text-lg font-black text-slate-900">
@@ -739,17 +744,20 @@ export default function ShopifyLeads() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Push to Call Center Product Selection Modal */}
-      {isPushModalOpen && (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
+      {isPushModalOpen && createPortal(
+        <div data-modal-portal style={{ zIndex: 2147483647 }} className="fixed inset-0 flex items-center justify-center p-4">
           <div 
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
+            data-modal-backdrop
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
             onClick={() => !isPushing && setIsPushModalOpen(false)}
           />
           <div 
+            data-modal-content
             className="relative z-10 bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]"
           >
             {/* Modal Header */}
@@ -885,7 +893,8 @@ export default function ShopifyLeads() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

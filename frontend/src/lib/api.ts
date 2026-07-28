@@ -741,6 +741,7 @@ export const youcanApi = {
   getStatus: () => api.get('/youcan/status'),
   syncNow: () => api.post('/youcan/sync'),
   toggleSync: (active: boolean) => api.post('/youcan/toggle-sync', { active }),
+  disconnect: () => api.post('/youcan/disconnect'),
   exchangeToken: (code: string) => api.post('/youcan/token', { code }),
   getOrders: (params?: any) => api.get('/youcan/orders', { params }),
   getCustomers: (params?: any) => api.get('/youcan/customers', { params }),
@@ -752,6 +753,7 @@ export const shopifyApi = {
   exchangeToken: (data: { code: string; shop: string }) => api.post('/shopify/token', data),
   saveToken: (data: { storeDomain: string; accessToken?: string }) => api.post('/shopify/save-token', data),
   toggleSync: (active: boolean) => api.post('/shopify/toggle-sync', { active }),
+  disconnect: () => api.post('/shopify/disconnect'),
   getOrders: (params?: any) => api.get('/shopify/orders', { params }),
 };
 
@@ -760,8 +762,19 @@ export const wooCommerceApi = {
   getAuthorizeUrl: (storeUrl: string) => api.post('/woocommerce/authorize-url', { storeUrl }),
   saveKeys: (data: { storeUrl: string; consumerKey: string; consumerSecret: string }) => api.post('/woocommerce/save-keys', data),
   toggleSync: (active: boolean) => api.post('/woocommerce/toggle-sync', { active }),
+  disconnect: () => api.post('/woocommerce/disconnect'),
   getOrders: (params?: any) => api.get('/woocommerce/orders', { params }),
   syncNow: () => api.post('/woocommerce/sync'),
+};
+
+export const googleSheetsApi = {
+  getStatus: () => api.get('/google-sheets/status'),
+  connect: (sheetUrl: string) => api.post('/google-sheets/connect', { sheetUrl }),
+  toggleSync: (active: boolean) => api.post('/google-sheets/toggle-sync', { active }),
+  disconnect: () => api.post('/google-sheets/disconnect'),
+  getOrders: (params?: any) => api.get('/google-sheets/orders', { params }),
+  syncNow: () => api.post('/google-sheets/sync-now'),
+  rotateToken: () => api.post('/google-sheets/rotate-token'),
 };
 
 export const eventApi = {

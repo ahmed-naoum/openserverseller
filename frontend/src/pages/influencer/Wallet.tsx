@@ -3,7 +3,7 @@ import { influencerApi, dashboardApi } from '../../lib/api';
 import { InfluencerCommission } from '../../types';
 import {
   DollarSign, TrendingUp, Clock, ArrowUpRight,
-  Wallet as WalletIcon, Download, FileText, Crown
+  Wallet as WalletIcon, Download, FileText, Crown, AlertCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -65,19 +65,38 @@ export default function InfluencerWallet() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Mon Portefeuille</h1>
           <p className="text-sm text-gray-500 mt-1">Gérez vos gains et demandes de retrait.</p>
         </div>
-        <button
-          disabled={totalEarnings < 200}
-          className="flex items-center gap-1.5 px-5 py-2.5 bg-influencer-500 text-white rounded-xl text-sm font-bold hover:bg-influencer-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-          onClick={() => toast.error('Le retrait nécessite l\'approbation admin.')}
-        >
-          <ArrowUpRight className="w-4 h-4" />
-          Demander un Retrait
-        </button>
+        <div className="flex items-center gap-3">
+          <span
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border ${
+              totalEarnings < 200
+                ? 'bg-amber-50 text-amber-700 border-amber-200/80'
+                : 'bg-emerald-50 text-emerald-700 border-emerald-200/80'
+            }`}
+          >
+            <AlertCircle className={`w-3.5 h-3.5 ${totalEarnings < 200 ? 'text-amber-500' : 'text-emerald-500'}`} />
+            Min. Retrait: <strong className="font-extrabold">200 DH</strong>
+          </span>
+          <button
+            disabled={totalEarnings < 200}
+            className="flex items-center gap-1.5 px-5 py-2.5 bg-influencer-500 text-white rounded-xl text-sm font-bold hover:bg-influencer-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xs"
+            onClick={() => {
+              if (totalEarnings < 200) {
+                toast.error('Un solde minimum de 200 DH est requis pour effectuer un retrait.');
+              } else {
+                toast.error('Le retrait nécessite l\'approbation admin.');
+              }
+            }}
+            title={totalEarnings < 200 ? 'Solde minimum de 200 DH requis' : 'Demander un retrait'}
+          >
+            <ArrowUpRight className="w-4 h-4" />
+            Demander un Retrait
+          </button>
+        </div>
       </div>
  {/* Tier Progress */}
       <div className="card p-5 rounded-2xl">

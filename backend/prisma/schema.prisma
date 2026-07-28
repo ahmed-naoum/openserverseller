@@ -119,6 +119,13 @@ model User {
   wooCommerceSyncActive     Boolean   @default(true)
   wooCommerceConnectedAt    DateTime?
 
+  // Google Sheets Integration
+  googleSheetUrl        String?
+  googleSheetId         String?
+  googleSheetSyncActive Boolean   @default(true)
+  googleSheetConnectedAt DateTime?
+  googleSheetWebhookToken String? @unique
+
   language       String            @default("ar") @db.VarChar(5)
 
   profile        UserProfile?
