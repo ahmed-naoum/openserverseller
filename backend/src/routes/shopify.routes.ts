@@ -209,6 +209,37 @@ router.post(
 );
 
 /**
+ * POST /api/v1/shopify/disconnect
+ * Disconnect Shopify integration for vendor
+ */
+router.post(
+  '/disconnect',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const vendorId = req.user?.id;
+    if (!vendorId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: vendorId },
+      data: {
+        shopifyAccessToken: null,
+        shopifyStoreDomain: null,
+        shopifySyncActive: false,
+        shopifyConnectedAt: null,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: 'Intégration Shopify déconnectée avec succès',
+    });
+  })
+);
+
+/**
  * GET /api/v1/shopify/orders
  * Fetch live orders directly from Shopify Admin API (filtered by shopifyConnectedAt)
  */

@@ -1138,7 +1138,10 @@ router.get(
     };
 
     if (mode === 'SELLER') {
-      commissionWhereClause.referralLink = { product: { ownerId: userId } };
+      commissionWhereClause.OR = [
+        { referralLink: { product: { ownerId: userId } } },
+        { order: { vendorId: userId } }
+      ];
     } else if (mode === 'AFFILIATE') {
       commissionWhereClause.influencerId = userId;
       commissionWhereClause.referralLink = { 
@@ -1192,24 +1195,38 @@ router.get(
     };
 
     if (mode === 'SELLER') {
-      leadWhereClause.referralLink = { product: { ownerId: userId } };
+      leadWhereClause.OR = [
+        { vendorId: userId },
+        { referralLink: { product: { ownerId: userId } } }
+      ];
     } else if (mode === 'AFFILIATE') {
-      leadWhereClause.referralLink = {
-        influencerId: userId,
-        product: { 
-          OR: [
-            { ownerId: { not: userId } },
-            { ownerId: null }
-          ]
+      leadWhereClause.OR = [
+        {
+          referralLink: {
+            influencerId: userId,
+            product: { 
+              OR: [
+                { ownerId: { not: userId } },
+                { ownerId: null }
+              ]
+            }
+          }
+        },
+        {
+          vendorId: userId,
+          sourceMode: 'AFFILIATE'
         }
-      };
+      ];
     } else {
       const influencerLinks = await prisma.referralLink.findMany({
         where: { influencerId: userId },
         select: { id: true }
       });
       const linkIds = influencerLinks.map(l => l.id);
-      leadWhereClause.referralLinkId = { in: linkIds };
+      leadWhereClause.OR = [
+        { vendorId: userId },
+        { referralLinkId: { in: linkIds } }
+      ];
     }
 
     const leads = await prisma.lead.findMany({
@@ -1231,7 +1248,7 @@ router.get(
         referralLink: { include: { product: { include: { images: { where: { isPrimary: true }, take: 1 } } }, landingPage: true } }
       },
       orderBy: { createdAt: 'desc' },
-      take: 50 // Limit leads for now
+      take: 100 // Limit leads for now
     });
 
     // Map leads to a commission-like structure for the frontend
@@ -1251,12 +1268,13 @@ router.get(
         customerAddress: lead.address,
         status: lead.status === 'NEW' ? 'LEAD' : lead.status,
         productVariant: lead.productVariant,
-        totalAmountMad: (lead as any).order?.totalAmountMad || 0,
+        totalAmountMad: (lead as any).order?.totalAmountMad || lead.requestedPriceMad || 0,
         coliatyPackageCode: (lead as any).order?.coliatyPackageCode,
         coliatyPackageId: (lead as any).order?.coliatyPackageId,
         statusHistory: (lead as any).order?.statusHistory || [],
         items: (lead as any).order?.items || [],
         lead: {
+          id: lead.id,
           paymentSituation: lead.paymentSituation,
           callbackDate: lead.callbackAt,
           notes: lead.notes,

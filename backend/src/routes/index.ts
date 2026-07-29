@@ -37,6 +37,7 @@ import pixelRoutes from './pixel.routes.js';
 import domainRoutes from './domain.routes.js';
 import customProductRoutes from './customProduct.routes.js';
 import eventRoutes from './event.routes.js';
+import googleSheetsRoutes from './googleSheets.routes.js';
 
 
 const router = Router();
@@ -93,6 +94,8 @@ router.use('/shopify', auditLog, shopifyRoutes);
 router.use('/woocommerce', auditLog, woocommerceRoutes);
 router.use('/integrations/woocommerce', auditLog, woocommerceRoutes);
 router.use('/integrations/shopify', auditLog, shopifyRoutes);
+router.use('/google-sheets', auditLog, googleSheetsRoutes);
+router.use('/integrations/google-sheets', auditLog, googleSheetsRoutes);
 router.use('/support', auditLog, supportRoutes);
 router.use('/user-pixels', auditLog, pixelRoutes);
 router.use('/domain', auditLog, domainRoutes);

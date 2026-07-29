@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { 
   ShoppingBag, 
@@ -24,10 +25,12 @@ import {
   Headphones
 } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { wooCommerceApi, leadsApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { fr, ar } from 'date-fns/locale';
+import wooCommerceLogo from '../../assets/woocommerce-logo.svg';
 
 interface WooCommerceOrder {
   id: string | number;
@@ -67,9 +70,10 @@ export default function WooCommerceLeads() {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
 
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const currentMode = searchParams.get('mode')?.toUpperCase() === 'AFFILIATE' ? 'AFFILIATE' : 'SELLER';
+  const currentMode = (searchParams.get('mode')?.toUpperCase() || user?.mode || 'SELLER') === 'AFFILIATE' ? 'AFFILIATE' : 'SELLER';
 
   const [orders, setOrders] = useState<WooCommerceOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -139,10 +143,11 @@ export default function WooCommerceLeads() {
     setLoadingProducts(true);
     try {
       const res = await leadsApi.getMyProducts({ mode: currentMode });
-      const rawProds = res.data?.data || res.data || [];
-      setProducts(Array.isArray(rawProds) ? rawProds : []);
-      if (rawProds.length > 0) {
-        setSelectedProductId(rawProds[0].id);
+      const rawProds = res.data?.data?.products || res.data?.products || res.data?.data || res.data || [];
+      const prodsList = Array.isArray(rawProds) ? rawProds : [];
+      setProducts(prodsList);
+      if (prodsList.length > 0) {
+        setSelectedProductId(prodsList[0].id);
       }
     } catch (err) {
       console.error('Error fetching inventory products:', err);
@@ -608,15 +613,16 @@ export default function WooCommerceLeads() {
       </div>
 
       {/* Order Details Modal */}
-      {selectedOrder && (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
+      {selectedOrder && createPortal(
+        <div data-modal-portal style={{ zIndex: 2147483647 }} className="fixed inset-0 flex items-center justify-center p-4">
           <div 
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
+            data-modal-backdrop
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
             onClick={() => setSelectedOrder(null)}
           />
           <div 
+            data-modal-content
             className="relative z-10 bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 cursor-default flex flex-col max-h-[90vh]"
-            style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
           >
             {/* Modal Header */}
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
@@ -727,17 +733,20 @@ export default function WooCommerceLeads() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Push to Call Center Product Selection Modal */}
-      {isPushModalOpen && (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
+      {isPushModalOpen && createPortal(
+        <div data-modal-portal style={{ zIndex: 2147483647 }} className="fixed inset-0 flex items-center justify-center p-4">
           <div 
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
+            data-modal-backdrop
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
             onClick={() => !isPushing && setIsPushModalOpen(false)}
           />
           <div 
+            data-modal-content
             className="relative z-10 bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]"
           >
             {/* Modal Header */}
@@ -873,7 +882,8 @@ export default function WooCommerceLeads() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

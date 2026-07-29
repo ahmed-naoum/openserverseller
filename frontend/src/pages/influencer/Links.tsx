@@ -248,8 +248,12 @@ export default function InfluencerLinks() {
     try {
       const res = await influencerApi.getClaims();
       const claimsList = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      const isInfluencerUser = user?.roleName === 'INFLUENCER' || user?.role === 'INFLUENCER' || user?.isInfluencer;
       const currentMode = user?.mode || 'AFFILIATE';
-      setClaims(claimsList.filter((c: any) => c.status === 'APPROVED' && c.userMode === currentMode));
+      setClaims(claimsList.filter((c: any) => 
+        c.status === 'APPROVED' && 
+        (isInfluencerUser ? (c.userMode === 'AFFILIATE' || c.userMode === 'INFLUENCER') : c.userMode === currentMode)
+      ));
     } catch (err) {
       toast.error(t('toast_load_claims_error', 'links'));
     } finally {

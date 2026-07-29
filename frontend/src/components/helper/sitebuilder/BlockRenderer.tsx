@@ -1220,7 +1220,52 @@ function SliderBlock({ id, content, isEditor, resolveUrl }: SliderBlockProps) {
   );
 }
 
-// --------------- Video Block Component with custom play button in center ---------------
+// Helper to parse YouTube or Vimeo video URLs
+function getVideoEmbedUrl(rawUrl?: string, options: { autoplay?: boolean; loop?: boolean; muted?: boolean; controls?: boolean } = {}) {
+  if (!rawUrl) return null;
+  const url = rawUrl.trim();
+
+  // YouTube pattern (watch?v=, youtu.be/, shorts/, embed/)
+  const ytRegExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|shorts\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const ytMatch = url.match(ytRegExp);
+
+  if (ytMatch && ytMatch[2] && ytMatch[2].length === 11) {
+    const videoId = ytMatch[2];
+    const params = new URLSearchParams();
+    if (options.autoplay) params.append('autoplay', '1');
+    if (options.muted || options.autoplay) params.append('mute', '1');
+    if (options.loop) {
+      params.append('loop', '1');
+      params.append('playlist', videoId);
+    }
+    if (options.controls === false) params.append('controls', '0');
+    params.append('rel', '0');
+    params.append('enablejsapi', '1');
+    return {
+      type: 'youtube',
+      embedUrl: `https://www.youtube.com/embed/${videoId}?${params.toString()}`
+    };
+  }
+
+  // Vimeo pattern
+  const vimeoRegExp = /(?:vimeo\.com\/|player\.vimeo\.com\/video\/)([0-9]+)/;
+  const vimeoMatch = url.match(vimeoRegExp);
+
+  if (vimeoMatch && vimeoMatch[1]) {
+    const videoId = vimeoMatch[1];
+    const params = new URLSearchParams();
+    if (options.autoplay) params.append('autoplay', '1');
+    if (options.muted || options.autoplay) params.append('muted', '1');
+    if (options.loop) params.append('loop', '1');
+    return {
+      type: 'vimeo',
+      embedUrl: `https://player.vimeo.com/video/${videoId}?${params.toString()}`
+    };
+  }
+
+  return null;
+}
+
 interface VideoBlockComponentProps {
   content: any;
   resolveUrl: (url?: string) => string;
@@ -1241,6 +1286,35 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
     setIsMuted(!!content.autoplay || !!content.muted);
     setShowUnmuteOverlay(!!content.autoplay);
   }, [content.autoplay, content.muted]);
+
+  const embedData = getVideoEmbedUrl(content.url, {
+    autoplay: !!content.autoplay,
+    loop: !!content.loop,
+    muted: !!content.muted,
+    controls: content.controls !== false,
+  });
+
+  if (embedData) {
+    return (
+      <div 
+        className="relative group overflow-hidden w-full flex justify-center rounded-2xl shadow-lg bg-black" 
+        style={{ 
+          width: content.width ? `${content.width}%` : '100%',
+          maxHeight: content.maxHeight ? `${content.maxHeight}px` : 'none',
+        }}
+      >
+        <div className="w-full aspect-video">
+          <iframe 
+            src={embedData.embedUrl} 
+            title="Video Player"
+            className="w-full h-full border-0 rounded-2xl"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        </div>
+      </div>
+    );
+  }
 
   const handlePlayToggle = () => {
     if (!videoRef.current) return;

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { 
   ShoppingBag, 
@@ -24,10 +25,12 @@ import {
   Headphones
 } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { shopifyApi, leadsApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { fr, ar } from 'date-fns/locale';
+import shopifyLogo from '../../assets/shopify-logo.svg';
 
 interface ShopifyOrder {
   id: string | number;
@@ -71,13 +74,59 @@ interface ShopifyOrder {
   }>;
 }
 
+// Utility functions to prevent runtime exceptions and accurately parse order totals
+export const toStatusString = (val: any, fallback = ''): string => {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object') {
+    return val.name || val.title || val.label || val.status || JSON.stringify(val);
+  }
+  return String(val);
+};
+
+export const extractOrderTotal = (order: any): number => {
+  if (!order) return 0;
+  
+  const possibleFields = [
+    order.total,
+    order.total_price,
+    order.price,
+    order.grand_total,
+    order.total_amount,
+    order.sub_total,
+    order.pricing?.total,
+    order.pricing?.total_price,
+    order.total_price_set?.shop_money?.amount,
+    order.current_total_price,
+  ];
+
+  for (const field of possibleFields) {
+    const num = Number(field);
+    if (!isNaN(num) && num > 0) {
+      return num;
+    }
+  }
+
+  if (Array.isArray(order.line_items) && order.line_items.length > 0) {
+    const itemsSum = order.line_items.reduce((sum: number, item: any) => {
+      const price = Number(item.price || item.unit_price || 0);
+      const qty = Number(item.quantity || 1);
+      return sum + (price * qty);
+    }, 0);
+    if (itemsSum > 0) return itemsSum;
+  }
+
+  return 0;
+};
+
 export default function ShopifyLeads() {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
 
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const currentMode = searchParams.get('mode')?.toUpperCase() === 'AFFILIATE' ? 'AFFILIATE' : 'SELLER';
+  const currentMode = (searchParams.get('mode')?.toUpperCase() || user?.mode || 'SELLER') === 'AFFILIATE' ? 'AFFILIATE' : 'SELLER';
 
   const [orders, setOrders] = useState<ShopifyOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,10 +197,11 @@ export default function ShopifyLeads() {
     setLoadingProducts(true);
     try {
       const res = await leadsApi.getMyProducts({ mode: currentMode });
-      const rawProds = res.data?.data || res.data || [];
-      setProducts(Array.isArray(rawProds) ? rawProds : []);
-      if (rawProds.length > 0) {
-        setSelectedProductId(rawProds[0].id);
+      const rawProds = res.data?.data?.products || res.data?.products || res.data?.data || res.data || [];
+      const prodsList = Array.isArray(rawProds) ? rawProds : [];
+      setProducts(prodsList);
+      if (prodsList.length > 0) {
+        setSelectedProductId(prodsList[0].id);
       }
     } catch (err) {
       console.error('Error fetching inventory products:', err);
@@ -178,7 +228,7 @@ export default function ShopifyLeads() {
         phone: getCustomerPhone(o),
         city: o.shipping_address?.city || o.billing_address?.city || '',
         address: o.shipping_address?.address1 || o.billing_address?.address1 || '',
-        total: Number(o.total_price || 0),
+        total: extractOrderTotal(o),
         currency: o.currency || 'MAD',
       }));
 
@@ -227,9 +277,9 @@ export default function ShopifyLeads() {
   };
 
   const getTotalAmount = (order: ShopifyOrder) => {
-    const val = order.total_price ?? 0;
+    const val = extractOrderTotal(order);
     const currency = order.currency || 'MAD';
-    return `${Number(val).toLocaleString()} ${currency}`;
+    return `${val.toLocaleString()} ${currency}`;
   };
 
   const formatDate = (dateStr: string) => {
@@ -248,25 +298,25 @@ export default function ShopifyLeads() {
     const query = searchTerm.toLowerCase();
 
     const matchesSearch = ref.includes(query) || name.includes(query) || phone.includes(query);
-    const matchesPayment = paymentFilter === 'ALL' || (order.financial_status || 'pending').toUpperCase() === paymentFilter.toUpperCase();
-    const matchesShipping = shippingFilter === 'ALL' || (order.fulfillment_status || 'unfulfilled').toUpperCase() === shippingFilter.toUpperCase();
+    const matchesPayment = paymentFilter === 'ALL' || toStatusString(order.financial_status, 'pending').toUpperCase() === paymentFilter.toUpperCase();
+    const matchesShipping = shippingFilter === 'ALL' || toStatusString(order.fulfillment_status, 'unfulfilled').toUpperCase() === shippingFilter.toUpperCase();
 
     return matchesSearch && matchesPayment && matchesShipping;
   });
 
   // Calculate Statistics
   const totalOrdersCount = orders.length;
-  const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.total_price) || 0), 0);
-  const unfulfilledCount = orders.filter(o => !o.fulfillment_status || o.fulfillment_status.toLowerCase() === 'unfulfilled').length;
-  const pendingPaymentCount = orders.filter(o => (o.financial_status || 'pending').toLowerCase() !== 'paid').length;
+  const totalRevenue = orders.reduce((sum, o) => sum + extractOrderTotal(o), 0);
+  const unfulfilledCount = orders.filter(o => !o.fulfillment_status || toStatusString(o.fulfillment_status).toLowerCase() === 'unfulfilled').length;
+  const pendingPaymentCount = orders.filter(o => toStatusString(o.financial_status, 'pending').toLowerCase() !== 'paid').length;
 
   return (
     <div dir={isRtl ? 'rtl' : 'ltr'} className="space-y-6 pt-4 pb-12 animate-in fade-in duration-300">
       {/* Page Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-gradient-to-br from-emerald-500 to-teal-700 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-emerald-500/20 ring-4 ring-white">
-            SF
+          <div className="w-14 h-14 rounded-2xl p-2.5 bg-[#95BF47]/15 flex items-center justify-center shadow-lg shadow-emerald-500/20 border border-[#95BF47]/30 shrink-0">
+            <img src={shopifyLogo} alt="Shopify" className="w-full h-full object-contain" />
           </div>
           <div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none uppercase">
@@ -569,21 +619,22 @@ export default function ShopifyLeads() {
       </div>
 
       {/* Order Details Modal */}
-      {selectedOrder && (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
+      {selectedOrder && createPortal(
+        <div data-modal-portal style={{ zIndex: 2147483647 }} className="fixed inset-0 flex items-center justify-center p-4">
           <div 
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
+            data-modal-backdrop
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
             onClick={() => setSelectedOrder(null)}
           />
           <div 
+            data-modal-content
             className="relative z-10 bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 cursor-default flex flex-col max-h-[90vh]"
-            style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
           >
             {/* Modal Header */}
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black">
-                  SF
+                <div className="w-10 h-10 rounded-xl p-1.5 bg-[#95BF47]/15 flex items-center justify-center border border-[#95BF47]/30 shrink-0">
+                  <img src={shopifyLogo} alt="Shopify" className="w-full h-full object-contain" />
                 </div>
                 <div>
                   <h3 className="text-lg font-black text-slate-900">
@@ -693,17 +744,20 @@ export default function ShopifyLeads() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Push to Call Center Product Selection Modal */}
-      {isPushModalOpen && (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
+      {isPushModalOpen && createPortal(
+        <div data-modal-portal style={{ zIndex: 2147483647 }} className="fixed inset-0 flex items-center justify-center p-4">
           <div 
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
+            data-modal-backdrop
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
             onClick={() => !isPushing && setIsPushModalOpen(false)}
           />
           <div 
+            data-modal-content
             className="relative z-10 bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]"
           >
             {/* Modal Header */}
@@ -839,7 +893,8 @@ export default function ShopifyLeads() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

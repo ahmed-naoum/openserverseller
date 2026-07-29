@@ -1,5 +1,5 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { productsApi, chatApi, influencerApi, uploadApi, BACKEND_URL } from '../../lib/api';
@@ -25,6 +25,8 @@ import {
   X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+// ProductDetail component handles header, carousel, pricing and tabs
 
 function DetailImageCarousel({ images, alt }: { images: { imageUrl: string }[]; alt: string }) {
   const [current, setCurrent] = useState(0);
@@ -52,23 +54,25 @@ function DetailImageCarousel({ images, alt }: { images: { imageUrl: string }[]; 
     );
   }
 
+  const [isZoomed, setIsZoomed] = useState(false);
+
   return (
-    <div
-      className="relative flex gap-4 h-full w-full"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <div className="flex-1 relative aspect-square overflow-hidden rounded-3xl group bg-white border border-slate-50">
+    <div className="flex flex-col gap-3 w-full">
+      <div 
+        className="relative w-full aspect-square overflow-hidden group bg-slate-50 border-y border-slate-100 transition-all duration-300"
+        onMouseEnter={() => setIsZoomed(true)}
+        onMouseLeave={() => setIsZoomed(false)}
+      >
         <AnimatePresence mode="wait">
           <motion.img
             key={current}
             src={images[current]?.imageUrl}
             alt={`${alt} ${current + 1}`}
-            initial={{ opacity: 0, scale: 1.05 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.4 }}
-            className="absolute inset-0 w-full h-full object-contain p-2"
+            initial={{ opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: isZoomed ? 1.06 : 1 }}
+            exit={{ opacity: 0, scale: 1.03 }}
+            transition={{ duration: 0.35, ease: "easeOut" }}
+            className="absolute inset-0 w-full h-full object-cover"
           />
         </AnimatePresence>
 
@@ -76,24 +80,37 @@ function DetailImageCarousel({ images, alt }: { images: { imageUrl: string }[]; 
           <>
             <button
               onClick={() => setCurrent(prev => (prev - 1 + count) % count)}
-              className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 shadow-lg flex items-center justify-center text-slate-700 hover:text-[#21c55d] transition-all opacity-0 group-hover:opacity-100 z-10"
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/90 backdrop-blur-md shadow-md flex items-center justify-center text-slate-700 hover:text-[#FF6B4A] hover:scale-110 transition-all opacity-0 group-hover:opacity-100 z-10 border border-white/60"
             >
-              <ChevronLeft size={20} />
+              <ChevronLeft size={18} />
             </button>
             <button
               onClick={() => setCurrent(prev => (prev + 1) % count)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 shadow-lg flex items-center justify-center text-slate-700 hover:text-[#21c55d] transition-all opacity-0 group-hover:opacity-100 z-10"
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/90 backdrop-blur-md shadow-md flex items-center justify-center text-slate-700 hover:text-[#FF6B4A] hover:scale-110 transition-all opacity-0 group-hover:opacity-100 z-10 border border-white/60"
             >
-              <ChevronRight size={20} />
+              <ChevronRight size={18} />
             </button>
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
-              {images.map((_, i) => (
-                <div key={i} className={`w-1.5 h-1.5 rounded-full transition-all ${i === current ? 'bg-slate-800 w-3' : 'bg-slate-300'}`} />
-              ))}
-            </div>
           </>
         )}
       </div>
+
+      {count > 1 && (
+        <div className="flex items-center justify-center gap-2 overflow-x-auto px-4 py-1">
+          {images.map((img, i) => (
+            <button
+              key={i}
+              onClick={() => setCurrent(i)}
+              className={`relative w-12 h-12 rounded-xl overflow-hidden border-2 transition-all duration-200 shrink-0 ${
+                i === current 
+                  ? 'border-[#FF6B4A] scale-105 shadow-md shadow-orange-500/20' 
+                  : 'border-slate-200 opacity-60 hover:opacity-100 hover:border-slate-300'
+              }`}
+            >
+              <img src={img.imageUrl} alt="" className="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -349,7 +366,7 @@ export default function ProductDetail() {
       return product.influencerPriceMad || product.retailPriceMad;
     }
     if (user?.mode === 'AFFILIATE' && product.visibility?.includes('AFFILIATE')) {
-      return product.affiliatePriceMad || product.retailPriceMad;
+      return product.commissionMad > 0 ? product.commissionMad : Math.round((product.retailPriceMad || 0) * 0.1 * 100) / 100;
     }
     return product.retailPriceMad;
   };
@@ -398,52 +415,71 @@ export default function ProductDetail() {
           
           {/* Right Column: Sticky Product Card */}
           <div className="w-full lg:w-4/12 lg:sticky lg:top-24 space-y-4 shrink-0">
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col relative overflow-hidden">
+            <div className="group bg-white rounded-3xl shadow-sm border border-slate-100 flex flex-col relative overflow-hidden">
               
-              {/* Product Info Header */}
-              <div className="w-full flex items-start justify-between mb-4">
-                <div className={textAlign}>
-                  <p className="text-[10px] font-bold text-slate-500 mb-1">
-                    {product.category && (
-                      language === 'ar' ? product.category.nameAr || product.category.nameFr :
-                      language === 'en' ? product.category.nameEn || product.category.nameFr :
-                      product.category.nameFr
-                    )}
-                  </p>
-                  <h1 className="text-2xl font-black text-slate-900 leading-none font-arabic">
-                    {language === 'ar' ? product.nameAr :
-                     language === 'en' ? product.nameEn || product.nameFr :
-                     product.nameFr || product.nameAr}
-                  </h1>
-                </div>
-                <div className="flex flex-col gap-1 shrink-0 items-start">
-                  <span className="px-3 py-1 bg-[#21c55d] text-white text-[9px] font-black rounded-full flex items-center gap-1.5 shadow-sm shadow-green-500/20">
+              {/* Main Image - Full Bleed Top */}
+              <div className="w-full relative">
+                {/* Floating Badges */}
+                <div className="absolute top-3 left-3 right-3 z-20 flex items-center justify-between pointer-events-none">
+                  {product.category ? (
+                    <span className="px-3 py-1 bg-white/80 backdrop-blur-md text-slate-700 text-[10px] font-bold rounded-full border border-white/60 shadow-sm pointer-events-auto">
+                      {language === 'ar' ? product.category.nameAr || product.category.nameFr :
+                       language === 'en' ? product.category.nameEn || product.category.nameFr :
+                       product.category.nameFr}
+                    </span>
+                  ) : <div />}
+                  <span className="px-3 py-1 bg-[#21c55d] text-white text-[9px] font-black rounded-full flex items-center gap-1.5 shadow-sm shadow-green-500/20 pointer-events-auto">
                     {t('pd_available', 'marketplace')} <div className="w-1.5 h-1.5 rounded-full bg-white" />
                   </span>
                 </div>
+
+                <DetailImageCarousel images={product.images || []} alt={language === 'ar' ? product.nameAr : product.nameFr} />
               </div>
 
-              {/* Main Image */}
-              <div className="w-full flex items-center justify-center my-4">
-                 <div className="w-full aspect-square max-w-[320px]">
-                   <DetailImageCarousel images={product.images || []} alt={language === 'ar' ? product.nameAr : product.nameFr} />
-                 </div>
-              </div>
-
-              {/* Footer Row */}
-              <div className="w-full flex items-end justify-between mt-4">
-                <div className="flex flex-col gap-1.5">
-                  <span className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-slate-600 text-[10px] font-bold rounded-lg border border-slate-100 w-fit">
-                    <Package size={12} className="text-slate-400" /> SKU: {product.sku}
+              {/* Product Info & Pricing Body */}
+              <div className="p-5 flex flex-col gap-3.5">
+                {/* Product Title & SKU */}
+                <div className={textAlign}>
+                  <h1 className="text-2xl font-black text-[#232863] leading-snug font-arabic break-words">
+                    {language === 'ar' ? (product.nameAr || product.nameFr) :
+                     language === 'en' ? (product.nameEn || product.nameFr) :
+                     (product.nameFr || product.nameAr)}
+                  </h1>
+                  <span className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 px-2.5 py-1 rounded-md border border-slate-100 w-fit">
+                    <Package size={11} className="text-slate-400" /> SKU: {product.sku}
                   </span>
                 </div>
-                
-                <div className={textAlign}>
-                  <span className="text-[10px] font-bold text-slate-500 block mb-0.5">{t('pd_price', 'marketplace')}</span>
-                  <div className="flex items-baseline gap-1 text-slate-800 justify-start">
-                    <span className="text-[28px] leading-none font-black text-[#232863]">{displayPrice}</span>
-                    <span className="text-sm font-bold text-[#232863]">{t('pd_currency', 'marketplace')}</span>
-                  </div>
+
+                {/* Footer Pricing Row */}
+                <div className="w-full">
+                  {user?.mode === 'AFFILIATE' && product.visibility?.includes('AFFILIATE') ? (
+                    <div className="bg-gradient-to-r rtl:bg-gradient-to-l from-emerald-50/70 to-orange-50/70 rounded-2xl p-3.5 border border-emerald-100/80 flex items-center justify-between gap-4 w-full shadow-sm">
+                      <div>
+                        <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest block mb-1">
+                          {language === 'ar' ? 'عمولة المسوق' : language === 'en' ? 'Affiliate Commission' : 'Commission Affilié'}
+                        </span>
+                        <div className="text-2xl font-black text-emerald-600 leading-none">
+                          +{displayPrice} <span className="text-xs font-bold text-emerald-600/70">{t('pd_currency', 'marketplace')}</span>
+                        </div>
+                      </div>
+                      <div className="text-right border-l border-slate-200/80 pl-4 rtl:border-r rtl:border-l-0 rtl:pr-4 rtl:pl-0">
+                        <span className="text-[10px] font-black text-[#FF6B4A] uppercase tracking-widest block mb-1">
+                          {language === 'ar' ? 'سعر البيع' : language === 'en' ? 'Selling Price' : 'Prix de Vente'}
+                        </span>
+                        <div className="text-2xl font-black text-[#FF6B4A] leading-none">
+                          {product.affiliatePriceMad || product.retailPriceMad} <span className="text-xs font-bold text-[#FF6B4A]/70">{t('pd_currency', 'marketplace')}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={textAlign}>
+                      <span className="text-[10px] font-bold text-slate-500 block mb-0.5">{t('pd_price', 'marketplace')}</span>
+                      <div className="flex items-baseline gap-1 text-slate-800 justify-start">
+                        <span className="text-[28px] leading-none font-black text-[#232863]">{displayPrice}</span>
+                        <span className="text-sm font-bold text-[#232863]">{t('pd_currency', 'marketplace')}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

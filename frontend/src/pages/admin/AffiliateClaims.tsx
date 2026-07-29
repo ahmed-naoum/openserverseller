@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { adminApi, uploadApi, customProductsApi } from '../../lib/api';
+import { adminApi, uploadApi, customProductsApi, BACKEND_URL, getFileUrl } from '../../lib/api';
 import { 
   CheckCircle2, 
   XCircle, 
@@ -17,7 +17,8 @@ import {
   AlertCircle,
   Star,
   Image as ImageIcon,
-  MessageSquare
+  MessageSquare,
+  Download
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -48,7 +49,48 @@ export default function AdminAffiliateClaims() {
   const [customStatusFilter, setCustomStatusFilter] = useState('PENDING');
   const [selectedImageForPreview, setSelectedImageForPreview] = useState<string | null>(null);
   const [selectedDocumentForPreview, setSelectedDocumentForPreview] = useState<{ url: string; type: 'image' | 'pdf' } | null>(null);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [actionInProgressId, setActionInProgressId] = useState<number | null>(null);
+
+  const getFullUrl = (url?: string | null) => getFileUrl(url);
+
+  useEffect(() => {
+    let createdUrl: string | null = null;
+    if (!selectedDocumentForPreview?.url) {
+      setPdfBlobUrl(null);
+      setPdfLoading(false);
+      return;
+    }
+
+    const fullUrl = getFullUrl(selectedDocumentForPreview.url);
+
+    if (selectedDocumentForPreview.type === 'pdf') {
+      setPdfLoading(true);
+      fetch(fullUrl)
+        .then(res => {
+          if (!res.ok) throw new Error('PDF load failed');
+          return res.blob();
+        })
+        .then(blob => {
+          const objectUrl = URL.createObjectURL(blob);
+          createdUrl = objectUrl;
+          setPdfBlobUrl(objectUrl);
+        })
+        .catch((err) => {
+          console.error("PDF fetch error:", err);
+        })
+        .finally(() => {
+          setPdfLoading(false);
+        });
+    }
+
+    return () => {
+      if (createdUrl) {
+        URL.revokeObjectURL(createdUrl);
+      }
+    };
+  }, [selectedDocumentForPreview]);
 
   // Clone Modal State
   const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
@@ -821,29 +863,55 @@ export default function AdminAffiliateClaims() {
               setSelectedDocumentForPreview(null);
             }}
           />
-          <div className="relative z-10 w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-2xl cursor-default flex flex-col" onClick={(e) => e.stopPropagation()} style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}>
-            <button 
-              onClick={() => {
-                setSelectedImageForPreview(null);
-                setSelectedDocumentForPreview(null);
-              }}
-              className="absolute top-4 right-4 p-2 bg-black/65 hover:bg-black/85 text-white rounded-full transition-all z-50"
-            >
-              <XCircle className="w-6 h-6" />
-            </button>
+          <div className="relative z-10 w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-2xl cursor-default flex flex-col bg-slate-900 shadow-2xl" onClick={(e) => e.stopPropagation()} style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}>
+            <div className="flex-shrink-0 p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/80 text-white z-50">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm text-slate-200">
+                  {selectedDocumentForPreview?.type === 'pdf' ? 'Aperçu Document PDF' : 'Aperçu Document'}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                {(selectedDocumentForPreview?.url || selectedImageForPreview) && (
+                  <a
+                    href={getFullUrl(selectedDocumentForPreview?.url || selectedImageForPreview || '')}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm"
+                  >
+                    <Download size={14} /> Ouvrir / Télécharger dans un nouvel onglet
+                  </a>
+                )}
+                <button 
+                  onClick={() => {
+                    setSelectedImageForPreview(null);
+                    setSelectedDocumentForPreview(null);
+                  }}
+                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-full transition-all"
+                >
+                  <XCircle className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
             
-            <div className="w-full h-full flex items-center justify-center bg-black/40 p-2 min-h-[50vh]">
-              {(selectedDocumentForPreview?.type === 'pdf') ? (
-                <iframe 
-                  src={selectedDocumentForPreview.url} 
-                  className="w-full h-[85vh] rounded-xl bg-white"
-                  title="PDF Preview"
-                />
+            <div className="w-full flex-1 flex items-center justify-center bg-black/40 p-2 min-h-[60vh] overflow-hidden">
+              {selectedDocumentForPreview?.type === 'pdf' ? (
+                pdfLoading ? (
+                  <div className="w-full h-[80vh] flex flex-col items-center justify-center text-slate-300 gap-3">
+                    <div className="w-10 h-10 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+                    <p className="text-xs font-semibold">Chargement du PDF...</p>
+                  </div>
+                ) : (
+                  <iframe 
+                    src={pdfBlobUrl || getFullUrl(selectedDocumentForPreview.url)} 
+                    className="w-full h-[80vh] rounded-xl bg-white border-0"
+                    title="PDF Preview"
+                  />
+                )
               ) : (
                 <img 
-                  src={selectedImageForPreview || selectedDocumentForPreview?.url} 
+                  src={getFullUrl(selectedImageForPreview || selectedDocumentForPreview?.url || '')} 
                   alt="Reference Agrandie" 
-                  className="max-w-full max-h-[85vh] object-contain shadow-2xl rounded-xl"
+                  className="max-w-full max-h-[80vh] object-contain shadow-2xl rounded-xl"
                 />
               )}
             </div>

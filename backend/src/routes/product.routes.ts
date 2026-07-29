@@ -58,6 +58,14 @@ async function grantProductToOwner(productId: number, ownerId: number, ownerMode
   });
   if (!product) return;
 
+  // Ensure Influencer users have mode = 'AFFILIATE'
+  if (ownerRole === 'INFLUENCER' && ownerUser.mode !== 'AFFILIATE') {
+    await prisma.user.update({
+      where: { id: ownerId },
+      data: { mode: 'AFFILIATE' }
+    });
+  }
+
   const targetMode = ownerMode === 'SELLER' ? 'SELLER' : 'AFFILIATE';
 
   if (ownerRole === 'INFLUENCER') {
@@ -69,46 +77,44 @@ async function grantProductToOwner(productId: number, ownerId: number, ownerMode
       where: { userId: ownerId, productId: product.id }
     });
 
-    const existingClaim = await prisma.affiliateClaim.findUnique({
+    await prisma.affiliateClaim.upsert({
       where: {
         userId_productId_userMode: {
           userId: ownerId,
           productId: product.id,
           userMode: 'AFFILIATE'
         }
+      },
+      update: {
+        status: 'APPROVED'
+      },
+      create: {
+        userId: ownerId,
+        productId: product.id,
+        status: 'APPROVED',
+        userMode: 'AFFILIATE'
       }
     });
-    if (!existingClaim) {
-      await prisma.affiliateClaim.create({
-        data: {
-          userId: ownerId,
-          productId: product.id,
-          status: 'APPROVED',
-          userMode: 'AFFILIATE'
-        }
-      });
-    }
 
     if (product.visibility.includes('INFLUENCER')) {
-      const existingClaimInfluencer = await prisma.affiliateClaim.findUnique({
+      await prisma.affiliateClaim.upsert({
         where: {
           userId_productId_userMode: {
             userId: ownerId,
             productId: product.id,
             userMode: 'INFLUENCER'
           }
+        },
+        update: {
+          status: 'APPROVED'
+        },
+        create: {
+          userId: ownerId,
+          productId: product.id,
+          status: 'APPROVED',
+          userMode: 'INFLUENCER'
         }
       });
-      if (!existingClaimInfluencer) {
-        await prisma.affiliateClaim.create({
-          data: {
-            userId: ownerId,
-            productId: product.id,
-            status: 'APPROVED',
-            userMode: 'INFLUENCER'
-          }
-        });
-      }
     }
   } else if (ownerRole === 'VENDOR') {
     if (targetMode === 'SELLER') {
@@ -117,25 +123,24 @@ async function grantProductToOwner(productId: number, ownerId: number, ownerMode
         where: { userId: ownerId, productId: product.id, userMode: 'AFFILIATE' }
       });
       
-      const existingClaim = await prisma.affiliateClaim.findUnique({
+      await prisma.affiliateClaim.upsert({
         where: {
           userId_productId_userMode: {
             userId: ownerId,
             productId: product.id,
             userMode: 'SELLER'
           }
+        },
+        update: {
+          status: 'APPROVED'
+        },
+        create: {
+          userId: ownerId,
+          productId: product.id,
+          status: 'APPROVED',
+          userMode: 'SELLER'
         }
       });
-      if (!existingClaim) {
-        await prisma.affiliateClaim.create({
-          data: {
-            userId: ownerId,
-            productId: product.id,
-            status: 'APPROVED',
-            userMode: 'SELLER'
-          }
-        });
-      }
 
       const existingInventory = await prisma.productInventory.findFirst({
         where: {
@@ -161,25 +166,24 @@ async function grantProductToOwner(productId: number, ownerId: number, ownerMode
         where: { userId: ownerId, productId: product.id }
       });
 
-      const existingClaim = await prisma.affiliateClaim.findUnique({
+      await prisma.affiliateClaim.upsert({
         where: {
           userId_productId_userMode: {
             userId: ownerId,
             productId: product.id,
             userMode: 'AFFILIATE'
           }
+        },
+        update: {
+          status: 'APPROVED'
+        },
+        create: {
+          userId: ownerId,
+          productId: product.id,
+          status: 'APPROVED',
+          userMode: 'AFFILIATE'
         }
       });
-      if (!existingClaim) {
-        await prisma.affiliateClaim.create({
-          data: {
-            userId: ownerId,
-            productId: product.id,
-            status: 'APPROVED',
-            userMode: 'AFFILIATE'
-          }
-        });
-      }
     }
   }
 }

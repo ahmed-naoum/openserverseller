@@ -41,7 +41,7 @@ function ProductCardCarousel({ images, alt }: { images: { imageUrl: string }[]; 
     }
     intervalRef.current = setInterval(() => {
       setCurrent(prev => (prev + 1) % count);
-    }, 4000);
+    }, 5000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [count, hovered]);
 
@@ -73,10 +73,10 @@ function ProductCardCarousel({ images, alt }: { images: { imageUrl: string }[]; 
           key={i}
           src={img.imageUrl}
           alt={`${alt} ${i + 1}`}
-          className="absolute inset-0 w-full h-full object-cover transition-all duration-500"
+          className="absolute inset-0 w-full h-full object-cover transition-all duration-[2000ms] ease-in-out"
           style={{
             opacity: i === current ? 1 : 0,
-            transform: i === current ? 'scale(1)' : 'scale(1.05)',
+            transform: i === current ? 'scale(1)' : 'scale(1.04)',
           }}
         />
       ))}
@@ -542,7 +542,7 @@ export default function PublicMarketplace() {
                         {/* Dramatic Lighting Overlay */}
                         <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 via-transparent to-black/10 opacity-0 group-hover/item:opacity-100 transition-opacity duration-500 pointer-events-none" />
 
-                        <div className="absolute top-5 left-5 right-5 flex items-start justify-between z-10">
+                        <div className="absolute top-5 left-5 right-5 flex items-start justify-between z-30">
                            <span className="px-4 py-2 bg-white/90 backdrop-blur-2xl rounded-2xl border border-white/50 text-[9px] font-black uppercase tracking-widest text-slate-800 shadow-xl shadow-black/5 transform transition-transform group-hover/item:-translate-y-1">
                              {product.category && (
                                language === 'ar' ? product.category.nameAr || product.category.nameFr :

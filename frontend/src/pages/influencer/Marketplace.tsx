@@ -18,6 +18,8 @@ const HoverMarquee = ({ text, className = "" }: { text: string, className?: stri
   const containerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLHeadingElement>(null);
   const [isOverflowing, setIsOverflowing] = useState(false);
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
 
   useLayoutEffect(() => {
     if (containerRef.current && textRef.current) {
@@ -27,26 +29,92 @@ const HoverMarquee = ({ text, className = "" }: { text: string, className?: stri
 
   if (isOverflowing) {
     return (
-      <div className="w-full overflow-hidden whitespace-nowrap relative group/text" dir="ltr">
-        <h3 className={`${className} block overflow-hidden text-ellipsis whitespace-nowrap group-hover:hidden text-left`} dir="ltr">
+      <div className="w-full overflow-hidden whitespace-nowrap relative group/text">
+        <h3 className={`${className} block overflow-hidden text-ellipsis whitespace-nowrap group-hover:hidden ${isRtl ? 'text-right' : 'text-left'}`} dir={isRtl ? "rtl" : "ltr"}>
           {text}
         </h3>
-        <div className="hidden group-hover:flex w-max animate-marquee-loop items-center">
-          <h3 className={`${className} pr-12`}>{text}</h3>
-          <h3 className={`${className} pr-12`}>{text}</h3>
+        <div className="hidden group-hover:flex w-max animate-marquee-loop items-center" dir="ltr">
+          <span className={`${className} inline-block pr-10`}>{text}</span>
+          <span className={`${className} inline-block pr-10`}>{text}</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div ref={containerRef} className="w-full overflow-hidden text-left" dir="ltr">
-      <h3 ref={textRef} className={`${className} whitespace-nowrap`}>
+    <div ref={containerRef} className={`w-full overflow-hidden ${isRtl ? 'text-right' : 'text-left'}`} dir={isRtl ? "rtl" : "ltr"}>
+      <h3 ref={textRef} className={`${className} whitespace-nowrap inline-block`}>
         {text}
       </h3>
     </div>
   );
 };
+
+function ProductCardCarousel({ images, alt }: { images?: Array<{ imageUrl?: string; url?: string }>; alt?: string }) {
+  const validImages = (images || []).map(img => typeof img === 'string' ? img : (img.imageUrl || img.url || '')).filter(Boolean);
+  const [current, setCurrent] = useState(0);
+  const count = validImages.length;
+
+  useEffect(() => {
+    if (count <= 1) return;
+    const timer = setInterval(() => {
+      setCurrent(prev => (prev + 1) % count);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [count]);
+
+  if (count === 0) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-slate-50">
+        <Package className="w-12 h-12 text-slate-200" />
+      </div>
+    );
+  }
+
+  if (count === 1) {
+    return (
+      <img
+        src={validImages[0]}
+        alt={alt || 'Product'}
+        loading="lazy"
+        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+      />
+    );
+  }
+
+  return (
+    <div className="relative w-full h-full overflow-hidden">
+      {validImages.map((src, i) => (
+        <img
+          key={`${src}-${i}`}
+          src={src}
+          alt={`${alt || 'Product'} ${i + 1}`}
+          loading={i === 0 ? "eager" : "lazy"}
+          className="absolute inset-0 w-full h-full object-cover transition-all duration-[2000ms] ease-in-out group-hover:scale-105"
+          style={{
+            opacity: i === current ? 1 : 0,
+            zIndex: i === current ? 1 : 0,
+            transform: i === current ? 'scale(1)' : 'scale(1.04)',
+          }}
+        />
+      ))}
+
+      {/* Navigation dots indicator */}
+      <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1 z-20 pointer-events-none">
+        {validImages.map((_, i) => (
+          <div
+            key={i}
+            className={`rounded-full transition-all duration-500 ${
+              i === current
+                ? 'w-4 h-1.5 bg-white shadow-md'
+                : 'w-1.5 h-1.5 bg-white/60'
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function InfluencerMarketplace() {
   const { t, language } = useLanguage();
@@ -156,6 +224,8 @@ export default function InfluencerMarketplace() {
 
   const [priceMin, setPriceMin] = useState('');
   const [priceMax, setPriceMax] = useState('');
+  const [commissionMin, setCommissionMin] = useState('');
+  const [commissionMax, setCommissionMax] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [limit, setLimit] = useState(10);
   const totalPages = Math.ceil(total / limit);
@@ -166,14 +236,14 @@ export default function InfluencerMarketplace() {
       ? (language === 'ar' ? 'لتجار الجملة' : 'Grossiste')
       : user?.mode === 'AFFILIATE' 
         ? (language === 'ar' ? 'للمسوقين بالعمولة' : 'Affilié') 
-        : (language === 'ar' ? 'للبائعين' : 'Vendeur');
+        : (language === 'ar' ? 'ل للبائعين' : 'Vendeur');
 
   const priceLabel = user?.role === 'INFLUENCER' 
     ? t('influencer_price', 'marketplace') 
     : user?.role === 'GROSSELLER'
       ? (language === 'ar' ? 'سعر الجملة' : 'Prix de Gros')
       : user?.mode === 'AFFILIATE' 
-        ? (language === 'ar' ? 'سعر المسوق بالعمولة' : 'Prix Affilié') 
+        ? (language === 'ar' ? 'عمولة المسوق' : 'Commission Affilié') 
         : (language === 'ar' ? 'سعر البيع' : 'Prix de Vente');
 
   useEffect(() => {
@@ -186,7 +256,7 @@ export default function InfluencerMarketplace() {
     return () => clearTimeout(timer);
   }, [search, searchParams, setSearchParams]);
 
-  useEffect(() => { fetchData(); }, [page, limit, JSON.stringify(selectedCategories), sortBy, searchParams.get('search'), priceMin, priceMax, statusFilter, user?.mode, user?.role]);
+  useEffect(() => { fetchData(); }, [page, limit, JSON.stringify(selectedCategories), sortBy, searchParams.get('search'), priceMin, priceMax, commissionMin, commissionMax, statusFilter, user?.mode, user?.role]);
 
   useEffect(() => {
     publicApi.categories().then(r => setCategories(r.data?.data?.categories || [])).catch(() => {});
@@ -207,14 +277,31 @@ export default function InfluencerMarketplace() {
       ]);
       let items = productsRes.data?.data?.products || [];
       const claimsDataRaw = Array.isArray(claimsRes.data) ? claimsRes.data : (claimsRes.data?.data || []);
+      const isInfluencerUser = user?.roleName === 'INFLUENCER' || user?.role === 'INFLUENCER' || user?.isInfluencer;
       const currentMode = user?.mode || 'AFFILIATE';
-      const claimsData = claimsDataRaw.filter((c: any) => c.userMode === currentMode);
+      const claimsData = claimsDataRaw.filter((c: any) => 
+        isInfluencerUser ? (c.userMode === 'AFFILIATE' || c.userMode === 'INFLUENCER') : c.userMode === currentMode
+      );
 
       if (selectedCategories.length > 0) items = items.filter((p: any) => p.categories?.some((c: any) => selectedCategories.includes(c.slug)));
 
       // Price filter
       if (priceMin) items = items.filter((p: any) => Number(p.influencerPriceMad || p.retailPriceMad) >= Number(priceMin));
       if (priceMax) items = items.filter((p: any) => Number(p.influencerPriceMad || p.retailPriceMad) <= Number(priceMax));
+
+      // Commission filter
+      if (commissionMin) {
+        items = items.filter((p: any) => {
+          const comm = p.commissionMad > 0 ? p.commissionMad : Math.round((p.retailPriceMad || 0) * 0.1 * 100) / 100;
+          return Number(comm) >= Number(commissionMin);
+        });
+      }
+      if (commissionMax) {
+        items = items.filter((p: any) => {
+          const comm = p.commissionMad > 0 ? p.commissionMad : Math.round((p.retailPriceMad || 0) * 0.1 * 100) / 100;
+          return Number(comm) <= Number(commissionMax);
+        });
+      }
 
       // Status filter
       if (statusFilter !== 'all') {
@@ -239,7 +326,7 @@ export default function InfluencerMarketplace() {
   const goToPage = (p: number) => { setPage(p); setSearchParams(prev => { prev.set('page', String(p)); return prev; }); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 
   const resetFilters = () => {
-    setSelectedCategories([]); setSortBy('newest'); setPriceMin(''); setPriceMax(''); setStatusFilter('all'); setPage(1);
+    setSelectedCategories([]); setSortBy('newest'); setPriceMin(''); setPriceMax(''); setCommissionMin(''); setCommissionMax(''); setStatusFilter('all'); setPage(1);
   };
 
   const handleOpenBuilderSelection = async (productId: number, productName: string) => {
@@ -297,18 +384,22 @@ export default function InfluencerMarketplace() {
     if (claim.status === 'PENDING') return <div className="w-full py-2.5 bg-amber-50 text-amber-600 rounded-xl text-xs font-black text-center border border-amber-200/50">{t('pending_approval', 'marketplace')}</div>;
     if (claim.status === 'REJECTED') return <div className="w-full py-2.5 bg-rose-50 text-rose-600 rounded-xl text-xs font-black text-center border border-rose-200/50">{t('request_rejected', 'marketplace')}</div>;
     if (claim.status === 'APPROVED') {
+      const role = user?.roleName || user?.role;
+      const showBuilder = role === 'SUPER_ADMIN' || role === 'HELPER' || role === 'VENDOR' || (role === 'INFLUENCER' && user?.canManageInfluencerLinks);
       return (
         <div className="flex items-center gap-2 w-full">
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              handleOpenBuilderSelection(product.id, product.nameFr || product.nameEn);
-            }}
-            className="p-2.5 bg-purple-50 text-purple-600 hover:text-white hover:bg-purple-600 border border-purple-100 hover:border-purple-600 rounded-xl transition-all shadow-sm flex items-center justify-center animate-pulse"
-            title={t('tooltip_builder', 'links') || "Constructeur de Page"}
-          >
-            <Wand2 className="w-4 h-4" />
-          </button>
+          {showBuilder && (
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpenBuilderSelection(product.id, product.nameFr || product.nameEn);
+              }}
+              className="p-2.5 bg-purple-50 text-purple-600 hover:text-white hover:bg-purple-600 border border-purple-100 hover:border-purple-600 rounded-xl transition-all shadow-sm flex items-center justify-center animate-pulse"
+              title={t('tooltip_builder', 'links') || "Constructeur de Page"}
+            >
+              <Wand2 className="w-4 h-4" />
+            </button>
+          )}
           <button 
             onClick={(e) => { 
               e.stopPropagation(); 
@@ -465,6 +556,7 @@ export default function InfluencerMarketplace() {
           categories={categories} selectedCategories={selectedCategories} setSelectedCategories={setSelectedCategories}
           sortBy={sortBy} setSortBy={setSortBy}
           priceMin={priceMin} setPriceMin={setPriceMin} priceMax={priceMax} setPriceMax={setPriceMax}
+          commissionMin={commissionMin} setCommissionMin={setCommissionMin} commissionMax={commissionMax} setCommissionMax={setCommissionMax}
           statusFilter={statusFilter} setStatusFilter={setStatusFilter}
           onReset={resetFilters} onPageReset={() => setPage(1)} t={t}
         />
@@ -473,6 +565,7 @@ export default function InfluencerMarketplace() {
           categories={categories} selectedCategories={selectedCategories} setSelectedCategories={setSelectedCategories}
           sortBy={sortBy} setSortBy={setSortBy}
           priceMin={priceMin} setPriceMin={setPriceMin} priceMax={priceMax} setPriceMax={setPriceMax}
+          commissionMin={commissionMin} setCommissionMin={setCommissionMin} commissionMax={commissionMax} setCommissionMax={setCommissionMax}
           statusFilter={statusFilter} setStatusFilter={setStatusFilter}
           onReset={resetFilters} onPageReset={() => setPage(1)} t={t}
           isMobile isOpen={mobileFiltersOpen} onClose={() => setMobileFiltersOpen(false)}
@@ -519,16 +612,12 @@ export default function InfluencerMarketplace() {
                       className="group bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col cursor-pointer"
                     >
                       <div className="relative aspect-[4/5] overflow-hidden bg-gradient-to-br from-slate-50 to-white">
-                        {product.images?.[0]?.imageUrl ? (
-                          <img src={product.images[0].imageUrl} alt={product.nameFr} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center"><Package className="w-12 h-12 text-slate-200" /></div>
-                        )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                        <ProductCardCarousel images={product.images} alt={product.nameFr} />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none z-10" />
 
                         {/* Category badge */}
                         {product.categories?.[0] && (
-                          <span className="absolute top-3 left-3 px-2.5 py-1 bg-white/90 backdrop-blur-md rounded-lg text-[9px] font-black tracking-wider text-slate-700 shadow-sm border border-white/50">
+                          <span className="absolute top-3 left-3 z-30 px-2.5 py-1 bg-white/90 backdrop-blur-md rounded-lg text-[9px] font-black tracking-wider text-slate-700 shadow-sm border border-white/50">
                             {language === 'ar' ? product.categories[0].nameAr || product.categories[0].nameFr :
                              language === 'en' ? product.categories[0].nameEn || product.categories[0].nameFr :
                              product.categories[0].nameFr}
@@ -536,7 +625,7 @@ export default function InfluencerMarketplace() {
                         )}
 
                         {/* Status dot */}
-                        <div className="absolute top-3 right-3">
+                        <div className="absolute top-3 right-3 z-30">
                           <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-black backdrop-blur-md shadow-sm border border-white/50 ${
                             status === 'claimed' ? 'bg-blue-500/90 text-white' :
                             status === 'pending' ? 'bg-amber-400/90 text-white' :
@@ -552,7 +641,7 @@ export default function InfluencerMarketplace() {
                         </div>
 
                         {/* Quick view */}
-                        <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0">
+                        <div className="absolute bottom-3 right-3 z-30 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0">
                           <button onClick={(e) => { e.stopPropagation(); navigate(`${basePath}/product/${product.id}`); }} className="w-9 h-9 flex items-center justify-center bg-white/90 backdrop-blur-md rounded-xl shadow-lg hover:scale-110 transition-all text-slate-600 hover:text-[#FF6B4A] border border-white/50" title={t('view_product_page', 'marketplace')}>
                             <Eye className="w-4 h-4" />
                           </button>
@@ -568,18 +657,38 @@ export default function InfluencerMarketplace() {
                           <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">SKU: {product.sku}</p>
                         </div>
                         <div className="mt-auto pt-3 border-t border-slate-50 space-y-2.5">
-                          <div className="flex justify-between items-center w-full">
-                            <div className="text-[8px] font-black text-[#FF6B4A] uppercase tracking-[0.15em]">
-                              {priceLabel}
+                          {user?.mode === 'AFFILIATE' ? (
+                            <div className="bg-gradient-to-r rtl:bg-gradient-to-l from-emerald-50/70 to-orange-50/70 rounded-xl p-2.5 border border-emerald-100/80 flex items-center justify-between">
+                              <div>
+                                <div className="text-[8px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1">
+                                  <TrendingUp size={10} className="text-emerald-500" />
+                                  {language === 'ar' ? 'عمولة المسوق' : language === 'en' ? 'Affiliate Commission' : 'Commission Affilié'}
+                                </div>
+                                <div className="text-lg font-black text-emerald-600 leading-tight">
+                                  +{(product.commissionMad > 0 ? product.commissionMad : Math.round((product.retailPriceMad || 0) * 0.1 * 100) / 100)} <span className="text-[10px] font-bold text-emerald-600/70">{language === 'ar' ? 'درهم' : 'MAD'}</span>
+                                </div>
+                              </div>
+                              <div className="text-right pl-2.5 rtl:pr-2.5 rtl:pl-0 border-l rtl:border-r rtl:border-l-0 border-slate-200/80">
+                                <div className="text-[8px] font-black text-[#FF6B4A] uppercase tracking-widest">
+                                  {language === 'ar' ? 'سعر البيع' : language === 'en' ? 'Selling Price' : 'Prix de Vente'}
+                                </div>
+                                <div className="text-sm font-black text-[#FF6B4A] leading-tight">
+                                  {product.affiliatePriceMad || product.retailPriceMad} <span className="text-[9px] font-bold text-[#FF6B4A]/70">{language === 'ar' ? 'درهم' : 'MAD'}</span>
+                                </div>
+                              </div>
                             </div>
-                            <div className="text-xl font-black text-[#232863] leading-none">
-                              {user?.role === 'INFLUENCER' 
-                                ? (product.influencerPriceMad || product.retailPriceMad)
-                                : user?.mode === 'AFFILIATE'
-                                  ? (product.affiliatePriceMad || product.retailPriceMad)
+                          ) : (
+                            <div className="flex justify-between items-center w-full">
+                              <div className="text-[8px] font-black text-[#FF6B4A] uppercase tracking-[0.15em]">
+                                {priceLabel}
+                              </div>
+                              <div className="text-xl font-black text-[#232863] leading-none">
+                                {user?.role === 'INFLUENCER' 
+                                  ? (product.influencerPriceMad || product.retailPriceMad)
                                   : product.retailPriceMad} <span className="text-[10px] font-bold text-slate-400">{language === 'ar' ? 'درهم' : 'MAD'}</span>
+                              </div>
                             </div>
-                          </div>
+                          )}
                           {renderClaimAction(product)}
                         </div>
                       </div>

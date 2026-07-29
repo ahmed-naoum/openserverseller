@@ -89,9 +89,12 @@ export default function EventMasterclass() {
           </div>
 
           <h1 className="text-2xl sm:text-4xl font-black text-[#0f172a] leading-tight tracking-tight">
-            كيفاش تسلم اللوجيستيك وتسيير الطلبيات لـ{' '}
-            <span className="inline-flex items-center gap-0.5 dir-ltr mx-1 font-black">
-              <span className="text-[#1D1D5B]">Sila</span><span className="text-[#F05023]">cod</span>
+            كيفاش تسلم اللوجيستيك وتسيير الطلبيات{' '}
+            <span className="inline-block whitespace-nowrap">
+              لـ{' '}
+              <bdi dir="ltr" style={{ unicodeBidi: 'isolate', direction: 'ltr' }} className="inline-flex items-center gap-0.5 font-black">
+                <span className="text-[#1D1D5B]">Sila</span><span className="text-[#F05023]">cod</span>
+              </bdi>
             </span>{' '}
             وتكبّر تجارتك الإلكترونية
           </h1>
@@ -341,12 +344,14 @@ export default function EventMasterclass() {
                 <span className="text-[11px] font-medium opacity-90">المقاعد محدودة لضمان الإجابة على كافة الأسئلة</span>
               </button>
 
-              <div className="text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-1.5 pt-2">
-                <span>🔒 البيانات ديالك آمنة 100% وغادي نتوصلوا بيها مباشرة فـ سيستم</span>
-                <span className="inline-flex items-center gap-0.5 dir-ltr font-black text-slate-700">
-                  <span className="text-[#1D1D5B]">Sila</span><span className="text-[#F05023]">cod</span>
+              <p className="text-center text-xs text-slate-400 font-medium pt-2">
+                🔒 البيانات ديالك آمنة 100% وغادي نتوصلوا بيها مباشرة فـ سيستم{' '}
+                <span className="inline-block whitespace-nowrap">
+                  <bdi dir="ltr" style={{ unicodeBidi: 'isolate', direction: 'ltr' }} className="inline-flex items-center gap-0.5 font-black text-slate-700">
+                    <span className="text-[#1D1D5B]">Sila</span><span className="text-[#F05023]">cod</span>
+                  </bdi>
                 </span>
-              </div>
+              </p>
             </form>
           </div>
         )}

@@ -62,5 +62,7 @@
   "toast_success": "Withdrawal request submitted successfully",
   "toast_insufficient": "Insufficient balance",
   "toast_min_amount": "Minimum amount is 200 MAD",
-  "toast_refreshed": "Data refreshed"
+  "toast_refreshed": "Data refreshed",
+  "min_withdrawal_badge": "Min. Withdrawal: 200 DH",
+  "min_withdrawal_tooltip": "Minimum balance of 200 DH required for withdrawal"
 }

@@ -118,7 +118,7 @@ const audioUpload = multer({
 
 const videoUpload = multer({
   storage,
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB limit for videos
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit for videos
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-m4v'];
     const allowedExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.m4v'];
@@ -465,6 +465,7 @@ router.post(
       const result = await cloudinary.uploader.upload(req.file.path, {
         resource_type: 'video',
         folder: 'silacod/videos',
+        format: 'webm',
       });
 
       // Cleanup local file

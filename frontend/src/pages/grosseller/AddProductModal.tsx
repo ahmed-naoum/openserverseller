@@ -62,6 +62,7 @@ export default function AddProductModal({ isOpen, onClose, onSuccess, isAdmin = 
     return {
       sku: editProduct?.sku || '',
       nameFr: editProduct?.nameFr || '',
+      nameEn: editProduct?.nameEn || '',
       nameAr: editProduct?.nameAr || '',
       description: editProduct?.description || '',
       categoryId: initialCategoryIds[0] || '',
@@ -240,11 +241,12 @@ export default function AddProductModal({ isOpen, onClose, onSuccess, isAdmin = 
 
     try {
       setLoading(true);
+      const isAffiliateExclusive = formData.visibility.includes('AFFILIATE') && !formData.visibility.includes('REGULAR');
       const payload = {
         ...formData,
         categoryIds: [Number(formData.categoryId)],
         baseCostMad: Number(formData.baseCostMad),
-        retailPriceMad: Number(formData.retailPriceMad),
+        retailPriceMad: isAffiliateExclusive ? (Number(formData.affiliatePriceMad) || 0) : Number(formData.retailPriceMad),
         affiliatePriceMad: formData.visibility.includes('AFFILIATE') && formData.affiliatePriceMad ? Number(formData.affiliatePriceMad) : null,
         influencerPriceMad: formData.visibility.includes('INFLUENCER') && formData.influencerPriceMad ? Number(formData.influencerPriceMad) : null,
         commissionMad: formData.visibility.includes('AFFILIATE') && formData.commissionMad ? Number(formData.commissionMad) : null,
@@ -430,7 +432,7 @@ export default function AddProductModal({ isOpen, onClose, onSuccess, isAdmin = 
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div className="space-y-1.5">
                         <label className="label">Nom (Français)</label>
                         <input
@@ -440,6 +442,16 @@ export default function AddProductModal({ isOpen, onClose, onSuccess, isAdmin = 
                           className="input"
                           value={formData.nameFr}
                           onChange={(e) => setFormData({ ...formData, nameFr: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="label">Name (English)</label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Organic Argan Oil"
+                          className="input"
+                          value={formData.nameEn}
+                          onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
                         />
                       </div>
                       <div className="space-y-1.5 text-right">
@@ -540,23 +552,25 @@ export default function AddProductModal({ isOpen, onClose, onSuccess, isAdmin = 
                     className="space-y-6"
                   >
                     <SectionHeader icon={Truck} title="Logistique & Prix" currentStep={2} maxSteps={totalSteps} />
-                    <div className="space-y-1.5">
-                      <label className="label flex items-center gap-1.5">
-                        <Layers size={14} className="text-secondary-500" />
-                        Prix Vendeur / Public (MAD)
-                      </label>
-                      <input
-                        type="number"
-                        required
-                        min="0"
-                        step="0.01"
-                        autoFocus
-                        onFocus={handleNumericFocus}
-                        className="input bg-secondary-50/20 border-secondary-200"
-                        value={formData.retailPriceMad}
-                        onChange={(e) => setFormData({ ...formData, retailPriceMad: e.target.value })}
-                      />
-                    </div>
+                    {!(formData.visibility.includes('AFFILIATE') && !formData.visibility.includes('REGULAR')) && (
+                      <div className="space-y-1.5">
+                        <label className="label flex items-center gap-1.5">
+                          <Layers size={14} className="text-secondary-500" />
+                          Prix Vendeur / Public (MAD)
+                        </label>
+                        <input
+                          type="number"
+                          required={!(formData.visibility.includes('AFFILIATE') && !formData.visibility.includes('REGULAR'))}
+                          min="0"
+                          step="0.01"
+                          autoFocus
+                          onFocus={handleNumericFocus}
+                          className="input bg-secondary-50/20 border-secondary-200"
+                          value={formData.retailPriceMad}
+                          onChange={(e) => setFormData({ ...formData, retailPriceMad: e.target.value })}
+                        />
+                      </div>
+                    )}
 
                     {(formData.visibility.includes('AFFILIATE') || formData.visibility.includes('INFLUENCER')) && (
                       <div className="space-y-6">

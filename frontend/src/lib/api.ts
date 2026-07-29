@@ -1,8 +1,16 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import toast from 'react-hot-toast';
 
-const API_URL = (import.meta.env as any).VITE_API_URL || (import.meta.env.PROD && typeof window !== 'undefined' ? `${window.location.origin}/api/v1` : 'http://localhost:3001/api/v1');
+export const API_URL = (import.meta.env as any).VITE_API_URL || (import.meta.env.PROD && typeof window !== 'undefined' ? `${window.location.origin}/api/v1` : 'http://localhost:3001/api/v1');
 export const BACKEND_URL = API_URL.replace('/api/v1', '');
+
+export const getFileUrl = (url?: string | null): string => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:')) return url;
+  
+  const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+  return `${BACKEND_URL}${cleanUrl}`;
+};
 
 export interface User {
   id: number;
@@ -733,6 +741,7 @@ export const youcanApi = {
   getStatus: () => api.get('/youcan/status'),
   syncNow: () => api.post('/youcan/sync'),
   toggleSync: (active: boolean) => api.post('/youcan/toggle-sync', { active }),
+  disconnect: () => api.post('/youcan/disconnect'),
   exchangeToken: (code: string) => api.post('/youcan/token', { code }),
   getOrders: (params?: any) => api.get('/youcan/orders', { params }),
   getCustomers: (params?: any) => api.get('/youcan/customers', { params }),
@@ -744,6 +753,7 @@ export const shopifyApi = {
   exchangeToken: (data: { code: string; shop: string }) => api.post('/shopify/token', data),
   saveToken: (data: { storeDomain: string; accessToken?: string }) => api.post('/shopify/save-token', data),
   toggleSync: (active: boolean) => api.post('/shopify/toggle-sync', { active }),
+  disconnect: () => api.post('/shopify/disconnect'),
   getOrders: (params?: any) => api.get('/shopify/orders', { params }),
 };
 
@@ -752,8 +762,19 @@ export const wooCommerceApi = {
   getAuthorizeUrl: (storeUrl: string) => api.post('/woocommerce/authorize-url', { storeUrl }),
   saveKeys: (data: { storeUrl: string; consumerKey: string; consumerSecret: string }) => api.post('/woocommerce/save-keys', data),
   toggleSync: (active: boolean) => api.post('/woocommerce/toggle-sync', { active }),
+  disconnect: () => api.post('/woocommerce/disconnect'),
   getOrders: (params?: any) => api.get('/woocommerce/orders', { params }),
   syncNow: () => api.post('/woocommerce/sync'),
+};
+
+export const googleSheetsApi = {
+  getStatus: () => api.get('/google-sheets/status'),
+  connect: (sheetUrl: string) => api.post('/google-sheets/connect', { sheetUrl }),
+  toggleSync: (active: boolean) => api.post('/google-sheets/toggle-sync', { active }),
+  disconnect: () => api.post('/google-sheets/disconnect'),
+  getOrders: (params?: any) => api.get('/google-sheets/orders', { params }),
+  syncNow: () => api.post('/google-sheets/sync-now'),
+  rotateToken: () => api.post('/google-sheets/rotate-token'),
 };
 
 export const eventApi = {

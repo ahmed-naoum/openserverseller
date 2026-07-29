@@ -2241,19 +2241,21 @@ router.post(
   })
 );
 
-// Get products the current user has bought or claimed
+// Get products the current user has bought, owned, or claimed
 router.get(
   '/my-products',
   authenticate,
   asyncHandler(async (req, res) => {
     const userId = req.user!.id;
     const { mode } = req.query;
+    const requestedMode = mode ? String(mode).toUpperCase() : null;
 
     let inventoryProducts: any[] = [];
+    let ownedProducts: any[] = [];
     let claimedProducts: any[] = [];
 
-    if (!mode || mode === 'SELLER') {
-      // Products from inventory (bought)
+    if (requestedMode === 'SELLER') {
+      // 1. Products from inventory (bought)
       inventoryProducts = await prisma.productInventory.findMany({
         where: { userId },
         include: {
@@ -2262,10 +2264,48 @@ router.get(
           },
         },
       });
-    }
 
-    if (!mode || mode === 'AFFILIATE') {
-      // Products from affiliate claims (claimed & approved)
+      // 2. Products created/owned by vendor
+      ownedProducts = await prisma.product.findMany({
+        where: { ownerId: userId },
+        include: { images: { where: { isPrimary: true }, take: 1 } },
+      });
+
+      // 3. Claims specifically in SELLER mode
+      claimedProducts = await prisma.affiliateClaim.findMany({
+        where: { userId, status: 'APPROVED', userMode: 'SELLER' },
+        include: {
+          product: {
+            include: { images: { where: { isPrimary: true }, take: 1 } },
+          },
+        },
+      });
+    } else if (requestedMode === 'AFFILIATE') {
+      // Products claimed specifically in AFFILIATE mode
+      claimedProducts = await prisma.affiliateClaim.findMany({
+        where: { userId, status: 'APPROVED', userMode: 'AFFILIATE' },
+        include: {
+          product: {
+            include: { images: { where: { isPrimary: true }, take: 1 } },
+          },
+        },
+      });
+    } else {
+      // All products if no mode parameter specified
+      inventoryProducts = await prisma.productInventory.findMany({
+        where: { userId },
+        include: {
+          product: {
+            include: { images: { where: { isPrimary: true }, take: 1 } },
+          },
+        },
+      });
+
+      ownedProducts = await prisma.product.findMany({
+        where: { ownerId: userId },
+        include: { images: { where: { isPrimary: true }, take: 1 } },
+      });
+
       claimedProducts = await prisma.affiliateClaim.findMany({
         where: { userId, status: 'APPROVED' },
         include: {
@@ -2292,6 +2332,19 @@ router.get(
       }
     }
 
+    for (const prod of ownedProducts) {
+      if (!productMap.has(prod.id)) {
+        productMap.set(prod.id, {
+          id: prod.id,
+          sku: prod.sku,
+          name: prod.nameFr || prod.nameAr,
+          image: prod.images[0]?.imageUrl || null,
+          retailPrice: prod.retailPriceMad,
+          source: 'OWNED',
+        });
+      }
+    }
+
     for (const claim of claimedProducts) {
       if (claim.product && !productMap.has(claim.productId)) {
         productMap.set(claim.productId, {
@@ -2301,6 +2354,26 @@ router.get(
           image: claim.product.images[0]?.imageUrl || null,
           retailPrice: claim.product.retailPriceMad,
           source: 'AFFILIATE_CLAIM',
+        });
+      }
+    }
+
+    // 4. Fallback ONLY if no mode parameter was specified
+    if (productMap.size === 0 && !requestedMode) {
+      const fallbackProducts = await prisma.product.findMany({
+        where: { isActive: true, status: 'APPROVED' },
+        take: 20,
+        include: { images: { where: { isPrimary: true }, take: 1 } },
+      });
+
+      for (const prod of fallbackProducts) {
+        productMap.set(prod.id, {
+          id: prod.id,
+          sku: prod.sku,
+          name: prod.nameFr || prod.nameAr,
+          image: prod.images[0]?.imageUrl || null,
+          retailPrice: prod.retailPriceMad,
+          source: 'CATALOG',
         });
       }
     }
@@ -2457,25 +2530,22 @@ router.post(
     }
 
     const isAffiliate = mode === 'AFFILIATE';
-    let referralLinkId: number | null = null;
+    
+    // Find or create referral link for this user & product
+    let refLink = await prisma.referralLink.findFirst({
+      where: { influencerId: userId, productId: product.id },
+    });
 
-    if (isAffiliate) {
-      // Find or create referral link for this affiliate & product
-      let refLink = await prisma.referralLink.findFirst({
-        where: { influencerId: userId, productId: product.id },
+    if (!refLink) {
+      refLink = await prisma.referralLink.create({
+        data: {
+          influencerId: userId,
+          productId: product.id,
+          code: `${isAffiliate ? 'aff' : 'sell'}-${userId}-${product.id}-${Date.now().toString(36)}`,
+        },
       });
-
-      if (!refLink) {
-        refLink = await prisma.referralLink.create({
-          data: {
-            influencerId: userId,
-            productId: product.id,
-            slug: `aff-${userId}-${product.id}-${Date.now().toString(36)}`,
-          },
-        });
-      }
-      referralLinkId = refLink.id;
     }
+    const referralLinkId = refLink.id;
 
     const sourceTag = source ? String(source).toUpperCase() : 'WOOCOMMERCE';
     let createdCount = 0;
@@ -2516,7 +2586,7 @@ router.post(
             source: sourceTag,
             sourceId: String(ord.id),
             sourceMode: isAffiliate ? 'AFFILIATE' : 'VENDOR',
-            productVariant: product.nameFr || product.nameAr || product.name || `Produit #${product.id}`,
+            productVariant: product.nameFr || product.nameAr || product.nameEn || `Produit #${product.id}`,
             requestedPriceMad: totalAmount > 0 ? totalAmount : null,
             referralLinkId,
             notes: `Leads ${sourceTag} | Commande #${orderRef} | ${product.nameFr || product.nameAr}`,

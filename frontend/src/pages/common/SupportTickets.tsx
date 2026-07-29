@@ -455,7 +455,7 @@ export default function SupportTickets() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setIsModalOpen(false)}
-                className="absolute inset-0 bg-slate-900/65 backdrop-blur-md"
+                className="absolute inset-0 bg-slate-900/60 transition-opacity"
               />
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}

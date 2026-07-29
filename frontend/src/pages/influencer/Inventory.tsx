@@ -59,8 +59,12 @@ export default function InfluencerInventory() {
       // Handle potential response structure differences
       const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
       // Filter out rejected claims
+      const isInfluencerUser = user?.roleName === 'INFLUENCER' || user?.role === 'INFLUENCER' || user?.isInfluencer;
       const currentMode = user?.mode || 'AFFILIATE';
-      const activeClaims = data.filter((c: any) => c.status !== 'REJECTED' && c.userMode === currentMode);
+      const activeClaims = data.filter((c: any) => 
+        c.status !== 'REJECTED' && 
+        (isInfluencerUser ? (c.userMode === 'AFFILIATE' || c.userMode === 'INFLUENCER') : c.userMode === currentMode)
+      );
       setClaims(activeClaims);
     } catch (error) {
       toast.error(t('error_loading', 'inventory', 'Impossible de charger vos produits'));
@@ -295,13 +299,19 @@ export default function InfluencerInventory() {
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <button 
-                            onClick={() => handleOpenBuilderSelection(claim.productId, claim.product.nameFr)}
-                            className="p-2 bg-purple-50 text-purple-600 hover:text-white hover:bg-purple-600 border border-purple-100 hover:border-purple-600 rounded-lg transition-all shadow-sm flex items-center justify-center animate-pulse"
-                            title={t('tooltip_builder', 'links') || "Constructeur de Page"}
-                          >
-                            <Wand2 className="w-3.5 h-3.5" />
-                          </button>
+                          {(() => {
+                            const role = user?.roleName || user?.role;
+                            const showBuilder = role === 'SUPER_ADMIN' || role === 'HELPER' || role === 'VENDOR' || (role === 'INFLUENCER' && user?.canManageInfluencerLinks);
+                            return showBuilder ? (
+                              <button 
+                                onClick={() => handleOpenBuilderSelection(claim.productId, claim.product.nameFr)}
+                                className="p-2 bg-purple-50 text-purple-600 hover:text-white hover:bg-purple-600 border border-purple-100 hover:border-purple-600 rounded-lg transition-all shadow-sm flex items-center justify-center animate-pulse"
+                                title={t('tooltip_builder', 'links') || "Constructeur de Page"}
+                              >
+                                <Wand2 className="w-3.5 h-3.5" />
+                              </button>
+                            ) : null;
+                          })()}
                           <button 
                             onClick={() => setLinksConfig({
                               isOpen: true,

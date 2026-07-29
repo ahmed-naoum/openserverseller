@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { translateNotification } from '../../utils/notificationTranslator';
-import { dashboardApi, chatApi, notificationsApi, adminApi } from '../../lib/api';
+import { dashboardApi, chatApi, notificationsApi, adminApi, youcanApi, shopifyApi, wooCommerceApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { useSocket } from '../../contexts/SocketContext';
 import AnnouncementBanner from '../common/AnnouncementBanner';
@@ -64,7 +64,8 @@ import {
   Mail,
   Target,
   Music,
-  Ghost
+  Ghost,
+  FileSpreadsheet
 } from 'lucide-react';
 
 const navigation = {
@@ -75,9 +76,10 @@ const navigation = {
       icon: Webhook,
       children: [
         { name: 'nav_youcan_connect', href: '/dashboard/integrations', icon: Link2 },
-        { name: 'nav_youcan_leads', href: '/dashboard/youcan-leads', icon: Globe },
-        { name: 'nav_shopify_leads', href: '/dashboard/shopify-leads', icon: ShoppingBag },
-        { name: 'nav_woocommerce_leads', href: '/dashboard/woocommerce-leads', icon: ShoppingBag },
+        { name: 'nav_youcan_leads', href: '/dashboard/youcan-leads', icon: Globe, integrationKey: 'youcan' },
+        { name: 'nav_shopify_leads', href: '/dashboard/shopify-leads', icon: ShoppingBag, integrationKey: 'shopify' },
+        { name: 'nav_woocommerce_leads', href: '/dashboard/woocommerce-leads', icon: ShoppingBag, integrationKey: 'woocommerce' },
+        { name: 'nav_google_sheets_leads', href: '/dashboard/google-sheets-leads', icon: FileSpreadsheet, integrationKey: 'googleSheets' },
       ]
     },
     { name: 'nav_inventory', href: '/dashboard/inventory', icon: Package },
@@ -341,6 +343,32 @@ export default function DashboardLayout() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
   const [toasts, setToasts] = useState<any[]>([]);
+
+  // Integration Connection Statuses for Dynamic Subnav
+  const [integrationsStatus, setIntegrationsStatus] = useState({
+    youcan: false,
+    shopify: false,
+    woocommerce: false,
+  });
+
+  useEffect(() => {
+    if (user?.role === 'VENDOR') {
+      Promise.all([
+        youcanApi.getStatus().catch(() => null),
+        shopifyApi.getStatus().catch(() => null),
+        wooCommerceApi.getStatus().catch(() => null),
+      ]).then(([youcanRes, shopifyRes, wooRes]) => {
+        const ycConnected = !!(youcanRes?.data?.data?.isConnected ?? youcanRes?.data?.isConnected);
+        const sfConnected = !!(shopifyRes?.data?.data?.isConnected ?? shopifyRes?.data?.isConnected);
+        const wcConnected = !!(wooRes?.data?.data?.isConnected ?? wooRes?.data?.isConnected);
+        setIntegrationsStatus({
+          youcan: ycConnected,
+          shopify: sfConnected,
+          woocommerce: wcConnected,
+        });
+      });
+    }
+  }, [user?.role, location.pathname]);
 
   // Confirmation Modal states
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
@@ -732,7 +760,14 @@ export default function DashboardLayout() {
     .map((item: any) => {
       // For groups with children, filter the children first
       if (item.children) {
-        const filteredChildren = item.children.filter((child: any) => isHelperItemAllowed(child));
+        const filteredChildren = item.children
+          .filter((child: any) => isHelperItemAllowed(child))
+          .filter((child: any) => {
+            if (child.integrationKey === 'youcan') return integrationsStatus.youcan;
+            if (child.integrationKey === 'shopify') return integrationsStatus.shopify;
+            if (child.integrationKey === 'woocommerce') return integrationsStatus.woocommerce;
+            return true;
+          });
         if (user?.role === 'HELPER' && filteredChildren.length === 0) return null;
         return { ...item, children: filteredChildren };
       }

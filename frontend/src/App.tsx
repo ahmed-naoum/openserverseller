@@ -58,6 +58,7 @@ import VendorDomains from './pages/vendor/Domains';
 import YouCanLeads from './pages/vendor/YouCanLeads';
 import ShopifyLeads from './pages/vendor/ShopifyLeads';
 import WooCommerceLeads from './pages/vendor/WooCommerceLeads';
+import GoogleSheetsLeads from './pages/vendor/GoogleSheetsLeads';
 import IntegrationsPage from './pages/vendor/IntegrationsPage';
 import PlatformSettings from './pages/admin/PlatformSettings';
 import SecurityFirewall from './pages/admin/SecurityFirewall';
@@ -353,6 +354,7 @@ function App() {
           <Route path="youcan-leads" element={<YouCanLeads />} />
           <Route path="shopify-leads" element={<ShopifyLeads />} />
           <Route path="woocommerce-leads" element={<WooCommerceLeads />} />
+          <Route path="google-sheets-leads" element={<GoogleSheetsLeads />} />
           <Route path="woocommerce-callback" element={<WooCommerceCallback />} />
 
           <Route path="wallet" element={<UserWallet />} />

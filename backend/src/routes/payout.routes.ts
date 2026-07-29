@@ -11,7 +11,7 @@ const router = Router();
 router.get(
   '/',
   authenticate,
-  authorize('SELLER', 'GROSSELLER', 'INFLUENCER', 'SUPER_ADMIN', 'FINANCE_ADMIN'),
+  authorize('SELLER', 'GROSSELLER', 'INFLUENCER', 'VENDOR', 'SUPER_ADMIN', 'FINANCE_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
     const { page = 1, limit = 20, status } = req.query;
 
@@ -60,8 +60,8 @@ router.get(
 router.post(
   '/',
   authenticate,
+  authorize('SELLER', 'GROSSELLER', 'INFLUENCER', 'VENDOR'),
   payoutRateLimiter,
-  authorize('SELLER', 'GROSSELLER', 'INFLUENCER'),
   [
     body('amountMad').isFloat({ min: 200 }),
     body('bankName').notEmpty(),

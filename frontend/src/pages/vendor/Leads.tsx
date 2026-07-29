@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { influencerApi, leadsApi } from '../../lib/api';
 import { ReferralLink, InfluencerCommission } from '../../types';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   Users, MousePointerClick, UserCheck, ShoppingCart,
   Filter, Search, Calendar,
@@ -124,9 +126,10 @@ const PAYMENT_SITUATION_BADGES: Record<string, { label: string; color: string }>
 
 export default function VendorLeads() {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const currentMode = searchParams.get('mode') || 'AFFILIATE';
+  const currentMode = searchParams.get('mode')?.toUpperCase() || user?.mode || 'AFFILIATE';
 
   const getStatusLabel = (status: string) => {
     return t(`all_status_badges.${status}`, 'leads', ALL_STATUS_BADGES[status]?.label || status);
@@ -1431,9 +1434,17 @@ export default function VendorLeads() {
       </div>
 
       {/* History Modal */}
-      {historyModal.isOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200">
+      {historyModal.isOpen && createPortal(
+        <div data-modal-portal style={{ zIndex: 2147483647 }} className="fixed inset-0 flex items-center justify-center p-4">
+          <div 
+            data-modal-backdrop
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
+            onClick={() => setHistoryModal(prev => ({ ...prev, isOpen: false }))}
+          />
+          <div 
+            data-modal-content
+            className="relative z-10 bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]"
+          >
             {/* Header */}
             <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100">
               <div className="flex-1">
@@ -1529,13 +1540,22 @@ export default function VendorLeads() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Duplicate Check Modal */}
-      {duplicateCheck.isOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[150] p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl border border-white/20 animate-in zoom-in-95 duration-300">
+      {duplicateCheck.isOpen && createPortal(
+        <div data-modal-portal style={{ zIndex: 2147483647 }} className="fixed inset-0 flex items-center justify-center p-4">
+          <div 
+            data-modal-backdrop
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-md cursor-pointer"
+            onClick={() => setDuplicateCheck(prev => ({ ...prev, isOpen: false }))}
+          />
+          <div 
+            data-modal-content
+            className="relative z-10 bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl border border-white/20 animate-in zoom-in-95 duration-300"
+          >
             <div className="p-8 border-b border-gray-100">
               <div className="flex items-center justify-between">
                 <div>
@@ -1748,13 +1768,22 @@ export default function VendorLeads() {
               })()}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Confirmation Modal */}
-      {confirmModal.isOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200">
+      {confirmModal.isOpen && createPortal(
+        <div data-modal-portal style={{ zIndex: 2147483647 }} className="fixed inset-0 flex items-center justify-center p-4">
+          <div 
+            data-modal-backdrop
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
+            onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+          />
+          <div 
+            data-modal-content
+            className="relative z-10 bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200"
+          >
             <div className="p-6 text-center">
               <div className={`w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center ${confirmModal.variant === 'danger' ? 'bg-red-50 text-red-500' : 'bg-influencer-50 text-influencer-600'}`}>
                 {confirmModal.variant === 'danger' ? <AlertCircle size={32} /> : <Headphones size={32} />}
@@ -1787,7 +1816,8 @@ export default function VendorLeads() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
