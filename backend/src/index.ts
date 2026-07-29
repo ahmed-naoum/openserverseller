@@ -358,6 +358,7 @@ const setupChatSocket = () => {
 setupChatSocket();
 
 export { io };
+export const getIO = () => io;
 
 import { BackupService } from './services/backup.service.js';
 

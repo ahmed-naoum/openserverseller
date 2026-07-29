@@ -337,8 +337,14 @@ export const publicApi = {
 };
 
 export const uploadApi = {
-  cloudinaryVideo: (data: FormData) => api.post('/upload/cloudinary-video', data, {
-    headers: { 'Content-Type': 'multipart/form-data' }
+  cloudinaryVideo: (data: FormData, onProgress?: (progress: number) => void) => api.post('/upload/cloudinary-video', data, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 600000, // 10 minutes for FFmpeg compression + Cloudinary chunked upload
+    onUploadProgress: (progressEvent) => {
+      if (onProgress && progressEvent.total) {
+        onProgress(Math.round((progressEvent.loaded * 100) / progressEvent.total));
+      }
+    },
   }),
   image: (data: FormData) => api.post('/upload/image', data, {
     headers: { 'Content-Type': 'multipart/form-data' }
@@ -431,6 +437,9 @@ export const adminApi = {
       autoAssignVendors,
       autoAssignInfluencers,
     }),
+  getHelperAffiliateStats: () => api.get('/admin/helpers/affiliate-stats'),
+  updateHelperAffiliateConfig: (id: number, data: { canManageAffiliateInvites?: boolean; helperCommissionPerDeliveredLead?: number }) =>
+    api.patch(`/admin/helpers/${id}/affiliate-config`, data),
   getPaymentMonitoring: () => api.get('/admin/payment-monitoring'),
   getUserPaymentMonitoring: (id: number) => api.get(`/admin/payment-monitoring/user/${id}`),
   bulkUpdatePaymentSituation: (data: { leadIds: number[]; situation: string }) => 

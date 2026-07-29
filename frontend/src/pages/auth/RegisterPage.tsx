@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { settingsApi } from '../../lib/api';
 import { Eye, EyeOff, User, Mail, Phone, Lock, Sparkles, Store, Link as LinkIcon } from 'lucide-react';
@@ -128,6 +128,8 @@ export default function RegisterPage() {
   const { language, t: tRaw } = useLanguage();
   const t = (key: string) => tRaw(key, 'register');
   const { pathname } = useLocation();
+  const [searchParams] = useSearchParams();
+  const refCode = searchParams.get('ref') || searchParams.get('referralCode') || undefined;
   const defaultRole = pathname.includes('/vendor') ? 'VENDOR' : 'INFLUENCER';
 
   const turnstileOptions = useMemo(() => ({
@@ -447,6 +449,7 @@ export default function RegisterPage() {
               phone: formData.phone || undefined,
               password: formData.password,
               fullName: formData.fullName,
+              ref: refCode,
               instagramUsername: formData.instagramUsername || undefined,
               tiktokUsername: formData.tiktokUsername || undefined,
               facebookUsername: formData.facebookUsername || undefined,
@@ -475,6 +478,7 @@ export default function RegisterPage() {
               password: formData.password,
               fullName: formData.fullName,
               role: 'VENDOR',
+              ref: refCode,
               cguAccepted: true,
               turnstileToken,
               sellingOnline: formData.sellingOnline || undefined,

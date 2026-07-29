@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSocket } from '../../contexts/SocketContext';
 import { helperApi, publicApi, uploadApi, adminApi } from '../../lib/api';
 import BlockRenderer, { EditorBlock, BlockType } from '../../components/helper/sitebuilder/BlockRenderer';
 import WhatsAppWidget, { IconRenderer } from '../../components/public/WhatsAppWidget';
@@ -53,7 +54,45 @@ export default function SiteBuilder() {
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [productData, setProductData] = useState<any>(null);
+  const { socket } = useSocket();
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadPipelineStage, setUploadPipelineStage] = useState<'vps_upload' | 'vps_compress' | 'cloudinary_upload' | 'vps_cleanup' | 'idle'>('idle');
+  const [stagePercentages, setStagePercentages] = useState({
+    vpsUpload: 0,
+    vpsCompress: 0,
+    cloudinaryUpload: 0,
+    vpsCleanup: 0,
+  });
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleStageProgress = (data: { stage: string; progress: number; message: string }) => {
+      setUploadProgressMsg(data.message);
+      if (data.stage === 'vps_compress') {
+        setUploadPipelineStage('vps_compress');
+        setStagePercentages(prev => ({ ...prev, vpsUpload: 100, vpsCompress: data.progress }));
+      } else if (data.stage === 'cloudinary_upload') {
+        setUploadPipelineStage('cloudinary_upload');
+        setStagePercentages(prev => ({ ...prev, vpsUpload: 100, vpsCompress: 100, cloudinaryUpload: data.progress }));
+      } else if (data.stage === 'vps_cleanup') {
+        setUploadPipelineStage('vps_cleanup');
+        setStagePercentages(prev => ({ ...prev, vpsUpload: 100, vpsCompress: 100, cloudinaryUpload: 100, vpsCleanup: data.progress }));
+      }
+    };
+
+    socket.on('upload-stage-progress', handleStageProgress);
+    return () => {
+      socket.off('upload-stage-progress', handleStageProgress);
+    };
+  }, [socket]);
+
+  const overallPercent = Math.min(100, Math.round(
+    stagePercentages.vpsUpload * 0.25 +
+    stagePercentages.vpsCompress * 0.35 +
+    stagePercentages.cloudinaryUpload * 0.30 +
+    stagePercentages.vpsCleanup * 0.10
+  ));
   const [uploadingAudioId, setUploadingAudioId] = useState<string | null>(null);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -382,24 +421,59 @@ export default function SiteBuilder() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 100 * 1024 * 1024) {
-      toast.error(`La vidéo dépasse la limite de 100 Mo (${(file.size / (1024 * 1024)).toFixed(1)} Mo). Veuillez choisir une vidéo plus légère.`);
+    const maxSizeBytes = 200 * 1024 * 1024; // 200MB limit
+    if (file.size > maxSizeBytes) {
+      toast.error(`La vidéo dépasse la limite de 200 Mo (${(file.size / (1024 * 1024)).toFixed(1)} Mo). Veuillez choisir une vidéo plus légère.`);
       return;
     }
 
     try {
       setIsUploading(true);
-      setUploadProgressMsg('Téléchargement & conversion WebM en cours (100 Mo max)...');
+      setUploadPipelineStage('vps_upload');
+      setStagePercentages({ vpsUpload: 0, vpsCompress: 0, cloudinaryUpload: 0, vpsCleanup: 0 });
+      const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      setUploadProgressMsg(`1/4 Envoi du fichier vers le serveur VPS (${fileSizeMB} Mo)...`);
       
       const formData = new FormData();
       formData.append('file', file);
-      const res = await uploadApi.cloudinaryVideo(formData);
-      updateBlockContent('url', res.data.data.url);
-      toast.success('Vidéo convertie en WebM et téléchargée avec succès !');
+      if (socket?.id) {
+        formData.append('socketId', socket.id);
+      }
+      
+      const res = await uploadApi.cloudinaryVideo(formData, (percent) => {
+        setStagePercentages(prev => ({ ...prev, vpsUpload: percent }));
+        if (percent < 100) {
+          const uploadedMB = ((file.size * (percent / 100)) / (1024 * 1024)).toFixed(1);
+          setUploadProgressMsg(`1/4 Envoi VPS live: ${percent}% (${uploadedMB} Mo / ${fileSizeMB} Mo)`);
+        } else {
+          setUploadProgressMsg('1/4 Envoi VPS terminé ! Lancement de la compression FFmpeg...');
+        }
+      });
+
+      // The HTTP response has arrived — set all stages to 100% and update video URL
+      setStagePercentages({ vpsUpload: 100, vpsCompress: 100, cloudinaryUpload: 100, vpsCleanup: 100 });
+      setUploadPipelineStage('vps_cleanup');
+      setUploadProgressMsg('4/4 Pipeline terminé avec succès !');
+
+      console.log('[Video Pipeline] Response:', JSON.stringify(res.data));
+      console.log('[Video Pipeline] selectedBlockId:', selectedBlockId);
+      console.log('[Video Pipeline] URL:', res.data?.data?.url);
+
+      if (res.data?.data?.url) {
+        updateBlockContent('url', res.data.data.url);
+      } else {
+        console.error('[Video Pipeline] ❌ No URL in response!', res.data);
+      }
+      toast.success('Vidéo optimisée, transmise et intégrée avec succès !');
+
+      // Keep success state visible for 2.5 seconds before resetting
+      await new Promise(r => setTimeout(r, 2500));
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || err?.message || 'Erreur lors du téléchargement de la vidéo');
+      toast.error(err?.response?.data?.message || err?.message || 'Erreur lors du traitement de la vidéo');
     } finally {
       setIsUploading(false);
+      setUploadPipelineStage('idle');
+      setStagePercentages({ vpsUpload: 0, vpsCompress: 0, cloudinaryUpload: 0, vpsCleanup: 0 });
       setUploadProgressMsg(''); 
     }
   };
@@ -804,24 +878,115 @@ export default function SiteBuilder() {
                     <div className="pt-2">
                       <div className="flex items-center justify-between mb-2">
                         <label className="block text-xs font-bold text-gray-500 uppercase">Uploader une vidéo</label>
-                        <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Max 100 Mo</span>
+                        <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Max 200 Mo</span>
                       </div>
                       <label className="relative flex flex-col items-center justify-center gap-3 p-5 border-2 border-dashed border-gray-200 rounded-2xl hover:border-orange-500 hover:bg-orange-50/40 cursor-pointer transition-all overflow-hidden group">
                         {isUploading ? (
-                          <div className="flex flex-col items-center justify-center py-2 space-y-3 w-full">
-                            {/* Modern Animated Ring Progress Spinner */}
-                            <div className="relative w-12 h-12 flex items-center justify-center">
-                              <div className="absolute inset-0 rounded-full border-4 border-orange-100"></div>
-                              <div className="absolute inset-0 rounded-full border-4 border-orange-500 border-t-transparent animate-spin"></div>
-                              <Upload className="w-5 h-5 text-orange-500 animate-pulse" />
+                          <div className="flex flex-col items-center justify-center py-2 space-y-3 w-full px-1">
+                            {/* Overall SVG Progress Ring */}
+                            <div className="relative w-16 h-16 flex items-center justify-center">
+                              <svg viewBox="0 0 72 72" className="w-16 h-16 transform -rotate-90 overflow-visible">
+                                <circle
+                                  cx="36"
+                                  cy="36"
+                                  r="28"
+                                  stroke="currentColor"
+                                  strokeWidth="4"
+                                  className="text-orange-100"
+                                  fill="transparent"
+                                />
+                                <circle
+                                  cx="36"
+                                  cy="36"
+                                  r="28"
+                                  stroke="currentColor"
+                                  strokeWidth="4"
+                                  className="text-orange-500 transition-all duration-300 ease-out"
+                                  fill="transparent"
+                                  strokeDasharray={2 * Math.PI * 28}
+                                  strokeDashoffset={2 * Math.PI * 28 * (1 - overallPercent / 100)}
+                                  strokeLinecap="round"
+                                />
+                              </svg>
+                              <span className="absolute font-black text-xs text-orange-600">
+                                {overallPercent}%
+                              </span>
                             </div>
-                            <div className="text-center space-y-1">
-                              <span className="block text-xs font-bold text-gray-800 animate-pulse">
-                                {uploadProgressMsg || 'Téléchargement & conversion...'}
+
+                            {/* Overall Progress Bar */}
+                            <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden border border-gray-200/60 p-0.5">
+                              <div 
+                                className="h-full bg-gradient-to-r from-orange-500 via-amber-500 to-emerald-500 transition-all duration-300 rounded-full"
+                                style={{ width: `${overallPercent}%` }}
+                              />
+                            </div>
+
+                            {/* Live Status Header */}
+                            <div className="text-center w-full bg-orange-50/80 p-2 rounded-xl border border-orange-100/80">
+                              <span className="block text-[11px] font-extrabold text-orange-950 leading-tight">
+                                {uploadProgressMsg || 'Traitement en cours...'}
                               </span>
-                              <span className="block text-[10px] font-semibold text-orange-600">
-                                Conversion WebM haute performance
-                              </span>
+                            </div>
+
+                            {/* Live 4-Step Pipeline Tracker */}
+                            <div className="w-full space-y-1.5 pt-1.5 border-t border-gray-100">
+                              {/* Step 1: Upload to VPS */}
+                              <div className="flex items-center justify-between text-[11px] font-semibold text-gray-700">
+                                <span className="flex items-center gap-1.5 truncate">
+                                  <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-extrabold ${
+                                    stagePercentages.vpsUpload >= 100 ? 'bg-emerald-500 text-white' : uploadPipelineStage === 'vps_upload' ? 'bg-orange-500 text-white animate-pulse' : 'bg-gray-200 text-gray-500'
+                                  }`}>
+                                    {stagePercentages.vpsUpload >= 100 ? '✓' : '1'}
+                                  </span>
+                                  Upload direct VPS
+                                </span>
+                                <span className="text-orange-600 font-bold">{stagePercentages.vpsUpload}%</span>
+                              </div>
+
+                              {/* Step 2: FFmpeg Local Compression */}
+                              <div className="flex items-center justify-between text-[11px] font-semibold text-gray-700">
+                                <span className="flex items-center gap-1.5 truncate">
+                                  <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-extrabold ${
+                                    stagePercentages.vpsCompress >= 100 ? 'bg-emerald-500 text-white' : uploadPipelineStage === 'vps_compress' ? 'bg-orange-500 text-white animate-pulse' : 'bg-gray-200 text-gray-500'
+                                  }`}>
+                                    {stagePercentages.vpsCompress >= 100 ? '✓' : '2'}
+                                  </span>
+                                  Compression FFmpeg VPS
+                                </span>
+                                <span className="text-orange-600 font-bold">
+                                  {stagePercentages.vpsUpload < 100 ? '0%' : `${stagePercentages.vpsCompress}%`}
+                                </span>
+                              </div>
+
+                              {/* Step 3: Cloudinary Chunked Upload */}
+                              <div className="flex items-center justify-between text-[11px] font-semibold text-gray-700">
+                                <span className="flex items-center gap-1.5 truncate">
+                                  <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-extrabold ${
+                                    stagePercentages.cloudinaryUpload >= 100 ? 'bg-emerald-500 text-white' : uploadPipelineStage === 'cloudinary_upload' ? 'bg-orange-500 text-white animate-pulse' : 'bg-gray-200 text-gray-500'
+                                  }`}>
+                                    {stagePercentages.cloudinaryUpload >= 100 ? '✓' : '3'}
+                                  </span>
+                                  Cloudinary Chunked Upload
+                                </span>
+                                <span className="text-orange-600 font-bold">
+                                  {stagePercentages.vpsCompress < 100 ? '0%' : `${stagePercentages.cloudinaryUpload}%`}
+                                </span>
+                              </div>
+
+                              {/* Step 4: VPS Automatic Cleanup */}
+                              <div className="flex items-center justify-between text-[11px] font-semibold text-gray-700">
+                                <span className="flex items-center gap-1.5 truncate">
+                                  <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-extrabold ${
+                                    stagePercentages.vpsCleanup >= 100 ? 'bg-emerald-500 text-white' : uploadPipelineStage === 'vps_cleanup' ? 'bg-emerald-500 text-white animate-pulse' : 'bg-gray-200 text-gray-500'
+                                  }`}>
+                                    {stagePercentages.vpsCleanup >= 100 ? '✓' : '4'}
+                                  </span>
+                                  Nettoyage automatique VPS
+                                </span>
+                                <span className={`font-bold ${stagePercentages.vpsCleanup >= 100 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                                  {stagePercentages.vpsCleanup >= 100 ? 'Effectué' : 'En attente'}
+                                </span>
+                              </div>
                             </div>
                           </div>
                         ) : (
@@ -834,7 +999,7 @@ export default function SiteBuilder() {
                                 Importer une vidéo locale
                               </span>
                               <span className="block text-[11px] text-gray-400 font-medium">
-                                MP4, WebM, MOV (Conversion WebM • Max 100 Mo)
+                                MP4, WebM, MOV (Max 200 Mo)
                               </span>
                             </div>
                           </>

@@ -37,6 +37,7 @@ export default function AdminFinance() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [roleFilter, setRoleFilter] = useState('ALL');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
   // Manual Adjustment State
@@ -214,12 +215,24 @@ export default function AdminFinance() {
   });
 
   const filteredPayouts = payouts.filter((p: any) => {
+    const roleName = (p.vendor?.role?.name || p.vendor?.role || '').toUpperCase();
     const matchesSearch = 
       p.bankName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.vendor?.profile?.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.vendor?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.ribAccount.includes(searchTerm);
     const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter;
-    return matchesSearch && matchesStatus;
+
+    let matchesRole = true;
+    if (roleFilter !== 'ALL') {
+      if (roleFilter === 'VENDOR') {
+        matchesRole = ['VENDOR', 'SELLER'].includes(roleName);
+      } else {
+        matchesRole = roleName === roleFilter;
+      }
+    }
+
+    return matchesSearch && matchesStatus && matchesRole;
   });
 
   const pendingPayouts = payouts.filter((p: any) => p.status === 'PENDING');
@@ -557,17 +570,34 @@ export default function AdminFinance() {
       <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm overflow-hidden">
         {/* Table Toolbar */}
         <div className="p-6 border-b border-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4 flex-1">
+          <div className="flex flex-wrap items-center gap-4 flex-1">
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input 
                 type="text"
-                placeholder="Rechercher par vendeur, RIB or banque..."
+                placeholder="Rechercher par vendeur, RIB ou banque..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-11 pr-4 py-2.5 bg-gray-50 border border-transparent focus:bg-white focus:border-violet-500 rounded-2xl text-sm font-medium transition-all outline-none"
               />
             </div>
+
+            {/* Account Type Filter */}
+            <div className="flex items-center gap-2">
+              <Filter size={16} className="text-gray-400" />
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="bg-gray-50 border border-gray-200 text-gray-700 text-xs font-bold rounded-2xl px-3 py-2 focus:outline-none focus:border-violet-500 cursor-pointer"
+              >
+                <option value="ALL">Tous les types de compte</option>
+                <option value="HELPER">✨ Helper / Affilié</option>
+                <option value="VENDOR">👤 Vendeur</option>
+                <option value="GROSSELLER">📦 Grossiste</option>
+                <option value="INFLUENCER">⭐ Influenceur</option>
+              </select>
+            </div>
+
             <div className="flex items-center gap-1 p-1 bg-gray-100/50 rounded-2xl border border-gray-100">
               {[
                 { id: 'ALL', label: 'Tous', icon: <History size={14}/> },
@@ -613,7 +643,8 @@ export default function AdminFinance() {
                     {selectedIds.length > 0 && <CheckCircle size={14} className="text-white" />}
                   </div>
                 </th>
-                <th className="py-4 px-6 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Vendeur</th>
+                <th className="py-4 px-6 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Utilisateur</th>
+                <th className="py-4 px-6 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Type</th>
                 <th className="py-4 px-6 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Détails Bancaires</th>
                 <th className="py-4 px-6 text-left text-xs font-black text-gray-400 uppercase tracking-widest text-center">Montant</th>
                 <th className="py-4 px-6 text-left text-xs font-black text-gray-400 uppercase tracking-widest text-center">Solde</th>
@@ -625,12 +656,12 @@ export default function AdminFinance() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    <td colSpan={6} className="p-8 text-center bg-gray-50/20">Chargement...</td>
+                    <td colSpan={8} className="p-8 text-center bg-gray-50/20">Chargement...</td>
                   </tr>
                 ))
               ) : filteredPayouts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-12 text-center text-gray-400 font-medium">Aucune donnée trouvée.</td>
+                  <td colSpan={8} className="p-12 text-center text-gray-400 font-medium">Aucune donnée trouvée.</td>
                 </tr>
               ) : (
                 filteredPayouts.map((payout: any) => (
@@ -653,10 +684,41 @@ export default function AdminFinance() {
                           {(payout.vendor?.profile?.fullName || 'U').split(' ').map((n:any) => n[0]).join('').toUpperCase()}
                         </div>
                         <div>
-                          <p className="text-sm font-bold text-gray-900">{payout.vendor?.profile?.fullName || 'Vendeur inconnu'}</p>
+                          <p className="text-sm font-bold text-gray-900">{payout.vendor?.profile?.fullName || 'Utilisateur inconnu'}</p>
                           <p className="text-[11px] text-gray-400 font-medium">{payout.vendor?.email}</p>
                         </div>
                       </div>
+                    </td>
+                    <td className="py-4 px-6">
+                      {(() => {
+                        const role = (payout.vendor?.role?.name || payout.vendor?.role || 'VENDOR').toUpperCase();
+                        if (role === 'HELPER') {
+                          return (
+                            <span className="whitespace-nowrap inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              ✨ Helper
+                            </span>
+                          );
+                        }
+                        if (role === 'GROSSELLER') {
+                          return (
+                            <span className="whitespace-nowrap inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200">
+                              📦 Grossiste
+                            </span>
+                          );
+                        }
+                        if (role === 'INFLUENCER') {
+                          return (
+                            <span className="whitespace-nowrap inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-pink-50 text-pink-700 border border-pink-200">
+                              ⭐ Influenceur
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="whitespace-nowrap inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
+                            👤 Vendeur
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-3">

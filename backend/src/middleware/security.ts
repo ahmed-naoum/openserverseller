@@ -496,14 +496,14 @@ export const validateRequestSize = (maxSize: number = 1024 * 1024) => {
     let allowedSize = maxSize;
 
     if (url.includes('/upload') || url.includes('/cloudinary') || url.includes('/import') || url.includes('/backups')) {
-      allowedSize = 100 * 1024 * 1024; // 100MB
+      allowedSize = 250 * 1024 * 1024; // 250MB limit
     }
 
     const contentLength = parseInt(req.get('content-length') || '0', 10);
     if (contentLength > allowedSize) {
       res.status(413).json({
         status: 'error',
-        message: 'Request body too large 100MB is the max',
+        message: 'Request body too large 250MB is the max',
       });
       return; 
     }

@@ -38,6 +38,7 @@ import domainRoutes from './domain.routes.js';
 import customProductRoutes from './customProduct.routes.js';
 import eventRoutes from './event.routes.js';
 import googleSheetsRoutes from './googleSheets.routes.js';
+import helperRoutes from './helper.routes.js';
 
 
 const router = Router();
@@ -101,6 +102,7 @@ router.use('/user-pixels', auditLog, pixelRoutes);
 router.use('/domain', auditLog, domainRoutes);
 router.use('/custom-products', auditLog, customProductRoutes);
 router.use('/event', eventRoutes);
+router.use('/helper', auditLog, helperRoutes);
 
 
 export default router;

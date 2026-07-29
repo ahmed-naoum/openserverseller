@@ -657,6 +657,118 @@ router.get(
   })
 );
 
+// Admin Helper Affiliate Overview Stats
+router.get(
+  '/helpers/affiliate-stats',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  asyncHandler(async (_req: Request, res: Response) => {
+    const helpers = await prisma.user.findMany({
+      where: { role: { name: 'HELPER' } },
+      include: {
+        profile: true,
+        role: true,
+        helperAssignments: {
+          where: { isAffiliateInvite: true },
+          include: {
+            targetUser: {
+              include: { profile: true }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const result = await Promise.all(
+      helpers.map(async (h) => {
+        const targetUserIds = h.helperAssignments.map((a: any) => a.targetUserId);
+        
+        let totalLeads = 0;
+        let deliveredLeads = 0;
+
+        if (targetUserIds.length > 0) {
+          const leadCounts = await prisma.lead.groupBy({
+            by: ['status'],
+            where: { vendorId: { in: targetUserIds } },
+            _count: { id: true }
+          });
+
+          leadCounts.forEach((c) => {
+            totalLeads += c._count.id;
+            if (c.status === 'DELIVERED') {
+              deliveredLeads += c._count.id;
+            }
+          });
+        }
+
+        const commissionRate = h.helperCommissionPerDeliveredLead ?? 5.0;
+
+        return {
+          id: h.id,
+          uuid: h.uuid,
+          fullName: h.profile?.fullName || 'N/A',
+          email: h.email,
+          phone: h.phone,
+          referralCode: h.referralCode,
+          canManageAffiliateInvites: h.canManageAffiliateInvites,
+          helperCommissionPerDeliveredLead: commissionRate,
+          totalInvitedUsers: targetUserIds.length,
+          totalLeads,
+          deliveredLeads,
+          totalEarnings: deliveredLeads * commissionRate,
+          createdAt: h.createdAt
+        };
+      })
+    );
+
+    res.json({
+      status: 'success',
+      data: result
+    });
+  })
+);
+
+// Admin Toggle Helper Permission & Commission
+router.patch(
+  '/helpers/:id/affiliate-config',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { canManageAffiliateInvites, helperCommissionPerDeliveredLead } = req.body;
+
+    const helper = await prisma.user.findFirst({
+      where: { id: Number(id), role: { name: 'HELPER' } }
+    });
+
+    if (!helper) {
+      res.status(404).json({ status: 'error', message: 'Helper user not found' });
+      return;
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: Number(id) },
+      data: {
+        canManageAffiliateInvites: typeof canManageAffiliateInvites === 'boolean' ? canManageAffiliateInvites : helper.canManageAffiliateInvites,
+        helperCommissionPerDeliveredLead: helperCommissionPerDeliveredLead !== undefined ? Number(helperCommissionPerDeliveredLead) : helper.helperCommissionPerDeliveredLead
+      },
+      include: { profile: true }
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Helper affiliate configuration updated successfully',
+      data: {
+        id: updated.id,
+        uuid: updated.uuid,
+        canManageAffiliateInvites: updated.canManageAffiliateInvites,
+        helperCommissionPerDeliveredLead: updated.helperCommissionPerDeliveredLead
+      }
+    });
+  })
+);
+
 router.post(
   '/helper-user-assignments',
   authenticate,

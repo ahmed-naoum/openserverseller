@@ -95,6 +95,8 @@ import HelperRetours from './pages/helper/Retours';
 import HelperTickets from './pages/helper/Tickets';
 import HelperUsers from './pages/helper/Users';
 import HelperLinks from './pages/helper/Links';
+import HelperAffiliate from './pages/helper/HelperAffiliate';
+import AdminHelpersAffiliate from './pages/admin/AdminHelpersAffiliate';
 import SiteBuilder from './pages/helper/SiteBuilder';
 import HelperScanner from './pages/helper/Scanner';
 import Chat from './pages/common/Chat';
@@ -433,6 +435,8 @@ function App() {
         {/* Helper Routes */}
         <Route path="/helper" element={<RoleGuard allowedRoles={['SUPER_ADMIN', 'HELPER']}><DashboardLayout /></RoleGuard>}>
           <Route index element={<HelperDashboard />} />
+          <Route path="affiliate" element={<HelperAffiliate />} />
+          <Route path="wallet" element={<HelperAffiliate />} />
           <Route path="users" element={<HelperUsers />} />
           <Route path="leads" element={<HelperLeads />} />
           <Route path="links" element={<HelperLinks />} />
@@ -457,6 +461,7 @@ function App() {
           <Route index element={<AdminDashboard />} />
           <Route path="leads" element={<AdminLeads />} />
           <Route path="users" element={<AdminUsers />} />
+          <Route path="helpers-affiliate" element={<AdminHelpersAffiliate />} />
           <Route path="categories" element={<AdminCategories />} />
           <Route path="products" element={<AdminProducts />} />
           <Route path="finance" element={<AdminFinance />} />

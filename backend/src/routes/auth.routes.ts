@@ -282,6 +282,40 @@ router.post(
       throw error;
     }
 
+    // Referral Link helper assignment
+    const refCode = req.body.ref || req.body.referralCode;
+    if (refCode) {
+      const cleanRef = String(refCode).trim();
+      const referringHelper = await prisma.user.findFirst({
+        where: {
+          role: { name: 'HELPER' },
+          OR: [
+            { referralCode: cleanRef },
+            { uuid: cleanRef },
+            ...(!isNaN(Number(cleanRef)) ? [{ id: Number(cleanRef) }] : [])
+          ]
+        }
+      });
+      if (referringHelper) {
+        await (prisma as any).helperUserAssignment.upsert({
+          where: {
+            helperId_targetUserId: {
+              helperId: referringHelper.id,
+              targetUserId: user.id
+            }
+          },
+          create: {
+            helperId: referringHelper.id,
+            targetUserId: user.id,
+            isAffiliateInvite: true
+          },
+          update: {
+            isAffiliateInvite: true
+          }
+        }).catch(() => {});
+      }
+    }
+
     // Auto-assign new user to helpers with autoAssignHelperUsers or autoAssignHelperVendors enabled
     const globalHelpers = await prisma.user.findMany({
       where: {
@@ -554,6 +588,40 @@ router.post(
           influencerId: user.id
         }))
       });
+    }
+
+    // Referral Link helper assignment
+    const refCode = req.body.ref || req.body.referralCode;
+    if (refCode) {
+      const cleanRef = String(refCode).trim();
+      const referringHelper = await prisma.user.findFirst({
+        where: {
+          role: { name: 'HELPER' },
+          OR: [
+            { referralCode: cleanRef },
+            { uuid: cleanRef },
+            ...(!isNaN(Number(cleanRef)) ? [{ id: Number(cleanRef) }] : [])
+          ]
+        }
+      });
+      if (referringHelper) {
+        await (prisma as any).helperUserAssignment.upsert({
+          where: {
+            helperId_targetUserId: {
+              helperId: referringHelper.id,
+              targetUserId: user.id
+            }
+          },
+          create: {
+            helperId: referringHelper.id,
+            targetUserId: user.id,
+            isAffiliateInvite: true
+          },
+          update: {
+            isAffiliateInvite: true
+          }
+        }).catch(() => {});
+      }
     }
 
     // Auto-assign new user to helpers with autoAssignHelperUsers or autoAssignHelperInfluencers enabled

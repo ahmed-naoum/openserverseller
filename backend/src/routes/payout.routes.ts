@@ -26,7 +26,7 @@ router.get(
         where,
         include: { 
           vendor: { 
-            include: { profile: true, wallet: true } 
+            include: { profile: true, wallet: true, role: true } 
           } 
         },
         orderBy: { createdAt: 'desc' },
@@ -231,15 +231,18 @@ router.patch(
     try {
       let title = '';
       let body = '';
-      if (['COMPLETED', 'RECEIVED'].includes(targetStatus)) {
-        title = '✅ Retrait effectué !';
-        body = `Votre demande de retrait de ${updatedPayout.amountMad} MAD (#${updatedPayout.id}) a été payée avec succès.`;
+      if (targetStatus === 'COMPLETED') {
+        title = '✅ Retrait payé !';
+        body = `Votre demande de retrait de ${updatedPayout.amountMad} MAD (#${updatedPayout.id}) a été payée par l'administration.`;
+      } else if (targetStatus === 'RECEIVED') {
+        title = '📩 Retrait reçu !';
+        body = `La réception des fonds pour votre demande de retrait de ${updatedPayout.amountMad} MAD (#${updatedPayout.id}) a été confirmée.`;
       } else if (targetStatus === 'REJECTED') {
         title = '❌ Retrait rejeté';
-        body = `Votre demande de retrait de ${updatedPayout.amountMad} MAD (#${updatedPayout.id}) a été rejetée. Les fonds ont été restitués à votre portefeuille.`;
+        body = `Votre demande de retrait de ${updatedPayout.amountMad} MAD (#${updatedPayout.id}) a été rejetée. Les fonds ont été restitués à votre solde.`;
       } else if (targetStatus === 'PENDING') {
         title = '⏳ Retrait en attente';
-        body = `Votre demande de retrait de ${updatedPayout.amountMad} MAD (#${updatedPayout.id}) est maintenant en cours de traitement.`;
+        body = `Votre demande de retrait de ${updatedPayout.amountMad} MAD (#${updatedPayout.id}) est en cours de vérification.`;
       }
 
       if (title && body) {
@@ -405,15 +408,18 @@ router.patch(
       for (const item of results) {
         let title = '';
         let body = '';
-        if (['COMPLETED', 'RECEIVED'].includes(targetStatus)) {
-          title = '✅ Retrait effectué !';
-          body = `Votre demande de retrait de ${item.amountMad} MAD (#${item.id}) a été payée avec succès.`;
+        if (targetStatus === 'COMPLETED') {
+          title = '✅ Retrait payé !';
+          body = `Votre demande de retrait de ${item.amountMad} MAD (#${item.id}) a été payée par l'administration.`;
+        } else if (targetStatus === 'RECEIVED') {
+          title = '📩 Retrait reçu !';
+          body = `La réception des fonds pour votre demande de retrait de ${item.amountMad} MAD (#${item.id}) a été confirmée.`;
         } else if (targetStatus === 'REJECTED') {
           title = '❌ Retrait rejeté';
-          body = `Votre demande de retrait de ${item.amountMad} MAD (#${item.id}) a été rejetée. Les fonds ont été restitués à votre portefeuille.`;
+          body = `Votre demande de retrait de ${item.amountMad} MAD (#${item.id}) a été rejetée. Les fonds ont été restitués à votre solde.`;
         } else if (targetStatus === 'PENDING') {
           title = '⏳ Retrait en attente';
-          body = `Votre demande de retrait de ${item.amountMad} MAD (#${item.id}) est maintenant en cours de traitement.`;
+          body = `Votre demande de retrait de ${item.amountMad} MAD (#${item.id}) est en cours de vérification.`;
         }
 
         if (title && body) {

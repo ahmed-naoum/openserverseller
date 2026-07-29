@@ -849,6 +849,8 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
     canManageInfluencerLinks: false,
     canManageTickets: false,
     canScanReturns: false,
+    canManageAffiliateInvites: false,
+    helperCommissionPerDeliveredLead: 5,
     canDisplayOnDashboard: true,
     city: '',
     address: '',
@@ -899,6 +901,8 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
         canManageInfluencerLinks: fullUser.canManageInfluencerLinks || false,
         canManageTickets: fullUser.canManageTickets || false,
         canScanReturns: fullUser.canScanReturns || false,
+        canManageAffiliateInvites: fullUser.canManageAffiliateInvites || false,
+        helperCommissionPerDeliveredLead: fullUser.helperCommissionPerDeliveredLead ?? 5,
         canDisplayOnDashboard: fullUser.canDisplayOnDashboard ?? true,
         city: fullUser.city || '',
         address: fullUser.address || '',
@@ -1288,6 +1292,44 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
                             >
                               <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canDisplayOnDashboard ? 'left-[22px]' : 'left-0.5'}`} />
                             </button>
+                          </div>
+
+                          <div className="flex items-center justify-between p-3 bg-amber-50/50 rounded-2xl border border-amber-100/50">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-2 bg-white rounded-xl text-amber-600 shadow-sm">
+                                <Link size={16} />
+                              </div>
+                              <div>
+                                <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Accès Affiliation</h4>
+                                <p className="text-[8px] font-bold text-amber-500 uppercase tracking-tighter">Générer lien & parrainer</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setFormData({ ...formData, canManageAffiliateInvites: !formData.canManageAffiliateInvites })}
+                              className={`w-10 h-5 rounded-full transition-all relative ${formData.canManageAffiliateInvites ? 'bg-amber-500' : 'bg-slate-200'}`}
+                            >
+                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.canManageAffiliateInvites ? 'left-[22px]' : 'left-0.5'}`} />
+                            </button>
+                          </div>
+
+                          <div className="col-span-2 p-4 bg-amber-50 rounded-2xl border border-amber-200/60 mt-2">
+                            <label className="block text-[10px] font-black text-amber-800 uppercase tracking-widest mb-1.5 flex items-center gap-2">
+                              <Percent size={14} className="text-amber-600" />
+                              Commission Helper par Lead Livré (DH)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.5"
+                              value={formData.helperCommissionPerDeliveredLead}
+                              onChange={(e) => setFormData({ ...formData, helperCommissionPerDeliveredLead: parseFloat(e.target.value) || 0 })}
+                              className="w-full bg-white border border-amber-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-amber-500"
+                              placeholder="Ex: 5"
+                            />
+                            <p className="text-[9px] font-medium text-amber-700 mt-1">
+                              Montant en DH attribué au Helper pour chaque lead livré généré par ses comptes parrainés.
+                            </p>
                           </div>
                         </div>
                       </div>

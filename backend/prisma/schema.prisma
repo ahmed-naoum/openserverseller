@@ -80,6 +80,8 @@ model User {
   canManageInfluencerLinks Boolean @default(false)
   canManageTickets       Boolean @default(false)
   canScanReturns         Boolean @default(false)
+  canManageAffiliateInvites Boolean @default(false)
+  helperCommissionPerDeliveredLead Float @default(5.0)
   canDisplayOnDashboard  Boolean @default(true)
 
   // Tracking
@@ -1002,6 +1004,7 @@ model HelperUserAssignment {
   helper       User     @relation("HelperAssignments", fields: [helperId], references: [id], onDelete: Cascade)
   targetUserId Int
   targetUser   User     @relation("TargetUserAssignments", fields: [targetUserId], references: [id], onDelete: Cascade)
+  isAffiliateInvite Boolean @default(false)
   assignedAt   DateTime @default(now())
 
   @@unique([helperId, targetUserId])

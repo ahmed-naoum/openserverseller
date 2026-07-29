@@ -61,6 +61,7 @@ import {
   Check,
   Crown,
   Link2,
+  Award,
   Mail,
   Target,
   Music,
@@ -218,6 +219,7 @@ const navigation = {
       icon: Users,
       children: [
         { name: 'Utilisateurs', href: '/admin/users', icon: Users },
+        { name: 'Affiliation Helpers', href: '/admin/helpers-affiliate', icon: Award },
         { name: 'Vérifications', href: '/admin/verifications', icon: ShieldCheck },
         { name: 'Inspect Call Center', href: '/admin/call-center-inspector', icon: Headphones },
         { name: 'Inspecteur Comptes', href: '/admin/influencer-inspector', icon: Crown },
@@ -298,6 +300,7 @@ const navigation = {
       children: [
         { name: 'Utilisateurs', href: '/helper/users', icon: Users },
         { name: 'Tous les Leads', href: '/helper/leads', icon: Users },
+        { name: 'Système d\'Affiliation', href: '/helper/affiliate', icon: Link2 },
       ]
     },
     { 
@@ -746,6 +749,7 @@ export default function DashboardLayout() {
   const isHelperItemAllowed = (item: any): boolean => {
     if (user?.role !== 'HELPER') return true;
     if (item.href === '/helper/users') return !!user?.canImpersonate;
+    if (item.href === '/helper/affiliate') return true; // Always allow Helper to view affiliate menu item
     if (item.href === '/helper/leads') return !!user?.canManageLeads;
     if (item.href === '/helper/products') return !!user?.canManageProducts;
     if (item.href === '/helper/colis') return !!user?.canManageOrders;
