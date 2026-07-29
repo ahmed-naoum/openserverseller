@@ -566,6 +566,8 @@ export default function SiteBuilder() {
         subtitle: 'Remplissez le formulaire ci-dessous pour réserver votre produit. Le paiement se fera à la livraison.',
         buttonText: 'Confirmer ma commande',
         themeColor: '#f97316',
+        formBgColor: '#ffffff',
+        containerBgColor: '#ffffff',
         nameLabel: 'Nom complet *',
         namePlaceholder: 'Ex: Youssef Benjelloun',
         phoneLabel: 'Numéro de téléphone *',
@@ -2279,6 +2281,10 @@ export default function SiteBuilder() {
                     <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-4">
                       <h4 className="text-[10px] font-bold text-gray-400 uppercase">Style du Formulaire</h4>
                       <div className="grid grid-cols-2 gap-4">
+                        <Field label="Fond du Formulaire" type="color" value={activeBlock.content.formBgColor || '#ffffff'} onChange={(v: string) => updateBlockContent('formBgColor', v)} />
+                        <Field label="Fond du Bloc" type="color" value={activeBlock.content.containerBgColor || '#ffffff'} onChange={(v: string) => updateBlockContent('containerBgColor', v)} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
                         <Field label="Bordure (px)" type="number" value={activeBlock.content.borderWidth} onChange={(v: number) => updateBlockContent('borderWidth', v)} />
                         <Field label="Couleur Bordure" type="color" value={activeBlock.content.borderColor} onChange={(v: string) => updateBlockContent('borderColor', v)} />
                       </div>
@@ -2886,8 +2892,9 @@ const CheckoutPreview = ({ content, product }: any) => {
   
   return (
     <div 
-      className="bg-white p-6 sm:p-8 w-full max-w-xl mx-auto selection:bg-orange-100"
+      className="p-6 sm:p-8 w-full max-w-xl mx-auto selection:bg-orange-100"
       style={{ 
+        backgroundColor: content.formBgColor || '#ffffff',
         border: `${content.borderWidth ?? 1}px solid ${content.borderColor ?? '#f3f4f6'}`,
         borderRadius: `${content.borderRadiusTL ?? 32}px ${content.borderRadiusTR ?? 32}px ${content.borderRadiusBR ?? 32}px ${content.borderRadiusBL ?? 32}px`
       }}

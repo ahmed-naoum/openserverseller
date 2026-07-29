@@ -372,20 +372,18 @@ export default function HelperAffiliate() {
   }
 
   return (
-    <div className="space-y-8 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto font-['29LT_Kaff',_Inter,_sans-serif]">
+    <div className="space-y-8 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto font-['29LT_Kaff',_Inter,_sans-serif] bg-slate-50/50 min-h-screen">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-6 sm:p-8 rounded-3xl text-white shadow-xl relative overflow-hidden">
-        <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-primary-500/10 rounded-full blur-3xl pointer-events-none" />
-        
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white border border-slate-200/80 p-6 sm:p-8 rounded-3xl text-slate-900 shadow-sm relative overflow-hidden">
         <div className="space-y-2 relative z-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-500/20 text-primary-300 text-xs font-semibold border border-primary-500/30">
-            <Award className="w-4 h-4" />
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary-50 text-primary-700 text-xs font-bold border border-primary-200/80">
+            <Award className="w-4 h-4 text-primary-600" />
             {t.badge}
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
             {t.title}
           </h1>
-          <p className="text-slate-300 text-sm max-w-2xl leading-relaxed">
+          <p className="text-slate-600 text-sm max-w-2xl leading-relaxed font-medium">
             {t.desc(stats?.commissionPerDeliveredLead || 5)}
           </p>
         </div>
@@ -393,9 +391,9 @@ export default function HelperAffiliate() {
         <button
           onClick={() => fetchStats(true)}
           disabled={refreshing}
-          className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-medium text-sm transition-all border border-white/10 backdrop-blur-md self-start md:self-auto"
+          className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-all border border-slate-200 self-start md:self-auto shadow-sm active:scale-95"
         >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-primary-600' : 'text-slate-500'}`} />
           <span>{t.refresh}</span>
         </button>
       </div>
@@ -405,12 +403,12 @@ export default function HelperAffiliate() {
         <motion.div 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="p-4 sm:p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 flex items-start gap-4"
+          className="p-4 sm:p-5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-start gap-4 shadow-sm"
         >
-          <ShieldAlert className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" />
+          <ShieldAlert className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" />
           <div className="space-y-1 text-sm">
-            <p className="font-bold">{t.accessDisabledTitle}</p>
-            <p className="text-amber-800 dark:text-amber-300">
+            <p className="font-bold text-amber-900">{t.accessDisabledTitle}</p>
+            <p className="text-amber-800">
               {t.accessDisabledDesc}
             </p>
           </div>
@@ -420,18 +418,18 @@ export default function HelperAffiliate() {
       {/* Referral Link & Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
         {/* Referral Link Card */}
-        <div className="md:col-span-2 bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between space-y-4">
+        <div className="md:col-span-2 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm flex flex-col justify-between space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-3 rounded-2xl bg-primary-50 dark:bg-primary-950/50 text-primary-600 dark:text-primary-400">
+              <div className="p-3 rounded-2xl bg-primary-50 text-primary-600 border border-primary-100">
                 <Link2 className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="font-bold text-slate-800 dark:text-white text-base">{t.inviteLinkTitle}</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{t.inviteLinkDesc}</p>
+                <h3 className="font-extrabold text-slate-900 text-base">{t.inviteLinkTitle}</h3>
+                <p className="text-xs font-medium text-slate-500">{t.inviteLinkDesc}</p>
               </div>
             </div>
-            <span className="px-3 py-1 text-xs font-bold rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">
+            <span className="px-3 py-1 text-xs font-extrabold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80">
               {t.active}
             </span>
           </div>
@@ -441,16 +439,16 @@ export default function HelperAffiliate() {
               type="text"
               readOnly
               value={referralUrl}
-              className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm text-slate-700 dark:text-slate-200 font-mono font-medium outline-none"
+              className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm text-slate-800 font-mono font-semibold outline-none focus:border-primary-500 focus:bg-white transition-all"
             />
             <button
               onClick={handleCopyLink}
               disabled={!stats?.canManageAffiliateInvites}
-              className={`inline-flex items-center gap-2 px-5 py-3 rounded-2xl font-semibold text-sm transition-all shadow-md ${
+              className={`inline-flex items-center gap-2 px-5 py-3 rounded-2xl font-bold text-sm transition-all shadow-md ${
                 copied
                   ? 'bg-emerald-600 text-white'
                   : 'bg-primary-600 hover:bg-primary-700 text-white shadow-primary-500/20'
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
+              } disabled:opacity-50 disabled:cursor-not-allowed active:scale-95`}
             >
               {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
               <span>{copied ? t.copied : t.copy}</span>
@@ -459,46 +457,46 @@ export default function HelperAffiliate() {
         </div>
 
         {/* Total Invited Users Card */}
-        <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-between">
+        <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm flex items-center justify-between">
           <div className="space-y-1">
-            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{t.invitedAccounts}</p>
-            <p className="text-3xl font-extrabold text-slate-900 dark:text-white">
+            <p className="text-xs font-bold text-slate-500">{t.invitedAccounts}</p>
+            <p className="text-3xl font-black text-slate-900">
               {stats?.totalInvitedUsers || 0}
             </p>
-            <p className="text-xs text-slate-400">{t.vendorsCreators}</p>
+            <p className="text-xs font-medium text-slate-400">{t.vendorsCreators}</p>
           </div>
-          <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center">
             <Users className="w-7 h-7" />
           </div>
         </div>
 
         {/* Delivered Leads, Earnings & Withdraw Card */}
-        <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between space-y-3">
+        <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm flex flex-col justify-between space-y-3">
           <div className="flex items-center justify-between">
             <div className="space-y-1">
-              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{t.withdrawableEarnings}</p>
+              <p className="text-xs font-bold text-slate-500">{t.withdrawableEarnings}</p>
               <div className="flex items-baseline gap-1">
-                <p className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">
+                <p className="text-3xl font-black text-emerald-600">
                   {stats?.availableEarnings || 0} <span className="text-sm font-bold">DH</span>
                 </p>
               </div>
             </div>
-            <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center">
               <Wallet className="w-6 h-6" />
             </div>
           </div>
 
-          <div className="text-[11px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-700">
-            <span>{t.deliveredLeads}: <strong className="text-slate-700 dark:text-slate-200">{stats?.deliveredLeads || 0}</strong></span>
+          <div className="text-[11px] text-slate-500 font-medium flex items-center justify-between pt-2 border-t border-slate-100">
+            <span>{t.deliveredLeads}: <strong className="text-slate-900 font-extrabold">{stats?.deliveredLeads || 0}</strong></span>
             {stats?.pendingEarnings && stats.pendingEarnings > 0 ? (
-              <span className="text-amber-500 font-semibold">{stats.pendingEarnings} {t.pending}</span>
+              <span className="text-amber-600 font-bold">{stats.pendingEarnings} {t.pending}</span>
             ) : null}
           </div>
 
           <button
             onClick={handleOpenWithdrawModal}
             disabled={!stats?.canManageAffiliateInvites || (stats?.availableEarnings || 0) < 50}
-            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-md shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs transition-all shadow-md shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
           >
             <ArrowDownToLine className="w-4 h-4" />
             <span>
@@ -510,10 +508,10 @@ export default function HelperAffiliate() {
 
       {/* Payout Requests History Section (if any requests exist) */}
       {stats?.payoutHistory && stats.payoutHistory.length > 0 && (
-        <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden p-6 space-y-4">
+        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Clock className="w-5 h-5 text-indigo-500" />
+            <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-indigo-600" />
               {t.payoutHistoryTitle} ({stats.payoutHistory.length})
             </h3>
           </div>
@@ -521,7 +519,7 @@ export default function HelperAffiliate() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                   <th className="px-4 py-3">{t.id}</th>
                   <th className="px-4 py-3">{t.amount}</th>
                   <th className="px-4 py-3">{t.bank}</th>
@@ -529,46 +527,46 @@ export default function HelperAffiliate() {
                   <th className="px-4 py-3 text-right">{t.date}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-xs">
+              <tbody className="divide-y divide-slate-100 text-xs">
                 {stats.payoutHistory.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/30">
+                  <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="px-4 py-3 font-mono font-bold text-slate-500">#{p.id}</td>
-                    <td className="px-4 py-3 font-extrabold text-emerald-600 dark:text-emerald-400">{p.amountMad} DH</td>
-                    <td className="px-4 py-3 text-slate-700 dark:text-slate-300 font-medium">
+                    <td className="px-4 py-3 font-black text-emerald-600 text-sm">{p.amountMad} DH</td>
+                    <td className="px-4 py-3 text-slate-800 font-semibold">
                       {p.bankName} <span className="text-[10px] text-slate-400 font-mono">({p.ribAccount ? `...${p.ribAccount.slice(-6)}` : 'RIB'})</span>
                     </td>
                     <td className="px-4 py-3">
                       {p.status === 'PENDING' && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200">
                           <Clock className="w-3 h-3" />
                           {t.statusPending}
                         </span>
                       )}
                       {p.status === 'COMPLETED' && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
                           <CheckCircle2 className="w-3 h-3" />
                           {t.statusCompleted}
                         </span>
                       )}
                       {p.status === 'REJECTED' && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200">
                           <XCircle className="w-3 h-3" />
                           {t.statusRejected}
                         </span>
                       )}
                       {p.status === 'RECEIVED' && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-500/10 text-violet-500 border border-violet-500/20">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-violet-50 text-violet-700 border border-violet-200">
                           <FileText className="w-3 h-3" />
                           {t.statusReceived}
                         </span>
                       )}
                       {!['PENDING', 'COMPLETED', 'REJECTED', 'RECEIVED'].includes(p.status) && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-500/10 text-slate-400 border border-slate-500/20">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-600 border border-slate-200">
                           {p.status}
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right text-slate-400">
+                    <td className="px-4 py-3 text-right text-slate-500 font-medium">
                       {new Date(p.createdAt).toLocaleDateString(language === 'ar' ? 'ar-MA' : language === 'en' ? 'en-US' : 'fr-FR', {
                         day: '2-digit',
                         month: 'short',
@@ -584,15 +582,15 @@ export default function HelperAffiliate() {
       )}
 
       {/* Invited Accounts Table Section */}
-      <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
         {/* Table Header & Search */}
-        <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-              <UserCheck className="w-5 h-5 text-primary-500" />
+            <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+              <UserCheck className="w-5 h-5 text-primary-600" />
               {t.registeredUsersTitle} ({filteredUsers.length})
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="text-xs font-medium text-slate-500">
               {t.registeredUsersDesc}
             </p>
           </div>
@@ -604,7 +602,7 @@ export default function HelperAffiliate() {
               placeholder={t.searchPlaceholder}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary-500"
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-slate-800 font-medium focus:bg-white focus:outline-none focus:border-primary-500 transition-all"
             />
           </div>
         </div>
@@ -613,7 +611,7 @@ export default function HelperAffiliate() {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                 <th className="px-6 py-4">{t.user}</th>
                 <th className="px-6 py-4">{t.role}</th>
                 <th className="px-6 py-4">{t.origin}</th>
@@ -623,26 +621,26 @@ export default function HelperAffiliate() {
                 <th className="px-6 py-4 text-right">{t.generatedComm}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm">
+            <tbody className="divide-y divide-slate-100 text-sm">
               {filteredUsers.length > 0 ? (
                 filteredUsers.map((user) => (
-                  <tr key={user.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-700/30 transition-colors">
+                  <tr key={user.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-primary-100 dark:bg-primary-950 text-primary-700 dark:text-primary-300 font-bold flex items-center justify-center text-xs">
+                        <div className="w-9 h-9 rounded-full bg-primary-100 text-primary-700 font-black flex items-center justify-center text-xs border border-primary-200">
                           {user.fullName.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <p className="font-bold text-slate-900 dark:text-white text-xs">{user.fullName}</p>
-                          <p className="text-[11px] text-slate-400">{user.email}</p>
+                          <p className="font-extrabold text-slate-900 text-xs">{user.fullName}</p>
+                          <p className="text-[11px] text-slate-500 font-medium">{user.email}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-extrabold ${
                         user.role === 'VENDOR' 
-                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300'
-                          : 'bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300'
+                          ? 'bg-blue-50 text-blue-700 border border-blue-200/80'
+                          : 'bg-purple-50 text-purple-700 border border-purple-200/80'
                       }`}>
                         {user.role === 'VENDOR' ? t.vendor : t.creator}
                       </span>
@@ -650,29 +648,29 @@ export default function HelperAffiliate() {
                     <td className="px-6 py-4">
                       <span className={`whitespace-nowrap inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-extrabold ${
                         user.isAffiliateInvite
-                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                          : 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-slate-100 text-slate-700 border border-slate-200'
                       }`}>
                         {user.isAffiliateInvite ? t.viaLink : t.adminAssign}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-xs text-slate-500 dark:text-slate-400">
+                    <td className="px-6 py-4 text-xs font-medium text-slate-500">
                       {new Date(user.createdAt).toLocaleDateString(language === 'ar' ? 'ar-MA' : language === 'en' ? 'en-US' : 'fr-FR', {
                         day: '2-digit',
                         month: 'short',
                         year: 'numeric'
                       })}
                     </td>
-                    <td className="px-6 py-4 text-center font-semibold text-slate-700 dark:text-slate-300 text-xs">
+                    <td className="px-6 py-4 text-center font-bold text-slate-800 text-xs">
                       {user.totalLeads}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className="inline-flex items-center gap-1 font-bold text-emerald-600 dark:text-emerald-400 text-xs bg-emerald-500/10 dark:bg-emerald-950/50 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                      <span className="inline-flex items-center gap-1 font-extrabold text-emerald-700 text-xs bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
                         <PackageCheck className="w-3.5 h-3.5" />
                         {user.deliveredLeads}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right font-extrabold text-slate-900 dark:text-white text-xs">
+                    <td className="px-6 py-4 text-right font-black text-slate-900 text-xs">
                       {user.earningsGenerated} DH
                     </td>
                   </tr>
@@ -681,8 +679,8 @@ export default function HelperAffiliate() {
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
                     <Users className="w-10 h-10 mx-auto mb-2 opacity-40" />
-                    <p className="font-semibold text-sm">{t.noUsersFound}</p>
-                    <p className="text-xs">{t.noUsersFoundSub}</p>
+                    <p className="font-bold text-sm text-slate-600">{t.noUsersFound}</p>
+                    <p className="text-xs text-slate-400">{t.noUsersFoundSub}</p>
                   </td>
                 </tr>
               )}
@@ -694,42 +692,42 @@ export default function HelperAffiliate() {
       {/* Withdrawal Modal */}
       <AnimatePresence>
         {showWithdrawModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white dark:bg-slate-800 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100 dark:border-slate-700 space-y-6 relative"
+              className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-200 space-y-6 relative"
             >
               <button
                 onClick={() => setShowWithdrawModal(false)}
-                className="absolute right-5 top-5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                className="absolute right-5 top-5 text-slate-400 hover:text-slate-600 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
 
               <div className="space-y-1">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-3">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center mb-3">
                   <ArrowDownToLine className="w-6 h-6" />
                 </div>
-                <h3 className="text-xl font-extrabold text-slate-900 dark:text-white">{t.modalTitle}</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <h3 className="text-xl font-black text-slate-900">{t.modalTitle}</h3>
+                <p className="text-xs text-slate-500 font-medium">
                   {t.modalDesc}
                 </p>
               </div>
 
               <form onSubmit={handleWithdrawSubmit} className="space-y-4">
                 {/* Solde disponible badge */}
-                <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/40 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">{t.withdrawableBalance}</span>
-                  <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">
+                <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-800">{t.withdrawableBalance}</span>
+                  <span className="text-base font-black text-emerald-700">
                     {stats?.availableEarnings || 0} DH
                   </span>
                 </div>
 
                 {/* Amount input */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
                     {t.amountToWithdraw}
                   </label>
                   <input
@@ -740,17 +738,17 @@ export default function HelperAffiliate() {
                     required
                     value={withdrawAmount}
                     onChange={(e) => setWithdrawAmount(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary-500"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-primary-500 transition-all"
                     placeholder="ex: 50"
                   />
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    {t.minWithdrawMessage} <strong className="text-amber-500 font-bold">50 DH</strong>
+                  <p className="text-[11px] text-slate-500 mt-1 font-medium">
+                    {t.minWithdrawMessage} <strong className="text-amber-600 font-bold">50 DH</strong>
                   </p>
                 </div>
 
                 {/* Bank Name */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
                     {t.bankName}
                   </label>
                   <div className="relative">
@@ -761,14 +759,14 @@ export default function HelperAffiliate() {
                       value={bankName}
                       onChange={(e) => setBankName(e.target.value)}
                       placeholder={t.bankNamePlaceholder}
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl pl-10 pr-4 py-3 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary-500"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-3 text-sm font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-primary-500 transition-all"
                     />
                   </div>
                 </div>
 
                 {/* RIB Account */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
                     {t.ribNumber}
                   </label>
                   <div className="relative">
@@ -780,12 +778,12 @@ export default function HelperAffiliate() {
                       value={ribAccount}
                       onChange={(e) => setRibAccount(e.target.value.replace(/\D/g, '').slice(0, 24))}
                       placeholder="230450000000000000000000"
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl pl-10 pr-4 py-3 text-sm font-mono text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary-500"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-3 text-sm font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-primary-500 transition-all"
                     />
                   </div>
-                  <div className="flex justify-between items-center text-[11px] text-slate-400 mt-1">
+                  <div className="flex justify-between items-center text-[11px] text-slate-400 mt-1 font-medium">
                     <span>{t.ribDigitsOnly}</span>
-                    <span className={`font-mono font-bold ${ribAccount.replace(/\D/g, '').length === 24 ? 'text-emerald-500' : 'text-amber-500'}`}>
+                    <span className={`font-mono font-bold ${ribAccount.replace(/\D/g, '').length === 24 ? 'text-emerald-600' : 'text-amber-600'}`}>
                       {ribAccount.replace(/\D/g, '').length}/24
                     </span>
                   </div>
@@ -795,14 +793,14 @@ export default function HelperAffiliate() {
                   <button
                     type="button"
                     onClick={() => setShowWithdrawModal(false)}
-                    className="px-5 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+                    className="px-5 py-3 rounded-2xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-all"
                   >
                     {t.cancel}
                   </button>
                   <button
                     type="submit"
                     disabled={submittingWithdraw}
-                    className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-lg shadow-emerald-500/20 disabled:opacity-50 flex items-center gap-2"
+                    className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-lg shadow-emerald-500/20 disabled:opacity-50 flex items-center gap-2 transition-all active:scale-95"
                   >
                     {submittingWithdraw ? (
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />

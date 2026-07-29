@@ -319,6 +319,7 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
                 className="w-full max-w-2xl mx-auto relative z-[10001]"
                 data-block-type="express_checkout"
                 style={{ 
+                  backgroundColor: content.containerBgColor || content.bgColor || 'transparent',
                   paddingTop: `${content.paddingTop ?? 32}px`,
                   paddingBottom: `${content.paddingBottom ?? 32}px`,
                   marginTop: `${content.marginTop ?? 0}px`,

@@ -298,8 +298,9 @@ export default function ReferralForm() {
 
   const renderCheckoutForm = (blockContent: any = {}) => (
     <div 
-      className="bg-white p-6 sm:p-7 relative"
+      className="p-6 sm:p-7 relative"
       style={{
+        backgroundColor: blockContent.formBgColor || '#ffffff',
         border: `${blockContent.borderWidth ?? 1}px solid ${blockContent.borderColor ?? '#f3f4f6'}`,
         borderRadius: `${blockContent.borderRadiusTL ?? 32}px ${blockContent.borderRadiusTR ?? 32}px ${blockContent.borderRadiusBR ?? 32}px ${blockContent.borderRadiusBL ?? 32}px`
       }}
