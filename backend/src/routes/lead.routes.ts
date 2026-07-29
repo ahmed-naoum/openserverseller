@@ -2247,6 +2247,7 @@ router.get(
   authenticate,
   asyncHandler(async (req, res) => {
     const userId = req.user!.id;
+    const { mode } = req.query;
     const requestedMode = mode ? String(mode).toUpperCase() : null;
 
     let inventoryProducts: any[] = [];
@@ -2360,7 +2361,7 @@ router.get(
     // 4. Fallback ONLY if no mode parameter was specified
     if (productMap.size === 0 && !requestedMode) {
       const fallbackProducts = await prisma.product.findMany({
-        where: { isPublished: true },
+        where: { isActive: true, status: 'APPROVED' },
         take: 20,
         include: { images: { where: { isPrimary: true }, take: 1 } },
       });
@@ -2540,7 +2541,7 @@ router.post(
         data: {
           influencerId: userId,
           productId: product.id,
-          slug: `${isAffiliate ? 'aff' : 'sell'}-${userId}-${product.id}-${Date.now().toString(36)}`,
+          code: `${isAffiliate ? 'aff' : 'sell'}-${userId}-${product.id}-${Date.now().toString(36)}`,
         },
       });
     }
@@ -2585,7 +2586,7 @@ router.post(
             source: sourceTag,
             sourceId: String(ord.id),
             sourceMode: isAffiliate ? 'AFFILIATE' : 'VENDOR',
-            productVariant: product.nameFr || product.nameAr || product.name || `Produit #${product.id}`,
+            productVariant: product.nameFr || product.nameAr || product.nameEn || `Produit #${product.id}`,
             requestedPriceMad: totalAmount > 0 ? totalAmount : null,
             referralLinkId,
             notes: `Leads ${sourceTag} | Commande #${orderRef} | ${product.nameFr || product.nameAr}`,
