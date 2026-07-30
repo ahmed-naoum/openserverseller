@@ -6,6 +6,7 @@ import {
 import ModOverview from './security/ModOverview';
 import ModBotDdos from './security/ModBotDdos';
 import ModAuthSessions from './security/ModAuthSessions';
+import ModBehavior from './security/ModBehavior';
 import ModWaf from './security/ModWaf';
 import ModAccessControl from './security/ModAccessControl';
 import ModInfrastructure from './security/ModInfrastructure';
@@ -13,12 +14,14 @@ import ModDataProtection from './security/ModDataProtection';
 import ModIncidents from './security/ModIncidents';
 import ModCompliance from './security/ModCompliance';
 import ModThreatMap from './security/ModThreatMap';
+import { Activity } from 'lucide-react';
 
 const MODULES = [
   { id: 'overview', label: 'Threat Overview', icon: Shield, color: 'text-emerald-400' },
   { id: 'threat-map', label: 'Global Analytics', icon: Globe, color: 'text-emerald-400' },
   { id: 'bot-ddos', label: 'Bot & DDoS', icon: ShieldAlert, color: 'text-red-400' },
-  { id: 'auth-sessions', label: 'Auth, Sessions & Behavior', icon: Users, color: 'text-cyan-400' },
+  { id: 'auth-sessions', label: 'Auth & Sessions', icon: Users, color: 'text-cyan-400' },
+  { id: 'behavior', label: 'User Behavior', icon: Activity, color: 'text-pink-400' },
   { id: 'waf', label: 'WAF & Injection', icon: Zap, color: 'text-amber-400' },
   { id: 'access', label: 'Access Control', icon: Lock, color: 'text-violet-400' },
   { id: 'infra', label: 'Infrastructure', icon: Server, color: 'text-blue-400' },
@@ -42,6 +45,7 @@ export default function SecurityFirewall() {
       case 'threat-map': return <ModThreatMap {...props} />;
       case 'bot-ddos': return <ModBotDdos {...props} />;
       case 'auth-sessions': return <ModAuthSessions {...props} />;
+      case 'behavior': return <ModBehavior {...props} />;
       case 'waf': return <ModWaf {...props} />;
       case 'access': return <ModAccessControl {...props} />;
       case 'infra': return <ModInfrastructure {...props} />;

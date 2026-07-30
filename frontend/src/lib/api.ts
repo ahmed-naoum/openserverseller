@@ -621,6 +621,22 @@ export const securityApi = {
   getSessions: () => api.get('/admin/security/sessions'),
   terminateSession: (socketId: string) => api.delete(`/admin/security/sessions/${socketId}`),
   blockGlobalSession: (socketId: string) => api.post(`/admin/security/sessions/${socketId}/block-global`),
+  banUserAccount: (userUuid: string) => api.post(`/admin/security/users/${userUuid}/ban`),
+  blockUserAgent: (userAgent: string) => api.post('/admin/security/block-useragent', { userAgent }),
+  batchBan: (data: {
+    socketId?: string;
+    userUuid?: string;
+    publicIp?: string;
+    currentPage?: string;
+    userAgent?: string;
+    options: {
+      banIp?: boolean;
+      banCurrentPage?: boolean;
+      banGlobal?: boolean;
+      banAccount?: boolean;
+      banUserAgent?: boolean;
+    };
+  }) => api.post('/admin/security/batch-ban', data),
   getBlockedSessions: () => api.get('/admin/security/sessions/blocks'),
   unblockSession: (key: string) => api.delete(`/admin/security/sessions/blocks/${encodeURIComponent(key)}`),
   unblockAllSessions: () => api.delete('/admin/security/sessions/blocks/all'),

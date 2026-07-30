@@ -63,6 +63,7 @@ import {
   Link2,
   Award,
   Mail,
+  Network,
   Target,
   Music,
   Ghost,
@@ -263,6 +264,7 @@ const navigation = {
         { name: 'Scanner Retour', href: '/admin/scanner', icon: ScanLine },
         { name: 'Webhooks Coliaty', href: '/admin/webhook-logs', icon: Webhook },
         { name: 'Journaux d\'Activité', href: '/admin/activity-logs', icon: History },
+        { name: 'Architecture Plateforme', href: '/admin/architecture', icon: Network },
         { name: 'Sauvegardes DB', href: '/admin/backups', icon: Database },
       ]
     },

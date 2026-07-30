@@ -124,7 +124,8 @@ router.get(
       };
     });
 
-    const safeProfileRib = user.profile?.ribAccount ? decrypt(user.profile.ribAccount) : '';
+    const profileAny = user.profile as any;
+    const safeProfileRib = profileAny?.ribAccount ? decrypt(profileAny.ribAccount) : '';
 
     res.json({
       status: 'success',
@@ -139,7 +140,7 @@ router.get(
         withdrawnEarnings,
         pendingEarnings,
         availableEarnings,
-        defaultBankName: user.profile?.bankName || '',
+        defaultBankName: profileAny?.bankName || '',
         defaultRibAccount: safeProfileRib,
         payoutHistory: payoutRequests.map(p => ({
           id: p.id,
@@ -244,13 +245,14 @@ router.post(
     });
 
     // Update bank info on profile if empty
-    if (user.profile && (!user.profile.bankName || !user.profile.ribAccount)) {
+    const pAny = user.profile as any;
+    if (pAny && (!pAny.bankName || !pAny.ribAccount)) {
       await prisma.userProfile.update({
         where: { userId },
         data: {
           bankName: String(bankName).trim(),
           ribAccount: encrypt(cleanRib)
-        }
+        } as any
       }).catch(() => {});
     }
 

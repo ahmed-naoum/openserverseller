@@ -562,20 +562,20 @@ export default function SiteBuilder() {
         marginBottom: 0
       };
       case 'express_checkout': return { 
-        title: 'Commander Maintenant', 
-        subtitle: 'Remplissez le formulaire ci-dessous pour réserver votre produit. Le paiement se fera à la livraison.',
-        buttonText: 'Confirmer ma commande',
+        title: 'اطلب الآن', 
+        subtitle: 'املأ النموذج أدناه لحجز منتجك. الدفع عند الاستلام.',
+        buttonText: 'تأكيد الطلب',
         themeColor: '#f97316',
         formBgColor: '#ffffff',
         containerBgColor: '#ffffff',
-        nameLabel: 'Nom complet *',
-        namePlaceholder: 'Ex: Youssef Benjelloun',
-        phoneLabel: 'Numéro de téléphone *',
+        nameLabel: 'الاسم الكامل *',
+        namePlaceholder: 'مثال: يوسف بن جلون',
+        phoneLabel: 'رقم الهاتف *',
         phonePlaceholder: '06 XX XX XX XX',
-        cityLabel: 'Ville *',
-        cityPlaceholder: 'Ex: Casablanca',
-        addressLabel: 'Adresse (Optionnel)',
-        addressPlaceholder: 'Votre adresse complète...',
+        cityLabel: 'المدينة *',
+        cityPlaceholder: 'مثال: الدار البيضاء',
+        addressLabel: 'العنوان (اختياري)',
+        addressPlaceholder: 'عنوانك الكامل لترهين التوصيل...',
         borderRadiusTL: 0,
         borderRadiusTR: 0,
         borderRadiusBL: 0,
@@ -2750,16 +2750,27 @@ export default function SiteBuilder() {
                             />
                           </div>
                           {pageSettings.cloaking?.filterBots && (
-                            <Field 
-                              label="URL pour les Bots (Page safe)" 
-                              type="text" 
-                              value={pageSettings.cloaking?.botRedirectUrl || ''} 
-                              placeholder="Ex: https://wikipedia.org"
-                              onChange={(v: string) => setPageSettings((prev: any) => ({
-                                ...prev,
-                                cloaking: { ...prev.cloaking, botRedirectUrl: v }
-                              }))} 
-                            />
+                            <>
+                              <Field 
+                                label="URL pour les Bots (Page safe)" 
+                                type="text" 
+                                value={pageSettings.cloaking?.botRedirectUrl || ''} 
+                                placeholder="Ex: https://wikipedia.org"
+                                onChange={(v: string) => setPageSettings((prev: any) => ({
+                                  ...prev,
+                                  cloaking: { ...prev.cloaking, botRedirectUrl: v }
+                                }))} 
+                              />
+                              <MultiSelectSearchList
+                                label="Sélection des Bots / User-Agents à bloquer"
+                                options={DEFAULT_BLOCKED_USER_AGENTS}
+                                selectedValues={pageSettings.cloaking?.selectedUserAgents}
+                                onChange={(newSelected) => setPageSettings((prev: any) => ({
+                                  ...prev,
+                                  cloaking: { ...prev.cloaking, selectedUserAgents: newSelected }
+                                }))}
+                              />
+                            </>
                           )}
                         </div>
 
@@ -2792,6 +2803,7 @@ export default function SiteBuilder() {
                         </div>
 
                         {/* 4. Language Restriction */}
+                        {/* 5. Language Restriction */}
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-[11px] font-bold text-gray-600">Restreindre par Langue</span>
@@ -2825,6 +2837,220 @@ export default function SiteBuilder() {
                                 onChange={(v: string) => setPageSettings((prev: any) => ({
                                   ...prev,
                                   cloaking: { ...prev.cloaking, languageRedirectUrl: v }
+                                }))} 
+                              />
+                            </>
+                          )}
+                        </div>
+
+                        {/* 6. Country Cloaking */}
+                        <div className="space-y-2 pt-2 border-t border-gray-100">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-gray-600">Restreindre par Pays (Cloaking IP)</span>
+                            <input 
+                              type="checkbox"
+                              checked={pageSettings.cloaking?.filterCountry ?? false}
+                              onChange={(e) => setPageSettings((prev: any) => ({
+                                ...prev,
+                                cloaking: { ...prev.cloaking, filterCountry: e.target.checked }
+                              }))}
+                              className="rounded text-orange-500 focus:ring-orange-500 w-3.5 h-3.5 border-gray-300 cursor-pointer"
+                            />
+                          </div>
+                          {pageSettings.cloaking?.filterCountry && (
+                            <>
+                              <Field 
+                                label="URL de redirection pays non-autorisé" 
+                                type="text" 
+                                value={pageSettings.cloaking?.countryRedirectUrl || ''} 
+                                placeholder="Ex: https://google.com"
+                                onChange={(v: string) => setPageSettings((prev: any) => ({
+                                  ...prev,
+                                  cloaking: { ...prev.cloaking, countryRedirectUrl: v }
+                                }))} 
+                              />
+                              <MultiSelectSearchList
+                                label="Sélection des Pays autorisés"
+                                options={DEFAULT_ALLOWED_COUNTRIES}
+                                selectedValues={pageSettings.cloaking?.selectedCountries}
+                                defaultSelectEmpty={true}
+                                onChange={(newSelected) => setPageSettings((prev: any) => ({
+                                  ...prev,
+                                  cloaking: { 
+                                    ...prev.cloaking, 
+                                    selectedCountries: newSelected,
+                                    // Derive ISO code string from selected labels
+                                    allowedCountries: newSelected.map(c => c.split(' - ')[0].trim()).join(', ')
+                                  }
+                                }))}
+                              />
+                              <Field 
+                                label="Codes Pays ISO supplémentaires (séparés par des virgules)" 
+                                type="text" 
+                                value={pageSettings.cloaking?.allowedCountries || ''} 
+                                placeholder="Ex: MA, FR, DZ, TN"
+                                onChange={(v: string) => setPageSettings((prev: any) => ({
+                                  ...prev,
+                                  cloaking: { ...prev.cloaking, allowedCountries: v }
+                                }))} 
+                              />
+                            </>
+                          )}
+                        </div>
+
+                        {/* 7. VPN / Proxy Filtering */}
+                        <div className="space-y-2 pt-2 border-t border-gray-100">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-gray-600">Bloquer Trafic VPN & Proxy</span>
+                            <input 
+                              type="checkbox"
+                              checked={pageSettings.cloaking?.filterVpn ?? false}
+                              onChange={(e) => setPageSettings((prev: any) => ({
+                                ...prev,
+                                cloaking: { ...prev.cloaking, filterVpn: e.target.checked }
+                              }))}
+                              className="rounded text-orange-500 focus:ring-orange-500 w-3.5 h-3.5 border-gray-300 cursor-pointer"
+                            />
+                          </div>
+                          {pageSettings.cloaking?.filterVpn && (
+                            <>
+                              <Field 
+                                label="URL de redirection VPN/Proxy" 
+                                type="text" 
+                                value={pageSettings.cloaking?.vpnRedirectUrl || ''} 
+                                placeholder="Ex: https://google.com"
+                                onChange={(v: string) => setPageSettings((prev: any) => ({
+                                  ...prev,
+                                  cloaking: { ...prev.cloaking, vpnRedirectUrl: v }
+                                }))} 
+                              />
+                              <div className="flex items-center justify-between pt-1">
+                                <span className="text-[10px] font-bold text-gray-500">Détecter Extensions Chrome (Urban, Browsec, VeePN)</span>
+                                <input 
+                                  type="checkbox"
+                                  checked={pageSettings.cloaking?.detectExtensionVpn ?? true}
+                                  onChange={(e) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, detectExtensionVpn: e.target.checked }
+                                  }))}
+                                  className="rounded text-orange-500 focus:ring-orange-500 w-3.5 h-3.5 border-gray-300 cursor-pointer"
+                                />
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        {/* 8. IPv6 Filtering */}
+                        <div className="space-y-2 pt-2 border-t border-gray-100">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-gray-600">Bloquer Trafic IPv6</span>
+                            <input 
+                              type="checkbox"
+                              checked={pageSettings.cloaking?.filterIpv6 ?? false}
+                              onChange={(e) => setPageSettings((prev: any) => ({
+                                ...prev,
+                                cloaking: { ...prev.cloaking, filterIpv6: e.target.checked }
+                              }))}
+                              className="rounded text-orange-500 focus:ring-orange-500 w-3.5 h-3.5 border-gray-300 cursor-pointer"
+                            />
+                          </div>
+                          {pageSettings.cloaking?.filterIpv6 && (
+                            <Field 
+                              label="URL de redirection IPv6" 
+                              type="text" 
+                              value={pageSettings.cloaking?.ipv6RedirectUrl || ''} 
+                              placeholder="Ex: https://google.com"
+                              onChange={(v: string) => setPageSettings((prev: any) => ({
+                                ...prev,
+                                cloaking: { ...prev.cloaking, ipv6RedirectUrl: v }
+                              }))} 
+                            />
+                          )}
+                        </div>
+
+                        {/* 9. IP Range / Subnet Blocking */}
+                        <div className="space-y-2 pt-2 border-t border-gray-100">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-gray-600">Bloquer Plages IP (CIDR)</span>
+                            <input 
+                              type="checkbox"
+                              checked={pageSettings.cloaking?.filterIpRange ?? false}
+                              onChange={(e) => setPageSettings((prev: any) => ({
+                                ...prev,
+                                cloaking: { ...prev.cloaking, filterIpRange: e.target.checked }
+                              }))}
+                              className="rounded text-orange-500 focus:ring-orange-500 w-3.5 h-3.5 border-gray-300 cursor-pointer"
+                            />
+                          </div>
+                          {pageSettings.cloaking?.filterIpRange && (
+                            <>
+                              <Field 
+                                label="Plages IP bloquées (Ex: 192.168.1.0/24, 10.0.0.0/8)" 
+                                type="text" 
+                                value={pageSettings.cloaking?.blockedIpRanges || ''} 
+                                placeholder="192.168.1.0/24, 10.0.0.0/8"
+                                onChange={(v: string) => setPageSettings((prev: any) => ({
+                                  ...prev,
+                                  cloaking: { ...prev.cloaking, blockedIpRanges: v }
+                                }))} 
+                              />
+                              <Field 
+                                label="URL de redirection Plage IP bloquée" 
+                                type="text" 
+                                value={pageSettings.cloaking?.ipRangeRedirectUrl || ''} 
+                                placeholder="Ex: https://google.com"
+                                onChange={(v: string) => setPageSettings((prev: any) => ({
+                                  ...prev,
+                                  cloaking: { ...prev.cloaking, ipRangeRedirectUrl: v }
+                                }))} 
+                              />
+                            </>
+                          )}
+                        </div>
+
+                        {/* 10. DNS / ISP Keyword Blocking */}
+                        <div className="space-y-2 pt-2 border-t border-gray-100">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-gray-600">Bloquer Mots-clés DNS / FAI</span>
+                            <input 
+                              type="checkbox"
+                              checked={pageSettings.cloaking?.filterDns ?? false}
+                              onChange={(e) => setPageSettings((prev: any) => ({
+                                ...prev,
+                                cloaking: { ...prev.cloaking, filterDns: e.target.checked }
+                              }))}
+                              className="rounded text-orange-500 focus:ring-orange-500 w-3.5 h-3.5 border-gray-300 cursor-pointer"
+                            />
+                          </div>
+                          {pageSettings.cloaking?.filterDns && (
+                            <>
+                              <Field 
+                                label="URL de redirection DNS bloqué" 
+                                type="text" 
+                                value={pageSettings.cloaking?.dnsRedirectUrl || ''} 
+                                placeholder="Ex: https://google.com"
+                                onChange={(v: string) => setPageSettings((prev: any) => ({
+                                  ...prev,
+                                  cloaking: { ...prev.cloaking, dnsRedirectUrl: v }
+                                }))} 
+                              />
+                              <MultiSelectSearchList
+                                label="Sélection des Domaines DNS / FAI à bloquer"
+                                options={DEFAULT_BLOCKED_DNS}
+                                selectedValues={pageSettings.cloaking?.selectedDns}
+                                onChange={(newSelected) => setPageSettings((prev: any) => ({
+                                  ...prev,
+                                  cloaking: { ...prev.cloaking, selectedDns: newSelected }
+                                }))}
+                              />
+                              <Field 
+                                label="Mots-clés DNS/ISP personnalisés (séparés par des virgules)" 
+                                type="text" 
+                                value={pageSettings.cloaking?.blockedDns || ''} 
+                                placeholder="Ex: custom-isp, myserver"
+                                onChange={(v: string) => setPageSettings((prev: any) => ({
+                                  ...prev,
+                                  cloaking: { ...prev.cloaking, blockedDns: v }
                                 }))} 
                               />
                             </>
@@ -2889,10 +3115,18 @@ export default function SiteBuilder() {
 // Subcomponents
 const CheckoutPreview = ({ content, product }: any) => {
   const price = product?.retailPriceMad || '...';
+  const isRtl = /[\u0600-\u06FF]/.test(
+    (content.nameLabel || '') +
+    (content.title || '') +
+    (content.subtitle || '') +
+    (content.buttonText || '') +
+    'الاسم الكامل'
+  );
   
   return (
     <div 
-      className="p-6 sm:p-8 w-full max-w-xl mx-auto selection:bg-orange-100"
+      dir={isRtl ? "rtl" : "ltr"}
+      className={`p-6 sm:p-8 w-full max-w-xl mx-auto selection:bg-orange-100 ${isRtl ? 'text-right' : 'text-left'}`}
       style={{ 
         backgroundColor: content.formBgColor || '#ffffff',
         border: `${content.borderWidth ?? 1}px solid ${content.borderColor ?? '#f3f4f6'}`,
@@ -2901,7 +3135,7 @@ const CheckoutPreview = ({ content, product }: any) => {
     >
       <div className="mb-8 text-center">
         <h2 className="text-2xl font-black text-gray-900 mb-1">
-          {content.title || 'Commander Maintenant'}
+          {content.title || 'اطلب الآن'}
         </h2>
         {content.showPrice !== false && (
           <div className="flex items-center justify-center gap-3 mb-2">
@@ -2928,7 +3162,7 @@ const CheckoutPreview = ({ content, product }: any) => {
           </div>
         )}
         <p className="text-gray-500 text-sm font-medium">
-          {content.subtitle || 'Remplissez le formulaire ci-dessous pour réserver votre produit. Le paiement se fera à la livraison.'}
+          {content.subtitle || 'املأ النموذج أدناه لحجز منتجك. الدفع عند الاستلام.'}
         </p>
       </div>
 
@@ -2985,14 +3219,17 @@ const CheckoutPreview = ({ content, product }: any) => {
       
       <div className="space-y-4">
         {[
-          { label: content.nameLabel || 'Nom complet *', placeholder: content.namePlaceholder || 'Ex: Youssef Benjelloun' },
-          { label: content.phoneLabel || 'Numéro de téléphone *', placeholder: content.phonePlaceholder || '06 XX XX XX XX' },
-          { label: content.cityLabel || 'Ville *', placeholder: content.cityPlaceholder || 'Ex: Casablanca' },
-          { label: content.addressLabel || 'Adresse (Optionnel)', placeholder: content.addressPlaceholder || 'Votre adresse complète...' }
+          { label: content.nameLabel || 'الاسم الكامل *', placeholder: content.namePlaceholder || 'مثال: يوسف بن جلون', isPhone: false },
+          { label: content.phoneLabel || 'رقم الهاتف *', placeholder: content.phonePlaceholder || '06 XX XX XX XX', isPhone: true },
+          { label: content.cityLabel || 'المدينة *', placeholder: content.cityPlaceholder || 'مثال: الدار البيضاء', isPhone: false },
+          { label: content.addressLabel || 'العنوان (اختياري)', placeholder: content.addressPlaceholder || 'عنوانك الكامل لترهين التوصيل...', isPhone: false }
         ].map((field, i) => (
           <div key={i}>
             <label className="block text-sm font-bold text-gray-700 mb-1.5">{field.label}</label>
-            <div className="w-full px-4 py-3.5 bg-gray-50 border border-gray-100 rounded-xl font-medium text-gray-400 text-sm">
+            <div 
+              dir={field.isPhone ? "ltr" : (isRtl ? "rtl" : "ltr")}
+              className={`w-full px-4 py-3.5 bg-gray-50 border border-gray-100 rounded-xl font-medium text-gray-400 text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+            >
               {field.placeholder}
             </div>
           </div>
@@ -3008,7 +3245,7 @@ const CheckoutPreview = ({ content, product }: any) => {
             borderRadius: content.buttonBorderRadius !== undefined && content.buttonBorderRadius !== '' ? `${content.buttonBorderRadius}px` : '12px',
           }}
         >
-          {content.buttonText || 'Confirmer ma commande'}
+          {content.buttonText || 'تأكيد الطلب'}
         </div>
 
         <div className="flex items-center justify-center gap-2 text-[10px] font-bold text-gray-400 mt-4 uppercase tracking-widest">
@@ -3093,3 +3330,163 @@ const Field = ({ label, type, value, onChange, placeholder }: any) => (
     )}
   </div>
 );
+
+export const DEFAULT_BLOCKED_USER_AGENTS = [
+  'googlebot', 'bot', 'Googlebot-Mobile', 'Googlebot-Image', 'Google favicon',
+  'Mediapartners-Google', 'bingbot', 'slurp', 'java', 'wget', 'curl',
+  'Commons-HttpClient', 'Python-urllib', 'libwww', 'httpunit', 'nutch',
+  'phpcrawl', 'msnbot', 'jyxobot', 'FAST-WebCrawler', 'FAST Enterprise Crawler',
+  'biglotron', 'teoma', 'convera', 'seekbot', 'gigablast', 'exabot', 'ngbot',
+  'ia_archiver', 'GingerCrawler', 'webmon ', 'httrack', 'webcrawler', 'grub.org',
+  'UsineNouvelleCrawler', 'antibot', 'netresearchserver', 'speedy', 'fluffy',
+  'bibnum.bnf', 'findlink', 'msrbot', 'panscient', 'yacybot', 'AISearchBot',
+  'IOI', 'ips-agent', 'tagoobot', 'MJ12bot', 'dotbot', 'woriobot', 'yanga',
+  'buzzbot', 'mlbot', 'yandexbot', 'purebot', 'Linguee Bot', 'Voyager',
+  'CyberPatrol', 'voilabot', 'baiduspider', 'citeseerxbot', 'spbot', 'twengabot',
+  'postrank', 'turnitinbot', 'scribdbot', 'page2rss', 'sitebot', 'linkdex',
+  'Adidxbot', 'blekkobot', 'ezooms', 'Mail.RU_Bot', 'discobot', 'heritrix',
+  'findthatfile', 'europarchive.org', 'NerdByNature.Bot', 'sistrix crawler',
+  'ahrefsbot', 'Aboundex', 'domaincrawler', 'wbsearchbot', 'summify', 'ccbot',
+  'edisterbot', 'seznambot', 'ec2linkfinder', 'gslfbot', 'aihitbot', 'intelium_bot',
+  'facebookexternalhit', 'yeti', 'RetrevoPageAnalyzer', 'lb-spider', 'sogou',
+  'lssbot', 'careerbot', 'wotbox', 'wocbot', 'ichiro', 'DuckDuckBot',
+  'lssrocketcrawler', 'drupact', 'webcompanycrawler', 'acoonbot', 'openindexspider',
+  'gnam gnam spider', 'web-archive-net.com.bot', 'backlinkcrawler', 'coccoc',
+  'integromedb', 'content crawler spider', 'toplistbot', 'seokicks-robot',
+  'it2media-domain-crawler', 'ip-web-crawler.com', 'siteexplorer.info', 'elisabot',
+  'proximic', 'changedetection', 'blexbot', 'arabot', 'WeSEE:Search', 'niki-bot',
+  'CrystalSemanticsBot', 'rogerbot', '360Spider', 'psbot', 'InterfaxScanBot',
+  'Lipperhey SEO Service', 'CC Metadata Scaper', 'g00g1e.net', 'GrapeshotCrawler',
+  'urlappendbot', 'brainobot', 'fr-crawler', 'binlar', 'SimpleCrawler',
+  'Livelapbot', 'Twitterbot', 'cXensebot', 'smtbot', 'bnf.fr_bot', 'A6-Indexer',
+  'ADmantX', 'Facebot', 'OrangeBot', 'memorybot', 'AdvBot', 'MegaIndex',
+  'SemanticScholarBot', 'ltx71', 'nerdybot', 'xovibot', 'BUbiNG', 'Qwantify',
+  'archive.org_bot', 'Applebot', 'TweetmemeBot', 'crawler4j', 'findxbot',
+  'SemrushBot', 'yoozBot', 'lipperhey', 'y!j-asr', 'Domain Re-Animator Bot', 'AddThis'
+];
+
+export const DEFAULT_BLOCKED_DNS = [
+  'facebook.com', 'fb.com', 'facebook.net', 'fbcdn.net', 'fbcdn.com',
+  'tfbnw.net', 'fbsbx.com', 'akamaihd.net', 'facebook.fr', 'facebook.de',
+  'whatsapp.net', 'messenger.com', 'foursquare.com', 'energized.pro',
+  'addtoany.com', 'whatsapp.com', 'instagram.com', 'hootsuite.com',
+  'edgesuite.net', 'internet.org', 'appspot.com', 'wechat.com', 'fb.me',
+  'freebasics.com', 'fburl.com'
+];
+
+export const DEFAULT_ALLOWED_COUNTRIES = [
+  'MA - Maroc', 'FR - France', 'DZ - Algérie', 'TN - Tunisie', 'EG - Égypte',
+  'SA - Arabie Saoudite', 'AE - Émirats Arabes Unis', 'QA - Qatar', 'KW - Koweït',
+  'OM - Oman', 'BH - Bahreïn', 'JO - Jordanie', 'LB - Liban', 'IQ - Irak',
+  'LY - Libye', 'SD - Soudan', 'MR - Mauritanie', 'SN - Sénégal', 'CI - Côte d\'Ivoire',
+  'CM - Cameroun', 'GA - Gabon', 'CG - Congo', 'CD - RDC', 'ML - Mali',
+  'BF - Burkina Faso', 'GN - Guinée', 'TOGO - Togo', 'BJ - Bénin', 'MG - Madagascar',
+  'ES - Espagne', 'IT - Italie', 'DE - Allemagne', 'BE - Belgique', 'CH - Suisse',
+  'NL - Pays-Bas', 'GB - Royaume-Uni', 'US - États-Unis', 'CA - Canada', 'TR - Turquie',
+  'TR - Turquie', 'SE - Suède', 'NO - Norvège', 'PT - Portugal'
+];
+
+const MultiSelectSearchList = ({
+  label,
+  options,
+  selectedValues,
+  onChange,
+  defaultSelectEmpty = false
+}: {
+  label: string;
+  options: string[];
+  selectedValues: string[];
+  onChange: (newSelected: string[]) => void;
+  defaultSelectEmpty?: boolean;
+}) => {
+  const [search, setSearch] = useState('');
+  
+  // If defaultSelectEmpty is true, fallback to empty array [] when selectedValues is undefined
+  const currentSelected = selectedValues ?? (defaultSelectEmpty ? [] : options);
+
+  const filteredOptions = options.filter(opt =>
+    opt.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleToggleOption = (option: string) => {
+    if (currentSelected.includes(option)) {
+      onChange(currentSelected.filter(item => item !== option));
+    } else {
+      onChange([...currentSelected, option]);
+    }
+  };
+
+  const handleSelectAll = () => {
+    const combined = Array.from(new Set([...currentSelected, ...filteredOptions]));
+    onChange(combined);
+  };
+
+  const handleDeselectAll = () => {
+    onChange(currentSelected.filter(item => !filteredOptions.includes(item)));
+  };
+
+  return (
+    <div className="space-y-1.5 mt-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-1">
+        <label className="text-[11px] font-bold text-gray-700 leading-tight">{label}</label>
+        <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200 shrink-0">
+          {currentSelected.length} / {options.length}
+        </span>
+      </div>
+
+      <div className="border border-gray-200 rounded-xl p-2.5 bg-gray-50/80 space-y-2 shadow-inner">
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Rechercher un bot / domaine..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-7 pr-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 placeholder-gray-400"
+          />
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">🔍</span>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 px-1 text-[10px] font-semibold border-b border-gray-200 pb-1.5">
+          <button
+            type="button"
+            onClick={handleSelectAll}
+            className="text-orange-600 hover:text-orange-700 hover:underline transition-colors text-left"
+          >
+            Tout cocher ({filteredOptions.length})
+          </button>
+          <button
+            type="button"
+            onClick={handleDeselectAll}
+            className="text-gray-500 hover:text-gray-700 hover:underline transition-colors text-right"
+          >
+            Tout décocher
+          </button>
+        </div>
+
+        <div className="max-h-48 overflow-y-auto space-y-1 bg-white border border-gray-200 rounded-lg p-1.5 divide-y divide-gray-50">
+          {filteredOptions.length === 0 ? (
+            <div className="text-[10px] text-gray-400 text-center py-4">Aucun élément trouvé</div>
+          ) : (
+            filteredOptions.map((opt) => {
+              const isChecked = currentSelected.includes(opt);
+              return (
+                <label
+                  key={opt}
+                  className="flex items-center justify-between px-2 py-1.5 hover:bg-orange-50/80 rounded-md cursor-pointer transition-colors text-xs font-medium text-gray-700 select-none group"
+                >
+                  <span className="truncate pr-2 group-hover:text-orange-900">{opt}</span>
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => handleToggleOption(opt)}
+                    className="rounded text-orange-500 focus:ring-orange-500 w-4 h-4 border-gray-300 cursor-pointer shrink-0 accent-orange-500"
+                  />
+                </label>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};

@@ -84,8 +84,18 @@ export default function ReferralForm() {
 
         // 1. Bot & Crawler Filtering
         if (c.filterBots) {
-          const botPattern = /bot|crawler|spider|crawling|scraper|snippet|curl|wget|python|postman|axios|node-fetch|httpclient|headless|puppeteer|phantomjs|selenium|cypress|facebookexternalhit|facebookplatform|facebookcatalog|facebookbot|googlebot|bingbot|slurp|yahoo|adbot|lighthouse|duckduckbot|baiduspider|yandexbot|sogou|exabot|facebot|ia_archiver|linkedinbot|twitterbot|slackbot|telegrambot|applebot|whatsapp|skypeuripreview|ahrefsbot|semrushbot|mj12bot|dotbot|rogerbot|moz|majestics12|seznambot|pingdom|archive\.org_bot|discordbot|pinterest|vkshare|redditbot|tumblr|flipboardproxy|feedfetcher|amazonbot|bytespider|ccbot|chatgpt-user|claudebot|coccocbot|dataminr|go-http-client|grapeshot|java|libwww|lwp-trivial|mail\.ru|megaindex|petalsearch|qwantify|screaming\sfrog|soso|tencenttraveler|zite|zoominfo|ahrefs|alexa|appinsights|archive|ask\sjeeves|bubing|catchpoint|cloudflare|criteo|datadog|duckduckgo|fastly|feedburner|flipboard|hubspot|incapsula|instagram|linkedin|majestic|monitor|msn|naver|nuzzel|outbrain|pagespeed|quora|reddit|semrush|skype|slack|snapchat|statuscake|telegram|updown|uptimerobot|vkontakte|yelp|youtube|zillow|zmeu/i;
-          if (botPattern.test(navigator.userAgent)) {
+          const ua = (navigator.userAgent || '').toLowerCase();
+          const targetAgents = Array.isArray(c.selectedUserAgents) && c.selectedUserAgents.length > 0
+            ? c.selectedUserAgents.map((agent: any) => (typeof agent === 'string' ? agent : (agent?.value || agent?.name || String(agent || ''))).toLowerCase())
+            : null;
+
+          const defaultBotPattern = /bot|crawler|spider|crawling|scraper|snippet|curl|wget|python|postman|axios|node-fetch|httpclient|headless|puppeteer|phantomjs|selenium|cypress|facebookexternalhit|facebookplatform|facebookcatalog|facebookbot|googlebot|bingbot|slurp|yahoo|adbot|lighthouse|duckduckbot|baiduspider|yandexbot|sogou|exabot|facebot|ia_archiver|linkedinbot|twitterbot|slackbot|telegrambot|applebot|whatsapp|skypeuripreview|ahrefsbot|semrushbot|mj12bot|dotbot|rogerbot|moz|majestics12|seznambot|pingdom|archive\.org_bot|discordbot|pinterest|vkshare|redditbot|tumblr|flipboardproxy|feedfetcher|amazonbot|bytespider|ccbot|chatgpt-user|claudebot|coccocbot|dataminr|go-http-client|grapeshot|java|libwww|lwp-trivial|mail\.ru|megaindex|petalsearch|qwantify|screaming\sfrog|soso|tencenttraveler|zite|zoominfo|ahrefs|alexa|appinsights|archive|ask\sjeeves|bubing|catchpoint|cloudflare|criteo|datadog|duckduckgo|fastly|feedburner|flipboard|hubspot|incapsula|instagram|linkedin|majestic|monitor|msn|naver|nuzzel|outbrain|pagespeed|quora|reddit|semrush|skype|slack|snapchat|statuscake|telegram|updown|uptimerobot|vkontakte|yelp|youtube|zillow|zmeu/i;
+
+          const isBlockedBot = targetAgents
+            ? targetAgents.some((agent: string) => ua.includes(agent))
+            : defaultBotPattern.test(ua);
+
+          if (isBlockedBot) {
             window.location.replace(c.botRedirectUrl || 'https://wikipedia.org');
             return;
           }
@@ -117,6 +127,139 @@ export default function ReferralForm() {
             window.location.replace(c.languageRedirectUrl || 'https://google.com');
             return;
           }
+        }
+
+        // 5. Country / Public IP GeoIP Filtering (Country Cloaking) & IP Data Inspection (VPN / DNS)
+        const needsGeoIp = (c.filterCountry && c.allowedCountries) || c.filterVpn || c.filterDns || c.filterIpRange || c.filterIpv6;
+
+        if (needsGeoIp) {
+          fetch('https://ipapi.co/json/')
+            .then((res) => res.json())
+            .then((ipData) => {
+              const userIp = ipData.ip || '';
+              const countryCode = (ipData.country_code || '').toUpperCase();
+              const isVpn = ipData.security?.vpn || ipData.security?.proxy || ipData.security?.tor || ipData.in_eu === false && false;
+              const orgDns = (ipData.org || ipData.asn || ipData.hostname || '').toLowerCase();
+
+              // 5a. IPv6 Filter
+              if (c.filterIpv6 && userIp.includes(':')) {
+                window.location.replace(c.ipv6RedirectUrl || 'https://google.com');
+                return;
+              }
+
+              // 5b. Country Cloaking
+              if (c.filterCountry && (c.allowedCountries || (Array.isArray(c.selectedCountries) && c.selectedCountries.length > 0))) {
+                const rawAllowedList = Array.isArray(c.selectedCountries) && c.selectedCountries.length > 0
+                  ? c.selectedCountries.map((item: any) => typeof item === 'string' ? item : (item?.code || item?.value || String(item || '')))
+                  : (c.allowedCountries || '').split(',').map((item: string) => item.trim());
+
+                const allowedTokens = rawAllowedList
+                  .flatMap((item: string) => (typeof item === 'string' ? item : String(item)).split('-').map(part => part.trim().toUpperCase()))
+                  .filter(Boolean);
+
+                const countryName = (ipData.country_name || '').toUpperCase();
+
+                const isCountryAllowed = allowedTokens.some((token: string) => {
+                  if (!token) return false;
+                  if (countryCode && (countryCode === token || token.includes(countryCode))) return true;
+                  if (countryName && (countryName.includes(token) || token.includes(countryName))) return true;
+                  return false;
+                });
+
+                if (!isCountryAllowed) {
+                  window.location.replace(c.countryRedirectUrl || 'https://google.com');
+                  return;
+                }
+              }
+
+              // 5c. VPN & Proxy Filter (GeoIP + Extension VPN DOM/Window Probing)
+              const win = window as any;
+              const hasExtensionVpnInjected = typeof window !== 'undefined' && (
+                win.urbanVpn || win.__URBAN_VPN__ || win.urban ||
+                win.browsec || win.veepn || win.__VEEPN__ ||
+                win.touchVpn || win.zenmate || win.setupVpn ||
+                !!document.querySelector('[id*="urban-vpn"], [class*="urban-vpn"], [id*="browsec"], [class*="browsec"], [id*="veepn"], [class*="veepn"], [id*="touchvpn"], [class*="touchvpn"], [id*="zenmate"], [class*="zenmate"]')
+              );
+
+              const isExtensionVpn = (c.detectExtensionVpn !== false) && hasExtensionVpnInjected;
+
+              if (c.filterVpn && (isVpn || isExtensionVpn)) {
+                window.location.replace(c.vpnRedirectUrl || 'https://google.com');
+                return;
+              }
+
+              // 5d. DNS / ISP Keyword Filter
+              if (c.filterDns) {
+                const selectedDnsList = Array.isArray(c.selectedDns) && c.selectedDns.length > 0
+                  ? c.selectedDns.map((d: any) => (typeof d === 'string' ? d : (d?.value || String(d || ''))).toLowerCase())
+                  : ['facebook.com', 'fb.com', 'facebook.net', 'fbcdn.net', 'fbcdn.com', 'tfbnw.net', 'fbsbx.com', 'akamaihd.net', 'facebook.fr', 'facebook.de', 'whatsapp.net', 'messenger.com', 'foursquare.com', 'energized.pro', 'addtoany.com', 'whatsapp.com', 'instagram.com', 'hootsuite.com', 'edgesuite.net', 'internet.org', 'appspot.com', 'wechat.com', 'fb.me', 'freebasics.com', 'fburl.com'];
+
+                const customDnsList = c.blockedDns
+                  ? c.blockedDns.split(',').map((k: string) => k.trim().toLowerCase()).filter(Boolean)
+                  : [];
+
+                const allDnsKeywords = [...selectedDnsList, ...customDnsList];
+                const isBlockedDns = allDnsKeywords.some((kw: string) => orgDns.includes(kw));
+
+                if (isBlockedDns) {
+                  window.location.replace(c.dnsRedirectUrl || 'https://google.com');
+                  return;
+                }
+              }
+
+              // 5e. IP Range Subnet Filter
+              if (c.filterIpRange && c.blockedIpRanges && userIp) {
+                const ranges = c.blockedIpRanges.split(/[\n,]+/).map((r: string) => r.trim()).filter(Boolean);
+                
+                const ipToLong = (ip: string) => {
+                  return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
+                };
+
+                const isIpInCidr = (ipStr: string, cidrStr: string) => {
+                  if (!cidrStr.includes('/')) return ipStr === cidrStr;
+                  const [rangeIp, bits] = cidrStr.split('/');
+                  const mask = ~((1 << (32 - parseInt(bits, 10))) - 1) >>> 0;
+                  return (ipToLong(ipStr) & mask) === (ipToLong(rangeIp) & mask);
+                };
+
+                const isBlockedIp = ranges.some((range: string) => {
+                  try {
+                    return isIpInCidr(userIp, range);
+                  } catch {
+                    return false;
+                  }
+                });
+
+                if (isBlockedIp) {
+                  window.location.replace(c.ipRangeRedirectUrl || 'https://google.com');
+                  return;
+                }
+              }
+            })
+            .catch(() => {
+              // Fallback to lightweight country check if primary GeoIP fails
+              if (c.filterCountry && (c.allowedCountries || (Array.isArray(c.selectedCountries) && c.selectedCountries.length > 0))) {
+                fetch('https://api.country.is')
+                  .then((res) => res.json())
+                  .then((resData) => {
+                    const countryCode = (resData.country || '').toUpperCase();
+                    const rawAllowedList = Array.isArray(c.selectedCountries) && c.selectedCountries.length > 0
+                      ? c.selectedCountries
+                      : (c.allowedCountries || '').split(',').map((item: string) => item.trim());
+
+                    const allowedTokens = rawAllowedList
+                      .flatMap((item: string) => item.split('-').map(part => part.trim().toUpperCase()))
+                      .filter(Boolean);
+
+                    const isAllowed = allowedTokens.some((token: string) => countryCode === token || token.includes(countryCode));
+
+                    if (countryCode && !isAllowed) {
+                      window.location.replace(c.countryRedirectUrl || 'https://google.com');
+                    }
+                  })
+                  .catch(() => {});
+              }
+            });
         }
       }
     }
@@ -208,10 +351,72 @@ export default function ReferralForm() {
     }
   };
 
+  const [errors, setErrors] = useState<{ fullName?: string; phone?: string; city?: string }>({});
+
+  const handleNameChange = (val: string) => {
+    // Strip numbers (0-9 and Eastern Arabic numerals ٠-٩)
+    const sanitized = val.replace(/[0-9٠-٩]/g, '');
+    setForm(prev => ({ ...prev, fullName: sanitized }));
+    if (errors.fullName) setErrors(prev => ({ ...prev, fullName: undefined }));
+  };
+
+  const handleCityChange = (val: string) => {
+    // Strip numbers (0-9 and Eastern Arabic numerals ٠-٩)
+    const sanitized = val.replace(/[0-9٠-٩]/g, '');
+    setForm(prev => ({ ...prev, city: sanitized }));
+    if (errors.city) setErrors(prev => ({ ...prev, city: undefined }));
+  };
+
+  const handlePhoneChange = (val: string) => {
+    // Convert Eastern Arabic digits ٠-٩ to standard digits 0-9
+    let sanitized = val;
+    const arabicDigits = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
+    for (let i = 0; i < 10; i++) {
+      sanitized = sanitized.replace(new RegExp(arabicDigits[i], 'g'), i.toString());
+    }
+    // Allow only digits, +, space, -
+    sanitized = sanitized.replace(/[^0-9+\s-]/g, '');
+    setForm(prev => ({ ...prev, phone: sanitized }));
+    if (errors.phone) setErrors(prev => ({ ...prev, phone: undefined }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.fullName || !form.phone || !form.city) {
-      toast.error('Veuillez remplir les champs obligatoires');
+    const newErrors: { fullName?: string; phone?: string; city?: string } = {};
+
+    const trimmedName = form.fullName.trim();
+    if (!trimmedName) {
+      newErrors.fullName = 'الاسم الكامل مطلوب *';
+    } else if (/[0-9٠-٩]/.test(trimmedName)) {
+      newErrors.fullName = 'الاسم الكامل يجب ألا يحتوي على أرقام';
+    } else if (trimmedName.length < 2) {
+      newErrors.fullName = 'يرجى كتابة الاسم الكامل بشكل صحيح';
+    }
+
+    const trimmedCity = form.city.trim();
+    if (!trimmedCity) {
+      newErrors.city = 'اسم المدينة مطلوب *';
+    } else if (/[0-9٠-٩]/.test(trimmedCity)) {
+      newErrors.city = 'اسم المدينة يجب ألا يحتوي على أرقام';
+    } else if (trimmedCity.length < 2) {
+      newErrors.city = 'يرجى كتابة اسم المدينة بشكل صحيح';
+    }
+
+    const cleanPhone = form.phone.replace(/\s+|-/g, '');
+    const digitsOnly = form.phone.replace(/\D/g, '');
+    const isMoroccanValid = /^(\+?212|0)[5-7]\d{8}$/.test(cleanPhone);
+    const isGeneralValid = digitsOnly.length >= 9 && digitsOnly.length <= 14;
+
+    if (!form.phone.trim()) {
+      newErrors.phone = 'رقم الهاتف مطلوب *';
+    } else if (!isMoroccanValid && !isGeneralValid) {
+      newErrors.phone = 'رقم هاتف غير صحيح (مثال: 0612345678)';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      const firstError = Object.values(newErrors)[0];
+      toast.error(firstError);
       return;
     }
 
@@ -296,229 +501,260 @@ export default function ReferralForm() {
     );
   }
 
-  const renderCheckoutForm = (blockContent: any = {}) => (
-    <div 
-      className="p-6 sm:p-7 relative"
-      style={{
-        backgroundColor: blockContent.formBgColor || '#ffffff',
-        border: `${blockContent.borderWidth ?? 1}px solid ${blockContent.borderColor ?? '#f3f4f6'}`,
-        borderRadius: `${blockContent.borderRadiusTL ?? 32}px ${blockContent.borderRadiusTR ?? 32}px ${blockContent.borderRadiusBR ?? 32}px ${blockContent.borderRadiusBL ?? 32}px`
-      }}
-    >
-      <AnimatePresence mode="wait">
-        {isSuccess ? (
-          <motion.div 
-            key="success"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="text-center py-12"
-          >
-            <div className="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle2 className="w-12 h-12 text-green-500" />
-            </div>
-            <h3 className="text-2xl font-black text-gray-900 mb-3">Félicitations !</h3>
-            <p className="text-gray-500 text-lg mb-8 max-w-xs mx-auto">
-              Votre demande a été bien reçue. Un agent va vous contacter très prochainement pour confirmer la commande.
-            </p>
-            <button 
-              onClick={() => {
-                setIsSuccess(false);
-                setForm({ fullName: '', phone: '', city: '', address: '' });
-              }}
-              className="font-bold hover:underline"
-              style={{ color: blockContent.themeColor || landingPage?.themeColor || '#f97316' }}
+  const renderCheckoutForm = (blockContent: any = {}) => {
+    const isRtl = /[\u0600-\u06FF]/.test(
+      (blockContent.nameLabel || '') +
+      (blockContent.title || '') +
+      (blockContent.subtitle || '') +
+      (blockContent.buttonText || '') +
+      'الاسم الكامل'
+    );
+
+    return (
+      <div 
+        dir={isRtl ? "rtl" : "ltr"}
+        className={`p-6 sm:p-7 relative ${isRtl ? 'text-right' : 'text-left'}`}
+        style={{
+          backgroundColor: blockContent.formBgColor || '#ffffff',
+          border: `${blockContent.borderWidth ?? 1}px solid ${blockContent.borderColor ?? '#f3f4f6'}`,
+          borderRadius: `${blockContent.borderRadiusTL ?? 32}px ${blockContent.borderRadiusTR ?? 32}px ${blockContent.borderRadiusBR ?? 32}px ${blockContent.borderRadiusBL ?? 32}px`
+        }}
+      >
+        <AnimatePresence mode="wait">
+          {isSuccess ? (
+            <motion.div 
+              key="success"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="text-center py-12"
             >
-              Passer une autre commande
-            </button>
-          </motion.div>
-        ) : (
-          <motion.div key="form" initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <div className="mb-8 text-center">
-              <h2 className="text-2xl font-black text-gray-900 mb-1">
-                {blockContent.title || 'Commander Maintenant'}
-              </h2>
-              {blockContent.showPrice !== false && (
-                <div className="flex items-center justify-center gap-3 mb-2">
-                  {blockContent.showOldPrice && (
-                    <span 
-                      className="font-bold line-through opacity-60"
+              <div className="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                <CheckCircle2 className="w-12 h-12 text-green-500" />
+              </div>
+              <h3 className="text-2xl font-black text-gray-900 mb-3">Félicitations !</h3>
+              <p className="text-gray-500 text-lg mb-8 max-w-xs mx-auto">
+                Votre demande a été bien reçue. Un agent va vous contacter très prochainement pour confirmer la commande.
+              </p>
+              <button 
+                onClick={() => {
+                  setIsSuccess(false);
+                  setForm({ fullName: '', phone: '', city: '', address: '' });
+                }}
+                className="font-bold hover:underline"
+                style={{ color: blockContent.themeColor || landingPage?.themeColor || '#f97316' }}
+              >
+                Passer une autre commande
+              </button>
+            </motion.div>
+          ) : (
+            <motion.div key="form" initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <div className="mb-8 text-center">
+                <h2 className="text-2xl font-black text-gray-900 mb-1">
+                  {blockContent.title || 'اطلب الآن'}
+                </h2>
+                {blockContent.showPrice !== false && (
+                  <div className="flex items-center justify-center gap-3 mb-2">
+                    {blockContent.showOldPrice && (
+                      <span 
+                        className="font-bold line-through opacity-60"
+                        style={{ 
+                          color: blockContent.oldPriceColor || '#9ca3af',
+                          fontSize: `${blockContent.oldPriceSize || (blockContent.priceSize || 30) * 0.7}px`
+                        }}
+                      >
+                        {blockContent.oldPriceValue || (product?.retailPriceMad ? Number(product.retailPriceMad) + 50 : 150)} <span className="text-sm uppercase ml-0.5">MAD</span>
+                      </span>
+                    )}
+                    <div 
+                      className="font-black"
                       style={{ 
-                        color: blockContent.oldPriceColor || '#9ca3af',
-                        fontSize: `${blockContent.oldPriceSize || (blockContent.priceSize || 30) * 0.7}px`
+                        color: blockContent.priceColor || '#f64444', 
+                        fontSize: `${blockContent.priceSize || 30}px` 
                       }}
                     >
-                      {blockContent.oldPriceValue || (product?.retailPriceMad ? Number(product.retailPriceMad) + 50 : 150)} <span className="text-sm uppercase ml-0.5">MAD</span>
-                    </span>
-                  )}
-                  <div 
-                    className="font-black"
-                    style={{ 
-                      color: blockContent.priceColor || '#f64444', 
-                      fontSize: `${blockContent.priceSize || 30}px` 
-                    }}
-                  >
-                    {selectedOption?.price || selectedProductFromBlock?.retailPriceMad || selectedProductFromBlock?.priceMad || product?.retailPriceMad} <span className="text-lg uppercase ml-1 opacity-60">MAD</span>
+                      {selectedOption?.price || selectedProductFromBlock?.retailPriceMad || selectedProductFromBlock?.priceMad || product?.retailPriceMad} <span className="text-lg uppercase ml-1 opacity-60">MAD</span>
+                    </div>
+                  </div>
+                )}
+                <p className="text-sm text-gray-500 font-medium">
+                  {blockContent.subtitle || 'املأ النموذج أدناه لحجز منتجك. الدفع عند الاستلام.'}
+                </p>
+              </div>
+
+              {blockContent.options && blockContent.options.length > 0 && (
+                <div className="mb-8 space-y-2">
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-3 tracking-widest">
+                    {isRtl ? 'اختر العرض المناسب' : 'Sélectionnez votre offre'}
+                  </label>
+                  <div className="grid grid-cols-1 gap-0">
+                    {blockContent.options.map((opt: any, i: number) => {
+                      const isSelected = selectedOption?.id === opt.id || (!selectedOption && i === 0);
+                      const accentColor = opt.color || blockContent.packColor || '#f97316';
+                      
+                      return (
+                        <div 
+                          key={opt.id || i} 
+                          onClick={() => setSelectedOption(opt)}
+                          className={`py-4 px-3 transition-all cursor-pointer flex justify-between items-center group relative outline-none ${
+                            isSelected ? '' : 'border-b border-gray-100'
+                          }`}
+                          style={isSelected ? { 
+                            borderColor: accentColor, 
+                            borderWidth: `${blockContent.packBorderWidth ?? 2}px`,
+                            borderRadius: `${blockContent.packBorderRadius ?? 16}px`,
+                            backgroundColor: `${accentColor}08`
+                          } : {}}
+                        >
+                          {isSelected && (
+                             <div 
+                              className={`absolute -top-1 ${isRtl ? '-left-2' : '-right-2'} py-0.5 px-2 text-[7px] font-black text-white uppercase tracking-tighter rounded-full shadow-sm`}
+                              style={{ backgroundColor: accentColor }}
+                             >
+                              {isRtl ? 'محدد' : 'Sélectionné'}
+                             </div>
+                          )}
+                          <div>
+                            <div 
+                              className="font-black text-lg transition-colors"
+                              style={{ color: isSelected ? accentColor : '#111827' }}
+                            >
+                              {opt.name || `Pack ${i + 1}`}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {opt.oldPrice && (
+                              <>
+                                <span 
+                                  className="font-bold line-through opacity-50"
+                                  style={{ 
+                                    color: opt.oldPriceColor || blockContent.oldPriceColor || '#9ca3af',
+                                    fontSize: opt.oldPriceSize ? `${opt.oldPriceSize}px` : (blockContent.oldPriceSize ? `${blockContent.oldPriceSize}px` : '24px')
+                                  }}
+                                >
+                                  {opt.oldPrice}
+                                </span>
+                                <span className="text-gray-300 font-bold text-xl mx-0.5">/</span>
+                              </>
+                            )}
+                            <div 
+                              className="font-black transition-colors"
+                              style={{ 
+                                color: opt.priceColor || (isSelected ? accentColor : '#111827'),
+                                fontSize: opt.priceSize ? `${opt.priceSize}px` : (blockContent.priceSize ? `${blockContent.priceSize}px` : '24px')
+                              }}
+                            >
+                              {opt.price} <span className="text-[11px] opacity-60 uppercase ml-1">MAD</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
-              <p className="text-sm text-gray-500 font-medium">
-                {blockContent.subtitle || 'Remplissez le formulaire ci-dessous pour réserver votre produit. Le paiement se fera à la livraison.'}
-              </p>
-            </div>
 
-            {blockContent.options && blockContent.options.length > 0 && (
-              <div className="mb-8 space-y-2">
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-3 tracking-widest">Sélectionnez votre offre</label>
-                <div className="grid grid-cols-1 gap-0">
-                  {blockContent.options.map((opt: any, i: number) => {
-                    const isSelected = selectedOption?.id === opt.id || (!selectedOption && i === 0);
-                    const accentColor = opt.color || blockContent.packColor || '#f97316';
-                    
-                    return (
-                      <div 
-                        key={opt.id || i} 
-                        onClick={() => setSelectedOption(opt)}
-                        className={`py-4 px-3 transition-all cursor-pointer flex justify-between items-center group relative outline-none ${
-                          isSelected ? '' : 'border-b border-gray-100'
-                        }`}
-                        style={isSelected ? { 
-                          borderColor: accentColor, 
-                          borderWidth: `${blockContent.packBorderWidth ?? 2}px`,
-                          borderRadius: `${blockContent.packBorderRadius ?? 16}px`,
-                          backgroundColor: `${accentColor}08`
-                        } : {}}
-                      >
-                        {isSelected && (
-                           <div 
-                            className="absolute -top-1 -right-2 py-0.5 px-2 text-[7px] font-black text-white uppercase tracking-tighter rounded-full shadow-sm"
-                            style={{ backgroundColor: accentColor }}
-                           >
-                            Sélectionné
-                           </div>
-                        )}
-                        <div>
-                          <div 
-                            className="font-black text-lg transition-colors"
-                            style={{ color: isSelected ? accentColor : '#111827' }}
-                          >
-                            {opt.name || `Pack ${i + 1}`}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          {opt.oldPrice && (
-                            <>
-                              <span 
-                                className="font-bold line-through opacity-50"
-                                style={{ 
-                                  color: opt.oldPriceColor || blockContent.oldPriceColor || '#9ca3af',
-                                  fontSize: opt.oldPriceSize ? `${opt.oldPriceSize}px` : (blockContent.oldPriceSize ? `${blockContent.oldPriceSize}px` : '24px')
-                                }}
-                              >
-                                {opt.oldPrice}
-                              </span>
-                              <span className="text-gray-300 font-bold text-xl mx-0.5">/</span>
-                            </>
-                          )}
-                          <div 
-                            className="font-black transition-colors"
-                            style={{ 
-                              color: opt.priceColor || (isSelected ? accentColor : '#111827'),
-                              fontSize: opt.priceSize ? `${opt.priceSize}px` : (blockContent.priceSize ? `${blockContent.priceSize}px` : '24px')
-                            }}
-                          >
-                            {opt.price} <span className="text-[11px] opacity-60 uppercase ml-1">MAD</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1.5">{blockContent.nameLabel || 'الاسم الكامل *'}</label>
+                  <input
+                    type="text"
+                    required
+                    dir={isRtl ? "rtl" : "ltr"}
+                    value={form.fullName}
+                    onChange={(e) => handleNameChange(e.target.value)}
+                    className={`w-full px-4 py-3.5 bg-gray-50 rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all font-medium ${isRtl ? 'text-right' : 'text-left'} ${errors.fullName ? 'border-2 border-red-500 bg-red-50/20' : ''}`}
+                    style={{ 
+                      '--tw-ring-color': `${blockContent.themeColor || landingPage?.themeColor || '#f97316'}33`,
+                      '--tw-focus-border-color': blockContent.themeColor || landingPage?.themeColor || '#f97316'
+                    } as any}
+                    onFocus={(e) => {
+                      if (!errors.fullName) {
+                        e.currentTarget.style.borderColor = blockContent.themeColor || landingPage?.themeColor || '#f97316';
+                        e.currentTarget.style.boxShadow = `0 0 0 2px ${blockContent.themeColor || landingPage?.themeColor || '#f97316'}33`;
+                      }
+                    }}
+                    onBlur={(e) => {
+                      if (!errors.fullName) {
+                        e.currentTarget.style.borderColor = '#e5e7eb';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }
+                    }}
+                    placeholder={blockContent.namePlaceholder || "مثال: يوسف بن جلون"}
+                  />
+                  {errors.fullName && <p className="text-xs text-red-500 font-bold mt-1.5">{errors.fullName}</p>}
                 </div>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1.5">{blockContent.nameLabel || 'Nom complet *'}</label>
-                <input
-                  type="text"
-                  required
-                  value={form.fullName}
-                  onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-                  className="w-full px-4 py-3.5 bg-gray-50 rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all font-medium"
-                  style={{ 
-                    '--tw-ring-color': `${blockContent.themeColor || landingPage?.themeColor || '#f97316'}33`,
-                    '--tw-focus-border-color': blockContent.themeColor || landingPage?.themeColor || '#f97316'
-                  } as any}
-                  onFocus={(e) => {
-                    e.currentTarget.style.borderColor = blockContent.themeColor || landingPage?.themeColor || '#f97316';
-                    e.currentTarget.style.boxShadow = `0 0 0 2px ${blockContent.themeColor || landingPage?.themeColor || '#f97316'}33`;
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = '#e5e7eb';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
-                  placeholder={blockContent.namePlaceholder || "Ex: Youssef Benjelloun"}
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1.5">{blockContent.phoneLabel || 'Numéro de téléphone *'}</label>
-                <input
-                  type="tel"
-                  required
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  className="w-full px-4 py-3.5 bg-gray-50 rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all font-medium"
-                  onFocus={(e) => {
-                    e.currentTarget.style.borderColor = blockContent.themeColor || landingPage?.themeColor || '#f97316';
-                    e.currentTarget.style.boxShadow = `0 0 0 2px ${blockContent.themeColor || landingPage?.themeColor || '#f97316'}33`;
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = '#e5e7eb';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
-                  placeholder={blockContent.phonePlaceholder || "06 XX XX XX XX"}
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1.5">{blockContent.cityLabel || 'Ville *'}</label>
-                <input
-                  type="text"
-                  required
-                  value={form.city}
-                  onChange={(e) => setForm({ ...form, city: e.target.value })}
-                  className="w-full px-4 py-3.5 bg-gray-50 rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all font-medium"
-                  onFocus={(e) => {
-                    e.currentTarget.style.borderColor = blockContent.themeColor || landingPage?.themeColor || '#f97316';
-                    e.currentTarget.style.boxShadow = `0 0 0 2px ${blockContent.themeColor || landingPage?.themeColor || '#f97316'}33`;
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = '#e5e7eb';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
-                  placeholder={blockContent.cityPlaceholder || "Ex: Casablanca"}
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1.5">{blockContent.addressLabel || 'Adresse (Optionnel)'}</label>
-                <textarea
-                  value={form.address}
-                  onChange={(e) => setForm({ ...form, address: e.target.value })}
-                  rows={2}
-                  className="w-full px-4 py-3.5 bg-gray-50 rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all font-medium resize-none"
-                  onFocus={(e) => {
-                    e.currentTarget.style.borderColor = blockContent.themeColor || landingPage?.themeColor || '#f97316';
-                    e.currentTarget.style.boxShadow = `0 0 0 2px ${blockContent.themeColor || landingPage?.themeColor || '#f97316'}33`;
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = '#e5e7eb';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
-                  placeholder={blockContent.addressPlaceholder || "Votre adresse complète pour faciliter la livraison"}
-                />
-              </div>
+                
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1.5">{blockContent.phoneLabel || 'رقم الهاتف *'}</label>
+                  <input
+                    type="tel"
+                    required
+                    dir="ltr"
+                    value={form.phone}
+                    onChange={(e) => handlePhoneChange(e.target.value)}
+                    className={`w-full px-4 py-3.5 bg-gray-50 rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all font-medium ${isRtl ? 'text-right' : 'text-left'} ${errors.phone ? 'border-2 border-red-500 bg-red-50/20' : ''}`}
+                    onFocus={(e) => {
+                      if (!errors.phone) {
+                        e.currentTarget.style.borderColor = blockContent.themeColor || landingPage?.themeColor || '#f97316';
+                        e.currentTarget.style.boxShadow = `0 0 0 2px ${blockContent.themeColor || landingPage?.themeColor || '#f97316'}33`;
+                      }
+                    }}
+                    onBlur={(e) => {
+                      if (!errors.phone) {
+                        e.currentTarget.style.borderColor = '#e5e7eb';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }
+                    }}
+                    placeholder={blockContent.phonePlaceholder || "06 XX XX XX XX"}
+                  />
+                  {errors.phone && <p className="text-xs text-red-500 font-bold mt-1.5">{errors.phone}</p>}
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1.5">{blockContent.cityLabel || 'المدينة *'}</label>
+                  <input
+                    type="text"
+                    required
+                    dir={isRtl ? "rtl" : "ltr"}
+                    value={form.city}
+                    onChange={(e) => handleCityChange(e.target.value)}
+                    className={`w-full px-4 py-3.5 bg-gray-50 rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all font-medium ${isRtl ? 'text-right' : 'text-left'} ${errors.city ? 'border-2 border-red-500 bg-red-50/20' : ''}`}
+                    onFocus={(e) => {
+                      if (!errors.city) {
+                        e.currentTarget.style.borderColor = blockContent.themeColor || landingPage?.themeColor || '#f97316';
+                        e.currentTarget.style.boxShadow = `0 0 0 2px ${blockContent.themeColor || landingPage?.themeColor || '#f97316'}33`;
+                      }
+                    }}
+                    onBlur={(e) => {
+                      if (!errors.city) {
+                        e.currentTarget.style.borderColor = '#e5e7eb';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }
+                    }}
+                    placeholder={blockContent.cityPlaceholder || "مثال: الدار البيضاء"}
+                  />
+                  {errors.city && <p className="text-xs text-red-500 font-bold mt-1.5">{errors.city}</p>}
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1.5">{blockContent.addressLabel || 'العنوان (اختياري)'}</label>
+                  <textarea
+                    dir={isRtl ? "rtl" : "ltr"}
+                    value={form.address}
+                    onChange={(e) => setForm({ ...form, address: e.target.value })}
+                    rows={2}
+                    className={`w-full px-4 py-3.5 bg-gray-50 rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all font-medium resize-none ${isRtl ? 'text-right' : 'text-left'}`}
+                    onFocus={(e) => {
+                      e.currentTarget.style.borderColor = blockContent.themeColor || landingPage?.themeColor || '#f97316';
+                      e.currentTarget.style.boxShadow = `0 0 0 2px ${blockContent.themeColor || landingPage?.themeColor || '#f97316'}33`;
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.style.borderColor = '#e5e7eb';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                    placeholder={blockContent.addressPlaceholder || "عنوانك الكامل لترهين التوصيل"}
+                  />
+                </div>
 
               <button
                 type="submit"
@@ -535,16 +771,16 @@ export default function ReferralForm() {
                 {isSubmitting ? (
                   <span className="flex items-center justify-center gap-2">
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Traitement...
+                    جاري المعالجة...
                   </span>
                 ) : (
-                  blockContent.buttonText || landingPage?.buttonText || 'Confirmer ma commande'
+                  blockContent.buttonText || landingPage?.buttonText || 'تأكيد الطلب'
                 )}
               </button>
               
               <div className="flex items-center justify-center gap-2 text-xs font-bold text-gray-400 mt-4">
                 <ShieldCheck className="w-4 h-4" />
-                Vos informations sont sécurisées
+                معلوماتك آمنة ومحمية
               </div>
             </form>
           </motion.div>
@@ -552,6 +788,7 @@ export default function ReferralForm() {
       </AnimatePresence>
     </div>
   );
+};
 
   const structure = landingPage?.customStructure;
   const blocks = Array.isArray(structure) ? structure : (structure?.blocks || []);

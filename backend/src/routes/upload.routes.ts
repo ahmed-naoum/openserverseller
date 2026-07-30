@@ -237,12 +237,15 @@ router.post(
       });
 
       if (socketId) {
-        io.to(socketId).emit('upload-progress', {
-          current: i + 1,
-          total: files.length,
-          filename: file.originalname,
-          url: fileUrl,
-        });
+        const ioInstance = getIO();
+        if (ioInstance) {
+          ioInstance.to(socketId).emit('upload-progress', {
+            current: i + 1,
+            total: files.length,
+            filename: file.originalname,
+            url: fileUrl,
+          });
+        }
       }
     }
 

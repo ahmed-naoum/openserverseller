@@ -512,8 +512,8 @@ export default function ShopifyLeads() {
                   const total = getTotalAmount(order);
                   const dateFormatted = formatDate(order.created_at);
 
-                  const payStatus = order.financial_status || 'pending';
-                  const shipStatus = order.fulfillment_status || 'unfulfilled';
+                  const payStatus = toStatusString(order.financial_status, 'pending');
+                  const shipStatus = toStatusString(order.fulfillment_status, 'unfulfilled');
                   const isSelected = selectedOrderIds.has(order.id);
 
                   return (

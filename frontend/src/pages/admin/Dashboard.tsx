@@ -517,7 +517,7 @@ export default function AdminDashboard() {
                       #{idx + 1}
                     </div>
                     <div>
-                      <p className="text-xs font-black text-slate-800 capitalize">{item.city.toLowerCase()}</p>
+                      <p className="text-xs font-black text-slate-800 capitalize">{(item.city || '').toString().toLowerCase()}</p>
                       <p className="text-[10px] font-bold text-slate-400">{item.ordersCount} commandes</p>
                     </div>
                   </div>

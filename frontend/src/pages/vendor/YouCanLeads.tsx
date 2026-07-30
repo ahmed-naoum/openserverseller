@@ -511,9 +511,9 @@ export default function YouCanLeads() {
                   const total = getTotalAmount(order);
                   const dateFormatted = formatDate(order.created_at);
 
-                  const confStatus = order.status || 'Open';
-                  const payStatus = order.payment_status || 'Unpaid';
-                  const shipStatus = order.fulfillment_status || 'Unfulfilled';
+                  const confStatus = toStatusString(order.status, 'Open');
+                  const payStatus = toStatusString(order.payment_status, 'Unpaid');
+                  const shipStatus = toStatusString(order.fulfillment_status, 'Unfulfilled');
                   const isSelected = selectedOrderIds.has(order.id);
 
                   return (
@@ -703,17 +703,17 @@ export default function YouCanLeads() {
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Confirmation</span>
-                  <span className="text-xs font-black text-amber-600">{selectedOrder.status || 'Open'}</span>
+                  <span className="text-xs font-black text-amber-600">{toStatusString(selectedOrder.status, 'Open')}</span>
                 </div>
 
                 <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Paiement</span>
-                  <span className="text-xs font-black text-emerald-600">{selectedOrder.payment_status || 'Unpaid'}</span>
+                  <span className="text-xs font-black text-emerald-600">{toStatusString(selectedOrder.payment_status, 'Unpaid')}</span>
                 </div>
 
                 <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Livraison</span>
-                  <span className="text-xs font-black text-slate-700">{selectedOrder.fulfillment_status || 'Unfulfilled'}</span>
+                  <span className="text-xs font-black text-slate-700">{toStatusString(selectedOrder.fulfillment_status, 'Unfulfilled')}</span>
                 </div>
               </div>
 

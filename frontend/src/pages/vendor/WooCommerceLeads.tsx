@@ -66,6 +66,14 @@ interface WooCommerceOrder {
   }>;
 }
 
+export const toStatusString = (val: any, fallback = ''): string => {
+  if (typeof val === 'string') return val;
+  if (val && typeof val === 'object') {
+    return val.name || val.label || val.value || val.code || fallback;
+  }
+  return fallback;
+};
+
 export default function WooCommerceLeads() {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
@@ -472,7 +480,7 @@ export default function WooCommerceLeads() {
                   const total = getTotalAmount(order);
                   const dateFormatted = formatDate(order.date_created);
 
-                  const status = (order.status || 'pending').toLowerCase();
+                  const status = toStatusString(order.status, 'pending').toLowerCase();
                   const isSelected = selectedOrderIds.has(order.id);
 
                   return (
@@ -685,7 +693,7 @@ export default function WooCommerceLeads() {
               {/* Status Summary */}
               <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 text-center">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Statut Commande</span>
-                <span className="text-xs font-black text-purple-600 uppercase">{selectedOrder.status || 'pending'}</span>
+                <span className="text-xs font-black text-purple-600 uppercase">{toStatusString(selectedOrder.status, 'pending')}</span>
               </div>
 
               {/* Line Items */}

@@ -176,6 +176,29 @@ const savePageBlocks = () => {
   }
 };
 
+export const extractSocketIp = (s: any): string => {
+  const headers = s.handshake?.headers || {};
+  const cfIp = headers['cf-connecting-ip'] as string;
+  const realIp = headers['x-real-ip'] as string;
+  const forwardedFor = headers['x-forwarded-for'] as string;
+
+  if (cfIp) return cfIp;
+  if (realIp) return realIp;
+  if (forwardedFor) return forwardedFor.split(',')[0].trim();
+
+  let rawIp = s.handshake?.address || s.ip || '127.0.0.1';
+  if (rawIp === '::1' || rawIp === '::ffff:127.0.0.1') return '127.0.0.1';
+  if (rawIp.startsWith('::ffff:')) return rawIp.replace('::ffff:', '');
+  return rawIp;
+};
+
+export const extractSocketLocalIp = (s: any): string => {
+  let rawIp = s.handshake?.address || s.ip || '127.0.0.1';
+  if (rawIp === '::1' || rawIp === '::ffff:127.0.0.1') return '127.0.0.1 (Localhost)';
+  if (rawIp.startsWith('::ffff:')) return rawIp.replace('::ffff:', '');
+  return rawIp;
+};
+
 // ─── GET /admin/security/sessions ────────────────────────────────────────────
 router.get(
   '/sessions',
@@ -195,13 +218,17 @@ router.get(
 
     const sessions = sockets.map(s => {
       const user = s.userUuid ? userMap.get(s.userUuid) : null;
+      const pub = extractSocketIp(s);
+      const loc = extractSocketLocalIp(s);
       return {
         socketId: s.id,
         userUuid: s.userUuid || null,
         email: user?.email || 'Guest',
         fullName: user?.profile?.fullName || 'Anonymous',
         role: user?.role?.name || 'Guest',
-        ip: s.handshake?.address || s.ip || 'unknown',
+        publicIp: pub,
+        localIp: loc,
+        ip: pub,
         userAgent: s.handshake?.headers['user-agent'] || 'unknown',
         currentPage: s.currentPage || '/',
         lastActive: s.lastActive || Date.now(),
@@ -239,10 +266,7 @@ router.delete(
       }
 
       // Extract the actual user's IP instead of the admin's req.ip
-      const targetIp = socket.handshake?.headers['x-forwarded-for']?.toString().split(',')[0].trim() || 
-                       socket.handshake?.address || 
-                       socket.ip || 
-                       'unknown';
+      const targetIp = extractSocketIp(socket);
                        
       const blockIdentifier = targetUuid || targetIp;
       const blockKey = `${blockIdentifier}-${blockedPath}`;
@@ -280,19 +304,13 @@ router.post(
         if (dbUser?.email) targetEmail = dbUser.email;
       }
 
-      const targetIp = socket.handshake?.headers['x-forwarded-for']?.toString().split(',')[0].trim() || 
-                       socket.handshake?.address || 
-                       socket.ip || 
-                       'unknown';
+      const targetIp = extractSocketIp(socket);
 
       // Terminate ALL sockets for this exact user (or exact IP if anonymous)
       if (io) {
         const allSockets = Array.from(io.sockets.sockets.values()) as any[];
         allSockets.forEach(s => {
-          const sIp = s.handshake?.headers['x-forwarded-for']?.toString().split(',')[0].trim() || 
-                      s.handshake?.address || 
-                      s.ip || 
-                      'unknown';
+          const sIp = extractSocketIp(s);
                       
           // Match by UUID if logged in, otherwise exact IP match (be careful on localhost)
           const isMatch = targetUuid ? s.userUuid === targetUuid : sIp === targetIp;
@@ -828,6 +846,191 @@ router.post(
       status: 'success',
       message: `IP ${ip} blocked and persisted successfully`,
       blockedIPs: settings.blockedIPs,
+    });
+  })
+);
+
+// ─── POST /admin/security/block-useragent ─────────────────────────────────────
+router.post(
+  '/block-useragent',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { userAgent } = req.body;
+    if (!userAgent || typeof userAgent !== 'string') {
+      return res.status(400).json({ status: 'error', message: 'Valid userAgent required' });
+    }
+
+    const cleanAgent = userAgent.trim();
+    const settings = await fetchSecuritySettings();
+    if (!settings.blockedUserAgents) settings.blockedUserAgents = [];
+    if (!settings.blockedUserAgents.includes(cleanAgent)) {
+      settings.blockedUserAgents.push(cleanAgent);
+      await prisma.platformSettings.upsert({
+        where: { key: 'security_settings' },
+        update: { value: settings as any },
+        create: { key: 'security_settings', value: settings as any }
+      });
+      clearSecurityCache();
+    }
+
+    await logImmutableAction(
+      req.user?.id || null,
+      req.user?.email || null,
+      `BLOCKED_USER_AGENT: ${cleanAgent}`,
+      req.ip || 'unknown'
+    );
+
+    emitSecurityUpdate('blocklist');
+    res.json({ status: 'success', message: 'User-Agent blocked successfully' });
+  })
+);
+
+// ─── POST /admin/security/users/:userUuid/ban ──────────────────────────────────
+router.post(
+  '/users/:userUuid/ban',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { userUuid } = req.params;
+    const user = await prisma.user.findUnique({ where: { uuid: userUuid as string } });
+    if (!user) {
+      return res.status(404).json({ status: 'error', message: 'User not found' });
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { isActive: false }
+    });
+
+    const { io } = await import('../index.js');
+    if (io) {
+      const sockets = Array.from(io.sockets.sockets.values()) as any[];
+      sockets.forEach(s => {
+        if (s.userUuid === userUuid) {
+          s.emit('session:terminated', { message: 'Your account has been suspended by an administrator.', blockedPath: '*' });
+          s.disconnect(true);
+        }
+      });
+    }
+
+    await logImmutableAction(
+      req.user?.id || null,
+      req.user?.email || null,
+      `BANNED_USER_ACCOUNT: email=${user.email} uuid=${user.uuid}`,
+      req.ip || 'unknown'
+    );
+
+    emitSecurityUpdate('sessions');
+    res.json({ status: 'success', message: `User account (${user.email}) banned successfully` });
+  })
+);
+
+// ─── POST /admin/security/batch-ban ───────────────────────────────────────────
+router.post(
+  '/batch-ban',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { socketId, userUuid, publicIp, currentPage, userAgent, options } = req.body;
+
+    const results: string[] = [];
+    const { io } = await import('../index.js');
+
+    // 1. Ban IP
+    if (options?.banIp && publicIp && publicIp !== '127.0.0.1') {
+      const settings = await fetchSecuritySettings();
+      if (!settings.blockedIPs.includes(publicIp)) {
+        settings.blockedIPs.push(publicIp);
+        await prisma.platformSettings.upsert({
+          where: { key: 'security_settings' },
+          update: { value: settings as any },
+          create: { key: 'security_settings', value: settings as any }
+        });
+        clearSecurityCache();
+      }
+      results.push('IP Address Banned');
+    }
+
+    // 2. Ban Current Page
+    if (options?.banCurrentPage && socketId) {
+      const socket = io?.sockets.sockets.get(socketId as string) as any;
+      const path = currentPage || socket?.currentPage || '/';
+      const targetIp = publicIp || 'unknown';
+      const blockKey = `${userUuid || targetIp}-${path}`;
+      pageBlocks.set(blockKey, { ip: targetIp, email: userUuid || 'Guest', path, timestamp: Date.now() });
+      savePageBlocks();
+      if (socket) {
+        socket.emit('session:terminated', { message: 'Session page blocked by administrator.', blockedPath: path });
+        socket.disconnect(true);
+      }
+      results.push('Current Page Banned');
+    }
+
+    // 3. Ban Global
+    if (options?.banGlobal) {
+      const targetIp = publicIp || 'unknown';
+      const blockKey = `${userUuid || targetIp}-*`;
+      pageBlocks.set(blockKey, { ip: targetIp, email: userUuid || 'Guest', path: '*', timestamp: Date.now() });
+      savePageBlocks();
+      if (io) {
+        const allSockets = Array.from(io.sockets.sockets.values()) as any[];
+        allSockets.forEach(s => {
+          if (userUuid ? s.userUuid === userUuid : extractSocketIp(s) === targetIp) {
+            s.emit('session:terminated', { message: 'Access globally blocked by administrator.', blockedPath: '*' });
+            s.disconnect(true);
+          }
+        });
+      }
+      results.push('Global Access Banned');
+    }
+
+    // 4. Ban User Account
+    if (options?.banAccount && userUuid) {
+      const user = await prisma.user.findUnique({ where: { uuid: userUuid as string } });
+      if (user) {
+        await prisma.user.update({ where: { id: user.id }, data: { isActive: false } });
+        if (io) {
+          const allSockets = Array.from(io.sockets.sockets.values()) as any[];
+          allSockets.forEach(s => {
+            if (s.userUuid === userUuid) {
+              s.emit('session:terminated', { message: 'Account banned by administrator.', blockedPath: '*' });
+              s.disconnect(true);
+            }
+          });
+        }
+        results.push('User Account Deactivated');
+      }
+    }
+
+    // 5. Ban User-Agent
+    if (options?.banUserAgent && userAgent && userAgent !== 'unknown') {
+      const settings = await fetchSecuritySettings();
+      if (!settings.blockedUserAgents) settings.blockedUserAgents = [];
+      if (!settings.blockedUserAgents.includes(userAgent)) {
+        settings.blockedUserAgents.push(userAgent);
+        await prisma.platformSettings.upsert({
+          where: { key: 'security_settings' },
+          update: { value: settings as any },
+          create: { key: 'security_settings', value: settings as any }
+        });
+        clearSecurityCache();
+      }
+      results.push('User-Agent Banned');
+    }
+
+    await logImmutableAction(
+      req.user?.id || null,
+      req.user?.email || null,
+      `BATCH_BAN_EXECUTED: actions=${results.join(', ')}`,
+      req.ip || 'unknown'
+    );
+
+    emitSecurityUpdate('sessions');
+    res.json({
+      status: 'success',
+      message: results.length ? `Actions executed: ${results.join(', ')}` : 'No options selected',
+      executed: results
     });
   })
 );

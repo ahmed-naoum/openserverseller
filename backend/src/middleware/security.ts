@@ -11,6 +11,7 @@ export interface DynamicSecuritySettings {
   enableAuditLog: boolean;
   enableRequestSanitization: boolean;
   blockedIPs: string[];
+  blockedUserAgents?: string[];
   whitelistedIPs: string[];
   globalRateLimitWindowMs: number;
   globalRateLimitMax: number;
@@ -35,6 +36,7 @@ export const fetchSecuritySettings = async (): Promise<DynamicSecuritySettings> 
     enableAuditLog: process.env.SECURITY_ENABLE_AUDIT_LOG === 'true',
     enableRequestSanitization: process.env.SECURITY_ENABLE_SANITIZATION === 'true',
     blockedIPs: (process.env.SECURITY_BLOCKED_IPS || '').split(',').filter(Boolean),
+    blockedUserAgents: [],
     whitelistedIPs: (process.env.SECURITY_WHITELISTED_IPS || '').split(',').filter(Boolean),
     globalRateLimitWindowMs: 900000, // 15 min
     globalRateLimitMax: 100,
@@ -54,6 +56,7 @@ export const fetchSecuritySettings = async (): Promise<DynamicSecuritySettings> 
         enableAuditLog: typeof data.enableAuditLog === 'boolean' ? data.enableAuditLog : defaultSettings.enableAuditLog,
         enableRequestSanitization: typeof data.enableRequestSanitization === 'boolean' ? data.enableRequestSanitization : defaultSettings.enableRequestSanitization,
         blockedIPs: Array.isArray(data.blockedIPs) ? data.blockedIPs.map(ip => ip.trim()) : defaultSettings.blockedIPs,
+        blockedUserAgents: Array.isArray(data.blockedUserAgents) ? data.blockedUserAgents : [],
         whitelistedIPs: Array.isArray(data.whitelistedIPs) ? data.whitelistedIPs.map(ip => ip.trim()) : defaultSettings.whitelistedIPs,
         globalRateLimitWindowMs: typeof data.globalRateLimitWindowMs === 'number' ? data.globalRateLimitWindowMs : defaultSettings.globalRateLimitWindowMs,
         globalRateLimitMax: typeof data.globalRateLimitMax === 'number' ? data.globalRateLimitMax : defaultSettings.globalRateLimitMax,
@@ -182,6 +185,15 @@ export const ipFilter = async (
     return res.status(403).json({
       status: 'error',
       message: 'Access denied. Your IP has been blocked.',
+    });
+  }
+
+  // Check blocked User-Agents
+  const userAgent = req.get('user-agent');
+  if (userAgent && settings.blockedUserAgents && settings.blockedUserAgents.includes(userAgent)) {
+    return res.status(403).json({
+      status: 'error',
+      message: 'Access denied. Your User-Agent has been blocked.',
     });
   }
 

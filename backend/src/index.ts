@@ -191,7 +191,12 @@ const broadcastActiveUsersCount = async (io: any) => {
   }> = {};
 
   sockets.forEach((s) => {
-    const ip = s.handshake.headers['x-forwarded-for']?.split(',')[0].trim() || s.handshake.address || 'unknown';
+    const rawIp = s.handshake.headers['cf-connecting-ip'] || 
+                  s.handshake.headers['x-real-ip'] || 
+                  s.handshake.headers['x-forwarded-for']?.split(',')[0].trim() || 
+                  s.handshake.address || 
+                  '127.0.0.1';
+    const ip = (rawIp === '::1' || rawIp === '::ffff:127.0.0.1') ? '127.0.0.1' : rawIp.replace(/^::ffff:/, '');
     const userAgent = s.handshake.headers['user-agent'] || 'unknown';
     const deviceKey = `${ip}::${userAgent}`;
     const page = s.currentPage || '/';

@@ -48,6 +48,7 @@ import SupportInspector from './pages/admin/SupportInspector';
 import ContactMessages from './pages/admin/ContactMessages';
 import AdminLinks from './pages/admin/Links';
 import AdminProfessionalEmails from './pages/admin/ProfessionalEmails';
+import PlatformArchitecture from './pages/admin/PlatformArchitecture';
 
 
 import YouCanCallback from './pages/vendor/YouCanCallback';
@@ -496,6 +497,7 @@ function App() {
           <Route path="support-inspector" element={<SupportInspector />} />
           <Route path="contact-messages" element={<ContactMessages />} />
           <Route path="links" element={<AdminLinks />} />
+          <Route path="architecture" element={<PlatformArchitecture />} />
           <Route path="scanner" element={<HelperScanner />} />
           <Route path="settings" element={<SettingsPage />} />
 

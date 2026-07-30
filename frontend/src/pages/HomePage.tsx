@@ -801,8 +801,27 @@ export default function HomePage() {
                   ? (prod.images[0].imageUrl.startsWith('http') ? prod.images[0].imageUrl : `${BACKEND_URL}${prod.images[0].imageUrl}`)
                   : "/placeholder.png";
                 
-                const categoryName = prod.categories?.[0]?.nameAr || prod.categories?.[0]?.nameFr || "منتج عام";
-                const rating = 4.8 + (prod.id % 3) * 0.1; // stable attractive mock rating
+                const categoryName = language === 'ar'
+                  ? (prod.categories?.[0]?.nameAr || prod.categories?.[0]?.nameFr || "منتج عام")
+                  : language === 'en'
+                  ? (prod.categories?.[0]?.nameEn || prod.categories?.[0]?.nameFr || "General Product")
+                  : (prod.categories?.[0]?.nameFr || prod.categories?.[0]?.nameAr || "Produit général");
+
+                const productName = language === 'en'
+                  ? (prod.nameEn || prod.nameFr || prod.nameAr)
+                  : language === 'fr'
+                  ? (prod.nameFr || prod.nameAr)
+                  : (prod.nameAr || prod.nameFr);
+
+                const productSubName = language === 'ar'
+                  ? (prod.nameFr && prod.nameFr !== prod.nameAr ? prod.nameFr : null)
+                  : (prod.nameAr && prod.nameAr !== productName ? prod.nameAr : null);
+
+                const productDesc = language === 'en'
+                  ? (prod.descriptionEn || prod.descriptionFr || prod.description)
+                  : language === 'fr'
+                  ? (prod.descriptionFr || prod.description)
+                  : (prod.description || prod.descriptionFr);
                 
                 const tag = prod.visibility?.includes('AFFILIATE') 
                   ? t('best_seller_fire') 
@@ -814,31 +833,31 @@ export default function HomePage() {
                   <motion.div
                     key={prod.id || idx}
                     whileHover={{ y: -6 }}
-                    className="shrink-0 w-[85vw] sm:w-[320px] snap-center bg-slate-50 border border-slate-100 hover:border-slate-200 rounded-[2.5rem] p-6 text-right flex flex-col justify-between shadow-sm relative overflow-hidden transition-all duration-300"
+                    className={`shrink-0 w-[85vw] sm:w-[320px] snap-center bg-slate-50 border border-slate-100 hover:border-slate-200 rounded-[2.5rem] p-6 flex flex-col justify-between shadow-sm relative overflow-hidden transition-all duration-300 ${language === 'ar' ? 'text-right' : 'text-left'}`}
                   >
-                    <div className="absolute top-4 left-4 z-10">
+                    <div className={`absolute top-4 ${language === 'ar' ? 'left-4' : 'right-4'} z-10`}>
                       <span className="px-3 py-1.5 bg-[#2e315e] text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-md">
                         {tag}
                       </span>
                     </div>
 
                     <div className="relative aspect-square w-full rounded-2xl overflow-hidden bg-slate-100 flex items-center justify-center">
-                      <img src={productImage} alt={prod.nameAr || prod.nameFr} className="object-cover w-full h-full hover:scale-105 transition-transform duration-300" />
+                      <img src={productImage} alt={productName} className="object-cover w-full h-full hover:scale-105 transition-transform duration-300" />
                     </div>
 
                     <div className="space-y-4 mt-6">
                       <div>
                         <h3 className="text-base font-black text-slate-950 mt-1 leading-tight" dir="auto">
-                          {prod.nameAr || prod.nameFr}
+                          {productName}
                         </h3>
-                        {prod.nameFr && prod.nameAr && prod.nameFr !== prod.nameAr && (
+                        {productSubName && (
                           <p className="text-[10px] text-slate-500 font-bold mt-1 tracking-wide" dir="auto">
-                            {prod.nameFr}
+                            {productSubName}
                           </p>
                         )}
-                        {prod.description && (
+                        {productDesc && (
                           <p className="text-xs text-slate-500 mt-2 line-clamp-2 leading-relaxed" dir="auto">
-                            {prod.description}
+                            {productDesc}
                           </p>
                         )}
                       </div>
