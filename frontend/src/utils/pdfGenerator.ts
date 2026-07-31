@@ -121,7 +121,7 @@ export const generateInvoicePDF = (invoiceDetails: any) => {
     invoiceDetails.leads.forEach((lead: any) => {
       const gross = Number(lead.order?.totalAmountMad) || 0;
       const shipping = lead.customShippingFee ?? 57;
-      const rate = lead.customPlatformFeeRate ?? invoiceDetails.user?.platformFeeRate ?? 0.13;
+      const rate = lead.customPlatformFeeRate ?? invoiceDetails.user?.platformFeeRate ?? 0.05;
       const profit = gross - shipping;
       const fee = profit > 0 ? profit * rate : 0;
 
@@ -152,7 +152,7 @@ export const generateInvoicePDF = (invoiceDetails: any) => {
 
     finalY += 8;
     doc.setTextColor(...lightGray);
-    const avgRate = (grossAmount - deliveryCost) > 0 ? (platformFee / (grossAmount - deliveryCost)) * 100 : 13;
+    const avgRate = (grossAmount - deliveryCost) > 0 ? (platformFee / (grossAmount - deliveryCost)) * 100 : 5;
     doc.text(`Frais de plateforme (${avgRate.toFixed(1)}%):`, pageWidth - 90, finalY);
     doc.setTextColor(239, 68, 68); // Red
     doc.text(`-${platformFee.toFixed(2)} MAD`, pageWidth - 14, finalY, { align: 'right' });

@@ -124,7 +124,7 @@ export default function PaymentMonitoring() {
     // Admin Profit calculation:
     // The summary provides the Net Amount (after 57 MAD delivery and platform fee).
     // Formula to recover the fee dynamically: (Net Amount / (1 - platformFeeRate)) * platformFeeRate
-    const rate = u.platformFeeRate ?? 0.13;
+    const rate = u.platformFeeRate ?? (u.role === 'INFLUENCER' ? 0.13 : 0.05);
     const userAdminProfit = rate < 1 ? (u.totalPaidAmount / (1 - rate)) * rate : 0;
     acc.totalAdminProfit += userAdminProfit;
     
@@ -207,13 +207,13 @@ export default function PaymentMonitoring() {
               {/* Dynamic and customizable platform fee rate field */}
               <div className="flex items-center gap-2 mt-2">
                 <span className="text-xs font-bold text-gray-500 bg-gray-50 px-2.5 py-1 rounded-xl flex items-center gap-1.5 border border-gray-100">
-                  Frais Plateforme: <span className="text-violet-600 font-black">{((selectedUser.platformFeeRate ?? 0.13) * 100).toFixed(1)}%</span>
+                  Frais Plateforme: <span className="text-violet-600 font-black">{((selectedUser.platformFeeRate ?? (selectedUser.role === 'INFLUENCER' ? 0.13 : 0.05)) * 100).toFixed(1)}%</span>
                 </span>
                 <button 
                   onClick={(e) => {
                     e.stopPropagation();
                     setEditingUser(selectedUser);
-                    setNewFeePercentage(String(Math.round((selectedUser.platformFeeRate ?? 0.13) * 1000) / 10));
+                    setNewFeePercentage(String(Math.round((selectedUser.platformFeeRate ?? (selectedUser.role === 'INFLUENCER' ? 0.13 : 0.05)) * 1000) / 10));
                   }}
                   className="px-3 py-1 bg-violet-50 hover:bg-violet-100 text-violet-600 hover:text-violet-700 text-[10px] font-black rounded-xl transition-all border border-violet-100/50 flex items-center gap-1"
                 >
@@ -307,7 +307,7 @@ export default function PaymentMonitoring() {
                         const grossAmount = Number(lead.order?.totalAmountMad) || 0;
                         const deliveryCost = lead.customShippingFee ?? 57;
                         const profit = grossAmount - deliveryCost;
-                        const rate = lead.customPlatformFeeRate ?? selectedUser?.platformFeeRate ?? 0.13;
+                        const rate = lead.customPlatformFeeRate ?? selectedUser?.platformFeeRate ?? (selectedUser?.role === 'INFLUENCER' ? 0.13 : 0.05);
                         const platformFee = profit > 0 ? profit * rate : 0;
                         const netAmount = grossAmount - deliveryCost - platformFee;
                         return (
@@ -599,7 +599,7 @@ export default function PaymentMonitoring() {
             <TrendingUp size={18} />
           </div>
           <div>
-            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">COD Fee (13%)</p>
+            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Frais Plateforme</p>
             <p className="text-base font-black text-blue-600 leading-none">+{overallStats.totalAdminProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           </div>
         </div>
@@ -683,13 +683,13 @@ export default function PaymentMonitoring() {
                   onClick={(e) => {
                     e.stopPropagation();
                     setEditingUser(user);
-                    setNewFeePercentage(String(Math.round((user.platformFeeRate ?? 0.13) * 1000) / 10));
+                    setNewFeePercentage(String(Math.round((user.platformFeeRate ?? (user.role === 'INFLUENCER' ? 0.13 : 0.05)) * 1000) / 10));
                   }}
                   className="flex items-center justify-between mb-4 bg-violet-50/50 hover:bg-violet-50 px-3 py-1.5 rounded-xl border border-violet-100/50 group/fee transition-all"
                 >
                   <span className="text-[10px] font-black text-violet-600 uppercase tracking-wider">Frais Plateforme</span>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-black text-gray-700">{((user.platformFeeRate ?? 0.13) * 100).toFixed(1)}%</span>
+                    <span className="text-xs font-black text-gray-700">{((user.platformFeeRate ?? (user.role === 'INFLUENCER' ? 0.13 : 0.05)) * 100).toFixed(1)}%</span>
                     <Edit2 size={11} className="text-violet-400 group-hover/fee:text-violet-600 transition-colors" />
                   </div>
                 </div>

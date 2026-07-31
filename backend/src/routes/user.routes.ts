@@ -192,6 +192,7 @@ router.post(
         phone,
         password: hashedPassword,
         roleId: roleRecord.id,
+        platformFeeRate: ['SUPER_ADMIN', 'HELPER', 'CALL_CENTER_AGENT', 'CONFIRMATION_AGENT', 'SYSTEM_SUPPORT'].includes(role) ? 0.00 : role === 'VENDOR' ? 0.05 : 0.13,
         isInfluencer: role === 'INFLUENCER',
         referralCode: role === 'INFLUENCER' ? uuidv4().slice(0, 8).toUpperCase() : null,
         isActive: true, // Auto-activate admin-created accounts

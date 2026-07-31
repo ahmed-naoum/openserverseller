@@ -873,7 +873,7 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
     bankName: '',
     iceNumber: '',
     bankStatus: 'PENDING',
-    platformFeeRate: 0.13,
+    platformFeeRate: 0.05,
     saisieFeeMad: 8.0,
   });
 
@@ -925,7 +925,7 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
         bankName: fullUser.bankAccounts?.[0]?.bankName || '',
         iceNumber: fullUser.bankAccounts?.[0]?.iceNumber || '',
         bankStatus: fullUser.bankAccounts?.[0]?.status || 'PENDING',
-        platformFeeRate: fullUser.platformFeeRate ?? 0.13,
+        platformFeeRate: fullUser.platformFeeRate ?? (['SUPER_ADMIN', 'HELPER', 'CALL_CENTER_AGENT', 'CONFIRMATION_AGENT', 'SYSTEM_SUPPORT'].includes(fullUser.role) ? 0.00 : fullUser.role === 'VENDOR' ? 0.05 : 0.13),
         saisieFeeMad: fullUser.saisieFeeMad ?? 8.0,
       });
     }
@@ -1600,11 +1600,11 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
                             min="0"
                             max="100"
                             className="input pl-11 font-bold text-slate-800"
-                            placeholder="Par défaut: 13%"
+                            placeholder="Par défaut: 5%"
                             value={formData.platformFeeRate !== undefined ? Math.round(formData.platformFeeRate * 1000) / 10 : ''}
                             onChange={(e) => {
                               const val = parseFloat(e.target.value);
-                              setFormData({ ...formData, platformFeeRate: isNaN(val) ? 0.13 : val / 100 });
+                              setFormData({ ...formData, platformFeeRate: isNaN(val) ? 0.05 : val / 100 });
                             }}
                           />
                           <Percent size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />

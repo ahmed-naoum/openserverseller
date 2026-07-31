@@ -33,7 +33,7 @@ export default function AdminInvoices() {
   // Calculate overall stats from current invoices list
   const overallStats = invoices.reduce((acc: any, inv: any) => {
     const delivery = (inv.leadsCount || 0) * 57;
-    const codFee = (inv.totalAmountMad / 0.87) * 0.13;
+    const codFee = (inv.totalAmountMad / 0.95) * 0.05;
     acc.totalDelivery += delivery;
     acc.totalCodFee += codFee;
     acc.totalAdminProfite += (delivery + codFee);
@@ -51,7 +51,7 @@ export default function AdminInvoices() {
       details.leads.forEach((lead: any) => {
         const gross = Number(lead.order?.totalAmountMad) || 0;
         const shipping = lead.customShippingFee ?? 57;
-        const rate = lead.customPlatformFeeRate ?? details.user?.platformFeeRate ?? 0.13;
+        const rate = lead.customPlatformFeeRate ?? details.user?.platformFeeRate ?? 0.05;
         const profit = gross - shipping;
         const fee = profit > 0 ? profit * rate : 0;
 
@@ -261,7 +261,7 @@ export default function AdminInvoices() {
             <TrendingUp size={20} />
           </div>
           <div>
-            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">COD Fee (13%)</p>
+            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Frais Plateforme</p>
             <p className="text-lg font-black text-blue-600 leading-none">+{overallStats.totalCodFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           </div>
         </div>

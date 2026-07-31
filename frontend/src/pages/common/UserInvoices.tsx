@@ -49,7 +49,7 @@ export default function UserInvoices() {
       details.leads.forEach((lead: any) => {
         const gross = Number(lead.order?.totalAmountMad) || 0;
         const shipping = lead.customShippingFee ?? 57;
-        const rate = lead.customPlatformFeeRate ?? details.user?.platformFeeRate ?? 0.13;
+        const rate = lead.customPlatformFeeRate ?? details.user?.platformFeeRate ?? 0.05;
         const profit = gross - shipping;
         const fee = profit > 0 ? profit * rate : 0;
 

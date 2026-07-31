@@ -47,7 +47,7 @@ model User {
   subdomain     String? @unique
   isInfluencer  Boolean @default(false)
   totalEarnings Float   @default(0)
-  platformFeeRate Float @default(0.13)
+  platformFeeRate Float @default(0.05)
 
   // Custom Domain Integration
   customDomain       String? @unique

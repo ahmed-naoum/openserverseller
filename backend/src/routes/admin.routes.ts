@@ -1790,7 +1790,7 @@ router.get(
       user.leads.forEach(lead => {
         const gross = Number(lead.order?.totalAmountMad) || 0;
         const shipping = lead.customShippingFee ?? 57;
-        const rate = lead.customPlatformFeeRate ?? user.platformFeeRate ?? 0.13;
+        const rate = lead.customPlatformFeeRate ?? user.platformFeeRate ?? 0.05;
         const profit = gross - shipping;
         const platformFee = profit > 0 ? profit * rate : 0;
         totalPaidAmount += (gross - shipping - platformFee);
@@ -1804,7 +1804,7 @@ router.get(
         role: 'SELLER',
         paidCount: user.leads.length,
         totalPaidAmount,
-        platformFeeRate: user.platformFeeRate ?? 0.13
+        platformFeeRate: user.platformFeeRate ?? 0.05
       };
     });
 
@@ -1926,7 +1926,7 @@ router.patch(
           where: { id: userId },
           select: { platformFeeRate: true }
         }) : null;
-        const platformFeeRate = userObj?.platformFeeRate ?? 0.13;
+        const platformFeeRate = userObj?.platformFeeRate ?? 0.05;
         
         let totalAmount = 0;
         for (const lead of leads) {
@@ -1941,7 +1941,7 @@ router.patch(
         for (const lead of leads) {
           const gross = Number(lead.order?.totalAmountMad) || 0;
           const shipping = lead.customShippingFee ?? 57;
-          const rate = lead.customPlatformFeeRate ?? platformFeeRate ?? 0.13;
+          const rate = lead.customPlatformFeeRate ?? platformFeeRate ?? 0.05;
           const profit = gross - shipping;
           const fee = profit > 0 ? profit * rate : 0;
           netAmount += (gross - shipping - fee);
