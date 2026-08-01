@@ -1361,6 +1361,7 @@ router.get(
                 email: true,
                 subdomain: true,
                 customDomain: true,
+                customDomainStatus: true,
                 profile: { select: { fullName: true } }
               }
             },
@@ -1387,7 +1388,19 @@ router.get(
         // If landingPage is missing, we still try to get the product info via the link
         referralLink: link ? await (prisma as any).referralLink.findUnique({
           where: { id: linkId },
-          include: { product: { select: { id: true, nameFr: true, retailPriceMad: true } } }
+          include: { 
+            product: { select: { id: true, nameFr: true, retailPriceMad: true } },
+            influencer: {
+              select: {
+                id: true,
+                email: true,
+                subdomain: true,
+                customDomain: true,
+                customDomainStatus: true,
+                profile: { select: { fullName: true } }
+              }
+            }
+          }
         }) : null
       }
     });

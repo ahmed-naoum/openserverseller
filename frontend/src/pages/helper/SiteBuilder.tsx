@@ -98,6 +98,8 @@ export default function SiteBuilder() {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [ownerId, setOwnerId] = useState<number | null>(null);
   const [ownerSubdomain, setOwnerSubdomain] = useState<string | null>(null);
+  const [ownerCustomDomain, setOwnerCustomDomain] = useState<string | null>(null);
+  const [ownerCustomDomainStatus, setOwnerCustomDomainStatus] = useState<string | null>(null);
 
   // ── Undo / Redo history ──
   type Snapshot = { blocks: EditorBlock[]; pageSettings: any };
@@ -319,6 +321,14 @@ export default function SiteBuilder() {
       const ownerSub = landingPage?.referralLink?.influencer?.subdomain;
       if (ownerSub) {
         setOwnerSubdomain(ownerSub);
+      }
+      const ownerCustomDom = landingPage?.referralLink?.influencer?.customDomain;
+      if (ownerCustomDom) {
+        setOwnerCustomDomain(ownerCustomDom);
+      }
+      const ownerCustomDomStatus = landingPage?.referralLink?.influencer?.customDomainStatus;
+      if (ownerCustomDomStatus) {
+        setOwnerCustomDomainStatus(ownerCustomDomStatus);
       }
       
       // Fetch accounts for products block
@@ -675,7 +685,7 @@ export default function SiteBuilder() {
           <div className="w-px h-6 bg-gray-200" />
           {referralCode && (
             <button 
-              onClick={() => window.open(buildReferralUrl(referralCode, ownerSubdomain), '_blank')}
+              onClick={() => window.open(buildReferralUrl(referralCode, ownerSubdomain, ownerCustomDomain, ownerCustomDomainStatus), '_blank')}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
             >
               <ExternalLink className="w-4 h-4" />
@@ -2401,7 +2411,7 @@ export default function SiteBuilder() {
                                     let updated;
                                     if (!isChecked) {
                                       const defaultLink = p.referralLinks?.[0]?.code
-                                        ? buildReferralUrl(p.referralLinks[0].code, ownerSubdomain)
+                                        ? buildReferralUrl(p.referralLinks[0].code, ownerSubdomain, ownerCustomDomain, ownerCustomDomainStatus)
                                         : '';
                                       updated = [...(activeBlock.content.selectedProducts || []), { productId: p.id, link: defaultLink, buttonText: 'Commander' }];
                                     } else {
@@ -2457,7 +2467,7 @@ export default function SiteBuilder() {
                                             <option value="">Aucun lien de landing page</option>
                                           ) : (
                                             (p.referralLinks || []).map((link: any) => {
-                                              const url = buildReferralUrl(link.code, ownerSubdomain);
+                                              const url = buildReferralUrl(link.code, ownerSubdomain, ownerCustomDomain, ownerCustomDomainStatus);
                                               const displayCode = link.code.length > 15 ? link.code.slice(0, 12) + '...' : link.code;
                                               return (
                                                 <option key={link.id} value={url}>
