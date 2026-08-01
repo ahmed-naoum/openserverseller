@@ -86,7 +86,7 @@ export default function VendorInventory() {
 
   useEffect(() => {
     fetchClaims();
-  }, [user?.mode]);
+  }, [user?.mode, user?.id]);
 
   const fetchClaims = async () => {
     try {
@@ -94,9 +94,19 @@ export default function VendorInventory() {
       const res = await influencerApi.getClaims();
       // Handle potential response structure differences
       const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-      // Filter out rejected claims
-      const currentMode = user?.mode || 'AFFILIATE';
-      const activeClaims = data.filter((c: any) => c.status !== 'REJECTED' && c.userMode === currentMode);
+      const currentMode = user?.mode || 'SELLER';
+
+      const activeClaims = data.filter((c: any) => {
+        const isVendorProduct = Boolean(user?.id && c.product?.ownerId === user.id);
+
+        if (currentMode === 'SELLER') {
+          // Mode Vendeur: Show ONLY vendor's owned products
+          return isVendorProduct;
+        } else {
+          // Mode Affilié: Show ONLY products claimed from marketplace (owned by other vendors/admins)
+          return !isVendorProduct;
+        }
+      });
       setClaims(activeClaims);
     } catch (error) {
       toast.error(t('error_loading', 'inventory', 'Impossible de charger vos produits'));
@@ -117,8 +127,8 @@ export default function VendorInventory() {
     } else {
       matchesTab = claim.status === activeTab;
     }
-    const matchesSearch = claim.product.nameFr.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         claim.product.sku.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = (claim.product?.nameFr || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         (claim.product?.sku || '').toLowerCase().includes(searchQuery.toLowerCase());
     return matchesTab && matchesSearch;
   });
 

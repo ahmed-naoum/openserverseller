@@ -208,7 +208,7 @@ router.get(
   authorize('VENDOR', 'INFLUENCER'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const [claims, links] = await Promise.all([
+    const [claims, links, ownedProducts] = await Promise.all([
       prisma.affiliateClaim.findMany({
         where: { userId },
         include: {
@@ -217,6 +217,10 @@ router.get(
       }),
       prisma.referralLink.findMany({
         where: { influencerId: userId }
+      }),
+      prisma.product.findMany({
+        where: { ownerId: userId },
+        include: { images: { where: { isPrimary: true }, take: 1 } }
       })
     ]);
 
@@ -225,7 +229,22 @@ router.get(
       referralLink: links.find(l => l.productId === claim.productId)
     }));
 
-    res.json(claimsWithLinks);
+    const existingProductIds = new Set(claims.map(c => c.productId));
+    const ownedProductClaims = ownedProducts
+      .filter(p => !existingProductIds.has(p.id))
+      .map(p => ({
+        id: `owned_${p.id}`,
+        userId,
+        productId: p.id,
+        status: 'APPROVED',
+        userMode: 'SELLER',
+        product: p,
+        referralLink: links.find(l => l.productId === p.id),
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt
+      }));
+
+    res.json([...claimsWithLinks, ...ownedProductClaims]);
   })
 );
 
