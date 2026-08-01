@@ -18,7 +18,22 @@
         script.crossOrigin = "anonymous";
         script.onload = function() {
           if (window.LogRocket) {
-            window.LogRocket.init('gvv9dw/silacod');
+            window.LogRocket.init('gvv9dw/silacod', {
+              network: {
+                requestSanitizer: function(request) {
+                  var url = request.url.toLowerCase();
+                  if (
+                    url.indexOf('browser/ebpaap') !== -1 ||
+                    url.indexOf('properties://') === 0 ||
+                    url.indexOf('chrome-extension://') === 0 ||
+                    url.indexOf('moz-extension://') === 0
+                  ) {
+                    return null;
+                  }
+                  return request;
+                }
+              }
+            });
           }
         };
         document.head.appendChild(script);
