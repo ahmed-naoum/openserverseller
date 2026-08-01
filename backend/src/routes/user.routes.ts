@@ -280,7 +280,7 @@ router.patch(
     const { uuid } = req.params;
     const {
       fullName, email, phone, role, isActive, kycStatus,
-      canImpersonate, canManageProducts, canManageLeads, canManageOrders, canManageInfluencerLinks, canManageTickets, canScanReturns, canManageAffiliateInvites, helperCommissionPerDeliveredLead, canDisplayOnDashboard,
+      canImpersonate, canManageProducts, canManageLeads, canManageOrders, canManageInfluencerLinks, canManageTickets, canScanReturns, canManageAffiliateInvites, helperCommissionPerDeliveredLead, canDisplayOnDashboard, autoSendLeadsToCallCenter,
       city, address, cinNumber, birthDate, language, avatarUrl,
       instagramUsername, tiktokUsername, facebookUsername, xUsername, youtubeUsername, snapchatUsername,
       instagramUrl, tiktokUrl, facebookUrl, youtubeUrl, snapchatUrl,
@@ -393,6 +393,7 @@ router.patch(
         canManageAffiliateInvites: typeof canManageAffiliateInvites === 'boolean' ? canManageAffiliateInvites : undefined,
         helperCommissionPerDeliveredLead: helperCommissionPerDeliveredLead !== undefined ? Number(helperCommissionPerDeliveredLead) : undefined,
         canDisplayOnDashboard: typeof canDisplayOnDashboard === 'boolean' ? canDisplayOnDashboard : undefined,
+        autoSendLeadsToCallCenter: typeof autoSendLeadsToCallCenter === 'boolean' ? autoSendLeadsToCallCenter : undefined,
         platformFeeRate: platformFeeRate !== undefined ? Number(platformFeeRate) : undefined,
         saisieFeeMad: saisieFeeMad !== undefined ? Number(saisieFeeMad) : undefined,
       },
@@ -496,6 +497,7 @@ router.get(
           helperCommissionPerDeliveredLead: user.helperCommissionPerDeliveredLead,
           referralCode: user.referralCode,
           canDisplayOnDashboard: user.canDisplayOnDashboard,
+          autoSendLeadsToCallCenter: user.autoSendLeadsToCallCenter,
           platformFeeRate: user.platformFeeRate,
           saisieFeeMad: user.saisieFeeMad,
           cguAccepted: user.cguAccepted,

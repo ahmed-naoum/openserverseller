@@ -43,6 +43,7 @@ import {
   Sun,
   Moon,
   HelpCircle,
+  Radio,
   ExternalLink,
   Command,
   PanelLeftClose,
@@ -265,6 +266,7 @@ const navigation = {
         { name: 'Webhooks Coliaty', href: '/admin/webhook-logs', icon: Webhook },
         { name: 'Journaux d\'Activité', href: '/admin/activity-logs', icon: History },
         { name: 'Architecture Plateforme', href: '/admin/architecture', icon: Network },
+        { name: '🔴 Streaming Direct', href: '/admin/live-stream', icon: Radio },
         { name: 'Sauvegardes DB', href: '/admin/backups', icon: Database },
       ]
     },

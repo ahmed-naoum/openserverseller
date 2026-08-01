@@ -1,6 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma.js';
 import { authenticate, authorize } from '../middleware/auth.js';
+import { isSessionRecordingEnabled, setSessionRecordingEnabled } from '../lib/sessionRecording.js';
+import { broadcastRecordingState } from '../lib/realtime.js';
+import { runSessionCleanup } from '../jobs/sessionCleanup.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { checkAndActivateUser } from '../utils/verification.js';
 import { fetchMaintenanceSettings } from '../middleware/maintenance.js';
@@ -8,9 +11,188 @@ import { decrypt, encrypt } from '../utils/crypto.js';
 import { getBlockedIPsList, unblockIP } from '../middleware/security.js';
 import fs from 'fs';
 import path from 'path';
+import zlib from 'zlib';
 
 const router = Router();
-const prisma = new PrismaClient();
+
+// Read/write the global auto-recording switch.
+router.get(
+  '/session-recording-setting',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (_req: Request, res: Response) => {
+    const enabled = await isSessionRecordingEnabled();
+    res.json({ enabled });
+  })
+);
+
+router.patch(
+  '/session-recording-setting',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const enabled = !!req.body?.enabled;
+    await setSessionRecordingEnabled(enabled);
+    // Push the new state to every connected client so tracking starts/stops now.
+    broadcastRecordingState(enabled);
+    res.json({ enabled });
+  })
+);
+
+router.get(
+  '/sessions',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = (page - 1) * limit;
+    const search = (req.query.search as string)?.trim();
+
+    const where = search
+      ? {
+          OR: [
+            { ip: { contains: search, mode: 'insensitive' as const } },
+            { path: { contains: search, mode: 'insensitive' as const } },
+            { userUuid: { contains: search, mode: 'insensitive' as const } },
+          ],
+        }
+      : {};
+
+    const [recordings, total] = await Promise.all([
+      prisma.sessionRecording.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          sessionId: true,
+          userUuid: true,
+          ip: true,
+          userAgent: true,
+          path: true,
+          durationSec: true,
+          hasLead: true,
+          createdAt: true,
+        },
+      }),
+      prisma.sessionRecording.count({ where }),
+    ]);
+
+    res.json({ recordings, total, page, totalPages: Math.ceil(total / limit) });
+  })
+);
+
+router.get(
+  '/sessions/:id/events',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const recordId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const record = await prisma.sessionRecording.findUnique({
+      where: { id: recordId },
+    });
+
+    if (!record || !record.eventDataGzip) {
+      return res.status(404).json({ error: 'Session recording not found' });
+    }
+
+    const jsonString = zlib.gunzipSync(record.eventDataGzip).toString('utf-8');
+    const events = JSON.parse(jsonString);
+
+    res.json({ record: { ...record, eventDataGzip: undefined }, events });
+  })
+);
+
+// Storage management: counts + real bytes on disk + abandoned/converted split.
+router.get(
+  '/sessions/stats',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (_req: Request, res: Response) => {
+    const [recCount, bytesRow, oldest, attemptsTotal, abandoned, converted] = await Promise.all([
+      prisma.sessionRecording.count(),
+      prisma.$queryRaw<{ bytes: bigint | null }[]>`SELECT COALESCE(SUM(octet_length("eventDataGzip")), 0)::bigint AS bytes FROM session_recordings`,
+      prisma.sessionRecording.findFirst({ orderBy: { createdAt: 'asc' }, select: { createdAt: true } }),
+      prisma.checkoutAttempt.count(),
+      prisma.checkoutAttempt.count({ where: { completed: false, phone: { not: null } } }),
+      prisma.checkoutAttempt.count({ where: { completed: true } }),
+    ]);
+
+    res.json({
+      recordings: recCount,
+      totalBytes: Number(bytesRow?.[0]?.bytes || 0),
+      oldestAt: oldest?.createdAt || null,
+      attempts: { total: attemptsTotal, abandoned, converted },
+    });
+  })
+);
+
+// Abandoned / completed checkout attempts, with a link to the session replay
+// (when one exists). Filter: 'abandoned' (default) | 'completed' | 'all'.
+router.get(
+  '/checkout-attempts',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = (page - 1) * limit;
+    const filter = (req.query.filter as string) || 'abandoned';
+    const search = (req.query.search as string)?.trim();
+
+    const and: any[] = [];
+    if (filter === 'abandoned') and.push({ completed: false }, { phone: { not: null } });
+    else if (filter === 'completed') and.push({ completed: true });
+    if (search) {
+      and.push({
+        OR: [
+          { ip: { contains: search, mode: 'insensitive' as const } },
+          { phone: { contains: search, mode: 'insensitive' as const } },
+          { fullName: { contains: search, mode: 'insensitive' as const } },
+          { referralCode: { contains: search, mode: 'insensitive' as const } },
+        ],
+      });
+    }
+    const where = and.length ? { AND: and } : {};
+
+    const [attempts, total] = await Promise.all([
+      prisma.checkoutAttempt.findMany({ where, orderBy: { updatedAt: 'desc' }, skip, take: limit }),
+      prisma.checkoutAttempt.count({ where }),
+    ]);
+
+    // Attach a recordingId where a session replay exists for the same socket.
+    const sessionIds = attempts.map((a) => a.sessionId);
+    const recordings = sessionIds.length
+      ? await prisma.sessionRecording.findMany({
+          where: { sessionId: { in: sessionIds } },
+          select: { id: true, sessionId: true },
+        })
+      : [];
+    const recBySession = new Map(recordings.map((r) => [r.sessionId, r.id]));
+
+    res.json({
+      attempts: attempts.map((a) => ({ ...a, recordingId: recBySession.get(a.sessionId) || null })),
+      total, page, totalPages: Math.ceil(total / limit),
+    });
+  })
+);
+
+// Manual purge (age + cap policy) for storage management.
+router.post(
+  '/sessions/purge',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (_req: Request, res: Response) => {
+    await runSessionCleanup();
+    // Also drop checkout attempts older than 7 days.
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 7);
+    const attempts = await prisma.checkoutAttempt.deleteMany({ where: { createdAt: { lt: cutoff } } });
+    res.json({ status: 'success', purgedAttempts: attempts.count });
+  })
+);
 
 router.post(
   '/cache-refresh',

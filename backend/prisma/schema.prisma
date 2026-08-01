@@ -83,6 +83,9 @@ model User {
   canManageAffiliateInvites Boolean @default(false)
   helperCommissionPerDeliveredLead Float @default(5.0)
   canDisplayOnDashboard  Boolean @default(true)
+  // When true, a lead created from this seller/influencer's Express Checkout is
+  // automatically forwarded to the call center (status AVAILABLE) on arrival.
+  autoSendLeadsToCallCenter Boolean @default(false)
 
   // Tracking
   registrationIp String?
@@ -1286,6 +1289,50 @@ model EventRegistration {
   updatedAt        DateTime @updatedAt
 
   @@map("event_registrations")
+}
+
+model SessionRecording {
+  id           String   @id @default(uuid())
+  sessionId    String
+  userUuid     String?
+  ip           String
+  userAgent    String?
+  path         String?
+  durationSec  Int      @default(0)
+  eventDataGzip Bytes   // Gzip compressed JSON string
+  hasLead      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([userUuid])
+  @@index([createdAt])
+  @@map("session_recordings")
+}
+
+/// Partial / abandoned checkout capture. Every keystroke on a referral checkout
+/// updates this row; if the visitor never submits, `completed` stays false and
+/// we keep the phone/name they typed so an agent can follow up on the lost lead.
+model CheckoutAttempt {
+  id           String   @id @default(uuid())
+  sessionId    String   @unique // = socket.id, correlates with SessionRecording.sessionId
+  referralCode String?
+  productName  String?
+  ip           String
+  userAgent    String?
+  path         String?
+  fullName     String?
+  phone        String?
+  city         String?
+  address      String?
+  fieldsFilled Int      @default(0)
+  completed    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([completed])
+  @@index([ip])
+  @@index([phone])
+  @@index([createdAt])
+  @@map("checkout_attempts")
 }
 
 

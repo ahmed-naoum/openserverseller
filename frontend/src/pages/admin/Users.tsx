@@ -45,7 +45,8 @@ import {
   LayoutDashboard,
   Loader2,
   Store,
-  Sparkles
+  Sparkles,
+  Headphones
 } from 'lucide-react';
 
 export function parseSocialInput(val: string, platform: 'instagram' | 'tiktok' | 'facebook' | 'youtube' | 'x' | 'snapchat') {
@@ -852,6 +853,7 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
     canManageAffiliateInvites: false,
     helperCommissionPerDeliveredLead: 5,
     canDisplayOnDashboard: true,
+    autoSendLeadsToCallCenter: false,
     city: '',
     address: '',
     cinNumber: '',
@@ -904,6 +906,7 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
         canManageAffiliateInvites: fullUser.canManageAffiliateInvites || false,
         helperCommissionPerDeliveredLead: fullUser.helperCommissionPerDeliveredLead ?? 5,
         canDisplayOnDashboard: fullUser.canDisplayOnDashboard ?? true,
+        autoSendLeadsToCallCenter: fullUser.autoSendLeadsToCallCenter || false,
         city: fullUser.city || '',
         address: fullUser.address || '',
         cinNumber: fullUser.cinNumber || '',
@@ -1372,6 +1375,27 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
                           value={formData.saisieFeeMad}
                           onChange={(e) => setFormData({ ...formData, saisieFeeMad: parseFloat(e.target.value) || 0 })}
                         />
+                      </div>
+                    )}
+
+                    {(formData.role === 'VENDOR' || formData.role === 'INFLUENCER') && (
+                      <div className="mt-4 flex items-center justify-between p-3 bg-cyan-50/50 rounded-2xl border border-cyan-100/50">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 bg-white rounded-xl text-cyan-600 shadow-sm">
+                            <Headphones size={16} />
+                          </div>
+                          <div>
+                            <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Envoi Auto au Call Center</h4>
+                            <p className="text-[8px] font-bold text-cyan-500 uppercase tracking-tighter">Les leads du Checkout Express sont envoyés automatiquement (frais 2 DH / lead)</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, autoSendLeadsToCallCenter: !formData.autoSendLeadsToCallCenter })}
+                          className={`w-10 h-5 rounded-full transition-all relative ${formData.autoSendLeadsToCallCenter ? 'bg-cyan-500' : 'bg-slate-200'}`}
+                        >
+                          <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.autoSendLeadsToCallCenter ? 'left-[22px]' : 'left-0.5'}`} />
+                        </button>
                       </div>
                     )}
                   </div>

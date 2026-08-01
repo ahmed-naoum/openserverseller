@@ -45,6 +45,8 @@ import BackupManager from './pages/admin/BackupManager';
 import CallCenterInspector from './pages/admin/CallCenterInspector';
 import InfluencerInspector from './pages/admin/InfluencerInspector';
 import SupportInspector from './pages/admin/SupportInspector';
+import LiveStreamInspector from './pages/admin/LiveStreamInspector';
+import LiveSessionTracker from './components/common/LiveSessionTracker';
 import ContactMessages from './pages/admin/ContactMessages';
 import AdminLinks from './pages/admin/Links';
 import AdminProfessionalEmails from './pages/admin/ProfessionalEmails';
@@ -232,6 +234,7 @@ function App() {
     <AuthProvider>
       <LanguageProvider>
       <SocketProvider>
+        <LiveSessionTracker />
         <MaintenanceGuard>
         <Routes>
           {/* Public Routes */}
@@ -498,6 +501,7 @@ function App() {
           <Route path="contact-messages" element={<ContactMessages />} />
           <Route path="links" element={<AdminLinks />} />
           <Route path="architecture" element={<PlatformArchitecture />} />
+          <Route path="live-stream" element={<LiveStreamInspector />} />
           <Route path="scanner" element={<HelperScanner />} />
           <Route path="settings" element={<SettingsPage />} />
 

@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import fs from 'fs';
 import path from 'path';
 import { validateInfluencerSubdomain } from '../utils/subdomain.js';
+import { getIO } from '../lib/realtime.js';
 
 const router = Router();
 
@@ -237,9 +238,9 @@ router.post(
 
     const link = await prisma.referralLink.findUnique({
       where: { code: referralCode },
-      include: { 
+      include: {
         product: true,
-        influencer: { select: { subdomain: true, customDomain: true } }
+        influencer: { select: { subdomain: true, customDomain: true, autoSendLeadsToCallCenter: true } }
       }
     });
 
@@ -286,6 +287,52 @@ router.post(
       where: { id: link.id },
       data: { conversions: { increment: 1 } }
     });
+
+    // Auto-forward to the call center if the link owner has that permission.
+    // Mirrors the manual "Envoyer au Call Center" action: status → AVAILABLE,
+    // status history, and the 2 MAD call-center fee.
+    if (link.influencer?.autoSendLeadsToCallCenter && link.influencerId) {
+      const ownerId = link.influencerId;
+      try {
+        await prisma.$transaction(async (tx) => {
+          await tx.leadStatusHistory.create({
+            data: { leadId: lead.id, oldStatus: lead.status, newStatus: 'AVAILABLE', changedBy: ownerId },
+          });
+          await tx.lead.update({ where: { id: lead.id }, data: { status: 'AVAILABLE' } });
+
+          let wallet = await tx.wallet.findUnique({ where: { userId: ownerId } });
+          if (!wallet) wallet = await tx.wallet.create({ data: { userId: ownerId } });
+          const newBalance = wallet.balanceMad - 2;
+          await tx.wallet.update({ where: { id: wallet.id }, data: { balanceMad: newBalance } });
+          await tx.walletTransaction.create({
+            data: {
+              walletId: wallet.id,
+              type: 'CALL_CENTER_FEE',
+              amountMad: -2,
+              balanceAfterMad: newBalance,
+              description: `Frais d'envoi automatique au Call Center (Lead #${lead.id})`,
+            },
+          });
+        });
+
+        // Notify assigned call-center agents in real time.
+        const assignments = await prisma.agentInfluencerAssignment.findMany({
+          where: { influencerId: ownerId },
+          select: { agentId: true },
+        });
+        const io = getIO();
+        if (io && assignments.length) {
+          const payload = {
+            id: lead.id, fullName, phone, city, address,
+            product: { name: link.product?.nameFr || link.product?.nameAr },
+            createdAt: lead.createdAt,
+          };
+          assignments.forEach((a) => io.to(`user:${a.agentId}`).emit('new-available-lead', payload));
+        }
+      } catch (err) {
+        console.error('[AutoCallCenter] Failed to auto-forward lead:', err);
+      }
+    }
 
     try {
       const productName = link.product?.nameFr || link.product?.nameAr || 'Produit';

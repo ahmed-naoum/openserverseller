@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { publicApi } from '../../lib/api';
+import { useSocket } from '../../contexts/SocketContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Package, ShieldCheck, Truck, Clock, CheckCircle2, UserCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -27,7 +28,8 @@ const getNoScriptUrl = (pixel: any) => {
 export default function ReferralForm() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
-  
+  const { socket } = useSocket();
+
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState(false);
@@ -59,6 +61,22 @@ export default function ReferralForm() {
       fetchData();
     }
   }, [code]);
+
+  // Abandoned-checkout capture: stream what the visitor types (debounced) so an
+  // admin can see partially-filled orders that were never submitted.
+  useEffect(() => {
+    if (!socket) return;
+    const hasData = form.fullName || form.phone || form.city || form.address;
+    if (!hasData) return;
+    const t = setTimeout(() => {
+      socket.emit('checkout:progress', {
+        code,
+        productName: data?.product?.nameFr || data?.product?.nameAr || undefined,
+        fields: form,
+      });
+    }, 700);
+    return () => clearTimeout(t);
+  }, [form, socket, code, data]);
 
   const findCheckoutBlock = (structure: any) => {
     if (!structure || !structure.blocks) return null;
@@ -429,7 +447,10 @@ export default function ReferralForm() {
           ? `${selectedProductFromBlock.nameFr || selectedProductFromBlock.nameEn || selectedProductFromBlock.nameAr} (${selectedOption?.name || 'Standard'})`
           : selectedOption?.name
       });
-      
+
+      // Mark the abandoned-checkout attempt as converted.
+      socket?.emit('checkout:complete', { code });
+
       // Track Conversion
       if (activePixels.length > 0) {
         activePixels.forEach((pixel: any) => {
