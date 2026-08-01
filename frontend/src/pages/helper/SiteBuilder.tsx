@@ -1758,7 +1758,7 @@ export default function SiteBuilder() {
                             {slide.mediaUrl && (
                               <div className="rounded-xl overflow-hidden border border-gray-100 h-20 bg-gray-50">
                                 {/\.(mp4|webm|ogg)$/i.test(slide.mediaUrl) ? (
-                                  <video src={slide.mediaUrl.startsWith('http') ? slide.mediaUrl : `${window.location.origin}${slide.mediaUrl}`} muted className="w-full h-full object-cover" />
+                                  <video src={slide.mediaUrl.startsWith('http') ? slide.mediaUrl : `${window.location.origin}${slide.mediaUrl}`} muted crossOrigin="anonymous" className="w-full h-full object-cover" />
                                 ) : (
                                   <img src={slide.mediaUrl.startsWith('http') ? slide.mediaUrl : `${window.location.origin}${slide.mediaUrl}`} alt="" className="w-full h-full object-cover" />
                                 )}

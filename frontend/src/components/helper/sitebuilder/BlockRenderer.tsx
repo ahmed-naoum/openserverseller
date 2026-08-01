@@ -850,6 +850,7 @@ function SliderBlock({ id, content, isEditor, resolveUrl }: SliderBlockProps) {
           loop
           muted
           playsInline
+          crossOrigin="anonymous"
           className={`w-full h-full ${fitClass}`}
         />
       );
@@ -1358,6 +1359,7 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
         loop={!!content.loop}
         muted={isMuted}
         playsInline
+        crossOrigin="anonymous"
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
         onEnded={() => setIsPlaying(false)}
