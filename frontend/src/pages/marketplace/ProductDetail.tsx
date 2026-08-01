@@ -243,7 +243,7 @@ export default function ProductDetail() {
         brandName: payloadParams.brandName,
         requestedQty: payloadParams.requestedQty,
         requestedLandingPageUrl: payloadParams.requestedLandingPageUrl,
-        userMode: user?.mode || 'AFFILIATE'
+        userMode: user?.role === 'INFLUENCER' ? 'INFLUENCER' : (user?.mode || 'AFFILIATE')
       });
       const affiliateClaimId = claimRes.data.id;
 

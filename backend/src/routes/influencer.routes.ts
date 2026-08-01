@@ -162,7 +162,8 @@ router.post(
       throw new AppException(404, 'Product not found or not available for your role');
     }
 
-    const mode = userMode || 'AFFILIATE';
+    const userRole = req.user!.roleName;
+    const mode = userRole === 'INFLUENCER' ? 'INFLUENCER' : (userMode || 'AFFILIATE');
     const claim = await prisma.affiliateClaim.upsert({
       where: { userId_productId_userMode: { userId, productId, userMode: mode } },
       update: {
