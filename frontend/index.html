@@ -2,8 +2,6 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <script src="https://cdn.logr-in.com/LogRocket.min.js" crossorigin="anonymous"></script>
-    <script>window.LogRocket && window.LogRocket.init('gvv9dw/silacod');</script>
     <link rel="icon" type="image/svg+xml" href="/new logo/logo filess-25.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="SILACOD - Plateforme de Dropshipping White-Label au Maroc. Lancez votre marque de cosmétiques et compléments alimentaires." />
@@ -13,8 +11,19 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <title>SILACOD - Dropshipping White-Label Maroc</title>
     <!-- LogRocket Setup -->
-    <script src="https://cdn.logr-in.com/LogRocket.min.js" crossorigin="anonymous"></script>
-    <script>window.LogRocket && window.LogRocket.init('gvv9dw/silacod');</script>
+    <script>
+      if (!window.LogRocket) {
+        const script = document.createElement('script');
+        script.src = "https://cdn.logr-in.com/LogRocket.min.js";
+        script.crossOrigin = "anonymous";
+        script.onload = function() {
+          if (window.LogRocket) {
+            window.LogRocket.init('gvv9dw/silacod');
+          }
+        };
+        document.head.appendChild(script);
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
