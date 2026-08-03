@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   Shield, ShieldAlert, Users, Lock, Globe, Database,
-  FileText, AlertTriangle, Zap, RefreshCw, Radio, Server, Eye
+  FileText, AlertTriangle, Zap, RefreshCw, Radio, Server, Eye, Cpu
 } from 'lucide-react';
 import ModOverview from './security/ModOverview';
 import ModBotDdos from './security/ModBotDdos';
@@ -10,6 +10,7 @@ import ModBehavior from './security/ModBehavior';
 import ModWaf from './security/ModWaf';
 import ModAccessControl from './security/ModAccessControl';
 import ModInfrastructure from './security/ModInfrastructure';
+import ModVpsPerformance from './security/ModVpsPerformance';
 import ModDataProtection from './security/ModDataProtection';
 import ModIncidents from './security/ModIncidents';
 import ModCompliance from './security/ModCompliance';
@@ -25,6 +26,7 @@ const MODULES = [
   { id: 'waf', label: 'WAF & Injection', icon: Zap, color: 'text-amber-400' },
   { id: 'access', label: 'Access Control', icon: Lock, color: 'text-violet-400' },
   { id: 'infra', label: 'Infrastructure', icon: Server, color: 'text-blue-400' },
+  { id: 'vps', label: 'VPS Performance', icon: Cpu, color: 'text-lime-400' },
   { id: 'data', label: 'Database & Storage', icon: Database, color: 'text-teal-400' },
   { id: 'incidents', label: 'Incidents & Alerts', icon: AlertTriangle, color: 'text-orange-400' },
   { id: 'compliance', label: 'Audit & Compliance', icon: FileText, color: 'text-indigo-400' },
@@ -49,6 +51,7 @@ export default function SecurityFirewall() {
       case 'waf': return <ModWaf {...props} />;
       case 'access': return <ModAccessControl {...props} />;
       case 'infra': return <ModInfrastructure {...props} />;
+      case 'vps': return <ModVpsPerformance {...props} />;
       case 'data': return <ModDataProtection {...props} />;
       case 'incidents': return <ModIncidents {...props} />;
       case 'compliance': return <ModCompliance {...props} />;
@@ -108,7 +111,7 @@ export default function SecurityFirewall() {
             <div>
               <h1 className="text-lg font-bold text-white">{current.label}</h1>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider">
-                Module {MODULES.findIndex(m => m.id === activeModule) + 1} / 10
+                Module {MODULES.findIndex(m => m.id === activeModule) + 1} / {MODULES.length}
               </p>
             </div>
           </div>

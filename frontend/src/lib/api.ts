@@ -618,6 +618,7 @@ export const announcementApi = {
 
 export const securityApi = {
   overview: () => api.get('/admin/security/overview'),
+  getServerPerformance: () => api.get('/admin/security/server-performance'),
   blockIP: (ip: string) => api.post('/admin/security/block-ip', { ip }),
   unblockIP: (ip: string) => api.delete('/admin/security/block-ip', { data: { ip } }),
   clearThreat: (ip?: string) => api.delete('/admin/security/clear-threat', { data: { ip } }),

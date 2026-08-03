@@ -3,6 +3,7 @@ import { Router, Request, Response } from 'express';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { getTrafficStats } from '../lib/trafficTracker.js';
+import { getServerPerformance } from '../services/serverMetrics.service.js';
 import {
   fetchSecuritySettings,
   clearSecurityCache,
@@ -1275,6 +1276,21 @@ router.get(
         },
       },
     });
+  })
+);
+
+/**
+ * Live VPS hardware metrics for the SOC "VPS Performance" module.
+ * Same guard as every other endpoint in this file — the payload includes hostname,
+ * kernel, disk layout and a process table, so it must never be reachable anonymously.
+ */
+router.get(
+  '/server-performance',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (_req: Request, res: Response) => {
+    const data = await getServerPerformance();
+    res.json({ status: 'success', data });
   })
 );
 

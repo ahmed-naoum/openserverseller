@@ -28,6 +28,7 @@ import zlib from 'zlib';
 import { startSessionCleanupCron } from './jobs/sessionCleanup.js';
 import { setIO } from './lib/realtime.js';
 import { isSessionRecordingEnabled } from './lib/sessionRecording.js';
+import { startSampler, stopSampler, peekSnapshot, warmupServerMetrics } from './services/serverMetrics.service.js';
 
 // ── Real-time session streaming state ────────────────────────────────────────
 // One buffer per *socket* (per browser tab), NOT per logical user. Streaming two
@@ -347,6 +348,18 @@ const scheduleBroadcast = (io: any) => {
   }, 1200);
 };
 
+/** Room for admins watching live VPS metrics. Joinable only via `perf:subscribe`. */
+const PERF_ROOM = 'perf:watchers';
+
+/**
+ * Stop sampling once the last admin leaves. Socket.IO removes disconnected sockets from
+ * rooms automatically, so this covers closed tabs and crashes as well as explicit
+ * unsubscribes — no bookkeeping of our own to leak.
+ */
+const stopSamplerIfIdle = () => {
+  if (!io.sockets.adapter.rooms.get(PERF_ROOM)?.size) stopSampler();
+};
+
 const setupChatSocket = () => {
   const jwt = require('jsonwebtoken');
 
@@ -422,11 +435,20 @@ const setupChatSocket = () => {
       });
     });
 
+    // Allow-list. This handler used to join ANY caller to ANY room by name, and
+    // io.use() above admits sockets with no token at all — so any visitor could
+    // `join-room('role:SUPER_ADMIN')` and receive admin-only broadcasts. These two are
+    // the only rooms the frontend ever joins (lib/socket.ts, DashboardLayout, Support,
+    // Chat, SupportTickets); role:*, user:*, perf:* and stream-room:* are off limits.
+    const JOINABLE_ROOMS = new Set(['support-queue', 'callcenter']);
+
     socket.on('join-room', (room: string) => {
+      if (!JOINABLE_ROOMS.has(room)) return;
       socket.join(room);
     });
 
     socket.on('leave-room', (room: string) => {
+      if (!JOINABLE_ROOMS.has(room)) return;
       socket.leave(room);
     });
 
@@ -610,6 +632,24 @@ const setupChatSocket = () => {
       } catch { /* noop */ }
     });
 
+    // ── Admin → server: live VPS hardware metrics ─────────────────────────────
+    // Role-gated at subscribe time, because io.use() lets tokenless sockets connect.
+    // The sampler only runs while someone is watching: a closed tab must not leave the
+    // VPS shelling out to ps/df/sensors forever.
+    socket.on('perf:subscribe', async () => {
+      if (!isSuperAdmin()) return;
+      socket.join(PERF_ROOM);
+      startSampler((snap) => io.to(PERF_ROOM).emit('server:performance', snap));
+      // Serve the cached sample immediately so the panel is not blank for 5s.
+      const cached = peekSnapshot();
+      if (cached) socket.emit('server:performance', cached);
+    });
+
+    socket.on('perf:unsubscribe', () => {
+      socket.leave(PERF_ROOM);
+      stopSamplerIfIdle();
+    });
+
     // ── Admin → server: start watching a specific visitor socket ──────────────
     socket.on('stream:watch', ({ socketId }: { socketId: string }) => {
       if (!isSuperAdmin() || !socketId) return;
@@ -650,6 +690,10 @@ const setupChatSocket = () => {
     });
 
     socket.on('disconnect', async () => {
+      // A closed tab never sends perf:unsubscribe, so re-check here too. The socket is
+      // already out of the room by this point, making the size check accurate.
+      stopSamplerIfIdle();
+
       // Save this tab's recording if it captured anything meaningful.
       const buffer = activeSessionBuffers.get(socket.id);
       if (buffer && buffer.events.length >= MIN_EVENTS_TO_SAVE) {
@@ -713,6 +757,10 @@ startLeadsReassignmentCron();
 
 // Purge expired / over-cap session recordings on a schedule.
 startSessionCleanupCron();
+
+// Cache immutable hardware facts (CPU model, GPU, OS) so the first SOC request is fast.
+// Starts no polling loop — an unwatched server costs nothing after this.
+warmupServerMetrics();
 
 // Start dynamic automated backup scheduler
 BackupService.startScheduler();
