@@ -21,9 +21,22 @@ interface Cart {
   productImage?: string;
   sellerName?: string;
   fieldsFilled: number;
+  /** This agent already owns a lead for this number. */
   alreadyHasLead?: boolean;
+  /** The number already exists as a Lead anywhere in the database. */
+  savedAsLead?: boolean;
+  /** This cart was already converted into a lead from this page. */
+  converted?: boolean;
   recordingId?: string;
   updatedAt: string;
+}
+
+type CartStatus = 'all' | 'saved' | 'unsaved';
+
+interface Counts {
+  all: number;
+  saved: number;
+  unsaved: number;
 }
 
 interface PlaybackTarget {
@@ -214,6 +227,9 @@ export default function AbandonedCarts() {
   const [total, setTotal] = useState(0);
   const [converting, setConverting] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Default to the actionable queue: numbers not yet in the database.
+  const [status, setStatus] = useState<CartStatus>('unsaved');
+  const [counts, setCounts] = useState<Counts>({ all: 0, saved: 0, unsaved: 0 });
 
   // Session playback state
   const [playing, setPlaying] = useState<PlaybackTarget | null>(null);
@@ -227,23 +243,30 @@ export default function AbandonedCarts() {
   const playBaselineRef = useRef<{ wallStart: number; offset: number }>({ wallStart: 0, offset: 0 });
   const progressTimerRef = useRef<any>(null);
 
-  const load = useCallback(async (p = page, q = search) => {
+  const load = useCallback(async (p = page, q = search, s = status) => {
     setLoading(true);
     try {
-      const r = await leadsApi.abandonedCarts({ page: p, limit: 30, search: q || undefined });
+      const r = await leadsApi.abandonedCarts({ page: p, limit: 30, search: q || undefined, status: s });
       setCarts(r.data.attempts || []);
       setTotal(r.data.total || 0);
       setTotalPages(r.data.totalPages || 1);
       setPage(p);
       setScoped(r.data.scoped !== false);
+      if (r.data.counts) setCounts(r.data.counts);
     } catch {
       toast.error('Impossible de charger les paniers abandonnés');
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, status]);
 
-  useEffect(() => { load(1); /* eslint-disable-next-line */ }, []);
+  // Switching filter always returns to page 1 — the old page may not exist anymore.
+  const applyStatus = (s: CartStatus) => {
+    setStatus(s);
+    load(1, search, s);
+  };
+
+  useEffect(() => { load(1, '', 'unsaved'); /* eslint-disable-next-line */ }, []);
 
   useEffect(() => {
     const t = setInterval(() => load(page), 30000);
@@ -255,8 +278,25 @@ export default function AbandonedCarts() {
     try {
       await leadsApi.convertCart(cart.id);
       toast.success('Panier converti en lead ! Il est maintenant dans « Mes Leads ».');
-      setCarts(prev => prev.filter(c => c.id !== cart.id));
-      setTotal(t => Math.max(0, t - 1));
+
+      // The cart now counts as "Validé". It stays in the list under Tous/Validé, but
+      // drops out of the Non validé queue the agent is normally working from.
+      const wasSaved = !!cart.savedAsLead;
+      if (status === 'unsaved') {
+        setCarts(prev => prev.filter(c => c.id !== cart.id));
+        setTotal(t => Math.max(0, t - 1));
+      } else {
+        setCarts(prev => prev.map(c =>
+          c.id === cart.id ? { ...c, converted: true, savedAsLead: true, alreadyHasLead: true } : c,
+        ));
+      }
+      if (!wasSaved) {
+        setCounts(prev => ({
+          all: prev.all,
+          saved: prev.saved + 1,
+          unsaved: Math.max(0, prev.unsaved - 1),
+        }));
+      }
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Erreur lors de la conversion');
     } finally {
@@ -414,11 +454,36 @@ export default function AbandonedCarts() {
         </div>
       </div>
 
-      {/* Count pill */}
+      {/* Count pill + status filter */}
       <div className="flex items-center gap-3 flex-wrap">
-        <span className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-red-50 text-red-600 text-sm font-black border border-red-100">
-          <AlertTriangle className="w-4 h-4" /> {total} panier(s) à rappeler
-        </span>
+        {status === 'saved' ? (
+          <span className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-emerald-50 text-emerald-600 text-sm font-black border border-emerald-100">
+            <CheckCircle2 className="w-4 h-4" /> {total} panier(s) déjà en base
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-red-50 text-red-600 text-sm font-black border border-red-100">
+            <AlertTriangle className="w-4 h-4" /> {total} panier(s) {status === 'all' ? 'au total' : 'à rappeler'}
+          </span>
+        )}
+
+        <div className="inline-flex items-center bg-gray-50 border border-gray-200 rounded-2xl p-1">
+          {([
+            { key: 'all', label: 'Tous', count: counts.all, active: 'bg-gray-900 text-white' },
+            { key: 'saved', label: 'Validé', count: counts.saved, active: 'bg-emerald-500 text-white' },
+            { key: 'unsaved', label: 'Non validé', count: counts.unsaved, active: 'bg-red-500 text-white' },
+          ] as const).map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => applyStatus(tab.key)}
+              className={`px-3.5 py-1.5 rounded-xl text-[11px] font-black transition-all ${
+                status === tab.key ? `${tab.active} shadow-xs` : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              {tab.label} ({tab.count})
+            </button>
+          ))}
+        </div>
+
         {!scoped && (
           <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-slate-100 text-slate-500 text-xs font-bold">
             <Globe className="w-3.5 h-3.5" /> Tous les paniers (aucun vendeur assigné)
@@ -433,7 +498,16 @@ export default function AbandonedCarts() {
       ) : byIp.length === 0 ? (
         <div className="bg-white p-12 rounded-3xl border border-gray-100 shadow-xs text-center text-gray-400 font-medium">
           <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
-          Aucun panier abandonné pour le moment. 🎉
+          {status === 'saved'
+            ? 'Aucun panier dont le numéro est déjà enregistré comme lead.'
+            : status === 'unsaved'
+              ? 'Aucun panier non validé. Tous les numéros sont déjà en base. 🎉'
+              : 'Aucun panier abandonné pour le moment. 🎉'}
+          {status !== 'all' && (
+            <button onClick={() => applyStatus('all')} className="block mx-auto mt-3 text-xs font-black text-orange-600 hover:text-orange-700">
+              Voir tous les paniers
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-6">
@@ -471,7 +545,21 @@ export default function AbandonedCarts() {
                           <div className="flex-1 min-w-[180px]">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-bold text-sm text-gray-900">{c.fullName || <span className="text-gray-400 font-medium">Nom non saisi</span>}</span>
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-red-100 text-red-700">Panier non validé</span>
+                              {c.savedAsLead ? (
+                                <span
+                                  title="Ce numéro existe déjà comme lead dans la base de données"
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-700"
+                                >
+                                  <CheckCircle2 className="w-3 h-3" /> Validé
+                                </span>
+                              ) : (
+                                <span
+                                  title="Ce numéro n'a pas encore été enregistré comme lead"
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-red-100 text-red-700"
+                                >
+                                  <AlertTriangle className="w-3 h-3" /> Panier non validé
+                                </span>
+                              )}
                               {c.alreadyHasLead && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-blue-100 text-blue-700">Déjà dans vos leads</span>
                               )}
@@ -501,15 +589,24 @@ export default function AbandonedCarts() {
                             <span className="text-[10px] text-gray-300 font-medium italic">pas d'enregistrement</span>
                           )}
 
-                          <button
-                            onClick={() => convert(c)}
-                            disabled={converting === c.id}
-                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black bg-gray-900 hover:bg-gray-800 active:scale-95 text-white disabled:opacity-50 transition-all shadow-xs"
-                          >
-                            {converting === c.id
-                              ? <><Loader2 className="w-4 h-4 animate-spin" /> Conversion…</>
-                              : <><UserPlus className="w-4 h-4" /> Convertir en Lead</>}
-                          </button>
+                          {c.converted ? (
+                            <span
+                              title="Ce panier a déjà été converti en lead"
+                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black bg-emerald-50 text-emerald-600 border border-emerald-100"
+                            >
+                              <CheckCircle2 className="w-4 h-4" /> Déjà converti
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => convert(c)}
+                              disabled={converting === c.id}
+                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black bg-gray-900 hover:bg-gray-800 active:scale-95 text-white disabled:opacity-50 transition-all shadow-xs"
+                            >
+                              {converting === c.id
+                                ? <><Loader2 className="w-4 h-4 animate-spin" /> Conversion…</>
+                                : <><UserPlus className="w-4 h-4" /> Convertir en Lead</>}
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>

@@ -240,7 +240,7 @@ export const leadsApi = {
   available: (params?: { influencerId?: number; limit?: number | string }) => api.get('/leads/available', { params }),
   claim: (id: number) => api.post(`/leads/${id}/claim`),
   // Abandoned carts (call-center recovery)
-  abandonedCarts: (params?: { page?: number; limit?: number; search?: string }) =>
+  abandonedCarts: (params?: { page?: number; limit?: number; search?: string; status?: 'all' | 'saved' | 'unsaved' }) =>
     api.get('/leads/abandoned-carts', { params }),
   convertCart: (id: string) => api.post(`/leads/abandoned-carts/${id}/convert`),
   detail: (id: number) => api.get(`/leads/${id}/detail`),

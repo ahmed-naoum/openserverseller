@@ -2653,6 +2653,27 @@ const buildLinkMap = async (codes: string[]) => {
   return new Map(links.map((l) => [l.code, l]));
 };
 
+/**
+ * Reduce a phone to its national significant digits, so the same customer written as
+ * "0667619014", "+212667619014", "212 667 619 014" or "00212-667-619-014" all compare
+ * equal. Used to decide whether an abandoned cart's number is already a Lead.
+ */
+const normalizePhone = (raw?: string | null) => {
+  let d = (raw || '').replace(/\D/g, '');
+  if (d.startsWith('00')) d = d.slice(2);
+  if (d.startsWith('212')) d = d.slice(3);
+  return d.replace(/^0+/, '');
+};
+
+/**
+ * The stored forms a normalised number could appear as in `leads.phone`. Querying these
+ * with `IN` keeps the lookup on the phone index instead of scanning and normalising the
+ * whole leads table. (A lead stored with embedded spaces would be missed — none exist
+ * today; if that changes, add a normalised generated column and index it.)
+ */
+const phoneVariants = (core: string) =>
+  core ? [core, `0${core}`, `212${core}`, `+212${core}`, `00212${core}`] : [];
+
 // List abandoned carts. Scoped to the agent's assigned sellers when they have
 // assignments; otherwise the full pool.
 router.get(
@@ -2664,14 +2685,21 @@ router.get(
     const limit = parseInt(req.query.limit as string) || 30;
     const skip = (page - 1) * limit;
     const search = (req.query.search as string)?.trim();
+    // 'saved'   → the cart's phone already exists as a Lead in the database
+    // 'unsaved' → it does not
+    const statusFilter = (req.query.status as string) === 'saved' ? 'saved'
+      : (req.query.status as string) === 'unsaved' ? 'unsaved'
+      : 'all';
 
     const influencerIds = await getAgentAssignedInfluencerIds(req.user!.id);
     const hasScope = influencerIds.length > 0;
 
+    // Converted carts stay in the list — they are the ones that carry the "Validé"
+    // badge. The status filter (defaulting to 'unsaved' on the client) is what keeps
+    // the agent's actionable queue clean.
     const and: any[] = [
       { completed: false },
       { phone: { not: null } },
-      { convertedLeadId: null },
     ];
 
     // Only restrict by referral code when the agent actually has assignments.
@@ -2683,7 +2711,10 @@ router.get(
       const codes = scopedLinks.map((l) => l.code);
       // Assigned but their sellers have no links yet → genuinely nothing to show.
       if (codes.length === 0) {
-        return res.json({ attempts: [], total: 0, page, totalPages: 0, scoped: true });
+        return res.json({
+          attempts: [], total: 0, page, totalPages: 0, scoped: true,
+          counts: { all: 0, saved: 0, unsaved: 0 },
+        });
       }
       and.push({ referralCode: { in: codes } });
     }
@@ -2697,6 +2728,49 @@ router.get(
         ],
       });
     }
+    // "Saved as a lead" is a cross-table condition (checkout_attempts.phone exists in
+    // leads.phone) that Prisma cannot express in a where clause — there is no relation
+    // between the two. Resolve it to a concrete id list BEFORE paginating, otherwise
+    // `total` and the page slicing would describe the unfiltered set.
+    // Two narrow columns, so this stays cheap even on a large backlog.
+    const candidates = await prisma.checkoutAttempt.findMany({
+      where: { AND: and },
+      select: { id: true, phone: true },
+    });
+    const candidateCores = Array.from(
+      new Set(candidates.map((c) => normalizePhone(c.phone)).filter(Boolean)),
+    );
+    const knownCores = candidateCores.length
+      ? new Set(
+          (await prisma.lead.findMany({
+            where: { phone: { in: candidateCores.flatMap(phoneVariants) } },
+            select: { phone: true },
+          })).map((l) => normalizePhone(l.phone)).filter(Boolean),
+        )
+      : new Set<string>();
+
+    const isSaved = (c: { phone: string | null }) => {
+      const core = normalizePhone(c.phone);
+      return !!core && knownCores.has(core);
+    };
+    const savedCount = candidates.filter(isSaved).length;
+    const counts = {
+      all: candidates.length,
+      saved: savedCount,
+      unsaved: candidates.length - savedCount,
+    };
+
+    if (statusFilter !== 'all') {
+      const wanted = candidates
+        .filter((c) => isSaved(c) === (statusFilter === 'saved'))
+        .map((c) => c.id);
+
+      if (wanted.length === 0) {
+        return res.json({ attempts: [], total: 0, page, totalPages: 0, scoped: hasScope, counts });
+      }
+      and.push({ id: { in: wanted } });
+    }
+
     const where = { AND: and };
 
     const [attempts, total] = await Promise.all([
@@ -2709,15 +2783,19 @@ router.get(
       Array.from(new Set(attempts.map((a) => a.referralCode).filter(Boolean) as string[])),
     );
 
-    // Flag phones the agent already has an active lead for, to avoid re-calling.
-    const phones = attempts.map((a) => a.phone).filter(Boolean) as string[];
-    const activeLeads = phones.length
+    // Whether THIS agent already owns a lead for the number, so they don't re-call it.
+    // Distinct from `isSaved`, which asks whether the number exists as a Lead at all
+    // (that one drives the Validé / Non validé badge and is computed above).
+    const pageCores = Array.from(
+      new Set(attempts.map((a) => normalizePhone(a.phone)).filter(Boolean)),
+    );
+    const activeLeads = pageCores.length
       ? await prisma.lead.findMany({
-          where: { assignedAgentId: req.user!.id, phone: { in: phones } },
+          where: { assignedAgentId: req.user!.id, phone: { in: pageCores.flatMap(phoneVariants) } },
           select: { phone: true },
         })
       : [];
-    const activePhones = new Set(activeLeads.map((l) => l.phone));
+    const activeCores = new Set(activeLeads.map((l) => normalizePhone(l.phone)).filter(Boolean));
 
     // Attach a recordingId where a session replay exists for the same socket or IP.
     const sessionIds = attempts.map((a) => a.sessionId).filter(Boolean) as string[];
@@ -2745,11 +2823,13 @@ router.get(
         productName: a.productName || link?.product?.nameFr || link?.product?.nameAr || null,
         productImage: link?.product?.images?.[0]?.imageUrl || null,
         sellerName: link?.influencer?.profile?.fullName || link?.influencer?.email || null,
-        alreadyHasLead: a.phone ? activePhones.has(a.phone) : false,
+        alreadyHasLead: activeCores.has(normalizePhone(a.phone)),
+        savedAsLead: isSaved(a),
+        converted: a.convertedLeadId != null,
       };
     });
 
-    res.json({ attempts: enriched, total, page, totalPages: Math.ceil(total / limit), scoped: hasScope });
+    res.json({ attempts: enriched, total, page, totalPages: Math.ceil(total / limit), scoped: hasScope, counts });
   })
 );
 
