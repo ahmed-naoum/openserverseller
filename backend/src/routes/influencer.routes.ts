@@ -1142,11 +1142,20 @@ router.get(
   authorize('VENDOR', 'INFLUENCER'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { page = 1, limit = 20, search, mode } = req.query;
+    const { page = 1, limit = 20, search, mode, all } = req.query;
 
-    const skip = (Number(page) - 1) * Number(limit);
-    const take = Number(limit);
-    
+    // The leads pages compute their stats/charts/pagination client-side, so they ask
+    // for the whole dataset with `all=true`. Cap it so a very large account can't OOM
+    // the response; `truncated` tells the client the numbers are incomplete.
+    const fetchAll = all === 'true' || all === '1' || (all as any) === true;
+    const ALL_HARD_CAP = 5000;
+
+    const safePage = Math.max(1, Number(page) || 1);
+    const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 500);
+
+    const skip = fetchAll ? 0 : (safePage - 1) * safeLimit;
+    const take = fetchAll ? ALL_HARD_CAP : safeLimit;
+
     const commissionWhereClause: any = {
       order: search ? {
         OR: [
@@ -1203,14 +1212,19 @@ router.get(
       take
     });
 
-    // New Leads (not yet orders)
+    // New Leads (not yet orders).
+    // The search predicate lives under AND, not OR — every mode branch below assigns
+    // `leadWhereClause.OR = [...]`, which would otherwise overwrite it and silently
+    // return the vendor's whole lead list for any search term.
     let leadWhereClause: any = {
       ...(search ? {
-        OR: [
-          { fullName: { contains: search as string, mode: 'insensitive' } },
-          { phone: { contains: search as string, mode: 'insensitive' } },
-          { city: { contains: search as string, mode: 'insensitive' } },
-        ]
+        AND: [{
+          OR: [
+            { fullName: { contains: search as string, mode: 'insensitive' } },
+            { phone: { contains: search as string, mode: 'insensitive' } },
+            { city: { contains: search as string, mode: 'insensitive' } },
+          ]
+        }]
       } : {})
     };
 
@@ -1268,7 +1282,9 @@ router.get(
         referralLink: { include: { product: { include: { images: { where: { isPrimary: true }, take: 1 } } }, landingPage: true } }
       },
       orderBy: { createdAt: 'desc' },
-      take: 100 // Limit leads for now
+      // Was hardcoded to 100, which silently truncated every vendor with more leads
+      // than that and made every client-side statistic wrong.
+      take: fetchAll ? ALL_HARD_CAP : Math.max(safeLimit, 100)
     });
 
     // Map leads to a commission-like structure for the frontend
@@ -1306,33 +1322,40 @@ router.get(
       }
     }));
 
-    const totalCommissions = await prisma.influencerCommission.count({
-      where: {
-        influencerId: userId,
-        order: search ? {
-          OR: [
-            { customerName: { contains: search as string, mode: 'insensitive' } },
-            { customerPhone: { contains: search as string, mode: 'insensitive' } },
-            { customerCity: { contains: search as string, mode: 'insensitive' } },
-          ]
-        } : { isNot: null }
-      }
-    });
+    // Counts must use the same where clauses as the queries above, otherwise the
+    // reported total describes a different set of rows than the one returned.
+    const [totalCommissions, totalLeads] = await Promise.all([
+      prisma.influencerCommission.count({ where: commissionWhereClause }),
+      prisma.lead.count({ where: leadWhereClause })
+    ]);
 
-    const combined = [...leadCommissions, ...commissions].sort((a, b) =>
+    // A lead that has been turned into an order can ALSO have a commission row
+    // pointing at that same order. Emitting both double-counts the customer in
+    // every stat and shows the row twice in the table.
+    const leadOrderIds = new Set(
+      leads.map(l => (l as any).order?.id).filter((id: number | undefined) => id != null)
+    );
+    const dedupedCommissions = commissions.filter(c => !c.orderId || !leadOrderIds.has(c.orderId));
+
+    const combined = [...leadCommissions, ...dedupedCommissions].sort((a, b) =>
       new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime()
     );
+
+    // When we fetched everything, the array itself is the exact answer (already deduped).
+    const total = fetchAll ? combined.length : totalCommissions + totalLeads;
 
     res.json({
       status: 'success',
       data: {
         commissions: combined,
         pagination: {
-          page: Number(page),
-          limit: Number(limit),
-          total: totalCommissions + leadCommissions.length,
-          totalPages: Math.ceil((totalCommissions + leadCommissions.length) / Number(limit)),
-
+          page: fetchAll ? 1 : safePage,
+          limit: fetchAll ? combined.length : safeLimit,
+          total,
+          totalPages: fetchAll ? 1 : Math.ceil(total / safeLimit),
+          returned: combined.length,
+          // true when the hard cap kicked in and the client is seeing a subset
+          truncated: fetchAll && (leads.length >= ALL_HARD_CAP || commissions.length >= ALL_HARD_CAP)
         }
       }
     });

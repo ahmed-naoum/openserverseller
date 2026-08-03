@@ -6,7 +6,7 @@ import 'rrweb/dist/style.css';
 import {
   Radio, Users, Eye, RefreshCw, Search, Play, Pause, Clock, HardDrive,
   Globe, Activity, X, RotateCcw, CheckCircle2, ShoppingCart, Phone, Trash2, Database, ChevronDown,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, UserPlus, Mail, Store,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, UserPlus, Mail, Store, Download,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -293,6 +293,7 @@ export default function LiveStreamInspector() {
   const [attemptPage, setAttemptPage] = useState(1);
   const [attemptTotalPages, setAttemptTotalPages] = useState(1);
   const [attemptTotal, setAttemptTotal] = useState(0);
+  const [exportingAttempts, setExportingAttempts] = useState(false);
 
   // Collapsed IP groups (keys prefixed with 'hist:' / 'co:' so the two tabs don't clash).
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -484,6 +485,60 @@ export default function LiveStreamInspector() {
       toast.error('Impossible de charger les paniers');
     } finally {
       setAttemptsLoading(false);
+    }
+  };
+
+  const exportAttemptsToExcel = async () => {
+    setExportingAttempts(true);
+    const loadToast = toast.loading('Préparation de l\'export...');
+    try {
+      // Fetch up to 5000 records matching current search + filter to capture all items
+      const r = await api.get('/admin/checkout-attempts', {
+        params: {
+          page: 1,
+          limit: 5000,
+          filter: attemptFilter,
+          search: attemptSearch || undefined
+        }
+      });
+      const allAttempts = r.data.attempts || [];
+      if (allAttempts.length === 0) {
+        toast.error('Aucun panier à exporter');
+        return;
+      }
+
+      const headers = ['IP', 'Nom Complet', 'Téléphone', 'Ville', 'Statut', 'Champs Remplis', 'Produit', 'Code Parrainage', 'Date'];
+      const rows = allAttempts.map((a: any) => [
+        a.ip || '',
+        a.fullName || '',
+        a.phone || '',
+        a.city || '',
+        a.completed ? 'Commande validée' : 'Lead incomplet',
+        `${a.fieldsFilled}/4`,
+        a.productName || '',
+        a.referralCode || '',
+        new Date(a.updatedAt).toLocaleString('fr-FR')
+      ]);
+
+      // Excel-friendly UTF-8 CSV with BOM and semicolon delimiter
+      const csvContent = '\uFEFF' + [
+        headers.join(';'),
+        ...rows.map((row: any[]) => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(';'))
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute('download', `paniers_abandonnes_${attemptFilter}_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success(`${allAttempts.length} paniers exportés avec succès !`);
+    } catch (err) {
+      toast.error('Erreur lors de l\'export des paniers');
+    } finally {
+      toast.dismiss(loadToast);
+      setExportingAttempts(false);
     }
   };
 
@@ -968,8 +1023,15 @@ export default function LiveStreamInspector() {
                   className="pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-orange-500/20"
                 />
               </div>
-              <button onClick={() => fetchAttempts(1)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl flex items-center gap-2">
+              <button onClick={() => fetchAttempts(1)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl flex items-center gap-2 transition-all">
                 <RefreshCw className="w-3.5 h-3.5" /> Actualiser
+              </button>
+              <button 
+                onClick={exportAttemptsToExcel}
+                disabled={exportingAttempts}
+                className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 active:scale-95 text-white text-xs font-bold rounded-xl flex items-center gap-2 transition-all shadow-xs disabled:opacity-50"
+              >
+                <Download className="w-3.5 h-3.5" /> Exporter Excel
               </button>
             </div>
           </div>

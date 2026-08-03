@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { DELIVERY_STATUSES, isConfirmedStatus, isConfirmedRow, isDeliveredRow, getDisplayStatus, getLeadDate } from '../../lib/leadStatus';
 import {
   Users, MousePointerClick, UserCheck, ShoppingCart,
   Filter, Search, Calendar,
@@ -25,9 +26,9 @@ const ALL_STATUS_BADGES: Record<string, { label: string; color: string; icon: Re
   'PICKED_UP': { label: 'Collecté', color: 'bg-blue-50 text-blue-600 border border-blue-100', icon: Package },
 
   // --- En transit ---
-  'SENT': { label: 'Expédié', color: 'bg-violet-50 text-violet-600 border border-violet-100', icon: Truck },
+  'SENT': { label: 'Expédié (Transporteur)', color: 'bg-violet-50 text-violet-600 border border-violet-100', icon: Truck },
   'RECEIVED': { label: 'Reçu (Destination)', color: 'bg-indigo-50 text-indigo-600 border border-indigo-100', icon: MapPin },
-  'DISTRIBUTION': { label: 'En livraison', color: 'bg-cyan-50 text-cyan-600 border border-cyan-100', icon: Truck },
+  'DISTRIBUTION': { label: 'En Distribution', color: 'bg-cyan-50 text-cyan-600 border border-cyan-100', icon: Truck },
   'PROGRAMMER_AUTO': { label: 'Livraison Auto', color: 'bg-purple-50 text-purple-600 border border-purple-100', icon: Calendar },
   'POSTPONED': { label: 'Reporté', color: 'bg-orange-50 text-orange-600 border border-orange-100', icon: Calendar },
   'NOANSWER': { label: 'Pas de réponse', color: 'bg-rose-50 text-rose-600 border border-rose-100', icon: Phone },
@@ -58,6 +59,24 @@ const ALL_STATUS_BADGES: Record<string, { label: string; color: string; icon: Re
   'CANCELLED': { label: 'Annulé', color: 'bg-red-50 text-red-600 border border-red-100', icon: AlertCircle },
   'PRICE_CONFIRMED': { label: 'Prix Confirmé', color: 'bg-blue-50 text-blue-600 border border-blue-100', icon: CheckCircle2 },
   'PRICE_REJECTED': { label: 'Prix Refusé', color: 'bg-rose-50 text-rose-600 border border-rose-100', icon: X },
+
+  // --- Statuses that were reaching the UI without a badge and rendering as raw codes ---
+  'CONFIRMED_DELIVERY': { label: 'Confirmé (Livraison)', color: 'bg-blue-50 text-blue-600 border border-blue-100', icon: Truck },
+  'CALLBACK_REQUESTED': { label: 'Rappel Demandé', color: 'bg-orange-50 text-orange-600 border border-orange-100', icon: Clock },
+  'ORDERED': { label: 'Commandé', color: 'bg-blue-50 text-blue-600 border border-blue-100', icon: ShoppingCart },
+  'IN_PRODUCTION': { label: 'En Production', color: 'bg-amber-50 text-amber-600 border border-amber-100', icon: RefreshCw },
+  'READY_FOR_SHIPPING': { label: 'Prêt à Expédier', color: 'bg-emerald-50 text-emerald-600 border border-emerald-100', icon: Package },
+  'REFUNDED': { label: 'Remboursé', color: 'bg-teal-50 text-teal-600 border border-teal-100', icon: RefreshCw },
+  'NO_REPLY': { label: 'Sans Réponse', color: 'bg-rose-50 text-rose-600 border border-rose-100', icon: Phone },
+  'UNREACHABLE': { label: 'Injoignable', color: 'bg-slate-50 text-slate-600 border border-slate-100', icon: Phone },
+  'INVALID': { label: 'Invalide', color: 'bg-slate-50 text-slate-600 border border-slate-100', icon: AlertCircle },
+  'CONTACTED': { label: 'Contacté', color: 'bg-green-50 text-green-600 border border-green-100', icon: Phone },
+  'INTERESTED': { label: 'Intéressé', color: 'bg-green-50 text-green-600 border border-green-100', icon: CheckCircle },
+  'NOT_INTERESTED': { label: 'Pas Intéressé', color: 'bg-red-50 text-red-600 border border-red-100', icon: X },
+  'CANCEL_REASON_PRICE': { label: 'Annulé (Prix)', color: 'bg-red-50 text-red-600 border border-red-100', icon: X },
+  'WRONG_ORDER': { label: 'Commande Erronée', color: 'bg-amber-50 text-amber-600 border border-amber-100', icon: AlertCircle },
+  'CANCEL_ORDER': { label: 'Commande Annulée', color: 'bg-red-50 text-red-600 border border-red-100', icon: X },
+  'UNKNOWN': { label: 'Inconnu', color: 'bg-gray-50 text-gray-600 border border-gray-100', icon: AlertCircle },
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -196,14 +215,18 @@ export default function VendorLeads() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, searchTerm, startDate, endDate, itemsPerPage]);
+    // tableDateRange/tableSelectedProductId shrink the result set too — without them
+    // the table stays on a page that no longer exists and renders blank.
+  }, [statusFilter, searchTerm, startDate, endDate, itemsPerPage, tableDateRange, tableSelectedProductId]);
 
   const loadData = async () => {
     try {
       setLoading(true);
       const [linksRes, commissionsRes] = await Promise.all([
         influencerApi.getLinks({ mode: currentMode }),
-        influencerApi.getCustomers({ mode: currentMode }) // This returns commissions with orders
+        // `all: true` — every stat, chart and the pagination on this page are computed
+        // client-side, so a truncated page would make all of them wrong.
+        influencerApi.getCustomers({ all: true, mode: currentMode })
       ]);
       setLinks(linksRes.data);
       // API returns { status, data: { commissions, pagination } }
@@ -223,8 +246,8 @@ export default function VendorLeads() {
       return false;
     }
 
-    const leadDate = new Date(c.order?.createdAt || c.createdAt);
-    
+    const leadDate = getLeadDate(c);
+
     // Date filter
     if (tableDateRange === 'TOUS') return true;
     
@@ -263,26 +286,9 @@ export default function VendorLeads() {
   
   const totalLeads = dateFilteredCommissions.length;
 
-  const confirmationStatuses = [
-    'LEAD', 'AVAILABLE', 'ASSIGNED', 'CALL_LATER', 
-    'NO_REPLY', 'UNREACHABLE', 'INVALID', 
-    'CONTACTED', 'INTERESTED', 'NOT_INTERESTED',
-    'CANCEL_REASON_PRICE', 'WRONG_ORDER', 'CANCEL_ORDER'
-  ];
-  
-  const deliveryStatuses = [
-    'PENDING', 'PUSHED_TO_DELIVERY', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED', 'CONFIRMED_DELIVERY',
-    'NEW_PARCEL', 'WAITING_PICKUP', 'PICKED_UP', 'SENT', 'RECEIVED', 'DISTRIBUTION', 'PROGRAMMER_AUTO', 'POSTPONED',
-    'WAITING_PREPARATION', 'PREPARED', 'ENCORE_PREPARED', 'CANCELED_BY_SELLER', 'CANCELED_BY_SYSTEM', 'REFUSE',
-    'NOANSWER', 'CANCELED', 'ERR', 'PROGRAMMER', 'INCORRECT_ADDRESS'
-  ];
+  const confirmedLeads = dateFilteredCommissions.filter(isConfirmedRow).length;
 
-  const confirmedLeads = dateFilteredCommissions.filter(c => {
-    const s = (c.order?.status || 'UNKNOWN').toUpperCase();
-    return s === 'CONFIRMED' || deliveryStatuses.includes(s);
-  }).length;
-  
-  const deliveredLeads = dateFilteredCommissions.filter(c => (c.order?.status || '').toUpperCase() === 'DELIVERED').length;
+  const deliveredLeads = dateFilteredCommissions.filter(isDeliveredRow).length;
 
   const confirmationRate = totalLeads > 0 ? (confirmedLeads / totalLeads) * 100 : 0;
   const deliveryRate = confirmedLeads > 0 ? (deliveredLeads / confirmedLeads) * 100 : 0;
@@ -306,10 +312,7 @@ export default function VendorLeads() {
   // Build status counts for filter chips
   const statusCounts: Record<string, number> = {};
   dateFilteredCommissions.forEach(c => {
-    let s = (c.order?.status || 'UNKNOWN').toUpperCase();
-    if (s === 'CONFIRMED' && c.order?.coliatyPackageCode) {
-      s = 'CONFIRMED_DELIVERY';
-    }
+    const s = getDisplayStatus(c);
     statusCounts[s] = (statusCounts[s] || 0) + 1;
   });
 
@@ -333,8 +336,7 @@ export default function VendorLeads() {
   const filteredCommissions = dateFilteredCommissions.filter(c => {
     // Status filter
     if (statusFilter !== 'ALL') {
-      const s = (c.order?.status || 'UNKNOWN').toUpperCase();
-      if (s !== statusFilter.toUpperCase()) return false;
+      if (getDisplayStatus(c) !== statusFilter.toUpperCase()) return false;
     }
     // Search filter
     if (!searchTerm) return true;
@@ -346,9 +348,9 @@ export default function VendorLeads() {
     );
   });
 
-  // Sort by date descending (newest first)
+  // Sort by date descending (newest first) — same date field the filters use
   const sortedCommissions = [...filteredCommissions].sort((a, b) => {
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    return getLeadDate(b).getTime() - getLeadDate(a).getTime();
   });
 
   const totalPages = Math.ceil(sortedCommissions.length / itemsPerPage);
@@ -375,20 +377,24 @@ export default function VendorLeads() {
   };
 
   // Data for Confirmation Analytics
-  const totalConfirmed = (statusCounts['CONFIRMED'] || 0) + 
-    deliveryStatuses.reduce((sum, status) => sum + (statusCounts[status] || 0), 0);
+  const totalConfirmed = Object.entries(statusCounts)
+    .filter(([status]) => isConfirmedStatus(status.toUpperCase()))
+    .reduce((sum, [, count]) => sum + count, 0);
 
+  // Everything that is NOT confirmed, rather than an allow-list. An allow-list
+  // silently dropped any status nobody remembered to add (ORDERED, PRICE_REJECTED,
+  // CALLBACK_REQUESTED, UNKNOWN...), so the donut total never matched TOTAL LEADS.
   const confirmationDistData = Object.entries(statusCounts)
-    .filter(([status]) => confirmationStatuses.includes(status.toUpperCase()))
+    .filter(([status]) => !isConfirmedStatus(status.toUpperCase()))
     .map(([status, count]) => ({
-      name: ALL_STATUS_BADGES[status.toUpperCase()]?.label || status,
+      name: getStatusLabel(status.toUpperCase()),
       value: count,
       color: getStatusColorHex(status.toUpperCase())
     }));
 
   if (totalConfirmed > 0) {
     confirmationDistData.push({
-      name: ALL_STATUS_BADGES['CONFIRMED']?.label || 'Confirmé',
+      name: getStatusLabel('CONFIRMED'),
       value: totalConfirmed,
       color: getStatusColorHex('CONFIRMED')
     });
@@ -397,9 +403,9 @@ export default function VendorLeads() {
   confirmationDistData.sort((a, b) => b.value - a.value);
 
   const deliveryDistData = Object.entries(statusCounts)
-    .filter(([status]) => deliveryStatuses.includes(status.toUpperCase()))
+    .filter(([status]) => DELIVERY_STATUSES.includes(status.toUpperCase()))
     .map(([status, count]) => ({
-      name: ALL_STATUS_BADGES[status.toUpperCase()]?.label || status,
+      name: getStatusLabel(status.toUpperCase()),
       value: count,
       color: getStatusColorHex(status.toUpperCase())
     })).sort((a, b) => b.value - a.value);
@@ -408,7 +414,7 @@ export default function VendorLeads() {
   const performanceData = (() => {
     const groupedMap = new Map();
     dateFilteredCommissions.forEach(comm => {
-      const dateKey = format(new Date(comm.createdAt), 'yyyy-MM-dd');
+      const dateKey = format(getLeadDate(comm), 'yyyy-MM-dd');
       groupedMap.set(dateKey, (groupedMap.get(dateKey) || 0) + 1);
     });
 
@@ -420,8 +426,9 @@ export default function VendorLeads() {
       }));
   })();
 
-  // Data for City Distribution (Count leads that have a tracking number)
-  const pushedLeadsForCity = commissions.filter(c => 
+  // Data for City Distribution (Count leads that have a tracking number).
+  // Must honour the GLOBAL FILTERS like every other card on this page.
+  const pushedLeadsForCity = dateFilteredCommissions.filter(c =>
     c.order?.coliatyPackageCode || (c.order as any)?.trackingNumber
   );
   const totalPushedLeads = pushedLeadsForCity.length;
@@ -921,16 +928,18 @@ export default function VendorLeads() {
             >
               <option value="ALL">{t('all_status', 'leads', 'Tous les statuts ({count})').replace('{count}', String(dateFilteredCommissions.length))}</option>
               {(() => {
-                const renderedLabels = new Set();
+                // De-duplicate on the status CODE, not the label. Two codes sharing a
+                // label (SENT/SHIPPED, DISTRIBUTION/PUSHED_TO_DELIVERY) used to make one
+                // of them unselectable and hid its count entirely.
+                const renderedStatuses = new Set<string>();
                 return activeStatuses
                   .map(status => {
-                    const badge = ALL_STATUS_BADGES[status.toUpperCase()] || { label: status };
-                    const count = statusCounts[status.toUpperCase()] || 0;
-                    return { status, label: badge.label, count };
+                    const code = status.toUpperCase();
+                    return { status: code, label: getStatusLabel(code), count: statusCounts[code] || 0 };
                   })
                   .filter(item => {
-                    if (renderedLabels.has(item.label)) return false;
-                    renderedLabels.add(item.label);
+                    if (renderedStatuses.has(item.status)) return false;
+                    renderedStatuses.add(item.status);
                     return true;
                   })
                   .map(item => (
@@ -966,7 +975,7 @@ export default function VendorLeads() {
         <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <h2 className="text-sm font-bold text-gray-700 flex items-center gap-2">
             <Filter className="w-4 h-4 text-influencer-500" />
-            {statusFilter === 'ALL' ? t('all_leads_title', 'leads', 'Tous les Leads') : (ALL_STATUS_BADGES[statusFilter]?.label || statusFilter)}
+            {statusFilter === 'ALL' ? t('all_leads_title', 'leads', 'Tous les Leads') : getStatusLabel(statusFilter)}
             <span className="text-gray-400 font-medium">({sortedCommissions.length})</span>
           </h2>
 

@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { dashboardApi, influencerApi } from '../../lib/api';
+import { isConfirmedRow, isDeliveredRow } from '../../lib/leadStatus';
 import { ReferralLink, InfluencerCommission } from '../../types';
 import {
   DollarSign, TrendingUp, Zap, MousePointerClick, ArrowUpRight, Crown,
@@ -141,19 +142,11 @@ export default function VendorDashboard() {
 
   const totalLeads = dateFilteredCommissions.length;
 
-  const deliveryStatuses = [
-    'PENDING', 'PUSHED_TO_DELIVERY', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED', 'CONFIRMED_DELIVERY',
-    'NEW_PARCEL', 'WAITING_PICKUP', 'PICKED_UP', 'SENT', 'RECEIVED', 'DISTRIBUTION', 'PROGRAMMER_AUTO', 'POSTPONED',
-    'WAITING_PREPARATION', 'PREPARED', 'ENCORE_PREPARED', 'CANCELED_BY_SELLER', 'CANCELED_BY_SYSTEM', 'REFUSE',
-    'NOANSWER', 'CANCELED', 'ERR', 'PROGRAMMER', 'INCORRECT_ADDRESS'
-  ];
+  // Shared with the Leads page — these two screens are compared side by side, so
+  // they must not carry their own copies of the confirmed/delivered rules.
+  const confirmedLeads = dateFilteredCommissions.filter(isConfirmedRow).length;
 
-  const confirmedLeads = dateFilteredCommissions.filter(c => {
-    const s = (c.order?.status || 'UNKNOWN').toUpperCase();
-    return s === 'CONFIRMED' || deliveryStatuses.includes(s);
-  }).length;
-  
-  const deliveredLeads = dateFilteredCommissions.filter(c => (c.order?.status || '').toUpperCase() === 'DELIVERED').length;
+  const deliveredLeads = dateFilteredCommissions.filter(isDeliveredRow).length;
 
   const confirmationRate = totalLeads > 0 ? (confirmedLeads / totalLeads) * 100 : 0;
   const deliveryRate = confirmedLeads > 0 ? (deliveredLeads / confirmedLeads) * 100 : 0;
