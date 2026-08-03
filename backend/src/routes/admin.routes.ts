@@ -249,16 +249,48 @@ router.post(
   '/sessions/purge',
   authenticate,
   authorize('SUPER_ADMIN'),
-  asyncHandler(async (_req: Request, res: Response) => {
-    await runSessionCleanup();
-    // Also drop checkout attempts older than 7 days.
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 7);
-    const [attempts, signups] = await Promise.all([
-      prisma.checkoutAttempt.deleteMany({ where: { createdAt: { lt: cutoff } } }),
-      prisma.signupAttempt.deleteMany({ where: { createdAt: { lt: cutoff } } }),
-    ]);
-    res.json({ status: 'success', purgedAttempts: attempts.count, purgedSignups: signups.count });
+  asyncHandler(async (req: Request, res: Response) => {
+    const { all, target } = req.body || {};
+    let attemptsCount = 0;
+    let signupsCount = 0;
+    let recordingsCount = 0;
+
+    if (target === 'history' || target === 'recordings') {
+      const resRecordings = await prisma.sessionRecording.deleteMany({});
+      recordingsCount = resRecordings.count;
+    } else if (target === 'checkouts') {
+      const resAttempts = await prisma.checkoutAttempt.deleteMany({ where: { convertedLeadId: null } });
+      attemptsCount = resAttempts.count;
+    } else if (target === 'signups') {
+      const resSignups = await prisma.signupAttempt.deleteMany({ where: { completed: false } });
+      signupsCount = resSignups.count;
+    } else if (all || target === 'all') {
+      const [resAttempts, resSignups, resRecordings] = await Promise.all([
+        prisma.checkoutAttempt.deleteMany({ where: { convertedLeadId: null } }),
+        prisma.signupAttempt.deleteMany({ where: { completed: false } }),
+        prisma.sessionRecording.deleteMany({}),
+      ]);
+      attemptsCount = resAttempts.count;
+      signupsCount = resSignups.count;
+      recordingsCount = resRecordings.count;
+    } else {
+      await runSessionCleanup();
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 7);
+      const [attempts, signups] = await Promise.all([
+        prisma.checkoutAttempt.deleteMany({ where: { createdAt: { lt: cutoff } } }),
+        prisma.signupAttempt.deleteMany({ where: { createdAt: { lt: cutoff } } }),
+      ]);
+      attemptsCount = attempts.count;
+      signupsCount = signups.count;
+    }
+
+    res.json({
+      status: 'success',
+      purgedAttempts: attemptsCount,
+      purgedSignups: signupsCount,
+      purgedRecordings: recordingsCount
+    });
   })
 );
 

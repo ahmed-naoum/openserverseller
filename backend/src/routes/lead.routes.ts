@@ -338,10 +338,19 @@ router.get(
 router.get(
   '/available',
   authenticate,
-  authorize('CALL_CENTER_AGENT'),
+  authorize('CALL_CENTER_AGENT', 'CONFIRMATION_AGENT', 'AGENT', 'HELPER', 'SUPER_ADMIN', 'VENDOR'),
   asyncHandler(async (req, res) => {
     const agentId = req.user!.id;
-    const { influencerId } = req.query;
+    const { influencerId, limit } = req.query;
+
+    let takeLimit = 20;
+    if (limit) {
+      if (limit === 'max' || limit === 'all') {
+        takeLimit = 1000;
+      } else {
+        takeLimit = Math.min(1000, Math.max(1, parseInt(limit as string) || 20));
+      }
+    }
 
     // Check if this agent has influencer assignments
     const assignments = await prisma.agentInfluencerAssignment.findMany({
@@ -372,6 +381,7 @@ router.get(
         status: 'success',
         data: {
           leads: [],
+          totalAvailable: 0,
           hasActiveLead: !!activeLead,
           activeLeadId: activeLead?.id || null,
           assignedInfluencers: [], // Return empty array so dropdown doesn't show all system influencers
@@ -406,16 +416,19 @@ router.get(
       ];
     }
 
-    const leads = await prisma.lead.findMany({
-      where,
-      take: 20,
-      orderBy: { createdAt: 'desc' },
-      include: { 
-        referralLink: {
-          include: { product: { include: { images: true } }, landingPage: true }
-        }
-      },
-    });
+    const [leads, totalAvailable] = await Promise.all([
+      prisma.lead.findMany({
+        where,
+        take: takeLimit,
+        orderBy: { createdAt: 'desc' },
+        include: { 
+          referralLink: {
+            include: { product: { include: { images: true } }, landingPage: true }
+          }
+        },
+      }),
+      prisma.lead.count({ where }),
+    ]);
 
     res.json({
       status: 'success',
@@ -430,6 +443,7 @@ router.get(
             image: l.referralLink.product.images[0]?.imageUrl || null,
           } : null,
         })),
+        totalAvailable,
         hasActiveLead: !!activeLead,
         activeLeadId: activeLead?.id || null,
         assignedInfluencers,
@@ -2644,7 +2658,7 @@ const buildLinkMap = async (codes: string[]) => {
 router.get(
   '/abandoned-carts',
   authenticate,
-  authorize('CALL_CENTER_AGENT', 'SUPER_ADMIN'),
+  authorize('CALL_CENTER_AGENT', 'CONFIRMATION_AGENT', 'AGENT', 'HELPER', 'SUPER_ADMIN', 'VENDOR'),
   asyncHandler(async (req, res) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 30;
@@ -2708,14 +2722,13 @@ router.get(
     // Attach a recordingId where a session replay exists for the same socket or IP.
     const sessionIds = attempts.map((a) => a.sessionId).filter(Boolean) as string[];
     const ips = attempts.map((a) => a.ip).filter(Boolean) as string[];
-    const recordings = (sessionIds.length || ips.length)
+    const recConditions: any[] = [];
+    if (sessionIds.length > 0) recConditions.push({ sessionId: { in: sessionIds } });
+    if (ips.length > 0) recConditions.push({ ip: { in: ips } });
+
+    const recordings = recConditions.length > 0
       ? await prisma.sessionRecording.findMany({
-          where: {
-            OR: [
-              { sessionId: { in: sessionIds } },
-              { ip: { in: ips } },
-            ],
-          },
+          where: { OR: recConditions },
           select: { id: true, sessionId: true, ip: true },
           orderBy: { createdAt: 'desc' },
         })
@@ -2744,7 +2757,7 @@ router.get(
 router.post(
   '/abandoned-carts/:id/convert',
   authenticate,
-  authorize('CALL_CENTER_AGENT', 'SUPER_ADMIN'),
+  authorize('CALL_CENTER_AGENT', 'CONFIRMATION_AGENT', 'AGENT', 'HELPER', 'SUPER_ADMIN', 'VENDOR'),
   asyncHandler(async (req, res) => {
     const attempt = await prisma.checkoutAttempt.findUnique({ where: { id: req.params.id } });
     if (!attempt) throw new AppException(404, 'Panier introuvable');

@@ -98,6 +98,8 @@ export default function AgentLeads() {
   }, []);
 
   const [availableLeads, setAvailableLeads] = useState<any[]>([]);
+  const [totalAvailableCount, setTotalAvailableCount] = useState<number>(0);
+  const [availableLimit, setAvailableLimit] = useState<number | 'max'>(20);
   const [myLeads, setMyLeads] = useState<any[]>([]);
   const [hasActiveLead, setHasActiveLead] = useState(false);
   const [activeLeadId, setActiveLeadId] = useState<number | null>(null);
@@ -176,11 +178,15 @@ export default function AgentLeads() {
   const loadData = useCallback(async () => {
     try {
       const [availRes, myRes] = await Promise.all([
-        leadsApi.available(selectedInfluencerId ? { influencerId: selectedInfluencerId } : undefined),
+        leadsApi.available({
+          influencerId: selectedInfluencerId ? Number(selectedInfluencerId) : undefined,
+          limit: availableLimit
+        }),
         leadsApi.list({ status: statusFilter })
       ]);
       const availData = availRes.data?.data || availRes.data;
       setAvailableLeads(availData?.leads || []);
+      setTotalAvailableCount(availData?.totalAvailable ?? (availData?.leads?.length || 0));
       setHasActiveLead(availData?.hasActiveLead || false);
       setActiveLeadId(availData?.activeLeadId || null);
       setAssignedInfluencers(availData?.assignedInfluencers || []);
@@ -192,7 +198,7 @@ export default function AgentLeads() {
     } catch (error) {
       console.error('Failed to load leads:', error);
     }
-  }, [selectedInfluencerId, statusFilter]);
+  }, [selectedInfluencerId, availableLimit, statusFilter]);
 
   const loadCities = async () => {
     if (coliatyCities.length > 0) return;
@@ -433,8 +439,8 @@ export default function AgentLeads() {
       {/* Available Leads Pool */}
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="relative">
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="relative flex items-center gap-2">
               <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
                 {isPrincess ? (
                   <Sparkles className="w-5 h-5 text-amber-500 animate-pulse" />
@@ -446,12 +452,35 @@ export default function AgentLeads() {
                 Leads Disponibles
               </h2>
               {availableLeads.length > 0 && (
-                <span className={`absolute -top-1 -right-8 text-white text-[10px] font-black rounded-full w-5 h-5 flex items-center justify-center animate-bounce shadow-md ${
+                <span className={`text-white text-[10px] font-black rounded-full px-2 py-0.5 shadow-md ${
                   isPrincess ? 'bg-amber-500 shadow-amber-200' : isGirly ? 'bg-pink-500 shadow-pink-200' : 'bg-indigo-500 shadow-indigo-200'
                 }`}>
-                  {availableLeads.length}
+                  {availableLeads.length} {totalAvailableCount > availableLeads.length ? `/ ${totalAvailableCount}` : ''}
                 </span>
               )}
+            </div>
+
+            {/* Limit Selector */}
+            <div className="flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl">
+              <span className="text-[10px] font-black text-gray-400 uppercase px-1.5">Afficher:</span>
+              {([20, 50, 100, 200, 'max'] as const).map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setAvailableLimit(opt)}
+                  className={`px-2 py-0.5 rounded-lg text-[11px] font-black transition-all ${
+                    availableLimit === opt
+                      ? isPrincess
+                        ? 'bg-amber-500 text-white shadow-xs'
+                        : isGirly
+                        ? 'bg-pink-500 text-white shadow-xs'
+                        : 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-gray-500 hover:text-gray-900 hover:bg-white/50'
+                  }`}
+                >
+                  {opt === 'max' ? 'Tout' : opt}
+                </button>
+              ))}
             </div>
           </div>
           

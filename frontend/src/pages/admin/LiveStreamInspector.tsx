@@ -554,11 +554,23 @@ export default function LiveStreamInspector() {
     }
   };
 
-  const purgeStorage = async () => {
+  const purgeStorage = async (target: 'history' | 'checkouts' | 'signups' = 'history') => {
+    let label = 'l\'historique des sessions enregistrées';
+    if (target === 'checkouts') label = 'les paniers non validés';
+    if (target === 'signups') label = 'les inscriptions non finalisées';
+
+    if (!window.confirm(`Voulez-vous vraiment purger ${label} ?`)) return;
     setPurging(true);
     try {
-      await api.post('/admin/sessions/purge');
-      toast.success('Nettoyage effectué');
+      const res = await api.post('/admin/sessions/purge', { target });
+      const { purgedAttempts, purgedSignups, purgedRecordings } = res.data || {};
+      if (target === 'history') {
+        toast.success(`Purger terminé: ${purgedRecordings || 0} enregistrements supprimés.`);
+      } else if (target === 'checkouts') {
+        toast.success(`Purger terminé: ${purgedAttempts || 0} paniers non validés supprimés.`);
+      } else if (target === 'signups') {
+        toast.success(`Purger terminé: ${purgedSignups || 0} inscriptions supprimées.`);
+      }
       fetchStats();
       if (activeTab === 'HISTORY') fetchHistory(1);
       if (activeTab === 'CHECKOUTS') fetchAttempts(1);
@@ -930,7 +942,7 @@ export default function LiveStreamInspector() {
               <span className="text-[11px] text-gray-400 font-medium">Plus ancien : {new Date(stats.oldestAt).toLocaleDateString('fr-FR')}</span>
             )}
             <button
-              onClick={purgeStorage}
+              onClick={() => purgeStorage('history')}
               disabled={purging}
               className="ml-auto px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl flex items-center gap-2 disabled:opacity-50"
             >
@@ -1034,6 +1046,24 @@ export default function LiveStreamInspector() {
                 <Download className="w-3.5 h-3.5" /> Exporter Excel
               </button>
             </div>
+          </div>
+
+          {/* Storage management strip */}
+          <div className="flex flex-wrap items-center gap-3 p-4 bg-gray-50 rounded-2xl">
+            <StoragePill icon={<Database className="w-4 h-4" />} label="Enregistrements" value={String(stats?.recordings ?? 0)} />
+            <StoragePill icon={<HardDrive className="w-4 h-4" />} label="Stockage" value={fmtBytes(stats?.totalBytes ?? 0)} />
+            <StoragePill icon={<ShoppingCart className="w-4 h-4" />} label="Paniers abandonnés" value={String(stats?.attempts.abandoned ?? 0)} />
+            <StoragePill icon={<CheckCircle2 className="w-4 h-4" />} label="Commandes validées" value={String(stats?.attempts.converted ?? 0)} />
+            {stats?.oldestAt && (
+              <span className="text-[11px] text-gray-400 font-medium">Plus ancien : {new Date(stats.oldestAt).toLocaleDateString('fr-FR')}</span>
+            )}
+            <button
+              onClick={() => purgeStorage('checkouts')}
+              disabled={purging}
+              className="ml-auto px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl flex items-center gap-2 disabled:opacity-50"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> {purging ? 'Nettoyage…' : 'Purger les paniers'}
+            </button>
           </div>
 
           {attemptsLoading ? (
@@ -1152,8 +1182,26 @@ export default function LiveStreamInspector() {
             </div>
           </div>
 
-          {/* Funnel summary */}
+          {/* Storage management strip */}
           <div className="flex flex-wrap items-center gap-3 p-4 bg-gray-50 rounded-2xl">
+            <StoragePill icon={<Database className="w-4 h-4" />} label="Enregistrements" value={String(stats?.recordings ?? 0)} />
+            <StoragePill icon={<HardDrive className="w-4 h-4" />} label="Stockage" value={fmtBytes(stats?.totalBytes ?? 0)} />
+            <StoragePill icon={<ShoppingCart className="w-4 h-4" />} label="Paniers abandonnés" value={String(stats?.attempts.abandoned ?? 0)} />
+            <StoragePill icon={<CheckCircle2 className="w-4 h-4" />} label="Commandes validées" value={String(stats?.attempts.converted ?? 0)} />
+            {stats?.oldestAt && (
+              <span className="text-[11px] text-gray-400 font-medium">Plus ancien : {new Date(stats.oldestAt).toLocaleDateString('fr-FR')}</span>
+            )}
+            <button
+              onClick={() => purgeStorage('signups')}
+              disabled={purging}
+              className="ml-auto px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl flex items-center gap-2 disabled:opacity-50"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> {purging ? 'Nettoyage…' : 'Purger les inscriptions'}
+            </button>
+          </div>
+
+          {/* Funnel summary */}
+          <div className="flex flex-wrap items-center gap-3 p-4 bg-gray-50/60 rounded-2xl border border-gray-100">
             <StoragePill icon={<UserPlus className="w-4 h-4" />} label="Inscriptions commencées" value={String(stats?.signups?.total ?? 0)} />
             <StoragePill icon={<Users className="w-4 h-4" />} label="Non finalisées" value={String(stats?.signups?.abandoned ?? 0)} />
             <StoragePill icon={<CheckCircle2 className="w-4 h-4" />} label="Comptes créés" value={String(stats?.signups?.completed ?? 0)} />

@@ -237,7 +237,7 @@ export const leadsApi = {
   bulkUpdateStatus: (data: { ids: number[]; status: string }) =>
     api.patch('/leads/bulk-status', data),
   assign: (id: string, data: { agentId: string }) => api.post(`/leads/${id}/assign`, data),
-  available: (params?: { influencerId?: number }) => api.get('/leads/available', { params }),
+  available: (params?: { influencerId?: number; limit?: number | string }) => api.get('/leads/available', { params }),
   claim: (id: number) => api.post(`/leads/${id}/claim`),
   // Abandoned carts (call-center recovery)
   abandonedCarts: (params?: { page?: number; limit?: number; search?: string }) =>
