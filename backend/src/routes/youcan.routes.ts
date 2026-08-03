@@ -267,23 +267,46 @@ router.post(
     }
 
     try {
-      // Fetch customers from YouCan Store API
-      const response = await axios.get(`${process.env.YOUCAN_API_URL || 'https://api.youcan.shop'}/customers`, {
-        headers: {
-          Authorization: `Bearer ${vendor.youcanAccessToken}`,
-          Accept: 'application/json',
-        },
-      });
+      // Fetch all customers from YouCan Store API using pagination
+      let allYoucanCustomers: any[] = [];
+      let page = 1;
+      let hasMore = true;
 
-      const rawCustomers = response.data?.data || response.data || [];
-      const youcanCustomers = Array.isArray(rawCustomers) 
-        ? rawCustomers.filter((c: any) => new Date(c.created_at || c.createdAt) >= connectedAt) 
-        : [];
+      while (hasMore) {
+        const response = await axios.get(`${process.env.YOUCAN_API_URL || 'https://api.youcan.shop'}/customers`, {
+          params: { page, limit: 100 },
+          headers: {
+            Authorization: `Bearer ${vendor.youcanAccessToken}`,
+            Accept: 'application/json',
+          },
+        });
 
-      if (!Array.isArray(youcanCustomers)) {
-         res.status(500).json({ success: false, message: 'Invalid response format from YouCan API' });
-         return;
+        const rawCustomers = response.data?.data || response.data || [];
+        if (!Array.isArray(rawCustomers) || rawCustomers.length === 0) {
+          hasMore = false;
+        } else {
+          allYoucanCustomers.push(...rawCustomers);
+          
+          const meta = response.data?.meta;
+          const pagination = meta?.pagination || meta;
+          if (pagination && pagination.current_page && pagination.last_page) {
+            if (pagination.current_page >= pagination.last_page) {
+              hasMore = false;
+            } else {
+              page++;
+            }
+          } else {
+            // Fallback
+            if (rawCustomers.length < 100) {
+              hasMore = false;
+            } else {
+              page++;
+            }
+          }
+        }
       }
+
+      const youcanCustomers = allYoucanCustomers.filter((c: any) => new Date(c.created_at || c.createdAt) >= connectedAt);
 
       let importedCount = 0;
 
