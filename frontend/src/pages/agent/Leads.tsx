@@ -4,7 +4,7 @@ import { leadsApi } from '../../lib/api';
 import { socket, connectToCallCenter, disconnectSocket } from '../../lib/socket';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
-import { Sparkles, Phone, MessageSquare, Zap, Clock, Package, Heart, Filter, ChevronRight, X, AlertCircle, Activity } from 'lucide-react';
+import { Sparkles, Phone, MessageSquare, Zap, Clock, Package, Heart, Filter, ChevronRight, X, AlertCircle, Activity, Check } from 'lucide-react';
 
 const AssignedTimer = ({ lead, onTimeout, isGirly, isPrincess }: { lead: any; onTimeout?: () => void; isGirly: boolean; isPrincess: boolean }) => {
   const [globalCooldown, setGlobalCooldown] = useState<number>(0);
@@ -108,6 +108,39 @@ export default function AgentLeads() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [dropdownSearch, setDropdownSearch] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const [clickedWaLeads, setClickedWaLeads] = useState<Set<number>>(() => {
+    try {
+      const saved = localStorage.getItem('agent_clicked_wa_leads');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch (e) {
+      return new Set();
+    }
+  });
+
+  const handleWaClick = (leadId: number) => {
+    setClickedWaLeads((prev) => {
+      const next = new Set(prev);
+      next.add(leadId);
+      try {
+        localStorage.setItem('agent_clicked_wa_leads', JSON.stringify(Array.from(next)));
+      } catch (e) {
+        console.error(e);
+      }
+      return next;
+    });
+
+    try {
+      const targetLead = myLeads.find((l: any) => l.id === leadId);
+      if (targetLead && targetLead.status === 'ASSIGNED') {
+        leadsApi.updateStatus(leadId.toString(), { status: 'CONTACTED' }).then(() => {
+          loadData();
+        }).catch(console.error);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -716,9 +749,22 @@ export default function AgentLeads() {
                       href={`https://wa.me/212${(lead.whatsapp || lead.phone || '').replace(/[^0-9]/g, '').replace(/^(212|0)/, '')}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-green-600 font-bold hover:opacity-90 flex items-center gap-1 bg-green-50 px-2.5 py-1.5 rounded-xl border border-green-100"
+                      onClick={() => handleWaClick(lead.id)}
+                      className={`text-xs font-bold transition-all flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border ${
+                        clickedWaLeads.has(lead.id)
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm font-black'
+                          : 'text-green-700 hover:bg-green-100 bg-green-50 border-green-200'
+                      }`}
                     >
-                      <MessageSquare className="w-3.5 h-3.5 text-green-500" /> WhatsApp
+                      {clickedWaLeads.has(lead.id) ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-white stroke-[3]" /> WhatsApp (Cliqué)
+                        </>
+                      ) : (
+                        <>
+                          <MessageSquare className="w-3.5 h-3.5 text-green-600" /> WhatsApp
+                        </>
+                      )}
                     </a>
                   </div>
 

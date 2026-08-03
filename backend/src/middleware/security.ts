@@ -565,15 +565,19 @@ const shouldSkipRateLimit = async (req: Request): Promise<boolean> => {
   try {
     const settings = await fetchSecuritySettings();
     const clientIP = req.ip || req.socket.remoteAddress || 'unknown';
-    
-    // Skip if localhost
-    if (
-      clientIP === '::1' || 
-      clientIP === '127.0.0.1' || 
-      clientIP === '::ffff:127.0.0.1' || 
-      clientIP.includes('127.0.0.1')
-    ) {
-      return true;
+
+    // SECURITY: never skip rate limiting in production based on IP.
+    // `trust proxy` is enabled, so `req.ip` is derived from the X-Forwarded-For
+    // header and is fully attacker-controlled — a request carrying
+    // `X-Forwarded-For: 127.0.0.1` used to disable ALL rate limiting, including
+    // login and OTP brute-force protection. In production the app also sits behind
+    // a local reverse proxy, so `req.socket.remoteAddress` is 127.0.0.1 as well and
+    // is equally unusable as a bypass signal. Only ever relax this in development.
+    if (process.env.NODE_ENV !== 'production') {
+      const peerIP = req.socket.remoteAddress || '';
+      if (peerIP === '::1' || peerIP === '127.0.0.1' || peerIP === '::ffff:127.0.0.1') {
+        return true;
+      }
     }
 
     // Skip if IP is whitelisted

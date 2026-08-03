@@ -79,5 +79,7 @@
   "logout_goback_btn": "Logout and go back",
   "session_invalid": "Invalid session. Please login again.",
   "enter_6_digits": "Please enter the 6-digit code",
-  "email_verified_success": "Email verified successfully!"
+  "email_verified_success": "Email verified successfully!",
+  "email_already_exists": "This email is already used by another account",
+  "phone_already_exists": "This phone number is already in use"
 }

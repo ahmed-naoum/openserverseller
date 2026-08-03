@@ -2604,4 +2604,212 @@ router.post(
   })
 );
 
+// ==========================================================================
+// ABANDONED CARTS (call-center recovery)
+// Express-checkout sessions where the visitor typed their info but never
+// clicked "Confirmer". Scoped to the agent's assigned sellers/influencers.
+// ==========================================================================
+
+/**
+ * The influencer/vendor ids assigned to this agent.
+ * An EMPTY result means "no explicit scope" — the agent then works the global
+ * pool (sees and can convert every abandoned cart), so a fresh agent is never
+ * left with a blank screen.
+ */
+const getAgentAssignedInfluencerIds = async (agentId: number): Promise<number[]> => {
+  const assignments = await prisma.agentInfluencerAssignment.findMany({
+    where: { agentId },
+    select: { influencerId: true },
+  });
+  return assignments.map((a) => a.influencerId);
+};
+
+/** Fetch referral-link metadata for a set of codes, keyed by code, for enrichment. */
+const buildLinkMap = async (codes: string[]) => {
+  if (codes.length === 0) return new Map<string, any>();
+  const links = await prisma.referralLink.findMany({
+    where: { code: { in: codes } },
+    select: {
+      code: true,
+      influencerId: true,
+      influencer: { select: { profile: { select: { fullName: true } }, email: true } },
+      product: { select: { nameFr: true, nameAr: true, images: { where: { isPrimary: true }, take: 1, select: { imageUrl: true } } } },
+    },
+  });
+  return new Map(links.map((l) => [l.code, l]));
+};
+
+// List abandoned carts. Scoped to the agent's assigned sellers when they have
+// assignments; otherwise the full pool.
+router.get(
+  '/abandoned-carts',
+  authenticate,
+  authorize('CALL_CENTER_AGENT', 'SUPER_ADMIN'),
+  asyncHandler(async (req, res) => {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 30;
+    const skip = (page - 1) * limit;
+    const search = (req.query.search as string)?.trim();
+
+    const influencerIds = await getAgentAssignedInfluencerIds(req.user!.id);
+    const hasScope = influencerIds.length > 0;
+
+    const and: any[] = [
+      { completed: false },
+      { phone: { not: null } },
+      { convertedLeadId: null },
+    ];
+
+    // Only restrict by referral code when the agent actually has assignments.
+    if (hasScope) {
+      const scopedLinks = await prisma.referralLink.findMany({
+        where: { influencerId: { in: influencerIds } },
+        select: { code: true },
+      });
+      const codes = scopedLinks.map((l) => l.code);
+      // Assigned but their sellers have no links yet → genuinely nothing to show.
+      if (codes.length === 0) {
+        return res.json({ attempts: [], total: 0, page, totalPages: 0, scoped: true });
+      }
+      and.push({ referralCode: { in: codes } });
+    }
+
+    if (search) {
+      and.push({
+        OR: [
+          { phone: { contains: search, mode: 'insensitive' as const } },
+          { fullName: { contains: search, mode: 'insensitive' as const } },
+          { city: { contains: search, mode: 'insensitive' as const } },
+        ],
+      });
+    }
+    const where = { AND: and };
+
+    const [attempts, total] = await Promise.all([
+      prisma.checkoutAttempt.findMany({ where, orderBy: { updatedAt: 'desc' }, skip, take: limit }),
+      prisma.checkoutAttempt.count({ where }),
+    ]);
+
+    // Enrich from whatever codes actually appear on this page.
+    const codeMap = await buildLinkMap(
+      Array.from(new Set(attempts.map((a) => a.referralCode).filter(Boolean) as string[])),
+    );
+
+    // Flag phones the agent already has an active lead for, to avoid re-calling.
+    const phones = attempts.map((a) => a.phone).filter(Boolean) as string[];
+    const activeLeads = phones.length
+      ? await prisma.lead.findMany({
+          where: { assignedAgentId: req.user!.id, phone: { in: phones } },
+          select: { phone: true },
+        })
+      : [];
+    const activePhones = new Set(activeLeads.map((l) => l.phone));
+
+    // Attach a recordingId where a session replay exists for the same socket or IP.
+    const sessionIds = attempts.map((a) => a.sessionId).filter(Boolean) as string[];
+    const ips = attempts.map((a) => a.ip).filter(Boolean) as string[];
+    const recordings = (sessionIds.length || ips.length)
+      ? await prisma.sessionRecording.findMany({
+          where: {
+            OR: [
+              { sessionId: { in: sessionIds } },
+              { ip: { in: ips } },
+            ],
+          },
+          select: { id: true, sessionId: true, ip: true },
+          orderBy: { createdAt: 'desc' },
+        })
+      : [];
+    const recBySession = new Map(recordings.map((r) => [r.sessionId, r.id]));
+    const recByIp = new Map(recordings.map((r) => [r.ip, r.id]));
+
+    const enriched = attempts.map((a) => {
+      const link = a.referralCode ? codeMap.get(a.referralCode) : null;
+      const recId = recBySession.get(a.sessionId) || recByIp.get(a.ip) || null;
+      return {
+        ...a,
+        recordingId: recId,
+        productName: a.productName || link?.product?.nameFr || link?.product?.nameAr || null,
+        productImage: link?.product?.images?.[0]?.imageUrl || null,
+        sellerName: link?.influencer?.profile?.fullName || link?.influencer?.email || null,
+        alreadyHasLead: a.phone ? activePhones.has(a.phone) : false,
+      };
+    });
+
+    res.json({ attempts: enriched, total, page, totalPages: Math.ceil(total / limit), scoped: hasScope });
+  })
+);
+
+// Convert an abandoned cart into a real Lead assigned to this agent.
+router.post(
+  '/abandoned-carts/:id/convert',
+  authenticate,
+  authorize('CALL_CENTER_AGENT', 'SUPER_ADMIN'),
+  asyncHandler(async (req, res) => {
+    const attempt = await prisma.checkoutAttempt.findUnique({ where: { id: req.params.id } });
+    if (!attempt) throw new AppException(404, 'Panier introuvable');
+    if (attempt.convertedLeadId) throw new AppException(400, 'Ce panier a déjà été converti en lead');
+    if (!attempt.phone) throw new AppException(400, 'Ce panier n\'a pas de numéro de téléphone');
+    if (!attempt.referralCode) throw new AppException(400, 'Ce panier n\'est lié à aucun lien de parrainage');
+
+    const link = await prisma.referralLink.findUnique({
+      where: { code: attempt.referralCode },
+      include: { product: true },
+    });
+    if (!link) throw new AppException(404, 'Lien de parrainage introuvable');
+
+    // Authorization: if the agent has explicit assignments, the seller behind this
+    // cart must be one of them. Agents with NO assignments work the global pool.
+    if (req.user!.roleName === 'CALL_CENTER_AGENT') {
+      const influencerIds = await getAgentAssignedInfluencerIds(req.user!.id);
+      if (influencerIds.length > 0 && !influencerIds.includes(link.influencerId)) {
+        throw new AppException(403, 'Ce panier ne fait pas partie de vos vendeurs assignés');
+      }
+    }
+
+    // Resolve the vendor exactly like the public lead-creation path.
+    let vendorId: number | null = link.product.ownerId;
+    if (!vendorId) {
+      const admin = await prisma.user.findFirst({ where: { role: { name: 'SUPER_ADMIN' } } });
+      vendorId = admin?.id ?? null;
+    }
+    if (!vendorId) throw new AppException(500, 'Aucun vendeur trouvé pour ce produit');
+
+    const rawPhone = attempt.phone.replace(/\s+|-/g, '');
+    const normalizedPhone = rawPhone.startsWith('0') ? '+212' + rawPhone.slice(1) : rawPhone;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const lead = await tx.lead.create({
+        data: {
+          vendorId: vendorId!,
+          referralLinkId: link.id,
+          fullName: attempt.fullName || 'Client (panier abandonné)',
+          phone: normalizedPhone,
+          whatsapp: normalizedPhone,
+          city: attempt.city,
+          address: attempt.address,
+          status: 'ASSIGNED',
+          assignedAgentId: req.user!.id,
+          source: 'ABANDONED_CART',
+          sourceMode: 'AFFILIATE',
+          notes: 'Panier abandonné récupéré depuis le Streaming Direct.',
+        },
+      });
+
+      await tx.leadStatusHistory.create({
+        data: { leadId: lead.id, oldStatus: 'ABANDONED_CART', newStatus: 'ASSIGNED', changedBy: req.user!.id },
+      });
+
+      await tx.checkoutAttempt.update({
+        where: { id: attempt.id },
+        data: { convertedLeadId: lead.id, convertedAt: new Date() },
+      });
+
+      return lead;
+    });
+
+    res.status(201).json({ status: 'success', message: 'Panier converti en lead avec succès', data: { leadId: result.id } });
+  })
+);
+
 export default router;

@@ -61,6 +61,14 @@ interface CheckoutState {
 }
 const checkoutState = new Map<string, CheckoutState>();
 
+// Live sign-up progress per socket (/register funnel). Same sticky-capture idea as
+// checkoutState, but for the "I'm a Seller" / "I'm an Influencer" registration.
+interface SignupState {
+  role?: string; fullName?: string; email?: string; phone?: string;
+  maxStep: number; filled: number; completed: boolean;
+}
+const signupState = new Map<string, SignupState>();
+
 // Return only the events needed to bootstrap a Replayer: from the last Meta(4)+
 // FullSnapshot(2) onward. Sending the whole history would replay stale DOM.
 const eventsFromLastSnapshot = (events: any[]): any[] => {
@@ -538,6 +546,70 @@ const setupChatSocket = () => {
       scheduleBroadcast(io);
     });
 
+    // ── Visitor → server: live /register progress (abandoned sign-up capture) ──
+    socket.on('signup:progress', async (data: { role?: string; step?: number; fields?: any }) => {
+      const f = data?.fields || {};
+      const clean = (v: any) => (String(v ?? '').trim() || undefined);
+      // NEVER capture passwords — only identity fields.
+      const incoming = { fullName: clean(f.fullName), email: clean(f.email), phone: clean(f.phone) };
+
+      // Sticky merge: keep the last non-empty value per field so clearing an input
+      // does not erase what we already learned about this visitor.
+      const prev = signupState.get(socket.id);
+      const merged = {
+        fullName: incoming.fullName ?? prev?.fullName,
+        email: incoming.email ?? prev?.email,
+        phone: incoming.phone ?? prev?.phone,
+      };
+      const filled = [merged.fullName, merged.email, merged.phone].filter(Boolean).length;
+      const maxStep = Math.max(Number(data?.step) || 1, prev?.maxStep || 1);
+      const role = data?.role || prev?.role;
+
+      if (filled === 0) return; // nothing worth recording yet
+
+      signupState.set(socket.id, {
+        ...merged, role, maxStep, filled, completed: prev?.completed || false,
+      });
+
+      try {
+        await prisma.signupAttempt.upsert({
+          where: { sessionId: socket.id },
+          create: {
+            sessionId: socket.id,
+            role,
+            fullName: merged.fullName || null,
+            email: merged.email || null,
+            phone: merged.phone || null,
+            maxStep,
+            fieldsFilled: filled,
+            completed: false,
+            ip: clientIp,
+            userAgent: socket.handshake.headers['user-agent'],
+            path: socket.currentPage || '/register',
+          },
+          update: {
+            role,
+            fullName: merged.fullName || null,
+            email: merged.email || null,
+            phone: merged.phone || null,
+            maxStep,
+            fieldsFilled: filled,
+          },
+        });
+      } catch (err) {
+        console.error('[Signup] Failed to persist attempt:', err);
+      }
+    });
+
+    // Visitor finished registering → mark the sign-up attempt as converted.
+    socket.on('signup:complete', async () => {
+      const st = signupState.get(socket.id);
+      if (st) st.completed = true;
+      try {
+        await prisma.signupAttempt.updateMany({ where: { sessionId: socket.id }, data: { completed: true } });
+      } catch { /* noop */ }
+    });
+
     // ── Admin → server: start watching a specific visitor socket ──────────────
     socket.on('stream:watch', ({ socketId }: { socketId: string }) => {
       if (!isSuperAdmin() || !socketId) return;
@@ -604,6 +676,7 @@ const setupChatSocket = () => {
       }
       activeSessionBuffers.delete(socket.id);
       checkoutState.delete(socket.id);
+      signupState.delete(socket.id);
 
       // Notify admins watching this tab that the stream ended, and clean rooms.
       io.to(`stream-room:${socket.id}`).emit('stream:ended', { socketId: socket.id });

@@ -32,6 +32,9 @@ export interface User {
 export const api = axios.create({
   baseURL: API_URL,
   withCredentials: true,
+  // Without a timeout a stalled request never settles, so callers that disable a
+  // button in try/finally stay disabled forever and the UI looks frozen.
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -236,6 +239,10 @@ export const leadsApi = {
   assign: (id: string, data: { agentId: string }) => api.post(`/leads/${id}/assign`, data),
   available: (params?: { influencerId?: number }) => api.get('/leads/available', { params }),
   claim: (id: number) => api.post(`/leads/${id}/claim`),
+  // Abandoned carts (call-center recovery)
+  abandonedCarts: (params?: { page?: number; limit?: number; search?: string }) =>
+    api.get('/leads/abandoned-carts', { params }),
+  convertCart: (id: string) => api.post(`/leads/abandoned-carts/${id}/convert`),
   detail: (id: number) => api.get(`/leads/${id}/detail`),
   pushToDelivery: (
     id: number,

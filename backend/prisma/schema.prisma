@@ -1325,6 +1325,10 @@ model CheckoutAttempt {
   address      String?
   fieldsFilled Int      @default(0)
   completed    Boolean  @default(false)
+  // Set when a call-center agent recovers this abandoned cart into a real Lead,
+  // so it disappears from the agent's actionable list and can't be double-converted.
+  convertedLeadId Int?
+  convertedAt     DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -1332,7 +1336,37 @@ model CheckoutAttempt {
   @@index([ip])
   @@index([phone])
   @@index([createdAt])
+  @@index([convertedLeadId])
   @@map("checkout_attempts")
+}
+
+/// Partial / abandoned SIGN-UP capture for /register. Mirrors CheckoutAttempt but
+/// for the "I'm a Seller" / "I'm an Influencer" funnel: whatever the visitor typed
+/// is kept even if they never finish, so an admin can follow up on the lost signup.
+/// Passwords are NEVER captured.
+model SignupAttempt {
+  id           String   @id @default(uuid())
+  sessionId    String   @unique // = socket.id
+  role         String?  // VENDOR | INFLUENCER
+  fullName     String?
+  email        String?
+  phone        String?
+  /// Highest wizard step the visitor reached (1..4).
+  maxStep      Int      @default(1)
+  fieldsFilled Int      @default(0)
+  completed    Boolean  @default(false)
+  ip           String
+  userAgent    String?
+  path         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([completed])
+  @@index([role])
+  @@index([email])
+  @@index([phone])
+  @@index([createdAt])
+  @@map("signup_attempts")
 }
 
 

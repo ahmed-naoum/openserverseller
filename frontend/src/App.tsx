@@ -24,6 +24,7 @@ import AgentOrders from './pages/agent/Orders';
 import AgentLivraison from './pages/agent/Livraison';
 import InsertLead from './pages/agent/InsertLead';
 import ColiatyDispatch from './pages/agent/ColiatyDispatch';
+import AgentAbandonedCarts from './pages/agent/AbandonedCarts';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminUsers from './pages/admin/Users';
 import AdminProducts from './pages/admin/Products';
@@ -403,6 +404,7 @@ function App() {
           <Route path="leads/:id" element={<AgentLeadDetail />} />
           <Route path="orders" element={<AgentOrders />} />
           <Route path="livraison" element={<AgentLivraison />} />
+          <Route path="live-stream-paniers" element={<AgentAbandonedCarts />} />
           <Route path="marketplace" element={<PublicMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="chat" element={<Chat />} />

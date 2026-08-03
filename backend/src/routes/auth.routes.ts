@@ -126,7 +126,7 @@ router.post(
   '/register',
   authLimiter,
   [
-    body('email').notEmpty().withMessage('Email is required').isEmail().normalizeEmail({ gmail_remove_dots: false, gmail_remove_subaddress: false, outlookdotcom_remove_subaddress: false, yahoo_remove_subaddress: false, icloud_remove_subaddress: false }),
+    body('email').notEmpty().withMessage('email_required').isEmail().withMessage('email_invalid').normalizeEmail({ gmail_remove_dots: false, gmail_remove_subaddress: false, outlookdotcom_remove_subaddress: false, yahoo_remove_subaddress: false, icloud_remove_subaddress: false }),
     body('phone').notEmpty().withMessage('Phone number is required').custom((value) => {
       const normalized = normalizePhoneNumber(value);
       if (!normalized) {
@@ -139,7 +139,11 @@ router.post(
       if (criteria < 3) throw new Error('Password must meet at least 3 of 4 complexity criteria (uppercase, lowercase, number, symbol)');
       return true;
     }),
-    body('fullName').trim().escape().isLength({ min: 4, max: 20 }).withMessage('Le nom complet doit contenir entre 4 et 20 caractères').custom((value) => {
+    // No .escape() here: it ran BEFORE .isLength, so an apostrophe (-> &#x27;) added 5
+    // characters and 400'd legitimate names like N'Diaye / El M'Hamdi, and any name that
+    // did pass was persisted HTML-encoded. React escapes on output and Prisma
+    // parameterises queries, so escaping at this layer was double-encoding, not security.
+    body('fullName').trim().isLength({ min: 4, max: 60 }).withMessage('Le nom complet doit contenir entre 4 et 60 caractères').custom((value) => {
       if (/[0-9]/.test(value)) throw new Error('Full name must not contain numbers');
       return true;
     }),
@@ -162,7 +166,9 @@ router.post(
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       const firstError = errors.array()[0];
-      throw new AppException(400, (firstError as any).msg || 'Validation failed');
+      // Pass the full field list through so the client can highlight the exact input
+      // and navigate back to the wizard step that owns it.
+      throw new AppException(400, (firstError as any).msg || 'Validation failed', errors.array());
     }
 
     // Verify Turnstile CAPTCHA
@@ -198,7 +204,16 @@ router.post(
     });
 
     if (existingUser) {
-      throw new AppException(409, 'User already exists with this email or phone');
+      // Say WHICH field collided so the client can flag that exact input and send
+      // the user back to the step that owns it.
+      const isEmailTaken = !!email && existingUser.email === email;
+      throw new AppException(
+        409,
+        isEmailTaken
+          ? 'Cet email est deja utilise par un autre compte'
+          : 'Ce numero de telephone est deja utilise par un autre compte',
+        [{ path: isEmailTaken ? 'email' : 'phone', msg: isEmailTaken ? 'email_already_exists' : 'phone_already_exists' }]
+      );
     }
 
     const hashedPassword = await bcrypt.hash(password, parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10));
@@ -366,7 +381,13 @@ router.post(
     if (process.env.NODE_ENV === 'development') {
       console.log(`[DEV] OTP for ${email}: ${otp}`);
     }
-    await sendOtpEmail(email, otp, langCode);
+    // The account exists at this point, so a mail failure must not 500 the request —
+    // but it MUST be surfaced, otherwise we tell the user "check your email" when no
+    // email was ever sent and they are stuck on the verification screen.
+    const otpSent = await sendOtpEmail(email, otp, langCode);
+    if (!otpSent) {
+      console.error(`[REGISTER] Account created for ${email} but the OTP email FAILED to send.`);
+    }
 
     const { accessToken, refreshToken } = generateTokens(user.uuid);
     setAuthCookies(res, accessToken, refreshToken);
@@ -374,6 +395,7 @@ router.post(
     res.status(201).json({
       status: 'success',
       message: 'Registration successful. Please verify your email.',
+      emailSent: otpSent,
       data: {
         user: {
           id: user.id,
@@ -401,7 +423,7 @@ router.post(
   '/register-influencer',
   authLimiter,
   [
-    body('email').notEmpty().withMessage('Email is required').isEmail().normalizeEmail({ gmail_remove_dots: false, gmail_remove_subaddress: false, outlookdotcom_remove_subaddress: false, yahoo_remove_subaddress: false, icloud_remove_subaddress: false }),
+    body('email').notEmpty().withMessage('email_required').isEmail().withMessage('email_invalid').normalizeEmail({ gmail_remove_dots: false, gmail_remove_subaddress: false, outlookdotcom_remove_subaddress: false, yahoo_remove_subaddress: false, icloud_remove_subaddress: false }),
     body('phone').notEmpty().withMessage('Phone is required').custom((value, { req }) => {
       const normalized = normalizePhoneNumber(value);
       if (!normalized) {
@@ -414,16 +436,20 @@ router.post(
       if (criteria < 3) throw new Error('Password must meet at least 3 of 4 complexity criteria');
       return true;
     }),
-    body('fullName').trim().escape().isLength({ min: 4, max: 20 }).withMessage('Le nom complet doit contenir entre 4 et 20 caractères').custom((value) => {
+    // No .escape() here: it ran BEFORE .isLength, so an apostrophe (-> &#x27;) added 5
+    // characters and 400'd legitimate names like N'Diaye / El M'Hamdi, and any name that
+    // did pass was persisted HTML-encoded. React escapes on output and Prisma
+    // parameterises queries, so escaping at this layer was double-encoding, not security.
+    body('fullName').trim().isLength({ min: 4, max: 60 }).withMessage('Le nom complet doit contenir entre 4 et 60 caractères').custom((value) => {
       if (/[0-9]/.test(value)) throw new Error('Full name must not contain numbers');
       return true;
     }),
-    body('instagramUsername').optional().trim().escape(),
-    body('tiktokUsername').optional().trim().escape(),
-    body('facebookUsername').optional().trim().escape(),
-    body('xUsername').optional().trim().escape(),
-    body('youtubeUsername').optional().trim().escape(),
-    body('snapchatUsername').optional().trim().escape(),
+    body('instagramUsername').optional().trim(),
+    body('tiktokUsername').optional().trim(),
+    body('facebookUsername').optional().trim(),
+    body('xUsername').optional().trim(),
+    body('youtubeUsername').optional().trim(),
+    body('snapchatUsername').optional().trim(),
     body('turnstileToken').notEmpty().withMessage('CAPTCHA verification is required'),
     body('cguAccepted').custom((value) => value === true || value === 'true' || value === 1 || value === '1').withMessage("Veuillez accepter les Conditions Générales d'Utilisation (CGU)"),
     body('followersCount').optional().isString(),
@@ -437,7 +463,9 @@ router.post(
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       const firstError = errors.array()[0];
-      throw new AppException(400, (firstError as any).msg || 'Validation failed');
+      // Pass the full field list through so the client can highlight the exact input
+      // and navigate back to the wizard step that owns it.
+      throw new AppException(400, (firstError as any).msg || 'Validation failed', errors.array());
     }
 
     // Verify Turnstile CAPTCHA
@@ -472,7 +500,16 @@ router.post(
     });
 
     if (existingUser) {
-      throw new AppException(409, 'User already exists with this email or phone');
+      // Say WHICH field collided so the client can flag that exact input and send
+      // the user back to the step that owns it.
+      const isEmailTaken = !!email && existingUser.email === email;
+      throw new AppException(
+        409,
+        isEmailTaken
+          ? 'Cet email est deja utilise par un autre compte'
+          : 'Ce numero de telephone est deja utilise par un autre compte',
+        [{ path: isEmailTaken ? 'email' : 'phone', msg: isEmailTaken ? 'email_already_exists' : 'phone_already_exists' }]
+      );
     }
 
     // Manual verification fallback. Skip automated scraping.
@@ -656,7 +693,13 @@ router.post(
     if (process.env.NODE_ENV === 'development') {
       console.log(`[DEV] OTP for ${email}: ${otp}`);
     }
-    await sendOtpEmail(email, otp, langCode);
+    // The account exists at this point, so a mail failure must not 500 the request —
+    // but it MUST be surfaced, otherwise we tell the user "check your email" when no
+    // email was ever sent and they are stuck on the verification screen.
+    const otpSent = await sendOtpEmail(email, otp, langCode);
+    if (!otpSent) {
+      console.error(`[REGISTER] Account created for ${email} but the OTP email FAILED to send.`);
+    }
 
     const { accessToken, refreshToken } = generateTokens(user.uuid);
     setAuthCookies(res, accessToken, refreshToken);
@@ -690,7 +733,10 @@ router.post(
   '/verify-email',
   loginLimiter,
   [
-    body('email').notEmpty().isEmail(),
+    // MUST use the exact same normalizer as /register (line ~129). Registration
+    // stores the normalized address; without this, anyone who typed a capital
+    // letter (or googlemail.com) could never verify their account.
+    body('email').notEmpty().isEmail().normalizeEmail({ gmail_remove_dots: false, gmail_remove_subaddress: false, outlookdotcom_remove_subaddress: false, yahoo_remove_subaddress: false, icloud_remove_subaddress: false }),
     body('otp').notEmpty().isString(),
   ],
   asyncHandler(async (req: Request, res: Response) => {
@@ -701,8 +747,10 @@ router.post(
 
     const { email, otp } = req.body;
 
+    // Case-insensitive as defence in depth: rows created by seeds/admin tools may
+    // not have gone through the same normalizer.
     const user = await prisma.user.findFirst({
-      where: { email },
+      where: { email: { equals: email, mode: 'insensitive' } },
     });
 
     if (!user) {

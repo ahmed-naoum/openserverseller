@@ -6,6 +6,7 @@ import 'rrweb/dist/style.css';
 import {
   Radio, Users, Eye, RefreshCw, Search, Play, Pause, Clock, HardDrive,
   Globe, Activity, X, RotateCcw, CheckCircle2, ShoppingCart, Phone, Trash2, Database, ChevronDown,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, UserPlus, Mail, Store,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -16,9 +17,15 @@ interface CheckoutAttempt {
   ip: string; path?: string; fullName?: string; phone?: string; city?: string; address?: string;
   fieldsFilled: number; completed: boolean; recordingId?: string | null; updatedAt: string; createdAt: string;
 }
+interface SignupAttempt {
+  id: string; role?: string; fullName?: string; email?: string; phone?: string;
+  maxStep: number; fieldsFilled: number; completed: boolean; ip: string;
+  registeredLater?: boolean; updatedAt: string; createdAt: string;
+}
 interface StorageStats {
   recordings: number; totalBytes: number; oldestAt: string | null;
   attempts: { total: number; abandoned: number; converted: number };
+  signups?: { total: number; abandoned: number; completed: number };
 }
 interface PlaybackTarget { id: string; ip: string; durationSec: number; }
 interface ActiveUserItem {
@@ -81,9 +88,164 @@ function fitReplayer(
   wrapper.style.top = `${Math.max(0, (cH - wH * scale) / 2)}px`;
 }
 
+function PaginationControls({
+  currentPage,
+  totalPages,
+  totalItems,
+  pageSize,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+}) {
+  const [inputPage, setInputPage] = useState(String(currentPage));
+
+  useEffect(() => {
+    setInputPage(String(currentPage));
+  }, [currentPage]);
+
+  if (totalPages <= 1 && totalItems <= pageSize) {
+    return (
+      <div className="flex items-center justify-between pt-4 border-t border-gray-100 text-xs text-gray-400 font-medium">
+        <span>Total: <strong className="text-gray-700">{totalItems}</strong> éléments</span>
+      </div>
+    );
+  }
+
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    const maxVisible = 5;
+
+    if (totalPages <= maxVisible + 2) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      let start = Math.max(2, currentPage - 1);
+      let end = Math.min(totalPages - 1, currentPage + 1);
+
+      if (currentPage <= 3) {
+        end = 4;
+      } else if (currentPage >= totalPages - 2) {
+        start = totalPages - 3;
+      }
+
+      if (start > 2) pages.push('...');
+      for (let i = start; i <= end; i++) pages.push(i);
+      if (end < totalPages - 1) pages.push('...');
+      pages.push(totalPages);
+    }
+    return pages;
+  };
+
+  const startItem = (currentPage - 1) * pageSize + 1;
+  const endItem = Math.min(currentPage * pageSize, totalItems);
+
+  const handleJump = (e: React.FormEvent) => {
+    e.preventDefault();
+    const p = parseInt(inputPage, 10);
+    if (!isNaN(p) && p >= 1 && p <= totalPages) {
+      onPageChange(p);
+    } else {
+      setInputPage(String(currentPage));
+    }
+  };
+
+  return (
+    <div className="flex flex-col md:flex-row items-center justify-between gap-4 pt-4 border-t border-orange-100/60 bg-gradient-to-r from-orange-50/40 via-amber-50/20 to-orange-50/30 p-4 rounded-2xl border border-orange-100/80 shadow-xs">
+      {/* Record info */}
+      <div className="text-xs text-gray-600 font-medium">
+        Affichage de <span className="font-black text-orange-600">{startItem}</span> à{' '}
+        <span className="font-black text-orange-600">{endItem}</span> sur{' '}
+        <span className="font-black text-gray-900">{totalItems.toLocaleString('fr-FR')}</span> enregistrements
+      </div>
+
+      {/* Pagination buttons */}
+      <div className="flex items-center gap-1.5 flex-wrap justify-center">
+        <button
+          disabled={currentPage <= 1}
+          onClick={() => onPageChange(1)}
+          className="p-2 rounded-xl text-xs font-bold bg-white border border-gray-200 hover:border-orange-300 hover:bg-orange-50 text-gray-700 disabled:opacity-30 disabled:hover:bg-white disabled:hover:border-gray-200 transition-all shadow-xs"
+          title="Première page"
+        >
+          <ChevronsLeft className="w-4 h-4" />
+        </button>
+
+        <button
+          disabled={currentPage <= 1}
+          onClick={() => onPageChange(currentPage - 1)}
+          className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white border border-gray-200 hover:border-orange-300 hover:bg-orange-50 text-gray-700 disabled:opacity-30 disabled:hover:bg-white disabled:hover:border-gray-200 transition-all flex items-center gap-1.5 shadow-xs"
+        >
+          <ChevronLeft className="w-4 h-4 text-orange-500" /> Précédent
+        </button>
+
+        <div className="flex items-center gap-1">
+          {getPageNumbers().map((p, idx) =>
+            typeof p === 'number' ? (
+              <button
+                key={idx}
+                onClick={() => onPageChange(p)}
+                className={`w-8 h-8 rounded-xl text-xs font-black transition-all ${
+                  currentPage === p
+                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/30 scale-105'
+                    : 'bg-white border border-gray-200 text-gray-700 hover:border-orange-300 hover:bg-orange-50'
+                }`}
+              >
+                {p}
+              </button>
+            ) : (
+              <span key={idx} className="px-1 text-xs text-gray-400 font-bold">
+                ...
+              </span>
+            )
+          )}
+        </div>
+
+        <button
+          disabled={currentPage >= totalPages}
+          onClick={() => onPageChange(currentPage + 1)}
+          className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white border border-gray-200 hover:border-orange-300 hover:bg-orange-50 text-gray-700 disabled:opacity-30 disabled:hover:bg-white disabled:hover:border-gray-200 transition-all flex items-center gap-1.5 shadow-xs"
+        >
+          Suivant <ChevronRight className="w-4 h-4 text-orange-500" />
+        </button>
+
+        <button
+          disabled={currentPage >= totalPages}
+          onClick={() => onPageChange(totalPages)}
+          className="p-2 rounded-xl text-xs font-bold bg-white border border-gray-200 hover:border-orange-300 hover:bg-orange-50 text-gray-700 disabled:opacity-30 disabled:hover:bg-white disabled:hover:border-gray-200 transition-all shadow-xs"
+          title="Dernière page"
+        >
+          <ChevronsRight className="w-4 h-4" />
+        </button>
+
+        <form onSubmit={handleJump} className="flex items-center gap-1.5 ml-2 border-l border-gray-200 pl-3">
+          <span className="text-[11px] text-gray-500 font-bold uppercase">Page</span>
+          <input
+            type="number"
+            min={1}
+            max={totalPages}
+            value={inputPage}
+            onChange={(e) => setInputPage(e.target.value)}
+            className="w-12 px-2 py-1 text-center bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-800 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+          />
+          <span className="text-xs text-gray-400 font-bold">/ {totalPages}</span>
+          <button
+            type="submit"
+            className="px-2.5 py-1 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white rounded-lg text-[10px] font-black uppercase transition-all shadow-xs"
+          >
+            Go
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function LiveStreamInspector() {
   const { socket } = useSocket();
-  const [activeTab, setActiveTab] = useState<'LIVE' | 'HISTORY' | 'CHECKOUTS'>('LIVE');
+  const [activeTab, setActiveTab] = useState<'LIVE' | 'HISTORY' | 'CHECKOUTS' | 'SIGNUPS'>('LIVE');
 
   const [realtime, setRealtime] = useState<{
     anonymousCount: number; totalActive: number; activeUsersList: ActiveUserItem[];
@@ -121,6 +283,16 @@ export default function LiveStreamInspector() {
   const [attemptsLoading, setAttemptsLoading] = useState(false);
   const [attemptFilter, setAttemptFilter] = useState<'abandoned' | 'completed' | 'all'>('abandoned');
   const [attemptSearch, setAttemptSearch] = useState('');
+
+  // Abandoned sign-ups (/register funnel)
+  const [signups, setSignups] = useState<SignupAttempt[]>([]);
+  const [signupsLoading, setSignupsLoading] = useState(false);
+  const [signupFilter, setSignupFilter] = useState<'abandoned' | 'completed' | 'all'>('abandoned');
+  const [signupRole, setSignupRole] = useState<'ALL' | 'VENDOR' | 'INFLUENCER'>('ALL');
+  const [signupSearch, setSignupSearch] = useState('');
+  const [attemptPage, setAttemptPage] = useState(1);
+  const [attemptTotalPages, setAttemptTotalPages] = useState(1);
+  const [attemptTotal, setAttemptTotal] = useState(0);
 
   // Collapsed IP groups (keys prefixed with 'hist:' / 'co:' so the two tabs don't clash).
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -305,10 +477,25 @@ export default function LiveStreamInspector() {
     try {
       const r = await api.get('/admin/checkout-attempts', { params: { page, limit: 30, filter, search: search || undefined } });
       setAttempts(r.data.attempts || []);
+      setAttemptTotalPages(r.data.totalPages || 1);
+      setAttemptTotal(r.data.total || r.data.attempts?.length || 0);
+      setAttemptPage(page);
     } catch {
       toast.error('Impossible de charger les paniers');
     } finally {
       setAttemptsLoading(false);
+    }
+  };
+
+  const fetchSignups = async (filter = signupFilter, role = signupRole, search = signupSearch) => {
+    setSignupsLoading(true);
+    try {
+      const r = await api.get('/admin/signup-attempts', { params: { page: 1, limit: 50, filter, role, search: search || undefined } });
+      setSignups(r.data.attempts || []);
+    } catch {
+      toast.error('Impossible de charger les inscriptions');
+    } finally {
+      setSignupsLoading(false);
     }
   };
 
@@ -320,6 +507,7 @@ export default function LiveStreamInspector() {
       fetchStats();
       if (activeTab === 'HISTORY') fetchHistory(1);
       if (activeTab === 'CHECKOUTS') fetchAttempts(1);
+      if (activeTab === 'SIGNUPS') fetchSignups();
     } catch {
       toast.error('Erreur lors du nettoyage');
     } finally {
@@ -330,6 +518,7 @@ export default function LiveStreamInspector() {
   useEffect(() => { fetchStats(); /* eslint-disable-next-line */ }, []);
   useEffect(() => { if (activeTab === 'HISTORY') { fetchHistory(1); fetchStats(); } /* eslint-disable-next-line */ }, [activeTab]);
   useEffect(() => { if (activeTab === 'CHECKOUTS') { fetchAttempts(1); fetchStats(); } /* eslint-disable-next-line */ }, [activeTab, attemptFilter]);
+  useEffect(() => { if (activeTab === 'SIGNUPS') { fetchSignups(); fetchStats(); } /* eslint-disable-next-line */ }, [activeTab, signupFilter, signupRole]);
 
   const stopProgressTimer = () => {
     if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
@@ -526,6 +715,12 @@ export default function LiveStreamInspector() {
             >
               <ShoppingCart className="w-4 h-4 text-orange-500" /> Paniers ({stats?.attempts.abandoned ?? 0})
             </button>
+            <button
+              onClick={() => setActiveTab('SIGNUPS')}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'SIGNUPS' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
+            >
+              <UserPlus className="w-4 h-4 text-violet-500" /> Inscriptions ({stats?.signups?.abandoned ?? 0})
+            </button>
           </div>
         </div>
       </div>
@@ -699,40 +894,48 @@ export default function LiveStreamInspector() {
                   const gkey = `hist:${group.ip}`;
                   const collapsed = collapsedGroups.has(gkey);
                   return (
-                  <div key={group.ip} className="border border-gray-100 rounded-2xl overflow-hidden">
-                    <button onClick={() => toggleGroup(gkey)} className="w-full flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-100 hover:bg-gray-100 transition-colors text-left">
-                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
-                      <Globe className="w-4 h-4 text-gray-400" />
-                      <span className="font-mono font-bold text-xs text-gray-900">{group.ip}</span>
-                      <span className="text-[10px] font-bold text-gray-400">{group.items.length} session(s)</span>
-                    </button>
-                    {!collapsed && (
-                    <div className="divide-y divide-gray-50">
-                      {group.items.map((s) => (
-                        <div key={s.id} className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50/50 flex-wrap text-xs">
-                          <span className="font-bold text-gray-600 truncate max-w-[240px] flex-1 min-w-[160px]">{s.path || '/'}</span>
-                          {s.userUuid && <span className="font-mono text-gray-400">User {s.userUuid.slice(0, 8)}</span>}
-                          <span className="font-bold text-gray-900">{fmtDuration(s.durationSec)}</span>
-                          {s.hasLead && <span className="inline-flex items-center gap-1 text-emerald-600 font-bold"><CheckCircle2 className="w-3.5 h-3.5" /> Lead</span>}
-                          <span className="text-gray-400">{new Date(s.createdAt).toLocaleString('fr-FR')}</span>
-                          <button onClick={() => openPlayback(s)} className="ml-auto px-3.5 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold text-xs inline-flex items-center gap-1.5">
-                            <Play className="w-3.5 h-3.5 fill-current" /> Revoir
-                          </button>
+                    <div key={group.ip} className="border border-orange-200/70 rounded-2xl overflow-hidden shadow-xs transition-all">
+                      <button 
+                        onClick={() => toggleGroup(gkey)} 
+                        className="w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-orange-50/80 via-amber-50/40 to-orange-50/20 border-b border-orange-100 hover:from-orange-100/90 hover:to-amber-100/70 transition-all text-left group"
+                      >
+                        <ChevronDown className={`w-4 h-4 text-orange-500 transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`} />
+                        <div className="w-7 h-7 rounded-xl bg-orange-500/10 text-orange-600 flex items-center justify-center font-bold">
+                          <Globe className="w-4 h-4 text-orange-600" />
                         </div>
-                      ))}
+                        <span className="font-mono font-black text-xs text-gray-900 group-hover:text-orange-600 transition-colors">{group.ip}</span>
+                        <span className="ml-auto px-2.5 py-0.5 rounded-full text-[10px] font-black bg-orange-500 text-white shadow-xs">
+                          {group.items.length} {group.items.length === 1 ? 'session' : 'sessions'}
+                        </span>
+                      </button>
+                      {!collapsed && (
+                        <div className="divide-y divide-gray-50 bg-white">
+                          {group.items.map((s) => (
+                            <div key={s.id} className="flex items-center gap-4 px-4 py-3 hover:bg-orange-50/30 transition-colors flex-wrap text-xs">
+                              <span className="font-bold text-gray-700 truncate max-w-[240px] flex-1 min-w-[160px]">{s.path || '/'}</span>
+                              {s.userUuid && <span className="font-mono text-gray-400 bg-gray-100 px-2 py-0.5 rounded-md text-[10px]">User {s.userUuid.slice(0, 8)}</span>}
+                              <span className="font-bold text-gray-900 bg-gray-50 px-2 py-0.5 rounded-md">{fmtDuration(s.durationSec)}</span>
+                              {s.hasLead && <span className="inline-flex items-center gap-1 text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100"><CheckCircle2 className="w-3.5 h-3.5" /> Lead</span>}
+                              <span className="text-gray-400 text-[11px]">{new Date(s.createdAt).toLocaleString('fr-FR')}</span>
+                              <button onClick={() => openPlayback(s)} className="ml-auto px-3.5 py-1.5 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white rounded-xl font-bold text-xs inline-flex items-center gap-1.5 shadow-xs transition-all">
+                                <Play className="w-3.5 h-3.5 fill-current" /> Revoir
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    )}
-                  </div>
                   );
                 })}
               </div>
-              <div className="flex items-center justify-between pt-2">
-                <span className="text-xs text-gray-400">Page {historyPage} / {totalPages}</span>
-                <div className="flex gap-2">
-                  <button disabled={historyPage <= 1} onClick={() => fetchHistory(historyPage - 1)} className="px-3 py-1.5 bg-gray-100 rounded-lg text-xs font-bold disabled:opacity-40">Précédent</button>
-                  <button disabled={historyPage >= totalPages} onClick={() => fetchHistory(historyPage + 1)} className="px-3 py-1.5 bg-gray-100 rounded-lg text-xs font-bold disabled:opacity-40">Suivant</button>
-                </div>
-              </div>
+
+              <PaginationControls
+                currentPage={historyPage}
+                totalPages={totalPages}
+                totalItems={totalSaved}
+                pageSize={15}
+                onPageChange={(p) => fetchHistory(p)}
+              />
             </>
           )}
         </div>
@@ -776,52 +979,206 @@ export default function LiveStreamInspector() {
           ) : attemptsByIp.length === 0 ? (
             <div className="text-center py-12 text-gray-400 font-medium">Aucun panier à afficher.</div>
           ) : (
-            <div className="space-y-4">
-              {attemptsByIp.map((group) => {
-                const gkey = `co:${group.ip}`;
-                const collapsed = collapsedGroups.has(gkey);
-                return (
-                <div key={group.ip} className="border border-gray-100 rounded-2xl overflow-hidden">
-                  <button onClick={() => toggleGroup(gkey)} className="w-full flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-100 hover:bg-gray-100 transition-colors text-left">
-                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
-                    <Globe className="w-4 h-4 text-gray-400" />
-                    <span className="font-mono font-bold text-xs text-gray-900">{group.ip}</span>
-                    <span className="text-[10px] font-bold text-gray-400">{group.items.length} onglet(s)</span>
-                  </button>
-                  {!collapsed && (
-                  <div className="divide-y divide-gray-50">
-                    {group.items.map((a) => (
-                      <div key={a.id} className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50/50 flex-wrap">
-                        <div className="flex-1 min-w-[180px]">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-bold text-sm text-gray-900">{a.fullName || <span className="text-gray-400 font-medium">Nom non saisi</span>}</span>
-                            {a.completed
-                              ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-700"><CheckCircle2 className="w-3 h-3" /> Commande validée</span>
-                              : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-red-100 text-red-700">Lead incomplet</span>}
-                          </div>
-                          <div className="text-[11px] text-gray-400 mt-0.5">
-                            {a.productName || a.referralCode || a.path || '—'} • {a.fieldsFilled}/4 champs • {new Date(a.updatedAt).toLocaleString('fr-FR')}
-                          </div>
+            <>
+              <div className="space-y-4">
+                {attemptsByIp.map((group) => {
+                  const gkey = `co:${group.ip}`;
+                  const collapsed = collapsedGroups.has(gkey);
+                  return (
+                    <div key={group.ip} className="border border-orange-200/70 rounded-2xl overflow-hidden shadow-xs transition-all">
+                      <button 
+                        onClick={() => toggleGroup(gkey)} 
+                        className="w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-orange-50/80 via-amber-50/40 to-orange-50/20 border-b border-orange-100 hover:from-orange-100/90 hover:to-amber-100/70 transition-all text-left group"
+                      >
+                        <ChevronDown className={`w-4 h-4 text-orange-500 transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`} />
+                        <div className="w-7 h-7 rounded-xl bg-orange-500/10 text-orange-600 flex items-center justify-center font-bold">
+                          <Globe className="w-4 h-4 text-orange-600" />
                         </div>
-                        {a.phone ? (
-                          <a href={`tel:${a.phone}`} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-black bg-orange-50 text-orange-600 hover:bg-orange-100">
-                            <Phone className="w-4 h-4" /> {a.phone}
+                        <span className="font-mono font-black text-xs text-gray-900 group-hover:text-orange-600 transition-colors">{group.ip}</span>
+                        <span className="ml-auto px-2.5 py-0.5 rounded-full text-[10px] font-black bg-orange-500 text-white shadow-xs">
+                          {group.items.length} {group.items.length === 1 ? 'onglet' : 'onglets'}
+                        </span>
+                      </button>
+                      {!collapsed && (
+                        <div className="divide-y divide-gray-50 bg-white">
+                          {group.items.map((a) => (
+                            <div key={a.id} className="flex items-center gap-4 px-4 py-3 hover:bg-orange-50/30 transition-colors flex-wrap">
+                              <div className="flex-1 min-w-[180px]">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold text-sm text-gray-900">{a.fullName || <span className="text-gray-400 font-medium">Nom non saisi</span>}</span>
+                                  {a.completed
+                                    ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-700"><CheckCircle2 className="w-3 h-3" /> Commande validée</span>
+                                    : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-red-100 text-red-700">Lead incomplet</span>}
+                                </div>
+                                <div className="text-[11px] text-gray-400 mt-0.5">
+                                  {a.productName || a.referralCode || a.path || '—'} • {a.fieldsFilled}/4 champs • {new Date(a.updatedAt).toLocaleString('fr-FR')}
+                                </div>
+                              </div>
+                              {a.phone ? (
+                                <a href={`tel:${a.phone}`} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-black bg-orange-50 text-orange-600 hover:bg-orange-100">
+                                  <Phone className="w-4 h-4" /> {a.phone}
+                                </a>
+                              ) : <span className="text-xs text-gray-300">pas de numéro</span>}
+                              {a.city && <span className="text-xs text-gray-500 font-medium">{a.city}</span>}
+                              {a.recordingId ? (
+                                <button onClick={() => openPlayback({ id: a.recordingId!, ip: a.ip, durationSec: 0 })}
+                                  className="px-3.5 py-1.5 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white rounded-xl font-bold text-xs inline-flex items-center gap-1.5 shadow-xs transition-all">
+                                  <Play className="w-3.5 h-3.5 fill-current" /> Revoir
+                                </button>
+                              ) : <span className="text-[10px] text-gray-300 font-medium">pas d'enregistrement</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <PaginationControls
+                currentPage={attemptPage}
+                totalPages={attemptTotalPages}
+                totalItems={attemptTotal}
+                pageSize={30}
+                onPageChange={(p) => fetchAttempts(p)}
+              />
+            </>
+          )}
+        </div>
+      )}
+
+      {/* TAB 4: ABANDONED SIGN-UPS (/register funnel) */}
+      {activeTab === 'SIGNUPS' && (
+        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-xs space-y-6">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <h2 className="text-lg font-black text-gray-900">Inscriptions Incomplètes</h2>
+              <p className="text-xs text-gray-500">
+                Visiteurs ayant commencé « Je suis Vendeur / Créateur » sans finaliser. Le mot de passe n'est jamais enregistré.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center bg-gray-100 p-1 rounded-xl">
+                {(['abandoned', 'completed', 'all'] as const).map((f) => (
+                  <button key={f} onClick={() => setSignupFilter(f)}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${signupFilter === f ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+                    {f === 'abandoned' ? 'Non finalisées' : f === 'completed' ? 'Finalisées' : 'Toutes'}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center bg-gray-100 p-1 rounded-xl">
+                {(['ALL', 'VENDOR', 'INFLUENCER'] as const).map((r) => (
+                  <button key={r} onClick={() => setSignupRole(r)}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${signupRole === r ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+                    {r === 'ALL' ? 'Tous' : r === 'VENDOR' ? 'Vendeur' : 'Créateur'}
+                  </button>
+                ))}
+              </div>
+              <div className="relative">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                <input
+                  value={signupSearch}
+                  onChange={(e) => setSignupSearch(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') fetchSignups(); }}
+                  placeholder="Email, téléphone, nom, IP…"
+                  className="pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-orange-500/20"
+                />
+              </div>
+              <button onClick={() => fetchSignups()} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl flex items-center gap-2">
+                <RefreshCw className="w-3.5 h-3.5" /> Actualiser
+              </button>
+            </div>
+          </div>
+
+          {/* Funnel summary */}
+          <div className="flex flex-wrap items-center gap-3 p-4 bg-gray-50 rounded-2xl">
+            <StoragePill icon={<UserPlus className="w-4 h-4" />} label="Inscriptions commencées" value={String(stats?.signups?.total ?? 0)} />
+            <StoragePill icon={<Users className="w-4 h-4" />} label="Non finalisées" value={String(stats?.signups?.abandoned ?? 0)} />
+            <StoragePill icon={<CheckCircle2 className="w-4 h-4" />} label="Comptes créés" value={String(stats?.signups?.completed ?? 0)} />
+            {!!stats?.signups?.total && (
+              <StoragePill
+                icon={<Activity className="w-4 h-4" />}
+                label="Taux de conversion"
+                value={`${Math.round(((stats.signups.completed || 0) / stats.signups.total) * 100)}%`}
+              />
+            )}
+          </div>
+
+          {signupsLoading ? (
+            <div className="text-center py-12 text-gray-400 font-medium">Chargement…</div>
+          ) : signups.length === 0 ? (
+            <div className="text-center py-12 text-gray-400 font-medium">Aucune inscription à afficher.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-100 text-[10px] font-black uppercase text-gray-400 tracking-wider">
+                    <th className="py-3 px-4">Type</th>
+                    <th className="py-3 px-4">Visiteur</th>
+                    <th className="py-3 px-4">Contact</th>
+                    <th className="py-3 px-4">Étape atteinte</th>
+                    <th className="py-3 px-4">Statut</th>
+                    <th className="py-3 px-4">Dernière activité</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50 text-xs">
+                  {signups.map((s) => (
+                    <tr key={s.id} className="hover:bg-gray-50/50">
+                      <td className="py-3.5 px-4">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black ${
+                          s.role === 'VENDOR' ? 'bg-orange-100 text-orange-700' : 'bg-violet-100 text-violet-700'
+                        }`}>
+                          {s.role === 'VENDOR' ? <Store className="w-3 h-3" /> : <Users className="w-3 h-3" />}
+                          {s.role === 'VENDOR' ? 'Vendeur' : s.role === 'INFLUENCER' ? 'Créateur' : '—'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="font-bold text-gray-900">{s.fullName || <span className="text-gray-400 font-medium">Nom non saisi</span>}</div>
+                        <div className="text-[10px] text-gray-400 font-mono">{s.ip}</div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {s.email && (
+                          <a href={`mailto:${s.email}`} className="flex items-center gap-1.5 text-blue-600 font-bold hover:underline">
+                            <Mail className="w-3.5 h-3.5" /> {s.email}
                           </a>
-                        ) : <span className="text-xs text-gray-300">pas de numéro</span>}
-                        {a.city && <span className="text-xs text-gray-500 font-medium">{a.city}</span>}
-                        {a.recordingId ? (
-                          <button onClick={() => openPlayback({ id: a.recordingId!, ip: a.ip, durationSec: 0 })}
-                            className="px-3 py-1.5 bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-bold text-xs inline-flex items-center gap-1.5">
-                            <Play className="w-3.5 h-3.5 fill-current" /> Revoir
-                          </button>
-                        ) : <span className="text-[10px] text-gray-300 font-medium">pas d'enregistrement</span>}
-                      </div>
-                    ))}
-                  </div>
-                  )}
-                </div>
-                );
-              })}
+                        )}
+                        {s.phone && (
+                          <a href={`tel:${s.phone}`} className="flex items-center gap-1.5 text-emerald-600 font-bold hover:underline mt-0.5">
+                            <Phone className="w-3.5 h-3.5" /> {s.phone}
+                          </a>
+                        )}
+                        {!s.email && !s.phone && <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-1.5">
+                          {[1, 2, 3, 4].map((n) => (
+                            <span key={n} className={`w-5 h-5 rounded-md flex items-center justify-center text-[9px] font-black ${
+                              n <= s.maxStep ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-300'
+                            }`}>{n}</span>
+                          ))}
+                          <span className="text-[10px] text-gray-400 ml-1">{s.maxStep}/4</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {s.completed ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-700">
+                            <CheckCircle2 className="w-3 h-3" /> Compte créé
+                          </span>
+                        ) : s.registeredLater ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-blue-100 text-blue-700">
+                            Inscrit plus tard
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-red-100 text-red-700">
+                            Abandonné
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-gray-400">{new Date(s.updatedAt).toLocaleString('fr-FR')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

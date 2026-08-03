@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSocket } from '../../contexts/SocketContext';
 import { settingsApi } from '../../lib/api';
 import { Eye, EyeOff, User, Mail, Phone, Lock, Sparkles, Store, Link as LinkIcon } from 'lucide-react';
 import { FaTiktok, FaFacebook, FaInstagram, FaSnapchatGhost, FaYoutube } from 'react-icons/fa';
@@ -83,7 +84,9 @@ const validateField = (name: string, value: string, allValues?: FormDataType): s
     case 'fullName':
       if (!value.trim()) return 'name_required';
       if (value.trim().length < 4) return 'name_too_short';
-      if (value.trim().length > 20) return 'name_too_long';
+      // Kept in lockstep with the backend bound (auth.routes.ts). 20 was far too
+      // short for real Moroccan/French full names and silently 400'd them.
+      if (value.trim().length > 60) return 'name_too_long';
       if (/[0-9]/.test(value)) return 'name_invalid_chars'; // Or a dedicated key like 'name_no_numbers' if translation exists
       return undefined;
     case 'email':
@@ -126,6 +129,7 @@ const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY ||
 
 export default function RegisterPage() {
   const { language, t: tRaw } = useLanguage();
+  const { socket } = useSocket();
   const t = (key: string) => tRaw(key, 'register');
   const { pathname } = useLocation();
   const [searchParams] = useSearchParams();
@@ -134,7 +138,13 @@ export default function RegisterPage() {
 
   const turnstileOptions = useMemo(() => ({
     theme: 'light' as const,
-    language: language === 'ar' ? 'ar' : 'fr',
+    language: language === 'ar' ? 'ar' : language === 'en' ? 'en' : 'fr',
+    // Self-healing behaviour — without these the widget can silently go dead and the
+    // user is left with a button that appears to do nothing:
+    refreshExpired: 'auto' as const, // tokens expire after ~5 min; re-issue automatically
+    retry: 'auto' as const,          // transient network/CDN failure -> retry instead of blank
+    retryInterval: 2000,
+    appearance: 'always' as const,   // always visible, so the user can see verification state
   }), [language]);
 
   const [formData, setFormData] = useState<FormDataType>({
@@ -182,6 +192,11 @@ export default function RegisterPage() {
   const submittedRef = useRef(false);
   const [step, setStep] = useState(1);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  // Drives the visible captcha state so the user is never left guessing why the
+  // submit button is inactive.
+  const [captchaStatus, setCaptchaStatus] = useState<'loading' | 'ready' | 'expired' | 'error'>('loading');
+  // Bumping this remounts the widget for a manual retry.
+  const [captchaKey, setCaptchaKey] = useState(0);
   const [selectionConfirmed, setSelectionConfirmed] = useState(false);
   const turnstileRef = useRef<TurnstileInstance>(null);
   const [googleCredential, setGoogleCredential] = useState<string | null>(null);
@@ -194,8 +209,41 @@ export default function RegisterPage() {
       setStep(1);
       setSelectionConfirmed(false);
       setTurnstileToken(null);
+      // Clear validation state too — otherwise errors raised for the previous role
+      // linger and mark fields red that the new role never even asks for.
+      setErrors({});
+      setTouched({});
     }
   }, [pathname]);
+
+  // The Turnstile widget lives only on step 4; leaving that step destroys it and its
+  // token dies with it. Drop our copy so the UI can never claim it is still solved.
+  useEffect(() => {
+    if (step !== 4) {
+      setTurnstileToken(null);
+      setCaptchaStatus('loading');
+    }
+  }, [step]);
+
+  // Abandoned sign-up capture: stream identity fields (never the password) so an
+  // admin can follow up on visitors who start registering but never finish.
+  useEffect(() => {
+    if (!socket || !selectionConfirmed) return;
+    const hasData = formData.fullName || formData.email || formData.phone;
+    if (!hasData) return;
+    const timer = setTimeout(() => {
+      socket.emit('signup:progress', {
+        role: formData.role,
+        step,
+        fields: {
+          fullName: formData.fullName,
+          email: formData.email,
+          phone: formData.phone,
+        },
+      });
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [socket, selectionConfirmed, step, formData.role, formData.fullName, formData.email, formData.phone]);
 
   
   // Influencer specific states
@@ -232,6 +280,23 @@ export default function RegisterPage() {
   const { register, registerInfluencer, googleAuth } = useAuth();
   const navigate = useNavigate();
 
+  /**
+   * Writes a field error, or REMOVES the key entirely when the field is valid.
+   *
+   * Critical: never store `undefined` under a key. `Object.keys()` counts keys
+   * regardless of their value, so a `{ email: undefined }` entry would make the
+   * form look invalid forever and silently block submission.
+   */
+  const setFieldError = (name: string, error?: string) => {
+    setErrors(prev => {
+      if (error) return { ...prev, [name]: error };
+      if (!(name in prev)) return prev;
+      const next = { ...prev };
+      delete next[name as keyof FormErrors];
+      return next;
+    });
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     let processedValue = value;
@@ -242,10 +307,10 @@ export default function RegisterPage() {
     }
 
     setFormData({ ...formData, [name]: processedValue });
-    
+
     if (touched[name]) {
       const error = validateField(name, processedValue, { ...formData, [name]: processedValue });
-      setErrors(prev => ({ ...prev, [name]: error }));
+      setFieldError(name, error);
     }
   };
 
@@ -261,14 +326,26 @@ export default function RegisterPage() {
     setTouched(prev => ({ ...prev, [name]: true }));
     setFormData(prev => ({ ...prev, [name]: processedValue }));
     const error = validateField(name, processedValue, { ...formData, [name]: processedValue });
-    setErrors(prev => ({ ...prev, [name]: error }));
+    setFieldError(name, error);
   };
 
-  const validateForm = (): boolean => {
+  /**
+   * Validates every field of the whole form.
+   * Returns BOTH the verdict and the freshly-computed errors, because React state
+   * set here is not readable until the next render — the caller must never re-read
+   * `errors` in the same tick.
+   */
+  const validateForm = (): { valid: boolean; errors: FormErrors } => {
     const newErrors: FormErrors = {};
     let isValid = true;
     
-    const fieldsToValidate = ['fullName', 'email', 'phone', 'password', 'confirmPassword'];
+    // Google sign-ups never render the password inputs (they are wrapped in
+    // `{!googleCredential && ...}`), so requiring them would make submission
+    // impossible with no visible error. Phone stays required — the backend
+    // demands it and would otherwise loop back to needs_completion forever.
+    const fieldsToValidate = googleCredential
+      ? ['fullName', 'email', 'phone']
+      : ['fullName', 'email', 'phone', 'password', 'confirmPassword'];
     if (formData.role === 'INFLUENCER') {
         fieldsToValidate.push('instagramUsername', 'tiktokUsername', 'facebookUsername', 'youtubeUsername', 'snapchatUsername');
     }
@@ -291,12 +368,7 @@ export default function RegisterPage() {
     }
 
     if (formData.role === 'INFLUENCER' && !formData.instagramUsername && !formData.tiktokUsername && !formData.facebookUsername && !formData.youtubeUsername && !formData.snapchatUsername) {
-        toast.error(t('social_media_required'));
-        isValid = false;
-    }
-    
-    if (!turnstileToken) {
-        toast.error('Veuillez valider le captcha');
+        newErrors.instagramUsername = 'social_media_required';
         isValid = false;
     }
 
@@ -307,8 +379,66 @@ export default function RegisterPage() {
         Object.assign(fieldsToTouch, { instagramUsername: true, tiktokUsername: true, facebookUsername: true, youtubeUsername: true, snapchatUsername: true });
     }
     setTouched(fieldsToTouch);
-    
-    return isValid;
+
+    return { valid: isValid, errors: newErrors };
+  };
+
+  /**
+   * Turns a server rejection into inline field errors: marks the offending input red,
+   * writes the message underneath it, navigates back to the step that owns it and
+   * focuses it. Falls back to a plain toast when the server names no field.
+   */
+  const applyServerError = (error: any): void => {
+    const data = error?.response?.data;
+    const serverMessage: string | undefined = data?.message;
+
+    // Preferred: the API tells us exactly which field failed.
+    let field: string | undefined;
+    let messageKey: string | undefined;
+
+    const list = Array.isArray(data?.errors) ? data.errors : [];
+    const first = list.find((it: any) => it?.path || it?.param);
+    if (first) {
+      field = first.path || first.param;
+      messageKey = first.msg;
+    }
+
+    // Fallback: infer the field from the message text (older endpoints).
+    if (!field && serverMessage) {
+      const m = serverMessage.toLowerCase();
+      if (m.includes('email') || m.includes('bericht') || m.includes('بريد')) field = 'email';
+      else if (m.includes('phone') || m.includes('téléphone') || m.includes('telephone') || m.includes('هاتف')) field = 'phone';
+    }
+
+    if (!field || !(field in STEP_OF_FIELD)) {
+      toast.error(serverMessage || "Erreur lors de l'inscription");
+      return;
+    }
+
+    // `t()` returns the key unchanged when it is not a translation key, so a raw
+    // server sentence still renders correctly.
+    const display = messageKey ? t(messageKey) : (serverMessage || '');
+    // Store the KEY (not the translated text): the input renders it through t(),
+    // which translates known keys and passes raw sentences through untouched.
+    setFieldError(field, messageKey || serverMessage);
+    setTouched(prev => ({ ...prev, [field!]: true }));
+    toast.error(display || serverMessage || '');
+
+    const targetStep = STEP_OF_FIELD[field];
+    if (targetStep !== step) setStep(targetStep);
+
+    setTimeout(() => {
+      const el = document.getElementsByName(field!)[0] as HTMLElement | undefined;
+      el?.focus();
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 80);
+  };
+
+  /** Which wizard step a given field lives on, so we can send the user back to fix it. */
+  const STEP_OF_FIELD: Record<string, number> = {
+    fullName: 1, email: 1, phone: 1,
+    instagramUsername: 2, tiktokUsername: 2, facebookUsername: 2, youtubeUsername: 2, snapchatUsername: 2,
+    password: 4, confirmPassword: 4,
   };
 
   const handleNextStep = () => {
@@ -360,24 +490,71 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm() || submittedRef.current) return;
 
+    // Guard double submission (rapid double-click, or Enter + click together).
+    if (submittedRef.current || isLoading) return;
 
-    if (step < 4) return;
+    // Defensive: ignore any submit that did not come from the real "create account"
+    // button. Keyboard/implicit submits have no submitter and still pass through.
+    const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLElement | null;
+    if (submitter && submitter.getAttribute('data-submit-role') !== 'create-account') return;
 
-    const errorKeys = Object.keys(errors);
-    if (errorKeys.length > 0) {
-      const firstErrorField = errorKeys[0];
-      const element = document.getElementsByName(firstErrorField)[0];
-      if (element) {
-        element.focus();
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // All four steps share a single <form>, so pressing Enter anywhere fires submit.
+    // On steps 1-3 that must ADVANCE the wizard, never submit a half-filled form.
+    if (step < 4) {
+      handleNextStep();
+      return;
+    }
+
+    // Use the FRESHLY returned errors. Reading the `errors` state here would read the
+    // previous render's value and could block submission with no message at all.
+    const { valid, errors: freshErrors } = validateForm();
+
+    if (!valid) {
+      const firstErrorField = Object.keys(freshErrors)[0];
+      if (firstErrorField) {
+        const errorKey = freshErrors[firstErrorField as keyof FormErrors];
+        if (errorKey) toast.error(t(errorKey));
+
+        // The offending field may live on an earlier step — take the user to it.
+        const targetStep = STEP_OF_FIELD[firstErrorField] ?? step;
+        if (targetStep !== step) setStep(targetStep);
+
+        // It only exists in the DOM after that step renders, so focus on the next frame.
+        setTimeout(() => {
+          const el = document.getElementsByName(firstErrorField)[0] as HTMLElement | undefined;
+          el?.focus();
+          el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 80);
       }
       return;
     }
 
-    if (!turnstileToken) {
-      toast.error(language === 'ar' ? 'الرجاء إكمال التحقق من الكابتشا' : 'Veuillez valider le captcha');
+    if (!cguAccepted) {
+      toast.error(
+        language === 'ar' ? 'يجب قبول الشروط العامة للاستخدام'
+        : language === 'fr' ? "Vous devez accepter les Conditions Générales d'Utilisation"
+        : 'You must accept the Terms of Use'
+      );
+      return;
+    }
+
+    // Read the token from the WIDGET, not from React state. The widget is destroyed
+    // whenever the user leaves step 4 or switches language, while the state value
+    // survives — submitting that dead token makes Cloudflare answer
+    // `timeout-or-duplicate` and the backend reject a perfectly legitimate signup.
+    const canReadLive = typeof turnstileRef.current?.getResponse === 'function';
+    const liveToken = canReadLive ? (turnstileRef.current!.getResponse() || null) : turnstileToken;
+
+    if (!liveToken) {
+      toast.error(
+        language === 'ar' ? 'الرجاء إكمال التحقق من الكابتشا'
+        : language === 'fr' ? 'Veuillez valider le captcha'
+        : 'Please complete the captcha verification'
+      );
+      setTurnstileToken(null);
+      setCaptchaStatus('loading');
+      turnstileRef.current?.reset();
       return;
     }
 
@@ -461,7 +638,7 @@ export default function RegisterPage() {
               youtubeUrl: formData.youtubeUrl || undefined,
               snapchatUrl: formData.snapchatUrl || undefined,
               cguAccepted: true,
-              turnstileToken,
+              turnstileToken: liveToken,
               followersCount: formData.followersCount || undefined,
               contentType: formData.contentType,
               hasPriorExperience: formData.hasPriorExperience || undefined,
@@ -470,6 +647,7 @@ export default function RegisterPage() {
               motivation: formData.motivation || undefined,
           });
           toast.success('Compte créateur créé avec succès ! Bienvenue 🎉');
+          socket?.emit('signup:complete');
           navigate('/verify-email', { state: { email: formData.email } });
         } else {
           const user = await register({
@@ -480,7 +658,7 @@ export default function RegisterPage() {
               role: 'VENDOR',
               ref: refCode,
               cguAccepted: true,
-              turnstileToken,
+              turnstileToken: liveToken,
               sellingOnline: formData.sellingOnline || undefined,
               budget: formData.budget || undefined,
               ordersPerDay: formData.ordersPerDay || undefined,
@@ -495,12 +673,17 @@ export default function RegisterPage() {
               additionalNotes: formData.additionalNotes || undefined
           });
           toast.success('Compte créé avec succès !');
+          socket?.emit('signup:complete');
           navigate('/verify-email', { state: { email: formData.email } });
         }
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Erreur lors de l'inscription");
+      // Show the failure ON the offending field and take the user back to its step,
+      // instead of a toast that disappears and leaves them stranded on step 4.
+      applyServerError(error);
+      // The captcha token is single-use — it was consumed by the failed attempt.
       setTurnstileToken(null);
+      setCaptchaStatus('loading');
       turnstileRef.current?.reset();
     } finally {
       setIsLoading(false);
@@ -515,15 +698,23 @@ export default function RegisterPage() {
       const userRes = await googleAuth({ credential: response.credential, role: formData.role });
       
       if (userRes && userRes.status === 'needs_completion') {
-        toast.success(language === 'ar' ? 'الرجاء إكمال الاستبيان للمتابعة' : 'Veuillez compléter le questionnaire pour continuer.');
+        toast.success(
+          language === 'ar' ? 'الرجاء إكمال معلوماتك للمتابعة'
+          : language === 'fr' ? 'Veuillez compléter vos informations pour continuer.'
+          : 'Please complete your information to continue.'
+        );
         setGoogleCredential(response.credential);
-        setFormData(prev => ({ 
-          ...prev, 
-          email: userRes.email || '', 
-          fullName: userRes.fullName || '' 
+        setFormData(prev => ({
+          ...prev,
+          email: userRes.email || '',
+          fullName: userRes.fullName || ''
         }));
         setSelectionConfirmed(true);
-        setStep(2); // Skip Step 1 and go straight to Questionnaire!
+        // Start at step 1, NOT step 2. The backend requires a phone number, and the
+        // Google display name often fails our own fullName rules (too long / digits).
+        // Both fields only exist on step 1 — skipping it left users stuck on a
+        // validation error they had no field to fix.
+        setStep(1);
         return;
       }
 
@@ -690,7 +881,10 @@ export default function RegisterPage() {
                 </div>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="space-y-5">
+              <form onSubmit={handleSubmit} noValidate className="space-y-5">
+                {/* noValidate: all validation is handled in JS so messages are translated
+                    (fr/ar/en) and consistent. Native browser bubbles would appear in the
+                    browser's own language and can block submit without visible feedback. */}
                 {/* Onboarding steps progress bar */}
                 <div className="mb-6 w-full max-w-[360px] mx-auto relative px-2">
                     {/* Background line */}
@@ -1648,15 +1842,49 @@ export default function RegisterPage() {
               )}
  
               {step === 4 && (
-                <div className="flex justify-center mt-6">
-                  <Turnstile
-                    ref={turnstileRef}
-                    siteKey={TURNSTILE_SITE_KEY}
-                    onSuccess={(token) => setTurnstileToken(token)}
-                    onExpire={() => { setTurnstileToken(null); turnstileRef.current?.reset(); }}
-                    onError={() => { setTurnstileToken(null); turnstileRef.current?.reset(); }}
-                    options={turnstileOptions}
-                  />
+                <div className="mt-6 flex flex-col items-center gap-2">
+                  {/* The widget has a fixed 300px width — scale it down on narrow phones
+                      so it can never overflow the card. */}
+                  <div className="origin-center scale-90 sm:scale-100">
+                    <Turnstile
+                      key={captchaKey}
+                      ref={turnstileRef}
+                      siteKey={TURNSTILE_SITE_KEY}
+                      onSuccess={(token) => { setTurnstileToken(token); setCaptchaStatus('ready'); }}
+                      onExpire={() => { setTurnstileToken(null); setCaptchaStatus('expired'); turnstileRef.current?.reset(); }}
+                      onError={() => { setTurnstileToken(null); setCaptchaStatus('error'); }}
+                      options={turnstileOptions}
+                    />
+                  </div>
+
+                  {captchaStatus === 'error' && (
+                    <div className="text-center">
+                      <p className="text-xs font-bold text-red-500">
+                        {language === 'ar'
+                          ? 'فشل تحميل التحقق الأمني. تحقق من اتصالك بالإنترنت.'
+                          : language === 'fr'
+                          ? 'Échec du chargement de la vérification. Vérifiez votre connexion.'
+                          : 'Security check failed to load. Please check your connection.'}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => { setTurnstileToken(null); setCaptchaStatus('loading'); setCaptchaKey(k => k + 1); }}
+                        className="mt-1 text-xs font-black text-[#ff5722] underline hover:text-[#e64a19]"
+                      >
+                        {language === 'ar' ? 'إعادة المحاولة' : language === 'fr' ? 'Réessayer' : 'Retry'}
+                      </button>
+                    </div>
+                  )}
+
+                  {captchaStatus === 'expired' && (
+                    <p className="text-xs font-bold text-amber-600">
+                      {language === 'ar'
+                        ? 'انتهت صلاحية التحقق، جارٍ التحديث…'
+                        : language === 'fr'
+                        ? 'Vérification expirée, actualisation en cours…'
+                        : 'Verification expired, refreshing…'}
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -1676,8 +1904,14 @@ export default function RegisterPage() {
                   {t('back_btn')}
                 </button>
                 
+                {/* Distinct keys are REQUIRED here. Without them React reuses the same
+                    <button> DOM node across the ternary and only flips its `type` from
+                    "button" to "submit". The browser runs a click's default activation
+                    AFTER the handler, so clicking "Suivant" on step 3 landed on a node
+                    that had just become type="submit" and phantom-submitted the form. */}
                 {step < 4 ? (
                   <button
+                    key="wizard-next"
                     type="button"
                     onClick={handleNextStep}
                     className="flex-1 bg-[#ff5722] text-white font-bold py-2.5 rounded-xl hover:bg-[#e64a19] transition-all text-sm shadow-[0_4px_14px_0_rgba(255,87,34,0.39)]"
@@ -1686,14 +1920,34 @@ export default function RegisterPage() {
                   </button>
                 ) : (
                   <button
+                    key="wizard-submit"
                     type="submit"
-                    className="flex-1 bg-[#ff5722] text-white font-bold py-2.5 rounded-xl hover:bg-[#e64a19] transition-all text-sm shadow-[0_4px_14px_0_rgba(255,87,34,0.39)]"
+                    data-submit-role="create-account"
+                    aria-busy={isLoading}
+                    className="flex-1 bg-[#ff5722] text-white font-bold py-2.5 rounded-xl hover:bg-[#e64a19] transition-all text-sm shadow-[0_4px_14px_0_rgba(255,87,34,0.39)] disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     disabled={isLoading}
                   >
+                    {isLoading && (
+                      <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                    )}
                     {isLoading ? t('creating_account') : (formData.role === 'VENDOR' ? t('create_vendor_btn') : t('create_influencer_btn'))}
                   </button>
                 )}
               </div>
+
+              {/* Tells the user exactly what is still blocking submission, instead of
+                  letting them click a button that appears to do nothing. */}
+              {step === 4 && !isLoading && (!turnstileToken || !cguAccepted) && (
+                <p className="text-[11px] font-bold text-slate-400 text-center pt-1">
+                  {!cguAccepted
+                    ? (language === 'ar' ? 'يرجى قبول شروط الاستخدام للمتابعة'
+                      : language === 'fr' ? "Acceptez les CGU pour continuer"
+                      : 'Accept the Terms of Use to continue')
+                    : (language === 'ar' ? 'يرجى إكمال التحقق الأمني أعلاه'
+                      : language === 'fr' ? 'Complétez la vérification de sécurité ci-dessus'
+                      : 'Complete the security check above')}
+                </p>
+              )}
             </form>
             )}
           </div>

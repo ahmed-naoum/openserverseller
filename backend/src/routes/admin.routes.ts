@@ -87,7 +87,7 @@ router.get(
 router.get(
   '/sessions/:id/events',
   authenticate,
-  authorize('SUPER_ADMIN'),
+  authorize('SUPER_ADMIN', 'CALL_CENTER_AGENT'),
   asyncHandler(async (req: Request, res: Response) => {
     const recordId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const record = await prisma.sessionRecording.findUnique({
@@ -111,13 +111,19 @@ router.get(
   authenticate,
   authorize('SUPER_ADMIN'),
   asyncHandler(async (_req: Request, res: Response) => {
-    const [recCount, bytesRow, oldest, attemptsTotal, abandoned, converted] = await Promise.all([
+    const [
+      recCount, bytesRow, oldest, attemptsTotal, abandoned, converted,
+      signupsTotal, signupsAbandoned, signupsCompleted,
+    ] = await Promise.all([
       prisma.sessionRecording.count(),
       prisma.$queryRaw<{ bytes: bigint | null }[]>`SELECT COALESCE(SUM(octet_length("eventDataGzip")), 0)::bigint AS bytes FROM session_recordings`,
       prisma.sessionRecording.findFirst({ orderBy: { createdAt: 'asc' }, select: { createdAt: true } }),
       prisma.checkoutAttempt.count(),
       prisma.checkoutAttempt.count({ where: { completed: false, phone: { not: null } } }),
       prisma.checkoutAttempt.count({ where: { completed: true } }),
+      prisma.signupAttempt.count(),
+      prisma.signupAttempt.count({ where: { completed: false } }),
+      prisma.signupAttempt.count({ where: { completed: true } }),
     ]);
 
     res.json({
@@ -125,6 +131,7 @@ router.get(
       totalBytes: Number(bytesRow?.[0]?.bytes || 0),
       oldestAt: oldest?.createdAt || null,
       attempts: { total: attemptsTotal, abandoned, converted },
+      signups: { total: signupsTotal, abandoned: signupsAbandoned, completed: signupsCompleted },
     });
   })
 );
@@ -179,6 +186,64 @@ router.get(
   })
 );
 
+// Abandoned / completed SIGN-UP attempts from /register ("I'm a Seller" /
+// "I'm an Influencer"). Filter: 'abandoned' (default) | 'completed' | 'all'.
+router.get(
+  '/signup-attempts',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = (page - 1) * limit;
+    const filter = (req.query.filter as string) || 'abandoned';
+    const role = (req.query.role as string) || 'ALL';
+    const search = (req.query.search as string)?.trim();
+
+    const and: any[] = [];
+    if (filter === 'abandoned') and.push({ completed: false });
+    else if (filter === 'completed') and.push({ completed: true });
+    if (role === 'VENDOR' || role === 'INFLUENCER') and.push({ role });
+    if (search) {
+      and.push({
+        OR: [
+          { email: { contains: search, mode: 'insensitive' as const } },
+          { phone: { contains: search, mode: 'insensitive' as const } },
+          { fullName: { contains: search, mode: 'insensitive' as const } },
+          { ip: { contains: search, mode: 'insensitive' as const } },
+        ],
+      });
+    }
+    const where = and.length ? { AND: and } : {};
+
+    const [attempts, total] = await Promise.all([
+      prisma.signupAttempt.findMany({ where, orderBy: { updatedAt: 'desc' }, skip, take: limit }),
+      prisma.signupAttempt.count({ where }),
+    ]);
+
+    // Mark rows whose email/phone now belongs to a real account: the visitor may
+    // have abandoned this session but signed up later, so it is not a lost lead.
+    const emails = attempts.map((a) => a.email).filter(Boolean) as string[];
+    const phones = attempts.map((a) => a.phone).filter(Boolean) as string[];
+    const existing = (emails.length || phones.length)
+      ? await prisma.user.findMany({
+          where: { OR: [ ...(emails.length ? [{ email: { in: emails } }] : []), ...(phones.length ? [{ phone: { in: phones } }] : []) ] },
+          select: { email: true, phone: true },
+        })
+      : [];
+    const knownEmails = new Set(existing.map((u) => u.email).filter(Boolean));
+    const knownPhones = new Set(existing.map((u) => u.phone).filter(Boolean));
+
+    res.json({
+      attempts: attempts.map((a) => ({
+        ...a,
+        registeredLater: (!!a.email && knownEmails.has(a.email)) || (!!a.phone && knownPhones.has(a.phone)),
+      })),
+      total, page, totalPages: Math.ceil(total / limit),
+    });
+  })
+);
+
 // Manual purge (age + cap policy) for storage management.
 router.post(
   '/sessions/purge',
@@ -189,8 +254,11 @@ router.post(
     // Also drop checkout attempts older than 7 days.
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 7);
-    const attempts = await prisma.checkoutAttempt.deleteMany({ where: { createdAt: { lt: cutoff } } });
-    res.json({ status: 'success', purgedAttempts: attempts.count });
+    const [attempts, signups] = await Promise.all([
+      prisma.checkoutAttempt.deleteMany({ where: { createdAt: { lt: cutoff } } }),
+      prisma.signupAttempt.deleteMany({ where: { createdAt: { lt: cutoff } } }),
+    ]);
+    res.json({ status: 'success', purgedAttempts: attempts.count, purgedSignups: signups.count });
   })
 );
 

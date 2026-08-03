@@ -3,10 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { leadsApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
+import { buildReferralUrl } from '../../utils/referral';
 import { 
   Eye, History, AlertTriangle, CheckCircle, XCircle, 
   Package, ShieldAlert, Clock, Info, Phone, X, 
-  TrendingUp, TrendingDown, User, Store
+  TrendingUp, TrendingDown, User, Store, Check, MessageSquare, Copy
 } from 'lucide-react';
 
 const STATUS_LABELS: Record<string, { label: string, icon: string, color: string, ring: string }> = {
@@ -66,6 +67,38 @@ export default function AgentLeadDetail() {
   const [citySearch, setCitySearch] = useState('');
   const [showCityDropdown, setShowCityDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const [clickedWaLeads, setClickedWaLeads] = useState<Set<number>>(() => {
+    try {
+      const saved = localStorage.getItem('agent_clicked_wa_leads');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch (e) {
+      return new Set();
+    }
+  });
+
+  const handleWaClick = (leadId: number) => {
+    setClickedWaLeads((prev) => {
+      const next = new Set(prev);
+      next.add(leadId);
+      try {
+        localStorage.setItem('agent_clicked_wa_leads', JSON.stringify(Array.from(next)));
+      } catch (e) {
+        console.error(e);
+      }
+      return next;
+    });
+
+    try {
+      if (data?.lead && data?.lead?.status === 'ASSIGNED') {
+        leadsApi.updateStatus(String(leadId), { status: 'CONTACTED' }).then(() => {
+          loadDetail();
+        }).catch(console.error);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -392,9 +425,22 @@ export default function AgentLeadDetail() {
                   href={`https://wa.me/${lead.whatsapp.replace('+', '')}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-green-600 font-medium hover:underline flex items-center gap-2"
+                  onClick={() => handleWaClick(lead.id)}
+                  className={`text-xs font-bold transition-all flex items-center gap-1.5 px-3 py-1.5 rounded-xl border w-fit ${
+                    clickedWaLeads.has(lead.id)
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm font-black'
+                      : 'text-green-700 hover:bg-green-100 bg-green-50 border-green-200'
+                  }`}
                 >
-                  💬 {lead.whatsapp}
+                  {clickedWaLeads.has(lead.id) ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-white stroke-[3]" /> WhatsApp ({lead.whatsapp}) - Cliqué
+                    </>
+                  ) : (
+                    <>
+                      <MessageSquare className="w-3.5 h-3.5 text-green-600" /> {lead.whatsapp}
+                    </>
+                  )}
                 </a>
               </div>
             )}
@@ -402,27 +448,47 @@ export default function AgentLeadDetail() {
               <p className="text-xs text-gray-400 font-medium uppercase mb-1">Reçu le</p>
               <p className="text-gray-700 font-medium">{format(new Date(lead.createdAt), 'dd MMM yyyy à HH:mm')}</p>
             </div>
-            {lead.referralLink?.code && (
-              <div>
-                <p className="text-xs text-gray-400 font-medium uppercase mb-1">Lien de parrainage</p>
-                <div className="flex items-center gap-2">
-                  <a 
-                    href={`/r/${lead.referralLink.code}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`flex items-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg font-mono text-sm font-bold border border-gray-200 hover:bg-gray-200 transition-all shadow-sm ${
-                      isPrincess ? 'hover:text-amber-600' : isGirly ? 'hover:text-pink-600' : 'hover:text-indigo-600'
-                    }`}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-70">
-                      <line x1="7" y1="17" x2="17" y2="7"></line>
-                      <polyline points="7 7 17 7 17 17"></polyline>
-                    </svg>
-                    {lead.referralLink.code}
-                  </a>
+            {lead.referralLink?.code && (() => {
+              const linkUser = lead.referralLink.influencer || influencer || vendor;
+              const refUrl = buildReferralUrl(
+                lead.referralLink.code,
+                linkUser?.subdomain,
+                linkUser?.customDomain,
+                linkUser?.customDomainStatus
+              );
+              return (
+                <div className="col-span-1 md:col-span-2">
+                  <p className="text-xs text-gray-400 font-medium uppercase mb-1">Lien de parrainage</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <a 
+                      href={refUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`flex items-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-800 rounded-xl font-mono text-xs font-bold border border-gray-200 hover:bg-gray-200 transition-all shadow-xs break-all max-w-full ${
+                        isPrincess ? 'hover:text-amber-600' : isGirly ? 'hover:text-pink-600' : 'hover:text-indigo-600'
+                      }`}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-70 shrink-0">
+                        <line x1="7" y1="17" x2="17" y2="7"></line>
+                        <polyline points="7 7 17 7 17 17"></polyline>
+                      </svg>
+                      {refUrl}
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(refUrl);
+                        toast.success('Lien de parrainage copié !');
+                      }}
+                      className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl text-xs font-bold transition-all border border-gray-200 flex items-center gap-1.5 shrink-0"
+                      title="Copier le lien"
+                    >
+                      <Copy className="w-3.5 h-3.5" /> Copier
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
 
           {/* Lead Info Paragraph */}

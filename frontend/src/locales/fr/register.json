@@ -79,5 +79,7 @@
   "logout_goback_btn": "Se déconnecter et retourner",
   "session_invalid": "Session invalide. Veuillez vous reconnecter.",
   "enter_6_digits": "Veuillez entrer le code à 6 chiffres",
-  "email_verified_success": "Email vérifié avec succès !"
+  "email_verified_success": "Email vérifié avec succès !",
+  "email_already_exists": "Cet email est déjà utilisé par un autre compte",
+  "phone_already_exists": "Ce numéro de téléphone est déjà utilisé"
 }

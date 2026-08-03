@@ -101,6 +101,8 @@ export const verifyTurnstile = async (token: string): Promise<boolean> => {
     
     const verifyWithSecret = async (sec: string) => {
       try {
+        // Hard timeout: without it a slow/unreachable Cloudflare hangs the whole
+        // registration request, so the user sits on a spinning button indefinitely.
         const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -108,8 +110,12 @@ export const verifyTurnstile = async (token: string): Promise<boolean> => {
             secret: sec,
             response: token,
           }),
+          signal: AbortSignal.timeout(8000),
         });
-        const data = await response.json() as { success: boolean };
+        const data = await response.json() as { success: boolean; 'error-codes'?: string[] };
+        if (data.success !== true) {
+          console.warn('[TURNSTILE] Verification rejected:', data['error-codes']);
+        }
         return data.success === true;
       } catch (e) {
         console.error(`[TURNSTILE] Failed to verify with secret key starting with ${sec.slice(0, 6)}:`, e);
