@@ -1414,9 +1414,12 @@ model SystemSecret {
 
 model DeploymentLog {
   id          String   @id @default(uuid())
-  status      String
-  triggeredBy String
+  commitHash  String?
+  commitMsg   String?
+  status      String   @default("PENDING")
+  triggeredBy String   @default("ADMIN")
   logOutput   String?  @db.Text
+  durationSec Int?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
