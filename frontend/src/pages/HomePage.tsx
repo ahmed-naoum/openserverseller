@@ -16,6 +16,7 @@ import FAQ from '../components/home/FAQ';
 import { publicApi, BACKEND_URL } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { Seo } from '../components/Seo';
 import { LanguageSwitcherWidget } from '../components/common';
 
 /* ─── Animated Counter ─── */
@@ -185,6 +186,7 @@ export default function HomePage() {
 
   return (
     <div dir={language === 'ar' ? 'rtl' : 'ltr'} className={`min-h-screen bg-[#fafafc] selection:bg-primary-100 font-['29LT_Kaff',_Cairo,_Inter,_sans-serif] overflow-x-hidden relative ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+      <Seo page="home" />
       
       {/* ── Navbar ── */}
       <motion.nav
@@ -946,15 +948,31 @@ export default function HomePage() {
                 </Link>
               </div>
 
-              {/* Social Icons Row */}
+              {/* Social Icons Row.
+                  Only profiles that exist are linked — an icon pointing at "#"
+                  is a dead end for users and gives search/AI systems nothing to
+                  connect the site to. Add X, TikTok and YouTube here once those
+                  accounts are live, and mirror them in lib/seo/schema.ts sameAs. */}
               <div className={`flex items-center gap-4 pt-2 ${language === 'ar' ? 'justify-end' : 'justify-start'}`}>
-                <a href="#" className="w-11 h-11 bg-white text-[#ff5722] rounded-xl flex items-center justify-center hover:scale-110 transition-transform shadow-lg"><Instagram size={22} /></a>
-                <a href="#" className="w-11 h-11 bg-white text-[#ff5722] rounded-xl flex items-center justify-center hover:scale-110 transition-transform shadow-lg">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4l11.733 16h4.267l-11.733 -16z" /><path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772" /></svg>
+                <a
+                  href="https://www.instagram.com/silacod.ma/"
+                  target="_blank"
+                  rel="noopener noreferrer me"
+                  aria-label="Instagram"
+                  title="Instagram"
+                  className="w-11 h-11 bg-white text-[#ff5722] rounded-xl flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
+                >
+                  <Instagram size={22} />
                 </a>
-                <a href="#" className="w-11 h-11 bg-white text-[#ff5722] rounded-xl flex items-center justify-center hover:scale-110 transition-transform shadow-lg"><MessageCircle size={22} /></a>
-                <a href="#" className="w-11 h-11 bg-white text-[#ff5722] rounded-xl flex items-center justify-center hover:scale-110 transition-transform shadow-lg">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5"/></svg>
+                <a
+                  href="https://wa.me/212660517679"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="WhatsApp"
+                  title="WhatsApp +212 660-517679"
+                  className="w-11 h-11 bg-white text-[#ff5722] rounded-xl flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
+                >
+                  <MessageCircle size={22} />
                 </a>
               </div>
             </div>

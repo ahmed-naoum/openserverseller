@@ -42,3 +42,6 @@ tmp/
 backend/backups/
 backend/cache_version.json
 backend/*.dump
+
+# Generated at build time by frontend/scripts/generate-sitemap.mjs
+frontend/public/sitemap.xml

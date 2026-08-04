@@ -37,6 +37,22 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // Used by scripts/prerender.mjs, which serves the built site locally and
+  // snapshots it. The API proxy mirrors the dev server so prerendered pages can
+  // render live data (stats, featured products) instead of empty placeholders.
+  preview: {
+    port: 4173,
+    proxy: {
+      '/api': {
+        target: process.env.PRERENDER_API_TARGET || 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/uploads': {
+        target: process.env.PRERENDER_API_TARGET || 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

@@ -6,6 +6,9 @@ import { productsApi, chatApi, influencerApi, uploadApi, BACKEND_URL } from '../
 import { getVerificationStatus } from '../common/ProfileVerification';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { Seo } from '../../components/Seo';
+import { SITE_URL } from '../../lib/seo/config';
+import { buildProductSchema, buildBreadcrumbSchema } from '../../lib/seo/schema';
 import { 
   Package, 
   ChevronLeft, 
@@ -389,8 +392,50 @@ export default function ProductDetail() {
     return filename;
   };
 
+  // Per-product SEO. Without this every catalogue page inherits the generic site
+  // title, so a search for a specific product ("collagène marque blanche Maroc")
+  // has nothing on silacod.com to match.
+  const seoName: string =
+    (language === 'ar' ? product?.nameAr : language === 'en' ? product?.nameEn : product?.nameFr) ||
+    product?.nameFr ||
+    product?.nameEn ||
+    product?.nameAr ||
+    '';
+  const seoRaw: string = product?.description || product?.longDescription || '';
+  const seoDescription = seoRaw
+    ? String(seoRaw).replace(/\s+/g, ' ').trim().slice(0, 160)
+    : seoName
+      ? `${seoName} — produit prêt à personnaliser à votre marque avec SILACOD. Stockage, confirmation et livraison COD partout au Maroc.`
+      : '';
+  const seoUrl = product ? `${SITE_URL}/product/${product.id}` : SITE_URL;
+  const seoImage: string | undefined = Array.isArray(product?.images) ? product.images[0] : undefined;
+
   return (
     <div className="min-h-screen bg-[#F4F6FB] font-['29LT_Kaff',_Cairo,_Inter,_sans-serif] pb-20" dir={direction}>
+      {product && seoName && (
+        <Seo
+          title={`${seoName} — Marque blanche Maroc | SILACOD`}
+          description={seoDescription}
+          path={`/product/${product.id}`}
+          image={seoImage}
+          jsonLd={[
+            buildProductSchema({
+              name: seoName,
+              description: seoDescription,
+              image: seoImage,
+              sku: product.sku,
+              category: product.category,
+              price: product.retailPriceMad,
+              url: seoUrl,
+            }),
+            buildBreadcrumbSchema([
+              { name: 'SILACOD', url: `${SITE_URL}/` },
+              { name: 'Catalogue', url: `${SITE_URL}/marketplace` },
+              { name: seoName, url: seoUrl },
+            ]),
+          ]}
+        />
+      )}
       <div className="max-w-7xl mx-auto px-6 pt-10">
         
         {/* Top Header - Back Button */}

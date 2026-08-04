@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { Seo } from '../../components/Seo';
 import { Link, useSearchParams } from 'react-router-dom';
 import { marketplaceApi, publicApi, customProductsApi } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -317,7 +318,8 @@ export default function PublicMarketplace() {
 
   return (
     <div className="min-h-[calc(100vh-80px)] bg-[#F9FAFB] selection:bg-primary-100 animate-in fade-in slide-in-from-bottom-2 duration-1000 ease-out">
-      
+      <Seo page="marketplace" />
+
       {/* Ultimate Marketplace Hero Header */}
       <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-12 pt-8">
         <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-[#1a1c4b] via-[#2c2f74] to-[#4b3e8c] p-8 lg:p-10 text-white shadow-[0_20px_60px_-15px_rgba(44,47,116,0.6)] border border-white/10">

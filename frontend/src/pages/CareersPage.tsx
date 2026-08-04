@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import { Briefcase, MapPin, Clock, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
+import { Seo } from '../components/Seo';
+import { FooterMeta } from '../components/common/FooterMeta';
 import LanguageSwitcherWidget from '../components/common/LanguageSwitcherWidget';
 
 const translations = {
@@ -118,6 +120,7 @@ export default function CareersPage() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] font-['29LT_Kaff',_Cairo,_Inter,_sans-serif] text-slate-700 relative overflow-x-hidden selection:bg-[#ff5722]/10 selection:text-[#ff5722]">
+      <Seo page="careers" />
       {/* Decorative Background Glows */}
       <div className="absolute top-[-10%] right-[-10%] w-[60%] h-[500px] bg-gradient-to-br from-[#ff5722]/8 to-transparent blur-[140px] rounded-full pointer-events-none animate-pulse duration-[8s]" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[500px] bg-gradient-to-tr from-[#2e315e]/6 to-transparent blur-[140px] rounded-full pointer-events-none animate-pulse duration-[10s]" />
@@ -230,6 +233,7 @@ export default function CareersPage() {
             <span className="text-slate-300">•</span>
             <Link to="/privacy" className="hover:text-[#ff5722] transition-colors">{t.privacyPolicy}</Link>
           </div>
+          <FooterMeta />
         </div>
       </footer>
     </div>

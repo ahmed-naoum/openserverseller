@@ -1,0 +1,131 @@
+# robots.txt — silacod.com
+# Policy: welcome every search and AI crawler on public marketing/catalog pages,
+# keep them out of authenticated dashboards and transactional flows.
+
+# ---------------------------------------------------------------------------
+# AI assistants & answer engines (explicitly allowed — these drive AI visibility)
+# ---------------------------------------------------------------------------
+
+# OpenAI — training crawler
+User-agent: GPTBot
+Allow: /
+
+# OpenAI — ChatGPT Search index
+User-agent: OAI-SearchBot
+Allow: /
+
+# OpenAI — live browsing on user request
+User-agent: ChatGPT-User
+Allow: /
+
+# Anthropic — Claude
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+# Perplexity
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+# Google — Gemini / AI Overviews grounding
+User-agent: Google-Extended
+Allow: /
+
+# Apple Intelligence
+User-agent: Applebot
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+# Meta AI
+User-agent: meta-externalagent
+Allow: /
+
+# Common Crawl (feeds many model training sets)
+User-agent: CCBot
+Allow: /
+
+# Amazon
+User-agent: Amazonbot
+Allow: /
+
+# ByteDance
+User-agent: Bytespider
+Allow: /
+
+# Mistral
+User-agent: MistralAI-User
+Allow: /
+
+# ---------------------------------------------------------------------------
+# Search engines
+# ---------------------------------------------------------------------------
+
+# Bing — critical: ~87% of ChatGPT Search citations come from Bing's index
+User-agent: Bingbot
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
+
+# ---------------------------------------------------------------------------
+# Default policy for all other crawlers
+# ---------------------------------------------------------------------------
+User-agent: *
+Allow: /
+
+# Authenticated areas — no public content, never index
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /agent
+Disallow: /helper
+Disallow: /grosseller
+Disallow: /confirmation
+Disallow: /verify
+Disallow: /influencer/
+
+# Auth & account flows
+Disallow: /verify-email
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /pending-verification
+Disallow: /blocked
+Disallow: /maintenance
+
+# Transactional / per-user pages with no search value
+Disallow: /thank-you
+Disallow: /r/
+
+# API and realtime endpoints. Cloudflare's AI Crawl Control showed
+# /api/v1/socket.io/ as the single most-crawled path (114 requests in 24h) —
+# crawl budget spent on a WebSocket handshake that returns nothing indexable.
+Disallow: /api/
+Disallow: /uploads/
+Disallow: /socket.io/
+
+# Public marketing, catalog and content — explicitly crawlable
+Allow: /login
+Allow: /register
+Allow: /marketplace
+Allow: /product/
+Allow: /blog
+Allow: /pricing
+Allow: /about
+Allow: /faq
+Allow: /contact
+Allow: /careers
+
+# ---------------------------------------------------------------------------
+Sitemap: https://silacod.com/sitemap.xml
