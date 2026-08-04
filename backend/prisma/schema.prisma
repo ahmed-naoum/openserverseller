@@ -1401,6 +1401,29 @@ model PendingCommit {
   @@map("pending_commits")
 }
 
+model SystemSecret {
+  key         String   @id
+  value       String
+  isEncrypted Boolean  @default(true)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_secrets")
+}
+
+model DeploymentLog {
+  id          String   @id @default(uuid())
+  status      String
+  triggeredBy String
+  logOutput   String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("deployment_logs")
+}
+
+
 
 
 
