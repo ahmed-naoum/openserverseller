@@ -3,6 +3,7 @@ import { Router } from 'express';
 import axios from 'axios';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { authenticate } from '../middleware/auth.js';
+import { getSecret } from '../lib/secretStore.js';
 
 const router = Router();
 
@@ -28,11 +29,11 @@ router.post(
     }
 
     try {
-      const clientId = (process.env.YOUCAN_CLIENT_ID || '').trim();
-      const clientSecret = (process.env.YOUCAN_CLIENT_SECRET || '').trim();
+      const clientId = (getSecret('YOUCAN_CLIENT_ID') || '').trim();
+      const clientSecret = (getSecret('YOUCAN_CLIENT_SECRET') || '').trim();
       const origin = req.headers.origin || process.env.FRONTEND_URL || 'https://silacod.com';
       const redirectUri = `${origin.replace(/\/$/, '')}/dashboard/youcan-callback`;
-      const tokenEndpoint = process.env.YOUCAN_TOKEN_URL || 'https://api.youcan.shop/oauth/token';
+      const tokenEndpoint = getSecret('YOUCAN_TOKEN_URL') || 'https://api.youcan.shop/oauth/token';
 
       console.log(`[YouCan Token Exchange] Exchanging code via ${tokenEndpoint} | redirect_uri: ${redirectUri}`);
 
@@ -65,7 +66,7 @@ router.post(
       // Fetch store info (non-fatal if /me fails)
       let storeDomain: string | null = null;
       try {
-        const storeResponse = await axios.get(`${process.env.YOUCAN_API_URL || 'https://api.youcan.shop'}/me`, {
+        const storeResponse = await axios.get(`${getSecret('YOUCAN_API_URL') || 'https://api.youcan.shop'}/me`, {
           headers: {
             Authorization: `Bearer ${data.access_token}`,
             Accept: 'application/json',
@@ -151,7 +152,7 @@ router.get(
     }
 
     try {
-      const response = await axios.get(`${process.env.YOUCAN_API_URL || 'https://api.youcan.shop'}/orders`, {
+      const response = await axios.get(`${getSecret('YOUCAN_API_URL') || 'https://api.youcan.shop'}/orders`, {
         params: {
           include: 'customer',
           ...req.query
@@ -207,7 +208,7 @@ router.get(
     }
 
     try {
-      const response = await axios.get(`${process.env.YOUCAN_API_URL || 'https://api.youcan.shop'}/customers`, {
+      const response = await axios.get(`${getSecret('YOUCAN_API_URL') || 'https://api.youcan.shop'}/customers`, {
         params: req.query,
         headers: {
           Authorization: `Bearer ${vendor.youcanAccessToken}`,
@@ -273,7 +274,7 @@ router.post(
       let hasMore = true;
 
       while (hasMore) {
-        const response = await axios.get(`${process.env.YOUCAN_API_URL || 'https://api.youcan.shop'}/customers`, {
+        const response = await axios.get(`${getSecret('YOUCAN_API_URL') || 'https://api.youcan.shop'}/customers`, {
           params: { page, limit: 100 },
           headers: {
             Authorization: `Bearer ${vendor.youcanAccessToken}`,

@@ -1,17 +1,5 @@
-import nodemailer from 'nodemailer';
-
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'mail.silacod.com',
-  port: parseInt(process.env.SMTP_PORT || '587', 10),
-  secure: process.env.SMTP_SECURE === 'true',
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false,
-  },
-});
+import { getTransporter } from '../lib/mailTransport.js';
+import { getSecret } from '../lib/secretStore.js';
 
 export const sendOtpEmail = async (to: string, otp: string, lang: string = 'fr') => {
   const subjects: Record<string, string> = {
@@ -81,8 +69,8 @@ export const sendOtpEmail = async (to: string, otp: string, lang: string = 'fr')
   const html = bodies[lang] || bodies.fr;
 
   try {
-    await transporter.sendMail({
-      from: `"SILACOD" <${process.env.SMTP_FROM_EMAIL || 'mail@silacod.com'}>`,
+    await getTransporter().sendMail({
+      from: `"SILACOD" <${getSecret('SMTP_FROM_EMAIL') || 'mail@silacod.com'}>`,
       to,
       subject,
       html,
@@ -97,7 +85,7 @@ export const sendOtpEmail = async (to: string, otp: string, lang: string = 'fr')
 
 export const verifyTurnstile = async (token: string): Promise<boolean> => {
   try {
-    const secret = process.env.TURNSTILE_SECRET_KEY || '';
+    const secret = getSecret('TURNSTILE_SECRET_KEY') || '';
     
     const verifyWithSecret = async (sec: string) => {
       try {

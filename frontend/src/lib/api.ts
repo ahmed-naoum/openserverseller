@@ -221,7 +221,7 @@ export const productsApi = {
 };
 
 export const leadsApi = {
-  list: (params?: { status?: string; page?: number; limit?: number; search?: string; viewMode?: string; mode?: string; vendorId?: string; productId?: string; isSuspicious?: boolean; city?: string; coliatyPackageCode?: string; accountId?: string; agentId?: string }) =>
+  list: (params?: { status?: string; page?: number; limit?: number; search?: string; viewMode?: string; mode?: string; vendorId?: string; productId?: string; isSuspicious?: boolean; city?: string; coliatyPackageCode?: string; accountId?: string; agentId?: string; source?: string; sourceMode?: string; paymentSituation?: string; hasOrder?: 'yes' | 'no'; dateFrom?: string; dateTo?: string; sort?: string; withStats?: string }) =>
     api.get('/leads', { params }),
   create: (data: any) => api.post('/leads', data),
   import: (data: { leads: any[]; sourceMode?: string }) => api.post('/leads/import', data),
@@ -237,13 +237,23 @@ export const leadsApi = {
   bulkUpdateStatus: (data: { ids: number[]; status: string }) =>
     api.patch('/leads/bulk-status', data),
   assign: (id: string, data: { agentId: string }) => api.post(`/leads/${id}/assign`, data),
-  available: (params?: { influencerId?: number; limit?: number | string }) => api.get('/leads/available', { params }),
+  available: (params?: {
+    influencerId?: number;
+    limit?: number | string;
+    search?: string;
+    city?: string;
+    productId?: number | string;
+  }) => api.get('/leads/available', { params }),
   claim: (id: number) => api.post(`/leads/${id}/claim`),
   // Abandoned carts (call-center recovery)
   abandonedCarts: (params?: { page?: number; limit?: number; search?: string; status?: 'all' | 'saved' | 'unsaved' }) =>
     api.get('/leads/abandoned-carts', { params }),
   convertCart: (id: string) => api.post(`/leads/abandoned-carts/${id}/convert`),
   detail: (id: number) => api.get(`/leads/${id}/detail`),
+  timeline: (id: number) => api.get(`/leads/${id}/timeline`),
+  sessions: (id: number) => api.get(`/leads/${id}/sessions`),
+  recordContactClick: (id: number, channel: 'WHATSAPP' | 'CALL') =>
+    api.post(`/leads/${id}/contact-click`, { channel }),
   pushToDelivery: (
     id: number,
     data: {
@@ -262,8 +272,22 @@ export const leadsApi = {
       productVariant?: string;
     }
   ) => api.post(`/leads/${id}/push-to-delivery`, data),
-  livraison: (params?: { page?: number; limit?: number }) =>
-    api.get('/leads/livraison', { params }),
+  livraison: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+    paymentSituation?: string;
+    city?: string;
+    vendorId?: number | string;
+    hasCode?: 'yes' | 'no';
+    dateFrom?: string;
+    dateTo?: string;
+    minAmount?: number | string;
+    maxAmount?: number | string;
+    tab?: 'all' | 'uninvoiced_returns';
+    sort?: string;
+  }) => api.get('/leads/livraison', { params }),
   getParcelHistory: (code: string) => api.get(`/leads/coliaty/parcel/${code}/history`),
   getColiatyCities: () => api.get('/leads/coliaty/cities'),
   updatePaymentSituation: (id: string, data: { paymentSituation: string }) =>

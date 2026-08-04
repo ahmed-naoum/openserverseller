@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { checkAndActivateUser } from '../utils/verification.js';
+import { getSecret } from '../lib/secretStore.js';
 
 const router = Router();
 
@@ -38,7 +39,7 @@ router.post(
       console.log(`[DamaneSign Webhook] User ${user.id} contract signing marked as complete.`);
 
       if (fileId) {
-        const downloadUrl = `${process.env.DAMANESIGN_API_URL || 'https://api-recette.damanesign.ma'}/files/${fileId}/download`;
+        const downloadUrl = `${getSecret('DAMANESIGN_API_URL') || 'https://api-recette.damanesign.ma'}/files/${fileId}/download`;
         await prisma.user.update({
           where: { id: user.id },
           data: {

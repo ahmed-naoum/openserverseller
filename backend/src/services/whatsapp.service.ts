@@ -1,8 +1,7 @@
 import axios from 'axios';
+import { getSecret } from '../lib/secretStore.js';
 
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v18.0';
-const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
-const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 
 export interface WhatsAppMessage {
   to: string;
@@ -16,6 +15,11 @@ export interface WhatsAppMessage {
 }
 
 export const sendWhatsAppMessage = async (message: WhatsAppMessage): Promise<any> => {
+  // Read per call so credentials changed in the admin dashboard take effect
+  // without a restart.
+  const PHONE_NUMBER_ID = getSecret('WHATSAPP_PHONE_NUMBER_ID');
+  const ACCESS_TOKEN = getSecret('WHATSAPP_ACCESS_TOKEN');
+
   if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) {
     console.log('[DEV] WhatsApp message:', message);
     return { success: true, dev: true };
@@ -135,7 +139,7 @@ export const sendNewLeadWhatsApp = async (
 };
 
 export const verifyWhatsAppWebhook = (mode: string, token: string, challenge: string): string | null => {
-  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+  const verifyToken = getSecret('WHATSAPP_VERIFY_TOKEN');
   
   if (mode === 'subscribe' && token === verifyToken) {
     return challenge;

@@ -502,7 +502,7 @@ router.get(
 
     let decodedToken: any;
     try {
-      decodedToken = jwt.verify(token, process.env.JWT_SECRET || 'dev_secret_key_change_in_production_64_chars_long_string_1234567890');
+      decodedToken = jwt.verify(token, process.env.JWT_SECRET!);
     } catch {
       res.status(401).end();
       return;

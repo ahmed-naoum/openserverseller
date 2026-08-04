@@ -8,8 +8,8 @@ Ajouter un composant "Vidéo" dans le Constructeur de Page (SiteBuilder) qui per
 
 ## 2. Ce qu'il me manque (TRÈS IMPORTANT)
 Pour que Cloudinary fonctionne, l'API nécessite 3 éléments :
-1. **API Key** : `686749435119774` (Fourni)
-2. **API Secret** : `Z7DsFVEtIpa_kQfBDHquBQM9gr8` (Fourni)
+1. **API Key** : à définir dans `backend/.env` (`CLOUDINARY_API_KEY`)
+2. **API Secret** : à définir dans `backend/.env` (`CLOUDINARY_API_SECRET`) — ne jamais l'écrire ici
 3. **Cloud Name** : ⚠️ **NON FOURNI** ⚠️
 
 **👉 Veuillez me donner votre "Cloud Name" Cloudinary (ex: `dqxyz123`) pour que je puisse commencer l'intégration.** Vous pouvez le trouver sur le tableau de bord de votre compte Cloudinary.

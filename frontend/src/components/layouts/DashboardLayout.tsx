@@ -13,6 +13,7 @@ import LanguageSwitcherWidget from '../common/LanguageSwitcherWidget';
 import ConfirmationModal from '../ui/ConfirmationModal';
 import { 
   Home, 
+  Rocket, 
   Package, 
   Tag, 
   Users, 
@@ -24,7 +25,8 @@ import {
   MessageSquare, 
   Zap, 
   UserCheck, 
-  Shield, 
+  Shield,
+  KeyRound,
   ShieldCheck,
   Settings, 
   Eye,
@@ -276,6 +278,8 @@ const navigation = {
       icon: ShieldAlert,
       children: [
         { name: 'Paramètres Plateforme', href: '/admin/platform-settings', icon: Shield },
+        { name: 'Variables & Secrets', href: '/admin/secrets', icon: KeyRound },
+        { name: 'Déploiement', href: '/admin/deployments', icon: Rocket },
         { name: 'Sécurité & Firewall', href: '/admin/security', icon: ShieldAlert },
       ]
     },
@@ -785,6 +789,19 @@ export default function DashboardLayout() {
       return item;
     })
     .filter((item: any) => item !== null)
+    .map((item: any) => {
+      // Secrets and deployment management are SUPER_ADMIN-only; hide the links
+      // rather than let them lead to a page the RoleGuard will refuse.
+      if (!item?.children) return item;
+      if (user?.role === 'SUPER_ADMIN') return item;
+      return {
+        ...item,
+        children: item.children.filter(
+          (child: any) =>
+            child?.href !== '/admin/secrets' && child?.href !== '/admin/deployments',
+        ),
+      };
+    })
     .filter((item: any) => {
       if (item.href === '/admin/backups' && user?.role !== 'SUPER_ADMIN') return false;
       // Filter by mode for vendor dashboard

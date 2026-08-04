@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useSocket } from '../../contexts/SocketContext';
 import { api } from '../../lib/api';
 import { Replayer } from 'rrweb';
@@ -245,6 +246,7 @@ function PaginationControls({
 
 export default function LiveStreamInspector() {
   const { socket } = useSocket();
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<'LIVE' | 'HISTORY' | 'CHECKOUTS' | 'SIGNUPS'>('LIVE');
 
   const [realtime, setRealtime] = useState<{
@@ -652,6 +654,17 @@ export default function LiveStreamInspector() {
       setIsPaused(true);
     }
   };
+
+  // Deep link: /admin/live-stream?recording=<id> opens that replay straight away
+  // (used by the "Voir le replay" button on a lead's detail modal).
+  const deepLinkedRef = useRef(false);
+  useEffect(() => {
+    const recordingId = searchParams.get('recording');
+    if (!recordingId || deepLinkedRef.current) return;
+    deepLinkedRef.current = true;
+    setActiveTab('HISTORY');
+    openPlayback({ id: recordingId, ip: '', durationSec: 0 });
+  }, [searchParams]);
 
   const restartPlayback = () => {
     const r = playbackReplayerRef.current;

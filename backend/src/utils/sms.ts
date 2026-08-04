@@ -1,12 +1,27 @@
 import twilio from 'twilio';
+import { getSecret } from '../lib/secretStore.js';
 
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+// The client is rebuilt whenever the credentials change, so updating them in the
+// admin dashboard takes effect without a restart.
+let cachedClient: ReturnType<typeof twilio> | null = null;
+let cachedSid: string | undefined;
+let cachedToken: string | undefined;
 
-const client = accountSid && authToken ? twilio(accountSid, authToken) : null;
+const getClient = () => {
+  const accountSid = getSecret('TWILIO_ACCOUNT_SID');
+  const authToken = getSecret('TWILIO_AUTH_TOKEN');
+
+  if (!accountSid || !authToken) return null;
+  if (cachedClient && accountSid === cachedSid && authToken === cachedToken) return cachedClient;
+
+  cachedClient = twilio(accountSid, authToken);
+  cachedSid = accountSid;
+  cachedToken = authToken;
+  return cachedClient;
+};
 
 export const sendSMS = async (to: string, message: string): Promise<void> => {
+  const client = getClient();
   if (!client) {
     console.log(`[DEV] SMS to ${to}: ${message}`);
     return;
@@ -15,7 +30,7 @@ export const sendSMS = async (to: string, message: string): Promise<void> => {
   try {
     await client.messages.create({
       body: message,
-      from: fromNumber,
+      from: getSecret('TWILIO_PHONE_NUMBER'),
       to,
     });
     console.log(`SMS sent to ${to}`);
@@ -26,7 +41,7 @@ export const sendSMS = async (to: string, message: string): Promise<void> => {
 };
 
 export const sendOTPSMS = async (phone: string, otp: string, purpose: string = 'vérification'): Promise<void> => {
-  const message = `SILACOD: Votre code de ${purpose} est ${otp}. Valable ${process.env.OTP_EXPIRY_MINUTES || 5} minutes.`;
+  const message = `SILACOD: Votre code de ${purpose} est ${otp}. Valable ${getSecret('OTP_EXPIRY_MINUTES') || 5} minutes.`;
   await sendSMS(phone, message);
 };
 

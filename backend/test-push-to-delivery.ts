@@ -1,10 +1,12 @@
+import 'dotenv/config';
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 const BASE_URL = 'http://localhost:3001/api/v1';
-const JWT_SECRET = 'dev_secret_key_change_in_production_64_chars_long_string_1234567890';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error('JWT_SECRET is not set (add it to backend/.env)');
 const bypassToken = jwt.sign({ maintenanceBypass: true }, JWT_SECRET);
 
 async function createTestLead(agentId: number) {

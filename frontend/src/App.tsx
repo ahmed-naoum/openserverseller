@@ -65,6 +65,8 @@ import WooCommerceLeads from './pages/vendor/WooCommerceLeads';
 import GoogleSheetsLeads from './pages/vendor/GoogleSheetsLeads';
 import IntegrationsPage from './pages/vendor/IntegrationsPage';
 import PlatformSettings from './pages/admin/PlatformSettings';
+import AdminSecrets from './pages/admin/AdminSecrets';
+import AdminDeployments from './pages/admin/Deployments';
 import SecurityFirewall from './pages/admin/SecurityFirewall';
 import AdminEventRegistrations from './pages/admin/AdminEventRegistrations';
 import EventMasterclass from './pages/public/EventMasterclass';
@@ -479,6 +481,16 @@ function App() {
           <Route path="verifications" element={<AdminVerifications />} />
           <Route path="event-registrations" element={<AdminEventRegistrations />} />
           <Route path="platform-settings" element={<PlatformSettings />} />
+          <Route path="secrets" element={
+            <RoleGuard allowedRoles={['SUPER_ADMIN']}>
+              <AdminSecrets />
+            </RoleGuard>
+          } />
+          <Route path="deployments" element={
+            <RoleGuard allowedRoles={['SUPER_ADMIN']}>
+              <AdminDeployments />
+            </RoleGuard>
+          } />
           <Route path="professional-emails" element={
             <RoleGuard allowedRoles={['SUPER_ADMIN']}>
               <AdminProfessionalEmails />

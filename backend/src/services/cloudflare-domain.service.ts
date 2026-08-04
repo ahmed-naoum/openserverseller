@@ -1,4 +1,5 @@
 import { AppException } from '../middleware/errorHandler.js';
+import { getSecret } from '../lib/secretStore.js';
 
 const CLOUDFLARE_API_URL = 'https://api.cloudflare.com/client/v4';
 
@@ -20,7 +21,7 @@ interface CloudflareCustomHostnameResponse {
 
 export class CloudflareDomainService {
   private static getHeaders() {
-    const token = process.env.CLOUDFLARE_API_TOKEN;
+    const token = getSecret('CLOUDFLARE_API_TOKEN');
     if (!token) {
       throw new AppException(500, 'CLOUDFLARE_API_TOKEN is not configured');
     }
@@ -31,7 +32,7 @@ export class CloudflareDomainService {
   }
 
   private static getZoneId() {
-    const zoneId = process.env.CLOUDFLARE_ZONE_ID;
+    const zoneId = getSecret('CLOUDFLARE_ZONE_ID');
     if (!zoneId) {
       throw new AppException(500, 'CLOUDFLARE_ZONE_ID is not configured');
     }

@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import passport from 'passport';
 import { Strategy as JwtStrategy, ExtractJwt } from 'passport-jwt';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import { getSecret } from '../lib/secretStore.js';
 
 
 export const setupPassport = () => {
@@ -37,13 +38,18 @@ export const setupPassport = () => {
     )
   );
 
-  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  // Read through the store so credentials set in the admin dashboard are used.
+  // setupPassport() runs after loadSecrets() (see index.ts), so values are ready.
+  const googleClientId = getSecret('GOOGLE_CLIENT_ID');
+  const googleClientSecret = getSecret('GOOGLE_CLIENT_SECRET');
+
+  if (googleClientId && googleClientSecret) {
     passport.use(
       new GoogleStrategy(
         {
-          clientID: process.env.GOOGLE_CLIENT_ID,
-          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-          callbackURL: process.env.GOOGLE_CALLBACK_URL!,
+          clientID: googleClientId,
+          clientSecret: googleClientSecret,
+          callbackURL: getSecret('GOOGLE_CALLBACK_URL')!,
         },
         async (accessToken, refreshToken, profile, done) => {
           try {

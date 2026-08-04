@@ -176,6 +176,9 @@ export default function AgentLivraison() {
   const [historyParcel, setHistoryParcel] = useState<Parcel | null>(null);
   const [parcelHistory, setParcelHistory] = useState<HistoryEntry[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [internalTimeline, setInternalTimeline] = useState<any[]>([]);
+  const [loadingTimeline, setLoadingTimeline] = useState(false);
+  const [historyTab, setHistoryTab] = useState<'internal' | 'coliaty'>('internal');
   const [liveConnected, setLiveConnected] = useState(false);
   const [lastLiveUpdate, setLastLiveUpdate] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -287,10 +290,19 @@ export default function AgentLivraison() {
 
   const handleOpenHistory = async (parcel: Parcel) => {
     setHistoryParcel(parcel);
-    setLoadingHistory(true);
     setParcelHistory([]);
+    setInternalTimeline([]);
+
+    // Internal timeline (lead + order status changes, with their reasons)
+    setLoadingTimeline(true);
+    leadsApi.timeline(parcel.leadId)
+      .then(res => setInternalTimeline(res.data?.data?.entries || []))
+      .catch(() => { })
+      .finally(() => setLoadingTimeline(false));
+
+    if (!parcel.coliatyPackageCode) return;
+    setLoadingHistory(true);
     try {
-      if (!parcel.coliatyPackageCode) return;
       const res = await leadsApi.getParcelHistory(parcel.coliatyPackageCode);
       setParcelHistory(res.data?.data?.details || []);
     } catch (err: any) {
@@ -958,9 +970,11 @@ export default function AgentLivraison() {
                   <Clock className="w-5 h-5 text-indigo-500" />
                   Suivi du Colis
                 </h3>
-                <p className="text-xs text-gray-500 font-bold mt-1 uppercase tracking-wider">CODE: {historyParcel.coliatyPackageCode}</p>
+                <p className="text-xs text-gray-500 font-bold mt-1 uppercase tracking-wider">
+                  CODE: {historyParcel.coliatyPackageCode || 'Non synchronisé'} · #{historyParcel.orderNumber}
+                </p>
               </div>
-              <button 
+              <button
                 onClick={() => setHistoryParcel(null)}
                 className="text-gray-400 hover:text-gray-600 bg-white shadow-sm p-2 rounded-full transition-all hover:rotate-90"
               >
@@ -968,7 +982,94 @@ export default function AgentLivraison() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
+            {/* Internal history vs carrier history */}
+            <div className="flex gap-1 p-2 bg-gray-50 border-b border-gray-100">
+              <button
+                onClick={() => setHistoryTab('internal')}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all ${
+                  historyTab === 'internal' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-white'
+                }`}
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Historique Interne ({internalTimeline.length})
+              </button>
+              <button
+                onClick={() => setHistoryTab('coliaty')}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all ${
+                  historyTab === 'coliaty' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-white'
+                }`}
+              >
+                <Truck className="w-3.5 h-3.5" />
+                Suivi Coliaty ({parcelHistory.length})
+              </button>
+            </div>
+
+            <div className={`flex-1 overflow-y-auto p-6 scrollbar-thin ${historyTab === 'internal' ? '' : 'hidden'}`}>
+              {loadingTimeline ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-4">
+                  <div className="w-10 h-10 border-3 border-slate-100 border-t-slate-500 rounded-full animate-spin" />
+                  <p className="text-gray-400 text-sm font-medium">Chargement de l'historique interne...</p>
+                </div>
+              ) : internalTimeline.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-400 font-medium italic">Aucun changement de statut interne enregistré.</p>
+                </div>
+              ) : (
+                <div className="relative pl-6 border-l-2 border-slate-100 space-y-6 py-2 ml-2">
+                  {internalTimeline.map((entry, idx) => (
+                    <div key={entry.id} className="relative">
+                      <div className={`absolute -left-[31px] top-1.5 w-4 h-4 rounded-full border-2 border-white shadow-sm ${
+                        idx === 0 ? 'bg-slate-900 scale-125' : 'bg-slate-300'
+                      }`} />
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
+                            entry.scope === 'ORDER'
+                              ? 'bg-indigo-50 text-indigo-600 border border-indigo-100'
+                              : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            {entry.scope === 'ORDER' ? 'Commande' : 'Lead'}
+                          </span>
+                          <span className="text-[10px] font-bold text-gray-400">
+                            {format(new Date(entry.createdAt), "dd MMM yyyy 'à' HH:mm", { locale: fr })}
+                          </span>
+                        </div>
+
+                        <div className="bg-gray-50 rounded-2xl p-4 mt-1 border border-white shadow-sm">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {entry.oldStatus && (
+                              <>
+                                <span className="text-[11px] font-medium text-gray-400 line-through">
+                                  {statusConfig[entry.oldStatus]?.label || entry.oldStatus}
+                                </span>
+                                <span className="text-gray-300">➔</span>
+                              </>
+                            )}
+                            <span className={`px-2 py-0.5 rounded-md text-[11px] font-black uppercase tracking-wider border ${
+                              statusConfig[entry.newStatus]?.bg || 'bg-gray-100 border-gray-200'
+                            } ${statusConfig[entry.newStatus]?.color || 'text-gray-700'}`}>
+                              {statusConfig[entry.newStatus]?.label || entry.newStatus}
+                            </span>
+                          </div>
+                          {entry.changedBy && (
+                            <p className="text-[10px] font-bold text-indigo-600 mt-2 uppercase tracking-wider">
+                              Par : {entry.changedBy}
+                            </p>
+                          )}
+                          {entry.notes && (
+                            <p className="text-sm font-bold text-gray-700 leading-relaxed italic mt-2 bg-amber-50/60 border border-amber-100 rounded-xl p-3">
+                              "{entry.notes}"
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className={`flex-1 overflow-y-auto p-6 scrollbar-thin ${historyTab === 'coliaty' ? '' : 'hidden'}`}>
               {loadingHistory ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-4">
                   <div className="w-10 h-10 border-3 border-indigo-100 border-t-indigo-500 rounded-full animate-spin" />

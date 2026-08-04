@@ -78,21 +78,45 @@ cd /var/www/silacod/backend
 npm install
 
 # Create .env from template
+if [ ! -f .env.example ]; then
+  echo "❌ backend/.env.example is missing — cannot generate .env."
+  exit 1
+fi
 cp .env.example .env
-# Replace DATABASE_URL with the actual password
-sed -i "s|YOUR_PASSWORD|${DB_PASS}|g" .env
 
-# Generate a random JWT secret
+# Fail loudly if a placeholder we expect to substitute is absent, otherwise a
+# drifted .env.example would silently ship its committed dev value to production.
+require_placeholder() {
+  if ! grep -q "$1" .env; then
+    echo "❌ .env.example no longer contains the placeholder '$1'."
+    echo "   Refusing to continue: the generated .env would keep a hardcoded value."
+    exit 1
+  fi
+}
+
+# Database — replace the whole line so the user/host from the template can't leak through.
+require_placeholder "YOUR_PASSWORD"
+sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"postgresql://silacod:${DB_PASS}@localhost:5432/silacod_db\"|" .env
+
+# Generate a random JWT secret (64 hex chars)
+require_placeholder "CHANGE_ME_generate_a_64_char_random_string"
 JWT_SECRET=$(openssl rand -hex 32)
 sed -i "s|CHANGE_ME_generate_a_64_char_random_string|${JWT_SECRET}|g" .env
+
+# Generate the at-rest encryption key (must be exactly 32 chars for aes-256-cbc).
+# NOTE: on an existing database, overwriting this makes stored bank accounts
+# (BankAccount.ribAccount) undecryptable. Keep the original key when re-provisioning.
+require_placeholder "CHANGE_ME_generate_a_32_char_random_string"
+ENCRYPTION_KEY=$(openssl rand -hex 16)
+sed -i "s|CHANGE_ME_generate_a_32_char_random_string|${ENCRYPTION_KEY}|g" .env
 
 echo ""
 read -p "Enter your domain name (or VPS IP, e.g. yourdomain.com): " DOMAIN
 sed -i "s|FRONTEND_URL=http://localhost:5173|FRONTEND_URL=https://${DOMAIN}|g" .env
 
 echo ""
-echo "Your .env file:"
-cat .env
+echo "Generated .env. Values still needing real credentials:"
+grep -nE "your_.*_here|CHANGE_ME" .env || echo "  (none)"
 echo ""
 read -p "Edit .env now? (y/n): " EDIT_ENV
 if [ "$EDIT_ENV" = "y" ]; then

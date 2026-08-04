@@ -4,6 +4,7 @@ import { body, query, validationResult } from 'express-validator';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import axios from 'axios';
+import { getSecret } from '../lib/secretStore.js';
 
 // Helper to call Coliaty API
 const callColiatyCreateParcel = async (parcelData: {
@@ -19,9 +20,9 @@ const callColiatyCreateParcel = async (parcelData: {
   package_old_tracking?: string;
   package_note?: string;
 }): Promise<{ package_code: string; package_id: number }> => {
-  const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
-  const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
-  const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
+  const COLIATY_PUBLIC_KEY = getSecret('COLIATY_PUBLIC_KEY');
+  const COLIATY_SECRET_KEY = getSecret('COLIATY_SECRET_KEY');
+  const COLIATY_BASE_URL = getSecret('COLIATY_BASE_URL') || 'https://customer-api-v1.coliaty.com';
 
   if (!COLIATY_PUBLIC_KEY || !COLIATY_SECRET_KEY || COLIATY_PUBLIC_KEY === 'your_coliaty_public_key') {
     throw new AppException(400, '[Coliaty] Clés API non configurées.');
@@ -117,9 +118,9 @@ router.get(
       });
     }
 
-    const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
-    const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
-    const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
+    const COLIATY_PUBLIC_KEY = getSecret('COLIATY_PUBLIC_KEY');
+    const COLIATY_SECRET_KEY = getSecret('COLIATY_SECRET_KEY');
+    const COLIATY_BASE_URL = getSecret('COLIATY_BASE_URL') || 'https://customer-api-v1.coliaty.com';
 
     if (!COLIATY_PUBLIC_KEY || !COLIATY_SECRET_KEY || COLIATY_PUBLIC_KEY === 'your_coliaty_public_key') {
       throw new AppException(400, 'Clés API Coliaty non configurées.');
@@ -159,8 +160,13 @@ router.get(
   '/',
   authenticate,
   asyncHandler(async (req, res) => {
-    const { page = 1, limit = 50, status, agentId, search, viewMode, excludeProcessed, mode, vendorId, productId } = req.query;
+    const {
+      page = 1, limit = 50, status, agentId, search, viewMode, excludeProcessed, mode, vendorId, productId,
+      // Admin-oriented filters (all optional / additive)
+      city, source, sourceMode, paymentSituation, hasOrder, dateFrom, dateTo, sort, withStats,
+    } = req.query;
 
+    // Status lives in its own bucket so stats can be computed across all statuses
     const conditions: any[] = [];
 
     if (mode) {
@@ -225,38 +231,69 @@ router.get(
       });
     }
 
+    const statusConditions: any[] = [];
     if (status) {
       const statusStr = status as string;
       if (statusStr.includes(',')) {
-        conditions.push({ status: { in: statusStr.split(',').map(s => s.trim()) } });
+        statusConditions.push({ status: { in: statusStr.split(',').map(s => s.trim()) } });
       } else {
-        conditions.push({ status: statusStr });
+        statusConditions.push({ status: statusStr });
       }
     } else if (viewMode !== 'ALL' && excludeProcessed !== 'true') {
-      conditions.push({ status: { not: 'PUSHED_TO_DELIVERY' } });
+      statusConditions.push({ status: { not: 'PUSHED_TO_DELIVERY' } });
     }
 
     if (agentId) conditions.push({ assignedAgentId: Number(agentId as string) });
+
+    if (city) conditions.push({ city: { equals: city as string, mode: 'insensitive' } });
+    if (source) conditions.push({ source: source as string });
+    if (sourceMode) conditions.push({ sourceMode: sourceMode as string });
+    if (paymentSituation) conditions.push({ paymentSituation: paymentSituation as string });
+    if (hasOrder === 'yes') conditions.push({ order: { isNot: null } });
+    if (hasOrder === 'no') conditions.push({ order: null });
+
+    if (dateFrom || dateTo) {
+      const createdAt: any = {};
+      if (dateFrom) createdAt.gte = new Date(`${dateFrom}T00:00:00.000Z`);
+      if (dateTo) createdAt.lte = new Date(`${dateTo}T23:59:59.999Z`);
+      conditions.push({ createdAt });
+    }
 
     if (search) {
       conditions.push({
         OR: [
           { fullName: { contains: search as string, mode: 'insensitive' } },
           { phone: { contains: search as string } },
+          { whatsapp: { contains: search as string } },
           { city: { contains: search as string, mode: 'insensitive' } },
+          { address: { contains: search as string, mode: 'insensitive' } },
           { order: { coliatyPackageCode: { contains: search as string, mode: 'insensitive' } } },
+          { order: { orderNumber: { contains: search as string, mode: 'insensitive' } } },
         ]
       });
     }
 
-    const where = conditions.length > 0 ? { AND: conditions } : {};
+    // `where` = every filter; `whereWithoutStatus` powers the per-status counts
+    const allConditions = [...conditions, ...statusConditions];
+    const where = allConditions.length > 0 ? { AND: allConditions } : {};
+    const whereWithoutStatus = conditions.length > 0 ? { AND: conditions } : {};
+
+    const orderByMap: Record<string, any> = {
+      recent: { createdAt: 'desc' },
+      oldest: { createdAt: 'asc' },
+      updated: { updatedAt: 'desc' },
+      name: { fullName: 'asc' },
+      city: { city: 'asc' },
+      amount_desc: { order: { totalAmountMad: 'desc' } },
+      amount_asc: { order: { totalAmountMad: 'asc' } },
+    };
 
     const [leads, total] = await Promise.all([
       prisma.lead.findMany({
         where,
         include: {
           vendor: {
-            include: { profile: true },
+            include: { profile: true, role: true },
           },
           assignedAgent: {
             include: { profile: true },
@@ -271,16 +308,110 @@ router.get(
             take: 3,
           },
           referralLink: {
-            include: { product: { include: { images: true } }, landingPage: true },
+            include: {
+              product: { include: { images: true } },
+              landingPage: true,
+              influencer: { include: { profile: true, role: true } },
+            },
           },
           order: true,
         },
         skip: (Number(page) - 1) * Number(limit),
         take: Number(limit),
-        orderBy: { createdAt: 'desc' },
+        orderBy: orderByMap[sort as string] || { createdAt: 'desc' },
       }),
       prisma.lead.count({ where }),
     ]);
+
+    // Contact-click counts (WhatsApp / appel) for the leads on this page.
+    // Raw SQL so it keeps working regardless of Prisma client generation state.
+    const leadIds = leads.map(l => l.id);
+    const clickMap = new Map<number, any>();
+    if (leadIds.length > 0) {
+      const clickRows = await prisma.$queryRaw<
+        { leadId: number; channel: string; count: number; lastAt: Date }[]
+      >`
+        SELECT "leadId", "channel", COUNT(*)::int AS count, MAX("createdAt") AS "lastAt"
+        FROM lead_contact_clicks
+        WHERE "leadId" = ANY(${leadIds}::int[])
+        GROUP BY "leadId", "channel"
+      `;
+      for (const row of clickRows) {
+        const entry = clickMap.get(row.leadId) || { whatsapp: 0, call: 0, lastWhatsappAt: null, lastCallAt: null };
+        if (row.channel === 'WHATSAPP') {
+          entry.whatsapp = Number(row.count);
+          entry.lastWhatsappAt = row.lastAt;
+        } else if (row.channel === 'CALL') {
+          entry.call = Number(row.count);
+          entry.lastCallAt = row.lastAt;
+        }
+        clickMap.set(row.leadId, entry);
+      }
+    }
+
+    // Optional aggregate block — only the admin console asks for it
+    let stats: any = undefined;
+    let filterOptions: any = undefined;
+    if (withStats === 'true') {
+      const orderScope = conditions.length > 0 ? { lead: { is: { AND: conditions } } } : {};
+
+      const [byStatusRows, orderAgg, deliveredAgg, cityRows, sourceRows, agentUsers] = await Promise.all([
+        prisma.lead.groupBy({
+          by: ['status'],
+          where: whereWithoutStatus,
+          _count: { _all: true },
+        }),
+        prisma.order.aggregate({
+          where: orderScope,
+          _sum: { totalAmountMad: true },
+          _count: { _all: true },
+        }),
+        prisma.order.aggregate({
+          where: { ...orderScope, status: 'DELIVERED' },
+          _sum: { totalAmountMad: true },
+          _count: { _all: true },
+        }),
+        prisma.lead.findMany({
+          where: { ...whereWithoutStatus, city: { not: null } },
+          select: { city: true },
+          distinct: ['city'],
+          take: 500,
+        }),
+        prisma.lead.findMany({
+          where: whereWithoutStatus,
+          select: { source: true },
+          distinct: ['source'],
+          take: 100,
+        }),
+        prisma.user.findMany({
+          where: { isActive: true, role: { name: 'CALL_CENTER_AGENT' } },
+          select: { id: true, email: true, profile: { select: { fullName: true } } },
+          orderBy: { profile: { fullName: 'asc' } },
+        }),
+      ]);
+
+      const byStatus: Record<string, number> = {};
+      let scopeTotal = 0;
+      for (const row of byStatusRows) {
+        byStatus[row.status] = row._count._all;
+        scopeTotal += row._count._all;
+      }
+
+      stats = {
+        total: scopeTotal,
+        byStatus,
+        ordersCount: orderAgg._count._all,
+        ordersRevenue: orderAgg._sum.totalAmountMad || 0,
+        deliveredCount: deliveredAgg._count._all,
+        deliveredRevenue: deliveredAgg._sum.totalAmountMad || 0,
+      };
+
+      filterOptions = {
+        cities: cityRows.map(r => r.city).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b))),
+        sources: sourceRows.map(r => r.source).filter(Boolean).sort(),
+        agents: agentUsers.map(a => ({ id: a.id, name: a.profile?.fullName || a.email || `Agent #${a.id}` })),
+      };
+    }
 
     res.json({
       status: 'success',
@@ -308,6 +439,10 @@ router.get(
               id: l.vendor.id,
               fullName: l.vendor.profile?.fullName || 'Utilisateur',
               phone: l.vendor.phone || '',
+              accountType: (l.vendor as any).role?.name || null, // VENDOR | INFLUENCER | ...
+              accountMode: (l.vendor as any).mode || null,       // SELLER | AFFILIATE
+              isInfluencer: (l.vendor as any).isInfluencer || false,
+              subdomain: (l.vendor as any).subdomain || null,
             }
             : null,
           recentCalls: l.callLogs.length,
@@ -323,6 +458,60 @@ router.get(
           coliatyPackageCode: l.order?.coliatyPackageCode || null,
           source: l.source,
           createdAt: l.createdAt,
+          // --- Additional detail (already loaded above, previously dropped) ---
+          sourceMode: l.sourceMode,
+          sourceId: l.sourceId,
+          paymentSituation: l.paymentSituation,
+          requestedPriceMad: l.requestedPriceMad,
+          requestedPriceStatus: l.requestedPriceStatus,
+          updatedAt: l.updatedAt,
+          importBatch: l.importBatch
+            ? { id: l.importBatch.id, fileName: (l.importBatch as any).fileName || null }
+            : null,
+          referralLink: l.referralLink
+            ? {
+              id: l.referralLink.id,
+              code: (l.referralLink as any).code || null,
+              landingPageTitle: (l.referralLink as any).landingPage?.title || null,
+              // Everything needed to rebuild the public /r/<code> URL client-side
+              ownerSubdomain: (l.referralLink as any).influencer?.subdomain || null,
+              ownerCustomDomain: (l.referralLink as any).influencer?.customDomain || null,
+              ownerCustomDomainStatus: (l.referralLink as any).influencer?.customDomainStatus || null,
+            }
+            : null,
+          // Who owns the link the lead came through, and what kind of account it is
+          linkOwner: (l.referralLink as any)?.influencer
+            ? {
+              id: (l.referralLink as any).influencer.id,
+              fullName: (l.referralLink as any).influencer.profile?.fullName
+                || (l.referralLink as any).influencer.email,
+              accountType: (l.referralLink as any).influencer.role?.name || null, // VENDOR | INFLUENCER | ...
+              accountMode: (l.referralLink as any).influencer.mode || null,        // SELLER | AFFILIATE
+              isInfluencer: (l.referralLink as any).influencer.isInfluencer || false,
+              subdomain: (l.referralLink as any).influencer.subdomain || null,
+            }
+            : null,
+          contactClicks: clickMap.get(l.id) || { whatsapp: 0, call: 0, lastWhatsappAt: null, lastCallAt: null },
+          order: l.order
+            ? {
+              id: l.order.id,
+              orderNumber: l.order.orderNumber,
+              status: l.order.status,
+              totalAmountMad: l.order.totalAmountMad,
+              coliatyPackageCode: l.order.coliatyPackageCode,
+              coliatyPackageId: l.order.coliatyPackageId,
+              createdAt: l.order.createdAt,
+            }
+            : null,
+          lastStatusChange: l.statusHistory[0]
+            ? {
+              oldStatus: l.statusHistory[0].oldStatus,
+              newStatus: l.statusHistory[0].newStatus,
+              notes: l.statusHistory[0].notes,
+              createdAt: l.statusHistory[0].createdAt,
+            }
+            : null,
+          statusChangeCount: l.statusHistory.length,
         })),
         pagination: {
           page: Number(page),
@@ -330,6 +519,8 @@ router.get(
           total,
           totalPages: Math.ceil(total / Number(limit)),
         },
+        ...(stats ? { stats } : {}),
+        ...(filterOptions ? { filterOptions } : {}),
       },
     });
   })
@@ -341,7 +532,7 @@ router.get(
   authorize('CALL_CENTER_AGENT', 'CONFIRMATION_AGENT', 'AGENT', 'HELPER', 'SUPER_ADMIN', 'VENDOR'),
   asyncHandler(async (req, res) => {
     const agentId = req.user!.id;
-    const { influencerId, limit } = req.query;
+    const { influencerId, limit, search, city, productId } = req.query;
 
     let takeLimit = 20;
     if (limit) {
@@ -416,19 +607,84 @@ router.get(
       ];
     }
 
-    const [leads, totalAvailable] = await Promise.all([
+    // Scope before the agent's own search/filters — used for the dropdown options
+    // and to show how many leads exist in total behind a filtered view.
+    const scopeWhere = { ...where };
+
+    const extraConditions: any[] = [];
+
+    if (search) {
+      const term = (search as string).trim();
+      // Phone hunting: match on digits only so "0667…", "+212667…" and "212667…" all hit
+      const digits = term.replace(/\D/g, '');
+      const or: any[] = [
+        { fullName: { contains: term, mode: 'insensitive' } },
+        { city: { contains: term, mode: 'insensitive' } },
+        { address: { contains: term, mode: 'insensitive' } },
+        { productVariant: { contains: term, mode: 'insensitive' } },
+        { referralLink: { product: { nameFr: { contains: term, mode: 'insensitive' } } } },
+        { referralLink: { product: { nameAr: { contains: term, mode: 'insensitive' } } } },
+        { referralLink: { product: { sku: { contains: term, mode: 'insensitive' } } } },
+      ];
+      if (digits.length >= 3) {
+        const tail = digits.slice(-9);
+        or.push({ phone: { contains: tail } });
+        or.push({ whatsapp: { contains: tail } });
+      }
+      extraConditions.push({ OR: or });
+    }
+
+    if (city) extraConditions.push({ city: { equals: city as string, mode: 'insensitive' } });
+    if (productId) extraConditions.push({ referralLink: { productId: Number(productId) } });
+
+    if (extraConditions.length > 0) where.AND = extraConditions;
+
+    const [leads, totalAvailable, totalScope, scopeRows] = await Promise.all([
       prisma.lead.findMany({
         where,
         take: takeLimit,
         orderBy: { createdAt: 'desc' },
-        include: { 
+        include: {
           referralLink: {
             include: { product: { include: { images: true } }, landingPage: true }
           }
         },
       }),
       prisma.lead.count({ where }),
+      prisma.lead.count({ where: scopeWhere }),
+      // Options for the city / product pickers, over the unfiltered scope
+      prisma.lead.findMany({
+        where: scopeWhere,
+        select: {
+          city: true,
+          referralLink: { select: { product: { select: { id: true, nameFr: true, nameAr: true, sku: true } } } },
+        },
+        take: 1000,
+      }),
     ]);
+
+    const citySet = new Set<string>();
+    const productMap = new Map<number, { name: string; sku: string | null }>();
+    for (const row of scopeRows) {
+      if (row.city) citySet.add(row.city);
+      const p = row.referralLink?.product;
+      if (p && !productMap.has(p.id)) {
+        productMap.set(p.id, { name: p.nameFr || p.nameAr || `#${p.id}`, sku: p.sku || null });
+      }
+    }
+
+    // Several distinct products can share a name — append the SKU so the
+    // picker doesn't show identical-looking rows.
+    const nameCounts = new Map<string, number>();
+    for (const { name } of productMap.values()) {
+      nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
+    }
+    const productOptions = Array.from(productMap.entries())
+      .map(([id, { name, sku }]) => ({
+        id,
+        name: (nameCounts.get(name) || 0) > 1 && sku ? `${name} · ${sku}` : name,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     res.json({
       status: 'success',
@@ -444,9 +700,14 @@ router.get(
           } : null,
         })),
         totalAvailable,
+        totalScope,
         hasActiveLead: !!activeLead,
         activeLeadId: activeLead?.id || null,
         assignedInfluencers,
+        filterOptions: {
+          cities: Array.from(citySet).sort((a, b) => a.localeCompare(b)),
+          products: productOptions,
+        },
       },
     });
   })
@@ -458,13 +719,33 @@ router.get(
   authenticate,
   authorize('CALL_CENTER_AGENT', 'HELPER', 'SUPER_ADMIN'),
   asyncHandler(async (req, res) => {
-    const { page = 1, limit = 50 } = req.query;
+    const {
+      page = 1,
+      limit = 50,
+      search,
+      status,
+      paymentSituation,
+      city,
+      vendorId,
+      hasCode,
+      dateFrom,
+      dateTo,
+      minAmount,
+      maxAmount,
+      tab,
+      sort = 'recent',
+    } = req.query as Record<string, string | undefined>;
 
-    const where: any = {
+    const pageNum = Math.max(1, Number(page) || 1);
+    // Cap generously: the agent dashboard still pulls large unpaginated pages
+    const limitNum = Math.min(1000, Math.max(1, Number(limit) || 50));
+
+    // --- 1. Base scope (what this user is allowed to see at all) ---
+    const baseWhere: any = {
       order: { isNot: null }, // Leads that have been converted to orders
     };
     if (req.user!.roleName === 'CALL_CENTER_AGENT') {
-      where.assignedAgentId = req.user!.id;
+      baseWhere.assignedAgentId = req.user!.id;
     } else if (req.user!.roleName === 'HELPER') {
       if (!req.user!.canManageOrders) {
         throw new AppException(403, 'Permission denied: Vous n\'avez pas le droit de gérer les colis');
@@ -474,35 +755,113 @@ router.get(
         where: { helperId: req.user!.id },
       });
       const assignedUserIds = assignments.map((a: any) => a.targetUserId);
-      where.vendorId = { in: assignedUserIds };
+      baseWhere.vendorId = { in: assignedUserIds };
     }
 
-    // Get leads for delivery tracking
-    const agentLeads = await prisma.lead.findMany({
-      where,
-      include: {
-        vendor: { include: { profile: true } },
-        order: {
-          include: {
-            items: {
-              include: {
-                product: {
-                  include: { images: { where: { isPrimary: true }, take: 1 } },
+    // --- 2. Filters layered on top of the base scope ---
+    const where: any = { ...baseWhere };
+    const orderFilter: any = {};
+
+    const statusList = (status || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (statusList.length > 0) orderFilter.status = { in: statusList };
+
+    if (city) orderFilter.customerCity = { equals: city, mode: 'insensitive' };
+    if (hasCode === 'yes') orderFilter.coliatyPackageCode = { not: null };
+    if (hasCode === 'no') orderFilter.coliatyPackageCode = null;
+
+    if (dateFrom || dateTo) {
+      orderFilter.createdAt = {};
+      if (dateFrom) orderFilter.createdAt.gte = new Date(`${dateFrom}T00:00:00.000Z`);
+      if (dateTo) orderFilter.createdAt.lte = new Date(`${dateTo}T23:59:59.999Z`);
+    }
+
+    if (minAmount || maxAmount) {
+      orderFilter.totalAmountMad = {};
+      if (minAmount) orderFilter.totalAmountMad.gte = Number(minAmount);
+      if (maxAmount) orderFilter.totalAmountMad.lte = Number(maxAmount);
+    }
+
+    if (paymentSituation) where.paymentSituation = paymentSituation;
+
+    // A vendor filter can only ever narrow the base scope, never widen it
+    if (vendorId && !Number.isNaN(Number(vendorId))) {
+      if (req.user!.roleName === 'HELPER') {
+        const allowed: number[] = baseWhere.vendorId?.in || [];
+        if (allowed.includes(Number(vendorId))) where.vendorId = Number(vendorId);
+      } else {
+        where.vendorId = Number(vendorId);
+      }
+    }
+
+    // "Retours non facturés" tab
+    if (tab === 'uninvoiced_returns') {
+      orderFilter.status = { in: ['RETURNED'] };
+      where.paymentSituation = { not: 'FACTURED' };
+    }
+
+    if (Object.keys(orderFilter).length > 0) {
+      where.order = { is: orderFilter };
+    }
+
+    if (search) {
+      where.OR = [
+        { fullName: { contains: search, mode: 'insensitive' } },
+        { order: { is: { customerName: { contains: search, mode: 'insensitive' } } } },
+        { order: { is: { customerPhone: { contains: search } } } },
+        { order: { is: { customerCity: { contains: search, mode: 'insensitive' } } } },
+        { order: { is: { orderNumber: { contains: search, mode: 'insensitive' } } } },
+        { order: { is: { coliatyPackageCode: { contains: search, mode: 'insensitive' } } } },
+      ];
+    }
+
+    const orderByMap: Record<string, any> = {
+      recent: { updatedAt: 'desc' },
+      oldest: { updatedAt: 'asc' },
+      newest_order: { order: { createdAt: 'desc' } },
+      oldest_order: { order: { createdAt: 'asc' } },
+      amount_desc: { order: { totalAmountMad: 'desc' } },
+      amount_asc: { order: { totalAmountMad: 'asc' } },
+      customer: { order: { customerName: 'asc' } },
+    };
+
+    // --- 3. Page of results + total for that filter set ---
+    const [total, agentLeads] = await Promise.all([
+      prisma.lead.count({ where }),
+      prisma.lead.findMany({
+        where,
+        include: {
+          vendor: { include: { profile: true } },
+          order: {
+            include: {
+              statusHistory: {
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+                include: { changedByUser: { include: { profile: true } } },
+              },
+              items: {
+                include: {
+                  product: {
+                    include: { images: { where: { isPrimary: true }, take: 1 } },
+                  },
                 },
               },
             },
           },
         },
-      },
-      skip: (Number(page) - 1) * Number(limit),
-      take: Number(limit),
-      orderBy: { updatedAt: 'desc' },
-    });
+        skip: (pageNum - 1) * limitNum,
+        take: limitNum,
+        orderBy: orderByMap[sort as string] || orderByMap.recent,
+      }),
+    ]);
 
     const parcels = agentLeads
       .filter(l => l.order)
       .map(l => {
         const o = l.order as any;
+        const lastChange = o.statusHistory?.[0] || null;
         return {
           id: o.id,
           orderNumber: o.orderNumber,
@@ -530,15 +889,75 @@ router.get(
           leadId: l.id,
           leadFullName: l.fullName,
           paymentSituation: l.paymentSituation,
+          vendorId: l.vendorId,
           vendorName: l.vendor?.profile?.fullName || l.vendor?.email || null,
           vendorEmail: l.vendor?.email || null,
           createdAt: o.createdAt,
+          // Last manual status change (reason is mandatory for DELIVERED / RETURNED)
+          lastStatusNote: lastChange?.notes || null,
+          lastStatusAt: lastChange?.createdAt || null,
+          lastStatusBy:
+            lastChange?.changedByUser?.profile?.fullName ||
+            lastChange?.changedByUser?.email ||
+            null,
         };
       });
 
+    // --- 4. Stats + filter options computed over the whole visible scope ---
+    const scopeRows = await prisma.lead.findMany({
+      where: baseWhere,
+      select: {
+        vendorId: true,
+        paymentSituation: true,
+        vendor: { select: { email: true, profile: { select: { fullName: true } } } },
+        order: { select: { status: true, customerCity: true, coliatyPackageCode: true } },
+      },
+    });
+
+    const statusCounts: Record<string, number> = {};
+    const cities = new Set<string>();
+    const vendorMap = new Map<number, string>();
+    let withColiaty = 0;
+    let uninvoicedReturns = 0;
+
+    for (const row of scopeRows) {
+      const st = row.order?.status || 'UNKNOWN';
+      statusCounts[st] = (statusCounts[st] || 0) + 1;
+      if (row.order?.customerCity) cities.add(row.order.customerCity);
+      if (row.order?.coliatyPackageCode) withColiaty++;
+      if (st === 'RETURNED' && row.paymentSituation !== 'FACTURED') uninvoicedReturns++;
+      if (row.vendorId && !vendorMap.has(row.vendorId)) {
+        vendorMap.set(
+          row.vendorId,
+          row.vendor?.profile?.fullName || row.vendor?.email || `#${row.vendorId}`
+        );
+      }
+    }
+
     res.json({
       status: 'success',
-      data: { parcels, total: parcels.length },
+      data: {
+        parcels,
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.max(1, Math.ceil(total / limitNum)),
+        stats: {
+          total: scopeRows.length,
+          withColiaty,
+          pending: statusCounts['PENDING'] || 0,
+          delivered: statusCounts['DELIVERED'] || 0,
+          returned: statusCounts['RETURNED'] || 0,
+          uninvoicedReturns,
+          byStatus: statusCounts,
+        },
+        filterOptions: {
+          cities: Array.from(cities).sort((a, b) => a.localeCompare(b)),
+          vendors: Array.from(vendorMap.entries())
+            .map(([id, name]) => ({ id, name }))
+            .sort((a, b) => a.name.localeCompare(b.name)),
+        },
+      },
     });
   })
 );
@@ -550,9 +969,9 @@ router.get(
   asyncHandler(async (req, res) => {
     const { code } = req.params;
     
-    const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
-    const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
-    const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
+    const COLIATY_PUBLIC_KEY = getSecret('COLIATY_PUBLIC_KEY');
+    const COLIATY_SECRET_KEY = getSecret('COLIATY_SECRET_KEY');
+    const COLIATY_BASE_URL = getSecret('COLIATY_BASE_URL') || 'https://customer-api-v1.coliaty.com';
 
     if (!COLIATY_PUBLIC_KEY || !COLIATY_SECRET_KEY || COLIATY_PUBLIC_KEY === 'your_coliaty_public_key') {
       throw new AppException(400, 'Clés API Coliaty non configurées.');
@@ -744,10 +1163,19 @@ router.get(
         },
         referralLink: {
           include: {
-            influencer: { include: { profile: true } },
+            influencer: { include: { profile: true, role: true } },
             product: { include: { images: true } },
             landingPage: true
           }
+        },
+        // Needed for the Coliaty tracking code and the delivery transition
+        order: {
+          include: {
+            statusHistory: {
+              orderBy: { createdAt: 'desc' },
+              include: { changedByUser: { include: { profile: true } } },
+            },
+          },
         },
       },
     });
@@ -770,7 +1198,12 @@ router.get(
 
     const { vendor, referralLink, ...leadData } = lead;
     const influencer = referralLink?.influencer
-      ? { ...referralLink.influencer, fullName: referralLink.influencer.profile?.fullName || referralLink.influencer.email }
+      ? {
+        ...referralLink.influencer,
+        fullName: referralLink.influencer.profile?.fullName || referralLink.influencer.email,
+        accountType: (referralLink.influencer as any).role?.name || null, // VENDOR | INFLUENCER
+        accountMode: (referralLink.influencer as any).mode || null,       // SELLER | AFFILIATE
+      }
       : null;
     const product = referralLink?.product
       ? {
@@ -791,6 +1224,199 @@ router.get(
         influencer,
         product,
         vendor: vendorFormatted
+      },
+    });
+  })
+);
+
+// POST /:id/contact-click - record that an operator opened WhatsApp / dialled the lead
+router.post(
+  '/:id/contact-click',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const leadId = Number(req.params.id);
+    const channel = String(req.body?.channel || '').toUpperCase();
+
+    if (!['WHATSAPP', 'CALL'].includes(channel)) {
+      throw new AppException(400, 'channel must be WHATSAPP or CALL');
+    }
+
+    const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { id: true, assignedAgentId: true } });
+    if (!lead) throw new AppException(404, 'Lead introuvable');
+
+    // An agent may only log contact attempts on their own leads
+    if (req.user!.roleName === 'CALL_CENTER_AGENT' && lead.assignedAgentId !== req.user!.id) {
+      throw new AppException(403, 'Permission denied: Ce lead ne vous est pas assigné');
+    }
+
+    await prisma.$executeRaw`
+      INSERT INTO lead_contact_clicks ("leadId", "userId", "channel", "createdAt")
+      VALUES (${leadId}, ${req.user!.id}, ${channel}, NOW())
+    `;
+
+    const rows = await prisma.$queryRaw<{ channel: string; count: number }[]>`
+      SELECT "channel", COUNT(*)::int AS count
+      FROM lead_contact_clicks
+      WHERE "leadId" = ${leadId}
+      GROUP BY "channel"
+    `;
+    const counts = { whatsapp: 0, call: 0 };
+    for (const r of rows) {
+      if (r.channel === 'WHATSAPP') counts.whatsapp = Number(r.count);
+      if (r.channel === 'CALL') counts.call = Number(r.count);
+    }
+
+    res.json({ status: 'success', data: { leadId, channel, counts } });
+  })
+);
+
+// GET /:id/timeline - merged internal history (lead status changes + order status
+// changes) for a lead. Unlike /:id/detail this stays readable once the lead has been
+// pushed to delivery, which is exactly when the parcel screens need it.
+router.get(
+  '/:id/timeline',
+  authenticate,
+  authorize('SUPER_ADMIN', 'HELPER', 'CALL_CENTER_AGENT', 'VENDOR'),
+  asyncHandler(async (req, res) => {
+    const leadId = Number(req.params.id);
+
+    const lead = await prisma.lead.findUnique({
+      where: { id: leadId },
+      include: {
+        statusHistory: {
+          orderBy: { createdAt: 'desc' },
+          include: { changer: { include: { profile: true } } },
+        },
+        order: {
+          include: {
+            statusHistory: {
+              orderBy: { createdAt: 'desc' },
+              include: { changedByUser: { include: { profile: true } } },
+            },
+          },
+        },
+      },
+    });
+    if (!lead) throw new AppException(404, 'Lead introuvable');
+
+    if (req.user!.roleName === 'VENDOR' && lead.vendorId !== req.user!.id) {
+      throw new AppException(403, 'Permission denied');
+    }
+
+    const naming = (u: any) => u?.profile?.fullName || u?.email || null;
+
+    const entries = [
+      ...lead.statusHistory.map(h => ({
+        id: `lead-${h.id}`,
+        scope: 'LEAD' as const,
+        oldStatus: h.oldStatus,
+        newStatus: h.newStatus,
+        notes: h.notes,
+        changedBy: naming((h as any).changer),
+        createdAt: h.createdAt,
+      })),
+      ...((lead.order?.statusHistory || []).map(h => ({
+        id: `order-${h.id}`,
+        scope: 'ORDER' as const,
+        oldStatus: h.oldStatus,
+        newStatus: h.newStatus,
+        notes: h.notes,
+        changedBy: naming((h as any).changedByUser),
+        createdAt: h.createdAt,
+      }))),
+    ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    res.json({
+      status: 'success',
+      data: {
+        leadId,
+        currentStatus: lead.status,
+        order: lead.order
+          ? {
+            id: lead.order.id,
+            orderNumber: lead.order.orderNumber,
+            status: lead.order.status,
+            totalAmountMad: lead.order.totalAmountMad,
+            coliatyPackageCode: lead.order.coliatyPackageCode,
+            coliatyPackageId: lead.order.coliatyPackageId,
+            createdAt: lead.order.createdAt,
+          }
+          : null,
+        entries,
+      },
+    });
+  })
+);
+
+// GET /:id/sessions - live-stream recordings (Streaming Direct & Replay) tied to this lead.
+// A lead is matched to a browsing session either explicitly (an abandoned cart that was
+// converted into this lead) or by the phone number captured on the /r/<code> page.
+router.get(
+  '/:id/sessions',
+  authenticate,
+  authorize('SUPER_ADMIN', 'HELPER', 'CALL_CENTER_AGENT'),
+  asyncHandler(async (req, res) => {
+    const leadId = Number(req.params.id);
+
+    const lead = await prisma.lead.findUnique({
+      where: { id: leadId },
+      select: { id: true, phone: true, whatsapp: true, referralLink: { select: { code: true } } },
+    });
+    if (!lead) throw new AppException(404, 'Lead introuvable');
+
+    // Match phones on their last 9 digits so 06…, +2126…, 2126… all line up
+    const tail = (v?: string | null) => (v || '').replace(/\D/g, '').slice(-9);
+    const phoneTails = [tail(lead.phone), tail(lead.whatsapp)].filter(t => t.length === 9);
+
+    const orConditions: any[] = [{ convertedLeadId: leadId }];
+    for (const t of phoneTails) orConditions.push({ phone: { endsWith: t } });
+
+    const attempts = await prisma.checkoutAttempt.findMany({
+      where: { OR: orConditions },
+      orderBy: { updatedAt: 'desc' },
+      take: 25,
+    });
+
+    const sessionIds = attempts.map(a => a.sessionId);
+    const recordings = sessionIds.length
+      ? await prisma.sessionRecording.findMany({
+        where: { sessionId: { in: sessionIds } },
+        select: {
+          id: true, sessionId: true, ip: true, userAgent: true, path: true,
+          durationSec: true, hasLead: true, createdAt: true,
+        },
+      })
+      : [];
+    const recBySession = new Map(recordings.map(r => [r.sessionId, r]));
+
+    res.json({
+      status: 'success',
+      data: {
+        referralCode: lead.referralLink?.code || null,
+        sessions: attempts.map(a => {
+          const rec = recBySession.get(a.sessionId);
+          return {
+            attemptId: a.id,
+            sessionId: a.sessionId,
+            recordingId: rec?.id || null,
+            ip: rec?.ip || a.ip,
+            userAgent: rec?.userAgent || a.userAgent,
+            path: rec?.path || a.path,
+            durationSec: rec?.durationSec ?? null,
+            referralCode: a.referralCode,
+            productName: a.productName,
+            fullName: a.fullName,
+            phone: a.phone,
+            city: a.city,
+            address: a.address,
+            fieldsFilled: a.fieldsFilled,
+            completed: a.completed,
+            convertedLeadId: a.convertedLeadId,
+            matchedBy: a.convertedLeadId === leadId ? 'CONVERTED' : 'PHONE',
+            createdAt: a.createdAt,
+            updatedAt: a.updatedAt,
+          };
+        }),
       },
     });
   })
@@ -1090,7 +1716,7 @@ router.post(
     const totalAmountMad = (customPrice !== undefined && customPrice !== null && customPrice !== '') 
       ? Number(customPrice) 
       : product.retailPriceMad * qteNum;
-    const commissionPercentage = parseFloat(process.env.PLATFORM_COMMISSION_PERCENTAGE || '15');
+    const commissionPercentage = parseFloat(getSecret('PLATFORM_COMMISSION_PERCENTAGE') || '15');
     const platformFeeMad = totalAmountMad * (commissionPercentage / 100);
     const vendorEarningMad = totalAmountMad - platformFeeMad;
 
@@ -1827,7 +2453,7 @@ router.post(
     // Use override price if provided, otherwise calculate
     const totalAmountMad = package_price !== undefined ? Number(package_price) : unitPrice * Number(quantity);
     
-    const commissionPercentage = parseFloat(process.env.PLATFORM_COMMISSION_PERCENTAGE || '15');
+    const commissionPercentage = parseFloat(getSecret('PLATFORM_COMMISSION_PERCENTAGE') || '15');
     const platformFeeMad = totalAmountMad * (commissionPercentage / 100);
     const vendorEarningMad = totalAmountMad - platformFeeMad;
 

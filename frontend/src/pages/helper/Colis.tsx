@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -11,20 +11,27 @@ import {
   MapPin,
   Phone,
   RefreshCw,
-  ExternalLink,
   Truck,
   Search,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   CheckCircle2,
   Clock,
-  Plus,
   FileText,
   ShieldAlert,
   Box,
-  QrCode
+  QrCode,
+  SlidersHorizontal,
+  X,
+  MessageSquareWarning,
 } from 'lucide-react';
+import StatusReasonModal, {
+  REASON_REQUIRED_STATUSES as REASON_REQUIRED,
+  MIN_REASON_LENGTH,
+} from '../../components/helper/StatusReasonModal';
 
 interface Parcel {
   id: number;
@@ -52,10 +59,14 @@ interface Parcel {
   }>;
   leadId: number;
   leadFullName: string;
+  vendorId: number | null;
   vendorName: string | null;
   vendorEmail: string | null;
   paymentSituation: string;
   createdAt: string;
+  lastStatusNote: string | null;
+  lastStatusAt: string | null;
+  lastStatusBy: string | null;
 }
 
 interface HistoryEntry {
@@ -70,6 +81,36 @@ interface HistoryEntry {
   HISTORY_LIVREUR: any;
 }
 
+interface Filters {
+  search: string;
+  statuses: string[];
+  paymentSituation: string;
+  city: string;
+  vendorId: string;
+  hasCode: '' | 'yes' | 'no';
+  dateFrom: string;
+  dateTo: string;
+  minAmount: string;
+  maxAmount: string;
+  sort: string;
+  limit: number;
+}
+
+const DEFAULT_FILTERS: Filters = {
+  search: '',
+  statuses: [],
+  paymentSituation: '',
+  city: '',
+  vendorId: '',
+  hasCode: '',
+  dateFrom: '',
+  dateTo: '',
+  minAmount: '',
+  maxAmount: '',
+  sort: 'recent',
+  limit: 25,
+};
+
 const statusConfig: Record<string, { label: string; color: string; bg: string; icon: React.ComponentType<any> }> = {
   // Cycle de vie / Stock
   'NEW_PARCEL': { label: 'Nouveau Colis', color: 'text-slate-600', bg: 'bg-slate-50 border-slate-100', icon: Package },
@@ -77,7 +118,7 @@ const statusConfig: Record<string, { label: string; color: string; bg: string; i
   'WAITING_PREPARATION': { label: 'Attente Préparation', color: 'text-orange-600', bg: 'bg-orange-50 border-orange-100', icon: Clock },
   'PREPARED': { label: 'Préparé', color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-100', icon: CheckCircle2 },
   'ENCORE_PREPARED': { label: 'En préparation', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-100', icon: RefreshCw },
-  
+
   // En transit
   'PICKED_UP': { label: 'Collecté', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-100', icon: Package },
   'SENT': { label: 'Expédié', color: 'text-violet-600', bg: 'bg-violet-50 border-violet-100', icon: Truck },
@@ -108,6 +149,15 @@ const statusConfig: Record<string, { label: string; color: string; bg: string; i
   'PUSHED_TO_DELIVERY': { label: 'En livraison', color: 'text-indigo-600', bg: 'bg-indigo-50 border-indigo-100', icon: Truck },
   'CALL_LATER': { label: 'Rappel', color: 'text-orange-600', bg: 'bg-orange-50 border-orange-100', icon: Clock },
 };
+
+// Grouped statuses drive both the filter panel and the per-parcel status picker
+const STATUS_GROUPS: { label: string; statuses: string[] }[] = [
+  { label: 'Préparation', statuses: ['PENDING', 'CONFIRMED', 'NEW_PARCEL', 'WAITING_PICKUP', 'WAITING_PREPARATION', 'ENCORE_PREPARED', 'PREPARED'] },
+  { label: 'En transit', statuses: ['PICKED_UP', 'SENT', 'SHIPPED', 'RECEIVED', 'DISTRIBUTION', 'PROGRAMMER', 'PROGRAMMER_AUTO'] },
+  { label: 'Incidents', statuses: ['POSTPONED', 'NOANSWER', 'ERR', 'INCORRECT_ADDRESS', 'CALL_LATER'] },
+  { label: 'Terminé', statuses: ['DELIVERED', 'RETURNED'] },
+  { label: 'Annulations', statuses: ['CANCELED_BY_SELLER', 'CANCELED_BY_SYSTEM', 'CANCELED', 'CANCELLED', 'REFUSE'] },
+];
 
 const paymentConfig: Record<string, { label: string; color: string; bg: string }> = {
   NOT_PAID: { label: 'Non payé', color: 'text-red-600', bg: 'bg-rose-50 border-rose-100' },
@@ -143,9 +193,179 @@ export default function HelperColis() {
   const { user } = useAuth();
   const [parcels, setParcels] = useState<Parcel[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'all' | 'uninvoiced_returns'>('all');
+  const [refreshing, setRefreshing] = useState(false);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [updatingStatusId, setUpdatingStatusId] = useState<number | null>(null);
+  const [updatingPaymentId, setUpdatingPaymentId] = useState<number | null>(null);
 
-  // Permission Guard
-  if (user?.role === 'HELPER' && !user?.canManageOrders) {
+  // Filters (search is debounced into `debouncedSearch` before hitting the API)
+  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
+  const [stats, setStats] = useState({
+    total: 0,
+    withColiaty: 0,
+    pending: 0,
+    delivered: 0,
+    returned: 0,
+    uninvoicedReturns: 0,
+    byStatus: {} as Record<string, number>,
+  });
+  const [filterOptions, setFilterOptions] = useState<{
+    cities: string[];
+    vendors: { id: number; name: string }[];
+  }>({ cities: [], vendors: [] });
+
+  const [historyParcel, setHistoryParcel] = useState<Parcel | null>(null);
+  const [parcelHistory, setParcelHistory] = useState<HistoryEntry[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [internalTimeline, setInternalTimeline] = useState<any[]>([]);
+  const [loadingTimeline, setLoadingTimeline] = useState(false);
+  const [historyTab, setHistoryTab] = useState<'internal' | 'coliaty'>('internal');
+  const [liveConnected, setLiveConnected] = useState(false);
+  const [lastLiveUpdate, setLastLiveUpdate] = useState<string | null>(null);
+  const [downloadingCode, setDownloadingCode] = useState<string | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+
+  // Mandatory-reason modal for DELIVERED / RETURNED
+  const [reasonModal, setReasonModal] = useState<{ parcel: Parcel; status: string } | null>(null);
+  const [reasonText, setReasonText] = useState('');
+  const [submittingReason, setSubmittingReason] = useState(false);
+
+  const canManage = !(user?.role === 'HELPER' && !user?.canManageOrders);
+
+  // Debounce the free-text search so typing doesn't hammer the API
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(filters.search.trim()), 400);
+    return () => clearTimeout(t);
+  }, [filters.search]);
+
+  const queryParams = useMemo(() => {
+    const params: any = {
+      page,
+      limit: filters.limit,
+      sort: filters.sort,
+      tab: activeTab,
+    };
+    if (debouncedSearch) params.search = debouncedSearch;
+    if (filters.statuses.length) params.status = filters.statuses.join(',');
+    if (filters.paymentSituation) params.paymentSituation = filters.paymentSituation;
+    if (filters.city) params.city = filters.city;
+    if (filters.vendorId) params.vendorId = filters.vendorId;
+    if (filters.hasCode) params.hasCode = filters.hasCode;
+    if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+    if (filters.dateTo) params.dateTo = filters.dateTo;
+    if (filters.minAmount) params.minAmount = filters.minAmount;
+    if (filters.maxAmount) params.maxAmount = filters.maxAmount;
+    return params;
+  }, [page, filters, debouncedSearch, activeTab]);
+
+  const fetchParcels = useCallback(async (isRefresh = false) => {
+    if (!canManage) return;
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    try {
+      const res = await leadsApi.livraison(queryParams);
+      const data = res.data?.data || {};
+      setParcels(data.parcels || []);
+      setTotalPages(data.totalPages || 1);
+      setTotalResults(data.total || 0);
+      if (data.stats) setStats(data.stats);
+      if (data.filterOptions) setFilterOptions(data.filterOptions);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Erreur lors du chargement des livraisons');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [queryParams, canManage]);
+
+  useEffect(() => {
+    fetchParcels();
+  }, [fetchParcels]);
+
+  // Reset to the first page whenever the filter set changes
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, filters.statuses, filters.paymentSituation, filters.city, filters.vendorId,
+      filters.hasCode, filters.dateFrom, filters.dateTo, filters.minAmount, filters.maxAmount,
+      filters.sort, filters.limit, activeTab]);
+
+  useEffect(() => {
+    if (!canManage) return;
+
+    // Open SSE stream for real-time status updates from Coliaty webhooks
+    const token = localStorage.getItem('accessToken');
+    if (!token) return;
+
+    const API_URL = (import.meta.env as any).VITE_API_URL || (import.meta.env.PROD && typeof window !== 'undefined' ? `${window.location.origin}/api/v1` : 'http://localhost:3001/api/v1');
+    const es = new EventSource(`${API_URL}/webhooks/stream?token=${token}`);
+    eventSourceRef.current = es;
+
+    es.addEventListener('connected', () => {
+      setLiveConnected(true);
+    });
+
+    es.addEventListener('status_update', (e) => {
+      const data = JSON.parse((e as MessageEvent).data);
+      // Update the matching parcel in-place without a full refresh
+      setParcels(prev =>
+        prev.map(p =>
+          p.id === data.orderId ? { ...p, status: data.newStatus } : p
+        )
+      );
+      setLastLiveUpdate(new Date().toLocaleTimeString('fr-FR'));
+      toast.success(
+        `📦 Colis ${data.packageCode} → ${data.newStatus}`,
+        { duration: 6000, id: `ws-${data.packageCode}` }
+      );
+    });
+
+    es.onerror = () => {
+      setLiveConnected(false);
+      // Auto-reconnect is handled by the browser; don't close manually
+    };
+
+    return () => {
+      eventSourceRef.current?.close();
+    };
+  }, [canManage]);
+
+  const activeFilterChips = useMemo(() => {
+    const chips: { key: string; label: string; clear: () => void }[] = [];
+    if (debouncedSearch) {
+      chips.push({ key: 'search', label: `Recherche: "${debouncedSearch}"`, clear: () => setFilters(f => ({ ...f, search: '' })) });
+    }
+    filters.statuses.forEach(s => {
+      chips.push({
+        key: `status-${s}`,
+        label: `Statut: ${statusConfig[s]?.label || s}`,
+        clear: () => setFilters(f => ({ ...f, statuses: f.statuses.filter(x => x !== s) })),
+      });
+    });
+    if (filters.paymentSituation) {
+      chips.push({ key: 'pay', label: `Paiement: ${paymentConfig[filters.paymentSituation]?.label || filters.paymentSituation}`, clear: () => setFilters(f => ({ ...f, paymentSituation: '' })) });
+    }
+    if (filters.city) chips.push({ key: 'city', label: `Ville: ${filters.city}`, clear: () => setFilters(f => ({ ...f, city: '' })) });
+    if (filters.vendorId) {
+      const v = filterOptions.vendors.find(x => String(x.id) === filters.vendorId);
+      chips.push({ key: 'vendor', label: `Référent: ${v?.name || filters.vendorId}`, clear: () => setFilters(f => ({ ...f, vendorId: '' })) });
+    }
+    if (filters.hasCode) chips.push({ key: 'code', label: filters.hasCode === 'yes' ? 'Avec code Coliaty' : 'Sans code Coliaty', clear: () => setFilters(f => ({ ...f, hasCode: '' })) });
+    if (filters.dateFrom) chips.push({ key: 'from', label: `Du ${filters.dateFrom}`, clear: () => setFilters(f => ({ ...f, dateFrom: '' })) });
+    if (filters.dateTo) chips.push({ key: 'to', label: `Au ${filters.dateTo}`, clear: () => setFilters(f => ({ ...f, dateTo: '' })) });
+    if (filters.minAmount) chips.push({ key: 'min', label: `Min ${filters.minAmount} MAD`, clear: () => setFilters(f => ({ ...f, minAmount: '' })) });
+    if (filters.maxAmount) chips.push({ key: 'max', label: `Max ${filters.maxAmount} MAD`, clear: () => setFilters(f => ({ ...f, maxAmount: '' })) });
+    return chips;
+  }, [filters, debouncedSearch, filterOptions]);
+
+  // Permission Guard (rendered after hooks so hook order stays stable)
+  if (!canManage) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] text-center px-4">
         <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center mb-6 animate-bounce">
@@ -155,8 +375,8 @@ export default function HelperColis() {
         <p className="text-slate-500 max-w-md mb-8">
           Vous n'avez pas la permission de gérer les expéditions. Veuillez contacter un administrateur pour obtenir l'accès.
         </p>
-        <Link 
-          to="/helper" 
+        <Link
+          to="/helper"
           className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
         >
           Retour au Tableau de Bord
@@ -164,78 +384,6 @@ export default function HelperColis() {
       </div>
     );
   }
-  const [activeTab, setActiveTab] = useState<'all' | 'uninvoiced_returns'>('all');
-  const [refreshing, setRefreshing] = useState(false);
-  const [search, setSearch] = useState('');
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [copiedCode, setCopiedCode] = useState<string | null>(null);
-  const [updatingStatusId, setUpdatingStatusId] = useState<number | null>(null);
-  const [updatingPaymentId, setUpdatingPaymentId] = useState<number | null>(null);
-
-  const [historyParcel, setHistoryParcel] = useState<Parcel | null>(null);
-  const [parcelHistory, setParcelHistory] = useState<HistoryEntry[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
-  const [liveConnected, setLiveConnected] = useState(false);
-  const [lastLiveUpdate, setLastLiveUpdate] = useState<string | null>(null);
-  const [downloadingCode, setDownloadingCode] = useState<string | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
-
-// removed fetchCities
-
-  const fetchParcels = async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    try {
-      const res = await leadsApi.livraison({ limit: 100 });
-      setParcels(res.data?.data?.parcels || []);
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Erreur lors du chargement des livraisons');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchParcels();
-
-    // Open SSE stream for real-time status updates from Coliaty webhooks
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-      const API_URL = (import.meta.env as any).VITE_API_URL || (import.meta.env.PROD && typeof window !== 'undefined' ? `${window.location.origin}/api/v1` : 'http://localhost:3001/api/v1');
-      const es = new EventSource(`${API_URL}/webhooks/stream?token=${token}`);
-      eventSourceRef.current = es;
-
-      es.addEventListener('connected', () => {
-        setLiveConnected(true);
-      });
-
-      es.addEventListener('status_update', (e) => {
-        const data = JSON.parse(e.data);
-        // Update the matching parcel in-place without a full refresh
-        setParcels(prev =>
-          prev.map(p =>
-            p.id === data.orderId ? { ...p, status: data.newStatus } : p
-          )
-        );
-        setLastLiveUpdate(new Date().toLocaleTimeString('fr-FR'));
-        toast.success(
-          `📦 Colis ${data.packageCode} → ${data.newStatus}`,
-          { duration: 6000, id: `ws-${data.packageCode}` }
-        );
-      });
-
-      es.onerror = () => {
-        setLiveConnected(false);
-        // Auto-reconnect is handled by the browser; don't close manually
-      };
-    }
-
-    return () => {
-      eventSourceRef.current?.close();
-    };
-  }, []);
-
 
   const handleDownloadLabel = async (code: string) => {
     setDownloadingCode(code);
@@ -262,7 +410,7 @@ export default function HelperColis() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      
+
       toast.success('Étiquette téléchargée !');
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Erreur lors du téléchargement de l\'étiquette');
@@ -279,18 +427,47 @@ export default function HelperColis() {
     });
   };
 
-// Read-only so removed edit and revert handlers
-
-  const handleStatusUpdate = async (parcelId: number, newStatus: string) => {
+  const applyStatus = async (parcelId: number, newStatus: string, reason?: string) => {
     setUpdatingStatusId(parcelId);
     try {
-      await ordersApi.updateStatus(parcelId.toString(), { status: newStatus });
-      toast.success(`Statut mis à jour : ${newStatus}`);
-      fetchParcels();
+      await ordersApi.updateStatus(parcelId.toString(), {
+        status: newStatus,
+        ...(reason ? { notes: reason } : {}),
+      });
+      toast.success(`Statut mis à jour : ${statusConfig[newStatus]?.label || newStatus}`);
+      await fetchParcels(true);
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Erreur lors de la mise à jour du statut');
+      throw err;
     } finally {
       setUpdatingStatusId(null);
+    }
+  };
+
+  // DELIVERED / RETURNED never go through directly — they require a written reason
+  const handleStatusSelect = (parcel: Parcel, newStatus: string) => {
+    if (newStatus === parcel.status) return;
+    if (REASON_REQUIRED[newStatus]) {
+      setReasonText('');
+      setReasonModal({ parcel, status: newStatus });
+      return;
+    }
+    applyStatus(parcel.id, newStatus).catch(() => {});
+  };
+
+  const handleConfirmReason = async () => {
+    if (!reasonModal) return;
+    const reason = reasonText.trim();
+    if (reason.length < MIN_REASON_LENGTH) return;
+    setSubmittingReason(true);
+    try {
+      await applyStatus(reasonModal.parcel.id, reasonModal.status, reason);
+      setReasonModal(null);
+      setReasonText('');
+    } catch {
+      // error already surfaced by applyStatus
+    } finally {
+      setSubmittingReason(false);
     }
   };
 
@@ -299,7 +476,7 @@ export default function HelperColis() {
     try {
       await leadsApi.updatePaymentSituation(leadId.toString(), { paymentSituation: status });
       toast.success(`Situation mise à jour : ${paymentConfig[status]?.label || status}`);
-      fetchParcels();
+      fetchParcels(true);
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Erreur lors de la mise à jour de la situation');
     } finally {
@@ -309,10 +486,20 @@ export default function HelperColis() {
 
   const handleOpenHistory = async (parcel: Parcel) => {
     setHistoryParcel(parcel);
-    setLoadingHistory(true);
     setParcelHistory([]);
+    setInternalTimeline([]);
+
+    // Internal timeline (lead + order status changes, with their reasons)
+    setLoadingTimeline(true);
+    leadsApi.timeline(parcel.leadId)
+      .then(res => setInternalTimeline(res.data?.data?.entries || []))
+      .catch(() => { })
+      .finally(() => setLoadingTimeline(false));
+
+    // Coliaty carrier history
+    if (!parcel.coliatyPackageCode) return;
+    setLoadingHistory(true);
     try {
-      if (!parcel.coliatyPackageCode) return;
       const res = await leadsApi.getParcelHistory(parcel.coliatyPackageCode);
       setParcelHistory(res.data?.data?.details || []);
     } catch (err: any) {
@@ -322,30 +509,16 @@ export default function HelperColis() {
     }
   };
 
-// Read-only so removed edit submit handler
-
-  const filtered = parcels.filter(p => {
-    if (activeTab === 'uninvoiced_returns') {
-      if (p.status !== 'RETURNED' || p.paymentSituation === 'FACTURED') {
-        return false;
-      }
-    }
-    return (
-      !search ||
-      p.customerName.toLowerCase().includes(search.toLowerCase()) ||
-      p.customerPhone.includes(search) ||
-      p.customerCity.toLowerCase().includes(search.toLowerCase()) ||
-      (p.coliatyPackageCode || '').toLowerCase().includes(search.toLowerCase()) ||
-      p.orderNumber.toLowerCase().includes(search.toLowerCase())
-    );
-  });
-
-  const stats = {
-    total: parcels.length,
-    withColiaty: parcels.filter(p => p.coliatyPackageCode).length,
-    pending: parcels.filter(p => p.status === 'PENDING').length,
-    delivered: parcels.filter(p => p.status === 'DELIVERED').length,
+  const toggleStatusFilter = (status: string) => {
+    setFilters(f => ({
+      ...f,
+      statuses: f.statuses.includes(status)
+        ? f.statuses.filter(s => s !== status)
+        : [...f.statuses, status],
+    }));
   };
+
+  const resetFilters = () => setFilters(DEFAULT_FILTERS);
 
   return (
     <div className="space-y-6">
@@ -393,7 +566,7 @@ export default function HelperColis() {
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards (computed server-side over the full scope, not just this page) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
           { label: 'Total envoyés', value: stats.total, icon: Package, color: 'from-blue-500 to-indigo-500', shadow: 'shadow-blue-200' },
@@ -422,7 +595,7 @@ export default function HelperColis() {
           }`}
         >
           <Package className="w-4 h-4" />
-          Tous les Colis ({parcels.length})
+          Tous les Colis ({stats.total})
         </button>
         <button
           onClick={() => setActiveTab('uninvoiced_returns')}
@@ -433,20 +606,240 @@ export default function HelperColis() {
           }`}
         >
           <Box className="w-4 h-4" />
-          Retours Non Facturés ({parcels.filter(p => p.status === 'RETURNED' && p.paymentSituation !== 'FACTURED').length})
+          Retours Non Facturés ({stats.uninvoicedReturns})
         </button>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Rechercher par nom, téléphone, ville, code Coliaty..."
-          className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all shadow-sm"
-        />
+      {/* Search + filter controls */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
+        <div className="flex flex-col lg:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              value={filters.search}
+              onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
+              placeholder="Rechercher par nom, téléphone, ville, n° commande, code Coliaty..."
+              className="w-full pl-10 pr-9 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+            />
+            {filters.search && (
+              <button
+                onClick={() => setFilters(f => ({ ...f, search: '' }))}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          <select
+            value={filters.sort}
+            onChange={e => setFilters(f => ({ ...f, sort: e.target.value }))}
+            className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+          >
+            <option value="recent">Trier : Plus récents</option>
+            <option value="oldest">Trier : Plus anciens</option>
+            <option value="newest_order">Trier : Date de commande ↓</option>
+            <option value="oldest_order">Trier : Date de commande ↑</option>
+            <option value="amount_desc">Trier : Montant ↓</option>
+            <option value="amount_asc">Trier : Montant ↑</option>
+            <option value="customer">Trier : Client (A-Z)</option>
+          </select>
+
+          <button
+            onClick={() => setShowFilters(s => !s)}
+            className={`flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all border ${
+              showFilters || activeFilterChips.length > 0
+                ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100'
+                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+            Filtres
+            {activeFilterChips.length > 0 && (
+              <span className="px-1.5 py-0.5 bg-white/25 rounded-md text-[10px] font-black">
+                {activeFilterChips.length}
+              </span>
+            )}
+            {showFilters ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+
+        {/* Advanced filters panel */}
+        {showFilters && (
+          <div className="border-t border-gray-100 pt-4 space-y-4">
+            {/* Status checkboxes, grouped */}
+            <div>
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2">Statut du colis</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+                {STATUS_GROUPS.map(group => (
+                  <div key={group.label} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-wider mb-2">{group.label}</p>
+                    <div className="space-y-1">
+                      {group.statuses.map(s => (
+                        <label key={s} className="flex items-center gap-2 cursor-pointer group">
+                          <input
+                            type="checkbox"
+                            checked={filters.statuses.includes(s)}
+                            onChange={() => toggleStatusFilter(s)}
+                            className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                          />
+                          <span className="text-[11px] font-semibold text-gray-600 group-hover:text-indigo-600 transition-colors flex-1 truncate">
+                            {statusConfig[s]?.label || s}
+                          </span>
+                          {stats.byStatus?.[s] > 0 && (
+                            <span className="text-[9px] font-black text-gray-400 bg-white px-1.5 py-0.5 rounded border border-gray-100">
+                              {stats.byStatus[s]}
+                            </span>
+                          )}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Other filters */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Situation de paiement</label>
+                <select
+                  value={filters.paymentSituation}
+                  onChange={e => setFilters(f => ({ ...f, paymentSituation: e.target.value }))}
+                  className="mt-1 w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                >
+                  <option value="">Toutes</option>
+                  {Object.entries(paymentConfig).map(([val, cfg]) => (
+                    <option key={val} value={val}>{cfg.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Ville</label>
+                <select
+                  value={filters.city}
+                  onChange={e => setFilters(f => ({ ...f, city: e.target.value }))}
+                  className="mt-1 w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                >
+                  <option value="">Toutes les villes</option>
+                  {filterOptions.cities.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Référent</label>
+                <select
+                  value={filters.vendorId}
+                  onChange={e => setFilters(f => ({ ...f, vendorId: e.target.value }))}
+                  className="mt-1 w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                >
+                  <option value="">Tous les référents</option>
+                  {filterOptions.vendors.map(v => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Code Coliaty</label>
+                <select
+                  value={filters.hasCode}
+                  onChange={e => setFilters(f => ({ ...f, hasCode: e.target.value as Filters['hasCode'] }))}
+                  className="mt-1 w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                >
+                  <option value="">Tous</option>
+                  <option value="yes">Synchronisés</option>
+                  <option value="no">Non synchronisés</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Du</label>
+                <input
+                  type="date"
+                  value={filters.dateFrom}
+                  onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
+                  className="mt-1 w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Au</label>
+                <input
+                  type="date"
+                  value={filters.dateTo}
+                  onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
+                  className="mt-1 w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Montant (MAD)</label>
+                <div className="mt-1 flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    value={filters.minAmount}
+                    onChange={e => setFilters(f => ({ ...f, minAmount: e.target.value }))}
+                    placeholder="Min"
+                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    value={filters.maxAmount}
+                    onChange={e => setFilters(f => ({ ...f, maxAmount: e.target.value }))}
+                    placeholder="Max"
+                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Colis par page</label>
+                <select
+                  value={filters.limit}
+                  onChange={e => setFilters(f => ({ ...f, limit: Number(e.target.value) }))}
+                  className="mt-1 w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                >
+                  {[10, 25, 50, 100, 200].map(n => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Active filter chips + result count */}
+        <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
+          <span className="text-xs font-bold text-gray-500">
+            {totalResults} colis trouvé{totalResults > 1 ? 's' : ''}
+          </span>
+          {activeFilterChips.map(chip => (
+            <span
+              key={chip.key}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg text-[11px] font-bold"
+            >
+              {chip.label}
+              <button onClick={chip.clear} className="hover:text-indigo-900">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+          {activeFilterChips.length > 0 && (
+            <button
+              onClick={resetFilters}
+              className="ml-auto px-3 py-1 text-[11px] font-black text-rose-600 hover:bg-rose-50 rounded-lg transition-colors uppercase tracking-wider"
+            >
+              Réinitialiser
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Parcels List */}
@@ -455,26 +848,35 @@ export default function HelperColis() {
           <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-500 rounded-full animate-spin" />
           <p className="text-gray-400 text-sm font-medium">Chargement des livraisons...</p>
         </div>
-      ) : filtered.length === 0 ? (
+      ) : parcels.length === 0 ? (
         <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-16 text-center">
           <div className="w-20 h-20 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-full flex items-center justify-center mx-auto mb-5">
             <Truck className="w-10 h-10 text-indigo-300" />
           </div>
           <h3 className="text-lg font-bold text-gray-800 mb-2">
-            {search ? 'Aucun résultat' : 'Aucune livraison'}
+            {activeFilterChips.length > 0 ? 'Aucun résultat' : 'Aucune livraison'}
           </h3>
           <p className="text-gray-400 text-sm max-w-xs mx-auto">
-            {search
-              ? `Aucun colis ne correspond à "${search}"`
+            {activeFilterChips.length > 0
+              ? 'Aucun colis ne correspond aux filtres sélectionnés.'
               : 'Envoyez des commandes à la livraison depuis la page "Mes Prospects" et elles apparaîtront ici.'}
           </p>
+          {activeFilterChips.length > 0 && (
+            <button
+              onClick={resetFilters}
+              className="mt-5 px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-slate-800 transition-all"
+            >
+              Réinitialiser les filtres
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map(parcel => {
+          {parcels.map(parcel => {
             const status = statusConfig[parcel.status] || { label: parcel.status, color: 'text-gray-600', bg: 'bg-gray-50 border-gray-200', icon: Package };
             const StatusIcon = status.icon;
             const isExpanded = expandedId === parcel.id;
+            const showReason = !!parcel.lastStatusNote && !!REASON_REQUIRED[parcel.status];
 
             return (
               <div
@@ -562,33 +964,43 @@ export default function HelperColis() {
                           <StatusIcon className="w-3.5 h-3.5" />
                           {status.label}
                         </span>
-                        
+
                         {/* Status Changer for Helper */}
                         <div className="relative group">
                           <select
                             disabled={updatingStatusId === parcel.id}
                             value={parcel.status}
-                            onChange={(e) => handleStatusUpdate(parcel.id, e.target.value)}
+                            onChange={(e) => handleStatusSelect(parcel, e.target.value)}
                             className={`
                               appearance-none pl-3 pr-8 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider
                               border border-gray-100 bg-gray-50 text-gray-400 hover:border-indigo-200 hover:text-indigo-600
                               transition-all cursor-pointer outline-none disabled:opacity-50
                             `}
                           >
-                            {Object.entries(statusConfig).map(([val, cfg]) => {
-                              if (val === 'PUSHED_TO_DELIVERY') return null; // Keep it clean, use SHIPPED
-                              return <option key={val} value={val}>{cfg.label}</option>;
-                            })}
+                            {!STATUS_GROUPS.some(g => g.statuses.includes(parcel.status)) && (
+                              <option value={parcel.status}>{status.label}</option>
+                            )}
+                            {STATUS_GROUPS.map(group => (
+                              <optgroup key={group.label} label={group.label}>
+                                {group.statuses.map(val => (
+                                  <option key={val} value={val}>
+                                    {statusConfig[val]?.label || val}
+                                    {REASON_REQUIRED[val] ? ' *' : ''}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ))}
                           </select>
                           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-300 pointer-events-none group-hover:text-indigo-400" />
                         </div>
+                        <p className="text-[9px] text-gray-300 font-bold uppercase tracking-wider">* raison obligatoire</p>
                       </div>
 
                       <div className="flex flex-col items-end gap-2">
                         <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border ${paymentConfig[parcel.paymentSituation]?.bg || 'bg-gray-50 border-gray-200'} ${paymentConfig[parcel.paymentSituation]?.color || 'text-gray-400'}`}>
                           💳 {paymentConfig[parcel.paymentSituation]?.label || parcel.paymentSituation}
                         </span>
-                        
+
                         {/* Payment Situation Changer */}
                         <div className="relative group">
                           <select
@@ -612,6 +1024,27 @@ export default function HelperColis() {
                     </div>
                   </div>
 
+                  {/* Justification of the last final status */}
+                  {showReason && (
+                    <div className="mt-4 flex items-start gap-2.5 bg-amber-50/60 border border-amber-100 rounded-xl px-4 py-3">
+                      <MessageSquareWarning className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black text-amber-600 uppercase tracking-wider">
+                          Raison ({status.label})
+                        </p>
+                        <p className="text-sm text-amber-900 font-medium italic mt-0.5 break-words">
+                          "{parcel.lastStatusNote}"
+                        </p>
+                        <p className="text-[10px] text-amber-500 font-bold mt-1">
+                          {parcel.lastStatusBy ? `${parcel.lastStatusBy} · ` : ''}
+                          {parcel.lastStatusAt
+                            ? format(new Date(parcel.lastStatusAt), "dd MMM yyyy 'à' HH:mm", { locale: fr })
+                            : ''}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Footer Row */}
                   <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-50">
                     <div className="flex items-center gap-3">
@@ -626,8 +1059,6 @@ export default function HelperColis() {
                       </span>
                     </div>
                     <div className="flex items-center gap-4">
-                      {/* Actions removed for helper mode */}
-                      
                         {parcel.coliatyPackageCode && (
                           <div className="flex items-center gap-2">
                             <button
@@ -649,7 +1080,7 @@ export default function HelperColis() {
                             </button>
                           </div>
                         )}
-                        
+
                         <button
                           onClick={() => setExpandedId(isExpanded ? null : parcel.id)}
                           className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-indigo-600 transition-colors"
@@ -732,16 +1163,55 @@ export default function HelperColis() {
           })}
         </div>
       )}
-      
-      {/* Edit modal removed for helper */}
+
+      {/* Pagination */}
+      {!loading && parcels.length > 0 && totalPages > 1 && (
+        <div className="flex items-center justify-between bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-3">
+          <p className="text-xs font-bold text-gray-500">
+            Page {page} sur {totalPages} · {totalResults} colis
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="flex items-center gap-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              Précédent
+            </button>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="flex items-center gap-1 px-3 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Suivant
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Mandatory reason modal for DELIVERED / RETURNED */}
+      {reasonModal && (
+        <StatusReasonModal
+          status={reasonModal.status}
+          parcelLabel={reasonModal.parcel.coliatyPackageCode || `#${reasonModal.parcel.orderNumber}`}
+          customerName={reasonModal.parcel.customerName}
+          reason={reasonText}
+          onReasonChange={setReasonText}
+          onCancel={() => setReasonModal(null)}
+          onConfirm={handleConfirmReason}
+          submitting={submittingReason}
+        />
+      )}
 
       {/* History Modal */}
       {historyParcel && createPortal(
-        <div 
+        <div
           className="fixed inset-0 z-[999999] bg-slate-900/65 backdrop-blur-md flex items-center justify-center p-4 cursor-pointer animate-in fade-in duration-200"
           onClick={() => setHistoryParcel(null)}
         >
-          <div 
+          <div
             className="bg-white rounded-3xl max-w-lg w-full max-h-[85vh] overflow-hidden shadow-2xl relative flex flex-col cursor-default animate-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
@@ -751,9 +1221,11 @@ export default function HelperColis() {
                   <Clock className="w-5 h-5 text-indigo-500" />
                   Suivi du Colis
                 </h3>
-                <p className="text-xs text-gray-500 font-bold mt-1 uppercase tracking-wider">CODE: {historyParcel.coliatyPackageCode}</p>
+                <p className="text-xs text-gray-500 font-bold mt-1 uppercase tracking-wider">
+                  CODE: {historyParcel.coliatyPackageCode || 'Non synchronisé'} · #{historyParcel.orderNumber}
+                </p>
               </div>
-              <button 
+              <button
                 onClick={() => setHistoryParcel(null)}
                 className="text-gray-400 hover:text-gray-600 bg-white shadow-sm p-2 rounded-full transition-all hover:rotate-90"
               >
@@ -761,7 +1233,112 @@ export default function HelperColis() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
+            {/* Internal history vs carrier history */}
+            <div className="flex gap-1 p-2 bg-gray-50 border-b border-gray-100">
+              <button
+                onClick={() => setHistoryTab('internal')}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all ${
+                  historyTab === 'internal'
+                    ? 'bg-slate-900 text-white shadow-md'
+                    : 'text-slate-500 hover:bg-white'
+                }`}
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Historique Interne ({internalTimeline.length})
+              </button>
+              <button
+                onClick={() => setHistoryTab('coliaty')}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all ${
+                  historyTab === 'coliaty'
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'text-slate-500 hover:bg-white'
+                }`}
+              >
+                <Truck className="w-3.5 h-3.5" />
+                Suivi Coliaty ({parcelHistory.length})
+              </button>
+            </div>
+
+            <div className={`flex-1 overflow-y-auto p-6 scrollbar-thin ${historyTab === 'internal' ? '' : 'hidden'}`}>
+              {loadingTimeline ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-4">
+                  <div className="w-10 h-10 border-3 border-slate-100 border-t-slate-500 rounded-full animate-spin" />
+                  <p className="text-gray-400 text-sm font-medium">Chargement de l'historique interne...</p>
+                </div>
+              ) : internalTimeline.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-400 font-medium italic">Aucun changement de statut interne enregistré.</p>
+                </div>
+              ) : (
+                <div className="relative pl-6 border-l-2 border-slate-100 space-y-6 py-2 ml-2">
+                  {internalTimeline.map((entry, idx) => (
+                    <div key={entry.id} className="relative">
+                      <div className={`absolute -left-[31px] top-1.5 w-4 h-4 rounded-full border-2 border-white shadow-sm ${
+                        idx === 0 ? 'bg-slate-900 scale-125' : 'bg-slate-300'
+                      }`} />
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
+                            entry.scope === 'ORDER'
+                              ? 'bg-indigo-50 text-indigo-600 border border-indigo-100'
+                              : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            {entry.scope === 'ORDER' ? 'Commande' : 'Lead'}
+                          </span>
+                          <span className="text-[10px] font-bold text-gray-400">
+                            {format(new Date(entry.createdAt), "dd MMM yyyy 'à' HH:mm", { locale: fr })}
+                          </span>
+                        </div>
+
+                        <div className="bg-gray-50 rounded-2xl p-4 mt-1 border border-white shadow-sm">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {entry.oldStatus && (
+                              <>
+                                <span className="text-[11px] font-medium text-gray-400 line-through">
+                                  {statusConfig[entry.oldStatus]?.label || entry.oldStatus}
+                                </span>
+                                <span className="text-gray-300">➔</span>
+                              </>
+                            )}
+                            <span className={`px-2 py-0.5 rounded-md text-[11px] font-black uppercase tracking-wider border ${
+                              statusConfig[entry.newStatus]?.bg || 'bg-gray-100 border-gray-200'
+                            } ${statusConfig[entry.newStatus]?.color || 'text-gray-700'}`}>
+                              {statusConfig[entry.newStatus]?.label || entry.newStatus}
+                            </span>
+                          </div>
+                          {entry.changedBy && (
+                            <p className="text-[10px] font-bold text-indigo-600 mt-2 uppercase tracking-wider">
+                              Par : {entry.changedBy}
+                            </p>
+                          )}
+                          {entry.notes && (
+                            <p className="text-sm font-bold text-gray-700 leading-relaxed italic mt-2 bg-amber-50/60 border border-amber-100 rounded-xl p-3">
+                              "{entry.notes}"
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className={`flex-1 overflow-y-auto p-6 scrollbar-thin ${historyTab === 'coliaty' ? '' : 'hidden'}`}>
+              {historyParcel.lastStatusNote && (
+                <div className="mb-6 bg-amber-50/60 border border-amber-100 rounded-2xl p-4">
+                  <p className="text-[10px] font-black text-amber-600 uppercase tracking-wider mb-1">
+                    Dernière raison saisie
+                  </p>
+                  <p className="text-sm text-amber-900 font-medium italic">"{historyParcel.lastStatusNote}"</p>
+                  <p className="text-[10px] text-amber-500 font-bold mt-1.5">
+                    {historyParcel.lastStatusBy ? `${historyParcel.lastStatusBy} · ` : ''}
+                    {historyParcel.lastStatusAt
+                      ? format(new Date(historyParcel.lastStatusAt), "dd MMM yyyy 'à' HH:mm", { locale: fr })
+                      : ''}
+                  </p>
+                </div>
+              )}
               {loadingHistory ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-4">
                   <div className="w-10 h-10 border-3 border-indigo-100 border-t-indigo-500 rounded-full animate-spin" />
@@ -779,7 +1356,7 @@ export default function HelperColis() {
                       <div className={`absolute -left-[31px] top-1.5 w-4 h-4 rounded-full border-2 border-white shadow-sm ${
                         idx === 0 ? 'bg-indigo-500 scale-125' : 'bg-indigo-200'
                       }`} />
-                      
+
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center justify-between">
                           <span className={`text-[11px] font-black uppercase tracking-tighter px-2 py-0.5 rounded-md ${
@@ -791,7 +1368,7 @@ export default function HelperColis() {
                             {format(new Date(entry.HISTORY_TIMESTAMP * 1000), "dd MMM yyyy 'à' HH:mm", { locale: fr })}
                           </span>
                         </div>
-                        
+
                         <div className="bg-gray-50 rounded-2xl p-4 mt-2 border border-white shadow-sm">
                           {entry.HISTORY_COMMENT ? (
                             <p className="text-sm font-bold text-gray-700 leading-relaxed italic">
@@ -800,14 +1377,14 @@ export default function HelperColis() {
                           ) : (
                             <p className="text-xs text-gray-400 italic">Aucun commentaire</p>
                           )}
-                          
+
                           {entry.HISTORY_LIVREUR && !Array.isArray(entry.HISTORY_LIVREUR) && entry.HISTORY_LIVREUR.name && (
                             <div className="mt-3 pt-3 border-t border-gray-200/50 flex items-center justify-between">
                               <p className="text-[10px] font-bold text-gray-500 flex items-center gap-1.5 uppercase tracking-wider">
                                 👤 {entry.HISTORY_LIVREUR.name}
                               </p>
                               {entry.HISTORY_LIVREUR.phone && (
-                                <a 
+                                <a
                                   href={`tel:${entry.HISTORY_LIVREUR.phone}`}
                                   className="text-[10px] font-black text-indigo-600 hover:underline flex items-center gap-1"
                                 >

@@ -3,6 +3,7 @@ import { Router } from 'express';
 import axios from 'axios';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { authenticate } from '../middleware/auth.js';
+import { getSecret } from '../lib/secretStore.js';
 
 const router = Router();
 
@@ -62,8 +63,8 @@ router.post(
     }
 
     try {
-      const clientId = (process.env.SHOPIFY_CLIENT_ID || process.env.SHOPIFY_API_KEY || '').trim();
-      const clientSecret = (process.env.SHOPIFY_CLIENT_SECRET || process.env.SHOPIFY_API_SECRET || '').trim();
+      const clientId = (getSecret('SHOPIFY_CLIENT_ID') || getSecret('SHOPIFY_API_KEY') || '').trim();
+      const clientSecret = (getSecret('SHOPIFY_CLIENT_SECRET') || getSecret('SHOPIFY_API_SECRET') || '').trim();
 
       // Normalize shop domain (e.g. mystore.myshopify.com)
       const cleanShop = shop.replace(/^https?:\/\//, '').replace(/\/$/, '');

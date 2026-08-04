@@ -58,10 +58,14 @@ export default function AgentLeadDetail() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [notes, setNotes] = useState('');
-  const [isEditingAddress, setIsEditingAddress] = useState(false);
   const [editedAddress, setEditedAddress] = useState('');
   const [editedCity, setEditedCity] = useState('');
   const [savingAddress, setSavingAddress] = useState(false);
+  const [addressSavedAt, setAddressSavedAt] = useState<number | null>(null);
+  // Last values known to be persisted — used to skip redundant auto-saves.
+  const savedAddressRef = useRef<{ address: string; city: string }>({ address: '', city: '' });
+  // Serialises auto-saves so a city pick and an address blur can never race.
+  const addressQueueRef = useRef<Promise<any>>(Promise.resolve());
   const [coliatyCities, setColiatyCities] = useState<any[]>([]);
   const [loadingCities, setLoadingCities] = useState(false);
   const [citySearch, setCitySearch] = useState('');
@@ -77,7 +81,13 @@ export default function AgentLeadDetail() {
     }
   });
 
+  // Persist the contact attempt server-side (localStorage stays for instant UI feedback)
+  const recordContactClick = (leadId: number, channel: 'WHATSAPP' | 'CALL') => {
+    leadsApi.recordContactClick(leadId, channel).catch(console.error);
+  };
+
   const handleWaClick = (leadId: number) => {
+    recordContactClick(leadId, 'WHATSAPP');
     setClickedWaLeads((prev) => {
       const next = new Set(prev);
       next.add(leadId);
@@ -216,6 +226,12 @@ export default function AgentLeadDetail() {
     fetchColiatyCities();
   }, [id]);
 
+  useEffect(() => {
+    if (!addressSavedAt) return;
+    const timer = setTimeout(() => setAddressSavedAt(null), 2500);
+    return () => clearTimeout(timer);
+  }, [addressSavedAt]);
+
   const loadDetail = async () => {
     try {
       const res = await leadsApi.detail(Number(id));
@@ -225,6 +241,10 @@ export default function AgentLeadDetail() {
       setEditedAddress(d?.lead?.address || '');
       setEditedCity(d?.lead?.city || '');
       setCitySearch(d?.lead?.city || '');
+      savedAddressRef.current = {
+        address: (d?.lead?.address || '').trim(),
+        city: (d?.lead?.city || '').trim()
+      };
     } catch (err: any) {
       toast.error('Lead introuvable');
       navigate('/agent/leads');
@@ -233,29 +253,57 @@ export default function AgentLeadDetail() {
     }
   };
 
-  const handleSaveAddress = async () => {
-    if (!data?.lead?.id) return;
-    setSavingAddress(true);
-    try {
-      await leadsApi.update(String(data.lead.id), {
-        address: editedAddress,
-        city: editedCity
-      });
-      toast.success("Adresse et ville mises à jour avec succès !");
-      setIsEditingAddress(false);
-      setShowCityDropdown(false);
-      setCitySearch(editedCity);
-      loadDetail();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Erreur lors de la mise à jour de l'adresse");
-    } finally {
-      setSavingAddress(false);
-    }
+  /**
+   * Persists the address/city silently. Called on city pick, on address blur, and
+   * flushed once more right before any status change so nothing typed is ever lost.
+   * No-ops when the values already match what is stored.
+   */
+  const persistAddressCity = (nextAddress: string, nextCity: string) => {
+    const leadId = data?.lead?.id;
+    if (!leadId) return Promise.resolve();
+
+    const address = (nextAddress || '').trim();
+    const city = (nextCity || '').trim();
+
+    const run = (async () => {
+      // Wait for any save already in flight so the newest value always wins.
+      await addressQueueRef.current;
+
+      if (address === savedAddressRef.current.address && city === savedAddressRef.current.city) {
+        return;
+      }
+
+      setSavingAddress(true);
+      try {
+        await leadsApi.update(String(leadId), { address, city });
+        savedAddressRef.current = { address, city };
+        setData((prev: any) => (prev ? { ...prev, lead: { ...prev.lead, address, city } } : prev));
+        setAddressSavedAt(Date.now());
+      } catch (err: any) {
+        toast.error(err.response?.data?.message || "Erreur lors de l'enregistrement de l'adresse");
+        throw err;
+      } finally {
+        setSavingAddress(false);
+      }
+    })();
+
+    addressQueueRef.current = run.catch(() => {});
+    return run;
   };
 
   const handleUpdateStatus = async (status: string, extra?: any) => {
     setUpdating(true);
     try {
+      // Flush any pending address/city edit first — the agent often types the
+      // corrected address and clicks a result button without leaving the field.
+      try {
+        await persistAddressCity(editedAddress, editedCity);
+      } catch (err) {
+        // persistAddressCity already surfaced the reason.
+        toast.error("Statut non modifié : l'adresse n'a pas pu être enregistrée.");
+        return;
+      }
+
       await leadsApi.updateStatus(String(id), { status, notes, ...extra });
       toast.success(`Statut mis à jour: ${status}`);
       
@@ -387,8 +435,9 @@ export default function AgentLeadDetail() {
             <div>
               <p className="text-xs text-gray-400 font-medium uppercase mb-1">Téléphone</p>
               <div className="flex items-center gap-2">
-                <a 
-                  href={`tel:${lead.phone}`} 
+                <a
+                  href={`tel:${lead.phone}`}
+                  onClick={() => recordContactClick(lead.id, 'CALL')}
                   className={`text-lg font-bold hover:underline flex items-center gap-2 ${
                     isPrincess ? 'text-amber-600' : isGirly ? 'text-pink-600' : 'text-indigo-600'
                   }`}
@@ -585,35 +634,21 @@ export default function AgentLeadDetail() {
           <h2 className="font-bold text-gray-900 flex items-center gap-2">
             📍 Adresse & Ville de livraison
           </h2>
-          {(editedAddress !== (lead.address || '') || editedCity !== (lead.city || '')) && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  setEditedAddress(lead.address || '');
-                  setEditedCity(lead.city || '');
-                  setCitySearch(lead.city || '');
-                  setShowCityDropdown(false);
-                  toast("Modifications annulées", { icon: 'ℹ️' });
-                }}
-                className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-700 rounded-xl transition-all text-xs font-black"
-                title="Annuler les modifications et restaurer les anciennes valeurs"
-              >
-                ✕ Annuler
-              </button>
-              <button
-                onClick={handleSaveAddress}
-                disabled={savingAddress}
-                className={`px-3 py-1.5 text-white font-bold text-xs rounded-xl transition-all uppercase tracking-wider ${
-                  isPrincess 
-                    ? 'bg-gradient-to-r from-amber-500 to-rose-500 shadow-sm shadow-amber-500/20 hover:from-amber-600 hover:to-rose-600' 
-                    : isGirly 
-                    ? 'bg-gradient-to-r from-pink-500 to-rose-500 shadow-sm shadow-pink-500/20 hover:from-pink-600 hover:to-rose-600' 
-                    : 'bg-indigo-600 hover:bg-indigo-700 shadow-sm shadow-indigo-600/20'
-                }`}
-              >
-                {savingAddress ? 'Enregistrement...' : '✓ Enregistrer'}
-              </button>
-            </div>
+          {savingAddress ? (
+            <span className="flex items-center gap-1.5 text-xs font-bold text-gray-400 animate-pulse">
+              <span className="w-3 h-3 border-2 border-gray-200 border-t-gray-400 rounded-full animate-spin" />
+              Enregistrement...
+            </span>
+          ) : addressSavedAt ? (
+            <span className={`flex items-center gap-1 text-xs font-bold ${
+              isPrincess ? 'text-amber-600' : isGirly ? 'text-pink-600' : 'text-emerald-600'
+            }`}>
+              <Check className="w-3.5 h-3.5" /> Enregistré
+            </span>
+          ) : (
+            <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider">
+              Sauvegarde auto
+            </span>
           )}
         </div>
 
@@ -630,6 +665,14 @@ export default function AgentLeadDetail() {
                   setEditedCity(e.target.value);
                 }}
                 onFocus={() => setShowCityDropdown(true)}
+                onBlur={() => persistAddressCity(editedAddress, editedCity)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    setShowCityDropdown(false);
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
                 placeholder="Rechercher une ville..."
                 className={`w-full pl-3 pr-10 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:bg-white focus:ring-2 focus:border-transparent outline-none transition-all ${
                   isPrincess ? 'focus:ring-amber-400' : isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-500'
@@ -668,10 +711,14 @@ export default function AgentLeadDetail() {
                     <button
                       key={c.city_id}
                       type="button"
+                      // Keep focus on the input so its onBlur auto-save doesn't
+                      // fire with the half-typed search text before this click lands.
+                      onMouseDown={(e) => e.preventDefault()}
                       onClick={() => {
                         setEditedCity(c.city_name);
                         setCitySearch(c.city_name);
                         setShowCityDropdown(false);
+                        persistAddressCity(editedAddress, c.city_name);
                       }}
                       className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all flex items-center justify-between ${
                         editedCity === c.city_name
@@ -699,6 +746,13 @@ export default function AgentLeadDetail() {
               type="text"
               value={editedAddress}
               onChange={(e) => setEditedAddress(e.target.value)}
+              onBlur={() => persistAddressCity(editedAddress, editedCity)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
               placeholder="Saisissez l'adresse complète de livraison..."
               className={`w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:bg-white focus:ring-2 focus:border-transparent outline-none transition-all ${
                 isPrincess ? 'focus:ring-amber-400' : isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-500'

@@ -3,7 +3,12 @@ const crypto = require('crypto');
 
 const prisma = new PrismaClient();
 const ALGORITHM = 'aes-256-cbc';
-const ENCRYPTION_KEY = '7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f'; // Matches .env
+require('dotenv').config();
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
+if (!ENCRYPTION_KEY || ENCRYPTION_KEY.length !== 32) {
+  console.error('ENCRYPTION_KEY must be set in .env and be exactly 32 characters.');
+  process.exit(1);
+}
 
 function encrypt(text) {
   if (!text) return text;

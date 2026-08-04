@@ -11,15 +11,24 @@ import { getIO } from '../index.js';
 import { uploadRateLimiter } from '../middleware/security.js';
 import { exec, spawn } from 'child_process';
 import { v2 as cloudinary } from 'cloudinary';
+import { getSecret } from '../lib/secretStore.js';
 
 const router = Router();
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
+/**
+ * Applies the current Cloudinary credentials to the SDK.
+ *
+ * Called immediately before every upload rather than once at module load: the
+ * module is imported before loadSecrets() finishes, and credentials can be
+ * changed from the admin dashboard at any time.
+ */
+const configureCloudinary = () => {
+  cloudinary.config({
+    cloud_name: getSecret('CLOUDINARY_CLOUD_NAME'),
+    api_key: getSecret('CLOUDINARY_API_KEY'),
+    api_secret: getSecret('CLOUDINARY_API_SECRET'),
+  });
+};
 
 // Disable sharp cache to prevent file locking issues on Windows
 sharp.cache(false);
@@ -655,6 +664,7 @@ router.post(
       console.log(`[Video Pipeline] 📁 File ready for Cloudinary: ${currentFilePath} (${(fileSize / (1024 * 1024)).toFixed(1)} MB)`);
 
       // 2. Upload to Cloudinary with Live Progress Stream
+      configureCloudinary();
       broadcastProgress(userUuid, socketId, {
         stage: 'cloudinary_upload',
         progress: 0,

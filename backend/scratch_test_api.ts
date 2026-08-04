@@ -1,7 +1,9 @@
+import 'dotenv/config';
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = 'dev_secret_key_change_in_production_64_chars_long_string_1234567890';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error('JWT_SECRET is not set (add it to backend/.env)');
 const userUuid = 'ef39f3b9-ee1c-464b-a8ec-863909fd947d'; // 123yassine.chaib@gmail.com
 
 const token = jwt.sign({ userId: userUuid }, JWT_SECRET, { expiresIn: '7d' });

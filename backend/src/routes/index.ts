@@ -33,6 +33,8 @@ import woocommerceRoutes from './woocommerce.routes.js';
 import supportRoutes from './support.routes.js';
 import invoiceRoutes from './invoice.routes.js';
 import backupRoutes from './admin/backup.routes.js';
+import secretRoutes from './secrets.routes.js';
+import deployRoutes from './deploy.routes.js';
 import pixelRoutes from './pixel.routes.js';
 import domainRoutes from './domain.routes.js';
 import customProductRoutes from './customProduct.routes.js';
@@ -75,6 +77,26 @@ router.use('/notifications', notificationRoutes);
 // Register specific admin sub-routes BEFORE the general /admin route
 router.use('/admin/backups', backupRoutes);
 router.use('/admin/security', securityRoutes);
+// Secrets are deliberately NOT behind auditLog.
+//
+// The generic middleware records req.body, and sensitiveDataMasking() only
+// redacts when the *key name* looks sensitive ('password', 'token', ...). The
+// body here is `{ value: "<the credential>" }` — the key is literally `value`,
+// so nothing matched and every submitted secret was written verbatim into
+// activity_logs, into the hash-chained immutable audit log (where it cannot be
+// deleted without breaking chain verification), and into the external log
+// stream. That log is readable by FINANCE_ADMIN and SYSTEM_SUPPORT, who are not
+// allowed on the secrets page at all.
+//
+// secrets.routes.ts writes its own audit entry instead: which key, by whom,
+// never the value.
+router.use('/admin/secrets', secretRoutes);
+
+// Deployments. Deliberately NOT behind auditLog: the router carries GitHub's
+// push payload, which is large and would be written verbatim into activity_logs
+// on every push. Deploy actions are audited by the Deployment table itself,
+// which records who triggered what, when, and with which result.
+router.use('/deploy', deployRoutes);
 
 router.use('/admin', auditLog, adminRoutes);
 

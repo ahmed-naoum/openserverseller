@@ -4,7 +4,8 @@ import { leadsApi } from '../../lib/api';
 import { socket, connectToCallCenter, disconnectSocket } from '../../lib/socket';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
-import { Sparkles, Phone, MessageSquare, Zap, Clock, Package, Heart, Filter, ChevronRight, X, AlertCircle, Activity, Check } from 'lucide-react';
+import { Sparkles, Phone, MessageSquare, Zap, Clock, Package, Heart, Filter, ChevronRight, X, AlertCircle, Activity, Check, Search, MapPin } from 'lucide-react';
+import { SearchableSelect } from '../../components/ui/SearchableSelect';
 
 const AssignedTimer = ({ lead, onTimeout, isGirly, isPrincess }: { lead: any; onTimeout?: () => void; isGirly: boolean; isPrincess: boolean }) => {
   const [globalCooldown, setGlobalCooldown] = useState<number>(0);
@@ -100,6 +101,17 @@ export default function AgentLeads() {
   const [availableLeads, setAvailableLeads] = useState<any[]>([]);
   const [totalAvailableCount, setTotalAvailableCount] = useState<number>(0);
   const [availableLimit, setAvailableLimit] = useState<number | 'max'>(20);
+  // Search over available leads. `searchInput` is what the agent types;
+  // `availableSearch` is the debounced value actually sent to the API.
+  const [searchInput, setSearchInput] = useState('');
+  const [availableSearch, setAvailableSearch] = useState('');
+  const [availableCity, setAvailableCity] = useState('');
+  const [availableProductId, setAvailableProductId] = useState<number | ''>('');
+  const [totalScopeCount, setTotalScopeCount] = useState(0);
+  const [availableFilterOptions, setAvailableFilterOptions] = useState<{
+    cities: string[];
+    products: { id: number; name: string }[];
+  }>({ cities: [], products: [] });
   const [myLeads, setMyLeads] = useState<any[]>([]);
   const [hasActiveLead, setHasActiveLead] = useState(false);
   const [activeLeadId, setActiveLeadId] = useState<number | null>(null);
@@ -120,7 +132,19 @@ export default function AgentLeads() {
     }
   });
 
+  // Persist the contact attempt server-side so it is visible to admins and
+  // survives a browser change (localStorage is kept for instant UI feedback).
+  const recordContactClick = (leadId: number, channel: 'WHATSAPP' | 'CALL') => {
+    leadsApi.recordContactClick(leadId, channel).catch(console.error);
+  };
+
+  const handleCallClick = (leadId: number) => {
+    recordContactClick(leadId, 'CALL');
+  };
+
   const handleWaClick = (leadId: number) => {
+    recordContactClick(leadId, 'WHATSAPP');
+
     setClickedWaLeads((prev) => {
       const next = new Set(prev);
       next.add(leadId);
@@ -180,13 +204,18 @@ export default function AgentLeads() {
       const [availRes, myRes] = await Promise.all([
         leadsApi.available({
           influencerId: selectedInfluencerId ? Number(selectedInfluencerId) : undefined,
-          limit: availableLimit
+          limit: availableLimit,
+          search: availableSearch.trim() || undefined,
+          city: availableCity || undefined,
+          productId: availableProductId || undefined,
         }),
         leadsApi.list({ status: statusFilter })
       ]);
       const availData = availRes.data?.data || availRes.data;
       setAvailableLeads(availData?.leads || []);
       setTotalAvailableCount(availData?.totalAvailable ?? (availData?.leads?.length || 0));
+      setTotalScopeCount(availData?.totalScope ?? 0);
+      setAvailableFilterOptions(availData?.filterOptions || { cities: [], products: [] });
       setHasActiveLead(availData?.hasActiveLead || false);
       setActiveLeadId(availData?.activeLeadId || null);
       setAssignedInfluencers(availData?.assignedInfluencers || []);
@@ -198,7 +227,13 @@ export default function AgentLeads() {
     } catch (error) {
       console.error('Failed to load leads:', error);
     }
-  }, [selectedInfluencerId, availableLimit, statusFilter]);
+  }, [selectedInfluencerId, availableLimit, statusFilter, availableSearch, availableCity, availableProductId]);
+
+  // Debounce typing so each keystroke doesn't hit the API
+  useEffect(() => {
+    const t = setTimeout(() => setAvailableSearch(searchInput), 400);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   const loadCities = async () => {
     if (coliatyCities.length > 0) return;
@@ -323,6 +358,7 @@ export default function AgentLeads() {
   }, [loadData, selectedInfluencerId, theme]);
 
   const handleCall = async (phone: string, leadId: number) => {
+    recordContactClick(leadId, 'CALL');
     window.location.href = `tel:${phone}`;
     try {
       if (myLeads.find(l => l.id === leadId)?.status === 'ASSIGNED') {
@@ -580,6 +616,91 @@ export default function AgentLeads() {
           )}
         </div>
 
+        {/* Search & filters over the available pool.
+            Matching happens server-side (phone included) — the number itself is
+            never rendered on a card, since the agent only gets it after claiming. */}
+        <div className={`bg-white rounded-2xl border p-3 shadow-sm ${
+          isPrincess ? 'border-amber-100' : isGirly ? 'border-pink-100' : 'border-indigo-100'
+        }`}>
+          <div className="flex flex-col lg:flex-row gap-2.5">
+            <div className="relative flex-1">
+              <Search className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 ${
+                isPrincess ? 'text-amber-400' : isGirly ? 'text-pink-400' : 'text-indigo-400'
+              }`} />
+              <input
+                type="text"
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                placeholder="Rechercher par nom, téléphone, ville, adresse, produit, SKU..."
+                className={`w-full pl-10 pr-9 py-2.5 bg-gray-50 border rounded-xl text-sm font-medium outline-none transition-all focus:bg-white ${
+                  isPrincess
+                    ? 'border-amber-100 focus:ring-2 focus:ring-amber-200'
+                    : isGirly
+                    ? 'border-pink-100 focus:ring-2 focus:ring-pink-200'
+                    : 'border-indigo-100 focus:ring-2 focus:ring-indigo-200'
+                }`}
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={() => setSearchInput('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            <div className="w-full lg:w-[190px] flex-shrink-0">
+              <SearchableSelect
+                theme={theme}
+                value={availableCity}
+                onChange={v => setAvailableCity(String(v))}
+                placeholder="Toutes les villes"
+                searchPlaceholder="Chercher une ville..."
+                icon={<MapPin className="w-4 h-4" />}
+                options={[
+                  { value: '', label: 'Toutes les villes' },
+                  ...availableFilterOptions.cities.map(c => ({ value: c, label: c })),
+                ]}
+              />
+            </div>
+
+            <div className="w-full lg:w-[200px] flex-shrink-0">
+              <SearchableSelect
+                theme={theme}
+                value={availableProductId}
+                onChange={v => setAvailableProductId(v === '' ? '' : Number(v))}
+                placeholder="Tous les produits"
+                searchPlaceholder="Chercher un produit..."
+                icon={<Package className="w-4 h-4" />}
+                options={[
+                  { value: '', label: 'Tous les produits' },
+                  ...availableFilterOptions.products.map(p => ({ value: p.id, label: p.name })),
+                ]}
+              />
+            </div>
+          </div>
+
+          {(availableSearch || availableCity || availableProductId) && (
+            <div className="flex items-center gap-2 flex-wrap mt-2.5 pt-2.5 border-t border-gray-50">
+              <span className="text-[11px] font-black text-gray-500">
+                {totalAvailableCount} résultat{totalAvailableCount > 1 ? 's' : ''}
+                {totalScopeCount > totalAvailableCount && (
+                  <span className="text-gray-300 font-bold"> sur {totalScopeCount} disponibles</span>
+                )}
+              </span>
+              <button
+                type="button"
+                onClick={() => { setSearchInput(''); setAvailableCity(''); setAvailableProductId(''); }}
+                className="ml-auto px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+              >
+                Réinitialiser
+              </button>
+            </div>
+          )}
+        </div>
+
         {availableLeads.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {availableLeads.map((lead) => (
@@ -684,8 +805,30 @@ export default function AgentLeads() {
             ) : (
               <Zap className="w-12 h-12 text-indigo-300 mx-auto mb-4 animate-pulse" />
             )}
-            <p className="text-gray-900 font-black text-sm">{isPrincess || isGirly ? 'Tout est tranquille pour l\'instant ! ✨' : 'Aucun lead disponible.'}</p>
-            <p className="text-gray-400 text-xs mt-1 font-medium">Les nouveaux leads apparaîtront ici dès qu'ils arrivent.</p>
+            {(availableSearch || availableCity || availableProductId) ? (
+              <>
+                <p className="text-gray-900 font-black text-sm">Aucun lead ne correspond à votre recherche.</p>
+                <p className="text-gray-400 text-xs mt-1 font-medium">
+                  {totalScopeCount > 0
+                    ? `${totalScopeCount} lead${totalScopeCount > 1 ? 's' : ''} disponible${totalScopeCount > 1 ? 's' : ''} sans filtre.`
+                    : 'Aucun lead disponible pour le moment.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { setSearchInput(''); setAvailableCity(''); setAvailableProductId(''); }}
+                  className={`mt-5 px-5 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider text-white transition-all active:scale-95 ${
+                    isPrincess ? 'bg-amber-500 hover:bg-amber-600' : isGirly ? 'bg-pink-500 hover:bg-pink-600' : 'bg-indigo-600 hover:bg-indigo-700'
+                  }`}
+                >
+                  Réinitialiser la recherche
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-gray-900 font-black text-sm">{isPrincess || isGirly ? 'Tout est tranquille pour l\'instant ! ✨' : 'Aucun lead disponible.'}</p>
+                <p className="text-gray-400 text-xs mt-1 font-medium">Les nouveaux leads apparaîtront ici dès qu'ils arrivent.</p>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -762,12 +905,13 @@ export default function AgentLeads() {
                   </div>
 
                   <div className="flex items-center justify-between gap-4 mb-4">
-                    <a 
-                      href={`tel:${lead.phone}`} 
+                    <a
+                      href={`tel:${lead.phone}`}
+                      onClick={() => handleCallClick(lead.id)}
                       className={`text-xs font-black flex items-center gap-1 px-2.5 py-1.5 rounded-xl border ${
                         isPrincess
                           ? 'text-amber-600 hover:text-amber-700 bg-amber-50 border-amber-100'
-                          : isGirly 
+                          : isGirly
                           ? 'text-pink-500 hover:text-pink-600 bg-pink-50 border-pink-100' 
                           : 'text-indigo-500 hover:text-indigo-600 bg-indigo-50 border-indigo-100'
                       }`}

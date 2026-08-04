@@ -22,6 +22,10 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
+import StatusReasonModal, {
+  REASON_REQUIRED_STATUSES,
+  MIN_REASON_LENGTH,
+} from '../../components/helper/StatusReasonModal';
 
 interface Parcel {
   id: number;
@@ -169,6 +173,11 @@ export default function HelperRetours() {
   const [downloadingCode, setDownloadingCode] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
+  // Mandatory-reason modal for DELIVERED / RETURNED
+  const [reasonModal, setReasonModal] = useState<{ parcel: Parcel; status: string } | null>(null);
+  const [reasonText, setReasonText] = useState('');
+  const [submittingReason, setSubmittingReason] = useState(false);
+
   const fetchParcels = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
@@ -260,16 +269,47 @@ export default function HelperRetours() {
     });
   };
 
-  const handleStatusUpdate = async (parcelId: number, newStatus: string) => {
+  const applyStatus = async (parcelId: number, newStatus: string, reason?: string) => {
     setUpdatingStatusId(parcelId);
     try {
-      await ordersApi.updateStatus(parcelId.toString(), { status: newStatus });
-      toast.success(`Statut mis à jour : ${newStatus}`);
+      await ordersApi.updateStatus(parcelId.toString(), {
+        status: newStatus,
+        ...(reason ? { notes: reason } : {}),
+      });
+      toast.success(`Statut mis à jour : ${statusConfig[newStatus]?.label || newStatus}`);
       fetchParcels();
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Erreur lors de la mise à jour du statut');
+      throw err;
     } finally {
       setUpdatingStatusId(null);
+    }
+  };
+
+  // "Livré" and "Retourné" are final: always ask for a written reason first
+  const handleStatusUpdate = (parcel: Parcel, newStatus: string) => {
+    if (newStatus === parcel.status) return;
+    if (REASON_REQUIRED_STATUSES[newStatus]) {
+      setReasonText('');
+      setReasonModal({ parcel, status: newStatus });
+      return;
+    }
+    applyStatus(parcel.id, newStatus).catch(() => {});
+  };
+
+  const handleConfirmReason = async () => {
+    if (!reasonModal) return;
+    const reason = reasonText.trim();
+    if (reason.length < MIN_REASON_LENGTH) return;
+    setSubmittingReason(true);
+    try {
+      await applyStatus(reasonModal.parcel.id, reasonModal.status, reason);
+      setReasonModal(null);
+      setReasonText('');
+    } catch {
+      // error already surfaced by applyStatus
+    } finally {
+      setSubmittingReason(false);
     }
   };
 
@@ -549,11 +589,13 @@ export default function HelperRetours() {
                           <select
                             disabled={updatingStatusId === parcel.id}
                             value={parcel.status}
-                            onChange={(e) => handleStatusUpdate(parcel.id, e.target.value)}
+                            onChange={(e) => handleStatusUpdate(parcel, e.target.value)}
                             className="appearance-none pl-3 pr-8 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border border-gray-100 bg-gray-50 text-gray-400 hover:border-indigo-200 hover:text-indigo-600 transition-all cursor-pointer outline-none"
                           >
                             {Object.entries(statusConfig).map(([val, cfg]) => (
-                              <option key={val} value={val}>{cfg.label}</option>
+                              <option key={val} value={val}>
+                                {cfg.label}{REASON_REQUIRED_STATUSES[val] ? ' *' : ''}
+                              </option>
                             ))}
                           </select>
                           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-300 pointer-events-none" />
@@ -692,6 +734,20 @@ export default function HelperRetours() {
             );
           })}
         </div>
+      )}
+
+      {/* Mandatory reason modal for DELIVERED / RETURNED */}
+      {reasonModal && (
+        <StatusReasonModal
+          status={reasonModal.status}
+          parcelLabel={reasonModal.parcel.coliatyPackageCode || `#${reasonModal.parcel.orderNumber}`}
+          customerName={reasonModal.parcel.customerName}
+          reason={reasonText}
+          onReasonChange={setReasonText}
+          onCancel={() => setReasonModal(null)}
+          onConfirm={handleConfirmReason}
+          submitting={submittingReason}
+        />
       )}
 
       {/* History Modal */}

@@ -41,7 +41,11 @@ import path from 'node:path';
 import { preview } from 'vite';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const DIST = path.join(ROOT, 'dist');
+// Mirrors build.outDir in vite.config.ts so deploy.sh can build into a staging
+// directory and swap it in atomically.
+const DIST = process.env.VITE_OUT_DIR
+  ? path.resolve(ROOT, process.env.VITE_OUT_DIR)
+  : path.join(ROOT, 'dist');
 const PORT = Number(process.env.PRERENDER_PORT || 4173);
 
 /**

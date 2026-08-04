@@ -19,8 +19,12 @@ import { generateContractPdf } from '../services/contract.service.js';
 import * as damanesign from '../services/damanesign.service.js';
 import { parseCookies } from '../middleware/security.js';
 import { sendOtpEmail, verifyTurnstile } from '../services/email.service.js';
+import { getSecret } from '../lib/secretStore.js';
 
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID || 'UNCONFIGURED_CLIENT_ID');
+// Built per request rather than at module load: the client id can be changed
+// from the admin dashboard, and this module is imported before loadSecrets().
+const getGoogleClient = () =>
+  new OAuth2Client(getSecret('GOOGLE_CLIENT_ID') || 'UNCONFIGURED_CLIENT_ID');
 const authLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 10, // Limit each IP to 10 register requests per windowMs
@@ -1101,9 +1105,9 @@ router.post(
       throw new AppException(400, 'Google credential is required');
     }
 
-    const ticket = await googleClient.verifyIdToken({
+    const ticket = await getGoogleClient().verifyIdToken({
       idToken: credential,
-      audience: process.env.GOOGLE_CLIENT_ID,
+      audience: getSecret('GOOGLE_CLIENT_ID'),
     });
 
     const payload = ticket.getPayload();

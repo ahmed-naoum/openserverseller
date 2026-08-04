@@ -5,6 +5,7 @@ import axios from 'axios';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { prisma } from '../lib/prisma.js';
+import { getSecret } from '../lib/secretStore.js';
 
 const router = Router();
 
@@ -29,9 +30,9 @@ const callColiatyCreateParcel = async (parcelData: {
   package_old_tracking?: string;
   package_note?: string;
 }): Promise<{ package_code: string; package_id: number }> => {
-  const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
-  const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
-  const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
+  const COLIATY_PUBLIC_KEY = getSecret('COLIATY_PUBLIC_KEY');
+  const COLIATY_SECRET_KEY = getSecret('COLIATY_SECRET_KEY');
+  const COLIATY_BASE_URL = getSecret('COLIATY_BASE_URL') || 'https://customer-api-v1.coliaty.com';
 
   if (!COLIATY_PUBLIC_KEY || !COLIATY_SECRET_KEY || COLIATY_PUBLIC_KEY === 'your_coliaty_public_key') {
     throw new AppException(400, '[Coliaty] Clés API non configurées.');
@@ -157,9 +158,9 @@ router.get(
   asyncHandler(async (req, res) => {
     const { code } = req.params;
 
-    const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
-    const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
-    const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
+    const COLIATY_PUBLIC_KEY = getSecret('COLIATY_PUBLIC_KEY');
+    const COLIATY_SECRET_KEY = getSecret('COLIATY_SECRET_KEY');
+    const COLIATY_BASE_URL = getSecret('COLIATY_BASE_URL') || 'https://customer-api-v1.coliaty.com';
 
     if (!COLIATY_PUBLIC_KEY || !COLIATY_SECRET_KEY || COLIATY_PUBLIC_KEY === 'your_coliaty_public_key') {
       throw new AppException(500, '[Coliaty] Clés API non configurées.');
@@ -409,7 +410,7 @@ router.post(
     }
 
     const commissionPercentage = parseFloat(
-      process.env.PLATFORM_COMMISSION_PERCENTAGE || '15'
+      getSecret('PLATFORM_COMMISSION_PERCENTAGE') || '15'
     );
     const platformFeeMad = totalAmountMad * (commissionPercentage / 100);
     const vendorEarningMad = totalAmountMad - platformFeeMad;
@@ -484,6 +485,7 @@ router.patch(
     const { status, notes, actionType, cloneName, cloneDescription, clonePrice, cloneQuantity, cloneImageUrls } = req.body;
 
     const validStatuses = [
+      // Internal lifecycle
       'PENDING',
       'CONFIRMED',
       'IN_PRODUCTION',
@@ -493,10 +495,51 @@ router.patch(
       'CANCELLED',
       'RETURNED',
       'REFUNDED',
+      'PUSHED_TO_DELIVERY',
+      'CALL_LATER',
+      // Coliaty lifecycle (mirrors COLIATY_TO_INTERNAL in webhook.routes.ts)
+      'NEW_PARCEL',
+      'WAITING_PICKUP',
+      'WAITING_PREPARATION',
+      'PREPARED',
+      'ENCORE_PREPARED',
+      'PICKED_UP',
+      'SENT',
+      'RECEIVED',
+      'DISTRIBUTION',
+      'PROGRAMMER_AUTO',
+      'PROGRAMMER',
+      'POSTPONED',
+      'NOANSWER',
+      'ERR',
+      'INCORRECT_ADDRESS',
+      'INTERESTED',
+      'CANCELED_BY_SELLER',
+      'CANCELED_BY_SYSTEM',
+      'CANCELED',
+      'REFUSE',
     ];
 
     if (!validStatuses.includes(status)) {
       throw new AppException(400, 'Invalid status');
+    }
+
+    // A helper must justify closing a parcel: "Livré" and "Retourné" are final,
+    // money-impacting states, so they always require a written reason.
+    const REASON_REQUIRED_STATUSES: Record<string, string> = {
+      DELIVERED: 'Livré',
+      RETURNED: 'Retourné',
+    };
+    const MIN_REASON_LENGTH = 10;
+    const reason = typeof notes === 'string' ? notes.trim() : '';
+
+    if (req.user!.roleName === 'HELPER' && REASON_REQUIRED_STATUSES[status]) {
+      if (reason.length < MIN_REASON_LENGTH) {
+        throw new AppException(
+          400,
+          `Une raison d'au moins ${MIN_REASON_LENGTH} caractères est obligatoire pour passer un colis en "${REASON_REQUIRED_STATUSES[status]}".`
+        );
+      }
     }
 
     const where: any = { id: Number(id) };
@@ -520,7 +563,7 @@ router.patch(
           oldStatus: order.status,
           newStatus: status,
           changedBy: req.user!.id,
-          notes: actionType === 'CLONE_PRODUCT' ? `Produit cloné et commande confirmée. ${notes || ''}` : notes,
+          notes: actionType === 'CLONE_PRODUCT' ? `Produit cloné et commande confirmée. ${reason}` : (reason || null),
         },
       });
 
@@ -591,7 +634,7 @@ router.patch(
         const allItems = await tx.orderItem.findMany({ where: { orderId: order.id } });
         const newTotalAmount = allItems.reduce((sum, item) => sum + Number(item.totalPriceMad), 0);
         
-        const commissionPercentage = parseFloat(process.env.PLATFORM_COMMISSION_PERCENTAGE || '15');
+        const commissionPercentage = parseFloat(getSecret('PLATFORM_COMMISSION_PERCENTAGE') || '15');
         const newPlatformFee = (newTotalAmount * commissionPercentage) / 100;
         const newVendorEarning = newTotalAmount - newPlatformFee;
 
@@ -713,9 +756,9 @@ router.post(
       };
     });
 
-    const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
-    const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
-    const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
+    const COLIATY_PUBLIC_KEY = getSecret('COLIATY_PUBLIC_KEY');
+    const COLIATY_SECRET_KEY = getSecret('COLIATY_SECRET_KEY');
+    const COLIATY_BASE_URL = getSecret('COLIATY_BASE_URL') || 'https://customer-api-v1.coliaty.com';
 
     let successParcels: Record<string, string> = {};
     let errorParcels: Record<string, any> = {};
@@ -861,9 +904,9 @@ router.post(
 
     // Unlink and delete from Coliaty if it was pushed
     if ((order as any).coliatyPackageCode) {
-      const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
-      const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
-      const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
+      const COLIATY_PUBLIC_KEY = getSecret('COLIATY_PUBLIC_KEY');
+      const COLIATY_SECRET_KEY = getSecret('COLIATY_SECRET_KEY');
+      const COLIATY_BASE_URL = getSecret('COLIATY_BASE_URL') || 'https://customer-api-v1.coliaty.com';
 
       if (COLIATY_PUBLIC_KEY && COLIATY_SECRET_KEY && COLIATY_PUBLIC_KEY !== 'your_coliaty_public_key') {
         try {
@@ -952,9 +995,9 @@ router.post(
     if (!(order as any).coliatyPackageCode) throw new AppException(400, 'This order is not synchronized with Coliaty.');
     if (order.status !== 'PENDING') throw new AppException(400, 'Seuls les colis en attente peuvent être modifiés.');
 
-    const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
-    const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
-    const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
+    const COLIATY_PUBLIC_KEY = getSecret('COLIATY_PUBLIC_KEY');
+    const COLIATY_SECRET_KEY = getSecret('COLIATY_SECRET_KEY');
+    const COLIATY_BASE_URL = getSecret('COLIATY_BASE_URL') || 'https://customer-api-v1.coliaty.com';
 
     if (!COLIATY_PUBLIC_KEY || !COLIATY_SECRET_KEY || COLIATY_PUBLIC_KEY === 'your_coliaty_public_key') {
       throw new AppException(500, '[Coliaty] Clés API non configurées.');
@@ -1049,9 +1092,9 @@ router.put(
     if (!order) throw new AppException(404, 'Order not found');
     if (!(order as any).coliatyPackageCode) throw new AppException(400, 'This order is not synchronized with Coliaty.');
 
-    const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
-    const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
-    const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
+    const COLIATY_PUBLIC_KEY = getSecret('COLIATY_PUBLIC_KEY');
+    const COLIATY_SECRET_KEY = getSecret('COLIATY_SECRET_KEY');
+    const COLIATY_BASE_URL = getSecret('COLIATY_BASE_URL') || 'https://customer-api-v1.coliaty.com';
 
     try {
       const response = await axios.put(`${COLIATY_BASE_URL.replace(/\/$/, '')}/parcel/normal/${(order as any).coliatyPackageCode}`, {
@@ -1133,9 +1176,9 @@ router.put(
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const getColiatyConfig = () => {
-  const pub = process.env.COLIATY_PUBLIC_KEY;
-  const sec = process.env.COLIATY_SECRET_KEY;
-  const base = (process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com').replace(/\/$/, '');
+  const pub = getSecret('COLIATY_PUBLIC_KEY');
+  const sec = getSecret('COLIATY_SECRET_KEY');
+  const base = (getSecret('COLIATY_BASE_URL') || 'https://customer-api-v1.coliaty.com').replace(/\/$/, '');
   if (!pub || !sec || pub === 'your_coliaty_public_key') {
     throw new AppException(500, '[Coliaty] Clés API non configurées.');
   }

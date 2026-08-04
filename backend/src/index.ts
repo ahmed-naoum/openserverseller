@@ -17,6 +17,8 @@ import { Server as SocketServer } from 'socket.io';
 import path from 'path';
 
 import routes from './routes/index.js';
+import { loadSecrets } from './lib/secretStore.js';
+import { reconcileInterruptedDeploys } from './services/deploy.service.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { setupPassport } from './config/passport.js';
@@ -163,7 +165,23 @@ app.use(cors({
 }));
 
 app.use(compression());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({
+  limit: '10mb',
+  /**
+   * Keeps the exact bytes for routes that verify an HMAC signature over the
+   * request body. Signatures are computed on what the sender signed, and a
+   * parsed-then-restringified object does not reproduce it (key order,
+   * whitespace and unicode escaping all differ).
+   *
+   * Scoped to the one path that needs it so we are not holding a second
+   * reference to every 10 MB upload body for the life of the request.
+   */
+  verify: (req, _res, buf) => {
+    if (req.url?.includes('/deploy/webhook')) {
+      (req as any).rawBody = Buffer.from(buf);
+    }
+  },
+}));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(morgan('combined'));
 app.use(requestLogger);
@@ -203,7 +221,10 @@ app.use('/uploads', (req, res, next) => {
   next();
 }, express.static(path.join(process.cwd(), 'uploads')));
 
-setupPassport();
+// setupPassport() is invoked after loadSecrets() (near server.listen) so the
+// Google strategy is registered with the credentials from the database.
+// Strategies are resolved by name at request time, so registering it after the
+// middleware chain is wired up is safe.
 
 app.use(maintenanceMiddleware);
 
@@ -650,6 +671,20 @@ const setupChatSocket = () => {
       stopSamplerIfIdle();
     });
 
+    // ── Admin → server: live deployment log ───────────────────────────────────
+    // Same shape as perf:subscribe and role-gated for the same reason: io.use()
+    // admits tokenless sockets, so a connected socket is not an authenticated
+    // one. Without this check any visitor could watch deploy output, which
+    // leaks paths, environment details and build errors.
+    socket.on('deploy:subscribe', () => {
+      if (!isSuperAdmin()) return;
+      socket.join('deploy:watchers');
+    });
+
+    socket.on('deploy:unsubscribe', () => {
+      socket.leave('deploy:watchers');
+    });
+
     // ── Admin → server: start watching a specific visitor socket ──────────────
     socket.on('stream:watch', ({ socketId }: { socketId: string }) => {
       if (!isSuperAdmin() || !socketId) return;
@@ -772,8 +807,21 @@ try {
   console.error('Failed to seed traffic data:', err);
 }
 
-server.listen(PORT, () => {
-  console.log(`
+// Load admin-managed configuration before accepting traffic, so the first
+// request already sees database values rather than stale .env ones. A failure
+// here is logged inside loadSecrets() and never blocks boot — the app simply
+// keeps running on .env values.
+loadSecrets().finally(() => {
+  setupPassport();
+
+  // Settle any deployment that was still RUNNING when this process died. The
+  // usual cause is benign — the deploy's final step is `pm2 restart silacod-api`,
+  // so a successful deploy always takes us down with it — but the row would stay
+  // RUNNING forever and wedge the single-deploy lock.
+  reconcileInterruptedDeploys();
+
+  server.listen(PORT, () => {
+    console.log(`
   🚀 SILACOD Backend Server Started
   ─────────────────────────────────────
   Environment: ${process.env.NODE_ENV || 'development'}
@@ -781,6 +829,7 @@ server.listen(PORT, () => {
   API: http://localhost:${PORT}${API_PREFIX}
   ─────────────────────────────────────
   `);
+  });
 });
 
 export default app;

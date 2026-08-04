@@ -32,6 +32,17 @@ export default defineConfig({
       }
     })
   ],
+  build: {
+    /**
+     * Overridable so deploy.sh can build into a staging directory and swap it in
+     * atomically. `vite build` empties its output directory before writing, so
+     * building straight into the live dist/ makes the site serve 404s for the
+     * duration of the build.
+     *
+     * scripts/prerender.mjs reads the same variable.
+     */
+    outDir: process.env.VITE_OUT_DIR || 'dist',
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

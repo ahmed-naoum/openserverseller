@@ -97,15 +97,12 @@ export default function VendorInventory() {
       const currentMode = user?.mode || 'SELLER';
 
       const activeClaims = data.filter((c: any) => {
-        const isVendorProduct = Boolean(user?.id && c.product?.ownerId === user.id);
-
-        if (currentMode === 'SELLER') {
-          // Mode Vendeur: Show ONLY vendor's owned products
-          return isVendorProduct;
-        } else {
-          // Mode Affilié: Show ONLY products claimed from marketplace (owned by other vendors/admins)
-          return !isVendorProduct;
-        }
+        // Show a product in the mode it was actually claimed under, not based on who owns it.
+        // Owned products come back with userMode 'SELLER', marketplace claims carry the mode
+        // that was active when the user clicked "Add to my products".
+        const claimMode = c.userMode
+          || (user?.id && c.product?.ownerId === user.id ? 'SELLER' : 'AFFILIATE');
+        return claimMode === currentMode;
       });
       setClaims(activeClaims);
     } catch (error) {

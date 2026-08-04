@@ -140,6 +140,7 @@ model User {
   leadImports    LeadImportBatch[]
   leads          Lead[]
   assignedLeads  Lead[]            @relation("AgentLeads")
+  leadContactClicks LeadContactClick[]
   orders         Order[]
   wallet         Wallet?
   payoutRequests PayoutRequest[]   @relation("VendorPayouts")
@@ -354,6 +355,23 @@ model PlatformSettings {
   @@map("platform_settings")
 }
 
+// Runtime-configurable environment values, managed by SUPER_ADMIN from the dashboard.
+// `value` is always stored encrypted with ENCRYPTION_KEY (see utils/crypto.ts), even for
+// non-secret entries, so a database dump never exposes provider credentials in plaintext.
+// Bootstrap values (DATABASE_URL, ENCRYPTION_KEY, JWT_SECRET) are NEVER stored here —
+// they are required before this table can be read. See config/secretRegistry.ts.
+model AppSecret {
+  id             Int      @id @default(autoincrement())
+  key            String   @unique // matches the env var name, e.g. "COLIATY_SECRET_KEY"
+  value          String // encrypted: "ENC:<iv>:<ciphertext>"
+  updatedById    Int?
+  updatedByEmail String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("app_secrets")
+}
+
 model LeadImportBatch {
   id            Int      @id @default(autoincrement())
   vendorId      Int
@@ -406,8 +424,25 @@ model Lead {
   statusHistory  LeadStatusHistory[]
   callLogs       CallLog[]
   assignments    LeadAssignment[]
+  contactClicks  LeadContactClick[]
 
   @@map("leads")
+}
+
+// Records each time an operator actually opened WhatsApp / dialled a lead, so
+// contact attempts are auditable instead of living in one browser's localStorage.
+model LeadContactClick {
+  id        Int      @id @default(autoincrement())
+  leadId    Int
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  channel   String // WHATSAPP, CALL
+  createdAt DateTime @default(now())
+
+  @@index([leadId])
+  @@index([leadId, channel])
+  @@map("lead_contact_clicks")
 }
 
 model LeadStatusHistory {
@@ -1371,3 +1406,59 @@ model SignupAttempt {
 
 
 
+
+/// Audit trail for every deployment triggered from the admin dashboard.
+///
+/// One row per attempt, including failures — a deploy that broke the site is
+/// exactly the record you need afterwards. `logPath` points at the file the
+/// detached runner streams into; the log survives the API process restarting.
+model Deployment {
+  id             String    @id @default(uuid())
+  /// Commit the deploy moved the checkout to. Null when it failed before pulling.
+  commitSha      String?
+  commitMessage  String?
+  commitAuthor   String?
+  branch         String    @default("master")
+  /// PENDING | RUNNING | SUCCESS | FAILED | TIMEOUT
+  status         String    @default("PENDING")
+  /// WEBHOOK | MANUAL — how the deploy was started.
+  trigger        String    @default("MANUAL")
+  triggeredById  Int?
+  triggeredBy    String?
+  exitCode       Int?
+  errorMessage   String?
+  logPath        String?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  durationMs     Int?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([commitSha])
+  @@map("deployments")
+}
+
+/// Commits seen via the GitHub webhook but not yet deployed.
+///
+/// Populated by the push webhook so the admin panel can show "3 commits waiting"
+/// without calling the GitHub API on every page load. Rows are marked deployed
+/// once a deployment that includes them succeeds.
+model PendingCommit {
+  id            String   @id @default(uuid())
+  sha           String   @unique
+  message       String
+  author        String?
+  branch        String
+  url           String?
+  committedAt   DateTime?
+  deployed      Boolean  @default(false)
+  deploymentId  String?
+  createdAt     DateTime @default(now())
+
+  @@index([deployed])
+  @@index([branch])
+  @@index([createdAt])
+  @@map("pending_commits")
+}

@@ -4,6 +4,7 @@ import axios from 'axios';
 import crypto from 'crypto';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { authenticate } from '../middleware/auth.js';
+import { getSecret } from '../lib/secretStore.js';
 
 const router = Router();
 
@@ -421,8 +422,8 @@ async function parseAndInsertLeadRows(vendorId: number, rows: any[][]): Promise<
 }
 
 async function fetchViaGoogleSheetsApi(sheetId: string, gid?: string | null): Promise<any[][] | null> {
-  const apiKey = process.env.GOOGLE_SHEETS_API_KEY;
-  const token = process.env.GOOGLE_OAUTH_ACCESS_TOKEN;
+  const apiKey = getSecret('GOOGLE_SHEETS_API_KEY');
+  const token = getSecret('GOOGLE_OAUTH_ACCESS_TOKEN');
 
   let range = 'A1:Z500';
   if (gid) {
@@ -505,7 +506,7 @@ async function syncDirectSheetForVendor(vendorId: number): Promise<{ importedCou
   }
 
   // 2. Try central SILACOD Reader Web App URL if defined
-  const readerUrl = process.env.GOOGLE_SHEETS_READER_URL;
+  const readerUrl = getSecret('GOOGLE_SHEETS_READER_URL');
   if (readerUrl) {
     try {
       const resp = await axios.get(`${readerUrl}?sheetId=${sheetId}&gid=${gid || ''}`, { timeout: 12000 });

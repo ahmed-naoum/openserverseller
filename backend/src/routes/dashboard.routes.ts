@@ -49,7 +49,8 @@ router.get(
       wallet,
       periodStats,
       periodLeadCounts,
-      periodClicks
+      periodClicks,
+      helperAssignments
     ] = await Promise.all([
       prisma.userProfile.findUnique({ where: { userId } }),
       prisma.referralLink.findMany({
@@ -121,6 +122,28 @@ router.get(
           ipAddress: true,
           userAgent: true
         }
+      }),
+      (prisma as any).helperUserAssignment.findMany({
+        where: {
+          targetUserId: userId,
+          helper: {
+            canDisplayOnDashboard: true
+          }
+        },
+        include: {
+          helper: {
+            select: {
+              email: true,
+              phone: true,
+              profile: {
+                select: {
+                  fullName: true,
+                  avatarUrl: true
+                }
+              }
+            }
+          }
+        }
       })
     ]);
 
@@ -181,7 +204,13 @@ router.get(
       notifications,
       wallet,
       walletTransactions: wallet?.transactions || [],
-      leadCountsByLink
+      leadCountsByLink,
+      helpers: (helperAssignments || []).map((ha: any) => ({
+        email: ha.helper.email,
+        phone: ha.helper.phone,
+        fullName: ha.helper.profile?.fullName || 'N/A',
+        avatarUrl: ha.helper.profile?.avatarUrl || null
+      }))
     });
   })
 );

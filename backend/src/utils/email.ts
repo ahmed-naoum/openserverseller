@@ -1,17 +1,5 @@
-import nodemailer from 'nodemailer';
-
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: process.env.SMTP_SECURE === 'true', // false for STARTTLS (port 587), true for SSL (port 465)
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false, // Allow self-signed certificates
-  },
-});
+import { getTransporter } from '../lib/mailTransport.js';
+import { getSecret } from '../lib/secretStore.js';
 
 export interface EmailOptions {
   to: string;
@@ -22,7 +10,7 @@ export interface EmailOptions {
 
 export const sendEmail = async (options: EmailOptions): Promise<void> => {
   const mailOptions = {
-    from: process.env.EMAIL_FROM || 'noreply@silacod.com',
+    from: getSecret('EMAIL_FROM') || 'noreply@silacod.com',
     to: options.to,
     subject: options.subject,
     text: options.text,
@@ -30,7 +18,7 @@ export const sendEmail = async (options: EmailOptions): Promise<void> => {
   };
 
   try {
-    await transporter.sendMail(mailOptions);
+    await getTransporter().sendMail(mailOptions);
     console.log(`Email sent to ${options.to}`);
   } catch (error) {
     console.error('Failed to send email:', error);

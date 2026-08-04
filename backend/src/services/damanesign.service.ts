@@ -1,14 +1,15 @@
 import axios, { AxiosInstance } from 'axios';
 import FormData from 'form-data';
+import { getSecret } from '../lib/secretStore.js';
 
-const BASE_URL = process.env.DAMANESIGN_API_URL || 'https://api-recette.damanesign.ma';
-const API_KEY = process.env.DAMANESIGN_API_KEY || '';
+// Resolved per request via an interceptor rather than captured at module load,
+// so credentials updated in the admin dashboard apply without a restart.
+const client: AxiosInstance = axios.create();
 
-const client: AxiosInstance = axios.create({
-  baseURL: BASE_URL,
-  headers: {
-    'x-api-key': API_KEY,
-  },
+client.interceptors.request.use((config) => {
+  config.baseURL = getSecret('DAMANESIGN_API_URL') || 'https://api-recette.damanesign.ma';
+  config.headers.set('x-api-key', getSecret('DAMANESIGN_API_KEY') || '');
+  return config;
 });
 
 export interface DamanesignMemberInput {
@@ -86,7 +87,7 @@ export async function uploadFile(
     },
     headers: {
       ...form.getHeaders(),
-      'x-api-key': API_KEY,
+      'x-api-key': getSecret('DAMANESIGN_API_KEY') || '',
     },
   });
 
