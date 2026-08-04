@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { influencerApi, leadsApi } from '../../lib/api';
@@ -162,6 +162,16 @@ export default function VendorLeads() {
   const [commissions, setCommissions] = useState<InfluencerCommission[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchInputValue, setSearchInputValue] = useState('');
+  const searchTimeout = useRef<any>(null);
+
+  useEffect(() => {
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    searchTimeout.current = setTimeout(() => {
+      setSearchTerm(searchInputValue);
+    }, 400);
+    return () => clearTimeout(searchTimeout.current);
+  }, [searchInputValue]);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [showStats, setShowStats] = useState(true);
   const [startDate, setStartDate] = useState<string>('');
@@ -961,8 +971,8 @@ export default function VendorLeads() {
               <input
                 type="text"
                 placeholder={t('search_placeholder', 'leads', 'Rechercher par nom, téléphone ou ville...')}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                value={searchInputValue}
+                onChange={(e) => setSearchInputValue(e.target.value)}
                 className="w-full pl-11 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-influencer-500 transition-all font-medium placeholder:text-gray-400"
               />
             </div>

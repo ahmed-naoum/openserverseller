@@ -4,6 +4,7 @@ import { body, query, validationResult } from 'express-validator';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import axios from 'axios';
+import { getSecret } from '../utils/secrets.js';
 
 // Helper to call Coliaty API
 const callColiatyCreateParcel = async (parcelData: {
@@ -19,8 +20,8 @@ const callColiatyCreateParcel = async (parcelData: {
   package_old_tracking?: string;
   package_note?: string;
 }): Promise<{ package_code: string; package_id: number }> => {
-  const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
-  const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
+  const COLIATY_PUBLIC_KEY = getSecret('COLIATY_PUBLIC_KEY');
+  const COLIATY_SECRET_KEY = getSecret('COLIATY_SECRET_KEY');
   const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
 
   if (!COLIATY_PUBLIC_KEY || !COLIATY_SECRET_KEY || COLIATY_PUBLIC_KEY === 'your_coliaty_public_key') {
@@ -117,8 +118,8 @@ router.get(
       });
     }
 
-    const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
-    const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
+    const COLIATY_PUBLIC_KEY = getSecret('COLIATY_PUBLIC_KEY');
+    const COLIATY_SECRET_KEY = getSecret('COLIATY_SECRET_KEY');
     const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
 
     if (!COLIATY_PUBLIC_KEY || !COLIATY_SECRET_KEY || COLIATY_PUBLIC_KEY === 'your_coliaty_public_key') {
@@ -550,8 +551,8 @@ router.get(
   asyncHandler(async (req, res) => {
     const { code } = req.params;
     
-    const COLIATY_PUBLIC_KEY = process.env.COLIATY_PUBLIC_KEY;
-    const COLIATY_SECRET_KEY = process.env.COLIATY_SECRET_KEY;
+    const COLIATY_PUBLIC_KEY = getSecret('COLIATY_PUBLIC_KEY');
+    const COLIATY_SECRET_KEY = getSecret('COLIATY_SECRET_KEY');
     const COLIATY_BASE_URL = process.env.COLIATY_BASE_URL || 'https://customer-api-v1.coliaty.com';
 
     if (!COLIATY_PUBLIC_KEY || !COLIATY_SECRET_KEY || COLIATY_PUBLIC_KEY === 'your_coliaty_public_key') {

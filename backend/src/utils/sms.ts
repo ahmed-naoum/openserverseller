@@ -1,12 +1,13 @@
 import twilio from 'twilio';
-
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const fromNumber = process.env.TWILIO_PHONE_NUMBER;
-
-const client = accountSid && authToken ? twilio(accountSid, authToken) : null;
+import { getSecret } from './secrets.js';
 
 export const sendSMS = async (to: string, message: string): Promise<void> => {
+  const accountSid = getSecret('TWILIO_ACCOUNT_SID');
+  const authToken = getSecret('TWILIO_AUTH_TOKEN');
+  const fromNumber = getSecret('TWILIO_PHONE_NUMBER');
+
+  const client = accountSid && authToken ? twilio(accountSid, authToken) : null;
+
   if (!client) {
     console.log(`[DEV] SMS to ${to}: ${message}`);
     return;

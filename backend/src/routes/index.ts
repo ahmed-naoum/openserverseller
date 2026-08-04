@@ -39,6 +39,7 @@ import customProductRoutes from './customProduct.routes.js';
 import eventRoutes from './event.routes.js';
 import googleSheetsRoutes from './googleSheets.routes.js';
 import helperRoutes from './helper.routes.js';
+import secretsRoutes from './secrets.routes.js';
 
 
 const router = Router();
@@ -72,9 +73,9 @@ router.use('/couriers', courierRoutes);
 router.use('/warehouse', warehouseRoutes);
 router.use('/notifications', notificationRoutes);
 
-// Register specific admin sub-routes BEFORE the general /admin route
 router.use('/admin/backups', backupRoutes);
 router.use('/admin/security', securityRoutes);
+router.use('/admin/secrets', secretsRoutes);
 
 router.use('/admin', auditLog, adminRoutes);
 

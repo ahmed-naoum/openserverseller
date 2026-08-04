@@ -2,6 +2,15 @@ import { prisma } from './lib/prisma.js';
 import * as dotenv from 'dotenv';
 dotenv.config({ override: true });
 
+import { initSecrets } from './utils/secrets.js';
+import { checkDeploymentOnStartup } from './utils/deployment.js';
+
+// Load DB-backed secrets and reconcile deployments on boot
+initSecrets()
+  .then(() => checkDeploymentOnStartup())
+  .catch((err) => console.error('Error during startup initialization:', err));
+
+
 // Enable BigInt serialization to JSON
 (BigInt.prototype as any).toJSON = function () {
   return Number(this);

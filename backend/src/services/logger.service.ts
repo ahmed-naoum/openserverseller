@@ -1,3 +1,4 @@
+import { getSecret } from '../utils/secrets.js';
 import axios from 'axios';
 
 export interface ExternalLogPayload {
@@ -10,8 +11,8 @@ export interface ExternalLogPayload {
 }
 
 export const streamLogToExternalTransport = async (logData: ExternalLogPayload) => {
-  const externalLogUrl = process.env.EXTERNAL_LOG_STREAM_URL;
-  const externalApiKey = process.env.EXTERNAL_LOG_STREAM_API_KEY;
+  const externalLogUrl = getSecret('EXTERNAL_LOG_STREAM_URL');
+  const externalApiKey = getSecret('EXTERNAL_LOG_STREAM_API_KEY');
 
   // Output to standard secure logs stream (stdout/stderr is captured by host runners like Docker/systemd)
   console.log(`[Tamper-Proof Audit Log Stream] ${new Date().toISOString()} - User: ${logData.userId || 'Anonymous'} - Action: ${logData.action}`);

@@ -1,18 +1,5 @@
 import nodemailer from 'nodemailer';
-
-// Configure the transporter using SMTP credentials from environment variables
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'mail.silacod.com',
-  port: parseInt(process.env.SMTP_PORT || '587', 10),
-  secure: process.env.SMTP_SECURE === 'true', // false for STARTTLS (port 587), true for SSL (port 465)
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false, // Allow self-signed certificates
-  },
-});
+import { getSecret } from './secrets.js';
 
 interface MailOptions {
   to: string;
@@ -23,9 +10,23 @@ interface MailOptions {
 
 export const sendEmail = async (options: MailOptions): Promise<boolean> => {
   try {
+    const host = getSecret('SMTP_HOST') || 'mail.silacod.com';
+    const port = parseInt(getSecret('SMTP_PORT') || '587', 10);
+    const user = getSecret('SMTP_USER');
+    const pass = getSecret('SMTP_PASS');
     const fromName = process.env.SITE_NAME || 'SILACOD';
-    const fromAddress = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || 'noreply@vegas.ma';
-    
+    const fromAddress = getSecret('SMTP_FROM') || process.env.SMTP_FROM_EMAIL || user || 'noreply@vegas.ma';
+
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: user && pass ? { user, pass } : undefined,
+      tls: {
+        rejectUnauthorized: false,
+      },
+    });
+
     await transporter.sendMail({
       from: `"${fromName}" <${fromAddress}>`,
       to: options.to,

@@ -12,6 +12,7 @@ import { getBlockedIPsList, unblockIP } from '../middleware/security.js';
 import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
+import { spawn, execSync } from 'child_process';
 
 const router = Router();
 
@@ -3079,7 +3080,6 @@ router.delete(
 // --- Professional Email Management ---
 
 // Helper function for system commands (with mock for non-linux/windows)
-import { spawn } from 'child_process';
 
 const runSystemCommand = (command: string, args: string[], stdinInput?: string): Promise<{ stdout: string; stderr: string }> => {
   return new Promise((resolve, reject) => {
@@ -3327,6 +3327,112 @@ router.delete(
         message: `Erreur lors de la suppression de l'email: ${err.message || err}` 
       });
     }
+  })
+);
+
+// ==========================================
+// DEPLOYMENT PANEL
+// ==========================================
+router.get(
+  '/deployments',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (_req: Request, res: Response) => {
+    const deployments = await prisma.deployment.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 50
+    });
+    res.json({ status: 'success', data: deployments });
+  })
+);
+
+router.get(
+  '/deployments/status',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (_req: Request, res: Response) => {
+    const { getServerPerformance } = await import('../services/serverMetrics.service.js');
+    const metrics = await getServerPerformance();
+
+    let pm2Status = null;
+    try {
+      const pm2Output = execSync('pm2 jlist', { encoding: 'utf8' });
+      const pm2List = JSON.parse(pm2Output);
+      const mainProcess = pm2List.find((p: any) => p.name === 'silacod-api');
+      if (mainProcess) {
+        pm2Status = {
+          pid: mainProcess.pid,
+          status: mainProcess.pm2_env?.status,
+          uptime: mainProcess.pm2_env?.pm_uptime,
+          restarts: mainProcess.pm2_env?.restart_time,
+          memory: mainProcess.monit?.memory,
+          cpu: mainProcess.monit?.cpu
+        };
+      }
+    } catch (e) {
+      console.warn('Failed to fetch PM2 status:', e);
+    }
+
+    let gitInfo = null;
+    try {
+      const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim();
+      const hash = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+      const msg = execSync('git log -1 --pretty=%B', { encoding: 'utf8' }).trim();
+      const date = execSync('git log -1 --pretty=%cd', { encoding: 'utf8' }).trim();
+      gitInfo = { branch, hash, msg, date };
+    } catch (e) {
+      console.warn('Failed to fetch Git status:', e);
+    }
+
+    res.json({
+      status: 'success',
+      data: {
+        metrics,
+        pm2: pm2Status,
+        git: gitInfo
+      }
+    });
+  })
+);
+
+router.post(
+  '/deployments/deploy',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const log = await prisma.deployment.create({
+      data: {
+        status: 'PENDING',
+        triggeredBy: req.user!.email || 'ADMIN'
+      }
+    });
+
+    const projectDir = process.cwd();
+    const projectRoot = path.resolve(projectDir, '..');
+
+    fs.writeFileSync(path.join(projectDir, 'current_deployment.txt'), log.id, 'utf8');
+    fs.writeFileSync(path.join(projectDir, 'deployment_status.txt'), 'PENDING', 'utf8');
+
+    const scriptPath = path.join(projectDir, 'run_deploy.sh');
+    try {
+      fs.chmodSync(scriptPath, '755');
+    } catch (err) {
+      console.warn('Could not chmod run_deploy.sh:', err);
+    }
+
+    console.log(`🚀 Spawning run_deploy.sh for deployment ${log.id}`);
+    const child = spawn('bash', [scriptPath, log.id, projectRoot], {
+      detached: true,
+      stdio: 'ignore',
+      cwd: projectDir
+    });
+    child.unref();
+
+    res.json({
+      status: 'success',
+      message: 'Déploiement initié avec succès. Le serveur va se reconstruire et redémarrer.',
+      data: log
+    });
   })
 );
 

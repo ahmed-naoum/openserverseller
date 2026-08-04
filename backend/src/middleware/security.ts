@@ -207,7 +207,7 @@ export const auditLog = async (
 ) => {
   const settings = await fetchSecuritySettings();
   
-  if (!settings.enableAuditLog) {
+  if (!settings.enableAuditLog || req.originalUrl.includes('/admin/secrets')) {
     return next();
   }
 

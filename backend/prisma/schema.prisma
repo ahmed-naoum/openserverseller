@@ -1369,5 +1369,38 @@ model SignupAttempt {
   @@map("signup_attempts")
 }
 
+model AppSecret {
+  key         String   @id
+  value       String
+  isEncrypted Boolean  @default(true)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("app_secrets")
+}
+
+model Deployment {
+  id          String   @id @default(uuid())
+  status      String   // PENDING, SUCCESS, FAILED
+  triggeredBy String
+  logOutput   String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("deployments")
+}
+
+model PendingCommit {
+  id        String   @id @default(uuid())
+  hash      String
+  message   String?
+  author    String?
+  createdAt DateTime @default(now())
+
+  @@map("pending_commits")
+}
+
+
 
 

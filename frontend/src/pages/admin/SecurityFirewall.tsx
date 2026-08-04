@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   Shield, ShieldAlert, Users, Lock, Globe, Database,
-  FileText, AlertTriangle, Zap, RefreshCw, Radio, Server, Eye, Cpu
+  FileText, AlertTriangle, Zap, RefreshCw, Radio, Server, Eye, Cpu, Key
 } from 'lucide-react';
 import ModOverview from './security/ModOverview';
 import ModBotDdos from './security/ModBotDdos';
@@ -15,6 +15,8 @@ import ModDataProtection from './security/ModDataProtection';
 import ModIncidents from './security/ModIncidents';
 import ModCompliance from './security/ModCompliance';
 import ModThreatMap from './security/ModThreatMap';
+import ModSecrets from './security/ModSecrets';
+import ModDeployments from './security/ModDeployments';
 import { Activity } from 'lucide-react';
 
 const MODULES = [
@@ -28,6 +30,8 @@ const MODULES = [
   { id: 'infra', label: 'Infrastructure', icon: Server, color: 'text-blue-400' },
   { id: 'vps', label: 'VPS Performance', icon: Cpu, color: 'text-lime-400' },
   { id: 'data', label: 'Database & Storage', icon: Database, color: 'text-teal-400' },
+  { id: 'secrets', label: 'DB Secrets', icon: Key, color: 'text-yellow-400' },
+  { id: 'deployments', label: 'Deployment Panel', icon: RefreshCw, color: 'text-sky-400' },
   { id: 'incidents', label: 'Incidents & Alerts', icon: AlertTriangle, color: 'text-orange-400' },
   { id: 'compliance', label: 'Audit & Compliance', icon: FileText, color: 'text-indigo-400' },
 ] as const;
@@ -53,6 +57,8 @@ export default function SecurityFirewall() {
       case 'infra': return <ModInfrastructure {...props} />;
       case 'vps': return <ModVpsPerformance {...props} />;
       case 'data': return <ModDataProtection {...props} />;
+      case 'secrets': return <ModSecrets {...props} />;
+      case 'deployments': return <ModDeployments {...props} />;
       case 'incidents': return <ModIncidents {...props} />;
       case 'compliance': return <ModCompliance {...props} />;
     }
