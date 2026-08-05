@@ -229,7 +229,8 @@ export default function AgentLeads() {
         {availableLeads.length > 0 ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {availableLeads.map((lead, index) => {
-              const leadTime = lead.createdAt ? new Date(lead.createdAt).getTime() : 0;
+              const timeVal = lead.updatedAt || lead.createdAt;
+              const leadTime = timeVal ? new Date(timeVal).getTime() : 0;
               const isNew = leadTime > 0 && (new Date().getTime() - leadTime) <= 5 * 60 * 1000;
               const isTopNewest = isNew && index === 0;
 

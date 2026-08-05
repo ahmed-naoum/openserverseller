@@ -104,9 +104,11 @@ export default function AgentLeads() {
     return () => clearInterval(timer);
   }, []);
 
-  const isNewLead = (createdAt: string | Date) => {
-    if (!createdAt) return false;
-    const leadTime = new Date(createdAt).getTime();
+  const isNewLead = (lead: any) => {
+    if (!lead) return false;
+    const timeVal = lead.updatedAt || lead.createdAt;
+    if (!timeVal) return false;
+    const leadTime = new Date(timeVal).getTime();
     const now = new Date().getTime();
     const diffInMinutes = (now - leadTime) / (1000 * 60);
     return diffInMinutes >= 0 && diffInMinutes <= 5;
@@ -743,7 +745,7 @@ export default function AgentLeads() {
         {availableLeads.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {availableLeads.map((lead, index) => {
-              const isNew = isNewLead(lead.createdAt);
+              const isNew = isNewLead(lead);
               const isTopNewest = isNew && index === 0;
 
               return (
