@@ -101,7 +101,12 @@ export default function Deployments() {
     }
   }, []);
 
-  const pending = status?.pendingCommits || status?.pending || [];
+  const currentLocalSha = (status?.local?.sha || '').slice(0, 7);
+  const rawPending = status?.pendingCommits || status?.pending || [];
+  const pending = rawPending.filter((c: any) => {
+    const sha = (c.shortSha || c.sha || '').slice(0, 7);
+    return sha && currentLocalSha ? sha !== currentLocalSha : true;
+  });
   const isBusy = deploying || status?.deploying;
   const canDeploy = !isBusy && !isLoading;
   const hasPendingCommits = pending.length > 0;

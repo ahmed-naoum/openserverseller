@@ -61,6 +61,7 @@ fi
 
 # ── Pull ────────────────────────────────────────────────────────────────────
 log ">>> Pulling ${BRANCH}..."
+git reset --hard HEAD >/dev/null 2>&1 || true
 git pull origin "$BRANCH" || fail "git pull failed (conflicts or no credentials)"
 DEPLOYED_SHA="$(git rev-parse --short HEAD)"
 log "    now at ${DEPLOYED_SHA}: $(git log -1 --pretty=%s)"
