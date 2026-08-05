@@ -5,6 +5,7 @@ import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import axios from 'axios';
 import { getSecret } from '../lib/secretStore.js';
+import { getIO } from '../lib/realtime.js';
 
 // Helper to call Coliaty API
 const callColiatyCreateParcel = async (parcelData: {
@@ -582,7 +583,7 @@ router.get(
     }
 
     const where: any = {
-      status: { in: ['AVAILABLE'] },
+      status: { in: ['AVAILABLE', 'NEW'] },
       assignedAgentId: null,
       order: null, // Exclude leads already pushed to delivery (have tracking number)
     };
@@ -3250,14 +3251,14 @@ router.post(
       });
 
       if (!existing) {
-        await prisma.lead.create({
+        const createdLead = await prisma.lead.create({
           data: {
             vendorId: userId,
             fullName,
             phone,
             city,
             address,
-            status: 'NEW',
+            status: 'AVAILABLE',
             source: sourceTag,
             sourceId: String(ord.id),
             sourceMode: isAffiliate ? 'AFFILIATE' : 'VENDOR',
@@ -3266,8 +3267,49 @@ router.post(
             referralLinkId,
             notes: `Leads ${sourceTag} | Commande #${orderRef} | ${product.nameFr || product.nameAr}`,
           },
+          include: {
+            referralLink: {
+              include: {
+                product: { include: { images: { where: { isPrimary: true }, take: 1 } } },
+                influencer: true,
+              },
+            },
+          },
         });
         createdCount++;
+
+        // Real-time Socket Broadcast to Call Center Agents
+        try {
+          const io = getIO();
+          if (io) {
+            const payload = {
+              id: createdLead.id,
+              fullName: createdLead.fullName,
+              phone: createdLead.phone,
+              city: createdLead.city,
+              address: createdLead.address,
+              status: createdLead.status,
+              createdAt: createdLead.createdAt,
+              updatedAt: createdLead.updatedAt,
+              productPrice: createdLead.requestedPriceMad || product.retailPriceMad || 0,
+              productVariant: createdLead.productVariant,
+              product: {
+                id: product.id,
+                name: product.nameFr || product.nameAr || product.nameEn || `Produit #${product.id}`,
+                sku: product.sku,
+                image: product.images?.[0]?.imageUrl || null,
+              },
+              influencer: createdLead.referralLink?.influencer ? {
+                id: createdLead.referralLink.influencer.id,
+                fullName: createdLead.referralLink.influencer.fullName || createdLead.referralLink.influencer.email,
+              } : null
+            };
+
+            io.emit('new-available-lead', payload);
+          }
+        } catch (e) {
+          console.error('[Socket push-integration-leads error]', e);
+        }
       }
     }
 
