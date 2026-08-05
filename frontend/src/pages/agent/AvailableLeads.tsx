@@ -228,18 +228,34 @@ export default function AgentLeads() {
         {/* Conditional Leads/Empty Render */}
         {availableLeads.length > 0 ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {availableLeads.map((lead) => (
-              <div
-                key={lead.id}
-                className="relative bg-white rounded-2xl border-2 border-dashed border-green-300 p-5 hover:border-green-500 hover:shadow-lg transition-all group"
-              >
-                {/* Pulse indicator */}
-                <div className="absolute top-3 right-3">
-                  <span className="relative flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-                  </span>
-                </div>
+            {availableLeads.map((lead, index) => {
+              const leadTime = lead.createdAt ? new Date(lead.createdAt).getTime() : 0;
+              const isNew = leadTime > 0 && (new Date().getTime() - leadTime) <= 5 * 60 * 1000;
+              const isTopNewest = isNew && index === 0;
+
+              return (
+                <div
+                  key={lead.id}
+                  className={`relative bg-white rounded-2xl border-2 border-dashed p-5 hover:shadow-lg transition-all group ${
+                    isNew ? 'border-green-400 ring-2 ring-green-400/50 shadow-md shadow-green-100' : 'border-green-300 hover:border-green-500'
+                  }`}
+                >
+                  {/* 5-minute NOUVEAU Badge */}
+                  {isNew && (
+                    <div className="absolute -top-3 left-4 z-10">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-gradient-to-r from-emerald-500 via-teal-500 to-green-500 text-white shadow-md border border-white animate-bounce">
+                        ✨ {isTopNewest ? 'LEAD RÉCENT 🔥' : 'NOUVEAU'}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Pulse indicator */}
+                  <div className="absolute top-3 right-3">
+                    <span className="relative flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                    </span>
+                  </div>
 
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center text-green-700 font-bold">
@@ -287,7 +303,8 @@ export default function AgentLeads() {
                   {claiming === lead.id ? '⏳ Réclamation...' : hasActiveLead ? '🔒 Bloqué (Lead en cours)' : '⚡ RÉCLAMER'}
                 </button>
               </div>
-            ))}
+            );
+          })}
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-12 text-center mt-4">

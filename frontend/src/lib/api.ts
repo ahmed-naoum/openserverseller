@@ -269,6 +269,7 @@ export const leadsApi = {
       package_no_open?: boolean;
       package_replacement?: boolean;
       package_old_tracking?: string;
+      package_note?: string;
       productVariant?: string;
     }
   ) => api.post(`/leads/${id}/push-to-delivery`, data),

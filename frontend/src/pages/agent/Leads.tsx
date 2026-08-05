@@ -98,6 +98,20 @@ export default function AgentLeads() {
     return () => window.removeEventListener('agent-theme-change', syncTheme);
   }, []);
 
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTick((t) => t + 1), 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const isNewLead = (createdAt: string | Date) => {
+    if (!createdAt) return false;
+    const leadTime = new Date(createdAt).getTime();
+    const now = new Date().getTime();
+    const diffInMinutes = (now - leadTime) / (1000 * 60);
+    return diffInMinutes >= 0 && diffInMinutes <= 5;
+  };
+
   const [availableLeads, setAvailableLeads] = useState<any[]>([]);
   const [totalAvailableCount, setTotalAvailableCount] = useState<number>(0);
   const [availableLimit, setAvailableLimit] = useState<number | 'max'>(20);
@@ -193,7 +207,8 @@ export default function AgentLeads() {
     address: '',
     price: 0,
     package_no_open: false,
-    productVariant: ''
+    productVariant: '',
+    note: ''
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
@@ -235,35 +250,58 @@ export default function AgentLeads() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  const loadCities = async () => {
-    if (coliatyCities.length > 0) return;
+  const loadCities = async (): Promise<any[]> => {
+    if (coliatyCities.length > 0) return coliatyCities;
     setLoadingCities(true);
     try {
       const res = await leadsApi.getColiatyCities();
-      if (res.data?.data) {
-        setColiatyCities(res.data.data);
-      }
+      const list = res.data?.data || [];
+      setColiatyCities(list);
+      return list;
     } catch (err: any) {
       toast.error('Erreur lors du chargement des villes Coliaty');
+      return [];
     } finally {
       setLoadingCities(false);
     }
   };
 
-  const handleOpenDeliveryModal = (lead: any) => {
+  /**
+   * Maps a free-text lead city onto an official Coliaty option.
+   *
+   * A <select> only shows a selection when its value matches an <option> value
+   * exactly, so a lead stored as "agadir" against an option "AGADIR" silently
+   * rendered as unselected. Returns '' when there is no match, which is what the
+   * "ville non trouvée" warning below the field keys off.
+   */
+  const resolveColiatyCity = (rawCity: string, cities: any[]): string => {
+    const value = (rawCity || '').trim().toLowerCase();
+    if (!value || cities.length === 0) return '';
+    const exact = cities.find((c) => (c.city_name || '').trim().toLowerCase() === value);
+    return exact ? exact.city_name : '';
+  };
+
+  const handleOpenDeliveryModal = async (lead: any) => {
     setSelectedLeadForDelivery(lead);
     setDeliveryForm({
       name: lead.fullName || '',
       phone: lead.phone || '',
-      city: lead.city || '',
+      city: '', // resolved below, once the official list is available
       address: lead.address || '',
       price: lead.productPrice || 0,
       package_no_open: false,
-      productVariant: lead.productVariant || ''
+      productVariant: lead.productVariant || '',
+      // The agent's call notes are what the courier needs on the parcel.
+      note: lead.notes || ''
     });
     setShowDeliveryModal(true);
     setFormErrors({});
-    loadCities();
+
+    // Cities arrive after the modal opens, so the lead's city can only be matched
+    // once they are loaded.
+    const cities = await loadCities();
+    const resolved = resolveColiatyCity(lead.city, cities);
+    if (resolved) setDeliveryForm((prev) => ({ ...prev, city: resolved }));
   };
 
   const validateDeliveryForm = () => {
@@ -313,6 +351,7 @@ export default function AgentLeads() {
         package_addresse: deliveryForm.address,
         package_price: deliveryForm.price,
         package_no_open: deliveryForm.package_no_open,
+        package_note: deliveryForm.note,
         productVariant: deliveryForm.productVariant
       });
       toast.success(theme === 'girly' ? 'Lead poussé à la livraison sur Coliaty! 🎀' : 'Lead envoyé à la livraison!');
@@ -703,27 +742,55 @@ export default function AgentLeads() {
 
         {availableLeads.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {availableLeads.map((lead) => (
-              <div
-                key={lead.id}
-                className={`relative bg-white rounded-3xl border-2 border-dashed p-5 hover:shadow-xl transition-all duration-300 group hover:-translate-y-1 ${
-                  isPrincess
-                    ? 'border-amber-200 hover:border-amber-500 hover:shadow-amber-50/55'
-                    : isGirly 
-                    ? 'border-pink-200 hover:border-pink-500 hover:shadow-pink-50/55' 
-                    : 'border-indigo-200 hover:border-indigo-500 hover:shadow-indigo-50/55'
-                }`}
-              >
-                <div className="absolute top-4 right-4">
-                  <span className="relative flex h-3 w-3">
-                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                      isPrincess ? 'bg-amber-400' : isGirly ? 'bg-pink-400' : 'bg-indigo-400'
-                    }`}></span>
-                    <span className={`relative inline-flex rounded-full h-3 w-3 ${
-                      isPrincess ? 'bg-amber-500' : isGirly ? 'bg-pink-500' : 'bg-indigo-500'
-                    }`}></span>
-                  </span>
-                </div>
+            {availableLeads.map((lead, index) => {
+              const isNew = isNewLead(lead.createdAt);
+              const isTopNewest = isNew && index === 0;
+
+              return (
+                <div
+                  key={lead.id}
+                  className={`relative bg-white rounded-3xl border-2 border-dashed p-5 hover:shadow-xl transition-all duration-300 group hover:-translate-y-1 ${
+                    isNew
+                      ? isPrincess
+                        ? 'border-amber-400 ring-2 ring-amber-400/50 shadow-lg shadow-amber-100/80'
+                        : isGirly
+                        ? 'border-pink-400 ring-2 ring-pink-400/50 shadow-lg shadow-pink-100/80'
+                        : 'border-indigo-400 ring-2 ring-indigo-400/50 shadow-lg shadow-indigo-100/80'
+                      : isPrincess
+                      ? 'border-amber-200 hover:border-amber-500 hover:shadow-amber-50/55'
+                      : isGirly 
+                      ? 'border-pink-200 hover:border-pink-500 hover:shadow-pink-50/55' 
+                      : 'border-indigo-200 hover:border-indigo-500 hover:shadow-indigo-50/55'
+                  }`}
+                >
+                  {/* 5-Minute NOUVEAU Badge */}
+                  {isNew && (
+                    <div className="absolute -top-3.5 left-4 z-10">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest text-white shadow-lg border border-white animate-bounce ${
+                        isTopNewest
+                          ? 'bg-gradient-to-r from-red-500 via-rose-500 to-pink-500 shadow-rose-500/40'
+                          : isPrincess
+                          ? 'bg-gradient-to-r from-amber-500 via-pink-500 to-rose-500 shadow-amber-500/30'
+                          : isGirly
+                          ? 'bg-gradient-to-r from-pink-500 via-rose-500 to-red-500 shadow-pink-500/30'
+                          : 'bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 shadow-indigo-500/30'
+                      }`}>
+                        <Sparkles className="w-3 h-3 text-yellow-300 fill-yellow-300 animate-spin" />
+                        {isTopNewest ? 'LEAD RÉCENT 🔥' : 'NOUVEAU ✨'}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="absolute top-4 right-4">
+                    <span className="relative flex h-3 w-3">
+                      <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                        isPrincess ? 'bg-amber-400' : isGirly ? 'bg-pink-400' : 'bg-indigo-400'
+                      }`}></span>
+                      <span className={`relative inline-flex rounded-full h-3 w-3 ${
+                        isPrincess ? 'bg-amber-500' : isGirly ? 'bg-pink-500' : 'bg-indigo-500'
+                      }`}></span>
+                    </span>
+                  </div>
 
                 <div className="flex items-center gap-3 mb-4">
                   <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black shadow-inner border border-white ${
@@ -794,7 +861,8 @@ export default function AgentLeads() {
                   {claiming === lead.id ? '⏳ RÉCLAMATION...' : hasActiveLead ? '🔒 DÉJÀ UN LEAD EN COURS' : (isPrincess ? '👑 RÉCLAMER CE LEAD' : isGirly ? '💖 RÉCLAMER CE LEAD' : '⚡ RÉCLAMER CE LEAD')}
                 </button>
               </div>
-            ))}
+            );
+          })}
           </div>
         ) : (
           <div className={`bg-white rounded-3xl border p-12 text-center shadow-sm ${isPrincess ? 'border-amber-100/50' : isGirly ? 'border-pink-100/50' : 'border-indigo-100/50'}`}>
@@ -1139,6 +1207,25 @@ export default function AgentLeads() {
                     placeholder="Ex: Pack 2 + 1"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-gray-500 uppercase mb-1">
+                  Note pour le livreur
+                </label>
+                <textarea
+                  rows={2}
+                  maxLength={255}
+                  value={deliveryForm.note}
+                  onChange={(e) => setDeliveryForm({ ...deliveryForm, note: e.target.value })}
+                  className={`w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 outline-none text-xs font-semibold resize-none ${
+                    isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-400'
+                  }`}
+                  placeholder="Ex: Appeler avant la livraison, disponible après 18h..."
+                />
+                <p className="text-[10px] text-gray-400 font-medium mt-1">
+                  Reprise des notes de l'appel • {deliveryForm.note.length}/255 • envoyée à Coliaty
+                </p>
               </div>
               
               <div className="flex gap-4 pt-1">

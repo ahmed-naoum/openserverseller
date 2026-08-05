@@ -2377,6 +2377,7 @@ router.post(
       package_price,
       package_content,
       package_no_open,
+      package_note,
       productVariant
     } = req.body;
 
@@ -2542,6 +2543,10 @@ router.post(
         package_city: receiverCity,
         package_content: contentValue,
         package_no_open: package_no_open ?? false,
+        // The agent's call notes ("customer only available after 18h", "call
+        // before delivery") are what the courier actually needs. Falls back to
+        // the notes already stored on the lead when the modal sends none.
+        package_note: (package_note ?? lead.notes ?? '').toString().slice(0, 255),
       });
     } catch (coliatyError: any) {
       console.error('[Coliaty] Error during parcel creation:', coliatyError);
