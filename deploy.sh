@@ -69,7 +69,7 @@ log "    now at ${DEPLOYED_SHA}: $(git log -1 --pretty=%s)"
 log ">>> Building backend..."
 cd "${REPO_ROOT}/backend"
 
-npm install --no-audit --no-fund || fail "backend npm install failed"
+npm install --include=dev --no-audit --no-fund || fail "backend npm install failed"
 npx prisma generate               || fail "prisma generate failed"
 
 if [ "$ALLOW_DATA_LOSS" = "1" ]; then
@@ -88,7 +88,7 @@ npm run build || fail "backend build failed"
 log ">>> Building frontend..."
 cd "${REPO_ROOT}/frontend"
 
-npm install --no-audit --no-fund || fail "frontend npm install failed"
+npm install --include=dev --no-audit --no-fund || fail "frontend npm install failed"
 
 # Point puppeteer at the system browser if it is installed. Prerendering skips
 # itself gracefully when no browser is found, so this is best-effort.
