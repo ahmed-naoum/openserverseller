@@ -658,19 +658,27 @@ export default function DashboardLayout() {
     const handleNewNotification = (notification: any) => {
       setNotifications(prev => [notification, ...prev]);
       
-      const isConfirmed = notification.message?.toLowerCase().includes('confirmé') ||
-                          notification.message?.toLowerCase().includes('confirmed') ||
-                          notification.title?.toLowerCase().includes('confirmé');
-      const isNewLead = notification.type === 'NEW_LEAD' ||
-                        notification.message?.toLowerCase().includes('nouveau lead');
+      const titleLower = (notification.title || '').toLowerCase();
+      const msgLower = (notification.message || '').toLowerCase();
+
+      const isNewSaleForVendor = notification.title?.includes('Nouvelle vente') ||
+                                msgLower.includes('vous avez reçu un nouveau lead') ||
+                                notification.type === 'NEW_LEAD';
+
+      const isConfirmed = msgLower.includes('confirmé') ||
+                          msgLower.includes('confirmed') ||
+                          titleLower.includes('confirmé');
+
+      const isAvailableLeadDrop = msgLower.includes('nouveau lead disponible') ||
+                                  titleLower.includes('nouveau lead disponible');
 
       // Play sound based on notification type
-      if (isConfirmed) {
-        playCorrectConfirmationSound();
-      } else if (isNewLead) {
-        playBellDingSound();
-      } else if (['NEW_LEAD', 'LEAD_STATUS_CHANGED'].includes(notification.type)) {
+      if (isNewSaleForVendor) {
         playMoneySound();
+      } else if (isConfirmed) {
+        playCorrectConfirmationSound();
+      } else if (isAvailableLeadDrop) {
+        playBellDingSound();
       } else {
         playChime();
       }
