@@ -15,6 +15,18 @@ import { getSecret } from '../lib/secretStore.js';
 
 const router = Router();
 
+interface MulterFile {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  size: number;
+  destination: string;
+  filename: string;
+  path: string;
+  buffer: Buffer;
+}
+
 /**
  * Applies the current Cloudinary credentials to the SDK.
  *
@@ -219,11 +231,11 @@ router.post(
   authorize('SUPER_ADMIN', 'ADMIN', 'GROSSELLER'),
   productImageUpload.array('images', 10),
   asyncHandler(async (req, res) => {
-    if (!req.files || (req.files as Express.Multer.File[]).length === 0) {
+    if (!req.files || (req.files as MulterFile[]).length === 0) {
       throw new AppException(400, 'Aucune image envoyée');
     }
 
-    const files = req.files as Express.Multer.File[];
+    const files = req.files as MulterFile[];
     const socketId = req.body.socketId;
     const results: { url: string; filename: string; size: number }[] = [];
 
@@ -303,7 +315,7 @@ router.post(
     }
 
     const files: { url: string; filename: string; size: number }[] = [];
-    for (const file of req.files as Express.Multer.File[]) {
+    for (const file of req.files as MulterFile[]) {
       const result = await optimizeAndConvertImage(file.path);
       files.push({
         url: `/uploads/${result.filename}`,
@@ -357,7 +369,7 @@ router.post(
     }
 
     const files: { url: string; filename: string; size: number }[] = [];
-    for (const file of req.files as Express.Multer.File[]) {
+    for (const file of req.files as MulterFile[]) {
       const result = await optimizeAndConvertImage(file.path);
       files.push({
         url: `/uploads/${result.filename}`,
