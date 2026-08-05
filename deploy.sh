@@ -84,14 +84,6 @@ fi
 
 npm run build || fail "backend build failed"
 
-log ">>> Restarting ${PM2_APP}..."
-pm2 restart "$PM2_APP" --update-env || fail "pm2 restart failed"
-
-# The sitemap step below calls the API. Give it a moment to bind its port —
-# it now waits for loadSecrets() before listening, so it starts slightly later
-# than it used to.
-sleep 5
-
 # ── Frontend (atomic) ───────────────────────────────────────────────────────
 log ">>> Building frontend..."
 cd "${REPO_ROOT}/frontend"
@@ -138,6 +130,9 @@ fi
 mv "$STAGING_DIR" "$BUILD_DIR"
 rm -rf "$PREVIOUS_DIR"
 
+log ">>> Restarting ${PM2_APP}..."
+pm2 restart "$PM2_APP" --update-env || fail "pm2 restart failed"
+
 log ""
 log "✅ Deployment complete — ${DEPLOYED_SHA}"
 log "   pm2 logs ${PM2_APP}   # backend logs"
@@ -145,3 +140,4 @@ log "   pm2 logs ${PM2_APP}   # backend logs"
 # Marker read by deploy.service.ts on boot, to settle deployments that were
 # still RUNNING when the pm2 restart above killed the API mid-stream.
 echo "DEPLOY_RESULT=SUCCESS"
+

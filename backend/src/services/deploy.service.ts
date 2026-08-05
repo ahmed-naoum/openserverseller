@@ -229,6 +229,7 @@ export async function startDeploy(opts: {
       DEBIAN_FRONTEND: 'noninteractive',
     },
   });
+  child.unref();
 
   const { createWriteStream } = await import('node:fs');
   const logStream = createWriteStream(logPath, { flags: 'a' });
