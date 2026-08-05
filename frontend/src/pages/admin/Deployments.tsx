@@ -109,7 +109,7 @@ export default function Deployments() {
   });
   const isBusy = deploying || status?.deploying;
   const canDeploy = !isBusy && !isLoading;
-  const hasPendingCommits = pending.length > 0;
+  const hasPendingCommits = pending.length > 0 && !isBusy;
 
   return (
     <div className="space-y-8 font-['Inter'] max-w-7xl mx-auto pb-12">
@@ -221,14 +221,22 @@ export default function Deployments() {
 
         {/* Sync Status Card */}
         <div className={`rounded-2xl border shadow-sm p-6 space-y-2 hover:shadow-md transition-shadow ${
-          hasPendingCommits ? 'bg-amber-50/60 border-amber-200/80' : 'bg-emerald-50/50 border-emerald-200/80'
+          isBusy
+            ? 'bg-indigo-50/50 border-indigo-200/80'
+            : hasPendingCommits
+            ? 'bg-amber-50/60 border-amber-200/80'
+            : 'bg-emerald-50/50 border-emerald-200/80'
         }`}>
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">État de Synchronisation</span>
-            {hasPendingCommits ? <Activity className="w-4 h-4 text-amber-600 animate-pulse" /> : <ShieldCheck className="w-4 h-4 text-emerald-600" />}
+            {isBusy ? <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" /> : hasPendingCommits ? <Activity className="w-4 h-4 text-amber-600 animate-pulse" /> : <ShieldCheck className="w-4 h-4 text-emerald-600" />}
           </div>
           <div className="flex items-center gap-2 text-xl font-black">
-            {hasPendingCommits ? (
+            {isBusy ? (
+              <span className="text-indigo-900 font-black flex items-center gap-2">
+                <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" /> Reconstruction...
+              </span>
+            ) : hasPendingCommits ? (
               <span className="text-amber-800 font-black">{pending.length} nouveau{pending.length > 1 ? 'x' : ''} commit{pending.length > 1 ? 's' : ''} disponible{pending.length > 1 ? 's' : ''}</span>
             ) : (
               <span className="text-emerald-800 font-black flex items-center gap-2">
@@ -236,8 +244,8 @@ export default function Deployments() {
               </span>
             )}
           </div>
-          <p className={`text-xs ${hasPendingCommits ? 'text-amber-700 font-medium' : 'text-emerald-700 font-medium'}`}>
-            {hasPendingCommits ? 'Prêt à être déployé sur silacod.com' : 'Votre serveur exécute les tout derniers changements'}
+          <p className={`text-xs ${isBusy ? 'text-indigo-700 font-medium' : hasPendingCommits ? 'text-amber-700 font-medium' : 'text-emerald-700 font-medium'}`}>
+            {isBusy ? 'Compilation du frontend & redémarrage API...' : hasPendingCommits ? 'Prêt à être déployé sur silacod.com' : 'Votre serveur exécute les tout derniers changements'}
           </p>
         </div>
       </div>
