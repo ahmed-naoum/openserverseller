@@ -60,9 +60,10 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 
 # ── Pull ────────────────────────────────────────────────────────────────────
-log ">>> Pulling ${BRANCH}..."
-git reset --hard HEAD >/dev/null 2>&1 || true
-git pull origin "$BRANCH" || fail "git pull failed (conflicts or no credentials)"
+log ">>> Updating repository to origin/${BRANCH}..."
+git fetch origin "$BRANCH" || fail "git fetch failed"
+git checkout "$BRANCH" 2>/dev/null || git checkout -B "$BRANCH" "origin/$BRANCH"
+git reset --hard "origin/$BRANCH" || fail "git reset failed"
 DEPLOYED_SHA="$(git rev-parse --short HEAD)"
 log "    now at ${DEPLOYED_SHA}: $(git log -1 --pretty=%s)"
 

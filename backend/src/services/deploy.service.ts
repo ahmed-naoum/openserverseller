@@ -136,9 +136,13 @@ export async function getDeployStatus(): Promise<DeployStatus> {
   let pending: CommitInfo[] = [];
   try {
     remote = parseCommits(await git(['log', '-1', FMT, `origin/${branch}`]))[0] ?? null;
-    pending = parseCommits(
-      await git(['log', FMT, `HEAD..origin/${branch}`, '--max-count=50']),
-    );
+    if (local?.sha && remote?.sha && local.sha === remote.sha) {
+      pending = [];
+    } else {
+      pending = parseCommits(
+        await git(['log', FMT, `HEAD..origin/${branch}`, '--max-count=50']),
+      );
+    }
   } catch {
     /* no upstream configured yet */
   }
