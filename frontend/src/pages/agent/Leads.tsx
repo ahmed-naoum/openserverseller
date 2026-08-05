@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { leadsApi } from '../../lib/api';
 import { socket, connectToCallCenter, disconnectSocket } from '../../lib/socket';
@@ -268,6 +268,30 @@ export default function AgentLeads() {
     }
   };
 
+  const formatMoroccanPhone = (input: string) => {
+    if (!input) return '';
+    let cleaned = input.trim().replace(/\s+/g, '');
+    if (cleaned.startsWith('+212')) {
+      cleaned = '0' + cleaned.slice(4);
+    } else if (cleaned.startsWith('212')) {
+      cleaned = '0' + cleaned.slice(3);
+    } else if (cleaned.length > 0 && !cleaned.startsWith('0')) {
+      cleaned = '0' + cleaned;
+    }
+    cleaned = cleaned.replace(/\D/g, '');
+    if (cleaned.length > 10) {
+      cleaned = cleaned.slice(0, 10);
+    }
+    return cleaned;
+  };
+
+  const coliatyCityOptions = useMemo(() => {
+    return coliatyCities.map((city) => ({
+      value: city.city_name,
+      label: `${city.city_name} (Hub: ${city.hub_name})`,
+    }));
+  }, [coliatyCities]);
+
   /**
    * Maps a free-text lead city onto an official Coliaty option.
    *
@@ -287,7 +311,7 @@ export default function AgentLeads() {
     setSelectedLeadForDelivery(lead);
     setDeliveryForm({
       name: lead.fullName || '',
-      phone: lead.phone || '',
+      phone: formatMoroccanPhone(lead.phone || ''),
       city: '', // resolved below, once the official list is available
       address: lead.address || '',
       price: lead.productPrice || 0,
@@ -1128,7 +1152,7 @@ export default function AgentLeads() {
                   type="tel"
                   required
                   value={deliveryForm.phone}
-                  onChange={(e) => setDeliveryForm({ ...deliveryForm, phone: e.target.value })}
+                  onChange={(e) => setDeliveryForm({ ...deliveryForm, phone: formatMoroccanPhone(e.target.value) })}
                   className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 outline-none text-sm font-semibold ${
                     formErrors.phone ? 'border-red-300 bg-red-50' : 'border-gray-200'
                   } ${isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-400'}`}
@@ -1144,24 +1168,18 @@ export default function AgentLeads() {
                     Chargement des villes...
                   </div>
                 ) : (
-                  <select
-                    required
+                  <SearchableSelect
+                    options={coliatyCityOptions}
                     value={deliveryForm.city}
-                    onChange={(e) => setDeliveryForm({ ...deliveryForm, city: e.target.value })}
-                    className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 outline-none text-sm font-bold max-h-48 overflow-y-auto ${
-                      formErrors.city ? 'border-red-300 bg-red-50' : 'border-gray-200'
-                    } ${isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-400'}`}
-                  >
-                    <option value="">Sélectionner une ville...</option>
-                    {coliatyCities.map((city) => (
-                      <option key={city.city_id} value={city.city_name}>
-                        {city.city_name} (Hub: {city.hub_name})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setDeliveryForm({ ...deliveryForm, city: String(val) })}
+                    placeholder="Rechercher une ville Coliaty..."
+                    searchPlaceholder="Tapez une ville (ex: Agadir, Afourar, Casablanca)..."
+                    error={!!formErrors.city}
+                    theme={theme}
+                  />
                 )}
                 {formErrors.city && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.city}</p>}
-                {deliveryForm.city === '' && !loadingCities && selectedLeadForDelivery.city && (
+                {deliveryForm.city === '' && !loadingCities && selectedLeadForDelivery?.city && (
                   <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
                     <AlertCircle className="w-3.5 h-3.5" />
                     Ville du prospect ({selectedLeadForDelivery.city}) non trouvée. Sélectionnez manuellement.
