@@ -246,6 +246,53 @@ export default function AgentLeads() {
     }
   }, [selectedInfluencerId, availableLimit, statusFilter, availableSearch, availableCity, availableProductId]);
 
+  // Real-time call center events for sound & notifications
+  useEffect(() => {
+    connectToCallCenter();
+
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+
+    const handleNewAvailableLead = (lead: any) => {
+      setAvailableLeads((prev) => {
+        if (prev.some((l) => l.id === lead.id)) return prev;
+        return [lead, ...prev];
+      });
+      setTotalAvailableCount((prev) => prev + 1);
+
+      try {
+        const audio = new Audio('/soundes/bell-ding.mp3');
+        audio.volume = 0.85;
+        audio.play().catch(() => {});
+      } catch (e) {}
+
+      toast.success('⚡ Nouveau lead disponible !', { icon: '🔔', duration: 4000 });
+
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification('⚡ Nouveau lead disponible !', {
+            body: `Le lead de ${lead.fullName || 'Client'} est disponible à réclamer.`,
+            icon: '/new logo/logo filess-25.svg',
+          });
+        } catch (e) {}
+      }
+    };
+
+    const handleLeadClaimed = ({ leadId }: { leadId: number }) => {
+      setAvailableLeads((prev) => prev.filter((l) => l.id !== leadId));
+    };
+
+    socket.on('new-available-lead', handleNewAvailableLead);
+    socket.on('lead-claimed', handleLeadClaimed);
+
+    return () => {
+      socket.off('new-available-lead', handleNewAvailableLead);
+      socket.off('lead-claimed', handleLeadClaimed);
+      disconnectSocket();
+    };
+  }, []);
+
   // Debounce typing so each keystroke doesn't hit the API
   useEffect(() => {
     const t = setTimeout(() => setAvailableSearch(searchInput), 400);
@@ -380,6 +427,12 @@ export default function AgentLeads() {
         package_note: deliveryForm.note,
         productVariant: deliveryForm.productVariant
       });
+      try {
+        const audio = new Audio('/soundes/correct-confirmation.mp3');
+        audio.volume = 0.85;
+        audio.play().catch(() => {});
+      } catch (e) {}
+
       toast.success(theme === 'girly' ? 'Lead poussé à la livraison sur Coliaty! 🎀' : 'Lead envoyé à la livraison!');
       setShowDeliveryModal(false);
       loadData();

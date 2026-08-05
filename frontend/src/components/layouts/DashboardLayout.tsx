@@ -442,6 +442,26 @@ export default function DashboardLayout() {
     }
   };
 
+  const playBellDingSound = () => {
+    try {
+      const audio = new Audio('/soundes/bell-ding.mp3');
+      audio.volume = 0.85;
+      audio.play().catch(err => {
+        console.warn('Playback blocked:', err);
+      });
+    } catch (err) {}
+  };
+
+  const playCorrectConfirmationSound = () => {
+    try {
+      const audio = new Audio('/soundes/correct-confirmation.mp3');
+      audio.volume = 0.85;
+      audio.play().catch(err => {
+        console.warn('Playback blocked:', err);
+      });
+    } catch (err) {}
+  };
+
   const fetchNotifications = async () => {
     try {
       const res = await notificationsApi.list({ page: 1, limit: 20 });
@@ -638,8 +658,18 @@ export default function DashboardLayout() {
     const handleNewNotification = (notification: any) => {
       setNotifications(prev => [notification, ...prev]);
       
+      const isConfirmed = notification.message?.toLowerCase().includes('confirmé') ||
+                          notification.message?.toLowerCase().includes('confirmed') ||
+                          notification.title?.toLowerCase().includes('confirmé');
+      const isNewLead = notification.type === 'NEW_LEAD' ||
+                        notification.message?.toLowerCase().includes('nouveau lead');
+
       // Play sound based on notification type
-      if (['NEW_LEAD', 'LEAD_STATUS_CHANGED'].includes(notification.type)) {
+      if (isConfirmed) {
+        playCorrectConfirmationSound();
+      } else if (isNewLead) {
+        playBellDingSound();
+      } else if (['NEW_LEAD', 'LEAD_STATUS_CHANGED'].includes(notification.type)) {
         playMoneySound();
       } else {
         playChime();
@@ -648,7 +678,7 @@ export default function DashboardLayout() {
       // Show browser system notification
       if ('Notification' in window && Notification.permission === 'granted') {
         try {
-          new Notification('🔔 Nouvelle Notification - Silacod', {
+          new Notification(notification.title || (isConfirmed ? '📈 Statut du lead mis à jour : CONFIRMÉ' : '🔔 Notification - Silacod'), {
             body: notification.message || 'Vous avez reçu une nouvelle notification',
             icon: '/new logo/logo filess-25.svg',
           });

@@ -455,6 +455,24 @@ export default function AgentLeadDetail() {
       }
 
       await leadsApi.updateStatus(String(id), { status, notes, ...extra });
+
+      if (['CONFIRMED', 'PRICE_CONFIRMED'].includes(status)) {
+        try {
+          const audio = new Audio('/soundes/correct-confirmation.mp3');
+          audio.volume = 0.85;
+          audio.play().catch(() => {});
+        } catch (e) {}
+
+        if ('Notification' in window && Notification.permission === 'granted') {
+          try {
+            new Notification('📈 Statut du lead mis à jour : CONFIRMÉ', {
+              body: `Le lead de ${lead?.fullName || 'Client'} pour le produit "${product?.nameFr || product?.nameAr || 'Produit'}" est maintenant CONFIRMÉ.`,
+              icon: '/new logo/logo filess-25.svg',
+            });
+          } catch (e) {}
+        }
+      }
+
       toast.success(`Statut mis à jour: ${status}`);
       
       // Only clear timer if we're navigating away immediately (so the new status isn't tracked)
