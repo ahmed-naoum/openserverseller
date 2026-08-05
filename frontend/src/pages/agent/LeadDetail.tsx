@@ -473,6 +473,14 @@ export default function AgentLeadDetail() {
         }
       }
 
+      if (['CANCEL_ORDER', 'CANCEL_REASON_PRICE', 'INVALID', 'PRICE_REJECTED'].includes(status)) {
+        try {
+          const audio = new Audio('/soundes/error.mp3');
+          audio.volume = 0.85;
+          audio.play().catch(() => {});
+        } catch (e) {}
+      }
+
       toast.success(`Statut mis à jour: ${status}`);
       
       // Only clear timer if we're navigating away immediately (so the new status isn't tracked)

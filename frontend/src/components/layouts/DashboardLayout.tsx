@@ -462,6 +462,16 @@ export default function DashboardLayout() {
     } catch (err) {}
   };
 
+  const playErrorSound = () => {
+    try {
+      const audio = new Audio('/soundes/error.mp3');
+      audio.volume = 0.85;
+      audio.play().catch(err => {
+        console.warn('Playback blocked:', err);
+      });
+    } catch (err) {}
+  };
+
   const fetchNotifications = async () => {
     try {
       const res = await notificationsApi.list({ page: 1, limit: 20 });
@@ -661,6 +671,19 @@ export default function DashboardLayout() {
       const titleLower = (notification.title || '').toLowerCase();
       const msgLower = (notification.message || '').toLowerCase();
 
+      const isRefusedOrCancelled = titleLower.includes('refusé') ||
+                                  titleLower.includes('refusée') ||
+                                  titleLower.includes('rejeté') ||
+                                  titleLower.includes('rejetée') ||
+                                  titleLower.includes('annulé') ||
+                                  titleLower.includes('annulée') ||
+                                  msgLower.includes('refusé') ||
+                                  msgLower.includes('refusée') ||
+                                  msgLower.includes('rejeté') ||
+                                  msgLower.includes('rejetée') ||
+                                  msgLower.includes('annulé') ||
+                                  msgLower.includes('annulée');
+
       const isNewSaleForVendor = notification.title?.includes('Nouvelle vente') ||
                                 msgLower.includes('vous avez reçu un nouveau lead') ||
                                 notification.type === 'NEW_LEAD';
@@ -673,7 +696,9 @@ export default function DashboardLayout() {
                                   titleLower.includes('nouveau lead disponible');
 
       // Play sound based on notification type
-      if (isNewSaleForVendor) {
+      if (isRefusedOrCancelled) {
+        playErrorSound();
+      } else if (isNewSaleForVendor) {
         playMoneySound();
       } else if (isConfirmed) {
         playCorrectConfirmationSound();
