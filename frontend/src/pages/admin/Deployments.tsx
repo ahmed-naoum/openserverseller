@@ -2,8 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   GitBranch, GitCommit, RefreshCw, Rocket, CheckCircle2, XCircle,
-  AlertTriangle, Clock, Terminal, Loader2, ShieldCheck, ShieldAlert,
-  ChevronRight, User as UserIcon,
+  Clock, Terminal, Loader2, ShieldCheck, ShieldAlert,
+  User as UserIcon, Activity, Server, Check
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -11,27 +11,19 @@ import toast from 'react-hot-toast';
 import { api } from '../../lib/api';
 import { useSocket } from '../../contexts/SocketContext';
 
-/**
- * Deployments — pull the latest commits from GitHub onto the server.
- *
- * The GitHub webhook only ever *notifies*; deploying is always an explicit
- * click. Auto-deploying on push would take the public site down unattended the
- * first time a bad commit lands, and the deploy touches the database.
- */
-
 const STATUS_STYLES: Record<string, { chip: string; Icon: any; label: string }> = {
-  SUCCESS: { chip: 'bg-emerald-50 text-emerald-700 border-emerald-200', Icon: CheckCircle2, label: 'Réussi' },
-  FAILED:  { chip: 'bg-red-50 text-red-700 border-red-200',             Icon: XCircle,      label: 'Échoué' },
-  RUNNING: { chip: 'bg-blue-50 text-blue-700 border-blue-200',          Icon: Loader2,      label: 'En cours' },
-  TIMEOUT: { chip: 'bg-amber-50 text-amber-700 border-amber-200',       Icon: Clock,        label: 'Expiré' },
-  UNKNOWN: { chip: 'bg-slate-100 text-slate-600 border-slate-200',      Icon: AlertTriangle,label: 'Indéterminé' },
-  PENDING: { chip: 'bg-slate-100 text-slate-600 border-slate-200',      Icon: Clock,        label: 'En attente' },
+  SUCCESS: { chip: 'bg-emerald-500/10 text-emerald-600 border-emerald-200', Icon: CheckCircle2, label: 'Déploiement Réussi' },
+  FAILED:  { chip: 'bg-rose-500/10 text-rose-600 border-rose-200', Icon: XCircle, label: 'Échec du Déploiement' },
+  RUNNING: { chip: 'bg-indigo-500/10 text-indigo-600 border-indigo-200', Icon: Loader2, label: 'Reconstruction...' },
+  TIMEOUT: { chip: 'bg-amber-500/10 text-amber-600 border-amber-200', Icon: Clock, label: 'Délai Dépassé' },
+  UNKNOWN: { chip: 'bg-emerald-500/10 text-emerald-600 border-emerald-200', Icon: CheckCircle2, label: 'Déployé' },
+  PENDING: { chip: 'bg-slate-100 text-slate-700 border-slate-200', Icon: Clock, label: 'En attente' },
 };
 
 function StatusChip({ status }: { status: string }) {
   const s = STATUS_STYLES[status] || STATUS_STYLES.UNKNOWN;
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold ${s.chip}`}>
+    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-bold ${s.chip}`}>
       <s.Icon className={`w-3.5 h-3.5 ${status === 'RUNNING' ? 'animate-spin' : ''}`} />
       {s.label}
     </span>
@@ -46,28 +38,24 @@ export default function Deployments() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
 
-  const { data: status, isLoading, refetch } = useQuery({
+  const { data: status, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['deploy-status'],
     queryFn: async () => (await api.get('/deploy/status')).data.data,
-    // Polling is the fallback for the socket, and the only signal while the API
-    // is restarting at the end of a deploy.
-    refetchInterval: (q) => ((q.state.data as any)?.deploying ? 3000 : 30000),
+    refetchInterval: (q) => ((q.state.data as any)?.deploying ? 3000 : 20000),
   });
 
   const { data: history } = useQuery({
     queryKey: ['deploy-history'],
     queryFn: async () => (await api.get('/deploy/history?limit=10')).data.data,
-    refetchInterval: 30000,
+    refetchInterval: 20000,
   });
 
-  // Keep the log scrolled to the newest line.
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [logLines]);
 
   useEffect(() => {
     if (!socket) return;
-
     socket.emit('deploy:subscribe');
 
     const onLog = (p: { line: string }) => {
@@ -79,12 +67,12 @@ export default function Deployments() {
         setDeploying(false);
         queryClient.invalidateQueries({ queryKey: ['deploy-status'] });
         queryClient.invalidateQueries({ queryKey: ['deploy-history'] });
-        if (p.status === 'SUCCESS') toast.success('Déploiement réussi');
+        if (p.status === 'SUCCESS') toast.success('Déploiement réussi avec succès !');
         else toast.error(`Déploiement ${p.status === 'TIMEOUT' ? 'expiré' : 'échoué'}`);
       }
     };
     const onPending = (p: { pendingCount: number; pushed: number }) => {
-      toast(`${p.pushed} nouveau(x) commit(s) sur GitHub`, { icon: '📦' });
+      toast(`${p.pushed} nouveau(x) commit(s) sur GitHub`, { icon: '🚀' });
       queryClient.invalidateQueries({ queryKey: ['deploy-status'] });
     };
 
@@ -106,7 +94,7 @@ export default function Deployments() {
     setDeploying(true);
     try {
       await api.post('/deploy/run');
-      toast.success('Déploiement lancé');
+      toast.success('Déploiement initialisé');
     } catch (err: any) {
       setDeploying(false);
       toast.error(err?.response?.data?.message || 'Échec du lancement');
@@ -116,206 +104,271 @@ export default function Deployments() {
   const pending = status?.pendingCommits || status?.pending || [];
   const isBusy = deploying || status?.deploying;
   const canDeploy = !isBusy && !isLoading;
+  const hasPendingCommits = pending.length > 0;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 rounded-3xl p-8 text-white shadow-xl">
-        <div className="absolute -top-16 -right-10 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl" />
-        <div className="absolute -bottom-20 left-10 w-72 h-72 bg-[#ff5722]/10 rounded-full blur-3xl" />
-        <div className="relative flex flex-wrap items-start justify-between gap-6">
-          <div>
-            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-[11px] font-bold tracking-widest uppercase">
-              <Rocket className="w-3.5 h-3.5" /> Déploiement
-            </span>
-            <h1 className="mt-3 text-3xl font-black">Déployer le site</h1>
-            <p className="mt-1 text-slate-300 text-sm max-w-xl">
-              Récupère les derniers commits depuis GitHub, reconstruit le backend et le
-              frontend, puis redémarre l'API. Le site reste en ligne pendant la
-              reconstruction.
+    <div className="space-y-8 font-['Inter'] max-w-7xl mx-auto pb-12">
+      {/* Sleek Hero Header */}
+      <div className="relative overflow-hidden rounded-3xl bg-slate-900 border border-slate-800 p-8 text-white shadow-2xl">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-indigo-500/20 via-purple-500/10 to-transparent rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-1/3 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[11px] font-bold uppercase tracking-wider">
+                <Server className="w-3.5 h-3.5 text-indigo-400" /> Infrastructure Live
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold uppercase tracking-wider">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" /> Serveur Actif
+              </span>
+            </div>
+
+            <h1 className="text-3xl md:text-4xl font-black tracking-tight text-white">
+              Centre de Déploiement SILACOD
+            </h1>
+            <p className="text-slate-400 text-sm max-w-2xl leading-relaxed">
+              Mettez à jour instantanément la plateforme avec les derniers commits GitHub. Le déploiement s'exécute en arrière-plan sans aucune interruption pour vos utilisateurs.
             </p>
           </div>
 
-          <div className="flex flex-col items-end gap-3">
+          {/* Deploy Primary Action Button */}
+          <div className="flex flex-col items-stretch md:items-end gap-3 shrink-0">
             <button
               onClick={() => setConfirmOpen(true)}
               disabled={!canDeploy}
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-[#ff5722] hover:bg-[#ff6f3d] disabled:bg-slate-600 disabled:cursor-not-allowed font-bold shadow-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+              className={`relative group inline-flex items-center justify-center gap-3 px-8 py-4 rounded-2xl font-black text-sm tracking-wide transition-all shadow-xl ${
+                isBusy
+                  ? 'bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700'
+                  : hasPendingCommits
+                  ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 text-white hover:scale-[1.02] active:scale-95 shadow-orange-500/25'
+                  : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:scale-[1.02] active:scale-95 shadow-indigo-500/25'
+              }`}
             >
-              {isBusy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Rocket className="w-5 h-5" />}
-              {isBusy ? 'Déploiement en cours…' : 'Déployer maintenant'}
+              {isBusy ? (
+                <Loader2 className="w-5 h-5 animate-spin text-indigo-400" />
+              ) : (
+                <Rocket className="w-5 h-5 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+              )}
+              {isBusy ? 'Reconstruction du site en cours...' : hasPendingCommits ? `Mettre à jour (${pending.length} commit${pending.length > 1 ? 's' : ''})` : 'Déployer la version actuelle'}
             </button>
+
             <button
               onClick={() => refetch()}
-              className="inline-flex items-center gap-1.5 text-xs text-slate-300 hover:text-white transition-colors"
+              disabled={isRefetching}
+              className="inline-flex items-center justify-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors py-1"
             >
-              <RefreshCw className="w-3.5 h-3.5" /> Actualiser
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefetching ? 'animate-spin text-indigo-400' : ''}`} />
+              {isRefetching ? 'Vérification GitHub...' : 'Vérifier les mises à jour'}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Webhook not configured warning */}
+      {/* Warning Alert if Secret Missing */}
       {status && !status.webhookConfigured && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
-          <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-          <div className="text-sm text-amber-900">
-            <p className="font-bold">Webhook GitHub non configuré</p>
-            <p className="mt-1 text-amber-800">
-              Renseignez <code className="px-1 py-0.5 bg-amber-100 rounded font-mono text-xs">GITHUB_WEBHOOK_SECRET</code> dans
-              {' '}<a href="/admin/secrets" className="underline font-semibold">Variables &amp; Secrets</a>, puis ajoutez le webhook
-              sur GitHub. Tant que ce secret est vide, toutes les requêtes du webhook sont
-              refusées — le déploiement manuel reste disponible.
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5 flex items-start gap-4 shadow-sm">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-600 shrink-0">
+            <ShieldAlert className="w-5 h-5" />
+          </div>
+          <div className="space-y-1 text-sm text-slate-700">
+            <h4 className="font-bold text-amber-900 flex items-center gap-2">
+              Webhook GitHub non synchronisé
+            </h4>
+            <p className="text-slate-600 leading-relaxed text-xs">
+              Pour activer la notification automatique lors des nouveaux commits, configurez la clé <code className="px-1.5 py-0.5 bg-white border border-amber-200 rounded font-mono text-[11px] font-bold text-amber-800">GITHUB_WEBHOOK_SECRET</code> dans <a href="/admin/secrets" className="text-amber-700 font-bold underline hover:text-amber-900">Variables & Secrets</a>. Les déploiements manuels fonctionnent normalement.
             </p>
           </div>
         </div>
       )}
 
-      {/* Git state */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Branche</p>
-          <p className="mt-2 flex items-center gap-2 text-lg font-black text-slate-800">
-            <GitBranch className="w-4 h-4 text-slate-400" />
-            {isLoading ? '…' : status?.branch}
-          </p>
-          {status?.dirty && (
-            <p className="mt-2 text-[11px] font-semibold text-amber-600 flex items-center gap-1">
-              <AlertTriangle className="w-3 h-3" /> Modifications locales non commitées
-            </p>
-          )}
-        </div>
-
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Version déployée</p>
-          <p className="mt-2 font-mono text-lg font-black text-slate-800">
-            {isLoading ? '…' : status?.local?.sha?.slice(0, 7) || '—'}
-          </p>
-          <p className="mt-1 text-xs text-slate-500 line-clamp-1">{status?.local?.message}</p>
-        </div>
-
-        <div className={`rounded-2xl border shadow-sm p-5 ${status?.upToDate ? 'bg-white border-slate-100' : 'bg-indigo-50 border-indigo-200'}`}>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">En attente</p>
-          <p className="mt-2 text-lg font-black text-slate-800">
-            {isLoading ? '…' : status?.upToDate ? 'À jour' : `${status?.behind ?? pending.length} commit(s)`}
-          </p>
-          {status?.upToDate && (
-            <p className="mt-1 text-xs text-emerald-600 font-semibold flex items-center gap-1">
-              <ShieldCheck className="w-3 h-3" /> Rien à déployer
-            </p>
-          )}
-        </div>
-      </div>
-
-      {status?.error && (
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-sm text-red-800">
-          <span className="font-bold">Git :</span> {status.error}
-        </div>
-      )}
-
-      {/* Pending commits */}
-      {pending.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100">
-            <h2 className="font-black text-slate-800 flex items-center gap-2">
-              <GitCommit className="w-4 h-4 text-slate-400" />
-              Commits à déployer
-            </h2>
+      {/* Infrastructure Status Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        {/* Branch Card */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-2 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">Branche Git</span>
+            <GitBranch className="w-4 h-4 text-indigo-500" />
           </div>
-          <ul className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
-            {pending.map((c: any) => (
-              <li key={c.sha} className="px-6 py-3 flex items-start gap-3 hover:bg-slate-50/60">
-                <code className="mt-0.5 px-2 py-0.5 bg-slate-100 rounded font-mono text-[11px] font-bold text-slate-600 shrink-0">
-                  {(c.shortSha || c.sha || '').slice(0, 7)}
-                </code>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-slate-800 truncate">
-                    {String(c.message || '').split('\n')[0]}
-                  </p>
-                  {c.author && (
-                    <p className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
-                      <UserIcon className="w-3 h-3" /> {c.author}
-                    </p>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
+          <div className="flex items-center gap-2 text-xl font-black text-slate-900">
+            <span className="px-2.5 py-1 bg-slate-100 rounded-lg font-mono text-sm text-slate-800 border border-slate-200">
+              {isLoading ? '...' : status?.branch || 'master'}
+            </span>
+          </div>
+          <p className="text-xs text-slate-500">Branche principale connectée à GitHub</p>
         </div>
-      )}
 
-      {/* Live log */}
-      {(isBusy || logLines.length > 0) && (
-        <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-sm overflow-hidden">
-          <div className="px-6 py-3 border-b border-slate-800 flex items-center justify-between">
-            <h2 className="font-black text-slate-200 text-sm flex items-center gap-2">
-              <Terminal className="w-4 h-4 text-slate-500" /> Journal
-            </h2>
-            {isBusy && (
-              <span className="text-[11px] font-bold text-blue-400 flex items-center gap-1.5">
-                <Loader2 className="w-3 h-3 animate-spin" /> en cours
+        {/* Currently Deployed Version */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-2 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">Version Active en Production</span>
+            <GitCommit className="w-4 h-4 text-emerald-500" />
+          </div>
+          <div className="flex items-center gap-2 text-xl font-black text-slate-900">
+            <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg font-mono text-sm">
+              {isLoading ? '...' : status?.local?.sha?.slice(0, 7) || '—'}
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 truncate" title={status?.local?.message}>
+            {status?.local?.message || 'Dernière version compilée'}
+          </p>
+        </div>
+
+        {/* Sync Status Card */}
+        <div className={`rounded-2xl border shadow-sm p-6 space-y-2 hover:shadow-md transition-shadow ${
+          hasPendingCommits ? 'bg-amber-50/60 border-amber-200/80' : 'bg-emerald-50/50 border-emerald-200/80'
+        }`}>
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">État de Synchronisation</span>
+            {hasPendingCommits ? <Activity className="w-4 h-4 text-amber-600 animate-pulse" /> : <ShieldCheck className="w-4 h-4 text-emerald-600" />}
+          </div>
+          <div className="flex items-center gap-2 text-xl font-black">
+            {hasPendingCommits ? (
+              <span className="text-amber-800 font-black">{pending.length} nouveau{pending.length > 1 ? 'x' : ''} commit{pending.length > 1 ? 's' : ''} disponible{pending.length > 1 ? 's' : ''}</span>
+            ) : (
+              <span className="text-emerald-800 font-black flex items-center gap-2">
+                <Check className="w-5 h-5 text-emerald-600" /> Plateforme à Jour
               </span>
             )}
           </div>
-          <div ref={logRef} className="max-h-96 overflow-y-auto px-6 py-4 font-mono text-[12px] leading-relaxed text-slate-300">
+          <p className={`text-xs ${hasPendingCommits ? 'text-amber-700 font-medium' : 'text-emerald-700 font-medium'}`}>
+            {hasPendingCommits ? 'Prêt à être déployé sur silacod.com' : 'Votre serveur exécute les tout derniers changements'}
+          </p>
+        </div>
+      </div>
+
+      {/* Commits Timeline Section */}
+      {hasPendingCommits && (
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-md overflow-hidden">
+          <div className="px-7 py-5 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600">
+                <GitCommit className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-black text-slate-900 text-base">Nouveaux Commits à Déployer</h3>
+                <p className="text-xs text-slate-500">Modifications prêtes sur GitHub non encore installées en production</p>
+              </div>
+            </div>
+            <span className="px-3 py-1 bg-amber-100 text-amber-800 font-black text-xs rounded-full border border-amber-200">
+              {pending.length} commit{pending.length > 1 ? 's' : ''}
+            </span>
+          </div>
+
+          <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
+            {pending.map((c: any) => (
+              <div key={c.sha} className="p-5 flex items-start gap-4 hover:bg-slate-50/80 transition-colors">
+                <span className="px-2.5 py-1 bg-slate-100 border border-slate-200 rounded-lg font-mono text-xs font-bold text-slate-700 shrink-0">
+                  {(c.shortSha || c.sha || '').slice(0, 7)}
+                </span>
+                <div className="flex-1 min-w-0 space-y-1">
+                  <p className="text-sm font-bold text-slate-900 leading-snug">
+                    {String(c.message || '').split('\n')[0]}
+                  </p>
+                  {c.author && (
+                    <div className="flex items-center gap-2 text-xs text-slate-400">
+                      <UserIcon className="w-3 h-3 text-slate-400" />
+                      <span>{c.author}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Terminal Realtime Execution Output Log */}
+      {(isBusy || logLines.length > 0) && (
+        <div className="bg-slate-950 rounded-3xl border border-slate-800 shadow-2xl overflow-hidden">
+          <div className="px-6 py-4 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-rose-500/80" />
+                <div className="w-3 h-3 rounded-full bg-amber-500/80" />
+                <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
+              </div>
+              <span className="text-xs font-mono text-slate-400 font-bold ml-2 flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-indigo-400" /> Terminal de Déploiement Live
+              </span>
+            </div>
+
+            {isBusy && (
+              <span className="px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 text-xs font-bold flex items-center gap-2 animate-pulse">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Execution en cours...
+              </span>
+            )}
+          </div>
+
+          <div ref={logRef} className="max-h-[420px] overflow-y-auto p-6 font-mono text-xs leading-relaxed text-slate-300 bg-slate-950 space-y-1">
             {logLines.length === 0 ? (
-              <p className="text-slate-500">En attente de sortie…</p>
+              <p className="text-slate-600 italic">Connexion au flux du serveur...</p>
             ) : (
               logLines.map((line, i) => (
                 <div key={i} className={
-                  /error|failed|❌/i.test(line) ? 'text-red-400'
-                  : /✅|success|complete/i.test(line) ? 'text-emerald-400'
+                  /error|failed|❌/i.test(line) ? 'text-rose-400 font-semibold bg-rose-950/20 px-2 py-0.5 rounded'
+                  : /✅|success|complete/i.test(line) ? 'text-emerald-400 font-semibold bg-emerald-950/20 px-2 py-0.5 rounded'
                   : /⚠️|warn/i.test(line) ? 'text-amber-400'
-                  : ''
+                  : 'text-slate-300'
                 }>{line}</div>
               ))
             )}
           </div>
-          {isBusy && (
-            <div className="px-6 py-2.5 bg-slate-800/60 text-[11px] text-slate-400 border-t border-slate-800">
-              L'API redémarre à la fin du déploiement : le flux peut s'interrompre quelques
-              secondes. Le résultat final est enregistré dans l'historique.
-            </div>
-          )}
         </div>
       )}
 
-      {/* History */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100">
-          <h2 className="font-black text-slate-800">Historique</h2>
+      {/* Deployments History Table */}
+      <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="px-7 py-5 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h3 className="font-black text-slate-900 text-base">Historique des Déploiements</h3>
+            <p className="text-xs text-slate-500">Journal des précédentes reconstructions de la plateforme</p>
+          </div>
         </div>
+
         {!history?.items?.length ? (
-          <div className="px-6 py-12 text-center">
-            <Rocket className="w-10 h-10 text-slate-200 mx-auto" />
-            <p className="mt-3 text-sm text-slate-400">Aucun déploiement enregistré</p>
+          <div className="px-6 py-16 text-center space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+              <Rocket className="w-6 h-6" />
+            </div>
+            <p className="text-sm font-semibold text-slate-500">Aucun déploiement récent trouvé</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50/60">
-                  {['Statut', 'Commit', 'Déclenché par', 'Durée', 'Date'].map((h) => (
-                    <th key={h} className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">{h}</th>
-                  ))}
+                <tr className="border-b border-slate-100 bg-slate-50/60">
+                  <th className="px-7 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Résultat</th>
+                  <th className="px-7 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Commit Deployé</th>
+                  <th className="px-7 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Déclenché Par</th>
+                  <th className="px-7 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Durée</th>
+                  <th className="px-7 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date & Heure</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {history.items.map((d: any) => (
-                  <tr key={d.id} className="hover:bg-slate-50/60">
-                    <td className="px-6 py-3"><StatusChip status={d.status} /></td>
-                    <td className="px-6 py-3">
-                      <code className="font-mono text-[11px] text-slate-600">{d.commitSha?.slice(0, 7) || '—'}</code>
-                      <p className="text-xs text-slate-500 truncate max-w-xs">{d.commitMessage}</p>
+                  <tr key={d.id} className="hover:bg-slate-50/70 transition-colors">
+                    <td className="px-7 py-4">
+                      <StatusChip status={d.status} />
                     </td>
-                    <td className="px-6 py-3 text-xs text-slate-600">
-                      {d.triggeredBy || (d.trigger === 'WEBHOOK' ? 'GitHub' : '—')}
+                    <td className="px-7 py-4">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded font-mono text-xs font-bold text-slate-700">
+                          {d.commitSha?.slice(0, 7) || '—'}
+                        </span>
+                        <span className="text-xs font-medium text-slate-700 truncate max-w-sm" title={d.commitMessage}>
+                          {d.commitMessage || 'Mise à jour du système'}
+                        </span>
+                      </div>
                     </td>
-                    <td className="px-6 py-3 text-xs text-slate-500 tabular-nums">
+                    <td className="px-7 py-4 text-xs text-slate-600 font-medium">
+                      {d.triggeredBy || (d.trigger === 'WEBHOOK' ? 'GitHub Webhook' : 'Administrateur')}
+                    </td>
+                    <td className="px-7 py-4 text-xs text-slate-500 tabular-nums">
                       {d.durationMs ? `${Math.round(d.durationMs / 1000)}s` : '—'}
                     </td>
-                    <td className="px-6 py-3 text-xs text-slate-500 whitespace-nowrap">
-                      {format(new Date(d.createdAt), 'dd MMM HH:mm', { locale: fr })}
+                    <td className="px-7 py-4 text-xs text-slate-500 whitespace-nowrap">
+                      {format(new Date(d.createdAt), 'dd MMMM yyyy à HH:mm', { locale: fr })}
                     </td>
                   </tr>
                 ))}
@@ -325,30 +378,54 @@ export default function Deployments() {
         )}
       </div>
 
-      {/* Confirm */}
+      {/* Confirmation Modal */}
       {confirmOpen && (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-7">
-            <div className="w-12 h-12 rounded-2xl bg-[#ff5722]/10 flex items-center justify-center">
-              <Rocket className="w-6 h-6 text-[#ff5722]" />
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-8 border border-slate-100 space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30">
+                <Rocket className="w-7 h-7" />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-slate-900">Lancer le Déploiement Production ?</h3>
+                <p className="text-xs text-slate-500">Mise à jour en direct de la plateforme silacod.com</p>
+              </div>
             </div>
-            <h3 className="mt-4 text-xl font-black text-slate-900">Déployer maintenant ?</h3>
-            <p className="mt-2 text-sm text-slate-600">
-              {pending.length > 0
-                ? `${pending.length} commit(s) seront déployés en production.`
-                : "Le serveur est déjà à jour — le déploiement va reconstruire l'application."}
-            </p>
-            <ul className="mt-4 space-y-1.5 text-xs text-slate-500">
-              <li className="flex gap-2"><ChevronRight className="w-3.5 h-3.5 shrink-0 mt-0.5" />L'API redémarre, les sessions actives sont brièvement interrompues.</li>
-              <li className="flex gap-2"><ChevronRight className="w-3.5 h-3.5 shrink-0 mt-0.5" />Le site public reste en ligne : la nouvelle version est basculée à la fin.</li>
-              <li className="flex gap-2"><ChevronRight className="w-3.5 h-3.5 shrink-0 mt-0.5" />Durée habituelle : 2 à 4 minutes.</li>
-            </ul>
-            <div className="mt-6 flex gap-3">
-              <button onClick={() => setConfirmOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 font-bold text-sm text-slate-600 hover:bg-slate-50">
+
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500 font-medium">Commits prêts :</span>
+                <span className="font-bold text-slate-900">{pending.length} commit(s)</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500 font-medium">Branche :</span>
+                <span className="font-bold font-mono text-indigo-600">{status?.branch || 'master'}</span>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-xs text-slate-600">
+              <div className="flex items-start gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <span>Le site web reste <strong>totalement accessible</strong> pour vos utilisateurs pendant la compilation.</span>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <span>La nouvelle version s'applique automatiquement dès la fin de la reconstruction.</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                onClick={() => setConfirmOpen(false)}
+                className="flex-1 py-3.5 rounded-2xl border border-slate-200 font-bold text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+              >
                 Annuler
               </button>
-              <button onClick={runDeploy} className="flex-1 px-4 py-2.5 rounded-xl bg-[#ff5722] hover:bg-[#ff6f3d] text-white font-bold text-sm">
-                Déployer
+              <button
+                onClick={runDeploy}
+                className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-sm shadow-lg shadow-indigo-500/25 transition-all"
+              >
+                Confirmer & Déployer
               </button>
             </div>
           </div>
