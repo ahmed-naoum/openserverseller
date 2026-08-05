@@ -17,6 +17,15 @@ const isWindows = process.platform === 'win32';
 const PG_DUMP_PATH = process.env.PG_DUMP_PATH || (isWindows ? 'C:\\Program Files\\PostgreSQL\\18\\bin\\pg_dump.exe' : 'pg_dump');
 const PG_RESTORE_PATH = process.env.PG_RESTORE_PATH || (isWindows ? 'C:\\Program Files\\PostgreSQL\\18\\bin\\pg_restore.exe' : 'pg_restore');
 
+// Session replay streams (SessionRecording.eventDataGzip) are the bulk of the DB —
+// tens of thousands of gzipped rrweb blobs that are purged after 7 days anyway.
+// Dumping them makes every snapshot ~8x larger for data nobody restores.
+// The table DDL is still dumped (only its rows are skipped), so a restore into a
+// fresh database still recreates the table and the app boots normally.
+// The lightweight funnel tables it correlates with — checkout_attempts (Paniers)
+// and signup_attempts (Inscriptions) — are plain text rows and stay in the backup.
+const SESSION_DATA_TABLES = ['public.session_recordings'];
+
 export class BackupService {
   static activeInterval: NodeJS.Timeout | null = null;
 
@@ -36,13 +45,15 @@ export class BackupService {
         return {
           interval: val.interval || '24h',
           maxBackups: typeof val.maxBackups === 'number' ? val.maxBackups : 100,
-          enabled: val.enabled !== false
+          enabled: val.enabled !== false,
+          // Opt-out flag: configs saved before this option existed skip session data too.
+          excludeSessionData: val.excludeSessionData !== false
         };
       }
     } catch (err) {
       console.error('Failed to load backup config:', err);
     }
-    return { interval: '24h', maxBackups: 100, enabled: true };
+    return { interval: '24h', maxBackups: 100, enabled: true, excludeSessionData: true };
   }
 
   static async startScheduler() {
@@ -88,7 +99,7 @@ export class BackupService {
     }, intervalMs);
   }
 
-  static async updateConfig(newConfig: { interval: string; maxBackups: number; enabled: boolean }) {
+  static async updateConfig(newConfig: { interval: string; maxBackups: number; enabled: boolean; excludeSessionData: boolean }) {
     await prisma.platformSettings.upsert({
       where: { key: 'backup_config' },
       update: { value: newConfig },
@@ -104,6 +115,7 @@ export class BackupService {
     // Run cleanup BEFORE creating a new backup to ensure we have disk space if at maximum capacity
     await this.cleanup();
 
+    const config = await this.loadConfig();
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `backup-${timestamp}.dump`;
     const filePath = path.join(finalBackupDir, filename);
@@ -124,6 +136,11 @@ export class BackupService {
       throw new Error('Invalid DATABASE_URL format: ' + (err instanceof Error ? err.message : String(err)));
     }
 
+    // Keep the table definitions, drop only their rows.
+    const excludeArgs = config.excludeSessionData
+      ? SESSION_DATA_TABLES.map(t => `--exclude-table-data=${t}`)
+      : [];
+
     return new Promise((resolve, reject) => {
       const dumpProcess = spawn(PG_DUMP_PATH, [
         '-h', host,
@@ -131,6 +148,7 @@ export class BackupService {
         '-U', user,
         '-d', dbname,
         '-Fc', // Custom format (compressed)
+        ...excludeArgs,
         '-f', filePath
       ], {
         env: { ...process.env, PGPASSWORD: password }
@@ -138,7 +156,13 @@ export class BackupService {
 
       dumpProcess.on('close', async (code) => {
         if (code === 0) {
-          console.log(`Backup created successfully: ${filename}`);
+          const skipped = config.excludeSessionData ? ' (session replay data excluded)' : '';
+          let sizeLabel = '';
+          try {
+            const { size } = await stat(filePath);
+            sizeLabel = ` — ${(size / 1024 / 1024).toFixed(1)} MB`;
+          } catch { /* size is only for the log line */ }
+          console.log(`Backup created successfully: ${filename}${sizeLabel}${skipped}`);
           resolve(filename);
         } else {
           reject(new Error(`pg_dump failed with code ${code}`));

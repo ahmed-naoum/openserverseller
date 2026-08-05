@@ -60,10 +60,17 @@ export const getBackupConfig = asyncHandler(async (req: Request, res: Response) 
 });
 
 export const updateBackupConfig = asyncHandler(async (req: Request, res: Response) => {
-  const { interval, maxBackups, enabled } = req.body;
+  const { interval, maxBackups, enabled, excludeSessionData } = req.body;
   if (typeof interval !== 'string' || typeof maxBackups !== 'number' || typeof enabled !== 'boolean') {
     return res.status(400).json({ status: 'error', message: 'Invalid payload' });
   }
-  await BackupService.updateConfig({ interval, maxBackups, enabled });
+  await BackupService.updateConfig({
+    interval,
+    maxBackups,
+    enabled,
+    // Omitted by older clients — keep skipping session data rather than silently
+    // reverting to multi-GB snapshots.
+    excludeSessionData: excludeSessionData !== false
+  });
   res.json({ status: 'success', message: 'Backup configuration updated successfully' });
 });

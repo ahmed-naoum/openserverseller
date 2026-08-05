@@ -489,7 +489,7 @@ export const adminApi = {
   deleteBackup: (filename: string) => api.delete(`/admin/backups/${filename}`),
   restoreBackup: (filename: string) => api.post(`/admin/backups/restore/${filename}`),
   getBackupConfig: () => api.get('/admin/backups/config'),
-  updateBackupConfig: (data: { interval: string; maxBackups: number; enabled: boolean }) => api.post('/admin/backups/config', data),
+  updateBackupConfig: (data: { interval: string; maxBackups: number; enabled: boolean; excludeSessionData: boolean }) => api.post('/admin/backups/config', data),
   // Activity Logs
   getActivityLogs: (params?: { page?: number; limit?: number; userId?: number; action?: string }) => 
     api.get('/admin/audit-logs', { params }),

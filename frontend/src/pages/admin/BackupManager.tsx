@@ -14,7 +14,8 @@ import {
   ShieldCheck,
   RotateCcw,
   X,
-  AlertTriangle
+  AlertTriangle,
+  Film
 } from 'lucide-react';
 import { adminApi } from '../../lib/api';
 import { format } from 'date-fns';
@@ -44,6 +45,7 @@ const BackupManager = () => {
   const [configInterval, setConfigInterval] = useState('24h');
   const [configMaxBackups, setConfigMaxBackups] = useState(100);
   const [configEnabled, setConfigEnabled] = useState(true);
+  const [configExcludeSessionData, setConfigExcludeSessionData] = useState(true);
   const [savingConfig, setSavingConfig] = useState(false);
 
   useEffect(() => {
@@ -54,10 +56,11 @@ const BackupManager = () => {
   const fetchBackupConfig = async () => {
     try {
       const res = await adminApi.getBackupConfig();
-      const { interval, maxBackups, enabled } = res.data.data;
+      const { interval, maxBackups, enabled, excludeSessionData } = res.data.data;
       setConfigInterval(interval);
       setConfigMaxBackups(maxBackups);
       setConfigEnabled(enabled);
+      setConfigExcludeSessionData(excludeSessionData !== false);
     } catch (error) {
       console.error('Failed to fetch backup config:', error);
     }
@@ -69,7 +72,8 @@ const BackupManager = () => {
       await adminApi.updateBackupConfig({
         interval: configInterval,
         maxBackups: Number(configMaxBackups),
-        enabled: configEnabled
+        enabled: configEnabled,
+        excludeSessionData: configExcludeSessionData
       });
       toast.success('Configuration de sauvegarde mise à jour');
       fetchBackupConfig();
@@ -313,6 +317,35 @@ const BackupManager = () => {
               Lorsque cette limite est dépassée, la sauvegarde la plus ancienne est automatiquement supprimée.
             </p>
           </div>
+        </div>
+
+        {/* Session replay exclusion — the single biggest lever on snapshot size */}
+        <div className="flex items-start justify-between gap-6 p-5 bg-slate-50 border border-slate-200 rounded-2xl">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-white text-amber-600 rounded-xl border border-slate-200 shrink-0">
+              <Film size={16} />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-black text-slate-900">Exclure le Streaming Direct &amp; Replay</p>
+              <p className="text-[11px] text-slate-500 font-medium leading-relaxed max-w-xl">
+                Les enregistrements vidéo des sessions représentent la quasi-totalité du poids des snapshots,
+                alors qu'ils sont purgés automatiquement après 7 jours. Les Paniers abandonnés et les
+                Inscriptions incomplètes restent inclus dans chaque sauvegarde.
+              </p>
+            </div>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer shrink-0 pt-1">
+            <input
+              type="checkbox"
+              checked={configExcludeSessionData}
+              onChange={(e) => setConfigExcludeSessionData(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+            <span className="ml-3 text-xs font-black uppercase tracking-wider text-slate-600">
+              {configExcludeSessionData ? 'Exclu' : 'Inclus'}
+            </span>
+          </label>
         </div>
 
         <div className="flex justify-end pt-2">
