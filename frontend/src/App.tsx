@@ -108,9 +108,9 @@ import HelperScanner from './pages/helper/Scanner';
 import Chat from './pages/common/Chat';
 import AccountVerification from './pages/verify/AccountVerification';
 import PublicMarketplace from './pages/marketplace/PublicMarketplace';
-import ProductDetail from './pages/marketplace/ProductDetail';
-import ReferralForm from './pages/public/ReferralForm';
-import ThankYouPage from './pages/public/ThankYouPage';
+const ProductDetail = lazy(() => import('./pages/marketplace/ProductDetail'));
+const ReferralForm = lazy(() => import('./pages/public/ReferralForm'));
+const ThankYouPage = lazy(() => import('./pages/public/ThankYouPage'));
 import PendingVerificationPage from './pages/auth/PendingVerificationPage';
 import EmailVerificationPage from './pages/auth/EmailVerificationPage';
 import CompleteRegisterGoogle from './pages/auth/CompleteRegisterGoogle';
@@ -252,9 +252,33 @@ function App() {
           <Route path="/reset-password" element={<UnauthGuard><ResetPassword /></UnauthGuard>} />
           <Route path="/marketplace" element={<PublicMarketplace />} />
           <Route path="/marketplace/:view" element={<PublicMarketplace />} />
-          <Route path="/product/:id" element={<ProductDetail />} />
-          <Route path="/r/:code" element={<ReferralForm />} />
-          <Route path="/thank-you" element={<ThankYouPage />} />
+          <Route path="/product/:id" element={
+            <Suspense fallback={
+              <div className="min-h-screen bg-[#FDFDFD] flex items-center justify-center p-4">
+                <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            }>
+              <ProductDetail />
+            </Suspense>
+          } />
+          <Route path="/r/:code" element={
+            <Suspense fallback={
+              <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+                <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            }>
+              <ReferralForm />
+            </Suspense>
+          } />
+          <Route path="/thank-you" element={
+            <Suspense fallback={
+              <div className="min-h-screen bg-white flex items-center justify-center p-4">
+                <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            }>
+              <ThankYouPage />
+            </Suspense>
+          } />
           <Route path="/pending-verification" element={<PendingVerificationPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />

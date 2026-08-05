@@ -1,14 +1,23 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { leadsApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { buildReferralUrl } from '../../utils/referral';
+import {
+  checkMoroccanPhone,
+  formatMoroccanPhone,
+  checkFullName,
+  checkAddress,
+} from '../../utils/leadValidation';
 import { 
   Eye, History, AlertTriangle, CheckCircle, XCircle, 
   Package, ShieldAlert, Clock, Info, Phone, X, 
-  TrendingUp, TrendingDown, User, Store, Check, MessageSquare, Copy
+  TrendingUp, TrendingDown, User, Store, Check, MessageSquare, Copy, Pencil
 } from 'lucide-react';
+
+/** Customer-card fields an agent can correct in place while on the call. */
+type EditableFieldKey = 'fullName' | 'phone' | 'city' | 'address';
 
 const STATUS_LABELS: Record<string, { label: string, icon: string, color: string, ring: string }> = {
   NEW: { label: 'Nouveau', icon: '🆕', color: 'bg-blue-100 text-blue-800', ring: 'bg-blue-500' },
@@ -52,6 +61,15 @@ export default function AgentLeadDetail() {
   const isGirly = theme === 'girly';
   const isPrincess = theme === 'princess';
 
+  /** Focus-ring colour for inline editors, matching the active agent theme. */
+  const accentRing = isPrincess ? 'focus:ring-amber-400' : isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-500';
+  /** Highlight for the currently selected row in the city dropdown. */
+  const citySelectedClass = isPrincess
+    ? 'bg-amber-50 text-amber-700 font-bold'
+    : isGirly
+    ? 'bg-pink-50 text-pink-700 font-bold'
+    : 'bg-indigo-50 text-indigo-700 font-bold';
+
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<any>(null);
@@ -69,8 +87,15 @@ export default function AgentLeadDetail() {
   const [coliatyCities, setColiatyCities] = useState<any[]>([]);
   const [loadingCities, setLoadingCities] = useState(false);
   const [citySearch, setCitySearch] = useState('');
-  const [showCityDropdown, setShowCityDropdown] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // ── Inline editing of the customer card ──────────────────────────────────
+  const [editingField, setEditingField] = useState<EditableFieldKey | null>(null);
+  const [fieldDraft, setFieldDraft] = useState('');
+  const [savingField, setSavingField] = useState<EditableFieldKey | null>(null);
+  const [savedField, setSavedField] = useState<EditableFieldKey | null>(null);
+  const [fieldError, setFieldError] = useState<string | null>(null);
+  // Set by Escape so the input's blur handler does not save what was cancelled.
+  const cancelEditRef = useRef(false);
 
   const [clickedWaLeads, setClickedWaLeads] = useState<Set<number>>(() => {
     try {
@@ -110,15 +135,7 @@ export default function AgentLeadDetail() {
     }
   };
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowCityDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  // Click-outside now lives inside CityPicker, so each instance closes itself.
 
   const fetchColiatyCities = async () => {
     setLoadingCities(true);
@@ -291,6 +308,139 @@ export default function AgentLeadDetail() {
     return run;
   };
 
+  /**
+   * Saves a single customer field (name / phone) inline.
+   *
+   * Queued behind addressQueueRef so it can never interleave with an address
+   * auto-save on the same lead. The server's returned lead is preferred over the
+   * submitted patch because the API normalises phone numbers (0… -> +212…), and
+   * echoing the raw input would show a value the database does not hold.
+   */
+  const persistLeadField = async (patch: Record<string, string>) => {
+    const leadId = data?.lead?.id;
+    if (!leadId) return;
+
+    const run = (async () => {
+      await addressQueueRef.current;
+      const res = await leadsApi.update(String(leadId), patch);
+      const updated = res?.data?.data?.lead;
+      setData((prev: any) =>
+        prev ? { ...prev, lead: { ...prev.lead, ...(updated ?? patch) } } : prev
+      );
+    })();
+
+    addressQueueRef.current = run.catch(() => {});
+    return run;
+  };
+
+  const startFieldEdit = (key: EditableFieldKey, current: string) => {
+    cancelEditRef.current = false;
+    setFieldError(null);
+    setEditingField(key);
+    // Phones are stored as +212… but agents read and dictate 06… form.
+    setFieldDraft(key === 'phone' ? formatMoroccanPhone(current) : (current ?? ''));
+  };
+
+  const cancelFieldEdit = () => {
+    cancelEditRef.current = true;
+    setFieldError(null);
+    setEditingField(null);
+  };
+
+  /** Returns an error message, or null when the value is acceptable. */
+  const validateField = (key: EditableFieldKey, value: string): string | null => {
+    if (key === 'fullName') return checkFullName(value).reason ?? null;
+    if (key === 'phone') return checkMoroccanPhone(value).reason ?? null;
+    if (key === 'address') return checkAddress(value).reason ?? null;
+    if (key === 'city' && !value.trim()) return 'La ville est obligatoire pour la livraison.';
+    return null;
+  };
+
+  /**
+   * @param explicitValue bypasses `fieldDraft` for a dropdown pick, whose click
+   * handler runs before the state update it triggers has been applied.
+   */
+  const commitFieldEdit = async (key: EditableFieldKey, explicitValue?: string) => {
+    // Escape already closed the editor; the trailing blur must not save.
+    if (cancelEditRef.current) {
+      cancelEditRef.current = false;
+      return;
+    }
+
+    const next = (explicitValue ?? fieldDraft).trim();
+    const current = (
+      key === 'fullName' ? data?.lead?.fullName
+      : key === 'phone' ? data?.lead?.phone
+      : key === 'city' ? editedCity
+      : editedAddress
+    ) ?? '';
+
+    // Compare phones in canonical form so "0612345678" is recognised as equal to
+    // the stored "+212612345678" and does not trigger a pointless write.
+    const unchanged =
+      key === 'phone'
+        ? (checkMoroccanPhone(next).e164 ?? next) === (current ?? '').trim()
+        : next === (current ?? '').trim();
+
+    if (unchanged) {
+      setFieldError(null);
+      setEditingField(null);
+      return;
+    }
+
+    const error = validateField(key, next);
+    if (error) {
+      // Keep the editor open so the agent can fix the value in place rather than
+      // losing it and having to retype from the customer's dictation.
+      setFieldError(error);
+      setEditingField(key);
+      return;
+    }
+
+    setFieldError(null);
+    setEditingField(null);
+
+    setSavingField(key);
+    try {
+      if (key === 'city') {
+        setEditedCity(next);
+        setCitySearch(next);
+        await persistAddressCity(editedAddress, next);
+      } else if (key === 'address') {
+        setEditedAddress(next);
+        await persistAddressCity(next, editedCity);
+      } else if (key === 'phone') {
+        // Send the canonical form; the API's own 0->+212 rewrite only handles
+        // one of the several shapes an agent may type.
+        await persistLeadField({ phone: checkMoroccanPhone(next).e164! });
+      } else {
+        await persistLeadField({ [key]: next });
+      }
+      setSavedField(key);
+      setTimeout(() => setSavedField((k) => (k === key ? null : k)), 2000);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Erreur lors de l'enregistrement");
+    } finally {
+      setSavingField((k) => (k === key ? null : k));
+    }
+  };
+
+  /**
+   * Whether the typed city matches an official Coliaty city.
+   *
+   * 'unknown' is deliberate: when the Coliaty list failed to load or is still
+   * loading, `coliatyCities` is empty, and calling every city "unrecognised"
+   * would be a false alarm on what is really a network problem.
+   */
+  const cityMatch: 'empty' | 'unknown' | 'matched' | 'unmatched' = useMemo(() => {
+    const value = (editedCity || '').trim().toLowerCase();
+    if (!value) return 'empty';
+    if (loadingCities || coliatyCities.length === 0) return 'unknown';
+    return coliatyCities.some((c) => (c.city_name || '').trim().toLowerCase() === value)
+      ? 'matched'
+      : 'unmatched';
+  }, [editedCity, coliatyCities, loadingCities]);
+
   const handleUpdateStatus = async (status: string, extra?: any) => {
     setUpdating(true);
     try {
@@ -429,11 +579,39 @@ export default function AgentLeadDetail() {
         <div className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <p className="text-xs text-gray-400 font-medium uppercase mb-1">Nom complet</p>
-              <p className="text-lg font-bold text-gray-900">{lead.fullName}</p>
+              <FieldLabel label="Nom complet" fieldKey="fullName" savingField={savingField} savedField={savedField} />
+              {editingField === 'fullName' ? (
+                <InlineInput
+                  value={fieldDraft}
+                  onChange={setFieldDraft}
+                  onCommit={() => commitFieldEdit('fullName')}
+                  onCancel={cancelFieldEdit}
+                  error={fieldError}
+                  accent={accentRing}
+                  placeholder="Nom complet du client"
+                />
+              ) : (
+                <div className="flex items-center gap-2">
+                  <p className="text-lg font-bold text-gray-900">{lead.fullName}</p>
+                  <EditPencil onClick={() => startFieldEdit('fullName', lead.fullName || '')} label="Modifier le nom" />
+                </div>
+              )}
             </div>
             <div>
-              <p className="text-xs text-gray-400 font-medium uppercase mb-1">Téléphone</p>
+              <FieldLabel label="Téléphone" fieldKey="phone" savingField={savingField} savedField={savedField} />
+              {editingField === 'phone' ? (
+                <InlineInput
+                  value={fieldDraft}
+                  onChange={setFieldDraft}
+                  onCommit={() => commitFieldEdit('phone')}
+                  onCancel={cancelFieldEdit}
+                  error={fieldError}
+                  accent={accentRing}
+                  type="tel"
+                  placeholder="06XXXXXXXX"
+                  hint="Enregistré au format +212"
+                />
+              ) : (
               <div className="flex items-center gap-2">
                 <a
                   href={`tel:${lead.phone}`}
@@ -457,15 +635,63 @@ export default function AgentLeadDetail() {
                 >
                   <Eye className="w-4 h-4" />
                 </button>
+                <EditPencil onClick={() => startFieldEdit('phone', lead.phone || '')} label="Modifier le téléphone" />
               </div>
+              )}
             </div>
             <div>
-              <p className="text-xs text-gray-400 font-medium uppercase mb-1">Ville</p>
-              <p className="text-gray-700 font-medium">{lead.city || '-'}</p>
+              <FieldLabel label="Ville" fieldKey="city" savingField={savingField} savedField={savedField} />
+              {editingField === 'city' ? (
+                <div className="space-y-1">
+                  <CityPicker
+                    autoFocus
+                    value={fieldDraft}
+                    onChange={setFieldDraft}
+                    onSelect={(name) => {
+                      setFieldDraft(name);
+                      commitFieldEdit('city', name);
+                    }}
+                    onCommit={() => commitFieldEdit('city')}
+                    cities={coliatyCities}
+                    loading={loadingCities}
+                    accentRing={accentRing}
+                    selectedClass={citySelectedClass}
+                  />
+                  {fieldError ? (
+                    <p className="text-[11px] text-red-600 font-bold flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 shrink-0" /> {fieldError}
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-gray-400 font-medium">
+                      Choisissez une ville officielle Coliaty • Entrée pour enregistrer
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <p className="text-gray-700 font-medium">{lead.city || '-'}</p>
+                  <EditPencil onClick={() => startFieldEdit('city', lead.city || '')} label="Modifier la ville" />
+                </div>
+              )}
             </div>
             <div>
-              <p className="text-xs text-gray-400 font-medium uppercase mb-1">Adresse</p>
-              <p className="text-gray-700 font-medium">{lead.address || '-'}</p>
+              <FieldLabel label="Adresse" fieldKey="address" savingField={savingField} savedField={savedField} />
+              {editingField === 'address' ? (
+                <InlineInput
+                  value={fieldDraft}
+                  onChange={setFieldDraft}
+                  onCommit={() => commitFieldEdit('address')}
+                  onCancel={cancelFieldEdit}
+                  error={fieldError}
+                  accent={accentRing}
+                  placeholder="Adresse complète de livraison"
+                />
+              ) : (
+                <div className="flex items-center gap-2">
+                  <p className="text-gray-700 font-medium">{lead.address || '-'}</p>
+                  <EditPencil onClick={() => startFieldEdit('address', lead.address || '')} label="Modifier l'adresse" />
+                </div>
+              )}
             </div>
             {lead.whatsapp && (
               <div>
@@ -653,92 +879,53 @@ export default function AgentLeadDetail() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-1 space-y-1 relative" ref={dropdownRef}>
-            <label className="text-xs text-gray-400 font-bold uppercase tracking-wider">Ville</label>
-            <div className="relative">
-              <input
-                type="text"
-                value={citySearch}
-                onChange={(e) => {
-                  setCitySearch(e.target.value);
-                  setShowCityDropdown(true);
-                  setEditedCity(e.target.value);
-                }}
-                onFocus={() => setShowCityDropdown(true)}
-                onBlur={() => persistAddressCity(editedAddress, editedCity)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    setShowCityDropdown(false);
-                    (e.target as HTMLInputElement).blur();
-                  }
-                }}
-                placeholder="Rechercher une ville..."
-                className={`w-full pl-3 pr-10 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:bg-white focus:ring-2 focus:border-transparent outline-none transition-all ${
-                  isPrincess ? 'focus:ring-amber-400' : isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-500'
-                }`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowCityDropdown(!showCityDropdown)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors text-xs"
-              >
-                {showCityDropdown ? '▲' : '▼'}
-              </button>
+          <div className="md:col-span-1 space-y-1 relative">
+            <div className="flex items-center gap-2 flex-wrap">
+              <label className="text-xs text-gray-400 font-bold uppercase tracking-wider">Ville</label>
+              {/* Whether the typed city is an official Coliaty city. A parcel cannot
+                  be pushed to delivery for an unrecognised city, so the agent needs
+                  to see the mismatch before confirming the order. */}
+              {cityMatch === 'matched' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black uppercase tracking-wide">
+                  <Check className="w-3 h-3 stroke-[3]" /> Ville reconnue
+                </span>
+              )}
+              {cityMatch === 'unmatched' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 text-[10px] font-black uppercase tracking-wide">
+                  <XCircle className="w-3 h-3 stroke-[3]" /> Non reconnue
+                </span>
+              )}
+              {cityMatch === 'empty' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-black uppercase tracking-wide">
+                  <AlertTriangle className="w-3 h-3 stroke-[3]" /> Ville manquante
+                </span>
+              )}
+              {cityMatch === 'unknown' && (
+                <span
+                  title={loadingCities ? 'Chargement de la liste Coliaty…' : 'Liste Coliaty indisponible — vérification impossible'}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-50 text-gray-400 border border-gray-200 text-[10px] font-black uppercase tracking-wide"
+                >
+                  <Info className="w-3 h-3" /> Non vérifiée
+                </span>
+              )}
             </div>
-
-            {/* Searchable Floating Cities Dropdown */}
-            {showCityDropdown && (
-              <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-gray-100 rounded-xl shadow-2xl z-50 p-2 space-y-1 animate-in fade-in slide-in-from-top-2 duration-200">
-                {loadingCities ? (
-                  <div className="text-xs text-gray-400 text-center py-3 animate-pulse">
-                    Chargement des villes de Coliaty...
-                  </div>
-                ) : (() => {
-                  const filtered = coliatyCities.filter(c =>
-                    c.city_name?.toLowerCase().includes(citySearch.toLowerCase())
-                  );
-
-                  if (filtered.length === 0) {
-                    return (
-                      <div className="text-xs text-gray-400 text-center py-3">
-                        Aucune ville officielle trouvée. Conserver "{citySearch}"
-                      </div>
-                    );
-                  }
-
-                  return filtered.map((c) => (
-                    <button
-                      key={c.city_id}
-                      type="button"
-                      // Keep focus on the input so its onBlur auto-save doesn't
-                      // fire with the half-typed search text before this click lands.
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => {
-                        setEditedCity(c.city_name);
-                        setCitySearch(c.city_name);
-                        setShowCityDropdown(false);
-                        persistAddressCity(editedAddress, c.city_name);
-                      }}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all flex items-center justify-between ${
-                        editedCity === c.city_name
-                          ? isPrincess
-                            ? 'bg-amber-50 text-amber-700 font-bold'
-                            : isGirly
-                            ? 'bg-pink-50 text-pink-700 font-bold'
-                            : 'bg-indigo-50 text-indigo-700 font-bold'
-                          : 'hover:bg-gray-50 text-gray-700 font-medium'
-                      }`}
-                    >
-                      <span>{c.city_name}</span>
-                      <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-md font-mono font-bold">
-                        {c.hub_name}
-                      </span>
-                    </button>
-                  ));
-                })()}
-              </div>
-            )}
+            <CityPicker
+              value={citySearch}
+              onChange={(v) => {
+                setCitySearch(v);
+                setEditedCity(v);
+              }}
+              onSelect={(name) => {
+                setEditedCity(name);
+                setCitySearch(name);
+                persistAddressCity(editedAddress, name);
+              }}
+              onCommit={() => persistAddressCity(editedAddress, editedCity)}
+              cities={coliatyCities}
+              loading={loadingCities}
+              accentRing={accentRing}
+              selectedClass={citySelectedClass}
+            />
           </div>
           <div className="md:col-span-2 space-y-1">
             <label className="text-xs text-gray-400 font-bold uppercase tracking-wider">Adresse complète</label>
@@ -1235,6 +1422,235 @@ export default function AgentLeadDetail() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Field label with inline save feedback, so the agent gets confirmation on the
+ * field they just edited rather than somewhere else on the page.
+ */
+function FieldLabel({
+  label,
+  fieldKey,
+  savingField,
+  savedField,
+}: {
+  label: string;
+  fieldKey: EditableFieldKey;
+  savingField: EditableFieldKey | null;
+  savedField: EditableFieldKey | null;
+}) {
+  return (
+    <p className="text-xs text-gray-400 font-medium uppercase mb-1 flex items-center gap-1.5">
+      {label}
+      {savingField === fieldKey && (
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-400 normal-case animate-pulse">
+          <span className="w-2.5 h-2.5 border-2 border-gray-200 border-t-gray-400 rounded-full animate-spin" />
+          Enregistrement…
+        </span>
+      )}
+      {savedField === fieldKey && savingField !== fieldKey && (
+        <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-600 normal-case">
+          <Check className="w-3 h-3" /> Enregistré
+        </span>
+      )}
+    </p>
+  );
+}
+
+/** Small pencil affordance shown next to an editable value. */
+function EditPencil({ onClick, label }: { onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className="p-1 rounded-lg text-gray-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors shrink-0"
+    >
+      <Pencil className="w-3.5 h-3.5" />
+    </button>
+  );
+}
+
+/**
+ * Auto-saving inline editor: commits on blur and on Enter, abandons on Escape.
+ *
+ * Escape closes the editor via onCancel, which also arms the parent's
+ * cancel flag — otherwise the blur that immediately follows would save the very
+ * edit the agent just discarded.
+ */
+function InlineInput({
+  value,
+  onChange,
+  onCommit,
+  onCancel,
+  accent,
+  type = 'text',
+  placeholder,
+  hint,
+  error,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onCommit: () => void;
+  onCancel: () => void;
+  accent: string;
+  type?: string;
+  placeholder?: string;
+  hint?: string;
+  error?: string | null;
+}) {
+  return (
+    <div className="space-y-1">
+      <input
+        autoFocus
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        aria-invalid={!!error}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onCommit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            (e.target as HTMLInputElement).blur();
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            onCancel();
+          }
+        }}
+        className={`w-full px-3 py-2 bg-white border rounded-xl text-sm font-semibold focus:ring-2 focus:border-transparent outline-none transition-all ${
+          error ? 'border-red-300 ring-1 ring-red-200 focus:ring-red-400' : `border-gray-200 ${accent}`
+        }`}
+      />
+      {error ? (
+        <p className="text-[11px] text-red-600 font-bold flex items-center gap-1">
+          <AlertTriangle className="w-3 h-3 shrink-0" /> {error}
+        </p>
+      ) : (
+        <p className="text-[10px] text-gray-400 font-medium">
+          {hint ? `${hint} • ` : ''}Entrée pour enregistrer, Échap pour annuler
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Searchable Coliaty city picker.
+ *
+ * Extracted so the customer card and the delivery card cannot drift: a free-text
+ * city that is not in Coliaty's list cannot be pushed to delivery, so both places
+ * an agent can change the city must offer the same official list.
+ *
+ * Owns its open state and click-outside handling, so two instances on the page
+ * never fight over a shared ref.
+ */
+function CityPicker({
+  value,
+  onChange,
+  onSelect,
+  onCommit,
+  cities,
+  loading,
+  accentRing,
+  selectedClass,
+  autoFocus = false,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onSelect: (cityName: string) => void;
+  onCommit: () => void;
+  cities: any[];
+  loading: boolean;
+  accentRing: string;
+  selectedClass: string;
+  autoFocus?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filtered = cities.filter((c) =>
+    c.city_name?.toLowerCase().includes(value.toLowerCase())
+  );
+
+  return (
+    <div className="relative" ref={ref}>
+      <div className="relative">
+        <input
+          type="text"
+          autoFocus={autoFocus}
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={onCommit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              setOpen(false);
+              (e.target as HTMLInputElement).blur();
+            }
+          }}
+          placeholder="Rechercher une ville..."
+          className={`w-full pl-3 pr-10 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:bg-white focus:ring-2 focus:border-transparent outline-none transition-all ${accentRing}`}
+        />
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors text-xs"
+        >
+          {open ? '▲' : '▼'}
+        </button>
+      </div>
+
+      {open && (
+        <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-gray-100 rounded-xl shadow-2xl z-50 p-2 space-y-1 animate-in fade-in slide-in-from-top-2 duration-200">
+          {loading ? (
+            <div className="text-xs text-gray-400 text-center py-3 animate-pulse">
+              Chargement des villes de Coliaty...
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-xs text-gray-400 text-center py-3">
+              Aucune ville officielle trouvée. Conserver "{value}"
+            </div>
+          ) : (
+            filtered.map((c) => (
+              <button
+                key={c.city_id}
+                type="button"
+                // Keep focus on the input so its onBlur auto-save doesn't fire
+                // with the half-typed search text before this click lands.
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setOpen(false);
+                  onSelect(c.city_name);
+                }}
+                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all flex items-center justify-between ${
+                  value === c.city_name ? selectedClass : 'hover:bg-gray-50 text-gray-700 font-medium'
+                }`}
+              >
+                <span>{c.city_name}</span>
+                <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-md font-mono font-bold">
+                  {c.hub_name}
+                </span>
+              </button>
+            ))
+          )}
         </div>
       )}
     </div>

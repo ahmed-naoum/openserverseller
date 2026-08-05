@@ -2002,7 +2002,37 @@ router.patch(
     const lead = await prisma.lead.findFirst({ where });
     if (!lead) throw new AppException(404, 'Lead not found');
 
-    const normalizedPhone = phone ? phone.replace(/^0/, '+212') : undefined;
+    // Validate server-side too: the agent UI checks these, but a malformed phone
+    // reaching the database means the courier cannot deliver, and the previous
+    // `replace(/^0/, '+212')` only rewrote one of the several shapes agents type.
+    let normalizedPhone: string | undefined;
+    if (phone !== undefined) {
+      const cleaned = String(phone).replace(/[\s.\-()]/g, '');
+      let subscriber: string;
+      if (cleaned.startsWith('+212')) subscriber = cleaned.slice(4);
+      else if (cleaned.startsWith('212')) subscriber = cleaned.slice(3);
+      else if (cleaned.startsWith('0')) subscriber = cleaned.slice(1);
+      else subscriber = cleaned;
+
+      if (!/^[567]\d{8}$/.test(subscriber)) {
+        throw new AppException(
+          400,
+          'Numéro de téléphone invalide. Format attendu : 0612345678 ou +212612345678.'
+        );
+      }
+      normalizedPhone = `+212${subscriber}`;
+    }
+
+    if (fullName !== undefined && String(fullName).trim().length > 0) {
+      const name = String(fullName).trim();
+      if (name.length < 3 || name.length > 80) {
+        throw new AppException(400, 'Nom invalide (entre 3 et 80 caractères).');
+      }
+    }
+
+    if (address !== undefined && String(address).trim().length > 200) {
+      throw new AppException(400, 'Adresse trop longue (200 caractères maximum).');
+    }
 
     const updated = await prisma.lead.update({
       where: { id: lead.id },
