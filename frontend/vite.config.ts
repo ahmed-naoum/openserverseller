@@ -42,6 +42,31 @@ export default defineConfig({
      * scripts/prerender.mjs reads the same variable.
      */
     outDir: process.env.VITE_OUT_DIR || 'dist',
+
+    /**
+     * Everything used to land in one 5.4 MB (1.4 MB gzip) chunk that the public
+     * landing page had to download and parse before it could render — Lighthouse
+     * reported 1,038 KiB of it unused and 2.0 s of JS execution.
+     *
+     * These libraries are only reachable from authenticated dashboards, so
+     * splitting them out lets the browser fetch them in parallel and cache them
+     * independently of the app code that changes on every deploy.
+     */
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          // Session replay: admin inspector + the guest tracker. Very large.
+          'vendor-rrweb': ['rrweb'],
+          // Face matching for identity verification — ML models, never on landing.
+          'vendor-faceapi': ['face-api.js'],
+          // Spreadsheet + PDF export, dashboards only.
+          'vendor-export': ['xlsx', 'jspdf', 'jspdf-autotable', 'pdf-lib'],
+          'vendor-charts': ['recharts'],
+          'vendor-motion': ['framer-motion'],
+        },
+      },
+    },
   },
   resolve: {
     alias: {

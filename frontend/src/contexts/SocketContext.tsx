@@ -22,6 +22,12 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     const SOCKET_URL = API_URL.replace('/api/v1', '');
     const SOCKET_PATH = `${API_URL.includes('/api/v1') ? '/api/v1' : ''}/socket.io`;
 
+    let cancelled = false;
+    let startTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const start = () => {
+      if (cancelled) return;
+
     // Connect with auth token if available, otherwise connect anonymously to track public guests
     const newSocket = io(SOCKET_URL, {
       path: SOCKET_PATH,
@@ -79,9 +85,35 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
     socketRef.current = newSocket;
     setSocket(newSocket);
+    };
+
+    /**
+     * Signed-in users get the socket immediately — their dashboards depend on it.
+     *
+     * Anonymous visitors (the public landing page, /r/:code checkout) get it only
+     * once the page has loaded and the main thread is idle. Connecting during load
+     * put socket.io's long-poll handshake on the critical path: Lighthouse measured
+     * a 14.4s critical chain of ~30 polling requests on silacod.com, because the
+     * websocket upgrade fails in that environment and it falls back to polling
+     * forever. Guest presence tracking still works, it just starts a moment later
+     * instead of competing with LCP.
+     */
+    if (token) {
+      start();
+    } else if (typeof window !== 'undefined') {
+      const schedule = () => {
+        const ric = (window as any).requestIdleCallback;
+        if (ric) ric(start, { timeout: 3000 });
+        else startTimer = setTimeout(start, 1500);
+      };
+      if (document.readyState === 'complete') schedule();
+      else window.addEventListener('load', schedule, { once: true });
+    }
 
     return () => {
-      newSocket.disconnect();
+      cancelled = true;
+      if (startTimer) clearTimeout(startTimer);
+      socketRef.current?.disconnect();
       socketRef.current = null;
       setSocket(null);
     };
