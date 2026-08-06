@@ -16,7 +16,11 @@ const STATUS_STYLES: Record<string, { chip: string; Icon: any; label: string }> 
   FAILED:  { chip: 'bg-rose-500/10 text-rose-600 border-rose-200', Icon: XCircle, label: 'Échec du Déploiement' },
   RUNNING: { chip: 'bg-indigo-500/10 text-indigo-600 border-indigo-200', Icon: Loader2, label: 'Reconstruction...' },
   TIMEOUT: { chip: 'bg-amber-500/10 text-amber-600 border-amber-200', Icon: Clock, label: 'Délai Dépassé' },
-  UNKNOWN: { chip: 'bg-emerald-500/10 text-emerald-600 border-emerald-200', Icon: CheckCircle2, label: 'Déployé' },
+  // Not a success. UNKNOWN means the outcome could not be determined — deploy.sh
+  // prints its DEPLOY_RESULT marker after `pm2 restart`, by which point nothing is
+  // reading the log. Styling it like SUCCESS told operators a deploy had worked
+  // when nobody actually knew, so it gets its own neutral treatment.
+  UNKNOWN: { chip: 'bg-slate-100 text-slate-600 border-slate-300', Icon: Activity, label: 'Indéterminé' },
   PENDING: { chip: 'bg-slate-100 text-slate-700 border-slate-200', Icon: Clock, label: 'En attente' },
 };
 
@@ -38,15 +42,45 @@ export default function Deployments() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
 
-  const { data: status, isLoading, refetch, isRefetching } = useQuery({
+  // Past-deployment log viewer.
+  const [logModal, setLogModal] = useState<{ id: string; sha?: string } | null>(null);
+  const [pastLog, setPastLog] = useState<string | null>(null);
+  const [pastLogAvailable, setPastLogAvailable] = useState(true);
+  const [loadingPastLog, setLoadingPastLog] = useState(false);
+
+  // How many history rows to request. The endpoint caps at 50.
+  const [historyLimit, setHistoryLimit] = useState(10);
+
+  const openPastLog = useCallback(async (id: string, sha?: string) => {
+    setLogModal({ id, sha });
+    setPastLog(null);
+    setPastLogAvailable(true);
+    setLoadingPastLog(true);
+    try {
+      const { data } = await api.get(`/deploy/${id}/log`);
+      setPastLog(data.data.log || '');
+      setPastLogAvailable(data.data.available !== false);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Impossible de charger le journal.');
+      setLogModal(null);
+    } finally {
+      setLoadingPastLog(false);
+    }
+  }, []);
+
+  const { data: status, dataUpdatedAt, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['deploy-status'],
     queryFn: async () => (await api.get('/deploy/status')).data.data,
     refetchInterval: (q) => ((q.state.data as any)?.deploying ? 3000 : 20000),
   });
 
+  // Wall-clock of the last successful POST /deploy/run, used to ignore status
+  // snapshots that predate it.
+  const deployStartedAt = useRef(0);
+
   const { data: history } = useQuery({
-    queryKey: ['deploy-history'],
-    queryFn: async () => (await api.get('/deploy/history?limit=10')).data.data,
+    queryKey: ['deploy-history', historyLimit],
+    queryFn: async () => (await api.get(`/deploy/history?limit=${historyLimit}`)).data.data,
     refetchInterval: 20000,
   });
 
@@ -54,9 +88,49 @@ export default function Deployments() {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [logLines]);
 
+  // Backfill the live log after a reload.
+  //
+  // logLines only accumulates from the deploy:log socket stream, so reloading (or
+  // navigating away and back) during a deploy left the panel blank while the build
+  // was still running — the operator could not tell whether anything was happening.
+  // Fetch what the runner has written so far, once, then let the socket append.
+  const backfilledFor = useRef<string | null>(null);
+  useEffect(() => {
+    const activeId = status?.activeDeploymentId;
+    if (!activeId || !status?.deploying) return;
+    if (backfilledFor.current === activeId) return;
+    backfilledFor.current = activeId;
+
+    api
+      .get(`/deploy/${activeId}/log`)
+      .then(({ data }) => {
+        const text: string = data?.data?.log || '';
+        if (!text) return;
+        // Only seed when nothing has streamed in yet, so we never duplicate lines
+        // that the socket already delivered.
+        setLogLines((prev) => (prev.length ? prev : text.split('\n').slice(-800)));
+      })
+      .catch(() => {
+        /* the panel simply stays empty until the next streamed line */
+      });
+  }, [status?.activeDeploymentId, status?.deploying]);
+
   useEffect(() => {
     if (!socket) return;
-    socket.emit('deploy:subscribe');
+
+    // Re-subscribe on every (re)connect, not just once.
+    //
+    // Room membership is per-connection server-side (index.ts: socket.join
+    // ('deploy:watchers')), and deploy.sh ends with `pm2 restart silacod-api`
+    // — so the deploy being watched drops the websocket. socket.io reconnects,
+    // but SocketContext reuses the same Socket object, so this effect never
+    // re-runs and the old code never re-joined the room. The tab then went
+    // permanently deaf to deploy:log / deploy:status for the rest of the
+    // session, which is why the live log stopped appearing after the first
+    // deploy.
+    const subscribe = () => socket.emit('deploy:subscribe');
+    subscribe();
+    socket.on('connect', subscribe);
 
     const onLog = (p: { line: string }) => {
       setLogLines((prev) => [...prev.slice(-800), p.line]);
@@ -82,6 +156,7 @@ export default function Deployments() {
 
     return () => {
       socket.emit('deploy:unsubscribe');
+      socket.off('connect', subscribe);
       socket.off('deploy:log', onLog);
       socket.off('deploy:status', onStatus);
       socket.off('deploy:pending', onPending);
@@ -94,12 +169,39 @@ export default function Deployments() {
     setDeploying(true);
     try {
       await api.post('/deploy/run');
+      deployStartedAt.current = Date.now();
       toast.success('Déploiement initialisé');
+      queryClient.invalidateQueries({ queryKey: ['deploy-status'] });
     } catch (err: any) {
       setDeploying(false);
       toast.error(err?.response?.data?.message || 'Échec du lancement');
     }
-  }, []);
+  }, [queryClient]);
+
+  /**
+   * Clears the local `deploying` latch from server truth.
+   *
+   * The terminal deploy:status event usually never arrives: deploy.sh restarts
+   * the API as its last step, killing the process that owns the runner's stdout
+   * pipe, so child.on('exit') -> finish() never runs in any live process. The
+   * latch was therefore only ever set, never cleared, leaving the Deploy button
+   * disabled forever after the first run.
+   *
+   * The dataUpdatedAt guard rejects the cached pre-click status (which still
+   * says deploying:false) so the latch cannot clear the instant it is set.
+   */
+  useEffect(() => {
+    if (!deploying) return;
+    if (status?.deploying) return;
+    if (dataUpdatedAt <= deployStartedAt.current) return;
+
+    setDeploying(false);
+    queryClient.invalidateQueries({ queryKey: ['deploy-history'] });
+    // Deliberately "terminé", not "réussi": the settled row is often UNKNOWN
+    // because deploy.sh prints DEPLOY_RESULT after the pm2 restart, with no
+    // live reader for the log. Point the operator at the log instead.
+    toast.success('Déploiement terminé — ouvrez le journal dans l’historique.');
+  }, [deploying, status?.deploying, dataUpdatedAt, queryClient]);
 
   const currentLocalSha = (status?.local?.sha || '').slice(0, 7);
   const rawPending = status?.pendingCommits || status?.pending || [];
@@ -356,6 +458,7 @@ export default function Deployments() {
                   <th className="px-7 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Déclenché Par</th>
                   <th className="px-7 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Durée</th>
                   <th className="px-7 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date & Heure</th>
+                  <th className="px-7 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Journal</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -381,15 +484,117 @@ export default function Deployments() {
                       {d.durationMs ? `${Math.round(d.durationMs / 1000)}s` : '—'}
                     </td>
                     <td className="px-7 py-4 text-xs text-slate-500 whitespace-nowrap">
-                      {format(new Date(d.createdAt), 'dd MMMM yyyy à HH:mm', { locale: fr })}
+                      {d.createdAt ? format(new Date(d.createdAt), 'dd MMMM yyyy à HH:mm', { locale: fr }) : '—'}
+                    </td>
+                    <td className="px-7 py-4 text-right">
+                      <button
+                        onClick={() => openPastLog(d.id, d.commitSha)}
+                        title="Voir le journal complet de ce déploiement"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 text-xs font-bold transition-colors"
+                      >
+                        <Terminal className="w-3.5 h-3.5" />
+                        Voir
+                      </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+
+            {/* The endpoint caps limit at 50; stop offering more once we have it all. */}
+            {history.pagination && history.items.length < history.pagination.total && (
+              <div className="px-7 py-4 border-t border-slate-100 flex items-center justify-between">
+                <span className="text-xs text-slate-500 font-medium">
+                  {history.items.length} sur {history.pagination.total} déploiements
+                </span>
+                <button
+                  onClick={() => setHistoryLimit((n) => Math.min(50, n + 10))}
+                  disabled={historyLimit >= 50}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {historyLimit >= 50 ? 'Maximum affiché (50)' : 'Afficher plus'}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {/* Past deployment log */}
+      {logModal && (
+        <div
+          className="fixed inset-0 z-[999999] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md"
+          onClick={() => setLogModal(null)}
+        >
+          <div
+            className="bg-slate-900 rounded-3xl shadow-2xl max-w-4xl w-full border border-slate-800 overflow-hidden flex flex-col max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5 text-white">
+                <Terminal className="w-4 h-4 text-indigo-400" />
+                <span className="font-black text-sm">Journal du déploiement</span>
+                {logModal.sha && (
+                  <span className="px-2 py-0.5 bg-slate-800 rounded font-mono text-[11px] text-slate-300">
+                    {logModal.sha.slice(0, 7)}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {pastLog && (
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(pastLog).then(
+                        () => toast.success('Journal copié'),
+                        () => toast.error('Copie impossible')
+                      );
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white text-xs font-bold"
+                  >
+                    Copier
+                  </button>
+                )}
+                <button
+                  onClick={() => setLogModal(null)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                >
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 font-mono text-xs leading-relaxed text-slate-300 bg-slate-950">
+              {loadingPastLog ? (
+                <div className="flex items-center gap-2 text-slate-500">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Chargement du journal…
+                </div>
+              ) : !pastLogAvailable || !pastLog ? (
+                <p className="text-slate-500">
+                  Aucun journal disponible pour ce déploiement. Le fichier a été supprimé,
+                  ou ce déploiement est antérieur à l'enregistrement des journaux.
+                </p>
+              ) : (
+                pastLog.split('\n').map((line, i) => (
+                  <div
+                    key={i}
+                    className={`whitespace-pre-wrap break-all ${
+                      /error|failed|❌|DEPLOY_RESULT=FAILED/i.test(line)
+                        ? 'text-rose-400'
+                        : /warning|⚠️/i.test(line)
+                          ? 'text-amber-400'
+                          : /✅|DEPLOY_RESULT=SUCCESS/i.test(line)
+                            ? 'text-emerald-400'
+                            : ''
+                    }`}
+                  >
+                    {line || ' '}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Confirmation Modal */}
       {confirmOpen && (

@@ -229,9 +229,32 @@ router.get('/history', async (req, res) => {
 // GET /api/v1/deploy/:id/log — full log for one deployment
 router.get('/:id/log', async (req, res) => {
   try {
+    const deployment = await prisma.deployment.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, status: true, commitSha: true, logPath: true },
+    });
+
+    // Distinguish "no such deployment" from "deployment exists but its log file is
+    // gone": readDeployLog returns '' for both, which renders as an empty panel the
+    // operator cannot interpret.
+    if (!deployment) {
+      return res.status(404).json({ status: 'error', message: 'Déploiement introuvable.' });
+    }
+
     const log = await readDeployLog(req.params.id);
-    res.json({ status: 'success', data: { log } });
+
+    res.json({
+      status: 'success',
+      data: {
+        log,
+        // false when the run predates log capture, or the file was pruned/rotated.
+        available: !!deployment.logPath && log.length > 0,
+        status: deployment.status,
+        commitSha: deployment.commitSha,
+      },
+    });
   } catch (err: any) {
+    console.error('[deploy] log read failed:', err);
     res.status(500).json({ status: 'error', message: err.message });
   }
 });
