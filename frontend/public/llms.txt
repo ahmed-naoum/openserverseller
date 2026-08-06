@@ -1,0 +1,41 @@
+# SILACOD
+
+> SILACOD is a Moroccan white-label (private-label) dropshipping platform for cosmetics and dietary supplements. Sellers, influencers and affiliate marketers choose products from a catalogue of 200+ items, put their own brand on them, and SILACOD handles sourcing, branding, warehousing, order confirmation, packing and cash-on-delivery (COD) delivery across Morocco.
+
+SILACOD SARL is headquartered in Agadir, Morocco, and runs its order-confirmation call centre in Casablanca. The platform serves three audiences: merchants and companies selling online, content creators and influencers monetising an audience, and affiliate marketers who earn commission on the traffic they send. Orders are settled cash on delivery, the dominant payment method in the Moroccan market. The site is published in French, Arabic and English; French is the default language.
+
+Pricing is published in full, with no hidden fees: 57 MAD per delivered parcel, 13% commission on net profit, 2 MAD per landing-page lead, 8 MAD per WhatsApp lead, and 3 MAD per return.
+
+## Core pages
+
+- [Home](https://silacod.com/): What SILACOD does, how the white-label model works, and the three ways to sell (own store, influencer shop, affiliate links).
+- [Product catalogue](https://silacod.com/marketplace): 200+ cosmetics and dietary supplements ready to carry your own brand, with suggested retail prices and margins for the Moroccan market.
+- [Pricing](https://silacod.com/pricing): Full fee schedule — 57 MAD per delivered parcel, 13% commission on net profit, 2 MAD per landing-page lead, 8 MAD per WhatsApp lead, 3 MAD per return.
+- [About](https://silacod.com/about): Company background for SILACOD SARL, the Agadir head office and the Casablanca call centre.
+- [FAQ](https://silacod.com/faq): How to start, how cash on delivery works, delivery times, returns, and how your brand is applied to the products.
+- [Blog](https://silacod.com/blog): Guides on selling online in Morocco — starting with COD, cutting delivery refusals, building a brand, choosing products, and the legal side.
+- [Contact](https://silacod.com/contact): Email, phone and WhatsApp support on +212 660-517679, 7 days a week.
+- [Careers](https://silacod.com/careers): Open roles in Agadir and Casablanca. Applications go to jobs@silacod.com.
+
+## Getting started
+
+- [Create an account](https://silacod.com/register): Free sign-up for sellers, influencers and affiliate marketers. No inventory purchase required to browse the catalogue.
+- [Sign in](https://silacod.com/login): Access to the seller, influencer and affiliate dashboards.
+- [Masterclass and events](https://silacod.com/masterclass): Live training sessions on running a COD dropshipping business in Morocco.
+
+## Legal
+
+- [Terms and Conditions](https://silacod.com/terms): Seller obligations, pricing, delivery, returns and payouts.
+- [Privacy Policy](https://silacod.com/privacy): How personal data of sellers and end customers is collected, used and protected under Moroccan law 09-08.
+
+## Optional
+
+- [Sitemap](https://silacod.com/sitemap.xml): Machine-readable index of every public page, including individual product pages under /product/.
+- [Crawler policy](https://silacod.com/robots.txt): Which paths are open to crawlers. Dashboards, authentication flows and API endpoints are private and intentionally excluded.
+
+## Contact
+
+- General enquiries: contact@silacod.com
+- Seller support: support@silacod.com
+- Careers: jobs@silacod.com
+- Phone / WhatsApp: +212 660-517679

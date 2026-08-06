@@ -235,19 +235,25 @@ export default function HomePage() {
               ) : (
                 <>
                   {/* Login Button (Dark Blue Square Icon Wrapper) */}
-                  <Link to="/login" className="w-[42px] h-[42px] bg-[#2e315e] hover:bg-[#1e2142] text-white rounded-[10px] flex items-center justify-center transition-colors">
+                  <Link to="/login" aria-label={t('login_label')} title={t('login_label')} className="w-[42px] h-[42px] bg-[#2e315e] hover:bg-[#1e2142] text-white rounded-[10px] flex items-center justify-center transition-colors">
                     <LogIn className="w-[20px] h-[20px]" />
                   </Link>
 
                   {/* Solid Orange/Coral Register Button */}
-                  <Link to="/register" className="rounded-[10px] bg-[#ff5722] hover:bg-[#e64a19] px-6 py-2.5 flex items-center justify-center text-[15px] font-bold text-white transition-all shadow-sm">
+                  <Link to="/register" className="rounded-[10px] bg-[#c93d0f] hover:bg-[#b7350b] px-6 py-2.5 flex items-center justify-center text-[15px] font-bold text-white transition-all shadow-sm">
                     <span className="translate-y-[4px]">{t('get_started_free')}</span>
                   </Link>
                 </>
               )}
             </div>
 
-            <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="lg:hidden p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label={mobileMenuOpen ? t('close_menu', 'home', 'Close menu') : t('open_menu', 'home', 'Open menu')}
+              aria-expanded={mobileMenuOpen}
+              className="lg:hidden p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors"
+            >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
           </div>
@@ -284,7 +290,7 @@ export default function HomePage() {
                 ) : (
                   <>
                     <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block font-bold text-[#2e315e] py-2">{t('login_label')}</Link>
-                    <Link to="/register" onClick={() => setMobileMenuOpen(false)} className="block w-full text-center bg-[#ff5722] text-white font-bold py-3.5 rounded-xl">
+                    <Link to="/register" onClick={() => setMobileMenuOpen(false)} className="block w-full text-center bg-[#c93d0f] text-white font-bold py-3.5 rounded-xl">
                       <span className="block -translate-y-[1px]">{t('get_started_free')}</span>
                     </Link>
                   </>
@@ -298,6 +304,11 @@ export default function HomePage() {
 
       {/* Main content padding to account for fixed ticker + navbar */}
       <div className="pt-[135px]"></div>
+
+      {/* Everything between the navbar and the footer is the page's main content.
+          Without this landmark, screen-reader and AI-agent users have no way to skip
+          the nav — Lighthouse: "Le document ne contient pas de repère principal". */}
+      <main id="main-content">
 
       {/* ── HERO SECTION ── */}
       <section className="relative pt-12 pb-20 lg:pt-16 lg:pb-32 px-4 sm:px-6 lg:px-8 overflow-hidden min-h-[85vh] flex items-center">
@@ -351,12 +362,12 @@ export default function HomePage() {
                     user?.role === 'CONFIRMATION_AGENT' ? '/confirmation' :
                     user?.role === 'HELPER' ? '/helper' :
                     user?.role === 'UNCONFIRMED' ? '/verify' : '/dashboard'
-                  } className="w-full sm:w-auto rounded-[12px] bg-[#ff5722] hover:bg-[#e64a19] transition-all px-8 py-[14px] flex items-center justify-center gap-3 text-[16px] font-black text-white shadow-xl shadow-[#ff5722]/20">
+                  } className="w-full sm:w-auto rounded-[12px] bg-[#c93d0f] hover:bg-[#b7350b] transition-all px-8 py-[14px] flex items-center justify-center gap-3 text-[16px] font-black text-white shadow-xl shadow-[#ff5722]/20">
                     <span>{t('go_to_dashboard')}</span>
                     <ArrowLeft size={18} />
                   </Link>
                 ) : (
-                  <Link to="/register" className="w-full sm:w-auto rounded-[12px] bg-[#ff5722] hover:bg-[#e64a19] transition-all px-8 py-[14px] flex items-center justify-center gap-3 text-[16px] font-black text-white shadow-xl shadow-[#ff5722]/20">
+                  <Link to="/register" className="w-full sm:w-auto rounded-[12px] bg-[#c93d0f] hover:bg-[#b7350b] transition-all px-8 py-[14px] flex items-center justify-center gap-3 text-[16px] font-black text-white shadow-xl shadow-[#ff5722]/20">
                     <span>{t('start_now_free')}</span>
                     <ArrowLeft size={18} />
                   </Link>
@@ -577,7 +588,7 @@ export default function HomePage() {
             {/* Card 1 */}
             <motion.div whileHover={{ y: -5 }} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm flex flex-col items-center pt-10 px-6 gap-8 text-center">
               <div className="space-y-3 w-full">
-                <span className="inline-block text-[#ff5722] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">{t('conf_badge')}</span>
+                <span className="inline-block text-[#c2410c] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">{t('conf_badge')}</span>
                 <h3 className="text-2xl font-black text-[#2e315e]">{t('conf_badge')}</h3>
                 <p className="text-slate-500 text-sm font-bold leading-relaxed max-w-sm mx-auto">
                   {t('conf_desc')}
@@ -589,7 +600,7 @@ export default function HomePage() {
             {/* Card 2 */}
             <motion.div whileHover={{ y: -5 }} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm flex flex-col items-center pt-10 px-6 gap-8 text-center">
               <div className="space-y-3 w-full">
-                <span className="inline-block text-[#ff5722] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">{t('variety_badge')}</span>
+                <span className="inline-block text-[#c2410c] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">{t('variety_badge')}</span>
                 <h3 className="text-2xl font-black text-[#2e315e]">{t('ready_products')}</h3>
                 <p className="text-slate-500 text-sm font-bold leading-relaxed max-w-sm mx-auto">
                   {t('variety_desc')}
@@ -601,7 +612,7 @@ export default function HomePage() {
             {/* Card 3 */}
             <motion.div whileHover={{ y: -5 }} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm flex flex-col items-center pt-10 px-6 gap-8 text-center">
               <div className="space-y-3 w-full">
-                <span className="inline-block text-[#ff5722] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">{t('mgmt_badge')}</span>
+                <span className="inline-block text-[#c2410c] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">{t('mgmt_badge')}</span>
                 <h3 className="text-2xl font-black text-[#2e315e]">{t('mgmt_badge')}</h3>
                 <p className="text-slate-500 text-sm font-bold leading-relaxed max-w-sm mx-auto">
                   {t('mgmt_desc')}
@@ -613,7 +624,7 @@ export default function HomePage() {
             {/* Card 4 */}
             <motion.div whileHover={{ y: -5 }} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm flex flex-col items-center pt-10 px-6 gap-8 text-center">
               <div className="space-y-3 w-full">
-                <span className="inline-block text-[#ff5722] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">{t('profits_badge')}</span>
+                <span className="inline-block text-[#c2410c] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">{t('profits_badge')}</span>
                 <h3 className="text-2xl font-black text-[#2e315e]">{t('profits_badge')}</h3>
                 <p className="text-slate-500 text-sm font-bold leading-relaxed max-w-sm mx-auto">
                   {t('profits_desc')}
@@ -643,7 +654,7 @@ export default function HomePage() {
             
             {/* Step 1 */}
             <motion.div whileHover={{ y: -5 }} className="bg-[#fafafc] rounded-[2rem] p-6 text-center shadow-sm border border-slate-100 flex flex-col items-center">
-              <div className="w-10 h-10 bg-[#ff5722] text-white rounded-full flex items-center justify-center font-black text-lg mb-4 shadow-md">1</div>
+              <div className="w-10 h-10 bg-[#c93d0f] text-white rounded-full flex items-center justify-center font-black text-lg mb-4 shadow-md">1</div>
               <h3 className="text-xl font-black text-[#2e315e] mb-3">{t('step1_title')}</h3>
               <p className="text-slate-500 text-sm font-bold leading-relaxed mb-6">
                 {t('step1_desc')}
@@ -653,7 +664,7 @@ export default function HomePage() {
 
             {/* Step 2 */}
             <motion.div whileHover={{ y: -5 }} className="bg-[#fafafc] rounded-[2rem] p-6 text-center shadow-sm border border-slate-100 flex flex-col items-center">
-              <div className="w-10 h-10 bg-[#ff5722] text-white rounded-full flex items-center justify-center font-black text-lg mb-4 shadow-md">2</div>
+              <div className="w-10 h-10 bg-[#c93d0f] text-white rounded-full flex items-center justify-center font-black text-lg mb-4 shadow-md">2</div>
               <h3 className="text-xl font-black text-[#2e315e] mb-3">{t('step2_title')}</h3>
               <p className="text-slate-500 text-sm font-bold leading-relaxed mb-6">
                 {t('step2_desc')}
@@ -663,7 +674,7 @@ export default function HomePage() {
 
             {/* Step 3 */}
             <motion.div whileHover={{ y: -5 }} className="bg-[#fafafc] rounded-[2rem] p-6 text-center shadow-sm border border-slate-100 flex flex-col items-center">
-              <div className="w-10 h-10 bg-[#ff5722] text-white rounded-full flex items-center justify-center font-black text-lg mb-4 shadow-md">3</div>
+              <div className="w-10 h-10 bg-[#c93d0f] text-white rounded-full flex items-center justify-center font-black text-lg mb-4 shadow-md">3</div>
               <h3 className="text-xl font-black text-[#2e315e] mb-3">{t('step3_title')}</h3>
               <p className="text-slate-500 text-sm font-bold leading-relaxed mb-6">
                 {t('step3_desc')}
@@ -690,12 +701,12 @@ export default function HomePage() {
             {/* Row 1: Sellers */}
             <motion.div whileHover={{ scale: 1.01 }} className="flex flex-col md:flex-row items-center gap-8 bg-[#fff] rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm">
               <div className="flex-1 p-8 md:p-12 text-right">
-                <span className="inline-block text-[#ff5722] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-4">{t('merchants_badge')}</span>
+                <span className="inline-block text-[#c2410c] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-4">{t('merchants_badge')}</span>
                 <h3 className="text-3xl font-black text-[#2e315e] mb-4">{t('sellers_title')}</h3>
                 <p className="text-slate-500 font-bold leading-relaxed mb-6">
                   {t('sellers_desc')}
                 </p>
-                <Link to="/register" className="inline-block py-3 px-8 bg-[#ff5722] hover:bg-[#e64a19] text-white rounded-[12px] text-sm font-black transition-colors shadow-md shadow-[#ff5722]/20">
+                <Link to="/register" className="inline-block py-3 px-8 bg-[#c93d0f] hover:bg-[#b7350b] text-white rounded-[12px] text-sm font-black transition-colors shadow-md shadow-[#ff5722]/20">
                   {t('start_business_now')}
                 </Link>
               </div>
@@ -707,12 +718,12 @@ export default function HomePage() {
             {/* Row 2: Influencers (Dark Theme, Alternating Layout) */}
             <motion.div whileHover={{ scale: 1.01 }} className="flex flex-col md:flex-row-reverse items-center gap-8 bg-[#1e2142] text-white rounded-[2rem] overflow-hidden shadow-xl shadow-[#1e2142]/10">
               <div className="flex-1 p-8 md:p-12 text-right">
-                <span className="inline-block text-[#ff5722] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-4">{t('creators_badge')}</span>
+                <span className="inline-block text-[#c2410c] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-4">{t('creators_badge')}</span>
                 <h3 className="text-3xl font-black mb-4">{t('influencers_title')}</h3>
                 <p className="text-slate-300 font-bold leading-relaxed mb-6">
                   {t('influencers_desc')}
                 </p>
-                <Link to="/influencer/register" className="inline-block py-3 px-8 bg-[#ff5722] hover:bg-[#e64a19] text-white rounded-[12px] text-sm font-black transition-colors shadow-lg shadow-[#ff5722]/20">
+                <Link to="/influencer/register" className="inline-block py-3 px-8 bg-[#c93d0f] hover:bg-[#b7350b] text-white rounded-[12px] text-sm font-black transition-colors shadow-lg shadow-[#ff5722]/20">
                   {t('start_influencer')}
                 </Link>
               </div>
@@ -725,12 +736,12 @@ export default function HomePage() {
             {/* Row 3: Affiliates */}
             <motion.div whileHover={{ scale: 1.01 }} className="flex flex-col md:flex-row items-center gap-8 bg-[#fafafc] rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm">
               <div className="flex-1 p-8 md:p-12 text-right">
-                <span className="inline-block text-[#ff5722] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-4">{t('affiliate_badge')}</span>
+                <span className="inline-block text-[#c2410c] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-4">{t('affiliate_badge')}</span>
                 <h3 className="text-3xl font-black text-[#2e315e] mb-4">{t('affiliates_title')}</h3>
                 <p className="text-slate-500 font-bold leading-relaxed mb-6">
                   {t('affiliates_desc')}
                 </p>
-                <Link to="/register" className="inline-block py-3 px-8 bg-[#ff5722] hover:bg-[#e64a19] text-white rounded-[12px] text-sm font-black transition-colors shadow-md shadow-[#ff5722]/20">
+                <Link to="/register" className="inline-block py-3 px-8 bg-[#c93d0f] hover:bg-[#b7350b] text-white rounded-[12px] text-sm font-black transition-colors shadow-md shadow-[#ff5722]/20">
                   {t('start_affiliate')}
                 </Link>
               </div>
@@ -768,17 +779,23 @@ export default function HomePage() {
             {/* Arrows */}
             {!loadingProducts && products.length > 0 && (
               <>
-                <button 
+                <button
+                  type="button"
                   onClick={() => scrollSlider('right')}
+                  aria-label={t('next_products', 'home', 'Next products')}
+                  aria-controls="marketplace-slider"
                   className="hidden md:flex absolute top-1/2 -right-4 md:-right-6 z-10 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.15)] border border-slate-100 items-center justify-center text-slate-700 hover:text-[#ff5722] hover:scale-110 transition-all active:scale-95 opacity-0 group-hover:opacity-100"
                 >
-                  <ChevronRight size={24} />
+                  <ChevronRight size={24} aria-hidden="true" />
                 </button>
-                <button 
+                <button
+                  type="button"
                   onClick={() => scrollSlider('left')}
+                  aria-label={t('previous_products', 'home', 'Previous products')}
+                  aria-controls="marketplace-slider"
                   className="hidden md:flex absolute top-1/2 -left-4 md:-left-6 z-10 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.15)] border border-slate-100 items-center justify-center text-slate-700 hover:text-[#ff5722] hover:scale-110 transition-all active:scale-95 opacity-0 group-hover:opacity-100"
                 >
-                  <ChevronLeft size={24} />
+                  <ChevronLeft size={24} aria-hidden="true" />
                 </button>
               </>
             )}
@@ -864,12 +881,12 @@ export default function HomePage() {
                         )}
                       </div>
                       <div className="py-4 border-t border-slate-150/60 flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('retail_price')}</span>
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('retail_price')}</span>
                         <span className="font-mono text-slate-900 font-black text-2xl">{prod.retailPriceMad ?? prod.baseCostMad} Dh</span>
                       </div>
                     </div>
 
-                    <Link to="/register" className="mt-5 block text-center py-3 bg-[#ff5722] hover:bg-[#e04a1b] text-white rounded-xl text-xs font-bold active:scale-[0.98] transition-all">
+                    <Link to="/register" className="mt-5 block text-center py-3 bg-[#c93d0f] hover:bg-[#b7350b] text-white rounded-xl text-xs font-bold active:scale-[0.98] transition-all">
                       {t('order_now')}
                     </Link>
                   </motion.div>
@@ -895,7 +912,7 @@ export default function HomePage() {
 
           {/* Text details (Right) */}
           <div className="w-full md:w-1/2 space-y-6">
-            <span className="inline-block text-[#ff5722] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">{t('local_suppliers_badge')}</span>
+            <span className="inline-block text-[#c2410c] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">{t('local_suppliers_badge')}</span>
             <h2 className="text-3xl sm:text-4xl font-black text-[#2e315e] leading-tight">{t('suppliers_title')}</h2>
             <p className="text-slate-500 font-bold text-sm sm:text-base leading-relaxed max-w-lg">
               {t('suppliers_desc')}
@@ -907,7 +924,7 @@ export default function HomePage() {
               <li className="flex items-center gap-2 text-[#2e315e]">✓ {t('supplier_benefit3')}</li>
             </ul>
 
-            <a href="mailto:contact@silacod.com" className="inline-block py-3 px-8 bg-[#ff5722] hover:bg-[#e64a19] text-white rounded-[12px] text-sm font-black transition-colors shadow-md shadow-[#ff5722]/20">
+            <a href="mailto:contact@silacod.com" className="inline-block py-3 px-8 bg-[#c93d0f] hover:bg-[#b7350b] text-white rounded-[12px] text-sm font-black transition-colors shadow-md shadow-[#ff5722]/20">
               {t('supplier_benefit_cta')}
             </a>
           </div>
@@ -920,6 +937,8 @@ export default function HomePage() {
 
       {/* ── FAQ SECTION ── */}
       <FAQ />
+
+      </main>
 
       {/* ── FOOTER ── */}
       <footer className="bg-white pt-10">
@@ -943,7 +962,7 @@ export default function HomePage() {
                   <LogIn size={18} />
                   {t('login_label')}
                 </Link>
-                <Link to="/register" className="h-12 px-6 bg-[#ff5722] hover:bg-[#e64a19] text-white rounded-xl text-sm font-bold transition-colors flex items-center shadow-lg shadow-[#ff5722]/20">
+                <Link to="/register" className="h-12 px-6 bg-[#c93d0f] hover:bg-[#b7350b] text-white rounded-xl text-sm font-bold transition-colors flex items-center shadow-lg shadow-[#ff5722]/20">
                   {t('get_started_free')}
                 </Link>
               </div>
@@ -979,13 +998,13 @@ export default function HomePage() {
 
             {/* Links 1: Platform */}
             <div className="space-y-6">
-              <h4 className="text-lg font-black text-white whitespace-nowrap">{t('footer_platform_header')}</h4>
+              <h3 className="text-lg font-black text-white whitespace-nowrap">{t('footer_platform_header')}</h3>
               <div className="space-y-4 text-sm text-slate-300 font-bold">
                 <Link to="/" className="block hover:text-[#ff5722] transition-colors">{t('home_label')}</Link>
                 <a href="#how-it-works" className="block hover:text-[#ff5722] transition-colors">{t('how_it_works_label')}</a>
                 <a href="#marketplace" className="flex items-center justify-start gap-2 hover:text-[#ff5722] transition-colors">
                   {t('products_label')}
-                  <span className="bg-[#ff5722] text-white text-[9px] px-2 py-0.5 rounded-full">{t('new_badge')}</span>
+                  <span className="bg-[#c93d0f] text-white text-[9px] px-2 py-0.5 rounded-full">{t('new_badge')}</span>
                 </a>
                 <Link to="/pricing" className="block hover:text-[#ff5722] transition-colors">{t('pricing_label')}</Link>
                 <a href="#success-stories" className="block hover:text-[#ff5722] transition-colors">{t('success_stories_label')}</a>
@@ -994,12 +1013,12 @@ export default function HomePage() {
 
             {/* Links 2: Start Now */}
             <div className="space-y-6">
-              <h4 className="text-lg font-black text-white whitespace-nowrap">{t('start_now')}</h4>
+              <h3 className="text-lg font-black text-white whitespace-nowrap">{t('start_now')}</h3>
               <div className="space-y-4 text-sm text-slate-300 font-bold">
                 <Link to="/register" className="block hover:text-[#ff5722] transition-colors">{t('sellers_label')}</Link>
                 <Link to="/influencer/register" className="flex items-center justify-start gap-2 hover:text-[#ff5722] transition-colors">
                   {t('influencers_label')}
-                  <span className="bg-[#ff5722] text-white text-[9px] px-2 py-0.5 rounded-full">{t('new_badge')}</span>
+                  <span className="bg-[#c93d0f] text-white text-[9px] px-2 py-0.5 rounded-full">{t('new_badge')}</span>
                 </Link>
                 <Link to="/register" className="block hover:text-[#ff5722] transition-colors">{t('affiliates_label')}</Link>
                 <Link to="/register" className="block hover:text-[#ff5722] transition-colors">{t('create_account_label')}</Link>
@@ -1008,7 +1027,7 @@ export default function HomePage() {
 
             {/* Links 3: About SILACOD */}
             <div className="space-y-6">
-              <h4 className="text-lg font-black text-white whitespace-nowrap">{t('about_silacod_header')}</h4>
+              <h3 className="text-lg font-black text-white whitespace-nowrap">{t('about_silacod_header')}</h3>
               <div className="space-y-4 text-sm text-slate-300 font-bold">
                 <Link to="/about" className="block hover:text-[#ff5722] transition-colors whitespace-nowrap">{t('who_we_are_label')}</Link>
                 <Link to="/contact" className="block hover:text-[#ff5722] transition-colors whitespace-nowrap">{t('contact_us_label')}</Link>
