@@ -20,7 +20,17 @@
     <title>SILACOD - Dropshipping White-Label Maroc</title>
     <!-- LogRocket Setup -->
     <script>
-      if (!window.LogRocket) {
+      /*
+       * The `window.LogRocket` check alone is not enough. scripts/prerender.mjs
+       * snapshots the rendered DOM, by which point this injector has already
+       * appended its <script> tag — so the prerendered HTML ships that tag too.
+       * On a real load the baked-in tag is still downloading when this inline
+       * script runs, `window.LogRocket` is undefined, and a SECOND copy gets
+       * injected. LogRocket then logs "already been loaded, loading a second
+       * instance is not supported" and the 137 KB logger is fetched twice.
+       * Checking for the tag itself closes that window.
+       */
+      if (!window.LogRocket && !document.querySelector('script[src*="LogRocket.min.js"]')) {
         const script = document.createElement('script');
         script.src = "https://cdn.logr-in.com/LogRocket.min.js";
         script.crossOrigin = "anonymous";

@@ -588,7 +588,7 @@ export default function HomePage() {
             {/* Card 1 */}
             <motion.div whileHover={{ y: -5 }} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm flex flex-col items-center pt-10 px-6 gap-8 text-center">
               <div className="space-y-3 w-full">
-                <span className="inline-block text-[#c2410c] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">{t('conf_badge')}</span>
+                <span className="inline-block text-[#9a3412] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">{t('conf_badge')}</span>
                 <h3 className="text-2xl font-black text-[#2e315e]">{t('conf_badge')}</h3>
                 <p className="text-slate-500 text-sm font-bold leading-relaxed max-w-sm mx-auto">
                   {t('conf_desc')}
@@ -600,7 +600,7 @@ export default function HomePage() {
             {/* Card 2 */}
             <motion.div whileHover={{ y: -5 }} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm flex flex-col items-center pt-10 px-6 gap-8 text-center">
               <div className="space-y-3 w-full">
-                <span className="inline-block text-[#c2410c] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">{t('variety_badge')}</span>
+                <span className="inline-block text-[#9a3412] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">{t('variety_badge')}</span>
                 <h3 className="text-2xl font-black text-[#2e315e]">{t('ready_products')}</h3>
                 <p className="text-slate-500 text-sm font-bold leading-relaxed max-w-sm mx-auto">
                   {t('variety_desc')}
@@ -612,7 +612,7 @@ export default function HomePage() {
             {/* Card 3 */}
             <motion.div whileHover={{ y: -5 }} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm flex flex-col items-center pt-10 px-6 gap-8 text-center">
               <div className="space-y-3 w-full">
-                <span className="inline-block text-[#c2410c] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">{t('mgmt_badge')}</span>
+                <span className="inline-block text-[#9a3412] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">{t('mgmt_badge')}</span>
                 <h3 className="text-2xl font-black text-[#2e315e]">{t('mgmt_badge')}</h3>
                 <p className="text-slate-500 text-sm font-bold leading-relaxed max-w-sm mx-auto">
                   {t('mgmt_desc')}
@@ -624,7 +624,7 @@ export default function HomePage() {
             {/* Card 4 */}
             <motion.div whileHover={{ y: -5 }} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm flex flex-col items-center pt-10 px-6 gap-8 text-center">
               <div className="space-y-3 w-full">
-                <span className="inline-block text-[#c2410c] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">{t('profits_badge')}</span>
+                <span className="inline-block text-[#9a3412] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">{t('profits_badge')}</span>
                 <h3 className="text-2xl font-black text-[#2e315e]">{t('profits_badge')}</h3>
                 <p className="text-slate-500 text-sm font-bold leading-relaxed max-w-sm mx-auto">
                   {t('profits_desc')}
@@ -701,7 +701,7 @@ export default function HomePage() {
             {/* Row 1: Sellers */}
             <motion.div whileHover={{ scale: 1.01 }} className="flex flex-col md:flex-row items-center gap-8 bg-[#fff] rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm">
               <div className="flex-1 p-8 md:p-12 text-right">
-                <span className="inline-block text-[#c2410c] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-4">{t('merchants_badge')}</span>
+                <span className="inline-block text-[#9a3412] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-4">{t('merchants_badge')}</span>
                 <h3 className="text-3xl font-black text-[#2e315e] mb-4">{t('sellers_title')}</h3>
                 <p className="text-slate-500 font-bold leading-relaxed mb-6">
                   {t('sellers_desc')}
@@ -718,7 +718,7 @@ export default function HomePage() {
             {/* Row 2: Influencers (Dark Theme, Alternating Layout) */}
             <motion.div whileHover={{ scale: 1.01 }} className="flex flex-col md:flex-row-reverse items-center gap-8 bg-[#1e2142] text-white rounded-[2rem] overflow-hidden shadow-xl shadow-[#1e2142]/10">
               <div className="flex-1 p-8 md:p-12 text-right">
-                <span className="inline-block text-[#c2410c] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-4">{t('creators_badge')}</span>
+                <span className="inline-block text-[#fb923c] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-4">{t('creators_badge')}</span>
                 <h3 className="text-3xl font-black mb-4">{t('influencers_title')}</h3>
                 <p className="text-slate-300 font-bold leading-relaxed mb-6">
                   {t('influencers_desc')}
@@ -736,7 +736,7 @@ export default function HomePage() {
             {/* Row 3: Affiliates */}
             <motion.div whileHover={{ scale: 1.01 }} className="flex flex-col md:flex-row items-center gap-8 bg-[#fafafc] rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm">
               <div className="flex-1 p-8 md:p-12 text-right">
-                <span className="inline-block text-[#c2410c] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-4">{t('affiliate_badge')}</span>
+                <span className="inline-block text-[#9a3412] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-4">{t('affiliate_badge')}</span>
                 <h3 className="text-3xl font-black text-[#2e315e] mb-4">{t('affiliates_title')}</h3>
                 <p className="text-slate-500 font-bold leading-relaxed mb-6">
                   {t('affiliates_desc')}
@@ -800,8 +800,12 @@ export default function HomePage() {
               </>
             )}
 
-            <div 
+            <div
               ref={sliderRef}
+              // Target of the arrow buttons' aria-controls. Without this id the
+              // attribute referenced a non-existent element, which is itself an
+              // ARIA failure (aria-valid-attr-value).
+              id="marketplace-slider"
               className="flex overflow-x-auto snap-x snap-mandatory gap-6 pb-8 pt-4 scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden -mx-4 px-4 sm:mx-0 sm:px-0"
             >
             {loadingProducts ? (
@@ -912,7 +916,7 @@ export default function HomePage() {
 
           {/* Text details (Right) */}
           <div className="w-full md:w-1/2 space-y-6">
-            <span className="inline-block text-[#c2410c] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">{t('local_suppliers_badge')}</span>
+            <span className="inline-block text-[#9a3412] font-black text-xs bg-[#ff5722]/10 px-3 py-1 rounded-full mb-2">{t('local_suppliers_badge')}</span>
             <h2 className="text-3xl sm:text-4xl font-black text-[#2e315e] leading-tight">{t('suppliers_title')}</h2>
             <p className="text-slate-500 font-bold text-sm sm:text-base leading-relaxed max-w-lg">
               {t('suppliers_desc')}

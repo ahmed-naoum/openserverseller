@@ -44,6 +44,14 @@ export default defineConfig({
     outDir: process.env.VITE_OUT_DIR || 'dist',
 
     /**
+     * Lighthouse flags large minified bundles with no source map. `hidden` emits
+     * the .map files without appending the //# sourceMappingURL comment, so the
+     * maps are available for debugging but browsers do not fetch them for
+     * ordinary visitors — no cost on the critical path.
+     */
+    sourcemap: 'hidden',
+
+    /**
      * Everything used to land in one 5.4 MB (1.4 MB gzip) chunk that the public
      * landing page had to download and parse before it could render — Lighthouse
      * reported 1,038 KiB of it unused and 2.0 s of JS execution.

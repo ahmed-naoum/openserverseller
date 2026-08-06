@@ -33,7 +33,7 @@ export default function SuccessStories() {
         
         {/* Header */}
         <div className="text-center mb-14 space-y-4">
-          <span className="inline-block bg-[#ff5722]/10 text-[#ff5722] font-black text-xs px-4 py-1.5 rounded-full">
+          <span className="inline-block bg-[#ff5722]/10 text-[#9a3412] font-black text-xs px-4 py-1.5 rounded-full">
             {t('stories_badge')}
           </span>
           <h2 className="text-3xl sm:text-4xl lg:text-[2.5rem] font-black text-[#2e315e] leading-tight">
