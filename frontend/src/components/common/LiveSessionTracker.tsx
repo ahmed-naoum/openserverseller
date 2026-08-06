@@ -49,7 +49,13 @@ export default function LiveSessionTracker() {
           },
           maskAllInputs: false, // raw capture per platform config
           maskInputOptions: { password: true }, // never capture password keystrokes
-          sampling: { mousemove: 50, scroll: 150, media: 800, input: 'last' },
+          // `input: 'last'` makes rrweb listen to `change` ONLY, so a field the
+          // visitor types into and never blurs (they abandon the page, or submit
+          // straight from the last field) records nothing at all — which is why
+          // replays of carts full of data reported no input. Capture every
+          // keystroke instead; a 4-field form adds a handful of tiny events next
+          // to mousemove at 50ms.
+          sampling: { mousemove: 50, scroll: 150, media: 800, input: 'all' },
           recordCanvas: false,
           collectFonts: false,
           // Periodic fresh full snapshot: lets an admin joining mid-session get a

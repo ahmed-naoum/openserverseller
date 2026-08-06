@@ -8,6 +8,10 @@ import {
   UserPlus, CheckCircle2, ChevronDown, Loader2, AlertTriangle,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Play, Pause, RotateCcw, X,
 } from 'lucide-react';
+import { extractInputTimeline, type InputTimeline } from '../../lib/replayInputs';
+import {
+  ReplayInputTimeline, ReplayInputTicks, type CapturedField,
+} from '../../components/common/ReplayInputTimeline';
 
 interface Cart {
   id: string;
@@ -42,7 +46,18 @@ interface Counts {
 interface PlaybackTarget {
   id: string;
   ip: string;
+  /** What the server stored for this cart, shown when the replay itself captured
+   *  no keystrokes. */
+  captured?: CapturedField[];
 }
+
+/** The four checkout fields the server persists, in form order. */
+const capturedFieldsOf = (c: Cart): CapturedField[] => [
+  { label: 'Nom', value: c.fullName },
+  { label: 'Téléphone', value: c.phone },
+  { label: 'Ville', value: c.city },
+  { label: 'Adresse', value: c.address },
+];
 
 function fitReplayer(
   replayer: Replayer,
@@ -236,6 +251,8 @@ export default function AbandonedCarts() {
   const [isPaused, setIsPaused] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [progress, setProgress] = useState(0);
+  // Where the visitor typed, derived from the same event stream the replayer uses.
+  const [inputTimeline, setInputTimeline] = useState<InputTimeline | null>(null);
 
   const playbackContainerRef = useRef<HTMLDivElement>(null);
   const playbackReplayerRef = useRef<Replayer | null>(null);
@@ -329,9 +346,11 @@ export default function AbandonedCarts() {
     setIsPaused(false);
     setProgress(0);
     setSpeed(1);
+    setInputTimeline(null);
     try {
       const r = await api.get(`/admin/sessions/${target.id}/events`);
       const events = r.data.events || [];
+      setInputTimeline(extractInputTimeline(events));
       setTimeout(() => {
         if (!playbackContainerRef.current || events.length < 2) return;
         playbackContainerRef.current.innerHTML = '';
@@ -393,17 +412,23 @@ export default function AbandonedCarts() {
     playBaselineRef.current = { wallStart: Date.now(), offset: elapsed };
   };
 
-  const seek = (e: React.MouseEvent<HTMLDivElement>) => {
+  /** Jumps the replayer to an absolute offset in ms. */
+  const seekToOffset = (offsetMs: number) => {
     const r = playbackReplayerRef.current;
     if (!r) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-    const offset = (playMetaRef.current.total || 0) * ratio;
+    const totalTime = playMetaRef.current.total || 0;
+    const offset = Math.min(Math.max(0, offsetMs), totalTime);
     r.play(offset);
     playBaselineRef.current = { wallStart: Date.now(), offset };
-    setProgress(ratio);
+    setProgress(totalTime > 0 ? offset / totalTime : 0);
     setIsPaused(false);
     startProgressTimer();
+  };
+
+  const seek = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    seekToOffset((playMetaRef.current.total || 0) * ratio);
   };
 
   const closePlayback = () => {
@@ -413,6 +438,7 @@ export default function AbandonedCarts() {
       playbackReplayerRef.current = null;
     }
     setPlaying(null);
+    setInputTimeline(null);
   };
 
   const byIp = Object.values(
@@ -580,7 +606,7 @@ export default function AbandonedCarts() {
 
                           {c.recordingId ? (
                             <button
-                              onClick={() => openPlayback({ id: c.recordingId!, ip: c.ip })}
+                              onClick={() => openPlayback({ id: c.recordingId!, ip: c.ip, captured: capturedFieldsOf(c) })}
                               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black bg-orange-500 hover:bg-orange-600 active:scale-95 text-white transition-all shadow-xs"
                             >
                               <Play className="w-3.5 h-3.5 fill-current" /> Revoir
@@ -643,10 +669,20 @@ export default function AbandonedCarts() {
               <div ref={playbackContainerRef} className="w-full h-full relative" />
             </div>
 
+            {/* Where the visitor typed — lets an agent jump straight to the first
+                keystroke instead of scrubbing the whole session. */}
+            <ReplayInputTimeline
+              timeline={inputTimeline}
+              captured={playing.captured}
+              onSeek={seekToOffset}
+            />
+
             {/* Controls */}
             <div className="p-4 bg-gray-950 border-t border-gray-800 space-y-3">
-              <div className="h-1.5 bg-gray-700 rounded-full cursor-pointer" onClick={seek}>
+              <div className="relative h-1.5 bg-gray-700 rounded-full cursor-pointer" onClick={seek}>
                 <div className="h-full bg-orange-500 rounded-full transition-all" style={{ width: `${progress * 100}%` }} />
+                {/* One tick per keystroke, so typing bursts are visible at a glance. */}
+                <ReplayInputTicks timeline={inputTimeline} />
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">

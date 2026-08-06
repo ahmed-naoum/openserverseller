@@ -10,7 +10,10 @@ import {
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, UserPlus, Mail, Store, Download, Pencil,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { extractInputTimeline, fmtOffset, type InputTimeline } from '../../lib/replayInputs';
+import { extractInputTimeline, type InputTimeline } from '../../lib/replayInputs';
+import {
+  ReplayInputTimeline, ReplayInputTicks, type CapturedField,
+} from '../../components/common/ReplayInputTimeline';
 
 interface CheckoutInfo { fullName?: string; phone?: string; city?: string; filled: number; completed: boolean; }
 interface SessionInfo { socketId: string; path: string; lastActive: number; checkout?: CheckoutInfo | null; }
@@ -29,7 +32,22 @@ interface StorageStats {
   attempts: { total: number; abandoned: number; converted: number };
   signups?: { total: number; abandoned: number; completed: number };
 }
-interface PlaybackTarget { id: string; ip: string; durationSec: number; }
+interface PlaybackTarget {
+  id: string; ip: string; durationSec: number;
+  /** What the server stored for this visitor, shown when the replay itself
+   *  captured no keystrokes. */
+  captured?: CapturedField[];
+}
+
+/** The four checkout fields the server persists, in form order. */
+const capturedFieldsOf = (a: {
+  fullName?: string | null; phone?: string | null; city?: string | null; address?: string | null;
+}): CapturedField[] => [
+  { label: 'Nom', value: a.fullName },
+  { label: 'Téléphone', value: a.phone },
+  { label: 'Ville', value: a.city },
+  { label: 'Adresse', value: a.address },
+];
 interface ActiveUserItem {
   key: string;
   type: 'AUTHENTICATED' | 'ANONYMOUS';
@@ -1138,7 +1156,7 @@ export default function LiveStreamInspector() {
                               ) : <span className="text-xs text-gray-300">pas de numéro</span>}
                               {a.city && <span className="text-xs text-gray-500 font-medium">{a.city}</span>}
                               {a.recordingId ? (
-                                <button onClick={() => openPlayback({ id: a.recordingId!, ip: a.ip, durationSec: 0 })}
+                                <button onClick={() => openPlayback({ id: a.recordingId!, ip: a.ip, durationSec: 0, captured: capturedFieldsOf(a) })}
                                   className="px-3.5 py-1.5 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white rounded-xl font-bold text-xs inline-flex items-center gap-1.5 shadow-xs transition-all">
                                   <Play className="w-3.5 h-3.5 fill-current" /> Revoir
                                 </button>
@@ -1336,79 +1354,18 @@ export default function LiveStreamInspector() {
 
             {/* Where the visitor typed — lets an operator jump straight to the
                 first keystroke instead of scrubbing the whole session. */}
-            {inputTimeline && inputTimeline.fields.length === 0 && (
-              <div className="bg-gray-900 border-t border-gray-800 px-4 py-2.5 flex items-center gap-2">
-                <Pencil className="w-3.5 h-3.5 text-gray-600" />
-                <span className="text-[11px] font-bold text-gray-500">
-                  Aucune saisie enregistrée — le visiteur n'a rien écrit dans le formulaire.
-                </span>
-              </div>
-            )}
-
-            {inputTimeline && inputTimeline.fields.length > 0 && (
-              <div className="bg-gray-900 border-t border-gray-800 px-4 py-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <Pencil className="w-3.5 h-3.5 text-orange-400" />
-                  <span className="text-[11px] font-black uppercase tracking-wide text-gray-400">
-                    Saisie — {inputTimeline.fields.length} champ{inputTimeline.fields.length > 1 ? 's' : ''}
-                  </span>
-                  {inputTimeline.firstWriteOffsetMs !== null && (
-                    <button
-                      onClick={() => seekToOffset(inputTimeline.firstWriteOffsetMs!)}
-                      className="ml-auto px-2.5 py-1 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold inline-flex items-center gap-1.5"
-                    >
-                      <Play className="w-3 h-3 fill-current" />
-                      Début de saisie · {fmtOffset(inputTimeline.firstWriteOffsetMs)}
-                    </button>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-                  {inputTimeline.fields.map((f, i) => (
-                    <button
-                      key={f.nodeId}
-                      onClick={() => seekToOffset(f.firstOffsetMs)}
-                      title={
-                        `Aller à ${fmtOffset(f.firstOffsetMs)} — ${f.edits} saisie(s)` +
-                        (f.clearedAfter ? ' — champ vidé ensuite' : '')
-                      }
-                      className="group flex items-center gap-1.5 px-2 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-left max-w-[260px]"
-                    >
-                      <span className="w-4 h-4 rounded-md bg-orange-500/20 text-orange-400 text-[9px] font-black flex items-center justify-center shrink-0">
-                        {i + 1}
-                      </span>
-                      <span className="text-[11px] font-bold text-gray-200 truncate">{f.label}</span>
-                      {f.masked ? (
-                        <span className="text-[10px] text-gray-500 italic shrink-0">masqué</span>
-                      ) : f.finalValue ? (
-                        <span
-                          className={`text-[10px] font-mono truncate max-w-[90px] ${
-                            f.clearedAfter ? 'text-amber-400/80 line-through' : 'text-emerald-400'
-                          }`}
-                        >
-                          {f.finalValue}
-                        </span>
-                      ) : null}
-                      <span className="text-[10px] text-gray-500 font-mono shrink-0 ml-auto">
-                        {fmtOffset(f.firstOffsetMs)}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            <ReplayInputTimeline
+              timeline={inputTimeline}
+              captured={playing.captured}
+              onSeek={seekToOffset}
+            />
 
             {/* Controls */}
             <div className="p-4 bg-gray-950 border-t border-gray-800 space-y-3">
               <div className="relative h-1.5 bg-gray-700 rounded-full cursor-pointer" onClick={seek}>
                 <div className="h-full bg-orange-500 rounded-full" style={{ width: `${progress * 100}%` }} />
                 {/* One tick per keystroke, so typing bursts are visible at a glance. */}
-                {inputTimeline && inputTimeline.durationMs > 0 && inputTimeline.moments.map((m, i) => (
-                  <span
-                    key={i}
-                    className="absolute top-1/2 -translate-y-1/2 w-0.5 h-3 bg-emerald-400/70 rounded-full pointer-events-none"
-                    style={{ left: `${Math.min(100, (m.offsetMs / inputTimeline.durationMs) * 100)}%` }}
-                  />
-                ))}
+                <ReplayInputTicks timeline={inputTimeline} />
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">

@@ -74,9 +74,28 @@ interface FieldMeta {
   kind: 'text' | 'toggle';
 }
 
+/** Tidies label text for display: collapses whitespace, drops the required marker. */
+function cleanLabel(raw: string): string {
+  return raw.replace(/\s+/g, ' ').replace(/[\s*:：]+$/, '').trim();
+}
+
+/** True for a <label> element that names a nearby field rather than via `for=`. */
+function unboundLabelText(node: SerializedNode): string {
+  if (node.type !== NODE_ELEMENT || node.tagName?.toLowerCase() !== 'label') return '';
+  const attrs = (node.attributes || {}) as Record<string, string>;
+  if (attrs.for) return '';
+  return cleanLabel(textOf(node));
+}
+
 /**
- * Walks a serialized node tree collecting form fields plus any <label for="…">
- * text, so an input can borrow its visible label when it has no placeholder.
+ * Walks a serialized node tree collecting form fields plus any <label> text, so
+ * an input can borrow its visible label when it has no placeholder.
+ *
+ * `nearbyLabel` carries a <label> that has NO `for=` attribute — either one
+ * wrapping the field, or its closest preceding sibling. That pattern is the norm
+ * on the landing pages here (`<div><label>رقم الهاتف *</label><input/></div>`),
+ * and the `for=`/`id` pairing below can never resolve it, which is why every
+ * field used to be named after its placeholder ("06 XX XX XX XX") instead.
  */
 function indexNodes(
   root: SerializedNode | undefined,
@@ -86,14 +105,21 @@ function indexNodes(
 ) {
   if (!root) return;
 
-  const visit = (node: SerializedNode) => {
+  const visit = (node: SerializedNode, nearbyLabel: string) => {
+    let inherited = nearbyLabel;
+
     if (node.type === NODE_ELEMENT && node.tagName) {
       const tag = node.tagName.toLowerCase();
       const attrs = (node.attributes || {}) as Record<string, string>;
 
-      if (tag === 'label' && attrs.for) {
-        const t = textOf(node);
-        if (t) labelTextByHtmlFor.set(attrs.for, t);
+      if (tag === 'label') {
+        if (attrs.for) {
+          const t = cleanLabel(textOf(node));
+          if (t) labelTextByHtmlFor.set(attrs.for, t);
+        } else {
+          // A label wrapping its own input names everything beneath it.
+          inherited = unboundLabelText(node) || inherited;
+        }
       }
 
       if (tag === 'input' || tag === 'textarea' || tag === 'select') {
@@ -105,13 +131,14 @@ function indexNodes(
         if (isWritable && typeof node.id === 'number') {
           const label =
             (attrs['aria-label'] as string) ||
+            nearbyLabel ||
             (attrs.placeholder as string) ||
             (attrs.name as string) ||
             (attrs.id as string) ||
             (tag === 'input' ? `input[${type || 'text'}]` : tag);
 
           byNodeId.set(node.id, {
-            label: label.trim(),
+            label: cleanLabel(label) || label.trim(),
             masked: type === 'password',
             kind: type === 'checkbox' || type === 'radio' ? 'toggle' : 'text',
           });
@@ -126,10 +153,18 @@ function indexNodes(
         }
       }
     }
-    node.childNodes?.forEach(visit);
+
+    // Walk children in document order so a <label> can name the field that
+    // follows it inside the same wrapper. The running value never escapes this
+    // node, so a sibling wrapper cannot borrow the previous one's label.
+    let running = inherited;
+    for (const child of node.childNodes || []) {
+      visit(child, running);
+      running = unboundLabelText(child) || running;
+    }
   };
 
-  visit(root);
+  visit(root, '');
 }
 
 export function extractInputTimeline(events: any[]): InputTimeline {
