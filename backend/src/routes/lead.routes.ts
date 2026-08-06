@@ -583,7 +583,7 @@ router.get(
     }
 
     const where: any = {
-      status: { in: ['AVAILABLE', 'NEW'] },
+      status: 'AVAILABLE',
       assignedAgentId: null,
       order: null, // Exclude leads already pushed to delivery (have tracking number)
     };
