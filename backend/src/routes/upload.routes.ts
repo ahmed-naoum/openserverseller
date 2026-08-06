@@ -10,8 +10,6 @@ import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { getIO } from '../index.js';
 import { uploadRateLimiter } from '../middleware/security.js';
 import { exec, spawn } from 'child_process';
-import { v2 as cloudinary } from 'cloudinary';
-import { getSecret } from '../lib/secretStore.js';
 
 const router = Router();
 
@@ -26,21 +24,6 @@ interface MulterFile {
   path: string;
   buffer: Buffer;
 }
-
-/**
- * Applies the current Cloudinary credentials to the SDK.
- *
- * Called immediately before every upload rather than once at module load: the
- * module is imported before loadSecrets() finishes, and credentials can be
- * changed from the admin dashboard at any time.
- */
-const configureCloudinary = () => {
-  cloudinary.config({
-    cloud_name: getSecret('CLOUDINARY_CLOUD_NAME'),
-    api_key: getSecret('CLOUDINARY_API_KEY'),
-    api_secret: getSecret('CLOUDINARY_API_SECRET'),
-  });
-};
 
 // Disable sharp cache to prevent file locking issues on Windows
 sharp.cache(false);
@@ -59,6 +42,11 @@ if (!fs.existsSync(productsUploadDir)) {
 const avatarsUploadDir = path.join(uploadsDir, 'avatars');
 if (!fs.existsSync(avatarsUploadDir)) {
   fs.mkdirSync(avatarsUploadDir, { recursive: true });
+}
+
+const videosUploadDir = path.join(uploadsDir, 'videos');
+if (!fs.existsSync(videosUploadDir)) {
+  fs.mkdirSync(videosUploadDir, { recursive: true });
 }
 
 const storage = multer.diskStorage({
@@ -137,9 +125,19 @@ const audioUpload = multer({
   },
 });
 
+const videoStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/videos/');
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '-' + Math.round(Math.random() * 1e9));
+    cb(null, uniqueSuffix + path.extname(file.originalname).toLowerCase());
+  },
+});
+
 const videoUpload = multer({
-  storage,
-  limits: { fileSize: 200 * 1024 * 1024 }, // 200MB limit for videos
+  storage: videoStorage,
+  limits: { fileSize: 300 * 1024 * 1024 }, // 300MB limit for local videos
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-m4v'];
     const allowedExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.m4v'];
@@ -518,7 +516,7 @@ const compressVideo = (inputPath: string, userUuid?: string, socketId?: string):
     const compressedFilename = `${fileBase}-compressed.mp4`;
     const outputPath = path.join(dir, compressedFilename);
 
-    // Guaranteed compression: 720p cap, maxrate 1.2M, crf 32 to keep size strictly < 90MB for Cloudinary
+    // Guaranteed compression: 720p cap, maxrate 1.2M, crf 32
     const args = [
       '-y',
       '-i', inputPath,
@@ -537,7 +535,7 @@ const compressVideo = (inputPath: string, userUuid?: string, socketId?: string):
     broadcastProgress(userUuid, socketId, {
       stage: 'vps_compress',
       progress: 5,
-      message: '2/4 Démarrage de la compression local FFmpeg sur le serveur VPS...'
+      message: '2/2 Optimization et compression locale FFmpeg de la vidéo...'
     });
 
     const ffmpeg = spawn('ffmpeg', args);
@@ -569,7 +567,7 @@ const compressVideo = (inputPath: string, userUuid?: string, socketId?: string):
           broadcastProgress(userUuid, socketId, {
             stage: 'vps_compress',
             progress: percent,
-            message: `2/4 Compression ultra-rapide FFmpeg sur VPS (${percent}%)...`
+            message: `2/2 Compression local FFmpeg (${percent}%)...`
           });
         }
       }
@@ -582,56 +580,21 @@ const compressVideo = (inputPath: string, userUuid?: string, socketId?: string):
         const sizeMB = sizeBytes / (1024 * 1024);
         console.log(`[FFmpeg] Initial compression finished: ${sizeMB.toFixed(1)} MB`);
 
-        // If file is still > 90MB (Cloudinary hard limit is 100MB), perform secondary downsizing pass
-        if (sizeBytes > 90 * 1024 * 1024) {
-          console.warn(`[FFmpeg] File size ${sizeMB.toFixed(1)} MB exceeds 90MB target! Running emergency 2nd pass...`);
-          const pass2Filename = `${fileBase}-compressed-small.mp4`;
-          const pass2Path = path.join(dir, pass2Filename);
-
-          const pass2Args = [
-            '-y',
-            '-i', outputPath,
-            '-c:v', 'libx264',
-            '-preset', 'ultrafast',
-            '-b:v', '700k',
-            '-maxrate', '800k',
-            '-bufsize', '1.6M',
-            '-r', '24',
-            '-vf', 'scale=min(960\\,iw):min(540\\,ih):force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2',
-            '-c:a', 'aac',
-            '-b:a', '64k',
-            '-movflags', '+faststart',
-            pass2Path
-          ];
-
-          await new Promise<void>((resPass2) => {
-            const p2 = spawn('ffmpeg', pass2Args);
-            p2.on('close', () => resPass2());
-            p2.on('error', () => resPass2());
-          });
-
-          if (fs.existsSync(pass2Path) && fs.statSync(pass2Path).size > 0) {
-            safeDeleteFile(outputPath);
-            finalPath = pass2Path;
-            console.log(`[FFmpeg] Emergency 2nd pass complete: ${(fs.statSync(finalPath).size / (1024 * 1024)).toFixed(1)} MB`);
-          }
-        }
-
         if (inputPath !== finalPath && fs.existsSync(inputPath)) {
           safeDeleteFile(inputPath);
         }
         broadcastProgress(userUuid, socketId, {
           stage: 'vps_compress',
           progress: 100,
-          message: '2/4 Compression local FFmpeg sur VPS terminée !'
+          message: '2/2 Optimization locale terminée !'
         });
         return resolve(finalPath);
       }
-      console.warn(`[FFmpeg] Non-zero exit code (${code}), falling back to raw video`);
+      console.warn(`[FFmpeg] Non-zero exit code (${code}), using uploaded file directly`);
       broadcastProgress(userUuid, socketId, {
         stage: 'vps_compress',
         progress: 100,
-        message: '2/4 FFmpeg terminé, passage à l\'upload Cloudinary...'
+        message: '2/2 Fichier sauvegardé localement.'
       });
       resolve(inputPath);
     });
@@ -641,163 +604,67 @@ const compressVideo = (inputPath: string, userUuid?: string, socketId?: string):
       broadcastProgress(userUuid, socketId, {
         stage: 'vps_compress',
         progress: 100,
-        message: '2/4 Compression contournée, passage à Cloudinary...'
+        message: '2/2 Fichier vidéo sauvegardé localement.'
       });
       resolve(inputPath);
     });
   });
 };
 
-// ─── Cloudinary Video Upload (Local VPS Compression + Chunked Cloudinary Upload) ───
-router.post(
-  '/cloudinary-video',
-  authenticate,
-  uploadRateLimiter,
-  videoUpload.single('file'),
-  asyncHandler(async (req, res) => {
-    if (!req.file) {
-      throw new AppException(400, 'Aucun fichier vidéo fourni');
+// ─── Local VPS Video Upload Endpoint ───
+const handleLocalVideoUpload = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    throw new AppException(400, 'Aucun fichier vidéo fourni');
+  }
+
+  const socketId = req.body?.socketId;
+  const userUuid = (req as any).user?.uuid;
+  let currentFilePath = req.file.path;
+
+  try {
+    broadcastProgress(userUuid, socketId, {
+      stage: 'vps_upload',
+      progress: 100,
+      message: '1/2 Upload local sur le serveur VPS effectué !'
+    });
+
+    // 1. Compress / optimize video locally with FFmpeg if available
+    currentFilePath = await compressVideo(req.file.path, userUuid, socketId);
+
+    if (!fs.existsSync(currentFilePath)) {
+      throw new Error('Le fichier vidéo est introuvable sur le serveur');
     }
 
-    const socketId = req.body?.socketId;
-    const userUuid = (req as any).user?.uuid;
-    let currentFilePath = req.file.path;
+    const filename = path.basename(currentFilePath);
+    const videoUrl = `/uploads/videos/${filename}`;
 
-    try {
-      // 1. Compress video locally on VPS with FFmpeg
-      currentFilePath = await compressVideo(req.file.path, userUuid, socketId);
+    broadcastProgress(userUuid, socketId, {
+      stage: 'vps_compress',
+      progress: 100,
+      message: '2/2 Vidéo enregistrée localement avec succès !'
+    });
 
-      // Verify compressed file exists before Cloudinary upload
-      if (!fs.existsSync(currentFilePath)) {
-        console.error('[Video Pipeline] ❌ Compressed file does not exist:', currentFilePath);
-        throw new Error('Le fichier compressé est introuvable sur le serveur');
-      }
-      const fileSize = fs.statSync(currentFilePath).size;
-      console.log(`[Video Pipeline] 📁 File ready for Cloudinary: ${currentFilePath} (${(fileSize / (1024 * 1024)).toFixed(1)} MB)`);
+    console.log(`[Video Pipeline] ✅ Video stored locally: ${videoUrl}`);
 
-      // 2. Upload to Cloudinary with Live Progress Stream
-      configureCloudinary();
-      broadcastProgress(userUuid, socketId, {
-        stage: 'cloudinary_upload',
-        progress: 0,
-        message: '3/4 Connexion à Cloudinary et préparation du transfert...'
-      });
+    res.json({
+      status: 'success',
+      data: {
+        url: videoUrl,
+        filename,
+      },
+    });
+  } catch (err: any) {
+    console.error('[Video Pipeline] ❌ Local Video Upload ERROR:', err?.message || err);
+    broadcastProgress(userUuid, socketId, {
+      stage: 'error',
+      progress: 0,
+      message: `Erreur: ${err.message || 'Échec de l\'upload'}`
+    });
+    throw new AppException(500, `Erreur lors de l'enregistrement de la vidéo: ${err.message || 'Erreur inconnue'}`);
+  }
+});
 
-      let result: any;
-      
-      const uploadWithLiveProgress = (filePath: string): Promise<any> => {
-        return new Promise((resolve, reject) => {
-          const totalBytes = fs.statSync(filePath).size;
-          let uploadedBytes = 0;
-          let lastPercent = 0;
-
-          const readStream = fs.createReadStream(filePath);
-
-          const cloudStream = cloudinary.uploader.upload_stream(
-            {
-              resource_type: 'video',
-              folder: 'silacod/videos',
-            },
-            (error, uploadResult) => {
-              if (error) {
-                return reject(error);
-              }
-              resolve(uploadResult);
-            }
-          );
-
-          readStream.on('data', (chunk: Buffer) => {
-            uploadedBytes += chunk.length;
-            const percent = Math.min(99, Math.round((uploadedBytes / totalBytes) * 100));
-            if (percent >= lastPercent + 5) {
-              lastPercent = percent;
-              broadcastProgress(userUuid, socketId, {
-                stage: 'cloudinary_upload',
-                progress: percent,
-                message: `3/4 Upload Cloudinary live (${percent}%)...`
-              });
-            }
-          });
-
-          readStream.on('error', (err) => reject(err));
-          readStream.pipe(cloudStream);
-        });
-      };
-
-      try {
-        result = await uploadWithLiveProgress(currentFilePath);
-        console.log('[Video Pipeline] ✅ Cloudinary stream upload complete:', result?.secure_url);
-      } catch (cloudErr: any) {
-        console.error('[Video Pipeline] ❌ Cloudinary stream upload FAILED:', cloudErr?.message || cloudErr);
-        // Fallback: try chunked upload_large
-        console.log('[Video Pipeline] 🔄 Trying fallback chunked upload...');
-        result = await new Promise((resolve, reject) => {
-          cloudinary.uploader.upload_large(
-            currentFilePath,
-            { resource_type: 'video', folder: 'silacod/videos', chunk_size: 6000000 },
-            (error: any, uploadResult: any) => {
-              if (error) reject(error);
-              else resolve(uploadResult);
-            }
-          );
-        });
-      }
-
-      if (!result?.secure_url) {
-        console.error('[Video Pipeline] ❌ No secure_url in Cloudinary result:', JSON.stringify(result));
-        throw new Error('Cloudinary n\'a pas retourné d\'URL');
-      }
-
-      broadcastProgress(userUuid, socketId, {
-        stage: 'cloudinary_upload',
-        progress: 100,
-        message: '3/4 Upload Cloudinary terminé !'
-      });
-
-      // 3. Deferred safe deletion from VPS
-      broadcastProgress(userUuid, socketId, {
-        stage: 'vps_cleanup',
-        progress: 50,
-        message: '4/4 Nettoyage automatique des fichiers du serveur VPS...'
-      });
-
-      safeDeleteFile(currentFilePath);
-      if (req.file && req.file.path !== currentFilePath) {
-        safeDeleteFile(req.file.path);
-      }
-
-      broadcastProgress(userUuid, socketId, {
-        stage: 'vps_cleanup',
-        progress: 100,
-        message: '4/4 Nettoyage VPS effectué avec succès !'
-      });
-
-      console.log('[Video Pipeline] ✅ Final Cloudinary URL:', result.secure_url);
-      
-      res.json({
-        status: 'success',
-        data: {
-          url: result.secure_url,
-          filename: result.original_filename,
-          format: result.format,
-          duration: result.duration,
-        },
-      });
-    } catch (err: any) {
-      console.error('[Video Pipeline] ❌ Pipeline ERROR:', err?.message || err);
-      // Always cleanup local file on VPS if error occurs
-      safeDeleteFile(currentFilePath);
-      if (req.file && req.file.path !== currentFilePath) {
-        safeDeleteFile(req.file.path);
-      }
-      broadcastProgress(userUuid, socketId, {
-        stage: 'error',
-        progress: 0,
-        message: `Erreur: ${err.message || 'Échec de l\'upload'}`
-      });
-      throw new AppException(500, `Erreur lors de l'upload Cloudinary: ${err.message || err.error?.message || 'Erreur inconnue'}`);
-    }
-  })
-);
+router.post('/video', authenticate, uploadRateLimiter, videoUpload.single('file'), handleLocalVideoUpload);
+router.post('/cloudinary-video', authenticate, uploadRateLimiter, videoUpload.single('file'), handleLocalVideoUpload);
 
 export default router;

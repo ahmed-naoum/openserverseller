@@ -56,12 +56,10 @@ export default function SiteBuilder() {
   const [productData, setProductData] = useState<any>(null);
   const { socket } = useSocket();
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadPipelineStage, setUploadPipelineStage] = useState<'vps_upload' | 'vps_compress' | 'cloudinary_upload' | 'vps_cleanup' | 'idle'>('idle');
+  const [uploadPipelineStage, setUploadPipelineStage] = useState<'vps_upload' | 'vps_compress' | 'idle'>('idle');
   const [stagePercentages, setStagePercentages] = useState({
     vpsUpload: 0,
     vpsCompress: 0,
-    cloudinaryUpload: 0,
-    vpsCleanup: 0,
   });
 
   useEffect(() => {
@@ -69,15 +67,12 @@ export default function SiteBuilder() {
 
     const handleStageProgress = (data: { stage: string; progress: number; message: string }) => {
       setUploadProgressMsg(data.message);
-      if (data.stage === 'vps_compress') {
+      if (data.stage === 'vps_upload') {
+        setUploadPipelineStage('vps_upload');
+        setStagePercentages(prev => ({ ...prev, vpsUpload: data.progress }));
+      } else if (data.stage === 'vps_compress') {
         setUploadPipelineStage('vps_compress');
         setStagePercentages(prev => ({ ...prev, vpsUpload: 100, vpsCompress: data.progress }));
-      } else if (data.stage === 'cloudinary_upload') {
-        setUploadPipelineStage('cloudinary_upload');
-        setStagePercentages(prev => ({ ...prev, vpsUpload: 100, vpsCompress: 100, cloudinaryUpload: data.progress }));
-      } else if (data.stage === 'vps_cleanup') {
-        setUploadPipelineStage('vps_cleanup');
-        setStagePercentages(prev => ({ ...prev, vpsUpload: 100, vpsCompress: 100, cloudinaryUpload: 100, vpsCleanup: data.progress }));
       }
     };
 
@@ -88,10 +83,8 @@ export default function SiteBuilder() {
   }, [socket]);
 
   const overallPercent = Math.min(100, Math.round(
-    stagePercentages.vpsUpload * 0.25 +
-    stagePercentages.vpsCompress * 0.35 +
-    stagePercentages.cloudinaryUpload * 0.30 +
-    stagePercentages.vpsCleanup * 0.10
+    stagePercentages.vpsUpload * 0.50 +
+    stagePercentages.vpsCompress * 0.50
   ));
   const [uploadingAudioId, setUploadingAudioId] = useState<string | null>(null);
   const [referralCode, setReferralCode] = useState<string | null>(null);
@@ -440,9 +433,9 @@ export default function SiteBuilder() {
     try {
       setIsUploading(true);
       setUploadPipelineStage('vps_upload');
-      setStagePercentages({ vpsUpload: 0, vpsCompress: 0, cloudinaryUpload: 0, vpsCleanup: 0 });
+      setStagePercentages({ vpsUpload: 0, vpsCompress: 0 });
       const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1);
-      setUploadProgressMsg(`1/4 Envoi du fichier vers le serveur VPS (${fileSizeMB} Mo)...`);
+      setUploadProgressMsg(`1/2 Envoi de la vidéo vers le serveur (${fileSizeMB} Mo)...`);
       
       const formData = new FormData();
       formData.append('file', file);
@@ -450,20 +443,18 @@ export default function SiteBuilder() {
         formData.append('socketId', socket.id);
       }
       
-      const res = await uploadApi.cloudinaryVideo(formData, (percent) => {
+      const res = await uploadApi.video(formData, (percent) => {
         setStagePercentages(prev => ({ ...prev, vpsUpload: percent }));
         if (percent < 100) {
           const uploadedMB = ((file.size * (percent / 100)) / (1024 * 1024)).toFixed(1);
-          setUploadProgressMsg(`1/4 Envoi VPS live: ${percent}% (${uploadedMB} Mo / ${fileSizeMB} Mo)`);
+          setUploadProgressMsg(`1/2 Envoi VPS: ${percent}% (${uploadedMB} Mo / ${fileSizeMB} Mo)`);
         } else {
-          setUploadProgressMsg('1/4 Envoi VPS terminé ! Lancement de la compression FFmpeg...');
+          setUploadProgressMsg('1/2 Envoi VPS terminé ! Traitement et enregistrement local...');
         }
       });
 
-      // The HTTP response has arrived — set all stages to 100% and update video URL
-      setStagePercentages({ vpsUpload: 100, vpsCompress: 100, cloudinaryUpload: 100, vpsCleanup: 100 });
-      setUploadPipelineStage('vps_cleanup');
-      setUploadProgressMsg('4/4 Pipeline terminé avec succès !');
+      setStagePercentages({ vpsUpload: 100, vpsCompress: 100 });
+      setUploadProgressMsg('2/2 Traitement local terminé avec succès !');
 
       console.log('[Video Pipeline] Response:', JSON.stringify(res.data));
       console.log('[Video Pipeline] selectedBlockId:', selectedBlockId);
@@ -474,16 +465,15 @@ export default function SiteBuilder() {
       } else {
         console.error('[Video Pipeline] ❌ No URL in response!', res.data);
       }
-      toast.success('Vidéo optimisée, transmise et intégrée avec succès !');
+      toast.success('Vidéo enregistrée et intégrée avec succès !');
 
-      // Keep success state visible for 2.5 seconds before resetting
-      await new Promise(r => setTimeout(r, 2500));
+      await new Promise(r => setTimeout(r, 1500));
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err?.message || 'Erreur lors du traitement de la vidéo');
     } finally {
       setIsUploading(false);
       setUploadPipelineStage('idle');
-      setStagePercentages({ vpsUpload: 0, vpsCompress: 0, cloudinaryUpload: 0, vpsCleanup: 0 });
+      setStagePercentages({ vpsUpload: 0, vpsCompress: 0 });
       setUploadProgressMsg(''); 
     }
   };
@@ -871,11 +861,11 @@ export default function SiteBuilder() {
                 {activeBlock.type === 'video' && (
                   <div className="space-y-4">
                     <Field 
-                      label="URL de la vidéo (YouTube, Vimeo, Cloudinary, MP4, WebM)" 
+                      label="URL de la vidéo (YouTube, Vimeo, MP4, WebM, local)" 
                       type="text" 
                       value={activeBlock.content.url} 
                       onChange={(v: any) => updateBlockContent('url', v)} 
-                      placeholder="https://www.youtube.com/watch?v=... ou https://..." 
+                      placeholder="https://www.youtube.com/watch?v=... ou /uploads/videos/..." 
                     />
                     
                     <div className="bg-orange-50/60 rounded-xl p-3 border border-orange-100 text-xs text-gray-600 space-y-1">
@@ -940,7 +930,7 @@ export default function SiteBuilder() {
                               </span>
                             </div>
 
-                            {/* Live 4-Step Pipeline Tracker */}
+                            {/* Live 2-Step Pipeline Tracker */}
                             <div className="w-full space-y-1.5 pt-1.5 border-t border-gray-100">
                               {/* Step 1: Upload to VPS */}
                               <div className="flex items-center justify-between text-[11px] font-semibold text-gray-700">
@@ -955,7 +945,7 @@ export default function SiteBuilder() {
                                 <span className="text-orange-600 font-bold">{stagePercentages.vpsUpload}%</span>
                               </div>
 
-                              {/* Step 2: FFmpeg Local Compression */}
+                              {/* Step 2: Local FFmpeg Optimization & Storage */}
                               <div className="flex items-center justify-between text-[11px] font-semibold text-gray-700">
                                 <span className="flex items-center gap-1.5 truncate">
                                   <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-extrabold ${
@@ -963,40 +953,10 @@ export default function SiteBuilder() {
                                   }`}>
                                     {stagePercentages.vpsCompress >= 100 ? '✓' : '2'}
                                   </span>
-                                  Compression FFmpeg VPS
+                                  Stockage local & Optimisation
                                 </span>
                                 <span className="text-orange-600 font-bold">
                                   {stagePercentages.vpsUpload < 100 ? '0%' : `${stagePercentages.vpsCompress}%`}
-                                </span>
-                              </div>
-
-                              {/* Step 3: Cloudinary Chunked Upload */}
-                              <div className="flex items-center justify-between text-[11px] font-semibold text-gray-700">
-                                <span className="flex items-center gap-1.5 truncate">
-                                  <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-extrabold ${
-                                    stagePercentages.cloudinaryUpload >= 100 ? 'bg-emerald-500 text-white' : uploadPipelineStage === 'cloudinary_upload' ? 'bg-orange-500 text-white animate-pulse' : 'bg-gray-200 text-gray-500'
-                                  }`}>
-                                    {stagePercentages.cloudinaryUpload >= 100 ? '✓' : '3'}
-                                  </span>
-                                  Cloudinary Chunked Upload
-                                </span>
-                                <span className="text-orange-600 font-bold">
-                                  {stagePercentages.vpsCompress < 100 ? '0%' : `${stagePercentages.cloudinaryUpload}%`}
-                                </span>
-                              </div>
-
-                              {/* Step 4: VPS Automatic Cleanup */}
-                              <div className="flex items-center justify-between text-[11px] font-semibold text-gray-700">
-                                <span className="flex items-center gap-1.5 truncate">
-                                  <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-extrabold ${
-                                    stagePercentages.vpsCleanup >= 100 ? 'bg-emerald-500 text-white' : uploadPipelineStage === 'vps_cleanup' ? 'bg-emerald-500 text-white animate-pulse' : 'bg-gray-200 text-gray-500'
-                                  }`}>
-                                    {stagePercentages.vpsCleanup >= 100 ? '✓' : '4'}
-                                  </span>
-                                  Nettoyage automatique VPS
-                                </span>
-                                <span className={`font-bold ${stagePercentages.vpsCleanup >= 100 ? 'text-emerald-600' : 'text-gray-400'}`}>
-                                  {stagePercentages.vpsCleanup >= 100 ? 'Effectué' : 'En attente'}
                                 </span>
                               </div>
                             </div>

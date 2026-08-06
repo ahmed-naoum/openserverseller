@@ -369,9 +369,18 @@ export const publicApi = {
 };
 
 export const uploadApi = {
-  cloudinaryVideo: (data: FormData, onProgress?: (progress: number) => void) => api.post('/upload/cloudinary-video', data, {
+  video: (data: FormData, onProgress?: (progress: number) => void) => api.post('/upload/video', data, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 600000, // 10 minutes for FFmpeg compression + Cloudinary chunked upload
+    timeout: 600000,
+    onUploadProgress: (progressEvent) => {
+      if (onProgress && progressEvent.total) {
+        onProgress(Math.round((progressEvent.loaded * 100) / progressEvent.total));
+      }
+    },
+  }),
+  cloudinaryVideo: (data: FormData, onProgress?: (progress: number) => void) => api.post('/upload/video', data, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 600000,
     onUploadProgress: (progressEvent) => {
       if (onProgress && progressEvent.total) {
         onProgress(Math.round((progressEvent.loaded * 100) / progressEvent.total));
