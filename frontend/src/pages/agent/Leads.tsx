@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { leadsApi } from '../../lib/api';
-import { socket, connectToCallCenter, disconnectSocket } from '../../lib/socket';
+import { useSocket } from '../../contexts/SocketContext';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { Sparkles, Phone, MessageSquare, Zap, Clock, Package, Heart, Filter, ChevronRight, X, AlertCircle, Activity, Check, Search, MapPin } from 'lucide-react';
@@ -79,6 +79,10 @@ const AssignedTimer = ({ lead, onTimeout, isGirly, isPrincess }: { lead: any; on
 };
 
 export default function AgentLeads() {
+  // Authenticated, app-wide socket. It is the only one the server puts in the
+  // `user:<id>` room that the call-center emitters target.
+  const { socket } = useSocket();
+
   const [theme, setTheme] = useState<'classic' | 'girly' | 'princess'>(() => {
     return (localStorage.getItem('agent-theme') as 'classic' | 'girly' | 'princess') || 'girly';
   });
@@ -133,6 +137,12 @@ export default function AgentLeads() {
   const [activeLeadId, setActiveLeadId] = useState<number | null>(null);
   const [assignedInfluencers, setAssignedInfluencers] = useState<any[]>([]);
   const [selectedInfluencerId, setSelectedInfluencerId] = useState<number | ''>('');
+  // Mirrored into a ref because the realtime effect below is mount-once: reading
+  // the state directly there would capture the value from first render forever.
+  const selectedInfluencerIdRef = useRef<number | ''>('');
+  useEffect(() => {
+    selectedInfluencerIdRef.current = selectedInfluencerId;
+  }, [selectedInfluencerId]);
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [claiming, setClaiming] = useState<number | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -246,15 +256,28 @@ export default function AgentLeads() {
     }
   }, [selectedInfluencerId, availableLimit, statusFilter, availableSearch, availableCity, availableProductId]);
 
-  // Real-time call center events for sound & notifications
+  // Real-time call center events for sound & notifications.
+  //
+  // This must use the AUTHENTICATED socket from SocketContext. The page used to
+  // listen on the singleton in lib/socket.ts, which is created without an auth
+  // token — so the server never set socket.userUuid and the connection handler
+  // never joined it to `user:<id>`. Every targeted emit
+  // (io.to(`user:${agentId}`) in influencer.routes.ts and public.routes.ts) was
+  // therefore invisible to this page, which is why no toast and no sound ever
+  // fired. Its connectToCallCenter() joined a `callcenter` room that nothing in
+  // the backend ever emits to.
   useEffect(() => {
-    connectToCallCenter();
+    if (!socket) return;
 
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission().catch(() => {});
     }
 
     const handleNewAvailableLead = (lead: any) => {
+      // Respect an active influencer filter, as the old duplicate handler did.
+      const filterId = selectedInfluencerIdRef.current;
+      if (filterId && lead.influencer?.id !== filterId) return;
+
       setAvailableLeads((prev) => {
         if (prev.some((l) => l.id === lead.id)) return prev;
         return [lead, ...prev];
@@ -289,9 +312,10 @@ export default function AgentLeads() {
     return () => {
       socket.off('new-available-lead', handleNewAvailableLead);
       socket.off('lead-claimed', handleLeadClaimed);
-      disconnectSocket();
+      // Never disconnect here: the context socket is shared app-wide, and tearing
+      // it down would kill chat and notifications everywhere else.
     };
-  }, []);
+  }, [socket]);
 
   // Debounce typing so each keystroke doesn't hit the API
   useEffect(() => {
@@ -447,31 +471,21 @@ export default function AgentLeads() {
 
   useEffect(() => {
     loadData();
-    connectToCallCenter();
 
-    // Real-time events
-    socket.on('new-available-lead', (lead: any) => {
-      if (selectedInfluencerId && lead.influencer?.id !== selectedInfluencerId) return;
-
-      setAvailableLeads(prev => [lead, ...prev]);
-      toast(theme === 'girly' ? '💖 Nouveau lead disponible!' : '⚡ Nouveau lead disponible!', { 
-        icon: theme === 'girly' ? '🌸' : '🔔', 
-        duration: 4000 
-      });
-    });
-
-    socket.on('lead-claimed', ({ leadId }: { leadId: number }) => {
-      setAvailableLeads(prev => prev.filter(l => l.id !== leadId));
-    });
+    // Real-time listeners live in the mount-once effect above, which is the only
+    // place that plays the sound and raises the desktop notification. This effect
+    // re-runs whenever a filter changes (loadData is rebuilt from the filter
+    // state), and it previously registered a second 'new-available-lead' handler
+    // whose cleanup called socket.off('new-available-lead') with no handler
+    // argument — which removes EVERY listener for the event, including the one
+    // that plays the sound. After the agent touched any filter, the sound was
+    // gone for the rest of the session.
 
     // Poll every 8s as fallback
     const interval = setInterval(loadData, 8000);
 
     return () => {
       clearInterval(interval);
-      socket.off('new-available-lead');
-      socket.off('lead-claimed');
-      disconnectSocket();
     };
   }, [loadData, selectedInfluencerId, theme]);
 

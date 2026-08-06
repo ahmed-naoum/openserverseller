@@ -44,11 +44,10 @@ interface SessionBuffer {
   startTime: number;
   events: any[];
   hasLead: boolean;
-  capped: boolean;
 }
 
 // Hard caps so a long-lived tab can never OOM the server.
-const MAX_EVENTS_PER_SESSION = 6000; // ~a few MB raw; truncated beyond this
+const MAX_EVENTS_PER_SESSION = 6000; // ~a few MB raw; oldest events rolled off beyond this
 const MIN_EVENTS_TO_SAVE = 6;
 const MIN_DURATION_TO_SAVE_SEC = 3;
 
@@ -83,6 +82,32 @@ const eventsFromLastSnapshot = (events: any[]): any[] => {
   let start = snapIdx;
   if (start > 0 && events[start - 1]?.type === 4) start -= 1; // include preceding Meta
   return events.slice(start);
+};
+
+// Bound a tab's buffer by rolling OLD events off the front. The previous version
+// truncated to the first MAX_EVENTS_PER_SESSION and then stopped recording for
+// good, so any visit long enough to hit the cap kept only the page load and threw
+// away exactly the part that matters — the visitor filling the checkout form.
+// That is what made replays show a spinner and report "no input recorded" for
+// carts that clearly had data. We cut back to a Meta(4)+FullSnapshot(2) boundary
+// (rrweb emits one every checkoutEveryNms) so the retained tail still replays on
+// its own.
+const trimSessionEvents = (events: any[], max: number): any[] => {
+  if (events.length <= max) return events;
+
+  // Oldest snapshot boundary that fits under the cap keeps the most history.
+  for (let i = 0; i < events.length; i++) {
+    if (events[i]?.type !== 2) continue;
+    const start = i > 0 && events[i - 1]?.type === 4 ? i - 1 : i;
+    if (events.length - start <= max) return events.slice(start);
+  }
+
+  // One segment already exceeds the cap (very chatty page). Keep the newest
+  // snapshot onward so playback still bootstraps; the next periodic snapshot
+  // brings it back under the cap. Absolute ceiling guards against OOM.
+  const tail = eventsFromLastSnapshot(events);
+  const kept = tail.length ? tail : events;
+  return kept.length > max * 3 ? kept.slice(-max) : kept;
 };
 
 const app = express();
@@ -395,6 +420,7 @@ const setupChatSocket = () => {
       });
       if (user) {
         socket.userUuid = user.uuid;
+        socket.userId = user.id;
         socket.userRole = user.role.name;
       }
       next();
@@ -407,6 +433,12 @@ const setupChatSocket = () => {
     if (socket.userUuid) {
       socket.join(`user:${socket.userUuid}`);
       socket.join(`role:${socket.userRole}`);
+      // Emitters are split on which identifier they address a user by: chat and
+      // utils/notification use the UUID, while the lead/order/agent paths use the
+      // numeric User.id (e.g. io.to(`user:${assignment.agentId}`)). Joining both
+      // rooms makes every one of those reach the socket. UUIDs and integers can
+      // never collide, so the two namespaces stay distinct.
+      socket.join(`user:${socket.userId}`);
     }
 
     // Tell the client whether global auto-recording is on. If it is, the client's
@@ -496,7 +528,6 @@ const setupChatSocket = () => {
           startTime: Date.now(),
           events: [],
           hasLead: false,
-          capped: false,
         };
         activeSessionBuffers.set(socket.id, buffer);
       }
@@ -514,13 +545,11 @@ const setupChatSocket = () => {
         events: data.events,
       });
 
-      // Persist into a bounded buffer for later save-on-disconnect.
-      if (!buffer.capped) {
-        buffer.events.push(...data.events);
-        if (buffer.events.length > MAX_EVENTS_PER_SESSION) {
-          buffer.events.length = MAX_EVENTS_PER_SESSION;
-          buffer.capped = true;
-        }
+      // Persist into a rolling window for later save-on-disconnect. Recording
+      // never stops: the END of a session is the part worth keeping.
+      buffer.events.push(...data.events);
+      if (buffer.events.length > MAX_EVENTS_PER_SESSION) {
+        buffer.events = trimSessionEvents(buffer.events, MAX_EVENTS_PER_SESSION);
       }
     });
 

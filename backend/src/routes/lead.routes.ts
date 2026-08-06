@@ -1979,6 +1979,60 @@ router.patch(
       });
     });
 
+    // Sending leads to the call center from /helper/leads and /vendor/leads goes
+    // through this endpoint, which previously emitted nothing at all — so agents
+    // got no toast, no sound and no live row until the 8s poll caught up.
+    // Emitted after the transaction commits, so an agent that reacts instantly
+    // cannot read the lead before its new status is visible.
+    if (status === 'AVAILABLE') {
+      try {
+        const io = getIO();
+        if (io) {
+          const fresh = await prisma.lead.findMany({
+            where: { id: { in: leads.map((l) => l.id) } },
+            include: {
+              referralLink: { include: { product: { include: { images: true } }, influencer: true } },
+            },
+          });
+
+          for (const lead of fresh) {
+            const product = (lead as any).referralLink?.product;
+            const influencer = (lead as any).referralLink?.influencer;
+            const payload = {
+              id: lead.id,
+              fullName: lead.fullName,
+              phone: lead.phone,
+              city: lead.city,
+              address: lead.address,
+              status: lead.status,
+              createdAt: lead.createdAt,
+              updatedAt: lead.updatedAt,
+              productPrice: lead.requestedPriceMad || product?.retailPriceMad || 0,
+              productVariant: lead.productVariant,
+              product: product
+                ? {
+                    id: product.id,
+                    name: product.nameFr || product.nameAr || product.nameEn || `Produit #${product.id}`,
+                    sku: product.sku,
+                    image: product.images?.[0]?.imageUrl || null,
+                  }
+                : null,
+              influencer: influencer
+                ? { id: influencer.id, fullName: influencer.fullName || influencer.email }
+                : null,
+            };
+
+            // Every call-center agent may claim from the available pool, so this
+            // is a role broadcast rather than a per-agent room emit.
+            io.to('role:CALL_CENTER_AGENT').emit('new-available-lead', payload);
+          }
+        }
+      } catch (e) {
+        // Never fail the status update because the realtime nudge could not be sent.
+        console.error('[bulk-status] realtime broadcast failed:', e);
+      }
+    }
+
     res.json({
       status: 'success',
       message: `${updatedLeads.count} leads updated successfully`,
@@ -3271,7 +3325,8 @@ router.post(
             referralLink: {
               include: {
                 product: { include: { images: { where: { isPrimary: true }, take: 1 } } },
-                influencer: true,
+                // profile carries fullName; the User row itself has no such column.
+                influencer: { include: { profile: true } },
               },
             },
           },
@@ -3297,11 +3352,16 @@ router.post(
                 id: product.id,
                 name: product.nameFr || product.nameAr || product.nameEn || `Produit #${product.id}`,
                 sku: product.sku,
-                image: product.images?.[0]?.imageUrl || null,
+                // Read the image off the lead's included relation: the standalone
+                // `product` lookup above selects no relations, so product.images
+                // does not exist on it.
+                image: createdLead.referralLink?.product?.images?.[0]?.imageUrl || null,
               },
               influencer: createdLead.referralLink?.influencer ? {
                 id: createdLead.referralLink.influencer.id,
-                fullName: createdLead.referralLink.influencer.fullName || createdLead.referralLink.influencer.email,
+                fullName:
+                  createdLead.referralLink.influencer.profile?.fullName ||
+                  createdLead.referralLink.influencer.email,
               } : null
             };
 
@@ -3510,16 +3570,34 @@ router.get(
     const recordings = recConditions.length > 0
       ? await prisma.sessionRecording.findMany({
           where: { OR: recConditions },
-          select: { id: true, sessionId: true, ip: true },
+          select: { id: true, sessionId: true, ip: true, createdAt: true },
           orderBy: { createdAt: 'desc' },
         })
       : [];
     const recBySession = new Map(recordings.map((r) => [r.sessionId, r.id]));
-    const recByIp = new Map(recordings.map((r) => [r.ip, r.id]));
+
+    // An IP can carry several recordings (multiple tabs, repeat visits, or a
+    // shared carrier NAT). Building a Map straight from a desc-ordered list let
+    // the OLDEST one win, which is how a cart full of data ended up linked to a
+    // replay where the visitor never typed. Keep every candidate and pick the one
+    // recorded closest in time to the attempt instead.
+    const recsByIp = new Map<string, typeof recordings>();
+    for (const r of recordings) {
+      const list = recsByIp.get(r.ip);
+      if (list) list.push(r); else recsByIp.set(r.ip, [r]);
+    }
+    const nearestRecordingForIp = (ip: string, at: Date) => {
+      const list = recsByIp.get(ip);
+      if (!list?.length) return null;
+      const target = at.getTime();
+      return list.reduce((best, r) =>
+        Math.abs(r.createdAt.getTime() - target) < Math.abs(best.createdAt.getTime() - target) ? r : best,
+      ).id;
+    };
 
     const enriched = attempts.map((a) => {
       const link = a.referralCode ? codeMap.get(a.referralCode) : null;
-      const recId = recBySession.get(a.sessionId) || recByIp.get(a.ip) || null;
+      const recId = recBySession.get(a.sessionId) || nearestRecordingForIp(a.ip, a.updatedAt) || null;
       return {
         ...a,
         recordingId: recId,
