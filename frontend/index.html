@@ -18,45 +18,6 @@
     <link rel="dns-prefetch" href="https://connect.facebook.net">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <title>SILACOD - Dropshipping White-Label Maroc</title>
-    <!-- LogRocket Setup -->
-    <script>
-      /*
-       * The `window.LogRocket` check alone is not enough. scripts/prerender.mjs
-       * snapshots the rendered DOM, by which point this injector has already
-       * appended its <script> tag — so the prerendered HTML ships that tag too.
-       * On a real load the baked-in tag is still downloading when this inline
-       * script runs, `window.LogRocket` is undefined, and a SECOND copy gets
-       * injected. LogRocket then logs "already been loaded, loading a second
-       * instance is not supported" and the 137 KB logger is fetched twice.
-       * Checking for the tag itself closes that window.
-       */
-      if (!window.LogRocket && !document.querySelector('script[src*="LogRocket.min.js"]')) {
-        const script = document.createElement('script');
-        script.src = "https://cdn.logr-in.com/LogRocket.min.js";
-        script.crossOrigin = "anonymous";
-        script.onload = function() {
-          if (window.LogRocket) {
-            window.LogRocket.init('gvv9dw/silacod', {
-              network: {
-                requestSanitizer: function(request) {
-                  var url = request.url.toLowerCase();
-                  if (
-                    url.indexOf('browser/ebpaap') !== -1 ||
-                    url.indexOf('properties://') === 0 ||
-                    url.indexOf('chrome-extension://') === 0 ||
-                    url.indexOf('moz-extension://') === 0
-                  ) {
-                    return null;
-                  }
-                  return request;
-                }
-              }
-            });
-          }
-        };
-        document.head.appendChild(script);
-      }
-    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -160,15 +160,12 @@ async function main() {
 
         // Block anything that never settles or that we do not want baked into a
         // static snapshot. Without this, `networkidle` never fires: SocketContext
-        // opens a socket.io connection that stays open by design, and LogRocket
-        // polls continuously.
+        // opens a socket.io connection that stays open by design.
         await page.setRequestInterception(true);
         page.on('request', (req) => {
           const url = req.url();
           const blocked =
             url.includes('socket.io') ||
-            url.includes('logr-in.com') ||
-            url.includes('logrocket') ||
             url.includes('challenges.cloudflare.com') ||
             url.includes('fonts.googleapis.com') ||
             url.includes('fonts.gstatic.com') ||
