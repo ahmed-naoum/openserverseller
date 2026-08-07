@@ -905,6 +905,106 @@ router.get(
   })
 );
 
+// List the product-level narrowing rows for an agent.
+// Shape: [{ influencerId, influencerName, productId, productName, sku }]
+router.get(
+  '/agent-product-assignments',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { agentId } = req.query;
+
+    const where: any = {};
+    if (agentId) where.agentId = Number(agentId);
+
+    const assignments = await (prisma as any).agentProductAssignment.findMany({
+      where,
+      include: {
+        influencer: { include: { profile: true } },
+        product: { select: { id: true, nameFr: true, nameAr: true, sku: true } },
+      },
+      orderBy: { assignedAt: 'desc' },
+    });
+
+    res.json({
+      status: 'success',
+      data: assignments.map((a: any) => ({
+        id: a.id,
+        agentId: a.agentId,
+        influencerId: a.influencerId,
+        influencerName:
+          a.influencer.profile?.fullName || a.influencer.email || `User #${a.influencerId}`,
+        productId: a.productId,
+        productName: a.product.nameFr || a.product.nameAr || `Produit #${a.productId}`,
+        sku: a.product.sku,
+        assignedAt: a.assignedAt,
+      })),
+    });
+  })
+);
+
+// Products belonging to one influencer/vendor — everything they could hand to an
+// agent. That is what they own plus whatever they hold a referral link for,
+// since a lead's product is resolved through its referral link.
+router.get(
+  '/influencers/:influencerId/products',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const influencerId = Number(req.params.influencerId);
+    if (!Number.isInteger(influencerId)) {
+      res.status(400).json({ status: 'error', message: 'influencerId invalide' });
+      return;
+    }
+
+    const [links, owned] = await Promise.all([
+      prisma.referralLink.findMany({
+        where: { influencerId },
+        select: {
+          product: {
+            select: {
+              id: true,
+              nameFr: true,
+              nameAr: true,
+              sku: true,
+              isActive: true,
+              images: { where: { isPrimary: true }, take: 1, select: { imageUrl: true } },
+            },
+          },
+        },
+      }),
+      prisma.product.findMany({
+        where: { ownerId: influencerId },
+        select: {
+          id: true,
+          nameFr: true,
+          nameAr: true,
+          sku: true,
+          isActive: true,
+          images: { where: { isPrimary: true }, take: 1, select: { imageUrl: true } },
+        },
+      }),
+    ]);
+
+    const byId = new Map<number, any>();
+    for (const p of [...links.map((l) => l.product), ...owned]) {
+      if (p && !byId.has(p.id)) byId.set(p.id, p);
+    }
+
+    const products = Array.from(byId.values())
+      .map((p) => ({
+        id: p.id,
+        name: p.nameFr || p.nameAr || `Produit #${p.id}`,
+        sku: p.sku,
+        isActive: p.isActive,
+        image: p.images[0]?.imageUrl || null,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    res.json({ status: 'success', data: products });
+  })
+);
+
 // List Helper-User assignments
 router.get(
   '/helper-user-assignments',
@@ -1135,17 +1235,43 @@ router.post(
   })
 );
 
-// Set assignments for an agent (replaces all existing)
+// Set assignments for an agent (replaces all existing).
+//
+// `productAssignments` is optional and narrows an assigned account down to some
+// of its products: [{ influencerId, productIds: [] }]. An account listed here is
+// implicitly assigned, so the admin never has to tick it in both places. An
+// account with no entry keeps the whole-account behaviour.
 router.post(
   '/agent-influencer-assignments',
   authenticate,
   authorize('SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { agentId, influencerIds, autoAssign } = req.body;
+    const { agentId, influencerIds, autoAssign, productAssignments } = req.body;
 
     if (!agentId || !Array.isArray(influencerIds)) {
       res.status(400).json({ status: 'error', message: 'agentId and influencerIds[] are required' });
       return;
+    }
+
+    if (productAssignments !== undefined && !Array.isArray(productAssignments)) {
+      res.status(400).json({ status: 'error', message: 'productAssignments must be an array' });
+      return;
+    }
+
+    // Collapse to one row per (influencer, product), dropping empty selections.
+    const productRows: { influencerId: number; productId: number }[] = [];
+    const seenPairs = new Set<string>();
+    for (const entry of (productAssignments || []) as any[]) {
+      const infId = Number(entry?.influencerId);
+      if (!Number.isInteger(infId) || !Array.isArray(entry?.productIds)) continue;
+      for (const raw of entry.productIds) {
+        const pid = Number(raw);
+        if (!Number.isInteger(pid)) continue;
+        const key = `${infId}:${pid}`;
+        if (seenPairs.has(key)) continue;
+        seenPairs.add(key);
+        productRows.push({ influencerId: infId, productId: pid });
+      }
     }
 
     // Verify agent exists and is CALL_CENTER_AGENT
@@ -1158,6 +1284,13 @@ router.post(
     }
 
     let finalInfluencerIds = [...influencerIds];
+    // Picking products for an account implies assigning that account.
+    for (const row of productRows) {
+      if (!finalInfluencerIds.some((id: any) => Number(id) === row.influencerId)) {
+        finalInfluencerIds.push(row.influencerId);
+      }
+    }
+    let finalProductRows = productRows;
 
     // If autoAssign is requested, we fetch all influencers & vendors to assign them all
     if (autoAssign) {
@@ -1171,6 +1304,20 @@ router.post(
         select: { id: true }
       });
       finalInfluencerIds = allInfluencers.map(inf => inf.id);
+      // "Everything, present and future" and "only these products" contradict
+      // each other — the global switch wins.
+      finalProductRows = [];
+    }
+
+    // Drop rows pointing at products that no longer exist, so createMany cannot
+    // blow up the whole save on one stale id from the client.
+    if (finalProductRows.length > 0) {
+      const existing = await prisma.product.findMany({
+        where: { id: { in: Array.from(new Set(finalProductRows.map((r) => r.productId))) } },
+        select: { id: true },
+      });
+      const liveIds = new Set(existing.map((p) => p.id));
+      finalProductRows = finalProductRows.filter((r) => liveIds.has(r.productId));
     }
 
     // Transaction: update autoAssign status, delete old assignments, create new ones
@@ -1193,13 +1340,34 @@ router.post(
           })),
         });
       }
+
+      // Product narrowing is replace-all too, so unticking a product removes it.
+      await (tx as any).agentProductAssignment.deleteMany({
+        where: { agentId: Number(agentId) },
+      });
+
+      if (finalProductRows.length > 0) {
+        await (tx as any).agentProductAssignment.createMany({
+          data: finalProductRows.map((row) => ({
+            agentId: Number(agentId),
+            influencerId: row.influencerId,
+            productId: row.productId,
+          })),
+          skipDuplicates: true,
+        });
+      }
     });
+
+    const restrictedAccounts = new Set(finalProductRows.map((r) => r.influencerId)).size;
 
     res.json({
       status: 'success',
-      message: autoAssign 
+      message: autoAssign
         ? `Agent marked for auto-assignment and linked to all ${finalInfluencerIds.length} influencers`
-        : `Assigned ${finalInfluencerIds.length} influencer(s) to agent`,
+        : `Assigned ${finalInfluencerIds.length} influencer(s) to agent`
+          + (restrictedAccounts
+            ? `, ${finalProductRows.length} product(s) scoped across ${restrictedAccounts} account(s)`
+            : ''),
     });
   })
 );
@@ -1212,12 +1380,22 @@ router.delete(
   asyncHandler(async (req: Request, res: Response) => {
     const { agentId, influencerId } = req.params;
 
-    await prisma.agentInfluencerAssignment.deleteMany({
-      where: {
-        agentId: Number(agentId),
-        influencerId: Number(influencerId),
-      },
-    });
+    // Drop the product narrowing with it — orphaned rows would silently
+    // re-restrict the account if it were ever re-assigned.
+    await prisma.$transaction([
+      prisma.agentInfluencerAssignment.deleteMany({
+        where: {
+          agentId: Number(agentId),
+          influencerId: Number(influencerId),
+        },
+      }),
+      (prisma as any).agentProductAssignment.deleteMany({
+        where: {
+          agentId: Number(agentId),
+          influencerId: Number(influencerId),
+        },
+      }),
+    ]);
 
     res.json({
       status: 'success',

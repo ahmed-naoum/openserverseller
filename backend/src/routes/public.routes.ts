@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { validateInfluencerSubdomain } from '../utils/subdomain.js';
 import { getIO } from '../lib/realtime.js';
+import { getNotifiableAgentIds } from '../utils/agentScope.js';
 
 const router = Router();
 
@@ -315,19 +316,17 @@ router.post(
           });
         });
 
-        // Notify assigned call-center agents in real time.
-        const assignments = await prisma.agentInfluencerAssignment.findMany({
-          where: { influencerId: ownerId },
-          select: { agentId: true },
-        });
+        // Notify assigned call-center agents in real time — skipping any agent
+        // whose assignment was narrowed to products other than this one.
+        const notifiableAgentIds = await getNotifiableAgentIds(ownerId, link.productId);
         const io = getIO();
-        if (io && assignments.length) {
+        if (io && notifiableAgentIds.length) {
           const payload = {
             id: lead.id, fullName, phone, city, address,
             product: { name: link.product?.nameFr || link.product?.nameAr },
             createdAt: lead.createdAt,
           };
-          assignments.forEach((a) => io.to(`user:${a.agentId}`).emit('new-available-lead', payload));
+          notifiableAgentIds.forEach((id) => io.to(`user:${id}`).emit('new-available-lead', payload));
         }
       } catch (err) {
         console.error('[AutoCallCenter] Failed to auto-forward lead:', err);

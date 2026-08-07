@@ -170,6 +170,10 @@ model User {
   agentAssignments      AgentInfluencerAssignment[] @relation("AgentAssignments")
   influencerAssignments AgentInfluencerAssignment[] @relation("InfluencerAssignments")
 
+  // Agent-Product assignment relations (narrows an assigned account to some of its products)
+  agentProductAssignments      AgentProductAssignment[] @relation("AgentProductAssignments")
+  influencerProductAssignments AgentProductAssignment[] @relation("InfluencerProductAssignments")
+
   // Helper-User assignment relations
   helperAssignments      HelperUserAssignment[] @relation("HelperAssignments")
   targetUserAssignments  HelperUserAssignment[] @relation("TargetUserAssignments")
@@ -305,6 +309,7 @@ model Product {
   supportRequests      SupportRequest[]
   wholesalePrices      WholesalePriceTier[]
   favorites            Favorite[]
+  agentAssignments     AgentProductAssignment[]
 
   @@map("products")
 }
@@ -409,6 +414,10 @@ model Lead {
   productVariant  String?
   notes           String?
   callbackAt      DateTime?
+  // Amount the agent settled on during the confirmation call. Overrides the pack
+  // price everywhere (see getPackPrice) and is what the courier collects. Null
+  // means "no override — bill the pack".
+  confirmedPriceMad Float?
   requestedPriceMad Float?
   requestedPriceStatus String? @default("PENDING") // PENDING, APPROVED, REJECTED
   customPlatformFeeRate Float?
@@ -1030,6 +1039,26 @@ model AgentInfluencerAssignment {
 
   @@unique([agentId, influencerId])
   @@map("agent_influencer_assignments")
+}
+
+// Narrows an AgentInfluencerAssignment down to specific products of that
+// influencer/vendor. No row for an assigned account = the agent works ALL of
+// that account's leads (the historical behaviour); one or more rows = the agent
+// only sees leads whose product is in that set.
+model AgentProductAssignment {
+  id           Int      @id @default(autoincrement())
+  agentId      Int
+  agent        User     @relation("AgentProductAssignments", fields: [agentId], references: [id], onDelete: Cascade)
+  influencerId Int
+  influencer   User     @relation("InfluencerProductAssignments", fields: [influencerId], references: [id], onDelete: Cascade)
+  productId    Int
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  assignedAt   DateTime @default(now())
+
+  @@unique([agentId, influencerId, productId])
+  @@index([agentId])
+  @@index([influencerId])
+  @@map("agent_product_assignments")
 }
 
 // ==========================================

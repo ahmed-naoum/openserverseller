@@ -10,14 +10,58 @@ import {
   checkFullName,
   checkAddress,
 } from '../../utils/leadValidation';
-import { 
-  Eye, History, AlertTriangle, CheckCircle, XCircle, 
-  Package, ShieldAlert, Clock, Info, Phone, X, 
+import {
+  Eye, History, AlertTriangle, CheckCircle, XCircle,
+  Package, ShieldAlert, Clock, Info, Phone, X,
   TrendingUp, TrendingDown, User, Store, Check, MessageSquare, Copy, Pencil
 } from 'lucide-react';
+import { SearchableSelect } from '../../components/ui/SearchableSelect';
 
 /** Customer-card fields an agent can correct in place while on the call. */
 type EditableFieldKey = 'fullName' | 'phone' | 'city' | 'address';
+
+/**
+ * Coliaty only accepts a local 10-digit number (06…/05…/07…), so the delivery
+ * form normalises as the agent types instead of rejecting on submit.
+ */
+const toColiatyPhone = (input: string): string => {
+  let cleaned = (input || '').trim().replace(/\s+/g, '');
+  if (cleaned.startsWith('+212')) cleaned = '0' + cleaned.slice(4);
+  else if (cleaned.startsWith('212')) cleaned = '0' + cleaned.slice(3);
+  else if (cleaned.length > 0 && !cleaned.startsWith('0')) cleaned = '0' + cleaned;
+  return cleaned.replace(/\D/g, '').slice(0, 10);
+};
+
+/**
+ * Price of the pack the customer picked on the landing page, or null when the
+ * lead has no variant or the landing page carries no pack pricing. The courier
+ * must collect the pack price, not the product's retail price.
+ */
+const resolveVariantPrice = (lead: any): number | null => {
+  if (!lead?.productVariant || !lead?.referralLink?.landingPage?.customStructure) return null;
+  try {
+    const structure = typeof lead.referralLink.landingPage.customStructure === 'string'
+      ? JSON.parse(lead.referralLink.landingPage.customStructure)
+      : lead.referralLink.landingPage.customStructure;
+    const checkoutBlock = (structure.blocks || []).find((b: any) => b.type === 'express_checkout');
+    if (!checkoutBlock) return null;
+    const selected = (checkoutBlock.content?.options || []).find((o: any) => o.name === lead.productVariant);
+    return selected?.price ?? null;
+  } catch (e) {
+    return null;
+  }
+};
+
+/**
+ * Maps a free-text city onto its official Coliaty spelling, or '' when there is
+ * no match — a parcel cannot be created for a city Coliaty does not know.
+ */
+const resolveColiatyCity = (rawCity: string, cities: any[]): string => {
+  const value = (rawCity || '').trim().toLowerCase();
+  if (!value || cities.length === 0) return '';
+  const exact = cities.find((c) => (c.city_name || '').trim().toLowerCase() === value);
+  return exact ? exact.city_name : '';
+};
 
 const STATUS_LABELS: Record<string, { label: string, icon: string, color: string, ring: string }> = {
   NEW: { label: 'Nouveau', icon: '🆕', color: 'bg-blue-100 text-blue-800', ring: 'bg-blue-500' },
@@ -137,13 +181,16 @@ export default function AgentLeadDetail() {
 
   // Click-outside now lives inside CityPicker, so each instance closes itself.
 
-  const fetchColiatyCities = async () => {
+  const fetchColiatyCities = async (): Promise<any[]> => {
     setLoadingCities(true);
     try {
       const res = await leadsApi.getColiatyCities();
-      setColiatyCities(res.data?.data || []);
+      const list = res.data?.data || [];
+      setColiatyCities(list);
+      return list;
     } catch (err) {
       console.error('Failed to load Coliaty cities');
+      return [];
     } finally {
       setLoadingCities(false);
     }
@@ -159,6 +206,23 @@ export default function AgentLeadDetail() {
   const [requestedPriceInput, setRequestedPriceInput] = useState('');
   const [cooldownRemaining, setCooldownRemaining] = useState<number>(0);
   const [globalCooldown, setGlobalCooldown] = useState<number>(0);
+
+  // ── Coliaty confirmation ─────────────────────────────────────────────────
+  // CONFIRMED goes through this form so the delivery details are locked in on
+  // the call. It only saves and confirms — the parcel is created afterwards from
+  // "Mes Leads Assignés".
+  const [showDeliveryModal, setShowDeliveryModal] = useState(false);
+  const [savingConfirmation, setSavingConfirmation] = useState(false);
+  const [deliveryForm, setDeliveryForm] = useState({
+    name: '',
+    phone: '',
+    city: '',
+    address: '',
+    price: 0,
+    productVariant: '',
+    note: '',
+  });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const isAssigned = data?.lead?.status === 'ASSIGNED';
@@ -316,7 +380,7 @@ export default function AgentLeadDetail() {
    * submitted patch because the API normalises phone numbers (0… -> +212…), and
    * echoing the raw input would show a value the database does not hold.
    */
-  const persistLeadField = async (patch: Record<string, string>) => {
+  const persistLeadField = async (patch: Record<string, string | number | null>) => {
     const leadId = data?.lead?.id;
     if (!leadId) return;
 
@@ -440,6 +504,157 @@ export default function AgentLeadDetail() {
       ? 'matched'
       : 'unmatched';
   }, [editedCity, coliatyCities, loadingCities]);
+
+  /**
+   * The listed price of the pack currently typed in the form — what the customer
+   * would pay without negotiation. The agent can overwrite the amount to collect;
+   * this is only the reference shown next to it.
+   */
+  const packPrice = useMemo(
+    () => Number(
+      resolveVariantPrice({ ...data?.lead, productVariant: deliveryForm.productVariant })
+        ?? data?.product?.retailPrice
+        ?? 0
+    ),
+    [data?.lead, data?.product, deliveryForm.productVariant]
+  );
+
+  const coliatyCityOptions = useMemo(
+    () => coliatyCities.map((c) => ({
+      value: c.city_name,
+      label: `${c.city_name} (Hub: ${c.hub_name})`,
+    })),
+    [coliatyCities]
+  );
+
+  /** ✅ CONFIRMED opens the delivery form pre-filled from the (possibly edited) lead. */
+  const openDeliveryModal = async () => {
+    const current = data?.lead;
+    if (!current) return;
+    const rawCity = editedCity || current.city;
+    setFormErrors({});
+    setDeliveryForm({
+      name: current.fullName || '',
+      phone: toColiatyPhone(current.phone || ''),
+      city: resolveColiatyCity(rawCity, coliatyCities),
+      address: editedAddress || current.address || '',
+      // A price already agreed on a previous call wins over the pack's listed one.
+      price: Number(current.confirmedPriceMad ?? packPrice ?? 0),
+      productVariant: current.productVariant || '',
+      // The agent's call notes are what the courier actually needs on the parcel.
+      note: notes || current.notes || '',
+    });
+    setShowDeliveryModal(true);
+
+    // The list is fetched on mount; retry here so a load that failed then does not
+    // leave the agent facing an empty city picker with no way to confirm.
+    if (coliatyCities.length === 0 && !loadingCities) {
+      const cities = await fetchColiatyCities();
+      const resolved = resolveColiatyCity(rawCity, cities);
+      if (resolved) setDeliveryForm((prev) => ({ ...prev, city: resolved }));
+    }
+  };
+
+  const validateDeliveryForm = () => {
+    const errors: Record<string, string> = {};
+
+    if (!deliveryForm.name || deliveryForm.name.trim().length < 3) {
+      errors.name = 'Le nom doit contenir au moins 3 caractères.';
+    }
+
+    const phoneDigits = deliveryForm.phone.replace(/\D/g, '');
+    if (!phoneDigits.startsWith('0') || phoneDigits.length !== 10) {
+      errors.phone = 'Le téléphone doit être au format 0612345678 (10 chiffres).';
+    }
+
+    if (!deliveryForm.city) {
+      errors.city = 'La ville est obligatoire.';
+    }
+
+    if (!deliveryForm.address || deliveryForm.address.trim().length < 10) {
+      errors.address = "L'adresse doit être détaillée (min. 10 caractères).";
+    }
+
+    if (!Number.isFinite(deliveryForm.price) || deliveryForm.price < 0) {
+      errors.price = 'Le prix doit être supérieur ou égal à 0.';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  /**
+   * Confirms the lead — it does NOT create the parcel.
+   *
+   * The form is where the agent locks in what the courier will need (recipient,
+   * an official Coliaty city, a full address, the pack, the note). Those are
+   * written onto the lead first, then the status goes to CONFIRMED. The parcel
+   * itself is created later from "Mes Leads Assignés", one lead or the whole
+   * selection at a time, using exactly what was saved here.
+   */
+  const handleConfirmDelivery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!data?.lead) return;
+
+    if (!validateDeliveryForm()) {
+      toast.error('Veuillez corriger les erreurs dans le formulaire.');
+      return;
+    }
+
+    setSavingConfirmation(true);
+    try {
+      // Mirror the modal values into the inline editors, so the card and the
+      // saved lead cannot disagree if the confirmation then fails.
+      setEditedAddress(deliveryForm.address);
+      setEditedCity(deliveryForm.city);
+      setCitySearch(deliveryForm.city);
+      try {
+        await persistAddressCity(deliveryForm.address, deliveryForm.city);
+        await persistLeadField({
+          fullName: deliveryForm.name.trim(),
+          phone: deliveryForm.phone,
+          productVariant: deliveryForm.productVariant.trim(),
+          confirmedPriceMad: deliveryForm.price,
+        });
+      } catch (err: any) {
+        toast.error(
+          err?.response?.data?.message ||
+            "Lead non confirmé : les informations de livraison n'ont pas pu être enregistrées."
+        );
+        return;
+      }
+
+      // The note typed here is what the courier reads, so it becomes the lead's
+      // notes — which is also what the push sends to Coliaty.
+      setNotes(deliveryForm.note);
+      await leadsApi.updateStatus(String(id), { status: 'CONFIRMED', notes: deliveryForm.note });
+
+      try {
+        const audio = new Audio('/soundes/correct-confirmation.mp3');
+        audio.volume = 0.85;
+        audio.play().catch(() => {});
+      } catch (e) {}
+
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification('📈 Statut du lead mis à jour : CONFIRMÉ', {
+            body: `Le lead de ${data.lead.fullName || 'Client'} est confirmé et prêt à être envoyé à la livraison.`,
+            icon: '/new logo/logo filess-25.svg',
+          });
+        } catch (e) {}
+      }
+
+      toast.success(isGirly ? 'Lead confirmé ! Prêt pour la livraison 🎀' : 'Lead confirmé ! Prêt pour la livraison.');
+      setShowDeliveryModal(false);
+      sessionStorage.removeItem(`lead_cooldown_${id}`);
+      navigate('/agent/leads');
+    } catch (err: any) {
+      console.error('[Lead confirm error]', err.response?.data);
+      toast.error(err.response?.data?.message || 'Erreur lors de la confirmation du lead');
+    } finally {
+      setSavingConfirmation(false);
+    }
+  };
 
   const handleUpdateStatus = async (status: string, extra?: any) => {
     setUpdating(true);
@@ -825,24 +1040,12 @@ export default function AgentLeadDetail() {
                 <p className="text-sm text-gray-400 mt-0.5">SKU: {product.sku}</p>
                 
                 {(() => {
-                  const variantPrice = (() => {
-                    if (!lead.productVariant || !lead.referralLink?.landingPage?.customStructure) return null;
-                    try {
-                      const structure = typeof lead.referralLink.landingPage.customStructure === 'string' 
-                        ? JSON.parse(lead.referralLink.landingPage.customStructure) 
-                        : lead.referralLink.landingPage.customStructure;
-                      const blocks = structure.blocks || [];
-                      const checkoutBlock = blocks.find((b: any) => b.type === 'express_checkout');
-                      if (!checkoutBlock) return null;
-                      const options = checkoutBlock.content?.options || [];
-                      const selected = options.find((o: any) => o.name === lead.productVariant);
-                      return selected ? selected.price : null;
-                    } catch (e) {
-                      return null;
-                    }
-                  })();
-
-                  const displayPrice = variantPrice !== null ? variantPrice : product.retailPrice;
+                  const variantPrice = resolveVariantPrice(lead);
+                  // What the courier will collect: the price agreed on the call
+                  // beats the pack's listed price, which beats retail.
+                  const agreedPrice = lead.confirmedPriceMad ?? null;
+                  const displayPrice =
+                    agreedPrice !== null ? agreedPrice : variantPrice !== null ? variantPrice : product.retailPrice;
 
                   return (
                     <div className="mt-2">
@@ -850,12 +1053,16 @@ export default function AgentLeadDetail() {
                         <p className={`text-xl font-black ${isPrincess ? 'text-rose-600' : isGirly ? 'text-pink-600' : 'text-indigo-600'}`}>
                           {Number(displayPrice).toFixed(2)} MAD
                         </p>
-                        {variantPrice !== null && (
+                        {agreedPrice !== null ? (
+                          <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded-md border bg-emerald-50 text-emerald-700 border-emerald-100">
+                            Prix convenu
+                          </span>
+                        ) : variantPrice !== null && (
                           <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-md border ${
-                            isPrincess 
+                            isPrincess
                               ? 'bg-amber-50 text-amber-700 border-amber-100'
-                              : isGirly 
-                              ? 'bg-pink-50 text-pink-600 border-pink-100' 
+                              : isGirly
+                              ? 'bg-pink-50 text-pink-600 border-pink-100'
                               : 'bg-purple-50 text-purple-600 border-purple-100'
                           }`}>
                             Prix du Pack
@@ -1031,8 +1238,8 @@ export default function AgentLeadDetail() {
             📵 NO REPLY
           </button>
           <button
-            onClick={() => handleUpdateStatus('CONFIRMED')}
-            disabled={updating || cooldownRemaining > 0}
+            onClick={openDeliveryModal}
+            disabled={updating || savingConfirmation || cooldownRemaining > 0}
             className="py-3 px-4 bg-emerald-50 text-emerald-700 rounded-xl text-sm font-bold hover:bg-emerald-100 transition-all border border-emerald-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             ✅ CONFIRMED
@@ -1081,6 +1288,198 @@ export default function AgentLeadDetail() {
           <p className="text-sm text-gray-400 text-center mt-3 animate-pulse">Mise à jour en cours...</p>
         )}
       </div>
+
+      {/* Coliaty confirmation — saves the delivery details and sets CONFIRMED */}
+      {showDeliveryModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start sm:items-center justify-center p-4 z-[105] overflow-y-auto">
+          {/* No overflow-hidden: it would clip the city dropdown, which is
+              absolutely positioned inside this card. The top bar keeps the
+              rounded corners itself instead. */}
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 border border-gray-100 my-8">
+            <div className={`absolute top-0 left-0 right-0 h-1.5 rounded-t-3xl ${
+              isPrincess
+                ? 'bg-gradient-to-r from-amber-400 via-pink-400 to-rose-500'
+                : isGirly
+                ? 'bg-gradient-to-r from-pink-400 via-rose-400 to-fuchsia-400'
+                : 'bg-gradient-to-r from-indigo-400 via-purple-400 to-indigo-600'
+            }`}></div>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                📦 Confirmation Coliaty
+              </h3>
+              <button
+                onClick={() => setShowDeliveryModal(false)}
+                disabled={savingConfirmation}
+                className="text-gray-400 hover:text-gray-600 bg-gray-50 hover:bg-gray-100 p-2 rounded-full transition-all disabled:opacity-50"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmDelivery} className="space-y-4">
+              <div>
+                <label className="block text-xs font-black text-gray-500 uppercase mb-1">Nom Complet du Destinataire</label>
+                <input
+                  type="text"
+                  required
+                  value={deliveryForm.name}
+                  onChange={(e) => setDeliveryForm({ ...deliveryForm, name: e.target.value })}
+                  className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 outline-none text-sm font-semibold ${
+                    formErrors.name ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                  } ${accentRing}`}
+                />
+                {formErrors.name && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.name}</p>}
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-gray-500 uppercase mb-1">Téléphone</label>
+                <input
+                  type="tel"
+                  required
+                  value={deliveryForm.phone}
+                  onChange={(e) => setDeliveryForm({ ...deliveryForm, phone: toColiatyPhone(e.target.value) })}
+                  className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 outline-none text-sm font-semibold ${
+                    formErrors.phone ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                  } ${accentRing}`}
+                  placeholder="Ex: 0612345678"
+                />
+                {formErrors.phone && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.phone}</p>}
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-gray-500 uppercase mb-1">Ville (Sélection Coliaty)</label>
+                {loadingCities ? (
+                  <div className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-500 text-xs font-bold animate-pulse">
+                    Chargement des villes...
+                  </div>
+                ) : (
+                  <SearchableSelect
+                    options={coliatyCityOptions}
+                    value={deliveryForm.city}
+                    onChange={(val) => setDeliveryForm({ ...deliveryForm, city: String(val) })}
+                    placeholder="Rechercher une ville Coliaty..."
+                    searchPlaceholder="Tapez une ville (ex: Agadir, Afourar, Casablanca)..."
+                    error={!!formErrors.city}
+                    theme={theme}
+                  />
+                )}
+                {formErrors.city && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.city}</p>}
+                {/* Reads from editedCity, the same value the pre-selection was
+                    resolved from, so an inline correction is reflected here. */}
+                {deliveryForm.city === '' && !loadingCities && (editedCity || lead.city) && (
+                  <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    Ville du prospect ({editedCity || lead.city}) non trouvée. Sélectionnez manuellement.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-gray-500 uppercase mb-1">Adresse Détaillée</label>
+                <textarea
+                  required
+                  rows={2}
+                  value={deliveryForm.address}
+                  onChange={(e) => setDeliveryForm({ ...deliveryForm, address: e.target.value })}
+                  className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 outline-none text-xs font-semibold resize-none ${
+                    formErrors.address ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                  } ${accentRing}`}
+                />
+                {formErrors.address && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.address}</p>}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-black text-gray-500 uppercase mb-1">Prix Encaisser (MAD)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    required
+                    value={deliveryForm.price || ''}
+                    onChange={(e) => setDeliveryForm({ ...deliveryForm, price: Number(e.target.value) })}
+                    className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 outline-none text-sm font-bold ${
+                      formErrors.price ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                    } ${accentRing}`}
+                  />
+                  {formErrors.price ? (
+                    <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.price}</p>
+                  ) : packPrice > 0 && Number(deliveryForm.price) !== packPrice ? (
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryForm({ ...deliveryForm, price: packPrice })}
+                      className="text-[10px] font-bold text-amber-600 hover:text-amber-700 mt-1 underline decoration-dotted underline-offset-2"
+                    >
+                      Prix du pack : {packPrice.toFixed(2)} MAD — appliquer
+                    </button>
+                  ) : (
+                    <p className="text-[10px] text-gray-400 font-medium mt-1">Montant encaissé par le livreur</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-black text-gray-500 uppercase mb-1">Pack / Variante</label>
+                  <input
+                    type="text"
+                    value={deliveryForm.productVariant}
+                    onChange={(e) => setDeliveryForm({ ...deliveryForm, productVariant: e.target.value })}
+                    className={`w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 outline-none text-sm font-semibold ${accentRing}`}
+                    placeholder="Ex: Pack 2 + 1"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-gray-500 uppercase mb-1">
+                  Note pour le livreur
+                </label>
+                <textarea
+                  rows={2}
+                  maxLength={255}
+                  value={deliveryForm.note}
+                  onChange={(e) => setDeliveryForm({ ...deliveryForm, note: e.target.value })}
+                  className={`w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 outline-none text-xs font-semibold resize-none ${accentRing}`}
+                  placeholder="Ex: Appeler avant la livraison, disponible après 18h..."
+                />
+                <p className="text-[10px] text-gray-400 font-medium mt-1">
+                  Reprise des notes de l'appel • {deliveryForm.note.length}/255 • envoyée à Coliaty
+                </p>
+              </div>
+
+              <div className="flex gap-2.5 p-3 bg-emerald-50 border border-emerald-100 rounded-2xl">
+                <span className="text-base leading-none">📋</span>
+                <p className="text-[11px] font-semibold text-emerald-800 leading-relaxed">
+                  Le lead passe en <span className="font-black">CONFIRMÉ</span> avec ces informations. Le colis
+                  Coliaty sera créé depuis « Mes Leads Assignés », individuellement ou en lot.
+                </p>
+              </div>
+
+              <div className="pt-2 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowDeliveryModal(false)}
+                  className="flex-1 py-3 bg-gray-50 border border-gray-100 text-gray-700 font-black rounded-xl hover:bg-gray-100 transition-all text-xs"
+                  disabled={savingConfirmation}
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingConfirmation || !deliveryForm.city}
+                  className={`flex-1 flex justify-center items-center gap-2 py-3 text-white font-black rounded-xl hover:opacity-95 shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs ${
+                    isPrincess
+                      ? 'bg-gradient-to-r from-amber-500 via-pink-500 to-rose-500'
+                      : isGirly
+                      ? 'bg-gradient-to-r from-pink-500 to-rose-500'
+                      : 'bg-gradient-to-r from-indigo-500 to-indigo-600'
+                  }`}
+                >
+                  {savingConfirmation ? 'Confirmation...' : 'Confirmer le lead'} ✅
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* History Modal */}
       {showHistoryModal && (

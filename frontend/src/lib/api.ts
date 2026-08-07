@@ -245,6 +245,17 @@ export const leadsApi = {
     productId?: number | string;
   }) => api.get('/leads/available', { params }),
   claim: (id: number) => api.post(`/leads/${id}/claim`),
+  // Leads already held by an agent (any agent) within this agent's own scope.
+  // The response never carries phone numbers — see /leads/assigned-all.
+  assignedAll: (params?: {
+    influencerId?: number;
+    limit?: number | string;
+    search?: string;
+    city?: string;
+    productId?: number | string;
+  }) => api.get('/leads/assigned-all', { params }),
+  forceClaim: (id: number, data: { phone: string; reason: string }) =>
+    api.post(`/leads/${id}/force-claim`, data),
   // Abandoned carts (call-center recovery)
   abandonedCarts: (params?: { page?: number; limit?: number; search?: string; status?: 'all' | 'saved' | 'unsaved' }) =>
     api.get('/leads/abandoned-carts', { params }),
@@ -275,7 +286,8 @@ export const leadsApi = {
   ) => api.post(`/leads/${id}/push-to-delivery`, data),
   livraison: (params?: {
     page?: number;
-    limit?: number;
+    /** A number, or 'all' / 'max' to pull the whole scope in one page. */
+    limit?: number | string;
     search?: string;
     status?: string;
     paymentSituation?: string;
@@ -318,16 +330,29 @@ export const ordersApi = {
   changeDemand: (id: number, data: any) => api.post(`/orders/${id}/change-demand`, data),
   updateNormal: (id: number, data: any) => api.put(`/orders/${id}/update-normal`, data),
   getParcelLabel: (code: string) => api.get(`/orders/parcel/${code}/label`),
+  /**
+   * Merges many parcel labels into one PDF server-side. Printing a batch used to
+   * mean one request per parcel, which got the server IP rate-limited by Coliaty.
+   */
+  getParcelLabelsBatch: (codes: string[]) =>
+    api.post('/orders/parcels/labels/batch', { codes }, { timeout: 180000 }),
   getProductsWithParcels: () => api.get('/orders/products-with-parcels'),
   // Pickup Notes
-  getPickupNoteDetail: (reference: string) => api.get(`/orders/pickup-note/detail/${reference}`),
+  getPickupNoteDetail: (reference: string, refresh = false) =>
+    api.get(`/orders/pickup-note/detail/${reference}`, { params: refresh ? { refresh: 1 } : undefined }),
+  /** Live status of many pickup notes in a single round-trip. */
+  getPickupNotesDetails: (references: string[], refresh = false) =>
+    api.post('/orders/pickup-notes/details', { references, refresh }, { timeout: 120000 }),
   createPickupNote: () => api.post('/orders/pickup-note/create', {}),
   addParcelsToPickup: (data: { pickup_note_reference: string; parcel_codes: string[] }) =>
-    api.post('/orders/pickup-note/add-parcels', data),
+    api.post('/orders/pickup-note/add-parcels', data, { timeout: 120000 }),
   removeParcelsFromPickup: (data: { pickup_note_reference: string; parcel_codes: string[] }) =>
     api.post('/orders/pickup-note/remove-parcels', data),
-  generatePickupLabels: (reference: string) =>
-    api.get(`/orders/pickup-note/${reference}/generate-labels`),
+  generatePickupLabels: (reference: string, refresh = false) =>
+    api.get(`/orders/pickup-note/${reference}/generate-labels`, {
+      params: refresh ? { refresh: 1 } : undefined,
+      timeout: 120000,
+    }),
   bulkDispatch: (data: { leadIds: number[] }) =>
     api.post('/orders/bulk-dispatch', data),
 };
@@ -457,10 +482,27 @@ export const adminApi = {
   getInfluencers: () => api.get('/admin/influencers'),
   getAgentInfluencerAssignments: (agentId?: number) =>
     api.get('/admin/agent-influencer-assignments', { params: agentId ? { agentId } : {} }),
-  setAgentInfluencerAssignments: (agentId: number, influencerIds: number[], autoAssign?: boolean) =>
-    api.post('/admin/agent-influencer-assignments', { agentId, influencerIds, autoAssign }),
+  setAgentInfluencerAssignments: (
+    agentId: number,
+    influencerIds: number[],
+    autoAssign?: boolean,
+    // Narrows an assigned account to a subset of its products. An account left
+    // out of this list keeps the whole-account scope.
+    productAssignments?: { influencerId: number; productIds: number[] }[]
+  ) =>
+    api.post('/admin/agent-influencer-assignments', {
+      agentId,
+      influencerIds,
+      autoAssign,
+      productAssignments,
+    }),
   removeAgentInfluencerAssignment: (agentId: number, influencerId: number) =>
     api.delete(`/admin/agent-influencer-assignments/${agentId}/${influencerId}`),
+  // Agent-Product Assignments
+  getAgentProductAssignments: (agentId?: number) =>
+    api.get('/admin/agent-product-assignments', { params: agentId ? { agentId } : {} }),
+  getInfluencerProducts: (influencerId: number) =>
+    api.get(`/admin/influencers/${influencerId}/products`),
   // Helper-User Assignments
   getHelperUserAssignments: (helperId?: number) =>
     api.get('/admin/helper-user-assignments', { params: helperId ? { helperId } : {} }),

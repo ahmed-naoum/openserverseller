@@ -6,6 +6,23 @@ import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import axios from 'axios';
 import { getSecret } from '../lib/secretStore.js';
 import { getIO } from '../lib/realtime.js';
+import { emitNewTickets } from '../lib/ticketEvents.js';
+import { getAgentLeadScope, getAgentProductRestrictions } from '../utils/agentScope.js';
+
+// How many rows one request may return. This is a memory ceiling, not a page
+// size — every list endpoint reports its true total separately (`total`,
+// `totalAvailable`, `stats.byStatus`), so this never caps a number an agent
+// reads, only how many rows are rendered at once.
+const MAX_ROWS_PER_REQUEST = 5000;
+const DEFAULT_ROWS_PER_REQUEST = 200;
+
+const resolveRowLimit = (limit: unknown): number => {
+  if (!limit) return DEFAULT_ROWS_PER_REQUEST;
+  if (limit === 'max' || limit === 'all') return MAX_ROWS_PER_REQUEST;
+  const parsed = parseInt(String(limit), 10);
+  if (!parsed || Number.isNaN(parsed)) return DEFAULT_ROWS_PER_REQUEST;
+  return Math.min(MAX_ROWS_PER_REQUEST, Math.max(1, parsed));
+};
 
 // Helper to call Coliaty API
 const callColiatyCreateParcel = async (parcelData: {
@@ -76,6 +93,11 @@ const callColiatyCreateParcel = async (parcelData: {
 const getPackPrice = (lead: any) => {
   if (lead.order?.totalAmountMad !== undefined && lead.order?.totalAmountMad !== null) {
     return Number(lead.order.totalAmountMad);
+  }
+  // What the agent agreed with the customer on the confirmation call wins over
+  // the pack's listed price — that is the amount the courier must collect.
+  if (lead.confirmedPriceMad !== undefined && lead.confirmedPriceMad !== null) {
+    return Number(lead.confirmedPriceMad);
   }
   if (lead.productVariant && lead.referralLink?.landingPage?.customStructure) {
     try {
@@ -166,6 +188,12 @@ router.get(
       // Admin-oriented filters (all optional / additive)
       city, source, sourceMode, paymentSituation, hasOrder, dateFrom, dateTo, sort, withStats,
     } = req.query;
+
+    // Callers that want everything pass a large limit; clamp it so a single
+    // request can't pull the whole table. `pagination.total` stays exact, and
+    // `stats.byStatus` below is a group-by that this never touches.
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.min(MAX_ROWS_PER_REQUEST, Math.max(1, Number(limit) || 50));
 
     // Status lives in its own bucket so stats can be computed across all statuses
     const conditions: any[] = [];
@@ -317,8 +345,8 @@ router.get(
           },
           order: true,
         },
-        skip: (Number(page) - 1) * Number(limit),
-        take: Number(limit),
+        skip: (pageNum - 1) * limitNum,
+        take: limitNum,
         orderBy: orderByMap[sort as string] || { createdAt: 'desc' },
       }),
       prisma.lead.count({ where }),
@@ -350,11 +378,15 @@ router.get(
       }
     }
 
-    // Optional aggregate block — only the admin console asks for it
+    // Optional aggregate block — the admin console and the agent dashboard both
+    // ask for it, so the per-status counts never have to be derived from a page.
     let stats: any = undefined;
     let filterOptions: any = undefined;
     if (withStats === 'true') {
       const orderScope = conditions.length > 0 ? { lead: { is: { AND: conditions } } } : {};
+      // The staff roster only ever feeds the admin console's agent picker — an
+      // agent asking for its own stats must not receive its colleagues' emails.
+      const canSeeAgentRoster = req.user!.roleName === 'SUPER_ADMIN';
 
       const [byStatusRows, orderAgg, deliveredAgg, cityRows, sourceRows, agentUsers] = await Promise.all([
         prisma.lead.groupBy({
@@ -372,23 +404,25 @@ router.get(
           _sum: { totalAmountMad: true },
           _count: { _all: true },
         }),
+        // No `take`: these are already bounded by how many distinct values
+        // exist, and truncating them silently dropped filter options.
         prisma.lead.findMany({
           where: { ...whereWithoutStatus, city: { not: null } },
           select: { city: true },
           distinct: ['city'],
-          take: 500,
         }),
         prisma.lead.findMany({
           where: whereWithoutStatus,
           select: { source: true },
           distinct: ['source'],
-          take: 100,
         }),
-        prisma.user.findMany({
-          where: { isActive: true, role: { name: 'CALL_CENTER_AGENT' } },
-          select: { id: true, email: true, profile: { select: { fullName: true } } },
-          orderBy: { profile: { fullName: 'asc' } },
-        }),
+        canSeeAgentRoster
+          ? prisma.user.findMany({
+            where: { isActive: true, role: { name: 'CALL_CENTER_AGENT' } },
+            select: { id: true, email: true, profile: { select: { fullName: true } } },
+            orderBy: { profile: { fullName: 'asc' } },
+          })
+          : Promise.resolve([]),
       ]);
 
       const byStatus: Record<string, number> = {};
@@ -515,10 +549,10 @@ router.get(
           statusChangeCount: l.statusHistory.length,
         })),
         pagination: {
-          page: Number(page),
-          limit: Number(limit),
+          page: pageNum,
+          limit: limitNum,
           total,
-          totalPages: Math.ceil(total / Number(limit)),
+          totalPages: Math.ceil(total / limitNum),
         },
         ...(stats ? { stats } : {}),
         ...(filterOptions ? { filterOptions } : {}),
@@ -535,28 +569,17 @@ router.get(
     const agentId = req.user!.id;
     const { influencerId, limit, search, city, productId } = req.query;
 
-    let takeLimit = 20;
-    if (limit) {
-      if (limit === 'max' || limit === 'all') {
-        takeLimit = 1000;
-      } else {
-        takeLimit = Math.min(1000, Math.max(1, parseInt(limit as string) || 20));
-      }
-    }
+    const takeLimit = resolveRowLimit(limit);
 
-    // Check if this agent has influencer assignments
-    const assignments = await prisma.agentInfluencerAssignment.findMany({
-      where: { agentId },
-      include: {
-        influencer: { include: { profile: true } },
-      },
-      orderBy: { assignedAt: 'desc' },
-    });
+    // Which influencers/vendors this agent works — and, when the admin narrowed
+    // an account down, which of that account's products.
+    const scope = await getAgentLeadScope(agentId, influencerId ? Number(influencerId) : null);
 
-    let assignedInfluencers = assignments.map(a => ({
-      id: a.influencer.id,
-      fullName: a.influencer.profile?.fullName || a.influencer.email,
-      email: a.influencer.email,
+    const assignedInfluencers = scope.accounts.map(a => ({
+      id: a.id,
+      fullName: a.fullName,
+      email: a.email,
+      productIds: a.productIds,
     }));
 
     const activeLead = await prisma.lead.findFirst({
@@ -568,7 +591,7 @@ router.get(
     });
 
     // If agent has no specific assignments, they see NO leads and NO filter options
-    if (assignedInfluencers.length === 0) {
+    if (!scope.hasScope) {
       res.json({
         status: 'success',
         data: {
@@ -582,31 +605,30 @@ router.get(
       return;
     }
 
+    // Assigned, but the scope resolves to nothing (e.g. the assigned products
+    // have no links yet) — keep the dropdown, drop the leads.
+    if (scope.or.length === 0) {
+      res.json({
+        status: 'success',
+        data: {
+          leads: [],
+          totalAvailable: 0,
+          totalScope: 0,
+          hasActiveLead: !!activeLead,
+          activeLeadId: activeLead?.id || null,
+          assignedInfluencers,
+          filterOptions: { cities: [], products: [] },
+        },
+      });
+      return;
+    }
+
     const where: any = {
       status: 'AVAILABLE',
       assignedAgentId: null,
       order: null, // Exclude leads already pushed to delivery (have tracking number)
+      OR: scope.or,
     };
-
-    // If a specific influencer is requested, filter by them
-    // Otherwise, filter by all of their assigned influencers
-    const filterByInfluencers = influencerId
-      ? [Number(influencerId)]
-      : assignments.map(a => a.influencerId);
-
-    if (filterByInfluencers.length > 0) {
-      // Get all referral links owned by the filter influencers
-      const referralLinks = await prisma.referralLink.findMany({
-        where: { influencerId: { in: filterByInfluencers } },
-        select: { id: true },
-      });
-      const linkIds = referralLinks.map(l => l.id);
-
-      where.OR = [
-        { referralLinkId: { in: linkIds } },
-        { vendorId: { in: filterByInfluencers } }
-      ];
-    }
 
     // Scope before the agent's own search/filters — used for the dropdown options
     // and to show how many leads exist in total behind a filtered view.
@@ -654,13 +676,15 @@ router.get(
       prisma.lead.count({ where }),
       prisma.lead.count({ where: scopeWhere }),
       // Options for the city / product pickers, over the unfiltered scope
+      // One row per (city, link) combination instead of the first 1000 leads —
+      // a city or product past row 1000 used to be missing from the pickers.
       prisma.lead.findMany({
         where: scopeWhere,
         select: {
           city: true,
           referralLink: { select: { product: { select: { id: true, nameFr: true, nameAr: true, sku: true } } } },
         },
-        take: 1000,
+        distinct: ['city', 'referralLinkId'],
       }),
     ]);
 
@@ -714,6 +738,184 @@ router.get(
   })
 );
 
+// Statuses where a lead is still "in the hands of" an agent and therefore worth
+// taking over. Anything past the confirmation call (CONFIRMED, WRONG_ORDER,
+// CANCEL_*) or already pushed to delivery is finished work — no force-claim.
+const FORCE_CLAIMABLE_STATUSES = ['ASSIGNED', 'CALL_LATER', 'NO_REPLY'];
+
+// Last 9 digits, so 0667…, +212667… and 212667… all compare equal.
+const phoneTail = (value: string | null | undefined) =>
+  (value || '').replace(/\D/g, '').slice(-9);
+
+// GET leads currently assigned to ANY agent, within this agent's own
+// influencer/vendor scope - must be before /:id routes.
+//
+// Phone numbers are deliberately stripped from the payload: an agent may only
+// take a lead over if they already know the number (see /:id/force-claim), so
+// the number must never leak through this list — not on the card, not in the
+// network response behind it.
+router.get(
+  '/assigned-all',
+  authenticate,
+  authorize('CALL_CENTER_AGENT', 'SUPER_ADMIN'),
+  asyncHandler(async (req, res) => {
+    const agentId = req.user!.id;
+    const { influencerId, limit, search, city, productId } = req.query;
+
+    const takeLimit = resolveRowLimit(limit);
+
+    const scope = await getAgentLeadScope(agentId, influencerId ? Number(influencerId) : null);
+
+    const assignedInfluencers = scope.accounts.map(a => ({
+      id: a.id,
+      fullName: a.fullName,
+      email: a.email,
+      productIds: a.productIds,
+    }));
+
+    const activeLead = await prisma.lead.findFirst({
+      where: { assignedAgentId: agentId, status: 'ASSIGNED' },
+      select: { id: true },
+    });
+
+    // Same rule as /available: no influencer assignments means no visibility.
+    // An assigned agent whose scope resolves to nothing keeps their dropdown.
+    if (!scope.hasScope || scope.or.length === 0) {
+      res.json({
+        status: 'success',
+        data: {
+          leads: [],
+          totalAssigned: 0,
+          totalScope: 0,
+          hasActiveLead: !!activeLead,
+          activeLeadId: activeLead?.id || null,
+          assignedInfluencers: scope.hasScope ? assignedInfluencers : [],
+          filterOptions: { cities: [], products: [] },
+        },
+      });
+      return;
+    }
+
+    const where: any = {
+      status: { in: FORCE_CLAIMABLE_STATUSES },
+      assignedAgentId: { not: null },
+      order: null, // already pushed to delivery — not up for grabs
+      OR: scope.or,
+    };
+
+    const scopeWhere = { ...where };
+
+    const extraConditions: any[] = [];
+
+    if (search) {
+      const term = (search as string).trim();
+      const digits = term.replace(/\D/g, '');
+      const or: any[] = [
+        { fullName: { contains: term, mode: 'insensitive' } },
+        { city: { contains: term, mode: 'insensitive' } },
+        { address: { contains: term, mode: 'insensitive' } },
+        { productVariant: { contains: term, mode: 'insensitive' } },
+        { referralLink: { product: { nameFr: { contains: term, mode: 'insensitive' } } } },
+        { referralLink: { product: { nameAr: { contains: term, mode: 'insensitive' } } } },
+        { referralLink: { product: { sku: { contains: term, mode: 'insensitive' } } } },
+      ];
+      if (digits.length >= 3) {
+        const tail = digits.slice(-9);
+        or.push({ phone: { contains: tail } });
+        or.push({ whatsapp: { contains: tail } });
+      }
+      extraConditions.push({ OR: or });
+    }
+
+    if (city) extraConditions.push({ city: { equals: city as string, mode: 'insensitive' } });
+    if (productId) extraConditions.push({ referralLink: { productId: Number(productId) } });
+
+    if (extraConditions.length > 0) where.AND = extraConditions;
+
+    const [leads, totalAssigned, totalScope, scopeRows] = await Promise.all([
+      prisma.lead.findMany({
+        where,
+        take: takeLimit,
+        orderBy: { updatedAt: 'desc' },
+        include: {
+          assignedAgent: { include: { profile: true } },
+          referralLink: {
+            include: { product: { include: { images: true } }, landingPage: true },
+          },
+        },
+      }),
+      prisma.lead.count({ where }),
+      prisma.lead.count({ where: scopeWhere }),
+      // One row per (city, link) combination instead of the first 1000 leads —
+      // a city or product past row 1000 used to be missing from the pickers.
+      prisma.lead.findMany({
+        where: scopeWhere,
+        select: {
+          city: true,
+          referralLink: { select: { product: { select: { id: true, nameFr: true, nameAr: true, sku: true } } } },
+        },
+        distinct: ['city', 'referralLinkId'],
+      }),
+    ]);
+
+    const citySet = new Set<string>();
+    const productMap = new Map<number, { name: string; sku: string | null }>();
+    for (const row of scopeRows) {
+      if (row.city) citySet.add(row.city);
+      const p = row.referralLink?.product;
+      if (p && !productMap.has(p.id)) {
+        productMap.set(p.id, { name: p.nameFr || p.nameAr || `#${p.id}`, sku: p.sku || null });
+      }
+    }
+
+    const nameCounts = new Map<string, number>();
+    for (const { name } of productMap.values()) {
+      nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
+    }
+    const productOptions = Array.from(productMap.entries())
+      .map(([id, { name, sku }]) => ({
+        id,
+        name: (nameCounts.get(name) || 0) > 1 && sku ? `${name} · ${sku}` : name,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    res.json({
+      status: 'success',
+      data: {
+        leads: leads.map(l => {
+          // Destructure the number out rather than deleting it after the fact,
+          // so it cannot survive a refactor of the object below.
+          const { phone, whatsapp, ...rest } = l as any;
+          return {
+            ...rest,
+            productPrice: getPackPrice(l),
+            product: l.referralLink?.product ? {
+              id: l.referralLink.product.id,
+              name: l.referralLink.product.nameFr || l.referralLink.product.nameAr,
+              sku: l.referralLink.product.sku,
+              image: l.referralLink.product.images[0]?.imageUrl || null,
+            } : null,
+            assignedAgent: l.assignedAgent ? {
+              id: l.assignedAgent.id,
+              fullName: l.assignedAgent.profile?.fullName || l.assignedAgent.email,
+              isMe: l.assignedAgent.id === agentId,
+            } : null,
+          };
+        }),
+        totalAssigned,
+        totalScope,
+        hasActiveLead: !!activeLead,
+        activeLeadId: activeLead?.id || null,
+        assignedInfluencers,
+        filterOptions: {
+          cities: Array.from(citySet).sort((a, b) => a.localeCompare(b)),
+          products: productOptions,
+        },
+      },
+    });
+  })
+);
+
 // GET agent's livraison (orders/parcels with Coliaty tracking) - must be before /:id routes
 router.get(
   '/livraison',
@@ -738,8 +940,9 @@ router.get(
     } = req.query as Record<string, string | undefined>;
 
     const pageNum = Math.max(1, Number(page) || 1);
-    // Cap generously: the agent dashboard still pulls large unpaginated pages
-    const limitNum = Math.min(1000, Math.max(1, Number(limit) || 50));
+    // `stats` below is computed over the whole scope, so this only bounds how
+    // many parcel rows travel per request — never any count the agent reads.
+    const limitNum = resolveRowLimit(limit);
 
     // --- 1. Base scope (what this user is allowed to see at all) ---
     const baseWhere: any = {
@@ -875,6 +1078,7 @@ router.get(
           paymentMethod: o.paymentMethod,
           coliatyPackageCode: o.coliatyPackageCode || null,
           coliatyPackageId: o.coliatyPackageId || null,
+          coliatyPickupRef: o.coliatyPickupRef || null,
           packageContent: o.packageContent || null,
           packageNoOpen: o.packageNoOpen || false,
           productVariant: o.productVariant || null,
@@ -889,11 +1093,16 @@ router.get(
           })) || [],
           leadId: l.id,
           leadFullName: l.fullName,
+          leadStatus: l.status,
+          // The agent's own note on the lead. Orders have no notes column, so this
+          // is the only note the parcel cards can show.
+          notes: l.notes || null,
           paymentSituation: l.paymentSituation,
           vendorId: l.vendorId,
           vendorName: l.vendor?.profile?.fullName || l.vendor?.email || null,
           vendorEmail: l.vendor?.email || null,
           createdAt: o.createdAt,
+          updatedAt: o.updatedAt,
           // Last manual status change (reason is mandatory for DELIVERED / RETURNED)
           lastStatusNote: lastChange?.notes || null,
           lastStatusAt: lastChange?.createdAt || null,
@@ -911,22 +1120,46 @@ router.get(
         vendorId: true,
         paymentSituation: true,
         vendor: { select: { email: true, profile: { select: { fullName: true } } } },
-        order: { select: { status: true, customerCity: true, coliatyPackageCode: true } },
+        order: {
+          select: {
+            status: true,
+            customerCity: true,
+            coliatyPackageCode: true,
+            totalAmountMad: true,
+          },
+        },
       },
     });
+
+    // A parcel stops moving once it lands in one of these — everything else is
+    // still money in transit that the agent can influence.
+    const CLOSED_STATUSES = new Set([
+      'DELIVERED', 'RETURNED', 'REFUSE',
+      'CANCELED', 'CANCELED_BY_SELLER', 'CANCELED_BY_SYSTEM', 'CANCELLED',
+    ]);
 
     const statusCounts: Record<string, number> = {};
     const cities = new Set<string>();
     const vendorMap = new Map<number, string>();
     let withColiaty = 0;
     let uninvoicedReturns = 0;
+    let revenueTotal = 0;
+    let revenueDelivered = 0;
+    let revenueInTransit = 0;
+    let revenueReturned = 0;
 
     for (const row of scopeRows) {
       const st = row.order?.status || 'UNKNOWN';
+      const amount = Number(row.order?.totalAmountMad) || 0;
       statusCounts[st] = (statusCounts[st] || 0) + 1;
       if (row.order?.customerCity) cities.add(row.order.customerCity);
       if (row.order?.coliatyPackageCode) withColiaty++;
       if (st === 'RETURNED' && row.paymentSituation !== 'FACTURED') uninvoicedReturns++;
+
+      revenueTotal += amount;
+      if (st === 'DELIVERED') revenueDelivered += amount;
+      else if (st === 'RETURNED') revenueReturned += amount;
+      if (!CLOSED_STATUSES.has(st)) revenueInTransit += amount;
       if (row.vendorId && !vendorMap.has(row.vendorId)) {
         vendorMap.set(
           row.vendorId,
@@ -951,6 +1184,11 @@ router.get(
           returned: statusCounts['RETURNED'] || 0,
           uninvoicedReturns,
           byStatus: statusCounts,
+          // Rounded here so every client shows the same figure
+          revenueTotal: Math.round(revenueTotal),
+          revenueDelivered: Math.round(revenueDelivered),
+          revenueInTransit: Math.round(revenueInTransit),
+          revenueReturned: Math.round(revenueReturned),
         },
         filterOptions: {
           cities: Array.from(cities).sort((a, b) => a.localeCompare(b)),
@@ -1138,6 +1376,166 @@ router.post(
       status: 'success',
       message: 'Lead claimed successfully',
       data: { lead: claimedLead },
+    });
+  })
+);
+
+// Take a lead over from the agent it is currently assigned to.
+//
+// The gate is knowledge of the customer's phone number: it is never rendered on
+// the assigned-leads page nor sent in that payload, so being able to type it
+// back proves the requesting agent already has a legitimate handle on this
+// customer. A written reason is mandatory and is stored on the status-history
+// row, and the agent losing the lead is notified.
+router.post(
+  '/:id/force-claim',
+  authenticate,
+  authorize('CALL_CENTER_AGENT'),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const phone = String(req.body?.phone ?? '').trim();
+    const reason = String(req.body?.reason ?? '').trim();
+    const agentId = req.user!.id;
+
+    if (phoneTail(phone).length < 9) {
+      throw new AppException(400, 'Numéro de téléphone invalide.');
+    }
+    if (reason.length < 10) {
+      throw new AppException(400, 'Merci de préciser le motif (10 caractères minimum).');
+    }
+
+    // Same one-lead-at-a-time rule as the normal claim.
+    const activeLead = await prisma.lead.findFirst({
+      where: { assignedAgentId: agentId, status: 'ASSIGNED' },
+      select: { id: true },
+    });
+    if (activeLead) {
+      throw new AppException(400, 'Terminez votre lead en cours avant d\'en réclamer un autre.');
+    }
+
+    const lead = await prisma.lead.findUnique({
+      where: { id: Number(id) },
+      include: {
+        assignedAgent: { include: { profile: true } },
+        order: { select: { id: true } },
+      },
+    });
+
+    if (!lead) {
+      throw new AppException(404, 'Lead introuvable.');
+    }
+    if (!lead.assignedAgentId) {
+      throw new AppException(400, 'Ce lead n\'est assigné à personne — réclamez-le normalement.');
+    }
+    if (lead.assignedAgentId === agentId) {
+      throw new AppException(400, 'Ce lead vous est déjà assigné.');
+    }
+    if (lead.order) {
+      throw new AppException(400, 'Ce lead est déjà passé en livraison.');
+    }
+    if (!FORCE_CLAIMABLE_STATUSES.includes(lead.status)) {
+      throw new AppException(400, `Un lead au statut ${lead.status} ne peut plus être réclamé.`);
+    }
+
+    // The requesting agent must own the influencer/vendor — and, where the admin
+    // restricted them to certain products, the product — this lead came from.
+    // Exactly the scope that gates the assigned-leads page.
+    const scope = await getAgentLeadScope(agentId);
+    if (!scope.hasScope) {
+      throw new AppException(403, 'Aucun influenceur/vendeur ne vous est assigné.');
+    }
+
+    const inScope =
+      scope.or.length > 0 &&
+      (await prisma.lead.count({ where: { id: lead.id, OR: scope.or } })) > 0;
+    if (!inScope) {
+      throw new AppException(403, 'Ce lead ne fait pas partie de votre portefeuille.');
+    }
+
+    // The proof-of-knowledge check.
+    const submitted = phoneTail(phone);
+    if (submitted !== phoneTail(lead.phone) && submitted !== phoneTail(lead.whatsapp)) {
+      throw new AppException(400, 'Le numéro saisi ne correspond pas à ce lead.');
+    }
+
+    const previousAgentId = lead.assignedAgentId;
+    const previousAgentName =
+      lead.assignedAgent?.profile?.fullName || lead.assignedAgent?.email || `Agent #${previousAgentId}`;
+
+    const newAgent = await prisma.user.findUnique({
+      where: { id: agentId },
+      include: { profile: true },
+    });
+    const newAgentName = newAgent?.profile?.fullName || newAgent?.email || `Agent #${agentId}`;
+
+    const updatedLead = await prisma.$transaction(async (tx) => {
+      // Guarded write: two agents can pass the checks above concurrently, and
+      // the auto-unassign cron can drop the lead in between. Pinning
+      // assignedAgentId means only one of them lands — the loser gets a 409
+      // instead of silently overwriting a transfer that already happened.
+      const { count } = await tx.lead.updateMany({
+        where: { id: lead.id, assignedAgentId: previousAgentId },
+        data: { assignedAgentId: agentId, status: 'ASSIGNED' },
+      });
+      if (count === 0) {
+        throw new AppException(409, 'Ce lead vient de changer de main. Rafraîchissez la page.');
+      }
+
+      await tx.leadAssignment.updateMany({
+        where: { leadId: lead.id, agentId: previousAgentId, unassignedAt: null },
+        data: { unassignedAt: new Date() },
+      });
+
+      await tx.leadAssignment.create({
+        data: { leadId: lead.id, agentId },
+      });
+
+      await tx.leadStatusHistory.create({
+        data: {
+          leadId: lead.id,
+          oldStatus: lead.status,
+          newStatus: 'ASSIGNED',
+          changedBy: agentId,
+          notes: `Réclamation forcée : repris à ${previousAgentName} par ${newAgentName}. Motif : ${reason}`,
+        },
+      });
+
+      return tx.lead.findUnique({ where: { id: lead.id } });
+    });
+
+    // Tell the agent who lost the lead — DB notification + live bell push.
+    const { createNotification } = await import('../utils/notification.js');
+    await createNotification(
+      previousAgentId,
+      'LEAD_FORCE_CLAIMED',
+      '⚠️ Un lead vous a été retiré',
+      `${newAgentName} a réclamé le lead de ${lead.fullName}. Motif : ${reason}`
+    );
+
+    try {
+      const io = getIO();
+      if (io) {
+        const previousAgent = await prisma.user.findUnique({
+          where: { id: previousAgentId },
+          select: { uuid: true },
+        });
+        if (previousAgent?.uuid) {
+          io.to(`user:${previousAgent.uuid}`).emit('lead-force-claimed', {
+            leadId: lead.id,
+            leadName: lead.fullName,
+            byAgent: newAgentName,
+            reason,
+          });
+        }
+      }
+    } catch (e) {
+      console.error('[force-claim] realtime notify failed:', e);
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Lead réclamé avec succès.',
+      data: { lead: updatedLead },
     });
   })
 );
@@ -1585,12 +1983,26 @@ router.get(
   authenticate,
   authorize('CALL_CENTER_AGENT', 'SUPER_ADMIN', 'HELPER'),
   asyncHandler(async (req, res) => {
+    // An agent may only file leads against accounts assigned to them. Returning
+    // the whole roster let any agent attribute a lead to a vendor they don't
+    // work — and buried their own accounts in a list of hundreds.
+    let restrictToIds: number[] | null = null;
+    if (req.user!.roleName === 'CALL_CENTER_AGENT') {
+      const scope = await getAgentLeadScope(req.user!.id);
+      if (!scope.hasScope) {
+        res.json({ status: 'success', data: [] });
+        return;
+      }
+      restrictToIds = scope.accounts.map(a => a.id);
+    }
+
     const vendors = await prisma.user.findMany({
       where: {
         isActive: true,
         role: {
           name: { in: ['VENDOR', 'INFLUENCER'] }
-        }
+        },
+        ...(restrictToIds ? { id: { in: restrictToIds } } : {}),
       },
       select: {
         id: true,
@@ -1633,10 +2045,24 @@ router.get(
       throw new AppException(403, 'Permission denied');
     }
 
+    // An agent sees this account's products only if the account is assigned to
+    // them, and only the subset they're narrowed to (AgentProductAssignment).
+    // No product rows for that account means the whole account, matching
+    // getAgentLeadScope's rule.
+    let allowedProductIds: number[] | null = null;
+    if (req.user!.roleName === 'CALL_CENTER_AGENT') {
+      const scope = await getAgentLeadScope(req.user!.id);
+      const account = scope.accounts.find(a => a.id === Number(vendorId));
+      if (!account) {
+        throw new AppException(403, 'Ce compte vendeur ne vous est pas assigné');
+      }
+      if (account.productIds.length > 0) allowedProductIds = account.productIds;
+    }
 
     const products = await prisma.product.findMany({
       where: {
         status: 'APPROVED',
+        ...(allowedProductIds ? { id: { in: allowedProductIds } } : {}),
         OR: [
           { ownerId: Number(vendorId) },
           { inventories: { some: { userId: Number(vendorId) } } },
@@ -1702,6 +2128,19 @@ router.post(
 
     if (!productId) {
       throw new AppException(400, 'Must provide a productId');
+    }
+
+    // Scoping the dropdown is cosmetic on its own — the body is what actually
+    // decides who the lead is filed against, so it gets the same check.
+    if (req.user!.roleName === 'CALL_CENTER_AGENT') {
+      const scope = await getAgentLeadScope(req.user!.id);
+      const account = scope.accounts.find(a => a.id === effectiveVendorId);
+      if (!account) {
+        throw new AppException(403, 'Ce compte vendeur ne vous est pas assigné');
+      }
+      if (account.productIds.length > 0 && !account.productIds.includes(Number(productId))) {
+        throw new AppException(403, 'Ce produit ne vous est pas assigné pour ce compte');
+      }
     }
 
     const product = await prisma.product.findUnique({ where: { id: Number(productId) } });
@@ -1797,8 +2236,15 @@ router.post(
 
     // Transaction execution
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Create Lead in PUSHED_TO_DELIVERY or LEAD status
-      const newLeadStatus = skipColiaty ? 'LEAD' : 'PUSHED_TO_DELIVERY';
+      // 1. Create Lead.
+      //
+      // `skipColiaty` means "queue it, don't ship it yet" — only the carrier
+      // call is deferred, never the Order. /orders/bulk-dispatch picks these up
+      // by `status: 'ORDERED', order: { isNot: null }` and builds the parcel
+      // from the order's items, so a queued lead without one can never ship.
+      // (It also writes `oldStatus: 'ORDERED'` into the history, which is the
+      // same contract from the other end.)
+      const newLeadStatus = skipColiaty ? 'ORDERED' : 'PUSHED_TO_DELIVERY';
       const lead = await tx.lead.create({
         data: {
           vendorId: effectiveVendorId,
@@ -1817,11 +2263,9 @@ router.post(
         },
       });
 
-      let order = null;
-
-      if (!skipColiaty) {
-        // 2. Create Order linked to lead and Coliaty parcel
-        order = await (tx.order as any).create({
+      // 2. Create the Order. When queued, `coliatyResult` is null further down,
+      // so the parcel simply carries no carrier code until it is dispatched.
+      const order = await (tx.order as any).create({
           data: {
             orderNumber: generateOrderNumber(),
             vendorId: effectiveVendorId,
@@ -1855,12 +2299,13 @@ router.post(
           },
         });
 
-        // 3. Decrement Product Stock
-        await tx.product.update({
-          where: { id: product.id },
-          data: { stockQuantity: { decrement: qteNum } },
-        });
-      }
+      // 3. Decrement Product Stock. Reserved at queue time, not at dispatch —
+      // bulk-dispatch never touches stock, so decrementing here is what keeps a
+      // queued lead from overselling the same unit twice.
+      await tx.product.update({
+        where: { id: product.id },
+        data: { stockQuantity: { decrement: qteNum } },
+      });
 
       // 4. Record history logs
       if (req.user!.roleName === 'CALL_CENTER_AGENT') {
@@ -1884,6 +2329,24 @@ router.post(
 
       return { lead, order };
     });
+
+    // A parcel with a Coliaty code is a ticket waiting on the packaging desk.
+    if (result.order?.coliatyPackageCode) {
+      await emitNewTickets(
+        [
+          {
+            orderNumber: result.order.orderNumber,
+            packageCode: result.order.coliatyPackageCode,
+            customerName: result.order.customerName,
+            customerCity: result.order.customerCity,
+            vendorId: result.order.vendorId,
+            productName: product.nameFr || product.nameAr || null,
+            amountMad: Number(result.order.totalAmountMad) || 0,
+          },
+        ],
+        { id: req.user!.id, name: req.user!.email, role: req.user!.roleName }
+      );
+    }
 
     res.status(201).json({
       status: 'success',
@@ -2048,7 +2511,7 @@ router.patch(
   authorize('SUPER_ADMIN', 'VENDOR', 'HELPER', 'CALL_CENTER_AGENT'),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { fullName, phone, whatsapp, city, address, notes } = req.body;
+    const { fullName, phone, whatsapp, city, address, notes, productVariant, confirmedPriceMad } = req.body;
 
     const where: any = { id: Number(id) };
     if (req.user!.roleName === 'VENDOR') where.vendorId = req.user!.id;
@@ -2089,6 +2552,28 @@ router.patch(
       throw new AppException(400, 'Adresse trop longue (200 caractères maximum).');
     }
 
+    // The pack drives the price the courier collects (see getPackPrice), so the
+    // agent must be able to correct it during the confirmation call.
+    if (productVariant !== undefined && String(productVariant).trim().length > 120) {
+      throw new AppException(400, 'Pack / variante trop long (120 caractères maximum).');
+    }
+
+    // Price agreed on the call. null clears the override and falls back to the
+    // pack price; anything non-numeric or negative is a client bug, not a
+    // discount, and must not reach the courier as the amount to collect.
+    let agreedPrice: number | null | undefined;
+    if (confirmedPriceMad !== undefined) {
+      if (confirmedPriceMad === null || confirmedPriceMad === '') {
+        agreedPrice = null;
+      } else {
+        const parsed = Number(confirmedPriceMad);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+          throw new AppException(400, 'Prix à encaisser invalide.');
+        }
+        agreedPrice = parsed;
+      }
+    }
+
     const updated = await prisma.lead.update({
       where: { id: lead.id },
       data: {
@@ -2098,6 +2583,8 @@ router.patch(
         city: city !== undefined ? city : lead.city,
         address: address !== undefined ? address : lead.address,
         notes: notes !== undefined ? notes : lead.notes,
+        productVariant: productVariant !== undefined ? (String(productVariant).trim() || null) : lead.productVariant,
+        confirmedPriceMad: agreedPrice !== undefined ? agreedPrice : lead.confirmedPriceMad,
       },
     });
 
@@ -2536,8 +3023,14 @@ router.post(
       }
     }
     
-    // Use override price if provided, otherwise calculate
-    const totalAmountMad = package_price !== undefined ? Number(package_price) : unitPrice * Number(quantity);
+    // Use override price if provided, then the price agreed on the confirmation
+    // call, and only then the pack/retail price.
+    const totalAmountMad =
+      package_price !== undefined
+        ? Number(package_price)
+        : lead.confirmedPriceMad !== null && lead.confirmedPriceMad !== undefined
+        ? Number(lead.confirmedPriceMad)
+        : unitPrice * Number(quantity);
     
     const commissionPercentage = parseFloat(getSecret('PLATFORM_COMMISSION_PERCENTAGE') || '15');
     const platformFeeMad = totalAmountMad * (commissionPercentage / 100);
@@ -2658,6 +3151,24 @@ router.post(
 
       return newOrder;
     });
+
+    // Ring the packaging desk — this parcel just entered their "En attente" queue.
+    if (coliatyResult?.package_code) {
+      await emitNewTickets(
+        [
+          {
+            orderNumber: order.orderNumber,
+            packageCode: coliatyResult.package_code,
+            customerName: order.customerName,
+            customerCity: order.customerCity,
+            vendorId: order.vendorId,
+            productName: productToOrder?.nameFr || productToOrder?.nameAr || null,
+            amountMad: Number(order.totalAmountMad) || 0,
+          },
+        ],
+        { id: req.user!.id, name: req.user!.email, role: req.user!.roleName }
+      );
+    }
 
     res.status(201).json({
       status: 'success',
@@ -3148,6 +3659,21 @@ router.delete(
 
     await prisma.$transaction(async (tx) => {
       if (existingOrder) {
+        // Stock was reserved when the order was created, so give it back before
+        // the items disappear — otherwise queue-then-delete silently burns
+        // inventory that was never shipped.
+        const items = await tx.orderItem.findMany({
+          where: { orderId: existingOrder.id },
+          select: { productId: true, quantity: true },
+        });
+        for (const item of items) {
+          if (!item.productId) continue;
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stockQuantity: { increment: item.quantity } },
+          });
+        }
+
         await tx.orderItem.deleteMany({ where: { orderId: existingOrder.id } });
         await tx.orderStatusHistory.deleteMany({ where: { orderId: existingOrder.id } });
         await tx.order.delete({ where: { id: existingOrder.id } });
@@ -3467,11 +3993,18 @@ router.get(
 
     // Only restrict by referral code when the agent actually has assignments.
     if (hasScope) {
+      const restrictions = await getAgentProductRestrictions(req.user!.id);
       const scopedLinks = await prisma.referralLink.findMany({
         where: { influencerId: { in: influencerIds } },
-        select: { code: true },
+        select: { code: true, influencerId: true, productId: true },
       });
-      const codes = scopedLinks.map((l) => l.code);
+      // An account narrowed to certain products only contributes those carts.
+      const codes = scopedLinks
+        .filter((l) => {
+          const allowed = restrictions.get(l.influencerId);
+          return !allowed || allowed.includes(l.productId);
+        })
+        .map((l) => l.code);
       // Assigned but their sellers have no links yet → genuinely nothing to show.
       if (codes.length === 0) {
         return res.json({
@@ -3638,6 +4171,11 @@ router.post(
       const influencerIds = await getAgentAssignedInfluencerIds(req.user!.id);
       if (influencerIds.length > 0 && !influencerIds.includes(link.influencerId)) {
         throw new AppException(403, 'Ce panier ne fait pas partie de vos vendeurs assignés');
+      }
+      // …and the product too, when that seller was narrowed down.
+      const allowedProducts = (await getAgentProductRestrictions(req.user!.id)).get(link.influencerId);
+      if (allowedProducts && !allowedProducts.includes(link.productId)) {
+        throw new AppException(403, 'Ce produit ne fait pas partie de vos produits assignés');
       }
     }
 

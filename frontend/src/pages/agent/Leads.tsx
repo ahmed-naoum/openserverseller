@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { leadsApi } from '../../lib/api';
 import { useSocket } from '../../contexts/SocketContext';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
-import { Sparkles, Phone, MessageSquare, Zap, Clock, Package, Heart, Filter, ChevronRight, X, AlertCircle, Activity, Check, Search, MapPin } from 'lucide-react';
+import { Sparkles, Phone, MessageSquare, Zap, Clock, Package, Heart, Filter, ChevronRight, X, Activity, Check, Search, MapPin } from 'lucide-react';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
 
 const AssignedTimer = ({ lead, onTimeout, isGirly, isPrincess }: { lead: any; onTimeout?: () => void; isGirly: boolean; isPrincess: boolean }) => {
@@ -120,7 +120,9 @@ export default function AgentLeads() {
 
   const [availableLeads, setAvailableLeads] = useState<any[]>([]);
   const [totalAvailableCount, setTotalAvailableCount] = useState<number>(0);
-  const [availableLimit, setAvailableLimit] = useState<number | 'max'>(20);
+  // Show the whole pool by default — the 20-row default made agents think the
+  // pool *was* 20. The selector is still there to narrow it down deliberately.
+  const [availableLimit, setAvailableLimit] = useState<number | 'max'>('max');
   // Search over available leads. `searchInput` is what the agent types;
   // `availableSearch` is the debounced value actually sent to the API.
   const [searchInput, setSearchInput] = useState('');
@@ -143,7 +145,18 @@ export default function AgentLeads() {
   useEffect(() => {
     selectedInfluencerIdRef.current = selectedInfluencerId;
   }, [selectedInfluencerId]);
-  const [statusFilter, setStatusFilter] = useState<string>('');
+  // ?status=CONFIRMED lands here pre-filtered (the agent dashboard links in)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [statusFilter, setStatusFilter] = useState<string>(() => searchParams.get('status') || '');
+
+  const applyStatusFilter = (next: string) => {
+    setStatusFilter(next);
+    const params = new URLSearchParams(searchParams);
+    if (next) params.set('status', next);
+    else params.delete('status');
+    setSearchParams(params, { replace: true });
+  };
+
   const [claiming, setClaiming] = useState<number | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [dropdownSearch, setDropdownSearch] = useState('');
@@ -206,23 +219,13 @@ export default function AgentLeads() {
     };
   }, []);
 
-  // Delivery Modal State
-  const [showDeliveryModal, setShowDeliveryModal] = useState(false);
-  const [selectedLeadForDelivery, setSelectedLeadForDelivery] = useState<any>(null);
+  // Push to delivery. The parcel form now runs on the lead detail page, as part
+  // of ✅ CONFIRMED — from here a lead goes straight through with the data
+  // already on its card, one at a time or for the whole selection.
   const [coliatyCities, setColiatyCities] = useState<any[]>([]);
-  const [loadingCities, setLoadingCities] = useState(false);
-  const [isPushingDelivery, setIsPushingDelivery] = useState(false);
-  const [deliveryForm, setDeliveryForm] = useState({
-    name: '',
-    phone: '',
-    city: '',
-    address: '',
-    price: 0,
-    package_no_open: false,
-    productVariant: '',
-    note: ''
-  });
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [pushingIds, setPushingIds] = useState<Set<number>>(new Set());
+  const [bulkPushing, setBulkPushing] = useState(false);
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<number>>(new Set());
 
   const navigate = useNavigate();
 
@@ -236,7 +239,9 @@ export default function AgentLeads() {
           city: availableCity || undefined,
           productId: availableProductId || undefined,
         }),
-        leadsApi.list({ status: statusFilter })
+        // Without an explicit limit this falls back to the server's 50/page and
+        // silently drops the rest of the agent's leads.
+        leadsApi.list({ status: statusFilter, limit: 5000 })
       ]);
       const availData = availRes.data?.data || availRes.data;
       setAvailableLeads(availData?.leads || []);
@@ -325,51 +330,25 @@ export default function AgentLeads() {
 
   const loadCities = async (): Promise<any[]> => {
     if (coliatyCities.length > 0) return coliatyCities;
-    setLoadingCities(true);
     try {
       const res = await leadsApi.getColiatyCities();
       const list = res.data?.data || [];
       setColiatyCities(list);
       return list;
     } catch (err: any) {
-      toast.error('Erreur lors du chargement des villes Coliaty');
+      // Not fatal: the push falls back to the city stored on the lead and lets
+      // the server (and Coliaty) have the final say.
+      console.error('[Coliaty] Failed to load city list', err);
       return [];
-    } finally {
-      setLoadingCities(false);
     }
   };
-
-  const formatMoroccanPhone = (input: string) => {
-    if (!input) return '';
-    let cleaned = input.trim().replace(/\s+/g, '');
-    if (cleaned.startsWith('+212')) {
-      cleaned = '0' + cleaned.slice(4);
-    } else if (cleaned.startsWith('212')) {
-      cleaned = '0' + cleaned.slice(3);
-    } else if (cleaned.length > 0 && !cleaned.startsWith('0')) {
-      cleaned = '0' + cleaned;
-    }
-    cleaned = cleaned.replace(/\D/g, '');
-    if (cleaned.length > 10) {
-      cleaned = cleaned.slice(0, 10);
-    }
-    return cleaned;
-  };
-
-  const coliatyCityOptions = useMemo(() => {
-    return coliatyCities.map((city) => ({
-      value: city.city_name,
-      label: `${city.city_name} (Hub: ${city.hub_name})`,
-    }));
-  }, [coliatyCities]);
 
   /**
-   * Maps a free-text lead city onto an official Coliaty option.
+   * Maps a free-text lead city onto its official Coliaty spelling.
    *
-   * A <select> only shows a selection when its value matches an <option> value
-   * exactly, so a lead stored as "agadir" against an option "AGADIR" silently
-   * rendered as unselected. Returns '' when there is no match, which is what the
-   * "ville non trouvée" warning below the field keys off.
+   * A lead stored as "agadir" has to be sent as the exact "AGADIR" Coliaty
+   * publishes. Returns '' when there is no match — which is what blocks the push
+   * before a parcel is attempted for a city Coliaty does not know.
    */
   const resolveColiatyCity = (rawCity: string, cities: any[]): string => {
     const value = (rawCity || '').trim().toLowerCase();
@@ -378,95 +357,148 @@ export default function AgentLeads() {
     return exact ? exact.city_name : '';
   };
 
-  const handleOpenDeliveryModal = async (lead: any) => {
-    setSelectedLeadForDelivery(lead);
-    setDeliveryForm({
-      name: lead.fullName || '',
-      phone: formatMoroccanPhone(lead.phone || ''),
-      city: '', // resolved below, once the official list is available
-      address: lead.address || '',
-      price: lead.productPrice || 0,
-      package_no_open: false,
-      productVariant: lead.productVariant || '',
-      // The agent's call notes are what the courier needs on the parcel.
-      note: lead.notes || ''
+  /** A lead can only be shipped once, and only after the confirmation call. */
+  const canPushToDelivery = (lead: any) =>
+    ['ORDERED', 'CONFIRMED'].includes(lead.status) && !lead.order?.coliatyPackageCode;
+
+  const deliverableLeads = useMemo(() => myLeads.filter(canPushToDelivery), [myLeads]);
+
+  // Leads leave this list as they ship (or when a filter changes), so drop any
+  // id that is no longer selectable rather than pushing a stale selection.
+  useEffect(() => {
+    setSelectedLeadIds((prev) => {
+      if (prev.size === 0) return prev;
+      const allowed = new Set(deliverableLeads.map((l: any) => l.id));
+      const next = new Set(Array.from(prev).filter((id) => allowed.has(id)));
+      return next.size === prev.size ? prev : next;
     });
-    setShowDeliveryModal(true);
-    setFormErrors({});
+  }, [deliverableLeads]);
 
-    // Cities arrive after the modal opens, so the lead's city can only be matched
-    // once they are loaded.
-    const cities = await loadCities();
-    const resolved = resolveColiatyCity(lead.city, cities);
-    if (resolved) setDeliveryForm((prev) => ({ ...prev, city: resolved }));
+  const toggleLeadSelection = (leadId: number) => {
+    setSelectedLeadIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(leadId)) next.delete(leadId);
+      else next.add(leadId);
+      return next;
+    });
   };
 
-  const validateDeliveryForm = () => {
-    const errors: Record<string, string> = {};
-    
-    if (!deliveryForm.name || deliveryForm.name.trim().length < 3) {
-      errors.name = "Le nom doit contenir au moins 3 caractères.";
-    }
-    
-    const phoneDigits = deliveryForm.phone.replace(/\D/g, '');
-    if (!phoneDigits.startsWith('0') || phoneDigits.length !== 10) {
-      errors.phone = "Le téléphone doit être au format 0612345678 (10 chiffres).";
-    }
+  const allDeliverableSelected =
+    deliverableLeads.length > 0 && deliverableLeads.every((l: any) => selectedLeadIds.has(l.id));
 
-    if (!deliveryForm.city) {
-      errors.city = "La ville est obligatoire.";
-    }
-
-    if (!deliveryForm.address || deliveryForm.address.trim().length < 10) {
-      errors.address = "L'adresse doit être détaillée (min. 10 caractères).";
-    }
-
-    if (deliveryForm.price < 0) {
-      errors.price = "Le prix doit être supérieur ou égal à 0.";
-    }
-
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
+  const toggleSelectAll = () => {
+    setSelectedLeadIds(allDeliverableSelected ? new Set() : new Set(deliverableLeads.map((l: any) => l.id)));
   };
 
-  const handleConfirmDelivery = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedLeadForDelivery) return;
-    
-    if (!validateDeliveryForm()) {
-      toast.error('Veuillez corriger les erreurs dans le formulaire.');
-      return;
+  /**
+   * Ships one lead with what is already on its card. The server falls back to the
+   * lead's own name/phone/address/notes for anything omitted, so only the values
+   * that need normalising (the city) or that the server cannot infer are sent.
+   * The price is left out when the card has none, so the server bills the pack or
+   * retail price instead of a 0 MAD COD.
+   */
+  const pushLeadToDelivery = async (lead: any, cities: any[]) => {
+    const resolvedCity = resolveColiatyCity(lead.city, cities);
+    if (!resolvedCity && cities.length > 0) {
+      throw new Error(`Ville « ${lead.city || 'non renseignée'} » inconnue de Coliaty — corrigez-la dans la fiche du lead.`);
     }
-    
-    setIsPushingDelivery(true);
+
+    const payload: Parameters<typeof leadsApi.pushToDelivery>[1] = {
+      productId: lead.product?.id || 0,
+    };
+    if (resolvedCity) payload.package_city = resolvedCity;
+    if (Number(lead.productPrice) > 0) payload.package_price = Number(lead.productPrice);
+    if (lead.productVariant) payload.productVariant = lead.productVariant;
+
+    await leadsApi.pushToDelivery(lead.id, payload);
+  };
+
+  const playDeliverySound = () => {
     try {
-      await leadsApi.pushToDelivery(selectedLeadForDelivery.id, {
-        productId: selectedLeadForDelivery.product?.id || 0,
-        package_reciever: deliveryForm.name,
-        package_phone: deliveryForm.phone,
-        package_city: deliveryForm.city,
-        package_addresse: deliveryForm.address,
-        package_price: deliveryForm.price,
-        package_no_open: deliveryForm.package_no_open,
-        package_note: deliveryForm.note,
-        productVariant: deliveryForm.productVariant
-      });
-      try {
-        const audio = new Audio('/soundes/correct-confirmation.mp3');
-        audio.volume = 0.85;
-        audio.play().catch(() => {});
-      } catch (e) {}
+      const audio = new Audio('/soundes/correct-confirmation.mp3');
+      audio.volume = 0.85;
+      audio.play().catch(() => {});
+    } catch (e) {}
+  };
 
+  const handlePushToDelivery = async (lead: any) => {
+    if (pushingIds.has(lead.id) || bulkPushing) return;
+    setPushingIds((prev) => new Set(prev).add(lead.id));
+    try {
+      const cities = await loadCities();
+      await pushLeadToDelivery(lead, cities);
+      playDeliverySound();
       toast.success(theme === 'girly' ? 'Lead poussé à la livraison sur Coliaty! 🎀' : 'Lead envoyé à la livraison!');
-      setShowDeliveryModal(false);
+      setSelectedLeadIds((prev) => {
+        const next = new Set(prev);
+        next.delete(lead.id);
+        return next;
+      });
       loadData();
     } catch (err: any) {
       console.error('[Coliaty Push Error]', err.response?.data);
-      const errorMessage = err.response?.data?.message || 'Erreur lors de la création de la commande';
-      toast.error(errorMessage);
+      toast.error(err.response?.data?.message || err.message || 'Erreur lors de la création de la commande');
     } finally {
-      setIsPushingDelivery(false);
+      setPushingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(lead.id);
+        return next;
+      });
     }
+  };
+
+  /**
+   * Ships the whole selection, one parcel at a time so a single rejected lead
+   * (unknown city, stock shortage) never takes the rest of the batch with it.
+   */
+  const handleBulkPushToDelivery = async () => {
+    const targets = deliverableLeads.filter((l: any) => selectedLeadIds.has(l.id));
+    if (targets.length === 0 || bulkPushing) return;
+
+    const confirmed = window.confirm(
+      `Envoyer ${targets.length} lead${targets.length > 1 ? 's' : ''} à la livraison ?\n\nUn colis Coliaty sera créé pour chacun — cette action est irréversible.`
+    );
+    if (!confirmed) return;
+
+    setBulkPushing(true);
+    const toastId = toast.loading(`Envoi 0/${targets.length}...`);
+    const cities = await loadCities();
+    const failures: string[] = [];
+    let sent = 0;
+
+    for (const lead of targets) {
+      try {
+        await pushLeadToDelivery(lead, cities);
+        sent++;
+        setSelectedLeadIds((prev) => {
+          const next = new Set(prev);
+          next.delete(lead.id);
+          return next;
+        });
+      } catch (err: any) {
+        console.error('[Coliaty Bulk Push Error]', lead.id, err.response?.data);
+        failures.push(`${lead.fullName}: ${err.response?.data?.message || err.message || 'erreur inconnue'}`);
+      }
+      toast.loading(`Envoi ${sent + failures.length}/${targets.length}...`, { id: toastId });
+    }
+
+    toast.dismiss(toastId);
+    if (sent > 0) {
+      playDeliverySound();
+      toast.success(
+        `${sent} lead${sent > 1 ? 's' : ''} envoyé${sent > 1 ? 's' : ''} à la livraison${theme === 'girly' ? ' 🎀' : ''}`
+      );
+    }
+    if (failures.length > 0) {
+      toast.error(
+        `${failures.length} échec${failures.length > 1 ? 's' : ''} — ${failures.slice(0, 3).join(' • ')}` +
+          (failures.length > 3 ? ` • … et ${failures.length - 3} autre${failures.length - 3 > 1 ? 's' : ''}.` : ''),
+        { duration: 10000 }
+      );
+    }
+
+    setBulkPushing(false);
+    loadData();
   };
 
   useEffect(() => {
@@ -1000,11 +1032,11 @@ export default function AgentLeads() {
           <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
             📋 Mes Leads Assignés ({myLeads.length})
           </h2>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-black text-gray-400 uppercase">Statut:</span>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => applyStatusFilter(e.target.value)}
               className={`py-1.5 px-3 border rounded-xl bg-white text-xs font-bold text-gray-700 focus:ring-2 outline-none cursor-pointer shadow-sm ${
                 isPrincess ? 'border-amber-100 focus:ring-amber-400' : isGirly ? 'border-pink-100 focus:ring-pink-400' : 'border-indigo-100 focus:ring-indigo-400'
               }`}
@@ -1023,22 +1055,102 @@ export default function AgentLeads() {
           </div>
         </div>
 
+        {/* Bulk delivery bar — only leads past the confirmation call and without a
+            parcel yet can be shipped, so the selection is limited to those. */}
+        {deliverableLeads.length > 0 && (
+          <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-2xl border p-3 shadow-sm ${
+            isPrincess ? 'border-amber-100' : isGirly ? 'border-pink-100' : 'border-indigo-100'
+          }`}>
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={allDeliverableSelected}
+                onChange={toggleSelectAll}
+                disabled={bulkPushing}
+                className={`w-4 h-4 rounded border-gray-300 cursor-pointer disabled:cursor-not-allowed ${
+                  isPrincess ? 'text-amber-500 focus:ring-amber-400' : isGirly ? 'text-pink-500 focus:ring-pink-400' : 'text-indigo-600 focus:ring-indigo-400'
+                }`}
+              />
+              <span className="text-xs font-black text-gray-700 uppercase tracking-wider">
+                Tout sélectionner
+              </span>
+              <span className="text-[11px] font-bold text-gray-400">
+                {selectedLeadIds.size} / {deliverableLeads.length} prêt{deliverableLeads.length > 1 ? 's' : ''} à expédier
+              </span>
+            </label>
+
+            <div className="flex items-center gap-2">
+              {selectedLeadIds.size > 0 && !bulkPushing && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedLeadIds(new Set())}
+                  className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-gray-400 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  Effacer
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleBulkPushToDelivery}
+                disabled={selectedLeadIds.size === 0 || bulkPushing}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all shadow-md flex items-center justify-center gap-1.5 ${
+                  selectedLeadIds.size === 0 || bulkPushing
+                    ? 'bg-gray-50 text-gray-400 border border-gray-100 cursor-not-allowed shadow-none'
+                    : 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:opacity-95 active:scale-95'
+                }`}
+              >
+                {bulkPushing
+                  ? '⏳ Envoi en cours...'
+                  : `🚚 Envoyer tout à la livraison${selectedLeadIds.size > 0 ? ` (${selectedLeadIds.size})` : ''}`}
+              </button>
+            </div>
+          </div>
+        )}
+
         {myLeads.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {myLeads.map((lead: any) => (
-              <div key={lead.id} className="bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 p-5 relative overflow-hidden flex flex-col justify-between">
+            {myLeads.map((lead: any) => {
+              const isDeliverable = canPushToDelivery(lead);
+              const isSelected = selectedLeadIds.has(lead.id);
+              const isPushing = pushingIds.has(lead.id);
+
+              return (
+              <div
+                key={lead.id}
+                className={`bg-white rounded-3xl border shadow-sm hover:shadow-md transition-all duration-300 p-5 relative overflow-hidden flex flex-col justify-between ${
+                  isSelected
+                    ? isPrincess
+                      ? 'border-amber-300 ring-2 ring-amber-200'
+                      : isGirly
+                      ? 'border-pink-300 ring-2 ring-pink-200'
+                      : 'border-indigo-300 ring-2 ring-indigo-200'
+                    : 'border-gray-100'
+                }`}
+              >
                 <div className={`absolute top-0 left-0 w-1.5 h-full ${isPrincess ? 'bg-amber-400' : isGirly ? 'bg-pink-400' : 'bg-indigo-400'}`}></div>
                 <div>
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
+                      {isDeliverable && (
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleLeadSelection(lead.id)}
+                          disabled={bulkPushing || isPushing}
+                          title="Sélectionner pour l'envoi groupé"
+                          className={`w-4 h-4 shrink-0 rounded border-gray-300 cursor-pointer disabled:cursor-not-allowed ${
+                            isPrincess ? 'text-amber-500 focus:ring-amber-400' : isGirly ? 'text-pink-500 focus:ring-pink-400' : 'text-indigo-600 focus:ring-indigo-400'
+                          }`}
+                        />
+                      )}
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black shadow-inner border border-white ${
                         isPrincess ? 'bg-amber-100 text-amber-600' : isGirly ? 'bg-pink-100 text-pink-600' : 'bg-indigo-100 text-indigo-600'
                       }`}>
                         {lead.fullName.charAt(0)}
                       </div>
-                      <div>
-                        <p className="font-bold text-gray-900">{lead.fullName}</p>
-                        <p className="text-xs text-gray-400 font-medium">📍 {lead.city || 'Ville inconnue'}</p>
+                      <div className="min-w-0">
+                        <p className="font-bold text-gray-900 truncate">{lead.fullName}</p>
+                        <p className="text-xs text-gray-400 font-medium truncate">📍 {lead.city || 'Ville inconnue'}</p>
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
@@ -1157,17 +1269,23 @@ export default function AgentLeads() {
                     </a>
                   </div>
                   
-                  {['ORDERED', 'CONFIRMED'].includes(lead.status) && !lead.order?.coliatyPackageCode && (
+                  {isDeliverable && (
                     <button
-                      onClick={() => handleOpenDeliveryModal(lead)}
-                      className="w-full py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-xs font-black hover:opacity-95 transition-all shadow-md flex justify-center items-center gap-1.5"
+                      onClick={() => handlePushToDelivery(lead)}
+                      disabled={isPushing || bulkPushing}
+                      className={`w-full py-2 rounded-xl text-xs font-black transition-all shadow-md flex justify-center items-center gap-1.5 ${
+                        isPushing || bulkPushing
+                          ? 'bg-gray-50 text-gray-400 border border-gray-100 cursor-not-allowed shadow-none'
+                          : 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:opacity-95'
+                      }`}
                     >
-                      🚚 Envoyer à la livraison
+                      {isPushing ? '⏳ Envoi en cours...' : '🚚 Envoyer à la livraison'}
                     </button>
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="bg-white rounded-3xl border border-gray-100 p-8 text-center shadow-sm">
@@ -1175,183 +1293,6 @@ export default function AgentLeads() {
           </div>
         )}
       </div>
-
-      {showDeliveryModal && selectedLeadForDelivery && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative overflow-hidden animate-slide-up border border-gray-100">
-            <div className={`absolute top-0 left-0 right-0 h-1.5 ${
-              isPrincess
-                ? 'bg-gradient-to-r from-amber-400 via-pink-400 to-rose-500'
-                : isGirly 
-                ? 'bg-gradient-to-r from-pink-400 via-rose-400 to-fuchsia-400' 
-                : 'bg-gradient-to-r from-indigo-400 via-purple-400 to-indigo-600'
-            }`}></div>
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                📦 Confirmation Coliaty
-              </h3>
-              <button 
-                onClick={() => setShowDeliveryModal(false)}
-                className="text-gray-400 hover:text-gray-600 bg-gray-50 hover:bg-gray-100 p-2 rounded-full transition-all"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            
-            <form onSubmit={handleConfirmDelivery} className="space-y-4">
-              <div>
-                <label className="block text-xs font-black text-gray-500 uppercase mb-1">Nom Complet du Destinataire</label>
-                <input
-                  type="text"
-                  required
-                  value={deliveryForm.name}
-                  onChange={(e) => setDeliveryForm({ ...deliveryForm, name: e.target.value })}
-                  className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 outline-none text-sm font-semibold ${
-                    formErrors.name ? 'border-red-300 bg-red-50' : 'border-gray-200'
-                  } ${isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-400'}`}
-                />
-                {formErrors.name && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.name}</p>}
-              </div>
-
-              <div>
-                <label className="block text-xs font-black text-gray-500 uppercase mb-1">Téléphone</label>
-                <input
-                  type="tel"
-                  required
-                  value={deliveryForm.phone}
-                  onChange={(e) => setDeliveryForm({ ...deliveryForm, phone: formatMoroccanPhone(e.target.value) })}
-                  className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 outline-none text-sm font-semibold ${
-                    formErrors.phone ? 'border-red-300 bg-red-50' : 'border-gray-200'
-                  } ${isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-400'}`}
-                  placeholder="Ex: 0612345678"
-                />
-                {formErrors.phone && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.phone}</p>}
-              </div>
-
-              <div>
-                <label className="block text-xs font-black text-gray-500 uppercase mb-1">Ville (Sélection Coliaty)</label>
-                {loadingCities ? (
-                  <div className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-500 text-xs font-bold animate-pulse">
-                    Chargement des villes...
-                  </div>
-                ) : (
-                  <SearchableSelect
-                    options={coliatyCityOptions}
-                    value={deliveryForm.city}
-                    onChange={(val) => setDeliveryForm({ ...deliveryForm, city: String(val) })}
-                    placeholder="Rechercher une ville Coliaty..."
-                    searchPlaceholder="Tapez une ville (ex: Agadir, Afourar, Casablanca)..."
-                    error={!!formErrors.city}
-                    theme={theme}
-                  />
-                )}
-                {formErrors.city && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.city}</p>}
-                {deliveryForm.city === '' && !loadingCities && selectedLeadForDelivery?.city && (
-                  <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    Ville du prospect ({selectedLeadForDelivery.city}) non trouvée. Sélectionnez manuellement.
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-black text-gray-500 uppercase mb-1">Adresse Détaillée</label>
-                <textarea
-                  required
-                  rows={2}
-                  value={deliveryForm.address}
-                  onChange={(e) => setDeliveryForm({ ...deliveryForm, address: e.target.value })}
-                  className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 outline-none text-xs font-semibold resize-none ${
-                    formErrors.address ? 'border-red-300 bg-red-50' : 'border-gray-200'
-                  } ${isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-400'}`}
-                />
-                {formErrors.address && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.address}</p>}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-black text-gray-500 uppercase mb-1">Prix Encaisser (MAD)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    required
-                    value={deliveryForm.price || ''}
-                    onChange={(e) => setDeliveryForm({ ...deliveryForm, price: Number(e.target.value) })}
-                    className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 outline-none text-sm font-bold ${
-                      formErrors.price ? 'border-red-300 bg-red-50' : 'border-gray-200'
-                    } ${isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-400'}`}
-                  />
-                  {formErrors.price && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.price}</p>}
-                </div>
-                <div>
-                  <label className="block text-xs font-black text-gray-500 uppercase mb-1">Pack / Variante</label>
-                  <input
-                    type="text"
-                    value={deliveryForm.productVariant}
-                    onChange={(e) => setDeliveryForm({ ...deliveryForm, productVariant: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 outline-none text-sm font-semibold"
-                    placeholder="Ex: Pack 2 + 1"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-black text-gray-500 uppercase mb-1">
-                  Note pour le livreur
-                </label>
-                <textarea
-                  rows={2}
-                  maxLength={255}
-                  value={deliveryForm.note}
-                  onChange={(e) => setDeliveryForm({ ...deliveryForm, note: e.target.value })}
-                  className={`w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 outline-none text-xs font-semibold resize-none ${
-                    isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-400'
-                  }`}
-                  placeholder="Ex: Appeler avant la livraison, disponible après 18h..."
-                />
-                <p className="text-[10px] text-gray-400 font-medium mt-1">
-                  Reprise des notes de l'appel • {deliveryForm.note.length}/255 • envoyée à Coliaty
-                </p>
-              </div>
-              
-              <div className="flex gap-4 pt-1">
-                <label className="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={deliveryForm.package_no_open}
-                    onChange={(e) => setDeliveryForm({ ...deliveryForm, package_no_open: e.target.checked })}
-                    className={`w-4 h-4 rounded border-gray-300 cursor-pointer ${
-                      isGirly ? 'text-pink-500 focus:ring-pink-500' : 'text-indigo-500 focus:ring-indigo-500'
-                    }`}
-                  />
-                  Interdire Ouverture (Ne pas ouvrir avant paiement)
-                </label>
-              </div>
-
-              <div className="pt-4 flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowDeliveryModal(false)}
-                  className="flex-1 py-3 bg-gray-50 border border-gray-100 text-gray-700 font-black rounded-xl hover:bg-gray-100 transition-all text-xs"
-                  disabled={isPushingDelivery}
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  disabled={isPushingDelivery || !deliveryForm.city}
-                  className={`flex-1 flex justify-center items-center gap-2 py-3 text-white font-black rounded-xl hover:opacity-95 shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs ${
-                    isGirly ? 'bg-gradient-to-r from-pink-500 to-rose-500' : 'bg-gradient-to-r from-indigo-500 to-indigo-600'
-                  }`}
-                >
-                  {isPushingDelivery ? 'Envoi en cours...' : 'Confirmer l\'envoi'} 🚀
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

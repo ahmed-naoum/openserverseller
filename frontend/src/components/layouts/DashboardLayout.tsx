@@ -209,6 +209,7 @@ const navigation = {
   agent: [
     { name: 'Tableau de bord', href: '/agent', icon: Home },
     { name: 'Réclamer Leads', href: '/agent/leads', icon: Zap },
+    { name: 'Leads Assignés', href: '/agent/assigned-leads', icon: Users },
     { name: 'WhatsApp Leads', href: '/agent/insert-lead', icon: Plus },
     { name: 'Paniers Abandonnés', href: '/agent/live-stream-paniers', icon: ShoppingCart },
     { name: 'Livraison', href: '/agent/livraison', icon: Truck },

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../lib/api';
@@ -46,7 +46,8 @@ import {
   Loader2,
   Store,
   Sparkles,
-  Headphones
+  Headphones,
+  Plus
 } from 'lucide-react';
 
 export function parseSocialInput(val: string, platform: 'instagram' | 'tiktok' | 'facebook' | 'youtube' | 'x' | 'snapchat') {
@@ -98,6 +99,246 @@ export function parseSocialInput(val: string, platform: 'instagram' | 'tiktok' |
   };
 }
 
+/**
+ * One "account + its products" block inside the product-assignment section.
+ *
+ * Search terms and the fetched catalogue are local to the row, so three of these
+ * can sit side by side without fighting over one shared picker.
+ */
+function ProductScopeRow({
+  index,
+  accounts,
+  candidates,
+  influencerId,
+  productIds,
+  canRemove,
+  onPickAccount,
+  onClearAccount,
+  onToggleProduct,
+  onClearProducts,
+  onRemove,
+}: {
+  index: number;
+  accounts: any[];
+  candidates: any[];
+  influencerId: number | null;
+  productIds: number[];
+  canRemove: boolean;
+  onPickAccount: (id: number) => void;
+  onClearAccount: () => void;
+  onToggleProduct: (productId: number) => void;
+  onClearProducts: () => void;
+  onRemove: () => void;
+}) {
+  const [accountSearch, setAccountSearch] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [products, setProducts] = useState<any[]>([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
+
+  // Products this account can actually hand over: what they own plus whatever
+  // they hold a referral link for.
+  useEffect(() => {
+    if (!influencerId) {
+      setProducts([]);
+      return;
+    }
+    let cancelled = false;
+    setProductsLoading(true);
+    setProductSearch('');
+    adminApi.getInfluencerProducts(influencerId)
+      .then(res => { if (!cancelled) setProducts(res.data?.data || []); })
+      .catch(() => { if (!cancelled) toast.error('Erreur lors du chargement des produits'); })
+      .finally(() => { if (!cancelled) setProductsLoading(false); });
+    return () => { cancelled = true; };
+  }, [influencerId]);
+
+  const account = accounts.find(a => a.id === influencerId);
+  const matches = (v: string, term: string) => (v || '').toLowerCase().includes(term);
+  const accountTerm = accountSearch.trim().toLowerCase();
+  const shownCandidates = accountTerm
+    ? candidates.filter(inf => [inf.fullName, inf.email, inf.phone].some((v: string) => matches(v, accountTerm)))
+    : candidates;
+  const productTerm = productSearch.trim().toLowerCase();
+  const shownProducts = productTerm
+    ? products.filter(p => [p.name, p.sku].some((v: string) => matches(v, productTerm)))
+    : products;
+
+  return (
+    <div className={`rounded-2xl border p-3 transition-all ${
+      productIds.length > 0 ? 'border-emerald-200 bg-white' : 'border-slate-100 bg-white/70'
+    }`}>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
+          Compte {index + 1}
+        </span>
+        {canRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            title="Retirer ce compte"
+            className="p-1 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-colors"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
+      {/* Input 1 — the account, searchable */}
+      {account ? (
+        <div className="flex items-center gap-3 p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/40">
+          <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center font-black text-emerald-600 text-xs shrink-0">
+            {account.fullName?.charAt(0) || '?'}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-black text-slate-800 truncate">{account.fullName}</p>
+            <p className="text-[10px] font-bold text-slate-400 truncate">{account.email || account.phone}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => { onClearAccount(); setPickerOpen(true); setAccountSearch(''); }}
+            className="text-[10px] font-black text-emerald-600 uppercase tracking-widest hover:text-emerald-800 shrink-0"
+          >
+            Changer
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={accountSearch}
+              onFocus={() => setPickerOpen(true)}
+              onChange={(e) => { setAccountSearch(e.target.value); setPickerOpen(true); }}
+              placeholder="Rechercher un influenceur ou vendeur..."
+              className="w-full pl-9 pr-3 py-2.5 text-xs font-bold border border-slate-200 bg-white rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 transition-all"
+            />
+          </div>
+          {pickerOpen && (
+            <div className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-slate-100 bg-white divide-y divide-slate-50">
+              {shownCandidates.length === 0 ? (
+                <p className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">
+                  Aucun résultat
+                </p>
+              ) : (
+                shownCandidates.map((inf: any) => (
+                  <button
+                    key={inf.id}
+                    type="button"
+                    onClick={() => { onPickAccount(inf.id); setPickerOpen(false); }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-emerald-50 transition-colors"
+                  >
+                    <div className="w-7 h-7 bg-slate-100 rounded-lg flex items-center justify-center font-black text-slate-400 text-[10px] shrink-0">
+                      {inf.fullName?.charAt(0) || '?'}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-black text-slate-800 truncate">{inf.fullName}</p>
+                      <p className="text-[10px] font-bold text-slate-400 truncate">{inf.email || inf.phone}</p>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Input 2 — that account's products, searchable + multi */}
+      {account && (
+        <div className="mt-3">
+          <div className="flex items-center justify-between">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              Produits {productIds.length > 0 && `(${productIds.length})`}
+            </label>
+            {productIds.length > 0 && (
+              <button
+                type="button"
+                onClick={onClearProducts}
+                className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-rose-500 transition-colors"
+              >
+                Tout effacer
+              </button>
+            )}
+          </div>
+          <div className="relative mt-2">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={productSearch}
+              onChange={(e) => setProductSearch(e.target.value)}
+              placeholder="Rechercher un produit ou un SKU..."
+              className="w-full pl-9 pr-3 py-2.5 text-xs font-bold border border-slate-200 bg-white rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 transition-all"
+            />
+          </div>
+
+          {productsLoading ? (
+            <div className="flex items-center justify-center gap-2 py-6">
+              <Loader2 size={16} className="animate-spin text-emerald-500" />
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Chargement...</span>
+            </div>
+          ) : products.length === 0 ? (
+            <p className="py-6 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              Aucun produit pour ce compte
+            </p>
+          ) : (
+            <>
+              <div className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-slate-100 bg-white divide-y divide-slate-50">
+                {shownProducts.length === 0 ? (
+                  <p className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">
+                    Aucun résultat
+                  </p>
+                ) : (
+                  shownProducts.map((p: any) => (
+                    <label
+                      key={p.id}
+                      className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
+                        productIds.includes(p.id) ? 'bg-emerald-50' : 'hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all ${
+                        productIds.includes(p.id)
+                          ? 'bg-emerald-600 border-emerald-600 text-white'
+                          : 'border-slate-200'
+                      }`}>
+                        <input
+                          type="checkbox"
+                          className="hidden"
+                          checked={productIds.includes(p.id)}
+                          onChange={() => onToggleProduct(p.id)}
+                        />
+                        {productIds.includes(p.id) && <CheckCircle2 size={12} className="stroke-[3px]" />}
+                      </div>
+                      {p.image ? (
+                        <img src={p.image} alt="" className="w-8 h-8 rounded-lg object-cover bg-slate-100 shrink-0" />
+                      ) : (
+                        <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                          <Box size={14} className="text-slate-400" />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-black text-slate-800 truncate">{p.name}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">
+                          {p.sku || `#${p.id}`}{p.isActive === false ? ' · inactif' : ''}
+                        </p>
+                      </div>
+                    </label>
+                  ))
+                )}
+              </div>
+              <p className="mt-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                {productIds.length === 0
+                  ? '→ Aucun produit coché = tout le compte'
+                  : `→ L'agent ne verra que ces ${productIds.length} produit(s) de ce compte`}
+              </p>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; onClose: () => void; agent: any }) {
   const queryClient = useQueryClient();
   const [selectedInfluencers, setSelectedInfluencers] = useState<number[]>([]);
@@ -105,18 +346,45 @@ function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; o
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [influencers, setInfluencers] = useState<any[]>([]);
+  const [accountSearch, setAccountSearch] = useState('');
+
+  // Product narrowing: influencerId -> productIds. An account absent from this
+  // map (or with an empty list) keeps its whole catalogue, which is how every
+  // assignment behaved before this feature existed.
+  const [productScope, setProductScope] = useState<Record<number, number[]>>({});
+  // One editor row per account being narrowed. Rows are what the admin sees and
+  // reorders; productScope is what gets saved. A row is kept even before an
+  // account is picked, which is why it needs a key of its own.
+  const [scopeRows, setScopeRows] = useState<{ key: number; influencerId: number | null }[]>([]);
+  const rowKeySeq = useRef(0);
+  const newRow = (influencerId: number | null = null) => ({ key: ++rowKeySeq.current, influencerId });
 
   useEffect(() => {
     if (!isOpen || !agent) return;
     setLoading(true);
+    setAccountSearch('');
 
     Promise.all([
       adminApi.getInfluencers(),
       adminApi.getAgentInfluencerAssignments(agent.id),
-    ]).then(([infRes, assignRes]) => {
+      adminApi.getAgentProductAssignments(agent.id),
+    ]).then(([infRes, assignRes, prodRes]) => {
       setInfluencers(infRes.data?.data || []);
       const currentIds = (assignRes.data?.data || []).map((a: any) => a.influencerId);
       setSelectedInfluencers(currentIds);
+
+      const scope: Record<number, number[]> = {};
+      (prodRes.data?.data || []).forEach((row: any) => {
+        if (!scope[row.influencerId]) scope[row.influencerId] = [];
+        scope[row.influencerId].push(row.productId);
+      });
+      setProductScope(scope);
+
+      // Re-open on exactly the accounts that were saved, plus one blank row to
+      // add the next one.
+      const scoped = Object.keys(scope).map(Number);
+      setScopeRows(scoped.length ? scoped.map(id => newRow(id)) : [newRow()]);
+
       // Sync autoAssign state from agent data
       setAutoAssign(agent.autoAssignInfluencers || false);
     }).catch(() => {
@@ -127,11 +395,23 @@ function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; o
   const handleSave = async () => {
     setSaving(true);
     try {
-      await adminApi.setAgentInfluencerAssignments(agent.id, selectedInfluencers, autoAssign);
+      const productAssignments = Object.entries(productScope)
+        .filter(([, ids]) => ids.length > 0)
+        .map(([influencerId, productIds]) => ({ influencerId: Number(influencerId), productIds }));
+
+      await adminApi.setAgentInfluencerAssignments(
+        agent.id,
+        selectedInfluencers,
+        autoAssign,
+        productAssignments
+      );
+
+      const scopedProducts = productAssignments.reduce((n, a) => n + a.productIds.length, 0);
       toast.success(
-        autoAssign 
+        autoAssign
           ? `Auto-assignation activée pour ${agent.fullName || 'cet agent'}`
-          : `${selectedInfluencers.length} influenceur(s) assigné(s) à ${agent.fullName || 'cet agent'}`
+          : `${selectedInfluencers.length} compte(s) assigné(s)`
+            + (scopedProducts ? ` · ${scopedProducts} produit(s) ciblé(s)` : '')
       );
       // Invalidate users query to refresh the list with new autoAssign status
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
@@ -143,19 +423,109 @@ function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; o
     }
   };
 
-  const toggleInfluencer = (id: number) => {
-    setSelectedInfluencers(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
+  const clearScope = (influencerId: number) => {
+    setProductScope(prev => {
+      const next = { ...prev };
+      delete next[influencerId];
+      return next;
+    });
   };
 
-  const toggleAll = () => {
-    if (selectedInfluencers.length === influencers.length) {
-      setSelectedInfluencers([]);
+  // Forget an account's narrowing and close whatever row was editing it.
+  const dropScopeRows = (ids: number[]) => {
+    if (ids.length === 0) return;
+    setProductScope(prev => {
+      const next = { ...prev };
+      ids.forEach(id => delete next[id]);
+      return next;
+    });
+    setScopeRows(prev => {
+      const next = prev.filter(r => r.influencerId === null || !ids.includes(r.influencerId));
+      return next.length ? next : [newRow()];
+    });
+  };
+
+  const toggleInfluencer = (id: number) => {
+    if (selectedInfluencers.includes(id)) {
+      // Unassigning the account drops any product narrowing with it.
+      dropScopeRows([id]);
+      setSelectedInfluencers(prev => prev.filter(x => x !== id));
     } else {
-      setSelectedInfluencers(influencers.map(inf => inf.id));
+      setSelectedInfluencers(prev => (prev.includes(id) ? prev : [...prev, id]));
     }
   };
+
+  const addScopeRow = () => setScopeRows(prev => [...prev, newRow()]);
+
+  const removeScopeRow = (key: number) => {
+    const row = scopeRows.find(r => r.key === key);
+    if (row?.influencerId) clearScope(row.influencerId);
+    setScopeRows(prev => {
+      const next = prev.filter(r => r.key !== key);
+      return next.length ? next : [newRow()];
+    });
+  };
+
+  const setRowAccount = (key: number, influencerId: number) => {
+    const row = scopeRows.find(r => r.key === key);
+    // Swapping the account on a row abandons the products picked for the old one.
+    if (row?.influencerId && row.influencerId !== influencerId) clearScope(row.influencerId);
+    setScopeRows(prev => prev.map(r => (r.key === key ? { ...r, influencerId } : r)));
+    setSelectedInfluencers(prev => (prev.includes(influencerId) ? prev : [...prev, influencerId]));
+  };
+
+  // "Changer" — hand the row back to the search box without touching the
+  // account's own assignment, only the products picked through this row.
+  const clearRowAccount = (key: number) => {
+    const row = scopeRows.find(r => r.key === key);
+    if (row?.influencerId) clearScope(row.influencerId);
+    setScopeRows(prev => prev.map(r => (r.key === key ? { ...r, influencerId: null } : r)));
+  };
+
+  const toggleProduct = (accountId: number, productId: number) => {
+    setProductScope(prev => {
+      const current = prev[accountId] || [];
+      const next = current.includes(productId)
+        ? current.filter(x => x !== productId)
+        : [...current, productId];
+      const copy = { ...prev };
+      if (next.length === 0) delete copy[accountId];
+      else copy[accountId] = next;
+      return copy;
+    });
+    // Targeting a product only makes sense if the account itself is assigned.
+    setSelectedInfluencers(prev => (prev.includes(accountId) ? prev : [...prev, accountId]));
+  };
+
+  const filteredInfluencers = influencers.filter(inf => {
+    const term = accountSearch.trim().toLowerCase();
+    if (!term) return true;
+    return [inf.fullName, inf.email, inf.phone]
+      .some((v: string) => (v || '').toLowerCase().includes(term));
+  });
+
+  const visibleIds = filteredInfluencers.map(inf => inf.id);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedInfluencers.includes(id));
+
+  const toggleAll = () => {
+    if (allVisibleSelected) {
+      dropScopeRows(visibleIds);
+      setSelectedInfluencers(prev => prev.filter(id => !visibleIds.includes(id)));
+    } else {
+      setSelectedInfluencers(prev => {
+        const next = [...prev];
+        visibleIds.forEach(id => { if (!next.includes(id)) next.push(id); });
+        return next;
+      });
+    }
+  };
+
+  const scopedAccounts = Object.entries(productScope).filter(([, ids]) => ids.length > 0);
+  const scopedProductCount = scopedAccounts.reduce((n, [, ids]) => n + ids.length, 0);
+  // The same account twice would fight over one productScope entry.
+  const takenAccountIds = scopeRows.map(r => r.influencerId).filter((id): id is number => id !== null);
+  const hasBlankRow = scopeRows.some(r => r.influencerId === null);
+  const canAddRow = !hasBlankRow && takenAccountIds.length < influencers.length;
 
   if (!isOpen || !agent) return null;
 
@@ -173,7 +543,7 @@ function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; o
           <div>
             <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
               <Users size={24} className="text-primary-600" />
-              Assigner Influenceurs & Vendeurs
+              Assigner Influenceurs, Vendeurs & Produits
             </h2>
             <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">
               Agent: <span className="text-primary-600">{agent.fullName || agent.email}</span>
@@ -232,61 +602,153 @@ function AssignInfluencersModal({ isOpen, onClose, agent }: { isOpen: boolean; o
               <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Aucun utilisateur trouvé</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  {selectedInfluencers.length} d'entre eux sélectionnés
-                </p>
-                <div className="h-px flex-1 mx-4 bg-slate-100" />
-                <button
-                  type="button"
-                  onClick={toggleAll}
-                  className="text-[10px] font-black text-primary-600 uppercase tracking-widest hover:text-primary-800 transition-colors"
-                >
-                  {selectedInfluencers.length === influencers.length ? 'Tout désélectionner' : 'Tout sélectionner'}
-                </button>
-              </div>
-              {influencers.map((inf: any) => (
-                <label
-                  key={inf.id}
-                  className={`flex items-center gap-4 p-4 rounded-2xl border transition-all duration-300 group cursor-pointer ${
-                    selectedInfluencers.includes(inf.id)
-                      ? 'border-primary-500 bg-primary-50 text-primary-900'
-                      : 'border-slate-100 bg-white hover:border-primary-200'
-                  }`}
-                >
-                  <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
-                    selectedInfluencers.includes(inf.id)
-                      ? 'bg-primary-600 border-primary-600 text-white'
-                      : 'border-slate-200 group-hover:border-primary-300'
-                  }`}>
-                    <input
-                      type="checkbox"
-                      className="hidden"
-                      checked={selectedInfluencers.includes(inf.id)}
-                      onChange={() => toggleInfluencer(inf.id)}
-                    />
-                    {selectedInfluencers.includes(inf.id) && <CheckCircle2 size={14} className="stroke-[3px]" />}
-                  </div>
-                  <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center font-black text-slate-400 group-hover:bg-primary-100 group-hover:text-primary-600 transition-colors">
-                    {inf.fullName?.charAt(0) || '?'}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-black tracking-tight">{inf.fullName}</p>
-                      <span className={`px-1.5 py-0.5 text-[8px] font-black uppercase rounded border ${
-                        inf.role === 'VENDOR' 
-                          ? 'bg-amber-50 text-amber-600 border-amber-200' 
-                          : 'bg-indigo-50 text-indigo-600 border-indigo-200'
-                      }`}>
-                        {inf.role === 'VENDOR' ? 'Vendeur' : 'Influenceur'}
-                      </span>
+            <>
+              {/* ── Product targeting ─────────────────────────────────────────
+                  Pick an account, then pick which of its products this agent
+                  works. Leave an account out and they keep all of it. */}
+              <div className={`mb-6 rounded-3xl border-2 transition-all duration-300 ${
+                autoAssign
+                  ? 'border-slate-100 bg-slate-50/50 opacity-50 pointer-events-none'
+                  : scopedAccounts.length > 0
+                    ? 'border-emerald-500 bg-emerald-50/40 shadow-lg shadow-emerald-100'
+                    : 'border-slate-100 bg-slate-50/50'
+              }`}>
+                <div className="p-4">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-colors ${
+                      scopedAccounts.length > 0 ? 'bg-emerald-600 text-white' : 'bg-white text-slate-400 border border-slate-100'
+                    }`}>
+                      <Package size={20} />
                     </div>
-                    <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">{inf.email || inf.phone}</p>
+                    <div>
+                      <p className="text-sm font-black text-slate-800 tracking-tight">Assignation par produit</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                        {autoAssign ? 'Désactivé en mode global' : 'Optionnel — sinon tous les produits du compte'}
+                      </p>
+                    </div>
                   </div>
-                </label>
-              ))}
-            </div>
+
+                  {/* One block per account, each with its own two inputs. */}
+                  <div className="space-y-3">
+                    {scopeRows.map((row, index) => (
+                      <ProductScopeRow
+                        key={row.key}
+                        index={index}
+                        accounts={influencers}
+                        // Every account except the ones other rows already hold.
+                        candidates={influencers.filter(
+                          inf => inf.id === row.influencerId || !takenAccountIds.includes(inf.id)
+                        )}
+                        influencerId={row.influencerId}
+                        productIds={row.influencerId ? (productScope[row.influencerId] || []) : []}
+                        canRemove={scopeRows.length > 1 || row.influencerId !== null}
+                        onPickAccount={(id) => setRowAccount(row.key, id)}
+                        onClearAccount={() => clearRowAccount(row.key)}
+                        onToggleProduct={(pid) => row.influencerId && toggleProduct(row.influencerId, pid)}
+                        onClearProducts={() => row.influencerId && clearScope(row.influencerId)}
+                        onRemove={() => removeScopeRow(row.key)}
+                      />
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={addScopeRow}
+                    disabled={!canAddRow}
+                    className={`mt-3 w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed text-[10px] font-black uppercase tracking-widest transition-all ${
+                      canAddRow
+                        ? 'border-emerald-300 text-emerald-600 hover:border-emerald-500 hover:bg-emerald-50'
+                        : 'border-slate-200 text-slate-300 cursor-not-allowed'
+                    }`}
+                  >
+                    <Plus size={14} />
+                    Ajouter un compte
+                  </button>
+
+                  {scopedAccounts.length > 0 && (
+                    <p className="mt-3 text-[10px] font-black text-emerald-600 uppercase tracking-widest text-center">
+                      {scopedAccounts.length} compte(s) ciblé(s) · {scopedProductCount} produit(s)
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Account assignment ─────────────────────────────────────── */}
+              <div className="space-y-3">
+                <div className="relative mb-4">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={accountSearch}
+                    onChange={(e) => setAccountSearch(e.target.value)}
+                    placeholder="Rechercher un influenceur ou vendeur..."
+                    className="w-full pl-9 pr-3 py-2.5 text-xs font-bold border border-slate-200 bg-white rounded-2xl outline-none focus:ring-2 focus:ring-primary-400 transition-all"
+                  />
+                </div>
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    {selectedInfluencers.length} d'entre eux sélectionnés
+                  </p>
+                  <div className="h-px flex-1 mx-4 bg-slate-100" />
+                  <button
+                    type="button"
+                    onClick={toggleAll}
+                    className="text-[10px] font-black text-primary-600 uppercase tracking-widest hover:text-primary-800 transition-colors"
+                  >
+                    {allVisibleSelected ? 'Tout désélectionner' : 'Tout sélectionner'}
+                  </button>
+                </div>
+                {filteredInfluencers.length === 0 ? (
+                  <p className="py-8 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    Aucun résultat
+                  </p>
+                ) : filteredInfluencers.map((inf: any) => (
+                  <label
+                    key={inf.id}
+                    className={`flex items-center gap-4 p-4 rounded-2xl border transition-all duration-300 group cursor-pointer ${
+                      selectedInfluencers.includes(inf.id)
+                        ? 'border-primary-500 bg-primary-50 text-primary-900'
+                        : 'border-slate-100 bg-white hover:border-primary-200'
+                    }`}
+                  >
+                    <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
+                      selectedInfluencers.includes(inf.id)
+                        ? 'bg-primary-600 border-primary-600 text-white'
+                        : 'border-slate-200 group-hover:border-primary-300'
+                    }`}>
+                      <input
+                        type="checkbox"
+                        className="hidden"
+                        checked={selectedInfluencers.includes(inf.id)}
+                        onChange={() => toggleInfluencer(inf.id)}
+                      />
+                      {selectedInfluencers.includes(inf.id) && <CheckCircle2 size={14} className="stroke-[3px]" />}
+                    </div>
+                    <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center font-black text-slate-400 group-hover:bg-primary-100 group-hover:text-primary-600 transition-colors">
+                      {inf.fullName?.charAt(0) || '?'}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-black tracking-tight">{inf.fullName}</p>
+                        <span className={`px-1.5 py-0.5 text-[8px] font-black uppercase rounded border ${
+                          inf.role === 'VENDOR'
+                            ? 'bg-amber-50 text-amber-600 border-amber-200'
+                            : 'bg-indigo-50 text-indigo-600 border-indigo-200'
+                        }`}>
+                          {inf.role === 'VENDOR' ? 'Vendeur' : 'Influenceur'}
+                        </span>
+                        {(productScope[inf.id]?.length || 0) > 0 && (
+                          <span className="px-1.5 py-0.5 text-[8px] font-black uppercase rounded border bg-emerald-50 text-emerald-600 border-emerald-200">
+                            {productScope[inf.id].length} produit{productScope[inf.id].length > 1 ? 's' : ''}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">{inf.email || inf.phone}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </>
           )}
         </div>
 
@@ -2456,7 +2918,7 @@ export default function AdminUsers() {
                             <button 
                               onClick={() => setAssigningAgent(user)} 
                               className="py-2 px-3 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-all flex items-center justify-center shrink-0" 
-                              title="Assigner Influenceurs & Vendeurs"
+                              title="Assigner Influenceurs, Vendeurs & Produits"
                             >
                               <Users size={13} />
                             </button>
@@ -2666,7 +3128,7 @@ export default function AdminUsers() {
                               <button
                                 onClick={() => setAssigningAgent(user)}
                                 className="w-10 h-10 rounded-xl bg-white border border-slate-100 text-slate-400 hover:text-primary-600 hover:border-primary-100 hover:bg-primary-50 transition-all flex items-center justify-center"
-                                title="Assigner Influenceurs & Vendeurs"
+                                title="Assigner Influenceurs, Vendeurs & Produits"
                               >
                                 <Users size={18} />
                               </button>

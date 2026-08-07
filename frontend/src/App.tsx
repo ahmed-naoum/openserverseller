@@ -18,6 +18,7 @@ import VendorLeads from './pages/vendor/Leads';
 import VendorInventory from './pages/vendor/Inventory';
 import AgentDashboard from './pages/agent/Dashboard';
 import AgentLeads from './pages/agent/Leads';
+import AgentAssignedLeads from './pages/agent/AssignedLeads';
 import AgentMyLeads from './pages/agent/MyLeads';
 import AgentLeadDetail from './pages/agent/LeadDetail';
 import AgentOrders from './pages/agent/Orders';
@@ -424,6 +425,7 @@ function App() {
         }>
           <Route index element={<AgentDashboard />} />
           <Route path="leads" element={<AgentLeads />} />
+          <Route path="assigned-leads" element={<AgentAssignedLeads />} />
           <Route path="insert-lead" element={<InsertLead />} />
           <Route path="dispatch" element={<Navigate to="/agent/insert-lead" replace />} />
           <Route path="my-leads" element={<AgentMyLeads />} />

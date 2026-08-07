@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { io } from '../index.js';
 import { containsBlockedWord } from '../utils/blockedWords.js';
 import { validateInfluencerSubdomain } from '../utils/subdomain.js';
+import { getNotifiableAgentIds } from '../utils/agentScope.js';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -938,10 +939,8 @@ router.post(
       where: { userId }
     });
 
-    const assignments = await prisma.agentInfluencerAssignment.findMany({
-      where: { influencerId: userId },
-      select: { agentId: true }
-    });
+    // Agents restricted to other products of this influencer are skipped.
+    const agentIds = await getNotifiableAgentIds(userId, lead.referralLink?.productId ?? null);
 
     const leadData = {
       id: updatedLead.id,
@@ -960,8 +959,8 @@ router.post(
       createdAt: updatedLead.createdAt
     };
 
-    assignments.forEach(a => {
-      io.to(`user:${a.agentId}`).emit('new-available-lead', leadData);
+    agentIds.forEach(id => {
+      io.to(`user:${id}`).emit('new-available-lead', leadData);
     });
 
     res.json({
@@ -1069,7 +1068,10 @@ router.post(
       });
 
       return tx.lead.findMany({
-        where: { id: { in: leads.map(l => l.id) } }
+        where: { id: { in: leads.map(l => l.id) } },
+        // The socket payload names the product, and the per-agent product scope
+        // is resolved from it — both need the link loaded.
+        include: { referralLink: { include: { product: { include: { images: true } } } } }
       });
     });
 
@@ -1077,13 +1079,9 @@ router.post(
       where: { userId }
     });
 
-    const assignments = await prisma.agentInfluencerAssignment.findMany({
-      where: { influencerId: userId },
-      select: { agentId: true }
-    });
-
-    // Notify agents for each pushed lead
-    leads.forEach(lead => {
+    // Notify agents for each pushed lead — the notifiable set is per product,
+    // so agents narrowed to a subset only hear about their own products.
+    for (const lead of leads) {
       const leadData = {
         id: lead.id,
         fullName: lead.fullName,
@@ -1101,10 +1099,11 @@ router.post(
         createdAt: lead.createdAt
       };
 
-      assignments.forEach(a => {
-        io.to(`user:${a.agentId}`).emit('new-available-lead', leadData);
+      const agentIds = await getNotifiableAgentIds(userId, (lead as any).referralLink?.productId ?? null);
+      agentIds.forEach(id => {
+        io.to(`user:${id}`).emit('new-available-lead', leadData);
       });
-    });
+    }
 
     res.json({
       status: 'success',

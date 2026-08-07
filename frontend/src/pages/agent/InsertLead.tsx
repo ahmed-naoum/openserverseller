@@ -3,18 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { leadsApi, ordersApi } from '../../lib/api';
 import toast from 'react-hot-toast';
-import { 
-  Sparkles, 
-  User, 
-  Phone, 
-  MessageSquare, 
-  MapPin, 
-  FileText, 
-  Tag, 
-  Plus, 
-  Check, 
-  AlertCircle, 
-  Heart, 
+import {
+  User,
+  Phone,
+  MapPin,
+  Plus,
   ArrowLeft,
   Eye,
   History,
@@ -33,9 +26,53 @@ import {
 import { format } from 'date-fns';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
 
+type ThemeKey = 'classic' | 'girly' | 'princess';
+
+/** Full class strings — Tailwind can't resolve interpolated utilities. */
+const THEME: Record<ThemeKey, {
+  tag: string; accentBar: string; icon: string; ring: string;
+  soft: string; softIcon: string; cta: string; ctaRing: string; step: string;
+}> = {
+  classic: {
+    tag: '💬 Lead WhatsApp',
+    accentBar: 'bg-gradient-to-r from-indigo-400 via-purple-400 to-indigo-600',
+    icon: 'text-indigo-500',
+    ring: 'focus:ring-indigo-400',
+    soft: 'bg-indigo-50 text-indigo-700 border-indigo-100',
+    softIcon: 'bg-indigo-100 text-indigo-600',
+    cta: 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200',
+    ctaRing: 'focus-visible:ring-indigo-400',
+    step: 'bg-indigo-600 text-white',
+  },
+  girly: {
+    tag: '🌸 Lead Doux',
+    accentBar: 'bg-gradient-to-r from-pink-400 via-rose-400 to-fuchsia-400',
+    icon: 'text-pink-500',
+    ring: 'focus:ring-pink-400',
+    soft: 'bg-pink-50 text-pink-700 border-pink-100',
+    softIcon: 'bg-pink-100 text-pink-600',
+    cta: 'bg-gradient-to-r from-pink-500 to-rose-500 hover:opacity-95 shadow-pink-200',
+    ctaRing: 'focus-visible:ring-pink-400',
+    step: 'bg-gradient-to-r from-pink-500 to-rose-500 text-white',
+  },
+  princess: {
+    tag: '👑 Lead Royal',
+    accentBar: 'bg-gradient-to-r from-amber-400 via-pink-400 to-rose-500',
+    icon: 'text-amber-500',
+    ring: 'focus:ring-amber-400',
+    soft: 'bg-amber-50 text-amber-800 border-amber-100',
+    softIcon: 'bg-amber-100 text-amber-600',
+    cta: 'bg-gradient-to-r from-amber-500 via-pink-500 to-rose-500 hover:opacity-95 shadow-amber-200',
+    ctaRing: 'focus-visible:ring-amber-400',
+    step: 'bg-gradient-to-r from-amber-500 to-rose-500 text-white',
+  },
+};
+
+const money = (n: number) => `${Number(n || 0).toFixed(2)} MAD`;
+
 export default function InsertLead() {
-  const [theme, setTheme] = useState<'classic' | 'girly' | 'princess'>(() => {
-    return (localStorage.getItem('agent-theme') as 'classic' | 'girly' | 'princess') || 'girly';
+  const [theme, setTheme] = useState<ThemeKey>(() => {
+    return (localStorage.getItem('agent-theme') as ThemeKey) || 'girly';
   });
 
   useEffect(() => {
@@ -86,35 +123,58 @@ export default function InsertLead() {
   const queryClient = useQueryClient();
   const [selectedLeadIds, setSelectedLeadIds] = useState<number[]>([]);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
-  // Fetch pending dispatch leads (ORDERED status) - Force refetch on mount with staleTime: 0
+  // Don't refire the query on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 350);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Queued leads sit at status ORDERED with an order attached — that's the same
+  // contract /orders/bulk-dispatch selects on.
   const { data: leadsData, isLoading: loadingDispatch, refetch: refetchDispatch, isFetching: isFetchingDispatch } = useQuery({
-    queryKey: ['agent-pending-dispatch', search],
-    queryFn: () => leadsApi.list({ status: 'ORDERED', search, limit: 100 }),
+    queryKey: ['agent-pending-dispatch', debouncedSearch],
+    queryFn: () => leadsApi.list({ status: 'ORDERED', search: debouncedSearch, limit: 5000 }),
     refetchOnMount: 'always',
     staleTime: 0,
   });
 
   const leads = leadsData?.data?.data?.leads || [];
 
+  // Drop selections whose row is gone (dispatched, deleted, filtered out by a
+  // search) — otherwise the button offers to ship rows that aren't on screen.
+  useEffect(() => {
+    if (!leads.length) {
+      if (selectedLeadIds.length) setSelectedLeadIds([]);
+      return;
+    }
+    const visible = new Set(leads.map((l: any) => l.id));
+    setSelectedLeadIds(prev => {
+      const next = prev.filter(id => visible.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [leads]);
+
   const dispatchMutation = useMutation({
     mutationFn: async (leadIds: number[]) => {
       return ordersApi.bulkDispatch({ leadIds });
     },
     onSuccess: (res) => {
-      toast.success(res.data.message || 'Expédition réussie');
       setSelectedLeadIds([]);
       queryClient.invalidateQueries({ queryKey: ['agent-pending-dispatch'] });
-      
-      const results = res.data.data.results;
+
+      // One toast that states the real outcome. It used to fire an unconditional
+      // "Expédition réussie" first, so a batch where every parcel failed still
+      // flashed green before the error appeared.
+      const results = res.data?.data?.results || [];
       const successes = results.filter((r: any) => r.status === 'success').length;
       const errors = results.filter((r: any) => r.status === 'error').length;
-      
-      if (errors > 0) {
-        toast.error(`${errors} expédition(s) ont échoué. Vérifiez les détails.`);
-      } else {
-        toast.success(`${successes} expédition(s) réussie(s).`);
-      }
+
+      if (successes > 0) toast.success(`${successes} expédition(s) réussie(s).`);
+      if (errors > 0) toast.error(`${errors} expédition(s) ont échoué.`);
+      if (!successes && !errors) toast.success(res.data?.message || 'Expédition traitée');
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.message || 'Erreur lors de l\'expédition en lot');
@@ -127,19 +187,15 @@ export default function InsertLead() {
     },
     onSuccess: () => {
       toast.success("Lead supprimé de la liste d'attente");
+      setConfirmDeleteId(null);
       queryClient.invalidateQueries({ queryKey: ['agent-pending-dispatch'] });
     },
     onError: (err: any) => {
       const msg = err.response?.data?.message || 'Erreur lors de la suppression';
       toast.error(msg);
+      setConfirmDeleteId(null);
     }
   });
-
-  const handleDelete = (leadId: number) => {
-    if (window.confirm("Voulez-vous vraiment supprimer ce lead de la liste d'attente Coliaty ? Cela supprimera également la commande associée.")) {
-      deleteMutation.mutate(leadId);
-    }
-  };
 
   const toggleSelectAll = () => {
     if (selectedLeadIds.length === leads.length) {
@@ -264,7 +320,6 @@ export default function InsertLead() {
     if (!selectedProductId) errors.product = 'Veuillez sélectionner un produit';
     if (!fullName.trim() || fullName.trim().length < 3) errors.fullName = 'Le nom complet doit contenir au moins 3 caractères';
     
-    const phoneDigits = phone.replace(/\D/g, '');
     const isMoroccan = /^(\+212|0)[0-9]{9}$/.test(phone);
     if (!phone || !isMoroccan) {
       errors.phone = 'Le numéro de téléphone doit être valide au Maroc (ex: 0612345678)';
@@ -346,637 +401,553 @@ export default function InsertLead() {
     }
   };
 
-  const isPrincess = theme === 'princess';
-  const isGirly = theme === 'girly';
+  const t = THEME[theme];
+  const selectedProduct = products.find(p => p.id === selectedProductId);
+  const unitPrice = Number(selectedProduct?.retailPriceMad || 0);
+  const standardTotal = unitPrice * qte;
+  const effectiveTotal = customPrice !== '' ? Number(customPrice) || 0 : standardTotal;
+  const hasVendors = vendors.length > 0;
+  const allSelected = leads.length > 0 && selectedLeadIds.length === leads.length;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-2 sm:px-4">
-      {/* Header card */}
-      <div className={`rounded-3xl p-6 md:p-8 text-white shadow-xl relative overflow-hidden transition-all duration-500 ${
-        isPrincess
-          ? 'bg-gradient-to-r from-amber-500 via-pink-500 to-rose-600'
-          : isGirly 
-          ? 'bg-gradient-to-r from-pink-500 via-rose-500 to-fuchsia-500' 
-          : 'bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700'
-      }`}>
-        <div className="absolute inset-0 bg-white/5 backdrop-blur-[1px]"></div>
-        <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
-        
-        <div className="relative z-10 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={() => navigate(-1)}
-              className="bg-white/20 hover:bg-white/30 p-2.5 rounded-full transition-all shadow-md active:scale-95 flex items-center justify-center text-white"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div>
-              <div className="inline-flex items-center gap-1 px-3 py-1 bg-white/20 rounded-full text-xs font-black uppercase tracking-wider mb-2">
-                {isPrincess ? '👑 Lead Royal' : isGirly ? '🌸 Lead Doux' : '💬 Lead WhatsApp'}
-              </div>
-              <h1 className="text-xl md:text-2xl font-black tracking-tight flex items-center gap-2">
-                {isPrincess ? 'Nouveau Lead WhatsApp Royal 👑✨' : isGirly ? 'Nouveau Lead WhatsApp 🌸' : 'Nouveau Lead WhatsApp'}
-              </h1>
-            </div>
+    <div className="max-w-[1600px] mx-auto px-2 sm:px-4 pb-10 space-y-5">
+      {/* ------------------------------------------------------------ Header */}
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="p-2.5 rounded-xl border border-gray-200 bg-white text-gray-500 hover:text-gray-900 hover:border-gray-300 transition-all shadow-sm active:scale-95"
+          title="Retour"
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </button>
+
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl md:text-2xl font-black tracking-tight text-gray-900">
+              Nouveau Lead WhatsApp
+            </h1>
+            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${t.soft}`}>
+              {t.tag}
+            </span>
           </div>
+          <p className="text-xs text-gray-500 font-medium mt-0.5">
+            Saisissez la commande, puis expédiez la file en lot vers Coliaty.
+          </p>
+        </div>
+
+        {/* Queue summary lives in the header so it's reachable without scrolling */}
+        <div className="ml-auto flex items-center gap-2">
+          <a
+            href="#file-attente"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-gray-200 bg-white shadow-sm hover:border-gray-300 transition-all"
+          >
+            <Truck className={`w-4 h-4 ${t.icon}`} />
+            <span className="text-lg font-black text-gray-900 tabular-nums leading-none">{leads.length}</span>
+            <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 leading-none">
+              en attente
+            </span>
+          </a>
+          <button
+            type="button"
+            onClick={handleDispatch}
+            disabled={selectedLeadIds.length === 0 || dispatchMutation.isPending}
+            className={`px-4 py-2.5 rounded-xl font-black text-xs text-white transition-all shadow-md flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${t.ctaRing} ${
+              selectedLeadIds.length === 0 || dispatchMutation.isPending
+                ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
+                : `${t.cta} active:scale-95`
+            }`}
+          >
+            {dispatchMutation.isPending
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <Truck className="w-3.5 h-3.5" />}
+            EXPÉDIER ({selectedLeadIds.length})
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 lg:gap-8 items-start">
-        {/* Left Column: Form Card */}
-        <div className="xl:col-span-6 w-full">
-          <form onSubmit={handleSubmit} className="bg-white rounded-3xl border border-gray-100 shadow-xl p-5 sm:p-6 md:p-8 relative">
-        {/* Top colored accent bar */}
-        <div className={`absolute top-0 left-0 right-0 h-2 ${
-          isPrincess 
-            ? 'bg-gradient-to-r from-amber-400 via-pink-400 to-rose-500' 
-            : isGirly 
-            ? 'bg-gradient-to-r from-pink-400 via-rose-400 to-fuchsia-400' 
-            : 'bg-gradient-to-r from-indigo-400 via-purple-400 to-indigo-600'
-        }`}></div>
+      {/* -------------------------------------------------------------- Form */}
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden"
+      >
+        <div className={`absolute top-0 left-0 right-0 h-1.5 ${t.accentBar}`} />
 
-        <div className="space-y-6">
-          
-          {/* Section 1: Account / Vendor Info */}
-          <div className="space-y-4">
-            <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
-              <User className={`w-4 h-4 ${isPrincess ? 'text-amber-500' : isGirly ? 'text-pink-500' : 'text-indigo-500'}`} />
-              1. Attribution du Lead (Compte Vendeur)
-            </h2>
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <label className="block text-xs font-black text-gray-500 uppercase mb-1">Sélectionner le vendeur</label>
-                {loadingVendors ? (
-                  <div className="h-10 bg-gray-50 border border-gray-100 rounded-xl animate-pulse"></div>
-                ) : (
-                  <SearchableSelect
-                    theme={theme}
-                    options={vendors.map(v => ({
-                      value: v.id,
-                      label: `${v.fullName} (${v.email})`
-                    }))}
-                    value={selectedVendorId}
-                    onChange={(val) => setSelectedVendorId(val as number)}
-                    placeholder="Choisissez le compte vendeur..."
-                    searchPlaceholder="Rechercher un vendeur..."
-                    error={!!formErrors.vendor}
-                  />
-                )}
-                {formErrors.vendor && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.vendor}</p>}
-              </div>
+        <div className="p-5 sm:p-6 pt-7 space-y-6">
+          {/* --- Section 1 ------------------------------------------------ */}
+          <section className="space-y-3">
+            <SectionTitle step="1" theme={t} icon={<Store className="w-3.5 h-3.5" />}>
+              Attribution &amp; produit
+            </SectionTitle>
 
-              <div>
-                <label className="block text-xs font-black text-gray-500 uppercase mb-1">Associer un Produit</label>
-                {loadingProducts ? (
-                  <div className="h-10 bg-gray-50 border border-gray-100 rounded-xl animate-pulse"></div>
-                ) : (
-                  <SearchableSelect
-                    theme={theme}
-                    options={products.map(p => ({
-                      value: p.id,
-                      label: `${p.name} - SKU: ${p.sku} (${Number(p.retailPriceMad).toFixed(2)} MAD)`
-                    }))}
-                    value={selectedProductId}
-                    onChange={(val) => setSelectedProductId(val as number)}
-                    placeholder={!selectedVendorId 
-                      ? 'Sélectionnez un vendeur d\'abord' 
-                      : products.length === 0 
-                      ? 'Aucun produit disponible' 
-                      : 'Choisissez le produit...'}
-                    searchPlaceholder="Rechercher un produit ou SKU..."
-                    disabled={!selectedVendorId}
-                    error={!!formErrors.product}
-                  />
-                )}
-                {formErrors.product && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.product}</p>}
-              </div>
-            </div>
-
-            {/* Selected Product Details card */}
-            {selectedProductId && products.find(p => p.id === selectedProductId) && (() => {
-              const p = products.find(prod => prod.id === selectedProductId);
-              return (
-                <div className={`p-4 rounded-2xl border flex items-center gap-4 transition-all duration-300 ${
-                  isPrincess ? 'bg-amber-50/20 border-amber-100' : isGirly ? 'bg-pink-50/20 border-pink-100' : 'bg-indigo-50/20 border-indigo-100'
-                }`}>
-                  {p.image ? (
-                    <img src={p.image} alt="" className="w-12 h-12 rounded-xl object-cover border border-gray-100 bg-white" />
-                  ) : (
-                    <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center text-xs font-black text-gray-400 border border-gray-200">
-                      IMG
-                    </div>
-                  )}
-                  <div>
-                    <h3 className="text-sm font-black text-gray-800">{p.name}</h3>
-                    <p className="text-[10px] text-gray-400 font-bold">SKU: {p.sku}</p>
-                    <p className={`text-xs font-black mt-1 ${isPrincess ? 'text-amber-600' : isGirly ? 'text-pink-600' : 'text-indigo-600'}`}>
-                      Prix: {Number(p.retailPriceMad).toFixed(2)} MAD
-                    </p>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Custom pricing, pack name and quantity configuration */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
-              <div>
-                <label className="block text-xs font-black text-gray-500 uppercase mb-1">Nom du Pack</label>
-                <input
-                  type="text"
-                  disabled={!selectedProductId}
-                  value={packName}
-                  onChange={(e) => setPackName(e.target.value)}
-                  placeholder={selectedProductId ? "Ex: Pack 2 + 1 Gratuit..." : "Sélectionnez un produit d'abord"}
-                  className={`w-full h-11 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 outline-none text-sm font-semibold shadow-sm ${
-                    !selectedProductId ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : ''
-                  } ${isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-400'}`}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-black text-gray-500 uppercase mb-1">Quantité</label>
-                <input
-                  type="number"
-                  min="1"
-                  required
-                  disabled={!selectedProductId}
-                  value={qte}
-                  onChange={(e) => setQte(Math.max(1, parseInt(e.target.value) || 1))}
-                  placeholder="Quantité"
-                  className={`w-full h-11 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 outline-none text-sm font-semibold shadow-sm ${
-                    !selectedProductId ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : ''
-                  } ${isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-400'}`}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-black text-gray-500 uppercase mb-1">Prix (MAD)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  disabled={!selectedProductId}
-                  value={customPrice}
-                  onChange={(e) => setCustomPrice(e.target.value)}
-                  placeholder={
-                    selectedProductId 
-                      ? `Standard: ${Number((products.find(p => p.id === selectedProductId)?.retailPriceMad || 0) * qte).toFixed(2)} MAD` 
-                      : "Sélectionnez un produit d'abord"
-                  }
-                  className={`w-full h-11 px-4 py-2.5 border rounded-xl focus:ring-2 outline-none text-sm font-semibold shadow-sm ${
-                    !selectedProductId ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : ''
-                  } ${formErrors.customPrice ? 'border-red-300 bg-red-50 focus:ring-red-400' : 'border-gray-200'} ${
-                    isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-400'
-                  }`}
-                />
-                {formErrors.customPrice && (
-                  <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.customPrice}</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <hr className="border-gray-100" />
-
-          {/* Section 2: Customer Details */}
-          <div className="space-y-4">
-            <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
-              <Phone className={`w-4 h-4 ${isPrincess ? 'text-amber-500' : isGirly ? 'text-pink-500' : 'text-indigo-500'}`} />
-              2. Informations du Client / Commanditaire
-            </h2>
-            
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <label className="block text-xs font-black text-gray-500 uppercase mb-1">Nom complet du client</label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-                    <User className="w-4 h-4" />
+            {!hasVendors && !loadingVendors ? (
+              <div className="flex items-start gap-2.5 p-3.5 rounded-2xl border border-amber-100 bg-amber-50/60">
+                <Info className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-[11px] font-bold text-amber-800 leading-snug">
+                  Aucun compte vendeur ne vous est assigné.
+                  <span className="block font-medium text-amber-700/80 mt-0.5">
+                    Demandez à un administrateur de vous attribuer un vendeur ou un influenceur pour pouvoir saisir des leads.
                   </span>
-                  <input
-                    type="text"
-                    required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Ex: Ahmed Naoum"
-                    className={`w-full pl-9 pr-4 h-11 py-2.5 border rounded-xl focus:ring-2 outline-none text-sm font-semibold shadow-sm ${
-                      formErrors.fullName ? 'border-red-300 bg-red-50 focus:ring-red-400' : 'border-gray-200'
-                    } ${isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-400'}`}
-                  />
-                </div>
-                {formErrors.fullName && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.fullName}</p>}
+                </p>
               </div>
-
-              <div>
-                <label className="block text-xs font-black text-gray-500 uppercase mb-1">N° de Téléphone</label>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-                        <Phone className="w-4 h-4" />
-                      </span>
-                      <input
-                        type="tel"
-                        required
-                        value={phone}
-                        onChange={(e) => handlePhoneChange(e.target.value)}
-                        placeholder="Ex: 0612345678"
-                        className={`w-full pl-9 pr-4 h-11 py-2.5 border rounded-xl focus:ring-2 outline-none text-sm font-semibold shadow-sm ${
-                          formErrors.phone ? 'border-red-300 bg-red-50 focus:ring-red-400' : 'border-gray-200'
-                        } ${isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-400'}`}
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleViewHistory(false)}
-                      className={`h-11 px-3 rounded-xl transition-all border shadow-sm flex items-center justify-center shrink-0 ${
-                        isPrincess
-                          ? 'bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100'
-                          : isGirly 
-                          ? 'bg-pink-50 text-pink-600 border-pink-100 hover:bg-pink-100' 
-                          : 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100'
-                      }`}
-                      title="Voir l'historique détaillé du client"
-                    >
-                      <Eye className="w-5 h-5" />
-                    </button>
-                  </div>
-                {formErrors.phone && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.phone}</p>}
-                
-                {/* Inline Trust Score - Moved under phone */}
-                <div className="mt-3">
-                  {historyData && !loadingHistory && (() => {
-                    if (!historyData.rawHistory?.leads?.length && !historyData.rawHistory?.orders?.length) {
-                      return (
-                        <div className="p-3 rounded-xl border bg-gray-50 border-gray-100 flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
-                          <div className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center shadow-sm bg-gray-200 text-gray-500">
-                            <Info className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <h4 className="font-black text-gray-900 text-xs">Nouveau Client</h4>
-                            <p className="text-[10px] text-gray-500 mt-0.5 font-medium leading-tight">
-                              Ce numéro n'a aucun historique de commande.
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    const delivered = historyData.summary.orderStats['DELIVERED'] || 0;
-                    const cancelled = historyData.summary.leadStats['CANCEL_ORDER'] || 0;
-                    const returns = historyData.summary.orderStats['RETURNED'] || 0;
-                    
-                    let score = 50;
-                    if (delivered > 0) score += (delivered * 20);
-                    if (cancelled > 0) score -= (cancelled * 15);
-                    if (returns > 0) score -= (returns * 25);
-                    score = Math.max(0, Math.min(100, score));
-
-                    return (
-                      <div className={`p-3 rounded-xl border flex items-center gap-3 animate-in fade-in slide-in-from-top-1 ${
-                        score >= 70 ? 'bg-emerald-50 border-emerald-100' :
-                        score < 40 ? 'bg-rose-50 border-rose-100' :
-                        'bg-amber-50 border-amber-100'
-                      }`}>
-                        <div className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center shadow-sm ${
-                          score >= 70 ? 'bg-emerald-500 text-white' :
-                          score < 40 ? 'bg-rose-500 text-white' :
-                          'bg-amber-500 text-white'
-                        }`}>
-                          <ShieldAlert className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <h4 className="font-black text-gray-900 text-xs">Score de Confiance: {score}%</h4>
-                          <p className="text-[10px] text-gray-500 mt-0.5 font-medium leading-tight">
-                            {score >= 70 ? 'Client très fiable. Priorité haute.' :
-                             score < 40 ? 'Attention : Historique problématique.' :
-                             'Client avec un historique modéré.'}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                  {loadingHistory && !showHistoryModal && (() => {
-                    const cleaned = phone.replace(/\s+/g, '');
-                    const isComplete = cleaned.length === 10 || (cleaned.startsWith('+212') && cleaned.length >= 13);
-                    return isComplete ? (
-                      <div className="flex items-center gap-2 text-xs font-bold text-gray-400 animate-pulse h-[66px] px-3">
-                        <div className="w-4 h-4 border-2 border-gray-200 border-t-gray-500 rounded-full animate-spin"></div>
-                        Analyse de l'historique...
-                      </div>
-                    ) : null;
-                  })()}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-xs font-black text-gray-500 uppercase mb-1">Ville (Sélection Coliaty)</label>
-                <div className="relative">
-                  {loadingCities ? (
-                    <div className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl animate-pulse text-xs font-bold text-gray-400">
-                      Chargement des villes...
-                    </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                <Field label="Compte vendeur" htmlFor="vendor" required error={formErrors.vendor}>
+                  {loadingVendors ? (
+                    <FieldSkeleton />
                   ) : (
                     <SearchableSelect
                       theme={theme}
-                      icon={<MapPin className="w-4 h-4" />}
-                      options={Array.from(new Set(cities.map(c => c.city_name))).map(name => ({
-                        value: name,
-                        label: name
-                      }))}
-                      value={city}
-                      onChange={(val) => setCity(val as string)}
-                      placeholder="Sélectionner une ville..."
-                      searchPlaceholder="Rechercher une ville..."
-                      error={!!formErrors.city}
+                      options={vendors.map(v => ({ value: v.id, label: `${v.fullName} (${v.email})` }))}
+                      value={selectedVendorId}
+                      onChange={val => setSelectedVendorId(val as number)}
+                      placeholder="Choisissez le vendeur..."
+                      searchPlaceholder="Rechercher un vendeur..."
+                      error={!!formErrors.vendor}
                     />
                   )}
-                </div>
-                {formErrors.city && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.city}</p>}
+                </Field>
+
+                <Field
+                  label="Produit"
+                  htmlFor="product"
+                  required
+                  error={formErrors.product}
+                  hint={!selectedVendorId ? 'Choisissez un vendeur en premier' : undefined}
+                >
+                  {loadingProducts ? (
+                    <FieldSkeleton />
+                  ) : (
+                    <SearchableSelect
+                      theme={theme}
+                      options={products.map(p => ({
+                        value: p.id,
+                        label: `${p.name} — ${p.sku} (${Number(p.retailPriceMad).toFixed(2)} MAD)`,
+                      }))}
+                      value={selectedProductId}
+                      onChange={val => setSelectedProductId(val as number)}
+                      placeholder={
+                        !selectedVendorId
+                          ? 'Sélectionnez un vendeur d\'abord'
+                          : products.length === 0
+                            ? 'Aucun produit disponible'
+                            : 'Choisissez le produit...'
+                      }
+                      searchPlaceholder="Rechercher un produit ou SKU..."
+                      disabled={!selectedVendorId}
+                      error={!!formErrors.product}
+                    />
+                  )}
+                </Field>
+
+                <Field label="Nom du pack" htmlFor="packName" hint="Optionnel">
+                  <input
+                    id="packName"
+                    type="text"
+                    disabled={!selectedProductId}
+                    value={packName}
+                    onChange={e => setPackName(e.target.value)}
+                    placeholder="Ex: Pack 2 + 1 Gratuit"
+                    className={inputCls(t, false, !selectedProductId)}
+                  />
+                </Field>
+
+                <Field label="Quantité" htmlFor="qte" required>
+                  <input
+                    id="qte"
+                    type="number"
+                    min="1"
+                    disabled={!selectedProductId}
+                    value={qte}
+                    onChange={e => setQte(Math.max(1, parseInt(e.target.value) || 1))}
+                    className={inputCls(t, false, !selectedProductId)}
+                  />
+                </Field>
               </div>
-              
-              {/* Colis de Remplacement UI moved here */}
-              <div className="flex flex-col justify-start">
-                <label className="block text-xs font-black text-gray-500 uppercase mb-1">Options d'expédition</label>
-                <div className={`rounded-xl border transition-all ${packageReplacement ? 'border-gray-200 bg-gray-50' : 'border-gray-100 bg-gray-50 hover:bg-gray-100'}`}>
-                  <label className="flex items-center gap-3 cursor-pointer p-3 select-none">
+            )}
+
+            {/* Live recap of what the customer will be charged */}
+            {selectedProduct && (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-3.5 rounded-2xl border border-gray-100 bg-gray-50/70">
+                {selectedProduct.image ? (
+                  <img src={selectedProduct.image} alt="" className="w-11 h-11 rounded-xl object-cover border border-gray-200 bg-white shrink-0" />
+                ) : (
+                  <div className="w-11 h-11 rounded-xl bg-white border border-gray-200 flex items-center justify-center shrink-0">
+                    <Package className="w-5 h-5 text-gray-300" />
+                  </div>
+                )}
+
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-black text-gray-900 truncate">{selectedProduct.name}</p>
+                  <p className="text-[10px] font-bold text-gray-400">
+                    SKU {selectedProduct.sku} · {money(unitPrice)} × {qte}
+                  </p>
+                </div>
+
+                <div className="sm:w-44 shrink-0">
+                  <label htmlFor="customPrice" className="block text-[9px] font-black text-gray-500 uppercase tracking-wider mb-1">
+                    Prix total à encaisser
+                  </label>
+                  <input
+                    id="customPrice"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={customPrice}
+                    onChange={e => setCustomPrice(e.target.value)}
+                    placeholder={standardTotal.toFixed(2)}
+                    className={inputCls(t, !!formErrors.customPrice)}
+                  />
+                </div>
+
+                <div className="text-right shrink-0">
+                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider">Total</p>
+                  <p className={`text-lg font-black tabular-nums ${customPrice !== '' ? t.icon : 'text-gray-900'}`}>
+                    {money(effectiveTotal)}
+                  </p>
+                  {customPrice !== '' && (
+                    <p className="text-[9px] font-bold text-gray-400">au lieu de {money(standardTotal)}</p>
+                  )}
+                </div>
+              </div>
+            )}
+            {formErrors.customPrice && (
+              <p className="text-[10px] text-red-500 font-bold">{formErrors.customPrice}</p>
+            )}
+          </section>
+
+          <hr className="border-gray-100" />
+
+          {/* --- Section 2 ------------------------------------------------ */}
+          <section className="space-y-3">
+            <SectionTitle step="2" theme={t} icon={<User className="w-3.5 h-3.5" />}>
+              Client &amp; livraison
+            </SectionTitle>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+              <Field label="Nom complet" htmlFor="fullName" required error={formErrors.fullName}>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <input
+                    id="fullName"
+                    type="text"
+                    value={fullName}
+                    onChange={e => setFullName(e.target.value)}
+                    placeholder="Ex: Ahmed Naoum"
+                    className={inputCls(t, !!formErrors.fullName) + ' pl-9'}
+                  />
+                </div>
+              </Field>
+
+              <Field label="Téléphone" htmlFor="phone" required error={formErrors.phone}>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                     <input
+                      id="phone"
+                      type="tel"
+                      value={phone}
+                      onChange={e => handlePhoneChange(e.target.value)}
+                      placeholder="0612345678"
+                      className={inputCls(t, !!formErrors.phone) + ' pl-9'}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleViewHistory(false)}
+                    className={`h-11 px-3 rounded-xl border transition-all shadow-sm flex items-center justify-center shrink-0 ${t.soft}`}
+                    title="Voir l'historique détaillé du client"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </button>
+                </div>
+              </Field>
+
+              <Field label="Ville" htmlFor="city" required error={formErrors.city}>
+                {loadingCities ? (
+                  <FieldSkeleton />
+                ) : (
+                  <SearchableSelect
+                    theme={theme}
+                    icon={<MapPin className="w-4 h-4" />}
+                    options={Array.from(new Set(cities.map(c => c.city_name))).map(name => ({ value: name, label: name }))}
+                    value={city}
+                    onChange={val => setCity(val as string)}
+                    placeholder="Sélectionner une ville..."
+                    searchPlaceholder="Rechercher une ville..."
+                    error={!!formErrors.city}
+                  />
+                )}
+              </Field>
+
+              <Field label="Options d'expédition" htmlFor="replacement">
+                <div className={`h-11 flex items-center rounded-xl border px-3 transition-all ${
+                  packageReplacement ? t.soft : 'border-gray-200 bg-gray-50/60'
+                }`}>
+                  <label htmlFor="replacement" className="flex items-center gap-2.5 cursor-pointer select-none w-full">
+                    <input
+                      id="replacement"
                       type="checkbox"
                       checked={packageReplacement}
-                      onChange={(e) => {
+                      onChange={e => {
                         setPackageReplacement(e.target.checked);
                         if (!e.target.checked) setPackageOldTracking('');
                       }}
-                      className={`w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 ${
-                        isGirly ? 'text-pink-600 focus:ring-pink-500' : ''
-                      }`}
+                      className="w-4 h-4 rounded border-gray-300"
                     />
-                    <div>
-                      <span className="text-xs font-black text-gray-700 block">Colis de remplacement ?</span>
-                    </div>
+                    <span className="text-xs font-bold text-gray-700">Colis de remplacement</span>
                   </label>
-                  
-                  {/* Tracking input nested seamlessly INSIDE the card */}
-                  {packageReplacement && (
-                    <div className="px-3 pb-3 animate-fadeIn">
-                      <input
-                        type="text"
-                        value={packageOldTracking}
-                        onChange={(e) => setPackageOldTracking(e.target.value)}
-                        placeholder="N° suivi à remplacer (ex: CO123456789)"
-                        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 outline-none text-xs font-semibold shadow-sm ${
-                          formErrors.packageOldTracking ? 'border-red-300 bg-red-50 focus:ring-red-400' : 'border-gray-200 bg-white'
-                        } ${isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-400'}`}
-                      />
-                      {formErrors.packageOldTracking && (
-                        <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.packageOldTracking}</p>
-                      )}
-                    </div>
-                  )}
                 </div>
+              </Field>
+            </div>
+
+            {/* Only takes space once the box above is ticked */}
+            {packageReplacement && (
+              <div className="max-w-md">
+                <Field label="N° de suivi à remplacer" htmlFor="oldTracking" required error={formErrors.packageOldTracking}>
+                  <input
+                    id="oldTracking"
+                    type="text"
+                    value={packageOldTracking}
+                    onChange={e => setPackageOldTracking(e.target.value)}
+                    placeholder="Ex: CO123456789"
+                    className={inputCls(t, !!formErrors.packageOldTracking)}
+                  />
+                </Field>
               </div>
+            )}
+
+            {/* Trust score — a single compact strip instead of a stacked block */}
+            <TrustStrip
+              historyData={historyData}
+              loading={loadingHistory && !showHistoryModal}
+              phone={phone}
+              onOpen={() => handleViewHistory(false)}
+            />
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <Field label="Adresse détaillée" htmlFor="address" required error={formErrors.address}>
+                <textarea
+                  id="address"
+                  rows={3}
+                  value={address}
+                  onChange={e => setAddress(e.target.value)}
+                  placeholder="Quartier, rue, n° de porte… (min. 8 caractères)"
+                  className={inputCls(t, !!formErrors.address) + ' h-auto py-2.5 resize-none'}
+                />
+              </Field>
+
+              <Field label="Notes (internes & livraison Coliaty)" htmlFor="notes" hint="Optionnel">
+                <textarea
+                  id="notes"
+                  rows={3}
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  placeholder="Ex: Ne pas ouvrir avant de payer, livrer après 18h…"
+                  className={inputCls(t, false) + ' h-auto py-2.5 resize-none'}
+                />
+              </Field>
             </div>
-
-            <div>
-              <label className="block text-xs font-black text-gray-500 uppercase mb-1">Adresse détaillée</label>
-              <textarea
-                rows={2}
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="Indiquez le quartier, rue, n° de porte, etc. (Min. 8 caractères)"
-                className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 outline-none text-xs font-semibold shadow-sm resize-none ${
-                  formErrors.address ? 'border-red-300 bg-red-50 focus:ring-red-400' : 'border-gray-200'
-                } ${isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-400'}`}
-              />
-              {formErrors.address && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.address}</p>}
-            </div>
-
-            <div>
-              <label className="block text-xs font-black text-gray-500 uppercase mb-1">Notes (Internes & Livraison Coliaty)</label>
-              <textarea
-                rows={3}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Ex: Ne pas ouvrir avant de payer, livrer après 18h..."
-                className={`w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 outline-none text-sm font-semibold shadow-sm resize-none ${
-                  isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-400'
-                }`}
-              />
-            </div>
-
-
-          </div>
-
-
-
+          </section>
         </div>
 
-        {/* Submit Section */}
-        <div className="mt-8 flex gap-3">
-          <button
-            type="button"
-            onClick={() => navigate('/agent/leads')}
-            className="flex-1 py-3 px-4 border border-gray-200 text-gray-500 hover:bg-gray-50 active:scale-95 transition-all text-xs font-black tracking-widest rounded-2xl"
-          >
-            ANNULER
-          </button>
-          
-          <button
-            type="submit"
-            disabled={submitting}
-            className={`flex-[2] py-3 px-4 text-white text-xs font-black tracking-widest transition-all shadow-lg active:scale-95 rounded-2xl flex items-center justify-center gap-1.5 ${
-              submitting
-                ? 'opacity-80 cursor-wait bg-gray-400'
-                : isPrincess
-                ? 'bg-gradient-to-r from-amber-500 via-pink-500 to-rose-500 hover:opacity-95 shadow-amber-200'
-                : isGirly 
-                ? 'bg-gradient-to-r from-pink-500 to-rose-500 hover:opacity-95 shadow-pink-200' 
-                : 'bg-gradient-to-r from-indigo-500 to-indigo-600 hover:opacity-95 shadow-indigo-200'
-            }`}
-          >
-            {submitting ? (
-              <>⏳ AJOUT EN COURS...</>
-            ) : (
-              <>
-                <Plus className="w-4 h-4" />
-                {isPrincess ? '👑 AJOUTER LEAD WHATSAPP 👑' : isGirly ? '🌸 AJOUTER LEAD WHATSAPP ✨' : '💬 AJOUTER LEAD WHATSAPP'}
-              </>
-            )}
-          </button>
+        {/* Submit bar — recap on the left so it's obvious what is about to be created */}
+        <div className="border-t border-gray-100 bg-gray-50/70 px-5 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="min-w-0 flex-1 text-[11px] font-bold text-gray-500 flex flex-wrap items-center gap-x-2 gap-y-1">
+            {(() => {
+              // Build the parts first, then interleave separators — rendering a
+              // separator per optional field left a stray "·" when the earlier
+              // field was still empty.
+              const parts = [
+                fullName && <span key="n" className="text-gray-900">{fullName}</span>,
+                selectedProduct && <span key="p" className="truncate max-w-[220px]">{selectedProduct.name}</span>,
+                city && <span key="c">{city}</span>,
+                selectedProduct && <span key="t" className="text-gray-900">{money(effectiveTotal)}</span>,
+              ].filter(Boolean);
+
+              if (parts.length === 0) {
+                return (
+                  <span className="text-gray-400 font-medium">
+                    Le lead sera ajouté à la file d'attente, pas expédié immédiatement.
+                  </span>
+                );
+              }
+              return parts.map((part, i) => (
+                <span key={i} className="flex items-center gap-2">
+                  {i > 0 && <span className="text-gray-300" aria-hidden="true">·</span>}
+                  {part}
+                </span>
+              ));
+            })()}
+          </div>
+
+          <div className="flex gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => navigate('/agent/leads')}
+              className="px-4 py-2.5 border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-all text-xs font-black tracking-wider rounded-xl"
+            >
+              ANNULER
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || !hasVendors}
+              className={`px-5 py-2.5 text-white text-xs font-black tracking-wider transition-all shadow-md rounded-xl flex items-center justify-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${t.ctaRing} ${
+                submitting || !hasVendors ? 'opacity-60 cursor-not-allowed bg-gray-400 shadow-none' : `${t.cta} active:scale-95`
+              }`}
+            >
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              {submitting ? 'AJOUT…' : 'AJOUTER À LA FILE'}
+            </button>
+          </div>
         </div>
       </form>
-    </div>
 
-    {/* Right Column: Coliaty Dispatch Waiting List */}
-    <div className="xl:col-span-6 w-full space-y-6">
-      <div className="bg-white rounded-3xl border border-gray-100 shadow-xl overflow-hidden relative">
-        {/* Accent top bar */}
-        <div className={`absolute top-0 left-0 right-0 h-2 ${
-          isPrincess 
-            ? 'bg-gradient-to-r from-amber-400 via-pink-400 to-rose-500' 
-            : isGirly 
-            ? 'bg-gradient-to-r from-pink-400 via-rose-400 to-fuchsia-400' 
-            : 'bg-gradient-to-r from-indigo-400 via-purple-400 to-indigo-600'
-        }`}></div>
+      {/* ------------------------------------------------------- Waiting list */}
+      <div id="file-attente" className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden relative scroll-mt-4">
+        <div className={`absolute top-0 left-0 right-0 h-1.5 ${t.accentBar}`} />
 
-        {/* Header controls inside card */}
-        <div className="p-6 border-b border-gray-100 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-md font-black text-gray-800 flex items-center gap-2">
-              <Truck className={`w-5 h-5 ${
-                isPrincess ? 'text-amber-500' : isGirly ? 'text-pink-500' : 'text-indigo-500'
-              }`} />
+        <div className="p-5 sm:p-6 pt-7 border-b border-gray-100 flex flex-col lg:flex-row lg:items-center gap-4">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-base font-black text-gray-900 flex items-center gap-2">
+              <Truck className={`w-4 h-4 ${t.icon}`} />
               Liste d'attente Coliaty
-            </h2>
-            <div className="flex items-center gap-2">
-              <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold ${
-                isPrincess ? 'bg-amber-50 text-amber-700' : isGirly ? 'bg-pink-50 text-pink-700' : 'bg-indigo-50 text-indigo-700'
-              }`}>
-                {leads.length} en attente
+              <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black border ${t.soft}`}>
+                {leads.length}
               </span>
-            </div>
+            </h2>
+            <p className="text-[11px] text-gray-400 font-medium mt-1">
+              Cochez les leads à expédier en lot. Des frais de saisie sont facturés aux vendeurs respectifs.
+            </p>
           </div>
-          <p className="text-xs text-gray-400 font-medium leading-relaxed">
-            Sélectionnez les leads que vous souhaitez expédier chez Coliaty en lot. Des frais de saisie seront facturés aux vendeurs respectifs.
-          </p>
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
-            <div className="flex items-center gap-2 flex-1">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Rechercher par nom, téléphone..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className={`w-full pl-10 pr-4 py-2 bg-gray-50 border-none rounded-xl text-xs font-medium focus:ring-2 transition-all ${
-                    isPrincess ? 'focus:ring-amber-100' : isGirly ? 'focus:ring-pink-100' : 'focus:ring-indigo-100'
-                  }`}
-                />
-              </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="relative flex-1 lg:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <label htmlFor="queueSearch" className="sr-only">Rechercher dans la file</label>
+              <input
+                id="queueSearch"
+                type="text"
+                placeholder="Nom, téléphone, ville…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className={`w-full h-10 pl-9 pr-3 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium outline-none focus:ring-2 focus:bg-white transition-all ${t.ring}`}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => { refetchDispatch(); toast.success('Données actualisées'); }}
+              disabled={loadingDispatch || isFetchingDispatch}
+              className="h-10 w-10 bg-gray-50 text-gray-500 rounded-xl hover:bg-gray-100 transition-all flex items-center justify-center shrink-0 active:scale-95 disabled:opacity-50"
+              title="Actualiser la liste"
+            >
+              <RotateCcw className={`w-4 h-4 ${loadingDispatch || isFetchingDispatch ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        </div>
+
+        {/* Selection bar only appears when it has something to say */}
+        {selectedLeadIds.length > 0 && (
+          <div className={`px-5 sm:px-6 py-2.5 flex items-center justify-between gap-3 border-b ${t.soft}`}>
+            <span className="text-xs font-black">
+              {selectedLeadIds.length} lead(s) sélectionné(s)
+            </span>
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  refetchDispatch();
-                  toast.success('Données actualisées');
-                }}
-                disabled={loadingDispatch || isFetchingDispatch}
-                className="p-2.5 bg-gray-50 text-gray-500 rounded-xl hover:bg-gray-100 transition-all border-none focus:outline-none flex items-center justify-center shrink-0 active:scale-95 disabled:opacity-50"
-                title="Actualiser la liste"
+                onClick={() => setSelectedLeadIds([])}
+                className="px-3 py-1.5 rounded-lg bg-white/70 text-[10px] font-black uppercase tracking-wider hover:bg-white transition-colors"
               >
-                <RotateCcw className={`w-4 h-4 ${loadingDispatch || isFetchingDispatch ? 'animate-spin' : ''}`} />
+                Tout désélectionner
               </button>
-            </div>
-
-            <div className="flex items-center justify-between sm:justify-end gap-3">
-              <span className="text-xs font-bold text-gray-500">
-                {selectedLeadIds.length} sélectionné(s)
-              </span>
               <button
                 type="button"
                 onClick={handleDispatch}
-                disabled={selectedLeadIds.length === 0 || dispatchMutation.isPending}
-                className={`px-5 py-2 rounded-xl font-black text-xs transition-all shadow-md flex items-center gap-1.5 ${
-                  selectedLeadIds.length === 0 || dispatchMutation.isPending
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
-                    : isPrincess
-                    ? 'bg-gradient-to-r from-amber-500 via-pink-500 to-rose-500 text-white hover:opacity-95 shadow-amber-100 active:scale-95'
-                    : isGirly
-                    ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white hover:opacity-95 shadow-pink-100 active:scale-95'
-                    : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-indigo-200 active:scale-95'
-                }`}
+                disabled={dispatchMutation.isPending}
+                className={`px-4 py-1.5 rounded-lg text-white text-[10px] font-black uppercase tracking-wider transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-60 ${t.cta}`}
               >
-                {dispatchMutation.isPending ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Truck className="w-3.5 h-3.5" />
-                )}
-                EXPÉDIER ({selectedLeadIds.length})
+                {dispatchMutation.isPending
+                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                  : <Truck className="w-3 h-3" />}
+                Expédier
               </button>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Table wrapper */}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-gray-50/50">
+            <thead className="bg-gray-50/70">
               <tr>
-                <th className="p-3 w-10">
+                <th scope="col" className="p-3 w-10">
+                  <label htmlFor="selectAll" className="sr-only">Tout sélectionner</label>
                   <input
+                    id="selectAll"
                     type="checkbox"
-                    className={`w-4 h-4 rounded border-gray-300 ${
-                      isPrincess 
-                        ? 'text-amber-500 focus:ring-amber-500' 
-                        : isGirly 
-                        ? 'text-pink-500 focus:ring-pink-500' 
-                        : 'text-indigo-600 focus:ring-indigo-500'
-                    }`}
-                    checked={leads.length > 0 && selectedLeadIds.length === leads.length}
+                    className="w-4 h-4 rounded border-gray-300 cursor-pointer"
+                    checked={allSelected}
                     onChange={toggleSelectAll}
+                    disabled={leads.length === 0}
                   />
                 </th>
-                <th className="p-3 font-black text-gray-400 uppercase text-[9px] tracking-widest">Client</th>
-                <th className="p-3 font-black text-gray-400 uppercase text-[9px] tracking-widest">Contact</th>
-                <th className="p-3 font-black text-gray-400 uppercase text-[9px] tracking-widest">Produit & Vendeur</th>
-                <th className="p-3 font-black text-gray-400 uppercase text-[9px] tracking-widest text-right">Prix</th>
-                <th className="p-3 font-black text-gray-400 uppercase text-[9px] tracking-widest text-center w-12">Actions</th>
+                <th scope="col" className="p-3 font-black text-gray-400 uppercase text-[9px] tracking-widest">Client</th>
+                <th scope="col" className="p-3 font-black text-gray-400 uppercase text-[9px] tracking-widest">Contact</th>
+                <th scope="col" className="p-3 font-black text-gray-400 uppercase text-[9px] tracking-widest">Produit</th>
+                <th scope="col" className="p-3 font-black text-gray-400 uppercase text-[9px] tracking-widest">Vendeur</th>
+                <th scope="col" className="p-3 font-black text-gray-400 uppercase text-[9px] tracking-widest text-right">Prix</th>
+                <th scope="col" className="p-3 font-black text-gray-400 uppercase text-[9px] tracking-widest text-center w-24">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loadingDispatch ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center">
-                    <Loader2 className={`w-5 h-5 animate-spin mx-auto ${
-                      isPrincess ? 'text-amber-500' : isGirly ? 'text-pink-500' : 'text-indigo-500'
-                    }`} />
+                  <td colSpan={7} className="p-12 text-center">
+                    <Loader2 className={`w-5 h-5 animate-spin mx-auto ${t.icon}`} />
                   </td>
                 </tr>
               ) : leads.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-gray-400 font-medium italic">
-                    Aucun lead en attente d'expédition.
+                  <td colSpan={7} className="p-12">
+                    <div className="flex flex-col items-center text-center">
+                      <div className="w-14 h-14 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center mb-3">
+                        <Truck className="w-6 h-6 text-gray-300" />
+                      </div>
+                      <p className="font-black text-gray-700 text-sm">
+                        {debouncedSearch ? 'Aucun résultat' : 'La file est vide'}
+                      </p>
+                      <p className="text-[11px] text-gray-400 font-medium mt-1 max-w-xs">
+                        {debouncedSearch
+                          ? `Aucun lead ne correspond à « ${debouncedSearch} ».`
+                          : 'Saisissez un lead ci-dessus — il apparaîtra ici, prêt à être expédié en lot.'}
+                      </p>
+                    </div>
                   </td>
                 </tr>
               ) : (
                 leads.map((lead: any) => {
                   const isSelected = selectedLeadIds.includes(lead.id);
                   return (
-                    <tr 
-                      key={lead.id} 
-                      className={`hover:bg-gray-50/30 transition-colors ${
-                        isSelected 
-                          ? isPrincess 
-                            ? 'bg-amber-50/20' 
-                            : isGirly 
-                            ? 'bg-pink-50/20' 
-                            : 'bg-indigo-50/30' 
-                          : ''
-                      }`}
+                    <tr
+                      key={lead.id}
+                      onClick={() => toggleSelect(lead.id)}
+                      className={`cursor-pointer transition-colors ${isSelected ? t.soft.replace(/text-\S+|border-\S+/g, '') : 'hover:bg-gray-50/60'}`}
                     >
-                      <td className="p-3">
+                      <td className="p-3" onClick={e => e.stopPropagation()}>
+                        <label htmlFor={`sel-${lead.id}`} className="sr-only">Sélectionner {lead.fullName}</label>
                         <input
+                          id={`sel-${lead.id}`}
                           type="checkbox"
-                          className={`w-4 h-4 rounded border-gray-300 ${
-                            isPrincess 
-                              ? 'text-amber-500 focus:ring-amber-500' 
-                              : isGirly 
-                              ? 'text-pink-500 focus:ring-pink-500' 
-                              : 'text-indigo-600 focus:ring-indigo-500'
-                          }`}
+                          className="w-4 h-4 rounded border-gray-300 cursor-pointer"
                           checked={isSelected}
                           onChange={() => toggleSelect(lead.id)}
                         />
                       </td>
                       <td className="p-3">
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5">
                           <span className="font-bold text-gray-800">{lead.fullName}</span>
                           {lead.source === 'WHATSAPP' && (
-                            <span 
-                              className="inline-flex items-center justify-center p-0.5 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100" 
-                              title="Lead WhatsApp"
-                            >
-                              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                            <span className="inline-flex items-center justify-center p-0.5 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100" title="Lead WhatsApp">
+                              <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24" aria-hidden="true">
                                 <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
                               </svg>
                             </span>
@@ -985,44 +956,62 @@ export default function InsertLead() {
                         <div className="text-[10px] text-gray-400 mt-0.5">{lead.city}</div>
                       </td>
                       <td className="p-3">
-                        <div className="font-medium text-gray-800">{lead.phone}</div>
+                        <div className="font-medium text-gray-800 tabular-nums">{lead.phone}</div>
                         <div className="text-[10px] text-gray-400 mt-0.5">
                           Saisi le {format(new Date(lead.createdAt), 'dd/MM')}
                         </div>
                       </td>
                       <td className="p-3">
-                        <div className="font-bold text-gray-800 line-clamp-1">
-                          {lead.product?.name || 'Produit inconnu'}
-                          {lead.productVariant && (
-                            <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[9px] font-black inline-flex items-center gap-0.5 ${
-                              isPrincess ? 'bg-amber-50 text-amber-700 border border-amber-100' :
-                              isGirly ? 'bg-pink-50 text-pink-600 border border-pink-100' :
-                              'bg-indigo-50 text-indigo-700 border border-indigo-100'
-                            }`}>
-                              📦 {lead.productVariant}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[9px] font-bold text-gray-400 uppercase flex items-center gap-1 mt-1">
-                          <Store className="w-2.5 h-2.5 opacity-50" />
-                          {lead.vendor?.fullName}
+                        <div className="font-bold text-gray-800 line-clamp-1">{lead.product?.name || 'Produit inconnu'}</div>
+                        {lead.productVariant && (
+                          <span className={`mt-0.5 inline-block px-1.5 py-0.5 rounded text-[9px] font-black border ${t.soft}`}>
+                            📦 {lead.productVariant}
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        <div className="text-[10px] font-bold text-gray-500 flex items-center gap-1">
+                          <Store className="w-2.5 h-2.5 opacity-50 shrink-0" />
+                          <span className="truncate">{lead.vendor?.fullName || '—'}</span>
                         </div>
                       </td>
                       <td className="p-3 text-right">
-                        <div className={`font-black ${
-                          isPrincess ? 'text-amber-600' : isGirly ? 'text-pink-600' : 'text-indigo-600'
-                        }`}>{lead.productPrice} MAD</div>
+                        <div className="font-black text-gray-900 tabular-nums">{lead.productPrice} MAD</div>
                       </td>
-                      <td className="p-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(lead.id)}
-                          disabled={deleteMutation.isPending}
-                          className="p-1.5 text-rose-500 hover:bg-rose-50 hover:text-rose-600 rounded-lg transition-colors inline-flex items-center justify-center disabled:opacity-50"
-                          title="Supprimer de la liste d'attente"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                      <td className="p-3 text-center" onClick={e => e.stopPropagation()}>
+                        {/* Inline confirm rather than window.confirm(): strict
+                            browser settings silently drop the native dialog,
+                            which made the delete look like it did nothing. */}
+                        {confirmDeleteId === lead.id ? (
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => deleteMutation.mutate(lead.id)}
+                              disabled={deleteMutation.isPending}
+                              className="px-2 py-1 bg-rose-500 text-white rounded-lg text-[9px] font-black hover:bg-rose-600 transition-colors disabled:opacity-50"
+                              title="Confirmer — le lead et sa commande seront supprimés"
+                            >
+                              {deleteMutation.isPending ? '…' : 'OUI'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="px-2 py-1 bg-gray-100 text-gray-500 rounded-lg text-[9px] font-black hover:bg-gray-200 transition-colors"
+                            >
+                              NON
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(lead.id)}
+                            disabled={deleteMutation.isPending}
+                            className="p-1.5 text-gray-300 hover:bg-rose-50 hover:text-rose-600 rounded-lg transition-colors inline-flex items-center justify-center disabled:opacity-50"
+                            title="Supprimer de la liste d'attente"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -1032,21 +1021,13 @@ export default function InsertLead() {
           </table>
         </div>
       </div>
-    </div>
-  </div>
 
       {/* History Modal */}
       {showHistoryModal && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] w-full max-w-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
             {/* Modal Header */}
-            <div className={`p-6 text-white shrink-0 relative overflow-hidden ${
-              isPrincess 
-                ? 'bg-gradient-to-r from-amber-500 via-pink-500 to-rose-600'
-                : isGirly 
-                ? 'bg-gradient-to-r from-pink-500 to-rose-500' 
-                : 'bg-indigo-600'
-            }`}>
+            <div className={`p-6 text-white shrink-0 relative overflow-hidden ${t.accentBar}`}>
               <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
               <div className="relative z-10 flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -1237,6 +1218,128 @@ export default function InsertLead() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+type ThemeTokens = (typeof THEME)[ThemeKey];
+
+/** One consistent input shape everywhere, so fields stop drifting apart. */
+function inputCls(t: ThemeTokens, hasError: boolean, disabled = false) {
+  return [
+    'w-full h-11 px-3.5 border rounded-xl text-sm font-semibold shadow-sm outline-none transition-all',
+    'focus:ring-2 focus:border-transparent',
+    t.ring,
+    hasError ? 'border-red-300 bg-red-50 focus:ring-red-400' : 'border-gray-200 bg-white',
+    disabled ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : '',
+  ].join(' ');
+}
+
+function SectionTitle({ step, theme, icon, children }: {
+  step: string; theme: ThemeTokens; icon: React.ReactNode; children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-[11px] font-black shadow-sm shrink-0 ${theme.step}`}>
+        {step}
+      </span>
+      <h2 className="text-sm font-black text-gray-900 flex items-center gap-1.5">
+        <span className={theme.icon}>{icon}</span>
+        {children}
+      </h2>
+      <span className="flex-1 h-px bg-gray-100" />
+    </div>
+  );
+}
+
+/**
+ * Every label is tied to its control with htmlFor/id — clicking the label now
+ * focuses the field, and screen readers announce it. 11 of the 12 labels on
+ * this page previously had no association at all.
+ */
+function Field({ label, htmlFor, required, error, hint, children }: {
+  label: string; htmlFor: string; required?: boolean;
+  error?: string; hint?: string; children: React.ReactNode;
+}) {
+  return (
+    <div className="min-w-0">
+      <label htmlFor={htmlFor} className="flex items-center gap-1 text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1.5">
+        {label}
+        {required && <span className="text-rose-400" aria-hidden="true">*</span>}
+        {hint && <span className="ml-auto font-bold text-gray-300 normal-case tracking-normal">{hint}</span>}
+      </label>
+      {children}
+      {error && <p className="text-[10px] text-red-500 font-bold mt-1">{error}</p>}
+    </div>
+  );
+}
+
+function FieldSkeleton() {
+  return <div className="h-11 bg-gray-50 border border-gray-100 rounded-xl animate-pulse" />;
+}
+
+/** Compact trust indicator: one row, not the old 66px stacked block. */
+function TrustStrip({ historyData, loading, phone, onOpen }: {
+  historyData: any; loading: boolean; phone: string; onOpen: () => void;
+}) {
+  const cleaned = phone.replace(/\s+/g, '');
+  const isComplete = cleaned.length === 10 || (cleaned.startsWith('+212') && cleaned.length >= 13);
+
+  if (loading && isComplete) {
+    return (
+      <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-gray-100 bg-gray-50/60 text-[11px] font-bold text-gray-400">
+        <div className="w-3.5 h-3.5 border-2 border-gray-200 border-t-gray-400 rounded-full animate-spin" />
+        Analyse de l'historique du client…
+      </div>
+    );
+  }
+
+  if (!historyData) return null;
+
+  const isNew = !historyData.rawHistory?.leads?.length && !historyData.rawHistory?.orders?.length;
+  if (isNew) {
+    return (
+      <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border border-gray-100 bg-gray-50/60">
+        <Info className="w-4 h-4 text-gray-400 shrink-0" />
+        <span className="text-[11px] font-bold text-gray-600">Nouveau client</span>
+        <span className="text-[11px] font-medium text-gray-400">— aucun historique de commande.</span>
+      </div>
+    );
+  }
+
+  const delivered = historyData.summary.orderStats['DELIVERED'] || 0;
+  const cancelled = historyData.summary.leadStats['CANCEL_ORDER'] || 0;
+  const returns = historyData.summary.orderStats['RETURNED'] || 0;
+
+  let score = 50 + delivered * 20 - cancelled * 15 - returns * 25;
+  score = Math.max(0, Math.min(100, score));
+
+  const tone = score >= 70
+    ? { wrap: 'bg-emerald-50 border-emerald-100', dot: 'bg-emerald-500', text: 'text-emerald-700', msg: 'Client très fiable.' }
+    : score < 40
+      ? { wrap: 'bg-rose-50 border-rose-100', dot: 'bg-rose-500', text: 'text-rose-700', msg: 'Historique problématique.' }
+      : { wrap: 'bg-amber-50 border-amber-100', dot: 'bg-amber-500', text: 'text-amber-700', msg: 'Historique modéré.' };
+
+  return (
+    <div className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3.5 py-2.5 rounded-xl border ${tone.wrap}`}>
+      <span className="flex items-center gap-2 shrink-0">
+        <ShieldAlert className={`w-4 h-4 ${tone.text}`} />
+        <span className={`text-[11px] font-black ${tone.text}`}>Confiance {score}%</span>
+      </span>
+      <span className="h-3 w-px bg-black/10" />
+      <span className="flex items-center gap-3 text-[10px] font-bold text-gray-500">
+        <span>✅ {delivered} livré(s)</span>
+        <span>❌ {cancelled} annulé(s)</span>
+        <span>↩️ {returns} retour(s)</span>
+      </span>
+      <span className="text-[10px] font-medium text-gray-400">{tone.msg}</span>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="ml-auto text-[10px] font-black uppercase tracking-wider text-gray-500 hover:text-gray-900 transition-colors shrink-0"
+      >
+        Détails →
+      </button>
     </div>
   );
 }

@@ -561,6 +561,72 @@ export const sensitiveDataMasking = (data: any): any => {
 
 // ─── Dynamic Rate Limiters ───────────────────────────────────────────────
 
+/**
+ * Internal staff. These accounts drive the back office — the packaging desk alone
+ * pushes ~1000 parcels a day through the tickets page — so throttling them only
+ * breaks legitimate work. The limiter exists to slow down anonymous abuse, and a
+ * valid staff JWT is a far stronger signal than a request count.
+ */
+const STAFF_ROLES = [
+  'SUPER_ADMIN',
+  'FINANCE_ADMIN',
+  'SYSTEM_SUPPORT',
+  'HELPER',
+  'CALL_CENTER_AGENT',
+  'CONFIRMATION_AGENT',
+  'FULFILLMENT_OPERATOR',
+];
+
+// Verifying the JWT and loading the user hits the DB on every single request,
+// which is exactly the wrong thing to do on the hot path we are trying to speed
+// up. Cache the token -> "is staff" verdict for a short while instead.
+const staffTokenCache = new Map<string, { isStaff: boolean; expiresAt: number }>();
+const STAFF_CACHE_TTL = 60_000;
+
+const isStaffToken = async (token: string): Promise<boolean> => {
+  const now = Date.now();
+  const cached = staffTokenCache.get(token);
+  if (cached && cached.expiresAt > now) return cached.isStaff;
+
+  let isStaff = false;
+  try {
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId?: string };
+    if (decoded?.userId) {
+      const user = await prisma.user.findUnique({
+        where: { uuid: decoded.userId },
+        include: { role: true },
+      });
+      isStaff = !!user && STAFF_ROLES.includes(user.role.name);
+    }
+  } catch {
+    isStaff = false;
+  }
+
+  // Keep the map from growing without bound on a long-lived process.
+  if (staffTokenCache.size > 5000) {
+    for (const [key, entry] of staffTokenCache) {
+      if (entry.expiresAt <= now) staffTokenCache.delete(key);
+    }
+    if (staffTokenCache.size > 5000) staffTokenCache.clear();
+  }
+
+  staffTokenCache.set(token, { isStaff, expiresAt: now + STAFF_CACHE_TTL });
+  return isStaff;
+};
+
+/** Reads the bearer token, the auth cookie, or the ?token= query param. */
+const extractToken = (req: Request): string | null => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.slice(7).trim() || null;
+  }
+  const cookies = parseCookies(req.headers.cookie);
+  if (cookies.token) return cookies.token;
+  if (typeof req.query?.token === 'string' && req.query.token) return req.query.token;
+  return null;
+};
+
 const shouldSkipRateLimit = async (req: Request): Promise<boolean> => {
   try {
     const settings = await fetchSecuritySettings();
@@ -585,7 +651,7 @@ const shouldSkipRateLimit = async (req: Request): Promise<boolean> => {
       return true;
     }
 
-    // Skip if request is an admin/helper login attempt
+    // Skip if request is a staff login attempt
     if (req.path && req.path.includes('/auth/login')) {
       const { email, phone } = req.body || {};
       if (email || phone) {
@@ -598,27 +664,18 @@ const shouldSkipRateLimit = async (req: Request): Promise<boolean> => {
           },
           include: { role: true }
         });
-        if (user && ['SUPER_ADMIN', 'FINANCE_ADMIN', 'HELPER'].includes(user.role.name)) {
+        if (user && STAFF_ROLES.includes(user.role.name)) {
           return true;
         }
       }
     }
 
-    // Skip if request has a bearer token belonging to an admin/helper user
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.split(' ')[1];
-      const jwt = require('jsonwebtoken');
-      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
-      if (decoded && decoded.userId) {
-        const user = await prisma.user.findUnique({
-          where: { uuid: decoded.userId },
-          include: { role: true }
-        });
-        if (user && ['SUPER_ADMIN', 'FINANCE_ADMIN', 'HELPER'].includes(user.role.name)) {
-          return true;
-        }
-      }
+    // Skip if the request carries a token belonging to a staff account. The token
+    // can arrive as a bearer header, a cookie, or ?token= — PDF/exports downloads
+    // open in a new tab and only have the last two.
+    const token = extractToken(req);
+    if (token && (await isStaffToken(token))) {
+      return true;
     }
   } catch (err) {
     // Fall back to not skipping
@@ -649,6 +706,10 @@ export const rateLimitCheckMiddleware = async (
   if (isIPRateLimitBlocked(clientIP)) {
     const skip = await shouldSkipRateLimit(req);
     if (skip) {
+      // Staff share an office IP with everyone else behind the same NAT, so a
+      // block triggered by another client would otherwise lock the back office
+      // out for ten minutes. Proving staff identity clears the block outright.
+      rateLimitBlockedIPs.delete(clientIP);
       return next();
     }
 

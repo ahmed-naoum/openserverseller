@@ -6,6 +6,18 @@ import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { prisma } from '../lib/prisma.js';
 import { getSecret } from '../lib/secretStore.js';
+import {
+  coliatyRequest,
+  getColiatyConfig,
+  getParcelLabelPdf,
+  getPickupNoteLabelsPdf,
+  getPickupNoteDetail as fetchPickupNoteDetail,
+  invalidatePickupNoteDetail,
+  invalidateLabel,
+  decodeColiatyError,
+  coliatyQueueStats,
+} from '../services/coliaty.service.js';
+import { emitNewTickets, type NewTicketPayload } from '../lib/ticketEvents.js';
 
 const router = Router();
 
@@ -157,62 +169,90 @@ router.get(
   authenticate,
   asyncHandler(async (req, res) => {
     const { code } = req.params;
+    if (req.query.refresh === '1') invalidateLabel(`parcel:${code}`);
 
-    const COLIATY_PUBLIC_KEY = getSecret('COLIATY_PUBLIC_KEY');
-    const COLIATY_SECRET_KEY = getSecret('COLIATY_SECRET_KEY');
-    const COLIATY_BASE_URL = getSecret('COLIATY_BASE_URL') || 'https://customer-api-v1.coliaty.com';
+    try {
+      const pdf = await getParcelLabelPdf(code);
+      return res.status(200).json({ status: 'success', data: { pdf } });
+    } catch (error: any) {
+      handleColiatyError(error, `Étiquette ${code}`);
+    }
+  })
+);
 
-    if (!COLIATY_PUBLIC_KEY || !COLIATY_SECRET_KEY || COLIATY_PUBLIC_KEY === 'your_coliaty_public_key') {
-      throw new AppException(500, '[Coliaty] Clés API non configurées.');
+/**
+ * Merges up to MAX_BATCH_LABELS parcel labels into a single PDF, server side.
+ *
+ * The packaging desk prints in batches of dozens to hundreds. Doing that from the
+ * browser meant one HTTP round-trip per parcel, which tripped both our own
+ * limiter and Coliaty's per-IP block. Here the whole batch is one request from the
+ * browser, and upstream calls are paced and cached by the shared Coliaty queue.
+ */
+const MAX_BATCH_LABELS = 400;
+
+router.post(
+  '/parcels/labels/batch',
+  authenticate,
+  // CALL_CENTER_AGENT is included because the single-label route above is open to
+  // any authenticated user — batching exposes no extra data, only fewer requests.
+  authorize('HELPER', 'SUPER_ADMIN', 'VENDOR', 'FULFILLMENT_OPERATOR', 'CALL_CENTER_AGENT'),
+  asyncHandler(async (req, res) => {
+    const { codes } = req.body || {};
+
+    if (!Array.isArray(codes) || codes.length === 0) {
+      throw new AppException(400, 'codes[] est requis.');
     }
 
-    let retries = 4;
-    let delay = 1000;
+    const unique = [...new Set(codes.map((c: any) => String(c).trim()).filter(Boolean))];
+    if (unique.length === 0) {
+      throw new AppException(400, 'Aucun code de colis valide fourni.');
+    }
+    if (unique.length > MAX_BATCH_LABELS) {
+      throw new AppException(400, `Maximum ${MAX_BATCH_LABELS} colis par lot (${unique.length} demandés).`);
+    }
 
-    while (retries > 0) {
+    const { PDFDocument } = await import('pdf-lib');
+    const merged = await PDFDocument.create();
+
+    const succeeded: string[] = [];
+    const failed: { code: string; message: string }[] = [];
+
+    // Sequential on purpose: the shared Coliaty queue paces the upstream calls,
+    // and appending pages in order keeps the printed stack matching the UI list.
+    for (const code of unique) {
       try {
-        const response = await axios.get(`${COLIATY_BASE_URL.replace(/\/$/, '')}/parcel/generate-label/${code}`, {
-          headers: {
-            Authorization: `Bearer ${COLIATY_PUBLIC_KEY}:${COLIATY_SECRET_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 15000,
-          responseType: 'arraybuffer'
-        });
-
-        const contentType = response.headers['content-type'] || '';
-        if (contentType.includes('application/pdf')) {
-          const base64 = Buffer.from(response.data).toString('base64');
-          return res.status(200).json({ status: 'success', data: { pdf: base64 } });
-        }
-
-        try {
-          const jsonStr = Buffer.from(response.data).toString('utf-8');
-          const jsonData = JSON.parse(jsonStr);
-          return res.status(200).json({ status: 'success', data: jsonData?.data || jsonData });
-        } catch (e) {
-          const base64 = Buffer.from(response.data).toString('base64');
-          return res.status(200).json({ status: 'success', data: { pdf: base64 } });
-        }
+        const base64 = await getParcelLabelPdf(code);
+        const doc = await PDFDocument.load(Buffer.from(base64, 'base64'));
+        const pages = await merged.copyPages(doc, doc.getPageIndices());
+        pages.forEach((page) => merged.addPage(page));
+        succeeded.push(code);
       } catch (error: any) {
-        const status = error.response?.status;
-        if (status === 429 && retries > 1) {
-          console.warn(`[Coliaty] 429 Rate Limit on parcel label. Retrying in ${delay}ms... (${retries - 1} retries left)`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          retries--;
-          delay *= 2;
-          continue;
-        }
-
-        console.error('[Coliaty] Label Generation Error:', error.response?.data || error.message);
-        let data = error.response?.data;
-        if (data instanceof Buffer) {
-          try { data = JSON.parse(data.toString('utf-8')); } catch (e) {}
-        }
-        const finalStatus = status || 500;
-        throw new AppException(finalStatus, data?.message || 'Erreur lors de la génération de l\'étiquette');
+        const data = decodeColiatyError(error?.response?.data);
+        failed.push({
+          code,
+          message: data?.message || error?.message || 'Étiquette indisponible',
+        });
       }
     }
+
+    if (succeeded.length === 0) {
+      throw new AppException(
+        502,
+        `Aucune étiquette n'a pu être récupérée. ${failed[0]?.message || ''}`.trim()
+      );
+    }
+
+    const bytes = await merged.save();
+    res.status(200).json({
+      status: 'success',
+      data: {
+        pdf: Buffer.from(bytes).toString('base64'),
+        merged: succeeded.length,
+        requested: unique.length,
+        succeeded,
+        failed,
+      },
+    });
   })
 );
 
@@ -687,7 +727,13 @@ router.post(
 
     const agent = await prisma.user.findUnique({
       where: { id: req.user!.id },
-      select: { id: true, role: { select: { name: true } }, saisieFeeMad: true }
+      select: {
+        id: true,
+        email: true,
+        role: { select: { name: true } },
+        saisieFeeMad: true,
+        profile: { select: { fullName: true } },
+      }
     });
 
     const feePerLead = agent?.saisieFeeMad ?? 8.0;
@@ -712,6 +758,7 @@ router.post(
 
     const results: any[] = [];
     const successfulLeadIdsByVendor: Record<number, number[]> = {};
+    const newTickets: NewTicketPayload[] = [];
 
     // 1. Prepare parcels array
     const parcels = leads.map((lead) => {
@@ -821,6 +868,16 @@ router.post(
         if (!successfulLeadIdsByVendor[lead.vendorId]) successfulLeadIdsByVendor[lead.vendorId] = [];
         successfulLeadIdsByVendor[lead.vendorId].push(lead.id);
 
+        newTickets.push({
+          orderNumber: lead.order!.orderNumber,
+          packageCode: coliatyCode,
+          customerName: lead.order!.customerName,
+          customerCity: lead.order!.customerCity,
+          vendorId: lead.vendorId,
+          productName: lead.order!.items[0]?.product?.nameFr || null,
+          amountMad: Number(lead.order!.totalAmountMad) || 0,
+        });
+
         results.push({ leadId: lead.id, status: 'success', coliatyCode });
       } else if (errorParcels[parcelKey]) {
         results.push({ leadId: lead.id, status: 'error', error: JSON.stringify(errorParcels[parcelKey]) });
@@ -874,6 +931,13 @@ router.post(
         });
       }
     }
+
+    // Ring the packaging desk: these parcels just appeared in their "En attente" queue.
+    await emitNewTickets(newTickets, {
+      id: req.user!.id,
+      name: agent?.profile?.fullName || agent?.email || req.user!.email,
+      role: agent?.role?.name || req.user!.roleName,
+    });
 
     res.json({
       status: 'success',
@@ -1175,25 +1239,21 @@ router.put(
 // Pickup Notes — Coliaty proxy
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-const getColiatyConfig = () => {
-  const pub = getSecret('COLIATY_PUBLIC_KEY');
-  const sec = getSecret('COLIATY_SECRET_KEY');
-  const base = (getSecret('COLIATY_BASE_URL') || 'https://customer-api-v1.coliaty.com').replace(/\/$/, '');
-  if (!pub || !sec || pub === 'your_coliaty_public_key') {
-    throw new AppException(500, '[Coliaty] Clés API non configurées.');
-  }
-  return { base, headers: { Authorization: `Bearer ${pub}:${sec}`, 'Content-Type': 'application/json' } };
-};
-
 router.post(
   '/pickup-note/create',
   authenticate,
-  authorize('HELPER', 'SUPER_ADMIN', 'VENDOR'),
+  authorize('HELPER', 'SUPER_ADMIN', 'VENDOR', 'FULFILLMENT_OPERATOR'),
   asyncHandler(async (req, res) => {
     const cfg = getColiatyConfig();
     try {
-      const response = await axios.post(`${cfg.base}/pickup-note/create`, {}, { headers: cfg.headers, timeout: 15000 });
-      res.json({ status: 'success', data: response.data?.data || response.data });
+      const response = await coliatyRequest({
+        method: 'POST',
+        url: `${cfg.base}/pickup-note/create`,
+        data: {},
+        headers: cfg.headers,
+        context: 'Création Bon',
+      });
+      res.json({ status: 'success', data: (response.data as any)?.data || response.data });
     } catch (error: any) {
       handleColiatyError(error, 'Création Bon');
     }
@@ -1203,23 +1263,69 @@ router.post(
 router.get(
   '/pickup-note/detail/:reference',
   authenticate,
-  authorize('HELPER', 'SUPER_ADMIN', 'VENDOR'),
+  authorize('HELPER', 'SUPER_ADMIN', 'VENDOR', 'FULFILLMENT_OPERATOR'),
   asyncHandler(async (req, res) => {
     const { reference } = req.params;
-    const cfg = getColiatyConfig();
     try {
-      const response = await axios.get(`${cfg.base}/pickup-note/detail/${reference}`, { headers: cfg.headers, timeout: 15000 });
-      res.json({ status: 'success', data: response.data?.data || response.data });
+      const data = await fetchPickupNoteDetail(reference, req.query.refresh === '1');
+      res.json({ status: 'success', data });
     } catch (error: any) {
       handleColiatyError(error, 'Détail Bon');
     }
   })
 );
 
+/**
+ * Details for many pickup notes in a single round-trip.
+ *
+ * The tickets page needs the live status of every open bon to split them between
+ * its tabs. Fetching them one-by-one from the browser is what got the server IP
+ * blocked by Coliaty; here they share one request and the throttled queue.
+ */
+const MAX_BATCH_PICKUP_DETAILS = 120;
+
+router.post(
+  '/pickup-notes/details',
+  authenticate,
+  authorize('HELPER', 'SUPER_ADMIN', 'VENDOR', 'FULFILLMENT_OPERATOR'),
+  asyncHandler(async (req, res) => {
+    const { references, refresh } = req.body || {};
+
+    if (!Array.isArray(references) || references.length === 0) {
+      throw new AppException(400, 'references[] est requis.');
+    }
+
+    const unique = [...new Set(references.map((r: any) => String(r).trim()).filter(Boolean))]
+      .slice(0, MAX_BATCH_PICKUP_DETAILS);
+
+    const details: Record<string, any> = {};
+    const errors: Record<string, string> = {};
+
+    for (const reference of unique) {
+      try {
+        details[reference] = await fetchPickupNoteDetail(reference, refresh === true);
+      } catch (error: any) {
+        const data = decodeColiatyError(error?.response?.data);
+        errors[reference] = data?.message || error?.message || 'Détail indisponible';
+      }
+    }
+
+    res.json({
+      status: 'success',
+      data: {
+        details,
+        errors,
+        truncated: references.length > unique.length,
+        queue: coliatyQueueStats(),
+      },
+    });
+  })
+);
+
 router.post(
   '/pickup-note/add-parcels',
   authenticate,
-  authorize('HELPER', 'SUPER_ADMIN', 'VENDOR'),
+  authorize('HELPER', 'SUPER_ADMIN', 'VENDOR', 'FULFILLMENT_OPERATOR'),
   asyncHandler(async (req, res) => {
     const { pickup_note_reference, parcel_codes } = req.body;
     if (!pickup_note_reference || !Array.isArray(parcel_codes) || parcel_codes.length === 0) {
@@ -1227,9 +1333,15 @@ router.post(
     }
     const cfg = getColiatyConfig();
     try {
-      const response = await axios.post(`${cfg.base}/pickup-note/add-parcels`, { pickup_note_reference, parcel_codes }, { headers: cfg.headers, timeout: 15000 });
-      const responseData = response.data?.data || response.data;
-      
+      const response = await coliatyRequest({
+        method: 'POST',
+        url: `${cfg.base}/pickup-note/add-parcels`,
+        data: { pickup_note_reference, parcel_codes },
+        headers: cfg.headers,
+        context: 'Ajout Colis Bon',
+      });
+      const responseData = (response.data as any)?.data || response.data;
+
       // Check for ignorable duplicate errors
       const errorParcels = responseData?.error_parcels || {};
       const ignorableIds = Object.values(errorParcels)
@@ -1240,17 +1352,29 @@ router.post(
         console.log(`[Coliaty] Automatically ignoring ${ignorableIds.length} duplicate errors...`);
         for (const error_id of ignorableIds) {
           try {
-            await axios.post(`${cfg.base}/parcel/error/ignore`, { error_id }, { headers: cfg.headers, timeout: 5000 });
+            await coliatyRequest({
+              method: 'POST',
+              url: `${cfg.base}/parcel/error/ignore`,
+              data: { error_id },
+              headers: cfg.headers,
+              context: 'Ignorer Erreur Colis',
+            });
           } catch (e: any) {
             console.error(`[Coliaty] Failed to ignore error ${error_id}:`, e.message);
           }
         }
-        
+
         // Retry adding parcels after ignoring errors
         console.log(`[Coliaty] Retrying add-parcels for ${parcel_codes.length} parcels...`);
-        const retryRes = await axios.post(`${cfg.base}/pickup-note/add-parcels`, { pickup_note_reference, parcel_codes }, { headers: cfg.headers, timeout: 15000 });
-        const retryData = retryRes.data?.data || retryRes.data;
-        
+        const retryRes = await coliatyRequest({
+          method: 'POST',
+          url: `${cfg.base}/pickup-note/add-parcels`,
+          data: { pickup_note_reference, parcel_codes },
+          headers: cfg.headers,
+          context: 'Ajout Colis Bon (retry)',
+        });
+        const retryData = (retryRes.data as any)?.data || retryRes.data;
+
         // Update responseData with the retry result
         Object.assign(responseData, retryData);
       }
@@ -1283,8 +1407,13 @@ router.post(
 
             // 2. Fallback: fetch parcel info if not provided in the error
             if (!actualRef) {
-              const parcelInfo = await axios.get(`${cfg.base}/parcel/${code}`, { headers: cfg.headers, timeout: 5000 });
-              actualRef = parcelInfo.data?.data?.pickup_note_reference || 
+              const parcelInfo = await coliatyRequest<any>({
+                method: 'GET',
+                url: `${cfg.base}/parcel/${code}`,
+                headers: cfg.headers,
+                context: `Info colis ${code}`,
+              });
+              actualRef = parcelInfo.data?.data?.pickup_note_reference ||
                           parcelInfo.data?.pickup_note_reference ||
                           parcelInfo.data?.data?.pickup_note_ref ||
                           parcelInfo.data?.pickup_note_ref;
@@ -1304,6 +1433,10 @@ router.post(
         }
       }
 
+      // The bon changed upstream, so any cached detail/label for it is stale.
+      invalidatePickupNoteDetail(pickup_note_reference);
+      invalidateLabel(`pickup:${pickup_note_reference}`);
+
       res.json({ status: 'success', data: responseData });
     } catch (error: any) {
       handleColiatyError(error, 'Ajout Colis Bon');
@@ -1314,87 +1447,76 @@ router.post(
 router.post(
   '/pickup-note/remove-parcels',
   authenticate,
-  authorize('HELPER', 'SUPER_ADMIN', 'VENDOR'),
+  authorize('HELPER', 'SUPER_ADMIN', 'VENDOR', 'FULFILLMENT_OPERATOR'),
   asyncHandler(async (req, res) => {
     const { pickup_note_reference, parcel_codes } = req.body;
     if (!pickup_note_reference || !Array.isArray(parcel_codes) || parcel_codes.length === 0) {
       throw new AppException(400, 'pickup_note_reference et parcel_codes[] sont requis.');
     }
     const cfg = getColiatyConfig();
-    const response = await axios.post(`${cfg.base}/pickup-note/remove-parcels`, { pickup_note_reference, parcel_codes }, { headers: cfg.headers, timeout: 15000 });
-    res.json({ status: 'success', data: response.data?.data || response.data });
+    try {
+      const response = await coliatyRequest({
+        method: 'POST',
+        url: `${cfg.base}/pickup-note/remove-parcels`,
+        data: { pickup_note_reference, parcel_codes },
+        headers: cfg.headers,
+        context: 'Retrait Colis Bon',
+      });
+
+      // Drop the local reference too, otherwise the parcel stays hidden from the
+      // "en attente" tab even though Coliaty no longer has it in the bon.
+      const codes = parcel_codes.map((c: any) => String(c)).filter(Boolean);
+      if (codes.length > 0) {
+        await prisma.$executeRaw`
+          UPDATE orders
+          SET "coliatyPickupRef" = NULL
+          WHERE "coliatyPackageCode" IN (${Prisma.join(codes)})
+            AND "coliatyPickupRef" = ${pickup_note_reference}
+        `;
+      }
+
+      invalidatePickupNoteDetail(pickup_note_reference);
+      invalidateLabel(`pickup:${pickup_note_reference}`);
+
+      res.json({ status: 'success', data: (response.data as any)?.data || response.data });
+    } catch (error: any) {
+      handleColiatyError(error, 'Retrait Colis Bon');
+    }
   })
 );
 
 router.get(
   '/pickup-note/:reference/generate-labels',
   authenticate,
-  authorize('HELPER', 'SUPER_ADMIN', 'VENDOR'),
+  authorize('HELPER', 'SUPER_ADMIN', 'VENDOR', 'FULFILLMENT_OPERATOR'),
   asyncHandler(async (req, res) => {
     const { reference } = req.params;
-    const cfg = getColiatyConfig();
-    
-    let retries = 4;
-    let delay = 1000; // start with 1s
-
-    while (retries > 0) {
-      try {
-        const response = await axios.get(`${cfg.base}/pickup-note/${reference}/generate-labels`, { 
-          headers: cfg.headers, 
-          timeout: 30000,
-          responseType: 'arraybuffer' // Handle both JSON and PDF binary
-        });
-
-        const contentType = response.headers['content-type'] || '';
-        
-        if (contentType.includes('application/pdf')) {
-          // Direct PDF binary -> Convert to base64 for the frontend
-          const base64 = Buffer.from(response.data).toString('base64');
-          return res.json({ status: 'success', data: { pdf: base64 } });
-        }
-
-        // If it's JSON, parse the arraybuffer back to JSON
-        try {
-          const jsonStr = Buffer.from(response.data).toString('utf-8');
-          const jsonData = JSON.parse(jsonStr);
-          return res.json({ status: 'success', data: jsonData?.data || jsonData });
-        } catch (e) {
-          // Fallback: maybe it's just a base64 string?
-          const base64 = Buffer.from(response.data).toString('base64');
-          return res.json({ status: 'success', data: { pdf: base64 } });
-        }
-      } catch (error: any) {
-        const status = error.response?.status;
-        if (status === 429 && retries > 1) {
-          console.warn(`[Coliaty] 429 Rate Limit on pickup-note labels. Retrying in ${delay}ms... (${retries - 1} retries left)`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          retries--;
-          delay *= 2; // Exponential backoff
-          continue;
-        }
-        handleColiatyError(error, 'Génération PDF Bon');
-        return;
-      }
+    try {
+      const pdf = await getPickupNoteLabelsPdf(reference, req.query.refresh === '1');
+      res.json({ status: 'success', data: { pdf } });
+    } catch (error: any) {
+      handleColiatyError(error, 'Génération PDF Bon');
     }
   })
 );
 
 // Helper to handle Coliaty specific errors
 function handleColiatyError(error: any, context: string) {
-  let data = error.response?.data;
-  const status = error.response?.status;
-
-  // If we used arraybuffer, the error data might be a Buffer
-  if (data instanceof Buffer) {
-    try {
-      data = JSON.parse(data.toString('utf-8'));
-    } catch (e) {
-      // Not JSON
-    }
-  }
+  const data = decodeColiatyError(error?.response?.data);
+  const status = error?.response?.status;
 
   console.error(`[Coliaty] ${context} Error:`, data || error.message);
-  
+
+  // Coliaty throttles per IP and answers 429 once the quota is spent. Surface it
+  // as a 429 with an actionable message instead of a generic 500 — the shared
+  // Coliaty queue has already retried with backoff by the time we get here.
+  if (status === 429) {
+    throw new AppException(
+      429,
+      `Coliaty a temporairement limité nos requêtes (${context}). Les envois sont mis en file d'attente — réessayez dans une minute.`
+    );
+  }
+
   if (status && [400, 401, 403, 404, 422].includes(status)) {
     let msg = data?.message || "Erreur API Coliaty";
     if (data?.details) {
