@@ -15,7 +15,7 @@ import {
   Package, ShieldAlert, Clock, Info, Phone, X,
   TrendingUp, TrendingDown, User, Store, Check, MessageSquare, Copy, Pencil
 } from 'lucide-react';
-import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import { normalizeSearch } from '../../utils/search';
 
 /** Customer-card fields an agent can correct in place while on the call. */
 type EditableFieldKey = 'fullName' | 'phone' | 'city' | 'address';
@@ -519,13 +519,20 @@ export default function AgentLeadDetail() {
     [data?.lead, data?.product, deliveryForm.productVariant]
   );
 
-  const coliatyCityOptions = useMemo(
-    () => coliatyCities.map((c) => ({
-      value: c.city_name,
-      label: `${c.city_name} (Hub: ${c.hub_name})`,
-    })),
-    [coliatyCities]
-  );
+  /**
+   * Free text in the modal's city box. Kept apart from `deliveryForm.city`,
+   * which only ever holds an official Coliaty city — what is typed is a search,
+   * what is stored is a validated choice.
+   */
+  const [modalCitySearch, setModalCitySearch] = useState('');
+
+  /** Same four states as the address card, evaluated on the modal's input. */
+  const modalCityMatch: 'empty' | 'unknown' | 'matched' | 'unmatched' = useMemo(() => {
+    const value = (modalCitySearch || '').trim();
+    if (!value) return 'empty';
+    if (loadingCities || coliatyCities.length === 0) return 'unknown';
+    return resolveColiatyCity(value, coliatyCities) ? 'matched' : 'unmatched';
+  }, [modalCitySearch, coliatyCities, loadingCities]);
 
   /** ✅ CONFIRMED opens the delivery form pre-filled from the (possibly edited) lead. */
   const openDeliveryModal = async () => {
@@ -533,6 +540,9 @@ export default function AgentLeadDetail() {
     if (!current) return;
     const rawCity = editedCity || current.city;
     setFormErrors({});
+    // Show what the lead actually holds, so an unrecognised city is visible and
+    // correctable rather than silently blank.
+    setModalCitySearch(rawCity || '');
     setDeliveryForm({
       name: current.fullName || '',
       phone: toColiatyPhone(current.phone || ''),
@@ -551,7 +561,10 @@ export default function AgentLeadDetail() {
     if (coliatyCities.length === 0 && !loadingCities) {
       const cities = await fetchColiatyCities();
       const resolved = resolveColiatyCity(rawCity, cities);
-      if (resolved) setDeliveryForm((prev) => ({ ...prev, city: resolved }));
+      if (resolved) {
+        setModalCitySearch(resolved);
+        setDeliveryForm((prev) => ({ ...prev, city: resolved }));
+      }
     }
   };
 
@@ -1346,30 +1359,58 @@ export default function AgentLeadDetail() {
                 {formErrors.phone && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.phone}</p>}
               </div>
 
+              {/* Same picker and badges as the "Adresse & Ville de livraison"
+                  card — one way to choose a city everywhere on this page. */}
               <div>
-                <label className="block text-xs font-black text-gray-500 uppercase mb-1">Ville (Sélection Coliaty)</label>
-                {loadingCities ? (
-                  <div className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-500 text-xs font-bold animate-pulse">
-                    Chargement des villes...
-                  </div>
-                ) : (
-                  <SearchableSelect
-                    options={coliatyCityOptions}
-                    value={deliveryForm.city}
-                    onChange={(val) => setDeliveryForm({ ...deliveryForm, city: String(val) })}
-                    placeholder="Rechercher une ville Coliaty..."
-                    searchPlaceholder="Tapez une ville (ex: Agadir, Afourar, Casablanca)..."
-                    error={!!formErrors.city}
-                    theme={theme}
-                  />
-                )}
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <label className="text-xs font-black text-gray-500 uppercase">Ville (Sélection Coliaty)</label>
+                  {modalCityMatch === 'matched' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black uppercase tracking-wide">
+                      <Check className="w-3 h-3 stroke-[3]" /> Ville reconnue
+                    </span>
+                  )}
+                  {modalCityMatch === 'unmatched' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 text-[10px] font-black uppercase tracking-wide">
+                      <XCircle className="w-3 h-3 stroke-[3]" /> Non reconnue
+                    </span>
+                  )}
+                  {modalCityMatch === 'empty' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-black uppercase tracking-wide">
+                      <AlertTriangle className="w-3 h-3 stroke-[3]" /> Ville manquante
+                    </span>
+                  )}
+                  {modalCityMatch === 'unknown' && (
+                    <span
+                      title={loadingCities ? 'Chargement de la liste Coliaty…' : 'Liste Coliaty indisponible — vérification impossible'}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-50 text-gray-400 border border-gray-200 text-[10px] font-black uppercase tracking-wide"
+                    >
+                      <Info className="w-3 h-3" /> Non vérifiée
+                    </span>
+                  )}
+                </div>
+                <CityPicker
+                  value={modalCitySearch}
+                  onChange={(v) => {
+                    setModalCitySearch(v);
+                    // Free text is only a search: the form keeps an official city
+                    // or nothing at all, so a half-typed name can never be sent.
+                    setDeliveryForm((prev) => ({ ...prev, city: resolveColiatyCity(v, coliatyCities) }));
+                  }}
+                  onSelect={(name) => {
+                    setModalCitySearch(name);
+                    setDeliveryForm((prev) => ({ ...prev, city: name }));
+                  }}
+                  onCommit={() => {}}
+                  cities={coliatyCities}
+                  loading={loadingCities}
+                  accentRing={accentRing}
+                  selectedClass={citySelectedClass}
+                />
                 {formErrors.city && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.city}</p>}
-                {/* Reads from editedCity, the same value the pre-selection was
-                    resolved from, so an inline correction is reflected here. */}
-                {deliveryForm.city === '' && !loadingCities && (editedCity || lead.city) && (
+                {modalCityMatch === 'unmatched' && (
                   <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
                     <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                    Ville du prospect ({editedCity || lead.city}) non trouvée. Sélectionnez manuellement.
+                    « {modalCitySearch} » n'est pas une ville Coliaty. Choisissez-en une dans la liste.
                   </p>
                 )}
               </div>
@@ -2007,9 +2048,21 @@ function CityPicker({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filtered = cities.filter((c) =>
-    c.city_name?.toLowerCase().includes(value.toLowerCase())
-  );
+  // Accent- and punctuation-insensitive, prefix matches first: agents type
+  // "temara" for "Témara" and "eljadida" for "El Jadida".
+  const filtered = useMemo(() => {
+    const query = normalizeSearch(value).replace(/ /g, '');
+    if (!query) return cities;
+    return cities
+      .map((c, index) => {
+        const name = normalizeSearch(c.city_name || '').replace(/ /g, '');
+        const rank = name.startsWith(query) ? 0 : name.includes(query) ? 1 : -1;
+        return { c, rank, index };
+      })
+      .filter((entry) => entry.rank >= 0)
+      .sort((a, b) => a.rank - b.rank || a.index - b.index)
+      .map((entry) => entry.c);
+  }, [cities, value]);
 
   return (
     <div className="relative" ref={ref}>

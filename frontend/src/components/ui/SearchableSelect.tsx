@@ -1,9 +1,17 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Search, ChevronDown, Check } from 'lucide-react';
+import { normalizeSearch as normalize } from '../../utils/search';
 
 interface Option {
   value: string | number;
   label: string;
+  /**
+   * What the search should actually match on, when the label carries extra
+   * context the user is not typing — e.g. a city labelled "AGADIR (Hub: SUD)"
+   * would otherwise surface every city in the SUD hub for the query "agadir".
+   * The label stays searchable, just ranked below these.
+   */
+  searchText?: string;
 }
 
 interface SearchableSelectProps {
@@ -47,9 +55,37 @@ export function SearchableSelect({
 
   const selectedOption = options.find(opt => opt.value === value);
 
-  const filteredOptions = options.filter(opt => 
-    opt.label.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  /**
+   * Ranked rather than a flat `includes`, so what was typed comes first: exact
+   * prefix, then a word starting with it, then anywhere in the text. Spaces are
+   * ignored on both sides, so "eljadida" finds "El Jadida".
+   *
+   * Only `searchText` is matched when an option provides one — the label's extra
+   * context is there to be read, not searched.
+   */
+  const filteredOptions = useMemo(() => {
+    const query = normalize(searchTerm);
+    if (!query) return options;
+    const compactQuery = query.replace(/ /g, '');
+
+    const ranked: { option: Option; rank: number; index: number }[] = [];
+
+    options.forEach((option, index) => {
+      const haystack = normalize(option.searchText ?? String(option.label));
+      const compact = haystack.replace(/ /g, '');
+
+      let rank = -1;
+      if (compact.startsWith(compactQuery)) rank = 0;
+      else if (haystack.split(' ').some(word => word.startsWith(compactQuery))) rank = 1;
+      else if (compact.includes(compactQuery)) rank = 2;
+
+      if (rank >= 0) ranked.push({ option, rank, index });
+    });
+
+    return ranked
+      .sort((a, b) => a.rank - b.rank || a.index - b.index)
+      .map(entry => entry.option);
+  }, [options, searchTerm]);
 
   const isPrincess = theme === 'princess';
   const isGirly = theme === 'girly';
@@ -86,7 +122,7 @@ export function SearchableSelect({
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-2 bg-white border border-gray-100 rounded-xl shadow-xl max-h-60 flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="absolute z-50 w-full mt-2 bg-white border border-gray-100 rounded-xl shadow-xl max-h-80 flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="p-2 border-b border-gray-50">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -108,9 +144,12 @@ export function SearchableSelect({
                 Aucun résultat trouvé
               </li>
             ) : (
-              filteredOptions.map((opt) => (
+              // Keyed by position, not value: option lists coming from external
+              // APIs (Coliaty's cities) repeat values, and duplicate keys leave
+              // React rendering stale rows after the query changes.
+              filteredOptions.map((opt, index) => (
                 <li
-                  key={opt.value}
+                  key={`${opt.value}-${index}`}
                   onClick={() => {
                     onChange(opt.value);
                     setIsOpen(false);
