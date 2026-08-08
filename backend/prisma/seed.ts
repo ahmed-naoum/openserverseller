@@ -59,6 +59,13 @@ async function main() {
       update: {},
       create: { name: 'HELPER', guardName: 'web' },
     }),
+    // Sub-account created and owned by a VENDOR. Logs in on its own credentials
+    // but every request is re-scoped to the parent vendor by authenticate().
+    prisma.role.upsert({
+      where: { name: 'VENDOR_HELPER' },
+      update: {},
+      create: { name: 'VENDOR_HELPER', guardName: 'web' },
+    }),
   ]);
 
   const roleMap = Object.fromEntries(roles.map((r) => [r.name, r.id]));

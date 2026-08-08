@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import { emitLeadUnassigned } from '../lib/realtime.js';
 
 
 // Check interval: every 10 seconds
@@ -77,6 +78,9 @@ export const startLeadsReassignmentCron = () => {
             }
           });
         });
+
+        // Close the lead page the previous agent may still have open on it.
+        emitLeadUnassigned(lead.assignedAgentId!, { leadId: lead.id, reason: 'EXPIRED' });
         }
       }
 
@@ -115,6 +119,8 @@ export const startLeadsReassignmentCron = () => {
               data: { assignedAgentId: null, status: 'AVAILABLE' }
             });
           });
+
+          emitLeadUnassigned(lead.assignedAgentId!, { leadId: lead.id, reason: 'TIMEOUT_IDLE' });
         }
       }
 
@@ -153,6 +159,8 @@ export const startLeadsReassignmentCron = () => {
               data: { assignedAgentId: null }
             });
           });
+
+          emitLeadUnassigned(lead.assignedAgentId!, { leadId: lead.id, reason: 'TIMEOUT_STATUS' });
         }
       }
 

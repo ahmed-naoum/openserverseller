@@ -13,6 +13,8 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { buildReferralUrl } from '../../utils/referral';
 import { containsBlockedWord } from '../../utils/blockedWords';
+import { currentBasePath } from '../../lib/dashboardBase';
+import { canUseLinkBuilder } from '../../lib/subAccountPermissions';
 
 export default function InfluencerLinks() {
   const { t } = useLanguage();
@@ -815,7 +817,7 @@ export default function InfluencerLinks() {
                         {group.links.map((link: any) => {
                           const ctr = link.clicks > 0 ? ((link.conversions / link.clicks) * 100).toFixed(1) : '0.0';
                           const role = user?.roleName || user?.role;
-                          const showBuilder = role === 'SUPER_ADMIN' || role === 'HELPER' || role === 'VENDOR' || (role === 'INFLUENCER' && user?.canManageInfluencerLinks);
+                          const showBuilder = canUseLinkBuilder(user);
 
                           return (
                             <div 
@@ -894,11 +896,7 @@ export default function InfluencerLinks() {
                                   <button 
                                     onClick={() => {
                                       const role = user?.roleName || user?.role;
-                                      const targetPath = role === 'VENDOR' 
-                                        ? `/dashboard/links/${link.id}/builder` 
-                                        : role === 'INFLUENCER' 
-                                          ? `/influencer/links/${link.id}/builder` 
-                                          : `/helper/links/${link.id}/builder`;
+                                      const targetPath = `${currentBasePath(role)}/links/${link.id}/builder`;
                                       navigate(targetPath);
                                     }} 
                                     disabled={link.status === 'SUSPENDED'}
@@ -1079,7 +1077,7 @@ export default function InfluencerLinks() {
                                         {group.links.map((link: any) => {
                                           const ctr = link.clicks > 0 ? ((link.conversions / link.clicks) * 100).toFixed(1) : '0.0';
                                           const role = user?.roleName || user?.role;
-                                          const showBuilder = role === 'SUPER_ADMIN' || role === 'HELPER' || role === 'VENDOR' || (role === 'INFLUENCER' && user?.canManageInfluencerLinks);
+                                          const showBuilder = canUseLinkBuilder(user);
                                           return (
                                             <tr 
                                               key={link.id}
@@ -1179,11 +1177,7 @@ export default function InfluencerLinks() {
                                                     <button 
                                                       onClick={() => {
                                                         const role = user?.roleName || user?.role;
-                                                        const targetPath = role === 'VENDOR' 
-                                                          ? `/dashboard/links/${link.id}/builder` 
-                                                          : role === 'INFLUENCER' 
-                                                            ? `/influencer/links/${link.id}/builder` 
-                                                            : `/helper/links/${link.id}/builder`;
+                                                        const targetPath = `${currentBasePath(role)}/links/${link.id}/builder`;
                                                         navigate(targetPath);
                                                       }} 
                                                       disabled={link.status === 'SUSPENDED'}

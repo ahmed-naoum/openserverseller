@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { getVerificationStatus } from '../../pages/common/ProfileVerification';
 import { UserCheck } from 'lucide-react';
+import { basePathFor, VENDOR_HELPER_BASE } from '../../lib/dashboardBase';
 
 export default function ProfileProgressBanner() {
   const { user, platformSettings } = useAuth();
@@ -11,8 +12,14 @@ export default function ProfileProgressBanner() {
   const { percentage } = getVerificationStatus(user, platformSettings);
 
   // Don't show if 100% complete, on verification page, admin, helper, confirmation, or call center agent
+  //
+  // Vendor sub-accounts are excluded too: identity, bank details and the
+  // contract belong to the vendor, so a helper has nothing here it could
+  // complete — and no /verification page in its tree for the button to open.
   if (
     percentage === 100 ||
+    user?.role === 'VENDOR_HELPER' ||
+    location.pathname.startsWith(VENDOR_HELPER_BASE) ||
     location.pathname.includes('/verification') ||
     location.pathname.startsWith('/admin') ||
     location.pathname.startsWith('/helper') ||
@@ -23,16 +30,7 @@ export default function ProfileProgressBanner() {
   }
 
   // Determine the base path for navigation
-  const getBasePath = () => {
-    if (location.pathname.startsWith('/admin')) return '/admin';
-    if (location.pathname.startsWith('/agent')) return '/agent';
-    if (location.pathname.startsWith('/grosseller')) return '/grosseller';
-    if (location.pathname.startsWith('/influencer')) return '/influencer';
-    if (location.pathname.startsWith('/confirmation')) return '/confirmation';
-    return '/dashboard';
-  };
-
-  const verificationPath = `${getBasePath()}/verification`;
+  const verificationPath = `${basePathFor(user?.role, location.pathname)}/verification`;
 
   return (
     <div className="bg-[#1e2333] mb-6 sm:mb-8 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl border border-slate-700/50 relative overflow-hidden group">

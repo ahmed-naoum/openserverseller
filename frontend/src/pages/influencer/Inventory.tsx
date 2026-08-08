@@ -28,6 +28,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { buildReferralUrl } from '../../utils/referral';
 import { containsBlockedWord } from '../../utils/blockedWords';
 import LinksManagerModal, { LinksManagerConfig } from '../../components/modals/LinksManagerModal';
+import { currentBasePath } from '../../lib/dashboardBase';
+import { canUseLinkBuilder } from '../../lib/subAccountPermissions';
 
 type ClaimStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'BUILDING';
 
@@ -131,11 +133,7 @@ export default function InfluencerInventory() {
       if (productLinks.length === 1) {
         const link = productLinks[0];
         const role = user?.roleName || user?.role;
-        const targetPath = role === 'VENDOR' 
-          ? `/dashboard/links/${link.id}/builder` 
-          : role === 'INFLUENCER' 
-            ? `/influencer/links/${link.id}/builder` 
-            : `/helper/links/${link.id}/builder`;
+        const targetPath = `${currentBasePath(role)}/links/${link.id}/builder`;
         navigate(targetPath);
         return;
       }
@@ -301,7 +299,7 @@ export default function InfluencerInventory() {
                         <div className="flex items-center gap-2">
                           {(() => {
                             const role = user?.roleName || user?.role;
-                            const showBuilder = role === 'SUPER_ADMIN' || role === 'HELPER' || role === 'VENDOR' || (role === 'INFLUENCER' && user?.canManageInfluencerLinks);
+                            const showBuilder = canUseLinkBuilder(user);
                             return showBuilder ? (
                               <button 
                                 onClick={() => handleOpenBuilderSelection(claim.productId, claim.product.nameFr)}
@@ -415,11 +413,7 @@ export default function InfluencerInventory() {
                     <button
                       onClick={() => {
                         const role = user?.roleName || user?.role;
-                        const targetPath = role === 'VENDOR' 
-                          ? `/dashboard/links/${link.id}/builder` 
-                          : role === 'INFLUENCER' 
-                            ? `/influencer/links/${link.id}/builder` 
-                            : `/helper/links/${link.id}/builder`;
+                        const targetPath = `${currentBasePath(role)}/links/${link.id}/builder`;
                         navigate(targetPath);
                       }}
                       className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors text-xs font-bold shadow-md shadow-purple-100"

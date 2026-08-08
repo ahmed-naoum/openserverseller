@@ -18,6 +18,7 @@ import {
   coliatyQueueStats,
 } from '../services/coliaty.service.js';
 import { emitNewTickets, type NewTicketPayload } from '../lib/ticketEvents.js';
+import { SAFE_USER_SELECT } from '../lib/safeUserSelect.js';
 
 const router = Router();
 
@@ -359,7 +360,7 @@ router.get(
     const order = await prisma.order.findFirst({
       where,
       include: {
-        vendor: { include: { profile: true } },
+        vendor: { select: SAFE_USER_SELECT },
         statusHistory: {
           include: { changedByUser: { include: { profile: true } } },
           orderBy: { createdAt: 'desc' },

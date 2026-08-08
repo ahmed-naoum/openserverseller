@@ -5,9 +5,11 @@ import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import axios from 'axios';
 import { getSecret } from '../lib/secretStore.js';
-import { getIO } from '../lib/realtime.js';
+import { getIO, emitLeadUnassigned } from '../lib/realtime.js';
 import { emitNewTickets } from '../lib/ticketEvents.js';
 import { getAgentLeadScope, getAgentProductRestrictions } from '../utils/agentScope.js';
+import { isCompletePhone } from '../lib/phoneCompleteness.js';
+import { SAFE_USER_SELECT } from '../lib/safeUserSelect.js';
 
 // How many rows one request may return. This is a memory ceiling, not a page
 // size — every list endpoint reports its true total separately (`total`,
@@ -340,7 +342,7 @@ router.get(
             include: {
               product: { include: { images: true } },
               landingPage: true,
-              influencer: { include: { profile: true, role: true } },
+              influencer: { select: SAFE_USER_SELECT },
             },
           },
           order: true,
@@ -838,7 +840,7 @@ router.get(
         take: takeLimit,
         orderBy: { updatedAt: 'desc' },
         include: {
-          assignedAgent: { include: { profile: true } },
+          assignedAgent: { select: SAFE_USER_SELECT },
           referralLink: {
             include: { product: { include: { images: true } }, landingPage: true },
           },
@@ -935,6 +937,8 @@ router.get(
       dateTo,
       minAmount,
       maxAmount,
+      productId,
+      agentId,
       tab,
       sort = 'recent',
     } = req.query as Record<string, string | undefined>;
@@ -1000,6 +1004,18 @@ router.get(
       }
     }
 
+    // Product filter — a parcel matches when any of its lines is that product
+    if (productId && !Number.isNaN(Number(productId))) {
+      orderFilter.items = { some: { productId: Number(productId) } };
+    }
+
+    // Call-center agent filter. Skipped for CALL_CENTER_AGENT, whose base scope is
+    // already pinned to their own id — accepting it there could only widen it.
+    if (agentId && req.user!.roleName !== 'CALL_CENTER_AGENT') {
+      if (agentId === 'none') where.assignedAgentId = null;
+      else if (!Number.isNaN(Number(agentId))) where.assignedAgentId = Number(agentId);
+    }
+
     // "Retours non facturés" tab
     if (tab === 'uninvoiced_returns') {
       orderFilter.status = { in: ['RETURNED'] };
@@ -1037,7 +1053,8 @@ router.get(
       prisma.lead.findMany({
         where,
         include: {
-          vendor: { include: { profile: true } },
+          vendor: { select: SAFE_USER_SELECT },
+          assignedAgent: { select: SAFE_USER_SELECT },
           order: {
             include: {
               statusHistory: {
@@ -1084,6 +1101,7 @@ router.get(
           productVariant: o.productVariant || null,
           items: o.items?.map((item: any) => ({
             id: item.id,
+            productId: item.productId,
             productName: item.product?.nameFr || item.product?.nameAr,
             productSku: item.product?.sku,
             productImage: item.product?.images?.[0]?.imageUrl,
@@ -1101,6 +1119,10 @@ router.get(
           vendorId: l.vendorId,
           vendorName: l.vendor?.profile?.fullName || l.vendor?.email || null,
           vendorEmail: l.vendor?.email || null,
+          // Call-center agent the lead is assigned to
+          agentId: l.assignedAgentId,
+          agentName: (l as any).assignedAgent?.profile?.fullName || (l as any).assignedAgent?.email || null,
+          agentEmail: (l as any).assignedAgent?.email || null,
           createdAt: o.createdAt,
           updatedAt: o.updatedAt,
           // Last manual status change (reason is mandatory for DELIVERED / RETURNED)
@@ -1118,8 +1140,10 @@ router.get(
       where: baseWhere,
       select: {
         vendorId: true,
+        assignedAgentId: true,
         paymentSituation: true,
         vendor: { select: { email: true, profile: { select: { fullName: true } } } },
+        assignedAgent: { select: { email: true, profile: { select: { fullName: true } } } },
         order: {
           select: {
             status: true,
@@ -1141,6 +1165,8 @@ router.get(
     const statusCounts: Record<string, number> = {};
     const cities = new Set<string>();
     const vendorMap = new Map<number, string>();
+    const agentMap = new Map<number, string>();
+    let unassignedAgentCount = 0;
     let withColiaty = 0;
     let uninvoicedReturns = 0;
     let revenueTotal = 0;
@@ -1166,7 +1192,40 @@ router.get(
           row.vendor?.profile?.fullName || row.vendor?.email || `#${row.vendorId}`
         );
       }
+
+      if (row.assignedAgentId) {
+        if (!agentMap.has(row.assignedAgentId)) {
+          agentMap.set(
+            row.assignedAgentId,
+            (row as any).assignedAgent?.profile?.fullName ||
+              (row as any).assignedAgent?.email ||
+              `#${row.assignedAgentId}`
+          );
+        }
+      } else {
+        unassignedAgentCount++;
+      }
     }
+
+    // Products that actually appear on a parcel in this scope. `distinct` keeps
+    // this to one row per product instead of one per order line.
+    const productRows = await prisma.orderItem.findMany({
+      where: { order: { lead: { is: baseWhere } } },
+      select: {
+        productId: true,
+        product: { select: { nameFr: true, nameAr: true, sku: true } },
+      },
+      distinct: ['productId'],
+    });
+
+    const products = productRows
+      .filter(r => r.productId)
+      .map(r => ({
+        id: r.productId,
+        name: r.product?.nameFr || r.product?.nameAr || `#${r.productId}`,
+        sku: r.product?.sku || null,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     res.json({
       status: 'success',
@@ -1195,6 +1254,11 @@ router.get(
           vendors: Array.from(vendorMap.entries())
             .map(([id, name]) => ({ id, name }))
             .sort((a, b) => a.name.localeCompare(b.name)),
+          agents: Array.from(agentMap.entries())
+            .map(([id, name]) => ({ id, name }))
+            .sort((a, b) => a.name.localeCompare(b.name)),
+          unassignedAgentCount,
+          products,
         },
       },
     });
@@ -1416,7 +1480,7 @@ router.post(
     const lead = await prisma.lead.findUnique({
       where: { id: Number(id) },
       include: {
-        assignedAgent: { include: { profile: true } },
+        assignedAgent: { select: SAFE_USER_SELECT },
         order: { select: { id: true } },
       },
     });
@@ -1532,6 +1596,14 @@ router.post(
       console.error('[force-claim] realtime notify failed:', e);
     }
 
+    // Uniform signal so the previous agent's open lead page closes itself.
+    emitLeadUnassigned(previousAgentId, {
+      leadId: lead.id,
+      leadName: lead.fullName,
+      reason: 'FORCE_CLAIMED',
+      byAgent: newAgentName,
+    });
+
     res.json({
       status: 'success',
       message: 'Lead réclamé avec succès.',
@@ -1549,8 +1621,8 @@ router.get(
     const lead = await prisma.lead.findUnique({
       where: { id: Number(id) },
       include: {
-        vendor: { include: { profile: true } },
-        assignedAgent: { include: { profile: true } },
+        vendor: { select: SAFE_USER_SELECT },
+        assignedAgent: { select: SAFE_USER_SELECT },
         callLogs: { orderBy: { createdAt: 'desc' } },
         statusHistory: {
           orderBy: { createdAt: 'desc' },
@@ -1562,7 +1634,7 @@ router.get(
         },
         referralLink: {
           include: {
-            influencer: { include: { profile: true, role: true } },
+            influencer: { select: SAFE_USER_SELECT },
             product: { include: { images: true } },
             landingPage: true
           }
@@ -2797,6 +2869,15 @@ router.post(
       });
     });
 
+    // Handed to somebody else — close the previous holder's open lead page.
+    if (lead.assignedAgentId && lead.assignedAgentId !== agent.id) {
+      emitLeadUnassigned(lead.assignedAgentId, {
+        leadId: lead.id,
+        leadName: lead.fullName,
+        reason: 'REASSIGNED',
+      });
+    }
+
     res.json({
       status: 'success',
       message: 'Lead assigned successfully',
@@ -3974,18 +4055,24 @@ router.get(
     const limit = parseInt(req.query.limit as string) || 30;
     const skip = (page - 1) * limit;
     const search = (req.query.search as string)?.trim();
-    // 'saved'   → the cart's phone already exists as a Lead in the database
-    // 'unsaved' → it does not
-    const statusFilter = (req.query.status as string) === 'saved' ? 'saved'
-      : (req.query.status as string) === 'unsaved' ? 'unsaved'
+    // 'unsaved'   → the cart's phone is not a Lead anywhere yet: the work queue
+    // 'converted' → this cart was recovered into a Lead from this page
+    //
+    // There is no 'saved' any more. A number that is already a Lead — whether in
+    // this agent's own list or someone else's — is not work, it is noise, so it
+    // is excluded from the page entirely (see `isVisible` below).
+    const statusFilter = (req.query.status as string) === 'unsaved' ? 'unsaved'
+      : (req.query.status as string) === 'converted' ? 'converted'
+      : 'all';
+    // Orthogonal to the above: whether the visitor got far enough to type a
+    // dialable number. Most abandoned carts hold a half-entered one.
+    const qualityFilter = (req.query.phoneQuality as string) === 'complete' ? 'complete'
+      : (req.query.phoneQuality as string) === 'incomplete' ? 'incomplete'
       : 'all';
 
     const influencerIds = await getAgentAssignedInfluencerIds(req.user!.id);
     const hasScope = influencerIds.length > 0;
 
-    // Converted carts stay in the list — they are the ones that carry the "Validé"
-    // badge. The status filter (defaulting to 'unsaved' on the client) is what keeps
-    // the agent's actionable queue clean.
     const and: any[] = [
       { completed: false },
       { phone: { not: null } },
@@ -4009,7 +4096,7 @@ router.get(
       if (codes.length === 0) {
         return res.json({
           attempts: [], total: 0, page, totalPages: 0, scoped: true,
-          counts: { all: 0, saved: 0, unsaved: 0 },
+          counts: { all: 0, unsaved: 0, complete: 0, incomplete: 0, converted: 0 },
         });
       }
       and.push({ referralCode: { in: codes } });
@@ -4031,7 +4118,7 @@ router.get(
     // Two narrow columns, so this stays cheap even on a large backlog.
     const candidates = await prisma.checkoutAttempt.findMany({
       where: { AND: and },
-      select: { id: true, phone: true },
+      select: { id: true, phone: true, convertedLeadId: true },
     });
     const candidateCores = Array.from(
       new Set(candidates.map((c) => normalizePhone(c.phone)).filter(Boolean)),
@@ -4049,23 +4136,48 @@ router.get(
       const core = normalizePhone(c.phone);
       return !!core && knownCores.has(core);
     };
-    const savedCount = candidates.filter(isSaved).length;
+    const isComplete = (c: { phone: string | null }) => isCompletePhone(c.phone);
+    const isConverted = (c: { convertedLeadId: number | null }) => c.convertedLeadId != null;
+
+    /**
+     * A cart whose number is already a Lead is not work: someone is on it, or it
+     * was handled long ago. Those never reach the page — which also removes the
+     * "already in your leads" case, since an agent's own leads are a subset of
+     * every lead. The exception is a cart this page converted: those stay so the
+     * agent can audit their own recoveries under "Déjà converti".
+     */
+    const isVisible = (c: (typeof candidates)[number]) => !isSaved(c) || isConverted(c);
+    const visible = candidates.filter(isVisible);
+
+    const completeCount = visible.filter(isComplete).length;
+    const convertedCount = visible.filter(isConverted).length;
     const counts = {
-      all: candidates.length,
-      saved: savedCount,
-      unsaved: candidates.length - savedCount,
+      all: visible.length,
+      unsaved: visible.length - convertedCount,
+      complete: completeCount,
+      incomplete: visible.length - completeCount,
+      converted: convertedCount,
     };
 
-    if (statusFilter !== 'all') {
-      const wanted = candidates
-        .filter((c) => isSaved(c) === (statusFilter === 'saved'))
-        .map((c) => c.id);
+    const matchesStatus = (c: (typeof candidates)[number]) => {
+      if (statusFilter === 'all') return true;
+      if (statusFilter === 'converted') return isConverted(c);
+      return !isConverted(c); // 'unsaved'
+    };
 
-      if (wanted.length === 0) {
-        return res.json({ attempts: [], total: 0, page, totalPages: 0, scoped: hasScope, counts });
-      }
-      and.push({ id: { in: wanted } });
+    // Resolved to an id list before pagination: these are conditions Prisma
+    // cannot express in the where clause, so applying them after `take` would
+    // make `total` and the page slice describe a different set than the one
+    // being filtered. The visibility rule alone makes this unconditional.
+    const wanted = visible
+      .filter(matchesStatus)
+      .filter((c) => qualityFilter === 'all' || isComplete(c) === (qualityFilter === 'complete'))
+      .map((c) => c.id);
+
+    if (wanted.length === 0) {
+      return res.json({ attempts: [], total: 0, page, totalPages: 0, scoped: hasScope, counts });
     }
+    and.push({ id: { in: wanted } });
 
     const where = { AND: and };
 
@@ -4157,6 +4269,11 @@ router.post(
     if (!attempt) throw new AppException(404, 'Panier introuvable');
     if (attempt.convertedLeadId) throw new AppException(400, 'Ce panier a déjà été converti en lead');
     if (!attempt.phone) throw new AppException(400, 'Ce panier n\'a pas de numéro de téléphone');
+    // Half-typed numbers are convertible on purpose (product decision): agents
+    // work these carts and complete the number from the session replay. The lead
+    // is tagged below so an incomplete one is easy to find and fix before it is
+    // pushed — Coliaty rejects a parcel whose number isn't dialable.
+    const phoneIsIncomplete = !isCompletePhone(attempt.phone);
     if (!attempt.referralCode) throw new AppException(400, 'Ce panier n\'est lié à aucun lien de parrainage');
 
     const link = await prisma.referralLink.findUnique({
@@ -4204,7 +4321,9 @@ router.post(
           assignedAgentId: req.user!.id,
           source: 'ABANDONED_CART',
           sourceMode: 'AFFILIATE',
-          notes: 'Panier abandonné récupéré depuis le Streaming Direct.',
+          notes: phoneIsIncomplete
+            ? `Panier abandonné récupéré depuis le Streaming Direct. ⚠️ NUMÉRO INCOMPLET tel que saisi par le client ("${attempt.phone}") — à compléter avant toute expédition.`
+            : 'Panier abandonné récupéré depuis le Streaming Direct.',
         },
       });
 

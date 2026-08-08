@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { useAuth } from '../../contexts/AuthContext';
 import { 
   Copy, Check, Users, PackageCheck, Wallet, Link2, 
   Search, ShieldAlert, Award, RefreshCw, UserCheck,
@@ -259,6 +261,7 @@ const translations = {
 };
 
 export default function HelperAffiliate() {
+  const { user } = useAuth();
   const { language } = useLanguage();
   const t = translations[language as 'ar' | 'en' | 'fr'] || translations.fr;
 
@@ -367,6 +370,28 @@ export default function HelperAffiliate() {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
+  // Hiding the nav item isn't enough — the URL is still typeable, so the page
+  // itself refuses to render without the permission.
+  if (user?.role === 'HELPER' && !user?.canManageAffiliateInvites) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+        <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center mb-6">
+          <ShieldAlert size={40} />
+        </div>
+        <h2 className="text-2xl font-black text-slate-800 mb-2">Accès non autorisé</h2>
+        <p className="text-slate-500 max-w-md mb-8">
+          Le programme d'affiliation n'est pas activé sur votre compte. Contactez un administrateur pour y accéder.
+        </p>
+        <Link
+          to="/helper"
+          className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
+        >
+          Retour au tableau de bord
+        </Link>
       </div>
     );
   }

@@ -12,6 +12,7 @@ import { getBlockedIPsList, unblockIP } from '../middleware/security.js';
 import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
+import { SAFE_USER_SELECT } from '../lib/safeUserSelect.js';
 
 const router = Router();
 
@@ -886,7 +887,7 @@ router.get(
       where,
       include: {
         agent: { include: { profile: true, role: true } },
-        influencer: { include: { profile: true, role: true } },
+        influencer: { select: SAFE_USER_SELECT },
       },
       orderBy: { assignedAt: 'desc' },
     });

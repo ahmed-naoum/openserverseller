@@ -5,6 +5,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { translateNotification } from '../../utils/notificationTranslator';
 import { dashboardApi, chatApi, notificationsApi, adminApi, youcanApi, shopifyApi, wooCommerceApi } from '../../lib/api';
+import { VENDOR_HELPER_BASE, basePathFor, dashboardRootOf, isVendorTree } from '../../lib/dashboardBase';
+import { accountIdOf, isReadOnlySubAccount, requiredPermissionForPage, subCan } from '../../lib/subAccountPermissions';
 import toast from 'react-hot-toast';
 import { useSocket } from '../../contexts/SocketContext';
 import AnnouncementBanner from '../common/AnnouncementBanner';
@@ -70,11 +72,16 @@ import {
   Target,
   Music,
   Ghost,
-  FileSpreadsheet
+  FileSpreadsheet,
+  UserCog
 } from 'lucide-react';
 
-const navigation = {
-  vendor: [
+/**
+ * The vendor's own sidebar. A vendor sub-account renders the very same tree at
+ * a different prefix (see `vendorHelperNav` below), so add new pages here once
+ * and both dashboards pick them up.
+ */
+const vendorNav = [
     { name: 'nav_dashboard', href: '/dashboard', icon: Home },
     { 
       name: 'nav_youcan_integration', 
@@ -128,8 +135,34 @@ const navigation = {
         { name: 'nav_snapchat_pixels', href: '/dashboard/pixels/snapchat', icon: Ghost },
       ]
     },
+    { name: 'Sous-comptes', href: '/dashboard/sub-accounts', icon: UserCog },
     { name: 'nav_settings', href: '/dashboard/settings', icon: Settings },
-  ],
+];
+
+/**
+ * Re-point a nav tree at another mount prefix. The sub-account dashboard is the
+ * vendor dashboard served from `/vendor-agent-helper-dashboard`, and every href
+ * in `vendorNav` is a literal, so they have to be rewritten rather than shared.
+ */
+const rebaseNav = (items: any[], base: string): any[] =>
+  items.map((item) => ({
+    ...item,
+    ...(item.href ? { href: item.href.replace(/^\/dashboard/, base) } : {}),
+    ...(item.children ? { children: rebaseNav(item.children, base) } : {}),
+  }));
+
+/**
+ * A sub-account gets everything the vendor has except sub-account management —
+ * only the account owner hands out permissions.
+ */
+const vendorHelperNav = rebaseNav(
+  vendorNav.filter((item) => item.href !== '/dashboard/sub-accounts'),
+  VENDOR_HELPER_BASE,
+);
+
+const navigation = {
+  vendor: vendorNav,
+  vendor_helper: vendorHelperNav,
   grosseller: [
     { name: 'Vue d\'ensemble', href: '/grosseller', icon: Home },
     { name: 'Mon Profil', href: '/grosseller/profile', icon: Users },
@@ -365,7 +398,7 @@ export default function DashboardLayout() {
   });
 
   useEffect(() => {
-    if (user?.role === 'VENDOR') {
+    if (user?.role === 'VENDOR' || user?.role === 'VENDOR_HELPER') {
       Promise.all([
         youcanApi.getStatus().catch(() => null),
         shopifyApi.getStatus().catch(() => null),
@@ -490,9 +523,16 @@ export default function DashboardLayout() {
 
   const getRolePrefix = () => {
     if (!user) return '';
+    // Trust the tree the user is actually browsing before the role: a vendor and
+    // its sub-account share every page, and only the URL tells the two apart.
+    const fromUrl = dashboardRootOf(location.pathname);
+    if (fromUrl) return fromUrl;
     const role = user.role;
     if (['SUPER_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_SUPPORT'].includes(role)) {
       return '/admin';
+    }
+    if (role === 'VENDOR_HELPER') {
+      return VENDOR_HELPER_BASE;
     }
     if (role === 'VENDOR') {
       return '/dashboard';
@@ -630,7 +670,10 @@ export default function DashboardLayout() {
     const handleNewMessage = (data: { message: any; conversationId: number }) => {
       const params = new URLSearchParams(location.search);
       const activeConvId = params.get('convId');
-      const isMyMessage = data.message.sender.id === user?.id;
+      // Chat is served as the parent vendor, so a sub-account's own sends come
+      // back under the vendor id — comparing to user.id would make the helper
+      // notify itself for its own messages.
+      const isMyMessage = data.message.sender.id === accountIdOf(user);
       const isViewingThisConv = activeConvId === String(data.conversationId);
       const isBackground = document.hidden || !document.hasFocus();
       
@@ -801,6 +844,7 @@ export default function DashboardLayout() {
       if (user?.role === 'SYSTEM_SUPPORT') return navigation.system_support;
       return navigation.admin;
     }
+    if (location.pathname.startsWith(VENDOR_HELPER_BASE)) return navigation.vendor_helper;
     if (location.pathname.startsWith('/agent')) return navigation.agent;
     if (location.pathname.startsWith('/grosseller')) return navigation.grosseller;
     if (location.pathname.startsWith('/influencer')) return navigation.influencer;
@@ -815,14 +859,26 @@ export default function DashboardLayout() {
   const walletUnreadCount = unreadNotifications.filter(n => n.type === 'PAYOUT_REQUEST_STATUS').length;
   const leadsUnreadCount = unreadNotifications.filter(n => ['NEW_LEAD', 'LEAD_STATUS_CHANGED'].includes(n.type)).length;
 
-  const isVendorDashboard = !location.pathname.startsWith('/admin') && !location.pathname.startsWith('/agent') && !location.pathname.startsWith('/grosseller') && !location.pathname.startsWith('/influencer') && !location.pathname.startsWith('/confirmation') && !location.pathname.startsWith('/helper');
+  // True in both vendor trees — the vendor's own and a sub-account's — because
+  // they share the Vendeur/Affilié mode switching and the same page set.
+  const isVendorHelperDashboard = location.pathname.startsWith(VENDOR_HELPER_BASE);
+  const isVendorDashboard = isVendorTree(location.pathname);
   const currentMode = user?.mode || 'SELLER';
 
-  // Permission check for individual helper nav items (works on both top-level and children)
+  // Permission check for individual nav items (works on both top-level and children)
   const isHelperItemAllowed = (item: any): boolean => {
+    // Vendor sub-accounts: each page is a grant the vendor turns on. The map
+    // lives in lib/subAccountPermissions so the sidebar and SubAccountGuard
+    // (which blocks the URL) can never disagree about what a page needs.
+    if (user?.role === 'VENDOR_HELPER') {
+      if (!item.href) return true;
+      const page = item.href.replace(VENDOR_HELPER_BASE, '').split('?')[0] || '/';
+      const needed = requiredPermissionForPage(page);
+      return !needed || subCan(user, needed);
+    }
     if (user?.role !== 'HELPER') return true;
     if (item.href === '/helper/users') return !!user?.canImpersonate;
-    if (item.href === '/helper/affiliate') return true; // Always allow Helper to view affiliate menu item
+    if (item.href === '/helper/affiliate') return !!user?.canManageAffiliateInvites;
     if (item.href === '/helper/leads') return !!user?.canManageLeads;
     if (item.href === '/helper/products') return !!user?.canManageProducts;
     if (item.href === '/helper/colis') return !!user?.canManageOrders;
@@ -845,7 +901,9 @@ export default function DashboardLayout() {
             if (child.integrationKey === 'woocommerce') return integrationsStatus.woocommerce;
             return true;
           });
-        if (user?.role === 'HELPER' && filteredChildren.length === 0) return null;
+        // A group whose children were all permission-filtered away would render
+        // as an empty, unclickable accordion header.
+        if (['HELPER', 'VENDOR_HELPER'].includes(user?.role || '') && filteredChildren.length === 0) return null;
         return { ...item, children: filteredChildren };
       }
       // For flat items, check directly
@@ -885,6 +943,12 @@ export default function DashboardLayout() {
     if (location.pathname.startsWith('/influencer')) return { label: 'Influenceur', color: 'text-purple-600 bg-purple-50' };
     if (location.pathname.startsWith('/confirmation')) return { label: 'Confirmation', color: 'text-teal-600 bg-teal-50' };
     if (location.pathname.startsWith('/helper')) return { label: 'Helper', color: 'text-orange-600 bg-orange-50' };
+    if (isVendorHelperDashboard) {
+      return {
+        label: currentMode === 'AFFILIATE' ? 'Affilié · Assistant' : 'Vendeur · Assistant',
+        color: 'text-amber-600 bg-amber-50',
+      };
+    }
     return { label: currentMode === 'AFFILIATE' ? 'Affilié' : 'Vendeur', color: 'text-primary-600 bg-primary-50' };
   };
   const section = getCurrentSection();
@@ -963,6 +1027,9 @@ export default function DashboardLayout() {
   };
 
   const getRoleLabel = () => {
+    if (isVendorHelperDashboard) {
+      return currentMode === 'AFFILIATE' ? 'Affilié (Assistant)' : 'Vendeur (Assistant)';
+    }
     if (isVendorDashboard) {
       return currentMode === 'AFFILIATE' ? 'Affilié' : 'VENDOR';
     }
@@ -986,6 +1053,8 @@ export default function DashboardLayout() {
     ? 'Retourner à mon compte Admin'
     : originalUserRole === 'HELPER'
     ? 'Retourner à mon compte Helper'
+    : originalUserRole === 'VENDOR_HELPER'
+    ? 'Retourner à mon compte Assistant'
     : 'Retourner à mon compte';
 
   return (
@@ -1002,6 +1071,16 @@ export default function DashboardLayout() {
           >
             {revertButtonLabel}
           </button>
+        </div>
+      )}
+      {/* Read-only sub-account: say so up front, rather than letting every
+          action fail with a 403 the user has to interpret. */}
+      {isReadOnlySubAccount(user) && (
+        <div className="bg-sky-600 text-white text-center py-2 px-4 shadow-md sticky top-0 z-[99] flex items-center justify-center gap-2">
+          <Eye size={16} />
+          <span className="font-bold text-sm">
+            Mode lecture seule : vous pouvez tout consulter, mais aucune modification n'est autorisée.
+          </span>
         </div>
       )}
       {/* Mobile Sidebar Overlay */}
@@ -1397,6 +1476,10 @@ export default function DashboardLayout() {
                     switch (user?.role) {
                       case 'VENDOR':
                         return navigation.vendor;
+                      case 'VENDOR_HELPER':
+                        // Already permission-filtered; the raw array would offer
+                        // pages this sub-account cannot open.
+                        return navItems;
                       case 'GROSSELLER':
                         return navigation.grosseller;
                       case 'SUPER_ADMIN':
@@ -1711,13 +1794,7 @@ export default function DashboardLayout() {
                             key={item.tab}
                             onClick={() => {
                               setShowProfileMenu(false);
-                              const base = location.pathname.startsWith('/admin') ? '/admin'
-                                : location.pathname.startsWith('/agent') ? '/agent'
-                                : location.pathname.startsWith('/grosseller') ? '/grosseller'
-                                : location.pathname.startsWith('/influencer') ? '/influencer'
-                                : location.pathname.startsWith('/confirmation') ? '/confirmation'
-                                : location.pathname.startsWith('/helper') ? '/helper'
-                                : '/dashboard';
+                              const base = basePathFor(user?.role, location.pathname);
                               navigate(`${base}/settings${item.tab ? `?tab=${item.tab}` : ''}`);
                             }}
                             className="w-full flex items-center gap-3 px-4 py-3 text-[13px] font-bold text-slate-600 hover:bg-slate-50 rounded-2xl transition-all group"

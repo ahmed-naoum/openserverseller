@@ -13,6 +13,8 @@ import { useSocket } from '../../contexts/SocketContext';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { currentBasePath } from '../../lib/dashboardBase';
+import { accountIdOf } from '../../lib/subAccountPermissions';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -83,6 +85,9 @@ function Avatar({ name, size = 'md' }: { name?: string; size?: 'sm' | 'md' | 'lg
 export default function Chat() {
   const { t, language } = useLanguage();
   const { user } = useAuth();
+  // Data comes back under the parent vendor for a sub-account, so identity
+  // comparisons must use the account the API answers as.
+  const meId = accountIdOf(user);
   const { socket } = useSocket();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -134,7 +139,8 @@ export default function Chat() {
       case 'SUPER_ADMIN':
       case 'FINANCE_ADMIN':
       case 'SYSTEM_SUPPORT': return '/admin/support';
-      case 'VENDOR': return '/dashboard/support';
+      case 'VENDOR':
+      case 'VENDOR_HELPER': return `${currentBasePath(role)}/support`;
       case 'GROSSELLER': return '/grosseller/support';
       case 'INFLUENCER': return '/influencer/support';
       default: return '/admin/support';
@@ -278,7 +284,7 @@ export default function Chat() {
             ...data.message,
             sender: {
               ...data.message.sender,
-              isMe: data.message.sender.id === user?.id
+              isMe: data.message.sender.id === meId
             }
           };
 
@@ -340,7 +346,7 @@ export default function Chat() {
 
     const handleNewTicket = (data: { conversation: any }) => {
       // ONLY add to sidebar if I am the creator/participant
-      const isParticipant = data.conversation.participants?.some((p: any) => p.userId === user?.id);
+      const isParticipant = data.conversation.participants?.some((p: any) => p.userId === meId);
       if (!isParticipant) return;
 
       queryClient.setQueryData(['conversations'], (oldData: any) => {
@@ -364,7 +370,7 @@ export default function Chat() {
       queryClient.setQueryData(['conversations'], (oldData: any) => {
         if (!oldData?.data?.data?.conversations) return oldData;
         
-        const isMe = data.participant.userId === user?.id;
+        const isMe = data.participant.userId === meId;
         const isAgent = ['SUPER_ADMIN', 'SYSTEM_SUPPORT'].includes(user?.roleName || '');
         
         const newConvs = oldData.data.data.conversations.map((c: any) => {
@@ -450,7 +456,7 @@ export default function Chat() {
       socket.off('conversation-closed', handleClosed);
       socket.off('conversation-opened', handleOpened);
     };
-  }, [socket, selectedConvId, queryClient, user?.id]);
+  }, [socket, selectedConvId, queryClient, meId]);
 
   // Join/Leave conversation room
   useEffect(() => {
@@ -616,7 +622,7 @@ export default function Chat() {
   };
 
   const filteredConvs = conversations.filter((c: any) =>
-    getConvTitle(c, user?.id, t).toLowerCase().includes(searchQuery.toLowerCase())
+    getConvTitle(c, meId, t).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const selectedConv = conversations.find((c: any) => c.id.toString() === selectedConvId) || singleConvData?.data?.data?.conversation;
@@ -691,8 +697,8 @@ export default function Chat() {
             <div className="py-2">
               {filteredConvs.map((conv: any) => {
                 const isActive = selectedConvId === conv.id.toString();
-                const title = getConvTitle(conv, user?.id, t);
-                const avatarName = getConvAvatar(conv, user?.id);
+                const title = getConvTitle(conv, meId, t);
+                const avatarName = getConvAvatar(conv, meId);
                 const isSupport = conv.type === 'SUPPORT';
                 return (
                   <button
@@ -770,12 +776,12 @@ export default function Chat() {
                   <Headphones size={18} className="text-white" />
                 </div>
               ) : (
-                <Avatar name={getConvAvatar(selectedConv, user?.id)} size="md" />
+                <Avatar name={getConvAvatar(selectedConv, meId)} size="md" />
               )}
 
               <div className="flex-1 min-w-0">
                 <h3 className="font-bold text-slate-900 text-sm leading-none mb-1 truncate">
-                  {getConvTitle(selectedConv, user?.id, t)}
+                  {getConvTitle(selectedConv, meId, t)}
                 </h3>
                 <div className="flex items-center gap-1.5">
                   <span className={`w-1.5 h-1.5 rounded-full ${

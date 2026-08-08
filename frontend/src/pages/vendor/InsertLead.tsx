@@ -23,6 +23,7 @@ import {
   X
 } from 'lucide-react';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import { currentBasePath } from '../../lib/dashboardBase';
 
 export default function VendorInsertLead() {
   const { user } = useAuth();
@@ -109,14 +110,18 @@ export default function VendorInsertLead() {
     loadCities();
   }, []);
 
-  // Fetch products dynamically for the logged-in vendor
+  // Fetch products dynamically for the vendor this session sells for. For a
+  // sub-account that is the parent vendor, not the logged-in user, so `vendorId`
+  // is what the API expects — `user.id` would come back empty.
+  const sellingVendorId = user?.vendorId ?? user?.id;
+
   useEffect(() => {
-    if (!user?.id) return;
+    if (!sellingVendorId) return;
 
     const loadProducts = async () => {
       setLoadingProducts(true);
       try {
-        const res = await leadsApi.getProductsByVendor(user.id);
+        const res = await leadsApi.getProductsByVendor(sellingVendorId);
         let allProducts = [];
         if (res.data?.status === 'success') {
           allProducts = res.data.data;
@@ -126,13 +131,13 @@ export default function VendorInsertLead() {
 
         // Filter products based on current mode
         const filteredProducts = allProducts.filter((p: any) => {
-          const isOwned = Number(p.ownerId) === Number(user?.id);
+          const isOwned = Number(p.ownerId) === Number(sellingVendorId);
           if (currentMode === 'SELLER') {
             // Sell owned products or products imported in inventory
             return isOwned || p.hasInventory === true;
           } else {
             // Affiliate mode: only claimed products that are NOT owned by the vendor
-            return !isOwned && (p.isClaimed === true || (p.isClaimed === undefined && Number(p.ownerId) !== Number(user?.id)));
+            return !isOwned && (p.isClaimed === true || p.isClaimed === undefined);
           }
         });
 
@@ -145,7 +150,7 @@ export default function VendorInsertLead() {
       }
     };
     loadProducts();
-  }, [user?.id, currentMode]);
+  }, [sellingVendorId, currentMode]);
 
   // Auto-fetch history when phone number is complete
   useEffect(() => {
@@ -528,7 +533,7 @@ export default function VendorInsertLead() {
         <div className="relative z-10 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button 
-              onClick={() => navigate(`/dashboard/leads?mode=${currentMode}`)}
+              onClick={() => navigate(`${currentBasePath(user?.role)}/leads?mode=${currentMode}`)}
               className="bg-white/20 hover:bg-white/30 p-2.5 rounded-full transition-all shadow-md active:scale-95 flex items-center justify-center text-white"
             >
               <ArrowLeft className="w-5 h-5" />
@@ -906,7 +911,7 @@ export default function VendorInsertLead() {
                   if (editingDraftId) {
                     handleCancelEdit();
                   } else {
-                    navigate(`/dashboard/leads?mode=${currentMode}`);
+                    navigate(`${currentBasePath(user?.role)}/leads?mode=${currentMode}`);
                   }
                 }}
                 className="flex-1 py-3 px-4 border border-gray-200 text-gray-500 hover:bg-gray-50 active:scale-95 transition-all text-xs font-black tracking-widest rounded-2xl"

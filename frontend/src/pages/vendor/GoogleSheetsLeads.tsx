@@ -42,6 +42,7 @@ import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { fr, ar } from 'date-fns/locale';
 import googleSheetsLogo from '../../assets/google-sheets-logo.svg';
+import { currentBasePath } from '../../lib/dashboardBase';
 
 interface GoogleSheetsOrder {
   id: string | number;
@@ -341,7 +342,7 @@ export default function GoogleSheetsLeads() {
         toast.success(`Succès ! ${res.data.data?.createdCount || selectedOrdersList.length} commande(s) envoyée(s) au Call Center.`);
         setIsPushModalOpen(false);
         setSelectedOrderIds(new Set());
-        navigate(`/dashboard/leads?mode=${currentMode}`);
+        navigate(`${currentBasePath(user?.role)}/leads?mode=${currentMode}`);
       } else {
         toast.error(res.data?.message || 'Échec de l\'envoi vers le Call Center');
       }

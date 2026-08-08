@@ -15,6 +15,7 @@ import {
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Truck, CheckCircle, CheckCircle2, XCircle, Box, AlertCircle, X, BarChart3, Activity, PieChart as PieIcon, Zap, TrendingUp, History, MessageSquare, Plus
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { currentBasePath } from '../../lib/dashboardBase';
 
 const ALL_STATUS_BADGES: Record<string, { label: string; color: string; icon: React.ComponentType<any> }> = {
   // --- Cycle de vie / Stock ---
@@ -223,12 +224,15 @@ export default function VendorLeads() {
     try {
       setLoading(true);
       const [linksRes, commissionsRes] = await Promise.all([
-        influencerApi.getLinks({ mode: currentMode }),
+        // Optional: the links list only labels each order with its source. A
+        // sub-account granted the orders page but not the links one would
+        // otherwise reject the whole batch and render nothing at all.
+        influencerApi.getLinks({ mode: currentMode }).catch(() => null),
         // `all: true` — every stat, chart and the pagination on this page are computed
         // client-side, so a truncated page would make all of them wrong.
         influencerApi.getCustomers({ all: true, mode: currentMode })
       ]);
-      setLinks(linksRes.data);
+      setLinks(linksRes?.data || []);
       // API returns { status, data: { commissions, pagination } }
       const commissionsData = commissionsRes.data?.data?.commissions || commissionsRes.data?.commissions || [];
       setCommissions(commissionsData);
@@ -606,7 +610,7 @@ export default function VendorLeads() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => navigate(`/dashboard/leads/new?mode=${currentMode}`)}
+            onClick={() => navigate(`${currentBasePath(user?.role)}/leads/new?mode=${currentMode}`)}
             className={`flex items-center gap-1.5 px-4 py-2 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg hover:opacity-95 transition-all ${
               currentMode === 'SELLER' 
                 ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-emerald-200' 

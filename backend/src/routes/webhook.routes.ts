@@ -492,7 +492,7 @@ router.post(
 
 router.get(
   '/stream',
-  (req, res) => {
+  async (req, res) => {
     // Authenticate via query param token (EventSource limitation)
     const token = req.query.token as string || req.headers.authorization?.replace('Bearer ', '');
     if (!token) {
@@ -505,6 +505,19 @@ router.get(
       decodedToken = jwt.verify(token, process.env.JWT_SECRET!);
     } catch {
       res.status(401).end();
+      return;
+    }
+
+    // This route verifies the token itself instead of going through
+    // authenticate(), so the vendor sub-account access matrix never sees it.
+    // The stream is unscoped — every status update the process emits — so a
+    // helper is refused here explicitly rather than by omission.
+    const streamUser = await prisma.user.findUnique({
+      where: { uuid: decodedToken?.userId },
+      select: { role: { select: { name: true } } },
+    });
+    if (!streamUser || streamUser.role.name === 'VENDOR_HELPER') {
+      res.status(403).end();
       return;
     }
 

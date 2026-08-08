@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { authApi, settingsApi } from '../lib/api';
+import { VENDOR_HELPER_BASE } from '../lib/dashboardBase';
 
 export interface AuthUser {
   uuid: string;
@@ -28,6 +29,51 @@ export interface AuthUser {
   canScanReturns?: boolean;
   canDisplayOnDashboard?: boolean;
   avatarUrl?: string;
+
+  // Vendor sub-accounts (role VENDOR_HELPER). `vendorId` is the account whose
+  // data this session reads and writes — the parent vendor for a sub-account,
+  // and the user themselves for everyone else.
+  vendorId?: number;
+  isVendorHelper?: boolean;
+  parentVendorId?: number;
+  parentVendorName?: string | null;
+  subAllowedModes?: 'BOTH' | 'SELLER' | 'AFFILIATE';
+  subReadOnly?: boolean;
+  subAccessExpiresAt?: string | null;
+  subCanViewDashboard?: boolean;
+  subCanViewLeads?: boolean;
+  subCanEditLeads?: boolean;
+  subCanCreateLeads?: boolean;
+  subCanViewInventory?: boolean;
+  subCanManageLinks?: boolean;
+  subCanViewWallet?: boolean;
+  subCanViewInvoices?: boolean;
+  subCanViewIntegrations?: boolean;
+  subCanViewMarketplace?: boolean;
+  subCanManageSupport?: boolean;
+  subCanUseChat?: boolean;
+  subCanManagePixels?: boolean;
+  subCanManageDomains?: boolean;
+  subCanDeleteLeads?: boolean;
+  subCanPushToCallCenter?: boolean;
+  subCanRespondPriceRequests?: boolean;
+  subCanImportIntegrationLeads?: boolean;
+  subCanClaimProducts?: boolean;
+  subCanEditProducts?: boolean;
+  subCanRequestCustomProduct?: boolean;
+  subCanCreateLinks?: boolean;
+  subCanUseLinkBuilder?: boolean;
+  subCanRegenerateLinks?: boolean;
+  subCanViewTransactions?: boolean;
+  subCanViewPayouts?: boolean;
+  subCanViewCommissions?: boolean;
+  subCanDownloadInvoices?: boolean;
+  subCanViewPixels?: boolean;
+  subCanCreateTickets?: boolean;
+  subCanSendMessages?: boolean;
+  subCanManageConversations?: boolean;
+  subCanRefreshDomain?: boolean;
+
   [key: string]: any;
 }
 
@@ -131,13 +177,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { user };
   };
 
+  // Both of these mirror login(): the login response carries a trimmed user
+  // object, while /auth/me is what returns verification progress and — for a
+  // vendor sub-account — its permission flags. Skipping the refetch lands a
+  // sub-account on its dashboard with every subCan* undefined and an empty
+  // sidebar.
   const login2FA = async (data: { twoFactorToken: string; code: string }) => {
     const response = await authApi.login2FA(data);
     const { user, tokens } = response.data.data;
     localStorage.setItem('accessToken', tokens.accessToken);
     localStorage.setItem('refreshToken', tokens.refreshToken);
-    setUser(user);
-    return user;
+    try {
+      const meRes = await authApi.me();
+      setUser(meRes.data.data.user);
+      return meRes.data.data.user;
+    } catch {
+      setUser(user);
+      return user;
+    }
   };
 
   const forcePasswordChange = async (data: { tempToken: string; newPassword: string }) => {
@@ -145,8 +202,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { user, tokens } = response.data.data;
     localStorage.setItem('accessToken', tokens.accessToken);
     localStorage.setItem('refreshToken', tokens.refreshToken);
-    setUser(user);
-    return user;
+    try {
+      const meRes = await authApi.me();
+      setUser(meRes.data.data.user);
+      return meRes.data.data.user;
+    } catch {
+      setUser(user);
+      return user;
+    }
   };
 
   const googleAuth = async (data: { credential: string; role?: string; [key: string]: any }) => {
@@ -261,6 +324,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       'CALL_CENTER_AGENT': '/agent',
       'CONFIRMATION_AGENT': '/confirmation',
       'HELPER': '/helper',
+      'VENDOR_HELPER': VENDOR_HELPER_BASE,
       'GROSSELLER': '/grosseller'
     };
 
@@ -289,6 +353,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         window.location.href = '/admin/users';
       } else if (originalUserRole === 'HELPER') {
         window.location.href = '/helper/users';
+      } else if (originalUserRole === 'VENDOR_HELPER') {
+        window.location.href = VENDOR_HELPER_BASE;
       } else {
         window.location.href = '/';
       }

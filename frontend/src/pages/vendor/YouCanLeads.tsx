@@ -34,6 +34,7 @@ import { youcanApi, leadsApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { fr, ar } from 'date-fns/locale';
+import { currentBasePath } from '../../lib/dashboardBase';
 
 interface YouCanOrder {
   id: string | number;
@@ -242,7 +243,7 @@ export default function YouCanLeads() {
       setIsPushModalOpen(false);
       setSelectedOrderIds(new Set());
       
-      navigate(`/dashboard/leads?mode=${currentMode}`);
+      navigate(`${currentBasePath(user?.role)}/leads?mode=${currentMode}`);
     } catch (err: any) {
       toast.error(err.response?.data?.message || (isRtl ? 'فشل إرسال الطلبيات إلى مركز الاتصال' : 'Erreur lors de l\'envoi au Call Center'));
     } finally {

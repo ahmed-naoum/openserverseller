@@ -125,7 +125,10 @@ export default function PublicMarketplace() {
     const role = user.role || user.roleName || '';
     if (role === 'SUPER_ADMIN' || role === 'FINANCE_ADMIN' || role === 'HELPER') return 'REGULAR'; // Admin/Helper sees all, default to REGULAR
     if (role === 'INFLUENCER') return 'INFLUENCER';
-    if (role === 'VENDOR') return user.mode === 'AFFILIATE' ? 'AFFILIATE' : 'REGULAR';
+    // A sub-account browses in whichever vendor mode it is currently in, the
+    // same as the vendor would — otherwise an Affilié helper is shown retail
+    // prices instead of affiliate ones.
+    if (role === 'VENDOR' || role === 'VENDOR_HELPER') return user.mode === 'AFFILIATE' ? 'AFFILIATE' : 'REGULAR';
     if (role === 'GROSSELLER') return 'REGULAR';
     return 'REGULAR';
   };

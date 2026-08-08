@@ -31,7 +31,9 @@ export const activityLogger = (action: string) => {
     res.json = (body: any) => {
       if (res.statusCode >= 200 && res.statusCode < 300 && req.user) {
         logActivity(
-          req.user.id,
+          // A vendor sub-account runs under the vendor's id; `actorId` is the
+          // helper that actually did this, and is what the log should name.
+          req.user.actorId || req.user.id,
           action,
           req.baseUrl.split('/').pop(),
           body?.data?.id ? Number(body.data.id) : undefined,

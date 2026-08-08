@@ -23,7 +23,6 @@ import {
   X,
   SlidersHorizontal,
   Printer,
-  Download,
   AlertTriangle,
   Navigation,
   User,
@@ -251,9 +250,6 @@ const CLOSED_STATUSES = new Set([
   'CANCELED', 'CANCELED_BY_SELLER', 'CANCELED_BY_SYSTEM', 'CANCELLED',
 ]);
 
-// Coliaty rejects a batch over this size; mirror it client-side for a clear message.
-const MAX_BATCH_LABELS = 400;
-
 /* ── helpers ───────────────────────────────────────────────────────────── */
 
 const parseDate = (value: unknown): Date | null => {
@@ -298,40 +294,9 @@ const downloadPdf = (base64: string, filename: string) => {
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 };
 
-const CSV_COLUMNS: { header: string; value: (p: Parcel) => string | number }[] = [
-  { header: 'Commande', value: p => p.orderNumber },
-  { header: 'Code Coliaty', value: p => p.coliatyPackageCode || '' },
-  { header: 'Client', value: p => p.customerName },
-  { header: 'Téléphone', value: p => p.customerPhone },
-  { header: 'Ville', value: p => p.customerCity },
-  { header: 'Adresse', value: p => p.customerAddress },
-  { header: 'Montant (MAD)', value: p => Math.round(Number(p.totalAmountMad) || 0) },
-  { header: 'Statut', value: p => statusConfig[p.status]?.label || p.status },
-  { header: 'Paiement', value: p => paymentConfig[p.paymentSituation || '']?.label || p.paymentSituation || '' },
-  { header: 'Contenu', value: p => p.packageContent || '' },
-  { header: 'Produits', value: p => p.items.map(i => `${i.productName} x${i.quantity}`).join(' | ') },
-  { header: 'Référent', value: p => p.vendorName || '' },
-  { header: 'Note', value: p => p.notes || '' },
-  { header: 'Créé le', value: p => fmtDate(p.createdAt, 'dd/MM/yyyy HH:mm') },
-];
-
-const downloadCsv = (parcels: Parcel[], filename: string) => {
-  const escape = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
-  const lines = [
-    CSV_COLUMNS.map(c => escape(c.header)).join(';'),
-    ...parcels.map(p => CSV_COLUMNS.map(c => escape(c.value(p))).join(';')),
-  ];
-  // BOM + ";" so Excel FR opens accents and columns correctly on a double-click
-  const blob = new Blob([`﻿${lines.join('\r\n')}`], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 30_000);
-};
+// CSV export and the bulk-selection actions that fed it were removed on purpose:
+// a call-center agent must not be able to walk off with the customer list
+// (names, phones, addresses) in one click. Single-parcel actions stay.
 
 /** Escape / backdrop-click / scroll-lock, so every modal on the page behaves the same. */
 function Modal({
@@ -440,11 +405,6 @@ export default function AgentLivraison() {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [revertingId, setRevertingId] = useState<number | null>(null);
   const [downloadingCode, setDownloadingCode] = useState<string | null>(null);
-  const [bulkBusy, setBulkBusy] = useState<'labels' | 'csv' | null>(null);
-
-  // Keeps the whole parcel (not just the id) so bulk actions still work after
-  // paging away from the row that was ticked.
-  const [selected, setSelected] = useState<Map<number, Parcel>>(new Map());
 
   const [coliatyCities, setColiatyCities] = useState<any[]>([]);
   const [loadingCities, setLoadingCities] = useState(false);
@@ -706,15 +666,6 @@ export default function AgentLivraison() {
     return chips;
   }, [filters, debouncedSearch, filterOptions]);
 
-  const pageSelectedCount = parcels.filter(p => selected.has(p.id)).length;
-  const allPageSelected = parcels.length > 0 && pageSelectedCount === parcels.length;
-  const selectedList = useMemo(() => [...selected.values()], [selected]);
-  const selectedWithCode = useMemo(() => selectedList.filter(p => p.coliatyPackageCode), [selectedList]);
-  const selectedTotalMad = useMemo(
-    () => selectedList.reduce((sum, p) => sum + (Number(p.totalAmountMad) || 0), 0),
-    [selectedList]
-  );
-
   /* ── actions ─────────────────────────────────────────────────────────── */
 
   const resetFilters = () => {
@@ -732,22 +683,6 @@ export default function AgentLivraison() {
     const group = STATUS_GROUPS.find(g => g.key === key);
     setFilters(f => ({ ...f, statuses: group ? [...group.statuses] : [] }));
   };
-
-  const toggleSelect = (parcel: Parcel) =>
-    setSelected(prev => {
-      const next = new Map(prev);
-      if (next.has(parcel.id)) next.delete(parcel.id);
-      else next.set(parcel.id, parcel);
-      return next;
-    });
-
-  const toggleSelectPage = () =>
-    setSelected(prev => {
-      const next = new Map(prev);
-      if (allPageSelected) parcels.forEach(p => next.delete(p.id));
-      else parcels.forEach(p => next.set(p.id, p));
-      return next;
-    });
 
   const handleCopy = (text: string, message: string, codeKey?: string) => {
     navigator.clipboard
@@ -777,74 +712,12 @@ export default function AgentLivraison() {
     }
   };
 
-  const handleBatchLabels = async () => {
-    const codes = selectedWithCode.map(p => p.coliatyPackageCode!) as string[];
-    if (codes.length === 0) {
-      toast.error('Aucun colis synchronisé dans la sélection');
-      return;
-    }
-    if (codes.length > MAX_BATCH_LABELS) {
-      toast.error(`Maximum ${MAX_BATCH_LABELS} étiquettes par lot (${codes.length} sélectionnées)`);
-      return;
-    }
-
-    setBulkBusy('labels');
-    const toastId = toast.loading(`Génération de ${codes.length} étiquette(s)...`);
-    try {
-      const res = await ordersApi.getParcelLabelsBatch(codes);
-      const { pdf, merged, failed } = res.data?.data || {};
-      if (!pdf) throw new Error('PDF manquant');
-      downloadPdf(pdf, `etiquettes-${merged}-colis.pdf`);
-      if (failed?.length) {
-        toast.success(`${merged} étiquette(s) — ${failed.length} indisponible(s)`, { id: toastId, duration: 7000 });
-      } else {
-        toast.success(`${merged} étiquette(s) téléchargée(s)`, { id: toastId });
-      }
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Erreur lors de la génération des étiquettes', { id: toastId });
-    } finally {
-      setBulkBusy(null);
-    }
-  };
-
-  /** Exports the selection, or the entire filtered set when nothing is ticked. */
-  const handleExportCsv = async () => {
-    if (selectedList.length > 0) {
-      downloadCsv(selectedList, `livraisons-selection-${selectedList.length}.csv`);
-      toast.success(`${selectedList.length} colis exporté(s)`);
-      return;
-    }
-
-    setBulkBusy('csv');
-    const toastId = toast.loading('Préparation de l\'export...');
-    try {
-      // Re-query without pagination so the file covers every match, not just this page
-      const res = await leadsApi.livraison({ ...queryParams, page: 1, limit: 5000 });
-      const rows: Parcel[] = res.data?.data?.parcels || [];
-      if (rows.length === 0) {
-        toast.error('Aucun colis à exporter', { id: toastId });
-        return;
-      }
-      downloadCsv(rows, `livraisons-${rows.length}.csv`);
-      toast.success(`${rows.length} colis exporté(s)`, { id: toastId });
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Erreur lors de l'export", { id: toastId });
-    } finally {
-      setBulkBusy(null);
-    }
-  };
-
   const handleRevertToLead = async (parcel: Parcel) => {
     setRevertingId(parcel.id);
     try {
       await ordersApi.revertToLead(parcel.id);
       toast.success('Colis annulé et retourné aux leads !');
       setCancelTarget(null);
-      setSelected(prev => {
-        const next = new Map(prev);
-        next.delete(parcel.id);
-        return next;
-      });
       fetchParcels(true);
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Erreur lors de l'annulation du colis");
@@ -1172,15 +1045,6 @@ export default function AgentLivraison() {
             {showFilters ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
 
-          <button
-            onClick={handleExportCsv}
-            disabled={bulkBusy !== null}
-            title={selectedList.length > 0 ? 'Exporter la sélection' : 'Exporter tous les colis filtrés'}
-            className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all border bg-white text-gray-600 border-gray-200 hover:bg-gray-50 disabled:opacity-50"
-          >
-            <Download className="w-4 h-4" />
-            {bulkBusy === 'csv' ? 'Export...' : 'CSV'}
-          </button>
         </div>
 
         {showFilters && (
@@ -1407,24 +1271,6 @@ export default function AgentLivraison() {
         </div>
       </div>
 
-      {/* Select-all bar */}
-      {!loading && parcels.length > 0 && (
-        <div className="flex items-center gap-3 px-1">
-          <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-gray-500 hover:text-gray-700">
-            <input
-              type="checkbox"
-              checked={allPageSelected}
-              ref={el => {
-                if (el) el.indeterminate = pageSelectedCount > 0 && !allPageSelected;
-              }}
-              onChange={toggleSelectPage}
-              className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-            />
-            Tout sélectionner sur cette page ({parcels.length})
-          </label>
-        </div>
-      )}
-
       {/* Parcels */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-16 gap-4">
@@ -1464,41 +1310,43 @@ export default function AgentLivraison() {
             };
             const StatusIcon = status.icon;
             const isExpanded = expandedId === parcel.id;
-            const isSelected = selected.has(parcel.id);
             const payment = paymentConfig[parcel.paymentSituation || ''];
             const age = daysSince(parcel.createdAt);
             const isStale = age !== null && age >= 7 && !CLOSED_STATUSES.has(parcel.status);
+            // The parcel's product is what an agent scans the row for; the
+            // customer's initial told them nothing they could not read beside it.
+            const productImage = parcel.items?.find(i => i.productImage)?.productImage || null;
 
             return (
               <div
                 key={parcel.id}
                 className={`bg-white rounded-2xl border shadow-sm hover:shadow-md transition-all overflow-hidden ${
-                  isSelected
-                    ? 'border-indigo-300 ring-2 ring-indigo-100'
-                    : isGirly
-                    ? 'border-pink-100/40 hover:border-pink-200'
-                    : 'border-gray-100 hover:border-gray-200'
+                  isGirly ? 'border-pink-100/40 hover:border-pink-200' : 'border-gray-100 hover:border-gray-200'
                 }`}
               >
                 <div className="p-5">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                    {/* Left: selection + customer */}
+                    {/* Left: product + customer */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3 mb-2">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleSelect(parcel)}
-                          aria-label={`Sélectionner le colis de ${parcel.customerName}`}
-                          className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer flex-shrink-0"
-                        />
-                        <div
-                          className={`w-10 h-10 bg-gradient-to-br rounded-full flex items-center justify-center font-black text-base flex-shrink-0 ${
-                            isGirly ? 'from-pink-100 to-rose-100 text-pink-700' : 'from-indigo-100 to-purple-100 text-indigo-700'
-                          }`}
-                        >
-                          {parcel.customerName.charAt(0).toUpperCase()}
-                        </div>
+                        {productImage ? (
+                          <img
+                            src={productImage}
+                            alt={parcel.items?.[0]?.productName || 'Produit'}
+                            loading="lazy"
+                            title={parcel.items?.map(i => `${i.productName} x${i.quantity}`).join(' · ')}
+                            className="w-10 h-10 rounded-xl object-cover border border-gray-100 bg-gray-50 flex-shrink-0"
+                          />
+                        ) : (
+                          <div
+                            className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br ${
+                              isGirly ? 'from-pink-100 to-rose-100 text-pink-600' : 'from-indigo-100 to-purple-100 text-indigo-600'
+                            }`}
+                            title={parcel.packageContent || 'Produit'}
+                          >
+                            <Package className="w-5 h-5" />
+                          </div>
+                        )}
                         <div className="min-w-0">
                           <p className="font-bold text-gray-900 truncate">{parcel.customerName}</p>
                           <p className="text-xs text-gray-400 font-medium">#{parcel.orderNumber}</p>
@@ -1855,65 +1703,6 @@ export default function AgentLivraison() {
             >
               Suivant
               <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Sticky bulk bar */}
-      {selected.size > 0 && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-3xl">
-          <div className="bg-slate-900 text-white rounded-2xl shadow-2xl px-4 py-3 flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 mr-auto">
-              <span className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-xs font-black">
-                {selected.size}
-              </span>
-              <div className="leading-tight">
-                <p className="text-xs font-black">colis sélectionné{selected.size > 1 ? 's' : ''}</p>
-                <p className="text-[10px] text-white/50 font-medium">
-                  {fmtMad(selectedTotalMad)} · {selectedWithCode.length} avec code
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={handleBatchLabels}
-              disabled={bulkBusy !== null || selectedWithCode.length === 0}
-              className="flex items-center gap-1.5 px-3 py-2 bg-white text-slate-900 rounded-xl text-xs font-black hover:bg-gray-100 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              {bulkBusy === 'labels' ? 'Génération...' : `Étiquettes (${selectedWithCode.length})`}
-            </button>
-
-            <button
-              onClick={handleExportCsv}
-              disabled={bulkBusy !== null}
-              className="flex items-center gap-1.5 px-3 py-2 bg-white/10 text-white rounded-xl text-xs font-black hover:bg-white/20 transition-all disabled:opacity-40"
-            >
-              <Download className="w-3.5 h-3.5" />
-              CSV
-            </button>
-
-            <button
-              onClick={() =>
-                handleCopy(
-                  selectedWithCode.map(p => p.coliatyPackageCode).join('\n'),
-                  `${selectedWithCode.length} code(s) copié(s)`
-                )
-              }
-              disabled={selectedWithCode.length === 0}
-              className="flex items-center gap-1.5 px-3 py-2 bg-white/10 text-white rounded-xl text-xs font-black hover:bg-white/20 transition-all disabled:opacity-40"
-            >
-              <Copy className="w-3.5 h-3.5" />
-              Codes
-            </button>
-
-            <button
-              onClick={() => setSelected(new Map())}
-              aria-label="Vider la sélection"
-              className="p-2 rounded-xl hover:bg-white/10 transition-all"
-            >
-              <X className="w-4 h-4" />
             </button>
           </div>
         </div>

@@ -19,6 +19,7 @@ import ConfirmationModal from '../../components/ui/ConfirmationModal';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { translateNotification } from '../../utils/notificationTranslator';
 import { useAuth } from '../../contexts/AuthContext';
+import { currentBasePath } from '../../lib/dashboardBase';
 
 export default function Notifications() {
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -142,14 +143,7 @@ export default function Notifications() {
   const theme = getRoleTheme();
 
   const getNotificationRedirect = (type: string) => {
-    const path = window.location.pathname;
-    let prefix = '/dashboard';
-    if (path.startsWith('/admin')) prefix = '/admin';
-    else if (path.startsWith('/agent')) prefix = '/agent';
-    else if (path.startsWith('/grosseller')) prefix = '/grosseller';
-    else if (path.startsWith('/influencer')) prefix = '/influencer';
-    else if (path.startsWith('/confirmation')) prefix = '/confirmation';
-    else if (path.startsWith('/helper')) prefix = '/helper';
+    const prefix = currentBasePath(user?.role);
 
     switch (type) {
       case 'PRODUCT_CLAIM_STATUS':

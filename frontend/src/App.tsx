@@ -65,6 +65,9 @@ import ShopifyLeads from './pages/vendor/ShopifyLeads';
 import WooCommerceLeads from './pages/vendor/WooCommerceLeads';
 import GoogleSheetsLeads from './pages/vendor/GoogleSheetsLeads';
 import IntegrationsPage from './pages/vendor/IntegrationsPage';
+import VendorSubAccounts from './pages/vendor/SubAccounts';
+import SubAccountGuard from './components/auth/SubAccountGuard';
+import { VENDOR_HELPER_BASE } from './lib/dashboardBase';
 import PlatformSettings from './pages/admin/PlatformSettings';
 import AdminSecrets from './pages/admin/AdminSecrets';
 import AdminDeployments from './pages/admin/Deployments';
@@ -413,8 +416,62 @@ function App() {
           <Route path="shopify-callback" element={<ShopifyCallback />} />
           <Route path="invoices" element={<UserInvoices />} />
           <Route path="support" element={<SupportTickets />} />
+          <Route path="sub-accounts" element={<VendorSubAccounts />} />
           <Route path="verification" element={<ProfileVerification />} />
           <Route path="notifications" element={<Notifications />} />
+        </Route>
+
+        {/*
+          Vendor sub-account dashboard.
+
+          The same page components as /dashboard above, mounted at a second
+          prefix for role VENDOR_HELPER. The backend re-points these accounts at
+          their parent vendor, so the pages show the vendor's data; which of
+          them a given sub-account may open is decided by the permission flags
+          its vendor granted (nav filtering in DashboardLayout, enforcement in
+          backend/src/lib/vendorSubAccount.ts).
+
+          Note there is deliberately no `sub-accounts` route here: only the
+          account owner hands out permissions.
+        */}
+        <Route path={VENDOR_HELPER_BASE} element={
+          <RoleGuard allowedRoles={['VENDOR_HELPER']}>
+            <DashboardLayout />
+          </RoleGuard>
+        }>
+          {/* Hiding a nav link is not blocking a URL — SubAccountGuard refuses
+              pages this helper was not granted, however it got there. */}
+          <Route element={<SubAccountGuard />}>
+          <Route index element={<VendorDashboard />} />
+          <Route path="products" element={<VendorProducts />} />
+          <Route path="leads" element={<VendorLeads />} />
+          <Route path="leads/new" element={<VendorInsertLead />} />
+          <Route path="youcan-leads" element={<YouCanLeads />} />
+          <Route path="shopify-leads" element={<ShopifyLeads />} />
+          <Route path="woocommerce-leads" element={<WooCommerceLeads />} />
+          <Route path="google-sheets-leads" element={<GoogleSheetsLeads />} />
+          <Route path="wallet" element={<UserWallet />} />
+          <Route path="inventory" element={<VendorInventory />} />
+          <Route path="marketplace" element={
+            <Suspense fallback={<PageLoader />}>
+              <InfluencerMarketplace />
+            </Suspense>
+          } />
+          <Route path="product/:id" element={<ProductDetail />} />
+          <Route path="chat" element={<Chat />} />
+          <Route path="settings" element={<SettingsPage />} />
+          <Route path="pixels" element={<UserPixels platform="META" />} />
+          <Route path="pixels/meta" element={<UserPixels platform="META" />} />
+          <Route path="pixels/google" element={<UserPixels platform="GOOGLE" />} />
+          <Route path="pixels/tiktok" element={<UserPixels platform="TIKTOK" />} />
+          <Route path="pixels/snapchat" element={<UserPixels platform="SNAPCHAT" />} />
+          <Route path="domains" element={<VendorDomains />} />
+          <Route path="links" element={<InfluencerLinks />} />
+          <Route path="integrations" element={<IntegrationsPage />} />
+          <Route path="invoices" element={<UserInvoices />} />
+          <Route path="support" element={<SupportTickets />} />
+          <Route path="notifications" element={<Notifications />} />
+          </Route>
         </Route>
 
         {/* Agent Dashboard */}
@@ -450,6 +507,12 @@ function App() {
 
         <Route path="/dashboard/links/:id/builder" element={
           <RoleGuard allowedRoles={['VENDOR']}>
+            <SiteBuilder />
+          </RoleGuard>
+        } />
+
+        <Route path={`${VENDOR_HELPER_BASE}/links/:id/builder`} element={
+          <RoleGuard allowedRoles={['VENDOR_HELPER']}>
             <SiteBuilder />
           </RoleGuard>
         } />

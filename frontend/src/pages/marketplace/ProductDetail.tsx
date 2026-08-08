@@ -28,6 +28,7 @@ import {
   X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { currentBasePath } from '../../lib/dashboardBase';
 
 // ProductDetail component handles header, carousel, pricing and tabs
 
@@ -179,17 +180,21 @@ export default function ProductDetail() {
       navigate('/login');
       return;
     }
-    const { percentage } = getVerificationStatus(user, platformSettings);
-    if (percentage < 100) {
-      toast.error('You must complete your profile to 100% to perform this action.');
-      const basePath = user?.role === 'INFLUENCER' ? '/influencer' 
-                     : user?.role === 'VENDOR' ? '/dashboard'
-                     : user?.role === 'GROSSELLER' ? '/grosseller'
-                     : '';
-      if (basePath) {
-         navigate(`${basePath}/verification`);
+    // A vendor sub-account has no profile of its own to complete — identity,
+    // bank details and the contract all belong to the parent vendor, whose
+    // standing is what the backend actually checks. Running this gate against
+    // the helper's own row scores it below 100 forever, blocking every claim,
+    // and sends it to a /verification page its tree does not have.
+    if (user?.role !== 'VENDOR_HELPER') {
+      const { percentage } = getVerificationStatus(user, platformSettings);
+      if (percentage < 100) {
+        toast.error('You must complete your profile to 100% to perform this action.');
+        const basePath = currentBasePath(user?.role);
+        if (basePath) {
+          navigate(`${basePath}/verification`);
+        }
+        return;
       }
-      return;
     }
 
     if (product.userStatus?.isBought || product.userStatus?.isClaimed) {
@@ -344,7 +349,7 @@ export default function ProductDetail() {
             content: `📦 Wholesale Order Inquiry:\nProduct: ${product.nameFr}\nSKU: ${product.sku}\n\nI would like to place a wholesale order for this product.` 
           });
         }
-        const basePath = user?.role === 'INFLUENCER' ? '/influencer' : '/dashboard';
+        const basePath = currentBasePath(user?.role);
         navigate(`${basePath}/chat?convId=${conv.id}`);
       }
     } catch (error: any) {

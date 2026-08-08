@@ -264,4 +264,306 @@ router.post(
   })
 );
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Dashboard
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/** A parcel in one of these has stopped moving. */
+const CLOSED_STATUSES = new Set([
+  'DELIVERED', 'RETURNED', 'REFUSE',
+  'CANCELED', 'CANCELED_BY_SELLER', 'CANCELED_BY_SYSTEM', 'CANCELLED',
+]);
+
+const DAY_MS = 86_400_000;
+const SERIES_DAYS = 30;
+/** A parcel still moving after this many days needs a human to look at it. */
+const STALE_AFTER_DAYS = 7;
+
+const dayKey = (d: Date) => d.toISOString().slice(0, 10);
+
+/**
+ * GET /api/v1/helper/dashboard
+ *
+ * Every figure is aggregated server-side over the helper's whole assigned scope.
+ * The page used to pull 1000 leads and count them in the browser, which silently
+ * capped every number it displayed.
+ */
+router.get(
+  '/dashboard',
+  authenticate,
+  authorize('HELPER', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const isHelper = req.user!.roleName === 'HELPER';
+
+    const me = await prisma.user.findUnique({ where: { id: userId } });
+    if (!me) throw new AppException(404, 'User not found');
+
+    // --- Scope: which accounts this helper is allowed to see ---
+    let assignedUserIds: number[] = [];
+    if (isHelper) {
+      const assignments = await (prisma as any).helperUserAssignment.findMany({
+        where: { helperId: userId },
+        select: { targetUserId: true },
+      });
+      assignedUserIds = assignments.map((a: any) => a.targetUserId);
+    }
+
+    const leadScope: any = isHelper ? { vendorId: { in: assignedUserIds } } : {};
+
+    // A helper with no assigned accounts has an empty scope — return zeros rather
+    // than letting an empty `in` clause read the whole table.
+    const emptyScope = isHelper && assignedUserIds.length === 0;
+
+    const rows = emptyScope
+      ? []
+      : await prisma.lead.findMany({
+          where: leadScope,
+          select: {
+            status: true,
+            createdAt: true,
+            paymentSituation: true,
+            vendorId: true,
+            assignedAgentId: true,
+            vendor: { select: { email: true, profile: { select: { fullName: true } } } },
+            assignedAgent: { select: { email: true, profile: { select: { fullName: true } } } },
+            order: {
+              select: {
+                status: true,
+                totalAmountMad: true,
+                createdAt: true,
+                coliatyPackageCode: true,
+                coliatyPickupRef: true,
+                items: { select: { productId: true, quantity: true, totalPriceMad: true } },
+              },
+            },
+          },
+        });
+
+    const now = Date.now();
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    // --- Accumulators ---
+    const leadsByStatus: Record<string, number> = {};
+    const parcelsByStatus: Record<string, number> = {};
+    const series = new Map<string, { date: string; leads: number; parcels: number; delivered: number; revenue: number }>();
+    for (let i = SERIES_DAYS - 1; i >= 0; i--) {
+      const key = dayKey(new Date(now - i * DAY_MS));
+      series.set(key, { date: key, leads: 0, parcels: 0, delivered: 0, revenue: 0 });
+    }
+
+    const productAgg = new Map<number, { parcels: number; units: number; revenue: number; delivered: number; returned: number }>();
+    const accountAgg = new Map<number, { name: string; parcels: number; revenue: number; delivered: number; returned: number; leads: number }>();
+    const agentAgg = new Map<number, { name: string; leads: number; parcels: number; delivered: number; returned: number; revenue: number }>();
+
+    let leadsToday = 0, leads7d = 0, leads30d = 0;
+    let parcelsTotal = 0, withCode = 0, notSynced = 0, readyForPickup = 0;
+    let revenueTotal = 0, revenueDelivered = 0, revenueInTransit = 0, revenueReturned = 0;
+    let uninvoicedReturns = 0, staleParcels = 0, unassignedLeads = 0;
+
+    for (const row of rows) {
+      const createdMs = row.createdAt.getTime();
+      leadsByStatus[row.status] = (leadsByStatus[row.status] || 0) + 1;
+      if (createdMs >= startOfToday.getTime()) leadsToday++;
+      if (now - createdMs <= 7 * DAY_MS) leads7d++;
+      if (now - createdMs <= 30 * DAY_MS) leads30d++;
+      if (!row.assignedAgentId) unassignedLeads++;
+
+      const leadBucket = series.get(dayKey(row.createdAt));
+      if (leadBucket) leadBucket.leads++;
+
+      if (row.vendorId) {
+        const acc = accountAgg.get(row.vendorId) || {
+          name: row.vendor?.profile?.fullName || row.vendor?.email || `#${row.vendorId}`,
+          parcels: 0, revenue: 0, delivered: 0, returned: 0, leads: 0,
+        };
+        acc.leads++;
+        accountAgg.set(row.vendorId, acc);
+      }
+
+      if (row.assignedAgentId) {
+        const ag = agentAgg.get(row.assignedAgentId) || {
+          name: (row as any).assignedAgent?.profile?.fullName || (row as any).assignedAgent?.email || `#${row.assignedAgentId}`,
+          leads: 0, parcels: 0, delivered: 0, returned: 0, revenue: 0,
+        };
+        ag.leads++;
+        agentAgg.set(row.assignedAgentId, ag);
+      }
+
+      const order = row.order;
+      if (!order) continue;
+
+      const st = order.status;
+      const amount = Number(order.totalAmountMad) || 0;
+      const isDelivered = st === 'DELIVERED';
+      const isReturned = st === 'RETURNED';
+      const isOpen = !CLOSED_STATUSES.has(st);
+
+      parcelsTotal++;
+      parcelsByStatus[st] = (parcelsByStatus[st] || 0) + 1;
+      revenueTotal += amount;
+      if (isDelivered) revenueDelivered += amount;
+      else if (isReturned) revenueReturned += amount;
+      if (isOpen) revenueInTransit += amount;
+
+      if (order.coliatyPackageCode) withCode++;
+      else notSynced++;
+      if (st === 'PENDING' && order.coliatyPackageCode && !order.coliatyPickupRef) readyForPickup++;
+      if (isReturned && row.paymentSituation !== 'FACTURED') uninvoicedReturns++;
+      if (isOpen && now - order.createdAt.getTime() > STALE_AFTER_DAYS * DAY_MS) staleParcels++;
+
+      const orderBucket = series.get(dayKey(order.createdAt));
+      if (orderBucket) {
+        orderBucket.parcels++;
+        orderBucket.revenue += amount;
+        if (isDelivered) orderBucket.delivered++;
+      }
+
+      if (row.vendorId) {
+        const acc = accountAgg.get(row.vendorId)!;
+        acc.parcels++;
+        acc.revenue += amount;
+        if (isDelivered) acc.delivered++;
+        if (isReturned) acc.returned++;
+      }
+
+      if (row.assignedAgentId) {
+        const ag = agentAgg.get(row.assignedAgentId)!;
+        ag.parcels++;
+        if (isDelivered) { ag.delivered++; ag.revenue += amount; }
+        if (isReturned) ag.returned++;
+      }
+
+      for (const item of order.items) {
+        if (!item.productId) continue;
+        const p = productAgg.get(item.productId) || { parcels: 0, units: 0, revenue: 0, delivered: 0, returned: 0 };
+        p.parcels++;
+        p.units += item.quantity || 0;
+        p.revenue += Number(item.totalPriceMad) || 0;
+        if (isDelivered) p.delivered++;
+        if (isReturned) p.returned++;
+        productAgg.set(item.productId, p);
+      }
+    }
+
+    // --- Resolve names/images for the top products only ---
+    const topProductIds = [...productAgg.entries()]
+      .sort((a, b) => b[1].revenue - a[1].revenue)
+      .slice(0, 8)
+      .map(([id]) => id);
+
+    const productMeta = topProductIds.length
+      ? await prisma.product.findMany({
+          where: { id: { in: topProductIds } },
+          select: {
+            id: true,
+            nameFr: true,
+            nameAr: true,
+            sku: true,
+            images: { where: { isPrimary: true }, take: 1, select: { imageUrl: true } },
+          },
+        })
+      : [];
+    const metaById = new Map(productMeta.map(p => [p.id, p]));
+
+    const topProducts = topProductIds.map(id => {
+      const agg = productAgg.get(id)!;
+      const meta = metaById.get(id);
+      const closed = agg.delivered + agg.returned;
+      return {
+        id,
+        name: meta?.nameFr || meta?.nameAr || `#${id}`,
+        sku: meta?.sku || null,
+        image: meta?.images?.[0]?.imageUrl || null,
+        parcels: agg.parcels,
+        units: agg.units,
+        revenue: Math.round(agg.revenue),
+        delivered: agg.delivered,
+        returned: agg.returned,
+        deliveryRate: closed > 0 ? Math.round((agg.delivered / closed) * 100) : null,
+      };
+    });
+
+    const topAccounts = [...accountAgg.entries()]
+      .map(([id, a]) => {
+        const closed = a.delivered + a.returned;
+        return {
+          id, name: a.name, leads: a.leads, parcels: a.parcels,
+          revenue: Math.round(a.revenue), delivered: a.delivered, returned: a.returned,
+          deliveryRate: closed > 0 ? Math.round((a.delivered / closed) * 100) : null,
+        };
+      })
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 8);
+
+    const topAgents = [...agentAgg.entries()]
+      .map(([id, a]) => {
+        const closed = a.delivered + a.returned;
+        return {
+          id, name: a.name, leads: a.leads, parcels: a.parcels,
+          delivered: a.delivered, returned: a.returned, revenue: Math.round(a.revenue),
+          deliveryRate: closed > 0 ? Math.round((a.delivered / closed) * 100) : null,
+        };
+      })
+      .sort((a, b) => b.delivered - a.delivered)
+      .slice(0, 8);
+
+    const closedParcels = (parcelsByStatus['DELIVERED'] || 0) + (parcelsByStatus['RETURNED'] || 0);
+
+    res.json({
+      status: 'success',
+      data: {
+        scope: {
+          isHelper,
+          accountsCount: isHelper ? assignedUserIds.length : accountAgg.size,
+          permissions: {
+            canManageLeads: me.canManageLeads,
+            canManageOrders: me.canManageOrders,
+            canManageProducts: me.canManageProducts,
+            canManageTickets: me.canManageTickets,
+            canScanReturns: me.canScanReturns,
+            canManageInfluencerLinks: me.canManageInfluencerLinks,
+            canManageAffiliateInvites: me.canManageAffiliateInvites,
+            canImpersonate: me.canImpersonate,
+          },
+        },
+        leads: {
+          total: rows.length,
+          today: leadsToday,
+          last7d: leads7d,
+          last30d: leads30d,
+          byStatus: leadsByStatus,
+          unassigned: unassignedLeads,
+        },
+        parcels: {
+          total: parcelsTotal,
+          withCode,
+          notSynced,
+          readyForPickup,
+          delivered: parcelsByStatus['DELIVERED'] || 0,
+          returned: parcelsByStatus['RETURNED'] || 0,
+          inTransit: parcelsTotal - closedParcels,
+          byStatus: parcelsByStatus,
+        },
+        revenue: {
+          total: Math.round(revenueTotal),
+          delivered: Math.round(revenueDelivered),
+          inTransit: Math.round(revenueInTransit),
+          returned: Math.round(revenueReturned),
+        },
+        rates: {
+          delivery: closedParcels > 0 ? Math.round(((parcelsByStatus['DELIVERED'] || 0) / closedParcels) * 100) : null,
+          return: closedParcels > 0 ? Math.round(((parcelsByStatus['RETURNED'] || 0) / closedParcels) * 100) : null,
+        },
+        alerts: { staleParcels, uninvoicedReturns, notSynced, unassignedLeads, readyForPickup },
+        series: [...series.values()].map(s => ({ ...s, revenue: Math.round(s.revenue) })),
+        topProducts,
+        topAccounts,
+        topAgents,
+      },
+    });
+  })
+);
+
 export default router;

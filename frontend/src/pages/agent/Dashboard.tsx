@@ -4,7 +4,7 @@ import { leadsApi } from '../../lib/api';
 import { Link } from 'react-router-dom';
 import {
   Headphones, Truck, CheckCircle2, Phone, PieChart as PieIcon,
-  Activity, ArrowRight, RefreshCw, Sparkles, Zap, PackageCheck, Inbox, Send,
+  Activity, ArrowRight, RefreshCw, Sparkles, Zap, PackageCheck, Inbox, Send, ShoppingCart,
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip } from 'recharts';
 
@@ -201,19 +201,31 @@ export default function AgentDashboard() {
     queryFn: () => leadsApi.available({ limit: 1 }),
   });
 
+  // The "Déjà converti" figure comes from the carts endpoint itself rather than
+  // being recomputed here: that page applies its own scoping and visibility
+  // rules, and a second implementation would quietly drift from the badge the
+  // agent sees when they click through. `counts` covers the whole visible set
+  // regardless of paging, so limit: 1 is enough.
+  const cartsQuery = useQuery({
+    queryKey: ['agent-cart-counts'],
+    queryFn: () => leadsApi.abandonedCarts({ limit: 1 }),
+  });
+
   const isLoading =
     leadStatsQuery.isLoading || deliveryQuery.isLoading || todoQuery.isLoading;
   const isRefreshing =
     leadStatsQuery.isRefetching ||
     deliveryQuery.isRefetching ||
     availableQuery.isRefetching ||
-    todoQuery.isRefetching;
+    todoQuery.isRefetching ||
+    cartsQuery.isRefetching;
 
   const refreshAll = () => {
     leadStatsQuery.refetch();
     deliveryQuery.refetch();
     availableQuery.refetch();
     todoQuery.refetch();
+    cartsQuery.refetch();
   };
 
   const byLeadStatus: Record<string, number> =
@@ -228,6 +240,19 @@ export default function AgentDashboard() {
   const availableCount: number = availableQuery.data?.data?.data?.totalAvailable ?? 0;
   // Confirmed but not yet pushed to Coliaty.
   const awaitingPush: number = byLeadStatus.CONFIRMED || 0;
+
+  // Abandoned carts recovered from the "Paniers Abandonnés" page. `claimed` is
+  // lifetime (what this agent converted); `inPipeline` is how many of those are
+  // still theirs to work.
+  // Both figures come from the carts endpoint's own `counts`, so the tile always
+  // reads exactly like the Paniers Abandonnés page: `converted` is its "Déjà
+  // converti" tab, `all` is its "Tous" tab. An all-time conversion count used to
+  // sit here instead, which silently mixed an unscoped lifetime number with the
+  // page's scoped ones — three different denominators on one tile.
+  const cartCounts = cartsQuery.data?.data?.counts;
+  const cartsConverted: number = cartCounts?.converted ?? 0;
+  const cartsTotal: number = cartCounts?.all ?? 0;
+  const cartsSub = `sur ${cartsTotal} panier${cartsTotal > 1 ? 's' : ''} au total`;
 
   // --- Phase 1: confirmation outcomes --------------------------------------
   const outcomes = useMemo(
@@ -378,7 +403,7 @@ export default function AgentDashboard() {
         </div>
 
         {/* Live counters — real totals, straight from the server aggregates */}
-        <div className="relative z-10 grid grid-cols-2 lg:grid-cols-4 gap-3 mt-6">
+        <div className="relative z-10 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 mt-6">
           <PulseStat
             to="/agent/leads"
             icon={<Inbox className="w-4 h-4" />}
@@ -413,6 +438,15 @@ export default function AgentDashboard() {
             sub={`${deliveredTotal} livrés sur ${parcelsTotal}`}
             value={inProgressTotal}
             tone="violet"
+          />
+          <PulseStat
+            to="/agent/live-stream-paniers"
+            icon={<ShoppingCart className="w-4 h-4" />}
+            label="Paniers convertis"
+            sub={cartsSub}
+            value={cartsConverted}
+            tone="rose"
+            live={cartsTotal > cartsConverted}
           />
         </div>
       </div>
@@ -687,6 +721,7 @@ const TONES: Record<string, { wrap: string; icon: string; dot: string; ping: str
   blue: { wrap: 'bg-blue-50/70 border-blue-100', icon: 'bg-blue-100 text-blue-600', dot: 'bg-blue-500', ping: 'bg-blue-400' },
   amber: { wrap: 'bg-amber-50/70 border-amber-100', icon: 'bg-amber-100 text-amber-600', dot: 'bg-amber-500', ping: 'bg-amber-400' },
   violet: { wrap: 'bg-violet-50/70 border-violet-100', icon: 'bg-violet-100 text-violet-600', dot: 'bg-violet-500', ping: 'bg-violet-400' },
+  rose: { wrap: 'bg-rose-50/70 border-rose-100', icon: 'bg-rose-100 text-rose-600', dot: 'bg-rose-500', ping: 'bg-rose-400' },
 };
 
 function PulseStat({ to, icon, label, sub, value, tone, live }: {

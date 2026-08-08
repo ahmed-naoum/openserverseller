@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { buildReferralUrl } from '../../utils/referral';
+import { currentBasePath } from '../../lib/dashboardBase';
 
 export default function SiteBuilder() {
   const { id } = useParams<{ id: string }>();
@@ -633,8 +634,8 @@ export default function SiteBuilder() {
                 navigate('/admin/links');
               } else if (role === 'HELPER') {
                 navigate('/helper/links');
-              } else if (role === 'VENDOR') {
-                navigate('/dashboard/links');
+              } else if (role === 'VENDOR' || role === 'VENDOR_HELPER') {
+                navigate(`${currentBasePath(role)}/links`);
               } else if (role === 'INFLUENCER') {
                 navigate('/influencer/links');
               } else {

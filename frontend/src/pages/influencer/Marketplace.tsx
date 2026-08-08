@@ -13,6 +13,8 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { buildReferralUrl } from '../../utils/referral';
 import MarketplaceSidebar from '../../components/marketplace/MarketplaceSidebar';
 import LinksManagerModal, { LinksManagerConfig } from '../../components/modals/LinksManagerModal';
+import { currentBasePath } from '../../lib/dashboardBase';
+import { canUseLinkBuilder } from '../../lib/subAccountPermissions';
 
 const HoverMarquee = ({ text, className = "" }: { text: string, className?: string }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -120,7 +122,7 @@ export default function InfluencerMarketplace() {
   const { t, language } = useLanguage();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const basePath = user?.role === 'INFLUENCER' ? '/influencer' : user?.role === 'GROSSELLER' ? '/grosseller' : '/dashboard';
+  const basePath = currentBasePath(user?.role);
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [products, setProducts] = useState<any[]>([]);
@@ -346,11 +348,7 @@ export default function InfluencerMarketplace() {
       if (productLinks.length === 1) {
         const link = productLinks[0];
         const role = user?.roleName || user?.role;
-        const targetPath = role === 'VENDOR' 
-          ? `/dashboard/links/${link.id}/builder` 
-          : role === 'INFLUENCER' 
-            ? `/influencer/links/${link.id}/builder` 
-            : `/helper/links/${link.id}/builder`;
+        const targetPath = `${currentBasePath(role)}/links/${link.id}/builder`;
         navigate(targetPath);
         return;
       }
@@ -385,7 +383,7 @@ export default function InfluencerMarketplace() {
     if (claim.status === 'REJECTED') return <div className="w-full py-2.5 bg-rose-50 text-rose-600 rounded-xl text-xs font-black text-center border border-rose-200/50">{t('request_rejected', 'marketplace')}</div>;
     if (claim.status === 'APPROVED') {
       const role = user?.roleName || user?.role;
-      const showBuilder = role === 'SUPER_ADMIN' || role === 'HELPER' || role === 'VENDOR' || (role === 'INFLUENCER' && user?.canManageInfluencerLinks);
+      const showBuilder = canUseLinkBuilder(user);
       return (
         <div className="flex items-center gap-2 w-full">
           {showBuilder && (
@@ -808,11 +806,7 @@ export default function InfluencerMarketplace() {
                     <button
                       onClick={() => {
                         const role = user?.roleName || user?.role;
-                        const targetPath = role === 'VENDOR' 
-                          ? `/dashboard/links/${link.id}/builder` 
-                          : role === 'INFLUENCER' 
-                            ? `/influencer/links/${link.id}/builder` 
-                            : `/helper/links/${link.id}/builder`;
+                        const targetPath = `${currentBasePath(role)}/links/${link.id}/builder`;
                         navigate(targetPath);
                       }}
                       className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors text-xs font-bold shadow-md shadow-purple-100"

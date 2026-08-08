@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { leadsApi } from '../../lib/api';
+import { useSocket } from '../../contexts/SocketContext';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { buildReferralUrl } from '../../utils/referral';
@@ -16,6 +17,17 @@ import {
   TrendingUp, TrendingDown, User, Store, Check, MessageSquare, Copy, Pencil
 } from 'lucide-react';
 import { normalizeSearch } from '../../utils/search';
+
+const DEFAULT_UNASSIGN_MESSAGE = "Ce lead ne vous est plus assigné.";
+
+/** Why the lead left this agent — mirrors LeadUnassignReason on the server. */
+const UNASSIGN_MESSAGES: Record<string, string> = {
+  FORCE_CLAIMED: "Ce lead vient d'être réclamé par un autre agent.",
+  REASSIGNED: "Ce lead a été réassigné à un autre agent.",
+  TIMEOUT_IDLE: "Temps écoulé : le lead a été libéré automatiquement pour inactivité.",
+  TIMEOUT_STATUS: "Délai expiré : le lead a été libéré automatiquement.",
+  EXPIRED: "Ce lead a expiré et a été remis dans le pool.",
+};
 
 /** Customer-card fields an agent can correct in place while on the call. */
 type EditableFieldKey = 'fullName' | 'phone' | 'city' | 'address';
@@ -116,6 +128,10 @@ export default function AgentLeadDetail() {
 
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { socket } = useSocket();
+  // Latches once the page has evicted itself, so the socket event and the
+  // focus re-check can't both fire a toast + navigation for the same event.
+  const hasLeftRef = useRef(false);
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -281,14 +297,18 @@ export default function AgentLeadDetail() {
         
         if (globalRemaining <= 0) {
           clearInterval(interval);
-          if (isWrongOrder) {
-            toast.error("Délai expiré : Le lead erroné a été libéré automatiquement.");
-          } else if (isCancelOrder) {
-            toast.error("Délai expiré : Le lead annulé a été libéré automatiquement.");
-          } else {
-            toast.error("Temps écoulé : Le lead a été réassigné automatiquement.");
-          }
-          navigate('/agent/leads');
+          // This countdown only *predicts* the server's auto-unassign cron; the
+          // two drift, so it used to evict agents who still held the lead. Now
+          // it asks the server, and the socket handles the real event anyway —
+          // this is just the backstop for a dropped connection.
+          void (async () => {
+            if (hasLeftRef.current || await stillOwnsLead()) return;
+            leaveLead(
+              isWrongOrder ? "Délai expiré : Le lead erroné a été libéré automatiquement."
+                : isCancelOrder ? "Délai expiré : Le lead annulé a été libéré automatiquement."
+                  : "Temps écoulé : Le lead a été réassigné automatiquement."
+            );
+          })();
         }
       }, 1000);
 
@@ -333,6 +353,76 @@ export default function AgentLeadDetail() {
       setLoading(false);
     }
   };
+
+  /**
+   * Close the page and go back to the list.
+   *
+   * Guarded by a ref because the socket event and the focus re-check can both
+   * fire for the same unassignment — without it the agent gets two toasts and
+   * two navigations.
+   */
+  const leaveLead = useCallback((message: string) => {
+    if (hasLeftRef.current) return;
+    hasLeftRef.current = true;
+    if (id) sessionStorage.removeItem(`lead_cooldown_${id}`);
+    toast.error(message, { id: 'lead-unassigned', duration: 6000 });
+    navigate('/agent/leads', { replace: true });
+  }, [id, navigate]);
+
+  /**
+   * Is this lead still ours? The detail endpoint answers with 403 for an agent
+   * the moment `assignedAgentId` stops matching, so a bare re-fetch is the
+   * cheapest authoritative check available.
+   */
+  const stillOwnsLead = useCallback(async (): Promise<boolean> => {
+    try {
+      await leadsApi.detail(Number(id));
+      return true;
+    } catch (err: any) {
+      const status = err?.response?.status;
+      // Only 403/404 mean "not yours" — a network blip must not evict the agent.
+      return !(status === 403 || status === 404);
+    }
+  }, [id]);
+
+  /**
+   * Live eviction. A lead can leave an agent's hands at any moment: another
+   * agent force-claims it, an admin reassigns it, or the auto-unassign cron
+   * reclaims it. This page would otherwise keep showing a customer the agent is
+   * no longer allowed to call, until some later action failed with a 403.
+   */
+  useEffect(() => {
+    if (!socket || !id) return;
+
+    const onUnassigned = (payload: { leadId: number | string; reason?: string; byAgent?: string }) => {
+      if (Number(payload.leadId) !== Number(id)) return;
+      leaveLead(UNASSIGN_MESSAGES[payload.reason || ''] || DEFAULT_UNASSIGN_MESSAGE);
+    };
+
+    socket.on('lead-unassigned', onUnassigned);
+    return () => { socket.off('lead-unassigned', onUnassigned); };
+  }, [socket, id, leaveLead]);
+
+  /**
+   * Fallback for a socket that was down when the event fired — rooms don't
+   * buffer, so a disconnected client simply never hears it. Re-checking when the
+   * tab regains focus catches those without polling.
+   */
+  useEffect(() => {
+    if (!id) return;
+
+    const verify = async () => {
+      if (hasLeftRef.current || document.visibilityState !== 'visible') return;
+      if (!(await stillOwnsLead())) leaveLead(DEFAULT_UNASSIGN_MESSAGE);
+    };
+
+    window.addEventListener('focus', verify);
+    document.addEventListener('visibilitychange', verify);
+    return () => {
+      window.removeEventListener('focus', verify);
+      document.removeEventListener('visibilitychange', verify);
+    };
+  }, [id, leaveLead, stillOwnsLead]);
 
   /**
    * Persists the address/city silently. Called on city pick, on address blur, and

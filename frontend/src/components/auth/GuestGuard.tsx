@@ -1,12 +1,13 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { basePathFor } from '../../lib/dashboardBase';
 
 interface GuestGuardProps {
   children: React.ReactNode;
 }
 
 export default function GuestGuard({ children }: GuestGuardProps) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -17,7 +18,7 @@ export default function GuestGuard({ children }: GuestGuardProps) {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={basePathFor(user?.role)} replace />;
   }
 
   return <>{children}</>;

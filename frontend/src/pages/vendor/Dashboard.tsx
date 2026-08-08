@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { ProCard } from '../../components/common/ProCard';
 import { TierProgressBanner } from '../../components/influencer/TierProgressBanner';
+import { currentBasePath } from '../../lib/dashboardBase';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -26,6 +27,9 @@ import toast from 'react-hot-toast';
 export default function VendorDashboard() {
   const { user } = useAuth();
   const { t, language } = useLanguage();
+  // This page is mounted under both /dashboard and the sub-account tree, so in-page
+  // links have to follow the URL rather than assume the vendor's own prefix.
+  const base = currentBasePath(user?.role);
   const [referralLinks, setReferralLinks] = useState<ReferralLink[]>([]);
   const [commissions, setCommissions] = useState<InfluencerCommission[]>([]);
   const [allCommissions, setAllCommissions] = useState<InfluencerCommission[]>([]);
@@ -78,13 +82,17 @@ export default function VendorDashboard() {
         linkParams.end = new Date().toISOString().split('T')[0];
       }
 
+      // Only the first call is essential. The other two belong to the links and
+      // orders sections, which a vendor sub-account may not have been granted —
+      // under Promise.all a single 403 there rejected the whole batch and left
+      // the dashboard blank. Let them fail softly and render what we do have.
       const [dashboardRes, linksRes, customersRes] = await Promise.all([
         dashboardApi.sellerAffiliate({ ...params, mode: currentMode }),
-        influencerApi.getLinks({ ...linkParams, mode: currentMode }),
-        influencerApi.getCustomers({ all: true, mode: currentMode })
+        influencerApi.getLinks({ ...linkParams, mode: currentMode }).catch(() => null),
+        influencerApi.getCustomers({ all: true, mode: currentMode }).catch(() => null)
       ]);
-      
-      setReferralLinks(linksRes.data);
+
+      setReferralLinks(linksRes?.data || []);
       // Use commissions from dashboardRes which are correctly filtered by date
       setCommissions(dashboardRes.data.commissions || []);
       setWallet(dashboardRes.data.wallet);
@@ -93,7 +101,7 @@ export default function VendorDashboard() {
       setLeadCountsByLink(dashboardRes.data.leadCountsByLink || []);
       setHelpers(dashboardRes.data.helpers || []);
 
-      const commissionsData = customersRes.data?.data?.commissions || customersRes.data?.commissions || [];
+      const commissionsData = customersRes?.data?.data?.commissions || customersRes?.data?.commissions || [];
       setAllCommissions(commissionsData);
     } catch (error) {
       console.error('Failed to load dashboard:', error);
@@ -273,8 +281,8 @@ export default function VendorDashboard() {
       <TierProgressBanner 
         totalEarned={wallet?.totalEarnedMad || 0} 
         title={currentMode === 'SELLER' ? t('dashboard_seller', 'dashboard') : t('dashboard_affiliate', 'dashboard')}
-        productsUrl="/dashboard/inventory"
-        marketplaceUrl="/dashboard/marketplace"
+        productsUrl={`${base}/inventory`}
+        marketplaceUrl={`${base}/marketplace`}
       />
 
       {/* Helpers / Account Managers Info */}

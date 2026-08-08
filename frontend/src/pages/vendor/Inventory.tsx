@@ -28,6 +28,8 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { buildReferralUrl } from '../../utils/referral';
 import { containsBlockedWord } from '../../utils/blockedWords';
+import { currentBasePath } from '../../lib/dashboardBase';
+import { accountIdOf, canUseLinkBuilder } from '../../lib/subAccountPermissions';
 
 type ClaimStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'BUILDING';
 
@@ -100,8 +102,11 @@ export default function VendorInventory() {
         // Show a product in the mode it was actually claimed under, not based on who owns it.
         // Owned products come back with userMode 'SELLER', marketplace claims carry the mode
         // that was active when the user clicked "Add to my products".
+        // ownerId comes back as the account the API answered as — the parent
+        // vendor for a sub-account — so compare against that, not user.id.
+        const meId = accountIdOf(user);
         const claimMode = c.userMode
-          || (user?.id && c.product?.ownerId === user.id ? 'SELLER' : 'AFFILIATE');
+          || (meId && c.product?.ownerId === meId ? 'SELLER' : 'AFFILIATE');
         return claimMode === currentMode;
       });
       setClaims(activeClaims);
@@ -258,11 +263,7 @@ export default function VendorInventory() {
       if (productLinks.length === 1) {
         const link = productLinks[0];
         const role = user?.roleName || user?.role;
-        const targetPath = role === 'VENDOR' 
-          ? `/dashboard/links/${link.id}/builder` 
-          : role === 'INFLUENCER' 
-            ? `/influencer/links/${link.id}/builder` 
-            : `/helper/links/${link.id}/builder`;
+        const targetPath = `${currentBasePath(role)}/links/${link.id}/builder`;
         navigate(targetPath);
         return;
       }
@@ -737,13 +738,15 @@ export default function VendorInventory() {
                             >
                               <Copy size={14} />
                             </button>
-                            <button
-                              onClick={() => navigate(`/dashboard/links/${link.id}/builder`)}
-                              className="p-2.5 bg-white text-slate-400 hover:text-purple-600 border border-slate-100 rounded-xl transition-all shadow-sm"
-                              title={t('tooltip_builder', 'links') || "Constructeur de Page"}
-                            >
-                              <Wand2 size={14} />
-                            </button>
+                            {canUseLinkBuilder(user) && (
+                              <button
+                                onClick={() => navigate(`${currentBasePath(user?.roleName || user?.role)}/links/${link.id}/builder`)}
+                                className="p-2.5 bg-white text-slate-400 hover:text-purple-600 border border-slate-100 rounded-xl transition-all shadow-sm"
+                                title={t('tooltip_builder', 'links') || "Constructeur de Page"}
+                              >
+                                <Wand2 size={14} />
+                              </button>
+                            )}
                             <button
                               onClick={() => {
                                 setSelectedLinkForQr(link);
@@ -951,11 +954,7 @@ export default function VendorInventory() {
                     <button
                       onClick={() => {
                         const role = user?.roleName || user?.role;
-                        const targetPath = role === 'VENDOR' 
-                          ? `/dashboard/links/${link.id}/builder` 
-                          : role === 'INFLUENCER' 
-                            ? `/influencer/links/${link.id}/builder` 
-                            : `/helper/links/${link.id}/builder`;
+                        const targetPath = `${currentBasePath(role)}/links/${link.id}/builder`;
                         navigate(targetPath);
                       }}
                       className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors text-xs font-bold shadow-md shadow-purple-100"

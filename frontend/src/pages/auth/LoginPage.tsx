@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { settingsApi } from '../../lib/api';
+import { VENDOR_HELPER_BASE } from '../../lib/dashboardBase';
 import { Eye, EyeOff, ShieldCheck, Mail, Lock } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
 import toast from 'react-hot-toast';
@@ -97,6 +98,10 @@ export default function LoginPage() {
         }
       } else if (user.role === 'UNCONFIRMED') {
         navigate('/verify');
+      } else if (user.role === 'VENDOR_HELPER') {
+        // Sub-accounts inherit the vendor's verified standing, so they go
+        // straight to their dashboard rather than through the KYC gate.
+        navigate(VENDOR_HELPER_BASE);
       } else {
         if (user.kycStatus !== 'APPROVED') {
           navigate('/dashboard/verification');
@@ -145,6 +150,10 @@ export default function LoginPage() {
         }
       } else if (user.role === 'UNCONFIRMED') {
         navigate('/verify');
+      } else if (user.role === 'VENDOR_HELPER') {
+        // Sub-accounts inherit the vendor's verified standing, so they go
+        // straight to their dashboard rather than through the KYC gate.
+        navigate(VENDOR_HELPER_BASE);
       } else {
         if (user.kycStatus !== 'APPROVED') {
           navigate('/dashboard/verification');
@@ -190,6 +199,10 @@ export default function LoginPage() {
         }
       } else if (user.role === 'UNCONFIRMED') {
         navigate('/verify');
+      } else if (user.role === 'VENDOR_HELPER') {
+        // Sub-accounts inherit the vendor's verified standing, so they go
+        // straight to their dashboard rather than through the KYC gate.
+        navigate(VENDOR_HELPER_BASE);
       } else {
         if (user.kycStatus !== 'APPROVED') {
           navigate('/dashboard/verification');
@@ -245,6 +258,10 @@ export default function LoginPage() {
         }
       } else if (user.role === 'UNCONFIRMED') {
         navigate('/verify');
+      } else if (user.role === 'VENDOR_HELPER') {
+        // Sub-accounts inherit the vendor's verified standing, so they go
+        // straight to their dashboard rather than through the KYC gate.
+        navigate(VENDOR_HELPER_BASE);
       } else {
         if (user.kycStatus !== 'APPROVED') {
           navigate('/dashboard/verification');

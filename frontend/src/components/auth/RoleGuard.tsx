@@ -1,5 +1,6 @@
 import { useAuth } from '../../contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
+import { VENDOR_HELPER_BASE } from '../../lib/dashboardBase';
 
 interface RoleGuardProps {
   children: React.ReactNode;
@@ -62,6 +63,8 @@ function getDefaultPath(role: string): string {
       return '/confirmation';
     case 'HELPER':
       return '/helper';
+    case 'VENDOR_HELPER':
+      return VENDOR_HELPER_BASE;
     case 'UNCONFIRMED':
       return '/verify';
     default:

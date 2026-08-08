@@ -255,8 +255,13 @@ export const auditLog = async (
   res.on('finish', async () => {
     try {
       const duration = Date.now() - startTime;
-      const userId = (req as any).user?.id || null;
-      const userEmail = (req as any).user?.email || null;
+      // `actorId` is set when a vendor sub-account made the call: from that
+      // point on `user.id` is the *parent vendor*, so attributing the audit row
+      // to it would credit every helper's action to the account owner and make
+      // several helpers indistinguishable from one another.
+      const actor = (req as any).user;
+      const userId = actor?.actorId || actor?.id || null;
+      const userEmail = actor?.actorEmail || actor?.email || null;
 
       let postFetchState: any = null;
       if (req.method !== 'GET' && prismaModelName && whereClause && (prisma as any)[prismaModelName] && preFetchState) {

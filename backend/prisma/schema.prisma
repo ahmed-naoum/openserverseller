@@ -42,6 +42,65 @@ model User {
   // Seller-Affiliate mode switching
   mode String @default("SELLER") // SELLER, AFFILIATE
 
+  // ------------------------------------------------------------------
+  // VENDOR sub-accounts (role VENDOR_HELPER)
+  //
+  // A VENDOR can create helper accounts that log in with their own
+  // credentials but operate on the *vendor's* data. The link below is what
+  // authenticate() uses to swap the request identity over to the parent, so
+  // every existing vendor-scoped query keeps working untouched.
+  // ------------------------------------------------------------------
+  parentVendorId Int?
+  parentVendor   User?  @relation("VendorSubAccounts", fields: [parentVendorId], references: [id], onDelete: Cascade)
+  subAccounts    User[] @relation("VendorSubAccounts")
+
+  // Per-page grants for a sub-account. All default to false: a freshly created
+  // helper can see nothing until its vendor explicitly hands over a page.
+  subCanViewDashboard      Boolean @default(true)
+  subCanViewLeads          Boolean @default(false)
+  subCanEditLeads          Boolean @default(false)
+  subCanCreateLeads        Boolean @default(false)
+  subCanViewInventory      Boolean @default(false)
+  subCanManageLinks        Boolean @default(false)
+  subCanViewWallet         Boolean @default(false)
+  subCanViewInvoices       Boolean @default(false)
+  subCanViewIntegrations   Boolean @default(false)
+  subCanViewMarketplace    Boolean @default(false)
+  subCanManageSupport      Boolean @default(false)
+  subCanUseChat            Boolean @default(false)
+  subCanManagePixels       Boolean @default(false)
+  subCanManageDomains      Boolean @default(false)
+
+  // Finer grants, each carved out of a broader one above because it is
+  // destructive, costs money, or is visible to the customer.
+  subCanDeleteLeads            Boolean @default(false)
+  subCanPushToCallCenter       Boolean @default(false)
+  subCanRespondPriceRequests   Boolean @default(false)
+  subCanImportIntegrationLeads Boolean @default(false)
+  subCanClaimProducts          Boolean @default(false)
+  subCanEditProducts           Boolean @default(false)
+  subCanRequestCustomProduct   Boolean @default(false)
+  subCanCreateLinks            Boolean @default(false)
+  subCanUseLinkBuilder         Boolean @default(false)
+  subCanRegenerateLinks        Boolean @default(false)
+  subCanViewTransactions       Boolean @default(false)
+  subCanViewPayouts            Boolean @default(false)
+  subCanViewCommissions        Boolean @default(false)
+  subCanDownloadInvoices       Boolean @default(false)
+  subCanViewPixels             Boolean @default(false)
+  subCanCreateTickets          Boolean @default(false)
+  subCanSendMessages           Boolean @default(false)
+  subCanManageConversations    Boolean @default(false)
+  subCanRefreshDomain          Boolean @default(false)
+
+  // Which of the two vendor modes this helper may sit in. SELLER | AFFILIATE | BOTH
+  subAllowedModes          String  @default("BOTH")
+  // Master switch: when true the helper can look at everything it was granted
+  // but change nothing of the vendor's, whatever the grants above say.
+  subReadOnly              Boolean  @default(false)
+  // Optional end of access, for a temporary helper. Null means no expiry.
+  subAccessExpiresAt       DateTime?
+
   // Influencer fields
   referralCode  String? @unique
   subdomain     String? @unique
@@ -187,6 +246,7 @@ model User {
   conversationLogs     ConversationLog[]  @relation("UserLogs")
   pixels               UserPixel[]
 
+  @@index([parentVendorId])
   @@map("users")
 }
 

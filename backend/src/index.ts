@@ -422,6 +422,18 @@ const setupChatSocket = () => {
         socket.userUuid = user.uuid;
         socket.userId = user.id;
         socket.userRole = user.role.name;
+        // A vendor sub-account works the vendor's inbox, and every emitter
+        // addresses the vendor. Remember the parent so the connection handler
+        // can subscribe this socket to the vendor's rooms too — without it a
+        // helper never sees a new lead land.
+        if (user.role.name === 'VENDOR_HELPER' && user.parentVendorId) {
+          socket.parentVendorId = user.parentVendorId;
+          const parent = await prisma.user.findUnique({
+            where: { id: user.parentVendorId },
+            select: { uuid: true },
+          });
+          socket.parentVendorUuid = parent?.uuid;
+        }
       }
       next();
     } catch {
@@ -439,6 +451,12 @@ const setupChatSocket = () => {
       // rooms makes every one of those reach the socket. UUIDs and integers can
       // never collide, so the two namespaces stay distinct.
       socket.join(`user:${socket.userId}`);
+
+      // Sub-accounts also listen on the vendor they act for, in both id spaces.
+      if (socket.parentVendorId) {
+        socket.join(`user:${socket.parentVendorId}`);
+        if (socket.parentVendorUuid) socket.join(`user:${socket.parentVendorUuid}`);
+      }
     }
 
     // Tell the client whether global auto-recording is on. If it is, the client's

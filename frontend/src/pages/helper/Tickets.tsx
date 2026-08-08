@@ -383,6 +383,58 @@ function ShortcutsModal({ open, onClose }: { open: boolean; onClose: () => void 
   );
 }
 
+function ImageLightbox({
+  image,
+  onClose,
+}: {
+  image: { src: string; name: string; sub?: string } | null;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!image) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [image, onClose]);
+
+  if (!image) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[130] flex items-center justify-center p-6 bg-slate-900/70 backdrop-blur-md animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-6 right-6 p-3 rounded-2xl bg-white/10 text-white hover:bg-white/20 transition-all active:scale-95"
+      >
+        <X size={22} />
+      </button>
+      <div
+        className="flex flex-col items-center gap-5 animate-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <img
+          src={image.src}
+          alt={image.name}
+          className="max-w-[88vw] max-h-[76vh] object-contain rounded-3xl bg-white shadow-2xl"
+        />
+        <div className="text-center">
+          <p className="text-lg font-black text-white">{image.name}</p>
+          {image.sub && (
+            <p className="text-[11px] font-bold text-white/60 uppercase tracking-wider mt-1">{image.sub}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StatCard({
   icon,
   label,
@@ -439,6 +491,7 @@ export default function HelperTickets() {
   const [visibleCount, setVisibleCount] = useState(pageSize);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<number>>(new Set());
   const [expandedBon, setExpandedBon] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ src: string; name: string; sub?: string } | null>(null);
 
   // Busy flags
   const [creatingBon, setCreatingBon] = useState(false);
@@ -1250,7 +1303,7 @@ export default function HelperTickets() {
         return;
       }
 
-      if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (typing || lightbox || e.ctrlKey || e.metaKey || e.altKey) return;
 
       switch (e.key) {
         case '/':
@@ -1329,6 +1382,7 @@ export default function HelperTickets() {
     showShortcuts,
     confirmCreate,
     confirmRemove,
+    lightbox,
     selectedCount,
     selectedCodes,
     creatingBon,
@@ -1405,10 +1459,23 @@ export default function HelperTickets() {
         <td className="px-4 py-2.5">
           <div className="flex items-center gap-2">
             {parcel.products[0]?.image ? (
-              <img src={parcel.products[0].image} alt="" className="w-7 h-7 rounded-lg object-cover flex-shrink-0" />
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightbox({
+                    src: parcel.products[0].image!,
+                    name: parcel.products[0].name,
+                    sub: parcel.code,
+                  });
+                }}
+                title="Agrandir l'image"
+                className="flex-shrink-0 rounded-xl overflow-hidden hover:ring-2 hover:ring-primary-300 transition-all active:scale-95 cursor-zoom-in"
+              >
+                <img src={parcel.products[0].image} alt={parcel.products[0].name} className="w-11 h-11 object-cover block" />
+              </button>
             ) : (
-              <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0 text-slate-300">
-                <Package size={14} />
+              <div className="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0 text-slate-300">
+                <Package size={20} />
               </div>
             )}
             <span className="text-xs font-bold text-slate-600 truncate max-w-[200px]">
@@ -1629,10 +1696,27 @@ export default function HelperTickets() {
                         <ChevronDown size={18} />
                       </button>
                       {group.product.image ? (
-                        <img src={group.product.image} alt="" className="w-9 h-9 rounded-xl object-cover" />
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLightbox({
+                              src: group.product.image!,
+                              name: group.product.name,
+                              sub: group.product.sku,
+                            });
+                          }}
+                          title="Agrandir l'image"
+                          className="flex-shrink-0 rounded-2xl overflow-hidden border border-slate-100 hover:ring-2 hover:ring-primary-300 transition-all active:scale-95 cursor-zoom-in"
+                        >
+                          <img
+                            src={group.product.image}
+                            alt={group.product.name}
+                            className="w-[100px] h-[100px] object-cover block"
+                          />
+                        </button>
                       ) : (
-                        <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-300">
-                          <Package size={16} />
+                        <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-300 flex-shrink-0">
+                          <Package size={26} />
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
@@ -2571,6 +2655,8 @@ export default function HelperTickets() {
       )}
 
       <ShortcutsModal open={showShortcuts} onClose={() => setShowShortcuts(false)} />
+
+      <ImageLightbox image={lightbox} onClose={() => setLightbox(null)} />
 
       <ConfirmDialog
         open={confirmCreate}

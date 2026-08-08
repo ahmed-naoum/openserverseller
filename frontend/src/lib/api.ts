@@ -100,6 +100,19 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    // A vendor sub-account is refused by the permission matrix with a message
+    // that explains exactly which grant is missing, or that the account is in
+    // read-only mode. Surface it: the pages that fire these calls mostly log
+    // and move on, so without this the button just appears to do nothing.
+    if (error.response?.status === 403) {
+      const message = (error.response.data as any)?.message;
+      const method = error.config?.method?.toUpperCase();
+      const isWrite = !!method && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+      if (isWrite && typeof message === 'string' && /sous-compte|vendeur|lecture seule/i.test(message)) {
+        toast.error(message, { id: 'sub-account-denied' });
+      }
+    }
+
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -257,8 +270,13 @@ export const leadsApi = {
   forceClaim: (id: number, data: { phone: string; reason: string }) =>
     api.post(`/leads/${id}/force-claim`, data),
   // Abandoned carts (call-center recovery)
-  abandonedCarts: (params?: { page?: number; limit?: number; search?: string; status?: 'all' | 'saved' | 'unsaved' }) =>
-    api.get('/leads/abandoned-carts', { params }),
+  abandonedCarts: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: 'all' | 'unsaved' | 'converted';
+    phoneQuality?: 'all' | 'complete' | 'incomplete';
+  }) => api.get('/leads/abandoned-carts', { params }),
   convertCart: (id: string) => api.post(`/leads/abandoned-carts/${id}/convert`),
   detail: (id: number) => api.get(`/leads/${id}/detail`),
   timeline: (id: number) => api.get(`/leads/${id}/timeline`),
@@ -298,6 +316,9 @@ export const leadsApi = {
     dateTo?: string;
     minAmount?: number | string;
     maxAmount?: number | string;
+    productId?: number | string;
+    /** A user id, or 'none' for parcels with no call-center agent assigned. */
+    agentId?: number | string;
     tab?: 'all' | 'uninvoiced_returns';
     sort?: string;
   }) => api.get('/leads/livraison', { params }),
@@ -619,6 +640,34 @@ export const fulfillmentApi = {
     api.post(`/fulfillment/${id}/fulfill`, data),
   rejectRequest: (id: string) =>
     api.patch(`/fulfillment/${id}/reject`),
+};
+
+/** Vendor sub-accounts. VENDOR-only: a sub-account cannot reach any of these. */
+export const vendorSubAccountsApi = {
+  list: () => api.get('/vendor/sub-accounts'),
+  create: (data: {
+    fullName: string;
+    email: string;
+    password: string;
+    phone?: string;
+    subAllowedModes?: 'BOTH' | 'SELLER' | 'AFFILIATE';
+    subReadOnly?: boolean;
+    subAccessExpiresAt?: string | null;
+    permissions?: Record<string, boolean>;
+  }) => api.post('/vendor/sub-accounts', data),
+  update: (uuid: string, data: {
+    fullName?: string;
+    phone?: string;
+    subAllowedModes?: 'BOTH' | 'SELLER' | 'AFFILIATE';
+    subReadOnly?: boolean;
+    subAccessExpiresAt?: string | null;
+    permissions?: Record<string, boolean>;
+  }) => api.patch(`/vendor/sub-accounts/${uuid}`, data),
+  setStatus: (uuid: string, isActive: boolean) =>
+    api.patch(`/vendor/sub-accounts/${uuid}/status`, { isActive }),
+  setPassword: (uuid: string, password: string) =>
+    api.post(`/vendor/sub-accounts/${uuid}/password`, { password }),
+  remove: (uuid: string) => api.delete(`/vendor/sub-accounts/${uuid}`),
 };
 
 export const dashboardApi = {

@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { leadsApi, ordersApi } from '../../lib/api';
+import { leadsApi, ordersApi, getFileUrl } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -27,6 +27,10 @@ import {
   SlidersHorizontal,
   X,
   MessageSquareWarning,
+  ZoomIn,
+  Tag,
+  Building2,
+  Headphones,
 } from 'lucide-react';
 import StatusReasonModal, {
   REASON_REQUIRED_STATUSES as REASON_REQUIRED,
@@ -50,6 +54,7 @@ interface Parcel {
   productVariant: string | null;
   items: Array<{
     id: number;
+    productId: number | null;
     productName: string;
     productImage: string | null;
     productSku: string | null;
@@ -62,6 +67,9 @@ interface Parcel {
   vendorId: number | null;
   vendorName: string | null;
   vendorEmail: string | null;
+  agentId: number | null;
+  agentName: string | null;
+  agentEmail: string | null;
   paymentSituation: string;
   createdAt: string;
   lastStatusNote: string | null;
@@ -87,6 +95,8 @@ interface Filters {
   paymentSituation: string;
   city: string;
   vendorId: string;
+  productId: string;
+  agentId: string;
   hasCode: '' | 'yes' | 'no';
   dateFrom: string;
   dateTo: string;
@@ -102,6 +112,8 @@ const DEFAULT_FILTERS: Filters = {
   paymentSituation: '',
   city: '',
   vendorId: '',
+  productId: '',
+  agentId: '',
   hasCode: '',
   dateFrom: '',
   dateTo: '',
@@ -200,9 +212,27 @@ export default function HelperColis() {
   const [updatingStatusId, setUpdatingStatusId] = useState<number | null>(null);
   const [updatingPaymentId, setUpdatingPaymentId] = useState<number | null>(null);
 
-  // Filters (search is debounced into `debouncedSearch` before hitting the API)
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  // Filters (search is debounced into `debouncedSearch` before hitting the API).
+  // Seeded from the URL so the dashboard's drill-down links land pre-filtered.
+  const [searchParams] = useSearchParams();
+  const [filters, setFilters] = useState<Filters>(() => {
+    const status = searchParams.get('status');
+    return {
+      ...DEFAULT_FILTERS,
+      search: searchParams.get('q') || '',
+      statuses: status ? status.split(',').filter(Boolean) : [],
+      paymentSituation: searchParams.get('payment') || '',
+      city: searchParams.get('city') || '',
+      vendorId: searchParams.get('vendorId') || '',
+      productId: searchParams.get('productId') || '',
+      agentId: searchParams.get('agentId') || '',
+      hasCode: (searchParams.get('code') as Filters['hasCode']) || '',
+      dateFrom: searchParams.get('from') || '',
+      dateTo: searchParams.get('to') || '',
+      sort: searchParams.get('sort') || DEFAULT_FILTERS.sort,
+    };
+  });
+  const [debouncedSearch, setDebouncedSearch] = useState(searchParams.get('q') || '');
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -219,7 +249,13 @@ export default function HelperColis() {
   const [filterOptions, setFilterOptions] = useState<{
     cities: string[];
     vendors: { id: number; name: string }[];
-  }>({ cities: [], vendors: [] });
+    agents: { id: number; name: string }[];
+    products: { id: number; name: string; sku: string | null }[];
+    unassignedAgentCount: number;
+  }>({ cities: [], vendors: [], agents: [], products: [], unassignedAgentCount: 0 });
+
+  // Product image lightbox
+  const [zoomImage, setZoomImage] = useState<{ url: string; name: string } | null>(null);
 
   const [historyParcel, setHistoryParcel] = useState<Parcel | null>(null);
   const [parcelHistory, setParcelHistory] = useState<HistoryEntry[]>([]);
@@ -257,6 +293,8 @@ export default function HelperColis() {
     if (filters.paymentSituation) params.paymentSituation = filters.paymentSituation;
     if (filters.city) params.city = filters.city;
     if (filters.vendorId) params.vendorId = filters.vendorId;
+    if (filters.productId) params.productId = filters.productId;
+    if (filters.agentId) params.agentId = filters.agentId;
     if (filters.hasCode) params.hasCode = filters.hasCode;
     if (filters.dateFrom) params.dateFrom = filters.dateFrom;
     if (filters.dateTo) params.dateTo = filters.dateTo;
@@ -276,7 +314,12 @@ export default function HelperColis() {
       setTotalPages(data.totalPages || 1);
       setTotalResults(data.total || 0);
       if (data.stats) setStats(data.stats);
-      if (data.filterOptions) setFilterOptions(data.filterOptions);
+      if (data.filterOptions) {
+        setFilterOptions({
+          cities: [], vendors: [], agents: [], products: [], unassignedAgentCount: 0,
+          ...data.filterOptions,
+        });
+      }
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Erreur lors du chargement des livraisons');
     } finally {
@@ -293,6 +336,7 @@ export default function HelperColis() {
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch, filters.statuses, filters.paymentSituation, filters.city, filters.vendorId,
+      filters.productId, filters.agentId,
       filters.hasCode, filters.dateFrom, filters.dateTo, filters.minAmount, filters.maxAmount,
       filters.sort, filters.limit, activeTab]);
 
@@ -336,6 +380,16 @@ export default function HelperColis() {
     };
   }, [canManage]);
 
+  // Escape closes the image lightbox
+  useEffect(() => {
+    if (!zoomImage) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setZoomImage(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [zoomImage]);
+
   const activeFilterChips = useMemo(() => {
     const chips: { key: string; label: string; clear: () => void }[] = [];
     if (debouncedSearch) {
@@ -354,7 +408,19 @@ export default function HelperColis() {
     if (filters.city) chips.push({ key: 'city', label: `Ville: ${filters.city}`, clear: () => setFilters(f => ({ ...f, city: '' })) });
     if (filters.vendorId) {
       const v = filterOptions.vendors.find(x => String(x.id) === filters.vendorId);
-      chips.push({ key: 'vendor', label: `Référent: ${v?.name || filters.vendorId}`, clear: () => setFilters(f => ({ ...f, vendorId: '' })) });
+      chips.push({ key: 'vendor', label: `Compte: ${v?.name || filters.vendorId}`, clear: () => setFilters(f => ({ ...f, vendorId: '' })) });
+    }
+    if (filters.productId) {
+      const p = filterOptions.products.find(x => String(x.id) === filters.productId);
+      chips.push({ key: 'product', label: `Produit: ${p?.name || filters.productId}`, clear: () => setFilters(f => ({ ...f, productId: '' })) });
+    }
+    if (filters.agentId) {
+      const a = filterOptions.agents.find(x => String(x.id) === filters.agentId);
+      chips.push({
+        key: 'agent',
+        label: `Agent: ${filters.agentId === 'none' ? 'Non assigné' : a?.name || filters.agentId}`,
+        clear: () => setFilters(f => ({ ...f, agentId: '' })),
+      });
     }
     if (filters.hasCode) chips.push({ key: 'code', label: filters.hasCode === 'yes' ? 'Avec code Coliaty' : 'Sans code Coliaty', clear: () => setFilters(f => ({ ...f, hasCode: '' })) });
     if (filters.dateFrom) chips.push({ key: 'from', label: `Du ${filters.dateFrom}`, clear: () => setFilters(f => ({ ...f, dateFrom: '' })) });
@@ -731,15 +797,48 @@ export default function HelperColis() {
               </div>
 
               <div>
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Référent</label>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Compte (référent)</label>
                 <select
                   value={filters.vendorId}
                   onChange={e => setFilters(f => ({ ...f, vendorId: e.target.value }))}
                   className="mt-1 w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                 >
-                  <option value="">Tous les référents</option>
+                  <option value="">Tous les comptes</option>
                   {filterOptions.vendors.map(v => (
                     <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Produit</label>
+                <select
+                  value={filters.productId}
+                  onChange={e => setFilters(f => ({ ...f, productId: e.target.value }))}
+                  className="mt-1 w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                >
+                  <option value="">Tous les produits</option>
+                  {filterOptions.products.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}{p.sku ? ` · ${p.sku}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Agent call center</label>
+                <select
+                  value={filters.agentId}
+                  onChange={e => setFilters(f => ({ ...f, agentId: e.target.value }))}
+                  className="mt-1 w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                >
+                  <option value="">Tous les agents</option>
+                  {filterOptions.unassignedAgentCount > 0 && (
+                    <option value="none">Non assigné ({filterOptions.unassignedAgentCount})</option>
+                  )}
+                  {filterOptions.agents.map(a => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
                   ))}
                 </select>
               </div>
@@ -877,6 +976,7 @@ export default function HelperColis() {
             const StatusIcon = status.icon;
             const isExpanded = expandedId === parcel.id;
             const showReason = !!parcel.lastStatusNote && !!REASON_REQUIRED[parcel.status];
+            const primaryItem = parcel.items[0];
 
             return (
               <div
@@ -889,9 +989,35 @@ export default function HelperColis() {
                     {/* Left: Customer Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3 mb-2">
-                        <div className="w-10 h-10 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-full flex items-center justify-center text-indigo-700 font-black text-base flex-shrink-0">
-                          {parcel.customerName.charAt(0).toUpperCase()}
-                        </div>
+                        {/* The parcel's product is what the operator actually needs to
+                            recognise here, so it replaces the customer initial. */}
+                        {primaryItem?.productImage ? (
+                          <button
+                            type="button"
+                            onClick={() => setZoomImage({ url: getFileUrl(primaryItem.productImage), name: primaryItem.productName || 'Produit' })}
+                            title="Agrandir l'image du produit"
+                            className="relative w-12 h-12 rounded-xl overflow-hidden border border-gray-200 flex-shrink-0 group/img hover:border-indigo-400 hover:shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          >
+                            <img
+                              src={getFileUrl(primaryItem.productImage)}
+                              alt={primaryItem.productName || 'Produit'}
+                              loading="lazy"
+                              className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-300"
+                            />
+                            <span className="absolute inset-0 bg-black/45 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                              <ZoomIn className="w-4 h-4 text-white" />
+                            </span>
+                            {parcel.items.length > 1 && (
+                              <span className="absolute bottom-0 right-0 px-1 bg-slate-900 text-white text-[9px] font-black rounded-tl-md">
+                                +{parcel.items.length - 1}
+                              </span>
+                            )}
+                          </button>
+                        ) : (
+                          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center flex-shrink-0 border border-gray-200">
+                            <Package className="w-5 h-5 text-gray-400" />
+                          </div>
+                        )}
                         <div className="min-w-0">
                           <p className="font-bold text-gray-900 truncate">{parcel.customerName}</p>
                           <p className="text-xs text-gray-400 font-medium">#{parcel.orderNumber}</p>
@@ -916,11 +1042,52 @@ export default function HelperColis() {
                             🚫 Ne pas ouvrir
                           </span>
                         )}
-                        {(parcel.vendorName || parcel.vendorEmail) && (
-                          <span className="flex items-center gap-1.5 text-purple-700 bg-purple-50 px-2 py-1 rounded-md text-[11px] font-bold border border-purple-100">
-                            👤 Référent: {parcel.vendorName || '—'}{parcel.vendorEmail ? ` · ${parcel.vendorEmail}` : ''}
-                          </span>
+                        {/* Product / account / agent — click to filter the list down to it */}
+                        {primaryItem?.productName && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              primaryItem.productId &&
+                              setFilters(f => ({ ...f, productId: String(primaryItem.productId) }))
+                            }
+                            title={primaryItem.productId ? `Filtrer sur « ${primaryItem.productName} »` : undefined}
+                            className="flex items-center gap-1.5 text-indigo-700 bg-indigo-50 px-2 py-1 rounded-md text-[11px] font-bold border border-indigo-100 hover:bg-indigo-100 transition-colors max-w-[220px]"
+                          >
+                            <Tag className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">{primaryItem.productName}</span>
+                            {primaryItem.productSku && (
+                              <span className="text-indigo-400 font-medium flex-shrink-0">· {primaryItem.productSku}</span>
+                            )}
+                          </button>
                         )}
+
+                        {(parcel.vendorName || parcel.vendorEmail) && (
+                          <button
+                            type="button"
+                            onClick={() => parcel.vendorId && setFilters(f => ({ ...f, vendorId: String(parcel.vendorId) }))}
+                            title={parcel.vendorEmail || undefined}
+                            className="flex items-center gap-1.5 text-purple-700 bg-purple-50 px-2 py-1 rounded-md text-[11px] font-bold border border-purple-100 hover:bg-purple-100 transition-colors max-w-[220px]"
+                          >
+                            <Building2 className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">{parcel.vendorName || parcel.vendorEmail}</span>
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFilters(f => ({ ...f, agentId: parcel.agentId ? String(parcel.agentId) : 'none' }))
+                          }
+                          title={parcel.agentEmail || "Filtrer sur cet agent"}
+                          className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-bold border transition-colors max-w-[220px] ${
+                            parcel.agentName
+                              ? 'text-teal-700 bg-teal-50 border-teal-100 hover:bg-teal-100'
+                              : 'text-gray-400 bg-gray-50 border-gray-200 hover:bg-gray-100'
+                          }`}
+                        >
+                          <Headphones className="w-3 h-3 flex-shrink-0" />
+                          <span className="truncate">{parcel.agentName || 'Agent non assigné'}</span>
+                        </button>
                       </div>
                     </div>
 
@@ -1429,6 +1596,35 @@ export default function HelperColis() {
                 FERMER
               </button>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Product image lightbox */}
+      {zoomImage && createPortal(
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[60]"
+          onMouseDown={e => {
+            if (e.target === e.currentTarget) setZoomImage(null);
+          }}
+        >
+          <div className="relative max-w-3xl w-full">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-white font-black text-sm truncate pr-4">{zoomImage.name}</p>
+              <button
+                onClick={() => setZoomImage(null)}
+                aria-label="Fermer"
+                className="p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-all flex-shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <img
+              src={zoomImage.url}
+              alt={zoomImage.name}
+              className="w-full max-h-[80vh] object-contain rounded-2xl bg-white/5"
+            />
           </div>
         </div>,
         document.body

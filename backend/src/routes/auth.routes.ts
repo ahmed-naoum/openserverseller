@@ -5,7 +5,8 @@ import multer from 'multer';
 import { OcrService } from '../services/ocr.service.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { authenticate, authorize } from '../middleware/auth.js';
+import { authenticate, authorize, VENDOR_HELPER_ROLE } from '../middleware/auth.js';
+import { SUB_ACCOUNT_PERMISSIONS, describeSubAccountLockout } from '../lib/vendorSubAccount.js';
 import { checkAndActivateUser } from '../utils/verification.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -835,6 +836,22 @@ router.post(
 
     if (!isPasswordValid) {
       throw new AppException(401, 'Invalid credentials');
+    }
+
+    // A vendor sub-account that has been suspended, has expired, or whose
+    // vendor is gone must be told so here. authenticate() already refuses it,
+    // but that refusal lands on /auth/me *after* login has handed out tokens
+    // and redirected — the client reads the 403 as a dead session and bounces
+    // back to the login screen with nothing explained.
+    if (user.role.name === VENDOR_HELPER_ROLE) {
+      const parentVendor = user.parentVendorId
+        ? await prisma.user.findUnique({
+            where: { id: user.parentVendorId },
+            select: { isActive: true, deletedAt: true },
+          })
+        : null;
+      const blocked = describeSubAccountLockout(user as any, parentVendor);
+      if (blocked) throw new AppException(403, blocked);
     }
 
     if ((user as any).requiresPasswordChange) {
@@ -2539,6 +2556,7 @@ router.get(
         role: true,
         wallet: true,
         bankAccounts: true,
+        parentVendor: { include: { profile: true } },
       },
     });
 
@@ -2576,9 +2594,13 @@ router.get(
           language: user.language || (user.profile as any)?.language || 'ar',
           role: user.role.name,
           mode: user.mode,
-          subdomain: user.subdomain,
-          customDomain: user.customDomain,
-          customDomainStatus: user.customDomainStatus,
+          // A sub-account has no storefront of its own. Report the vendor's, or
+          // every referral link and QR code it copies would point at the bare
+          // platform host instead of the vendor's branded domain.
+          subdomain: (user as any).parentVendor?.subdomain ?? user.subdomain,
+          customDomain: (user as any).parentVendor?.customDomain ?? user.customDomain,
+          customDomainStatus:
+            (user as any).parentVendor?.customDomainStatus ?? user.customDomainStatus,
           contractAccepted: user.contractAccepted,
           contractSignedAt: user.contractSignedAt,
           kycStatus: user.kycStatus,
@@ -2592,6 +2614,8 @@ router.get(
           canManageInfluencerLinks: user.canManageInfluencerLinks,
           canManageTickets: user.canManageTickets,
           canScanReturns: user.canScanReturns,
+          // Drives whether the Affiliation nav item and route are reachable at all
+          canManageAffiliateInvites: user.canManageAffiliateInvites,
           isTwoFactorEnabled: (user as any).isTwoFactorEnabled,
           instagramUsername: ((user as any).profile)?.instagramUsername,
           tiktokUsername: ((user as any).profile)?.tiktokUsername,
@@ -2600,6 +2624,26 @@ router.get(
           youtubeUsername: ((user as any).profile)?.youtubeUsername,
           snapchatUsername: ((user as any).profile)?.snapchatUsername,
           referralCode: user.referralCode,
+          // The account whose data this session actually operates on. Identical
+          // to `id` for everyone except a vendor sub-account, where it is the
+          // parent vendor — pages that pass a vendor id to the API must use it.
+          vendorId: user.parentVendorId || user.id,
+          ...(user.role.name === VENDOR_HELPER_ROLE
+            ? {
+                isVendorHelper: true,
+                parentVendorId: user.parentVendorId,
+                parentVendorName:
+                  (user as any).parentVendor?.profile?.fullName ||
+                  (user as any).parentVendor?.email ||
+                  null,
+                subAllowedModes: user.subAllowedModes,
+                subReadOnly: user.subReadOnly,
+                subAccessExpiresAt: user.subAccessExpiresAt,
+                ...Object.fromEntries(
+                  SUB_ACCOUNT_PERMISSIONS.map((key) => [key, (user as any)[key]]),
+                ),
+              }
+            : {}),
           bankAccounts: user.bankAccounts || [],
           emailVerified: !!user.emailVerifiedAt,
           emailVerifiedAt: user.emailVerifiedAt,

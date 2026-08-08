@@ -18,6 +18,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Seo } from '../components/Seo';
 import { LanguageSwitcherWidget } from '../components/common';
+import { basePathFor } from '../lib/dashboardBase';
 
 /* ─── Animated Counter ─── */
 function Counter({ to, suffix = '', duration = 2000 }: { to: number; suffix?: string; duration?: number }) {
@@ -228,7 +229,7 @@ export default function HomePage() {
                   user?.role === 'INFLUENCER' ? '/influencer' :
                   user?.role === 'CONFIRMATION_AGENT' ? '/confirmation' :
                   user?.role === 'HELPER' ? '/helper' :
-                  user?.role === 'UNCONFIRMED' ? '/verify' : '/dashboard'
+                  user?.role === 'UNCONFIRMED' ? '/verify' : basePathFor(user?.role)
                 } className="rounded-[10px] bg-[#2e315e] hover:bg-[#1e2142] px-6 py-2.5 flex items-center justify-center text-[15px] font-bold text-white transition-all shadow-md">
                   <span className="translate-y-[4px]">{t('go_to_dashboard')}</span>
                 </Link>
@@ -283,7 +284,7 @@ export default function HomePage() {
                     user?.role === 'INFLUENCER' ? '/influencer' :
                     user?.role === 'CONFIRMATION_AGENT' ? '/confirmation' :
                     user?.role === 'HELPER' ? '/helper' :
-                    user?.role === 'UNCONFIRMED' ? '/verify' : '/dashboard'
+                    user?.role === 'UNCONFIRMED' ? '/verify' : basePathFor(user?.role)
                   } onClick={() => setMobileMenuOpen(false)} className="block w-full text-center bg-[#2e315e] text-white font-bold py-3.5 rounded-xl">
                     <span className="block -translate-y-[1px]">{t('go_to_dashboard')}</span>
                   </Link>
@@ -361,7 +362,7 @@ export default function HomePage() {
                     user?.role === 'INFLUENCER' ? '/influencer' :
                     user?.role === 'CONFIRMATION_AGENT' ? '/confirmation' :
                     user?.role === 'HELPER' ? '/helper' :
-                    user?.role === 'UNCONFIRMED' ? '/verify' : '/dashboard'
+                    user?.role === 'UNCONFIRMED' ? '/verify' : basePathFor(user?.role)
                   } className="w-full sm:w-auto rounded-[12px] bg-[#c93d0f] hover:bg-[#b7350b] transition-all px-8 py-[14px] flex items-center justify-center gap-3 text-[16px] font-black text-white shadow-xl shadow-[#ff5722]/20">
                     <span>{t('go_to_dashboard')}</span>
                     <ArrowLeft size={18} />

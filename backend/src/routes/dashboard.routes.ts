@@ -2,6 +2,8 @@ import { prisma } from '../lib/prisma.js';
 import { Router, Request, Response } from 'express';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { isModeAllowedForSubAccount } from '../lib/vendorSubAccount.js';
+import { SAFE_USER_SELECT } from '../lib/safeUserSelect.js';
 
 const router = Router();
 
@@ -225,6 +227,16 @@ router.patch(
       return res.status(400).json({ error: 'Invalid mode. Must be SELLER or AFFILIATE' });
     }
 
+    // A sub-account reaches this route under its own id (scope 'self-as-vendor'),
+    // so the update below rewrites the helper's mode and never the vendor's. The
+    // vendor can still pin a helper to one of the two modes.
+    if (req.user!.isVendorHelper && !isModeAllowedForSubAccount(req.user!.subPermissions || {}, mode)) {
+      return res.status(403).json({
+        status: 'error',
+        error: "Le vendeur a restreint ce sous-compte à un seul mode.",
+      });
+    }
+
     const user = await prisma.user.update({
       where: { id: req.user!.id },
       data: { mode }
@@ -345,13 +357,13 @@ router.get(
       prisma.userProfile.findUnique({ where: { userId } }),
       prisma.lead.findMany({
         where: { assignedAgentId: userId },
-        include: { vendor: { include: { profile: true } } },
+        include: { vendor: { select: SAFE_USER_SELECT } },
         orderBy: { createdAt: 'desc' }
       }),
       prisma.lead.findMany({
         orderBy: { createdAt: 'desc' },
         take: 50,
-        include: { vendor: { include: { profile: true } } }
+        include: { vendor: { select: SAFE_USER_SELECT } }
       }),
       prisma.notification.findMany({
         where: { userId },
@@ -655,7 +667,7 @@ router.get(
         take: 20
       }),
       prisma.lead.findMany({
-        include: { vendor: { include: { profile: true } } },
+        include: { vendor: { select: SAFE_USER_SELECT } },
         orderBy: { createdAt: 'desc' },
         take: 20
       }),
@@ -666,7 +678,7 @@ router.get(
       }),
       prisma.payoutRequest.findMany({
         where: { status: 'PENDING' },
-        include: { vendor: { include: { profile: true } } },
+        include: { vendor: { select: SAFE_USER_SELECT } },
         take: 20
       }),
       prisma.notification.findMany({

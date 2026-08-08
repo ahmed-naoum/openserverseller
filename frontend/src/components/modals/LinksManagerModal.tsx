@@ -8,6 +8,8 @@ import { buildReferralUrl } from '../../utils/referral';
 import { containsBlockedWord } from '../../utils/blockedWords';
 import { RefreshCw, Copy, QrCode, Power, Plus, Package, AlertCircle, Wand2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { currentBasePath } from '../../lib/dashboardBase';
+import { canUseLinkBuilder } from '../../lib/subAccountPermissions';
 
 export interface LinksManagerConfig {
   isOpen: boolean;
@@ -363,7 +365,7 @@ export default function LinksManagerModal({
               ) : (
                 modalLinks.map(link => {
                   const role = user?.roleName || user?.role;
-                  const showBuilder = role === 'SUPER_ADMIN' || role === 'HELPER' || role === 'VENDOR' || (role === 'INFLUENCER' && user?.canManageInfluencerLinks);
+                  const showBuilder = canUseLinkBuilder(user);
                   return (
                     <div 
                       key={link.id} 
@@ -406,11 +408,7 @@ export default function LinksManagerModal({
                           <button
                             onClick={() => {
                               onClose();
-                              const targetPath = role === 'VENDOR' 
-                                ? `/dashboard/links/${link.id}/builder` 
-                                : role === 'INFLUENCER' 
-                                  ? `/influencer/links/${link.id}/builder` 
-                                  : `/helper/links/${link.id}/builder`;
+                              const targetPath = `${currentBasePath(role)}/links/${link.id}/builder`;
                               navigate(targetPath);
                             }}
                             className="p-2 bg-slate-50 hover:bg-purple-50 text-slate-400 hover:text-purple-600 rounded-xl transition-all"

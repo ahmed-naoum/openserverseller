@@ -26,6 +26,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../../contexts/SocketContext';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { currentBasePath } from '../../lib/dashboardBase';
 
 const CATEGORIES = ['General', 'Payment', 'Delivery', 'Product Issue', 'Bug', 'Account'];
 
@@ -406,7 +407,7 @@ export default function SupportTickets() {
                         ticket.conversationId && (
                           <button
                             onClick={() => {
-                              const prefix = user?.role === 'VENDOR' ? '/dashboard' : `/${user?.role?.toLowerCase()}`;
+                              const prefix = currentBasePath(user?.role);
                               navigate(`${prefix}/chat?convId=${ticket.conversationId}`);
                             }}
                             className="px-6 py-2.5 bg-primary-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 shadow-[0_10px_20px_-5px_rgba(59,130,246,0.4)] hover:shadow-slate-900/30 transition-all active:scale-95 flex items-center gap-2 group/btn"
