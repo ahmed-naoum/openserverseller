@@ -93,6 +93,11 @@ model User {
   subCanManageConversations    Boolean @default(false)
   subCanRefreshDomain          Boolean @default(false)
 
+  // Optionally narrows a helper to part of the vendor's catalogue. NO rows means
+  // the whole catalogue, so every sub-account created before this existed keeps
+  // exactly the reach it had. See lib/subAccountProductScope.ts.
+  subAccountProducts VendorSubAccountProduct[] @relation("SubAccountProducts")
+
   // Which of the two vendor modes this helper may sit in. SELLER | AFFILIATE | BOTH
   subAllowedModes          String  @default("BOTH")
   // Master switch: when true the helper can look at everything it was granted
@@ -243,6 +248,7 @@ model User {
   targetedAnnouncements Announcement[]     @relation("TargetedAnnouncements")
   bankAccounts         UserBankAccount[]
   invoices             Invoice[]
+  agentInvoices        AgentInvoice[]     @relation("AgentInvoices")
   conversationLogs     ConversationLog[]  @relation("UserLogs")
   pixels               UserPixel[]
 
@@ -370,6 +376,7 @@ model Product {
   wholesalePrices      WholesalePriceTier[]
   favorites            Favorite[]
   agentAssignments     AgentProductAssignment[]
+  subAccountAssignments VendorSubAccountProduct[]
 
   @@map("products")
 }
@@ -490,6 +497,9 @@ model Lead {
   referralLink   ReferralLink?       @relation(fields: [referralLinkId], references: [id])
   invoiceId      Int?
   invoice        Invoice?            @relation(fields: [invoiceId], references: [id])
+  // The call-center side of the same parcel. Separate from `invoice` above,
+  // which is the vendor's — see AgentInvoice for why the two cannot share it.
+  agentInvoiceItem AgentInvoiceItem? @relation("AgentInvoiceItems")
   statusHistory  LeadStatusHistory[]
   callLogs       CallLog[]
   assignments    LeadAssignment[]
@@ -1122,6 +1132,33 @@ model AgentProductAssignment {
 }
 
 // ==========================================
+// VENDOR SUB-ACCOUNT PRODUCT ASSIGNMENT
+// ==========================================
+
+/**
+ * Narrows one of a vendor's sub-accounts to part of the vendor's catalogue.
+ *
+ * Same convention as AgentProductAssignment above: NO rows for a sub-account
+ * means it works the whole catalogue — the behaviour that existed before this
+ * table, so every helper already configured keeps the reach it had. Rows mean
+ * "only these products", and everything downstream of a product (its links, its
+ * leads, its orders) narrows with it.
+ */
+model VendorSubAccountProduct {
+  id           Int      @id @default(autoincrement())
+  subAccountId Int
+  subAccount   User     @relation("SubAccountProducts", fields: [subAccountId], references: [id], onDelete: Cascade)
+  productId    Int
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  assignedAt   DateTime @default(now())
+
+  @@unique([subAccountId, productId])
+  @@index([subAccountId])
+  @@index([productId])
+  @@map("vendor_sub_account_products")
+}
+
+// ==========================================
 // HELPER-USER ASSIGNMENT
 // ==========================================
 
@@ -1166,6 +1203,66 @@ model Invoice {
   leads          Lead[]
 
   @@map("invoices")
+}
+
+// ---------------------------------------------------------------------------
+// Call-center facturation
+//
+// What a *vendor* is billed for a lead already lives on `Invoice`, and a Lead
+// carries a single `invoiceId` — so the agent's own billing cannot ride on that
+// table without taking the lead away from the vendor's invoice. These two tables
+// are the agent side of the same parcel, separate for exactly that reason.
+//
+// An agent is paid per parcel that actually reached the customer, so only a
+// DELIVERED order is ever billable here.
+// ---------------------------------------------------------------------------
+model AgentInvoice {
+  id            Int    @id @default(autoincrement())
+  invoiceNumber String @unique
+  agentId       Int
+  agent         User   @relation("AgentInvoices", fields: [agentId], references: [id], onDelete: Cascade)
+
+  // Snapshot of the rate at issue time. An admin can change `User.saisieFeeMad`
+  // afterwards, and a settled invoice must not silently re-price itself.
+  feePerParcelMad Float
+  parcelCount     Int
+  totalAmountMad  Float
+
+  // PAID from the moment it is issued: issuing an invoice credits the agent's
+  // wallet in the same transaction, so the money has genuinely moved. Admin
+  // control sits one step later, on the payout request.
+  status String @default("PAID")
+
+  // Oldest and newest parcel on the invoice — the period it covers.
+  periodFrom DateTime?
+  periodTo   DateTime?
+  paidAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  items AgentInvoiceItem[]
+
+  @@index([agentId])
+  @@map("agent_invoices")
+}
+
+model AgentInvoiceItem {
+  id        Int          @id @default(autoincrement())
+  invoiceId Int
+  invoice   AgentInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  // Unique, and that is the whole idempotency guard: a delivered parcel can be
+  // billed by its agent exactly once, no matter how often the page is clicked.
+  leadId Int  @unique
+  lead   Lead @relation("AgentInvoiceItems", fields: [leadId], references: [id], onDelete: Cascade)
+
+  // What the agent earned on this parcel, and what the parcel itself was worth.
+  // Both frozen here so an invoice reads the same after the order is edited.
+  amountMad      Float
+  parcelValueMad Float    @default(0)
+  createdAt      DateTime @default(now())
+
+  @@index([invoiceId])
+  @@map("agent_invoice_items")
 }
 
 model ContactMessage {

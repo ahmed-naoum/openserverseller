@@ -4,7 +4,7 @@ import { leadsApi } from '../../lib/api';
 import { useSocket } from '../../contexts/SocketContext';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
-import { Sparkles, Phone, MessageSquare, Zap, Clock, Package, Heart, Filter, ChevronRight, X, Activity, Check, Search, MapPin } from 'lucide-react';
+import { Sparkles, Phone, MessageSquare, Zap, Package, Heart, Filter, ChevronRight, Activity, Check } from 'lucide-react';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
 
 const AssignedTimer = ({ lead, onTimeout, isGirly, isPrincess }: { lead: any; onTimeout?: () => void; isGirly: boolean; isPrincess: boolean }) => {
@@ -120,14 +120,12 @@ export default function AgentLeads() {
 
   const [availableLeads, setAvailableLeads] = useState<any[]>([]);
   const [totalAvailableCount, setTotalAvailableCount] = useState<number>(0);
-  // Show the whole pool by default — the 20-row default made agents think the
-  // pool *was* 20. The selector is still there to narrow it down deliberately.
-  const [availableLimit, setAvailableLimit] = useState<number | 'max'>('max');
-  // Search over available leads. `searchInput` is what the agent types;
-  // `availableSearch` is the debounced value actually sent to the API.
-  const [searchInput, setSearchInput] = useState('');
-  const [availableSearch, setAvailableSearch] = useState('');
-  const [availableCity, setAvailableCity] = useState('');
+  // 20 by default. The badge next to the heading always shows the real pool
+  // size, so a short page no longer reads as "there are only 20 leads".
+  const [availableLimit, setAvailableLimit] = useState<number | 'max'>(20);
+  // Product is the only filter over the available pool: an agent picks what to
+  // work by product, not by searching a pool whose phone numbers they cannot
+  // see yet. Free-text search, city and the arrival window were removed.
   const [availableProductId, setAvailableProductId] = useState<number | ''>('');
   const [totalScopeCount, setTotalScopeCount] = useState(0);
   const [availableFilterOptions, setAvailableFilterOptions] = useState<{
@@ -235,8 +233,6 @@ export default function AgentLeads() {
         leadsApi.available({
           influencerId: selectedInfluencerId ? Number(selectedInfluencerId) : undefined,
           limit: availableLimit,
-          search: availableSearch.trim() || undefined,
-          city: availableCity || undefined,
           productId: availableProductId || undefined,
         }),
         // Without an explicit limit this falls back to the server's 50/page and
@@ -259,7 +255,7 @@ export default function AgentLeads() {
     } catch (error) {
       console.error('Failed to load leads:', error);
     }
-  }, [selectedInfluencerId, availableLimit, statusFilter, availableSearch, availableCity, availableProductId]);
+  }, [selectedInfluencerId, availableLimit, statusFilter, availableProductId]);
 
   // Real-time call center events for sound & notifications.
   //
@@ -321,12 +317,6 @@ export default function AgentLeads() {
       // it down would kill chat and notifications everywhere else.
     };
   }, [socket]);
-
-  // Debounce typing so each keystroke doesn't hit the API
-  useEffect(() => {
-    const t = setTimeout(() => setAvailableSearch(searchInput), 400);
-    return () => clearTimeout(t);
-  }, [searchInput]);
 
   const loadCities = async (): Promise<any[]> => {
     if (coliatyCities.length > 0) return coliatyCities;
@@ -685,11 +675,11 @@ export default function AgentLeads() {
           </div>
           
           {assignedInfluencers.length > 0 && (
-            <div className="flex items-center gap-2 relative" ref={dropdownRef}>
-              <Filter className={`w-4 h-4 ${isPrincess ? 'text-amber-400' : isGirly ? 'text-pink-400' : 'text-indigo-400'}`} />
+            <div className="flex flex-wrap items-center gap-2 relative w-full sm:w-auto" ref={dropdownRef}>
+              <Filter className={`w-4 h-4 shrink-0 ${isPrincess ? 'text-amber-400' : isGirly ? 'text-pink-400' : 'text-indigo-400'}`} />
               <span className="text-xs font-black text-gray-500 uppercase">Vendeur/Influenceur:</span>
-              
-              <div className="relative min-w-[240px]">
+
+              <div className="relative w-full sm:w-auto sm:min-w-[240px]">
                 <button
                   type="button"
                   onClick={() => {
@@ -700,17 +690,17 @@ export default function AgentLeads() {
                     isPrincess ? 'border-amber-100' : isGirly ? 'border-pink-100' : 'border-indigo-100'
                   }`}
                 >
-                  <span className="truncate max-w-[200px]">
+                  <span className="truncate min-w-0">
                     {selectedInfluencerId
                       ? assignedInfluencers.find(inf => inf.id === selectedInfluencerId)?.fullName || `Tous mes influenceurs/vendeurs ${isPrincess ? '👑' : isGirly ? '🌸' : '📋'}`
                       : `Tous mes influenceurs/vendeurs ${isPrincess ? '👑' : isGirly ? '🌸' : '📋'}`
                     }
                   </span>
-                  <span className="text-gray-400">▼</span>
+                  <span className="text-gray-400 shrink-0 ml-2">▼</span>
                 </button>
 
                 {isDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl border border-gray-100 shadow-xl z-50 p-3 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="absolute right-0 mt-2 w-full sm:w-72 bg-white rounded-2xl border border-gray-100 shadow-xl z-50 p-3 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
                     <div className="relative">
                       <span className="absolute inset-y-0 left-3 flex items-center text-gray-400 pointer-events-none">🔍</span>
                       <input
@@ -787,50 +777,7 @@ export default function AgentLeads() {
           isPrincess ? 'border-amber-100' : isGirly ? 'border-pink-100' : 'border-indigo-100'
         }`}>
           <div className="flex flex-col lg:flex-row gap-2.5">
-            <div className="relative flex-1">
-              <Search className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 ${
-                isPrincess ? 'text-amber-400' : isGirly ? 'text-pink-400' : 'text-indigo-400'
-              }`} />
-              <input
-                type="text"
-                value={searchInput}
-                onChange={e => setSearchInput(e.target.value)}
-                placeholder="Rechercher par nom, téléphone, ville, adresse, produit, SKU..."
-                className={`w-full pl-10 pr-9 py-2.5 bg-gray-50 border rounded-xl text-sm font-medium outline-none transition-all focus:bg-white ${
-                  isPrincess
-                    ? 'border-amber-100 focus:ring-2 focus:ring-amber-200'
-                    : isGirly
-                    ? 'border-pink-100 focus:ring-2 focus:ring-pink-200'
-                    : 'border-indigo-100 focus:ring-2 focus:ring-indigo-200'
-                }`}
-              />
-              {searchInput && (
-                <button
-                  type="button"
-                  onClick={() => setSearchInput('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-600"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-
-            <div className="w-full lg:w-[190px] flex-shrink-0">
-              <SearchableSelect
-                theme={theme}
-                value={availableCity}
-                onChange={v => setAvailableCity(String(v))}
-                placeholder="Toutes les villes"
-                searchPlaceholder="Chercher une ville..."
-                icon={<MapPin className="w-4 h-4" />}
-                options={[
-                  { value: '', label: 'Toutes les villes' },
-                  ...availableFilterOptions.cities.map(c => ({ value: c, label: c })),
-                ]}
-              />
-            </div>
-
-            <div className="w-full lg:w-[200px] flex-shrink-0">
+            <div className="w-full lg:w-[260px] flex-shrink-0">
               <SearchableSelect
                 theme={theme}
                 value={availableProductId}
@@ -846,7 +793,7 @@ export default function AgentLeads() {
             </div>
           </div>
 
-          {(availableSearch || availableCity || availableProductId) && (
+          {availableProductId !== '' && (
             <div className="flex items-center gap-2 flex-wrap mt-2.5 pt-2.5 border-t border-gray-50">
               <span className="text-[11px] font-black text-gray-500">
                 {totalAvailableCount} résultat{totalAvailableCount > 1 ? 's' : ''}
@@ -856,7 +803,7 @@ export default function AgentLeads() {
               </span>
               <button
                 type="button"
-                onClick={() => { setSearchInput(''); setAvailableCity(''); setAvailableProductId(''); }}
+                onClick={() => setAvailableProductId('')}
                 className="ml-auto px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
               >
                 Réinitialiser
@@ -869,7 +816,9 @@ export default function AgentLeads() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {availableLeads.map((lead, index) => {
               const isNew = isNewLead(lead);
-              const isTopNewest = isNew && index === 0;
+              // The list runs oldest-first, so the most recent arrival is the
+              // last card, not the first one.
+              const isTopNewest = isNew && index === availableLeads.length - 1;
 
               return (
                 <div
@@ -961,12 +910,11 @@ export default function AgentLeads() {
                   </div>
                 )}
 
-                <div className="flex items-center justify-between text-[10px] text-gray-400 font-medium mb-4">
-                  {lead.influencer && (
+                {lead.influencer && (
+                  <div className="flex items-center text-[10px] text-gray-400 font-medium mb-4">
                     <span>Par: <span className="text-gray-600 font-bold">{lead.influencer.fullName}</span></span>
-                  )}
-                  <span>{format(new Date(lead.createdAt), 'dd MMM à HH:mm')}</span>
-                </div>
+                  </div>
+                )}
 
                 <button
                   onClick={() => handleClaim(lead.id)}
@@ -998,9 +946,9 @@ export default function AgentLeads() {
             ) : (
               <Zap className="w-12 h-12 text-indigo-300 mx-auto mb-4 animate-pulse" />
             )}
-            {(availableSearch || availableCity || availableProductId) ? (
+            {availableProductId !== '' ? (
               <>
-                <p className="text-gray-900 font-black text-sm">Aucun lead ne correspond à votre recherche.</p>
+                <p className="text-gray-900 font-black text-sm">Aucun lead pour ce produit.</p>
                 <p className="text-gray-400 text-xs mt-1 font-medium">
                   {totalScopeCount > 0
                     ? `${totalScopeCount} lead${totalScopeCount > 1 ? 's' : ''} disponible${totalScopeCount > 1 ? 's' : ''} sans filtre.`
@@ -1008,12 +956,12 @@ export default function AgentLeads() {
                 </p>
                 <button
                   type="button"
-                  onClick={() => { setSearchInput(''); setAvailableCity(''); setAvailableProductId(''); }}
+                  onClick={() => setAvailableProductId('')}
                   className={`mt-5 px-5 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider text-white transition-all active:scale-95 ${
                     isPrincess ? 'bg-amber-500 hover:bg-amber-600' : isGirly ? 'bg-pink-500 hover:bg-pink-600' : 'bg-indigo-600 hover:bg-indigo-700'
                   }`}
                 >
-                  Réinitialiser la recherche
+                  Voir tous les produits
                 </button>
               </>
             ) : (

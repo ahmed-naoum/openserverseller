@@ -6,6 +6,7 @@ import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { prisma } from '../lib/prisma.js';
 import { getSecret } from '../lib/secretStore.js';
+import { productScopeOf, applyOrderProductScope } from '../lib/subAccountProductScope.js';
 import {
   coliatyRequest,
   getColiatyConfig,
@@ -99,6 +100,7 @@ router.get(
     if (req.user!.roleName === 'VENDOR') {
       where.vendorId = req.user!.id;
     }
+    applyOrderProductScope(where, productScopeOf(req));
 
     if (status) where.status = status;
 
@@ -280,6 +282,14 @@ router.get(
       throw new AppException(403, 'Access denied');
     }
 
+    // This one is raw SQL, so the product scope has to be spelled out instead of
+    // merged into a `where`. It joins products already, so it filters on p.id
+    // directly rather than walking back out through the lead.
+    const scope = productScopeOf(req);
+    const scopeSql = scope
+      ? Prisma.sql`AND p.id IN (${Prisma.join(scope)})`
+      : Prisma.sql``;
+
     // Using a single, comprehensive raw query to ensure we get all fields correctly
     // especially the coliatyPickupRef which might be ignored by an outdated Prisma client.
     const rawData: any[] = await prisma.$queryRaw`
@@ -305,6 +315,7 @@ router.get(
         AND o."coliatyPackageCode" IS NOT NULL
         ${req.user!.roleName === 'VENDOR' ? Prisma.sql`AND o."vendorId" = ${req.user!.id}` : Prisma.sql``}
         ${req.user!.roleName === 'HELPER' ? Prisma.sql`AND o."vendorId" IN (SELECT "targetUserId" FROM "helper_user_assignments" WHERE "helperId" = ${req.user!.id})` : Prisma.sql``}
+        ${scopeSql}
       ORDER BY o."createdAt" DESC
     `;
 
@@ -356,6 +367,7 @@ router.get(
     if (req.user!.roleName === 'VENDOR') {
       where.vendorId = req.user!.id;
     }
+    applyOrderProductScope(where, productScopeOf(req));
 
     const order = await prisma.order.findFirst({
       where,

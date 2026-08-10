@@ -5,6 +5,7 @@ import { prisma } from '../lib/prisma.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { SUB_ACCOUNT_PERMISSIONS } from '../lib/vendorSubAccount.js';
+import { setSubAccountProducts, vendorCatalogueWhere } from '../lib/subAccountProductScope.js';
 
 /**
  * Vendor sub-accounts.
@@ -25,7 +26,14 @@ const MAX_SUB_ACCOUNTS_PER_VENDOR = 10;
 
 const ALLOWED_MODES = ['BOTH', 'SELLER', 'AFFILIATE'];
 
-const publicShape = (u: any) => ({
+/**
+ * `productIds` is the catalogue half of a helper's reach, and an EMPTY array
+ * means the whole catalogue — the same "no rows = everything" rule the table
+ * itself uses (lib/subAccountProductScope.ts). The screen has to say which of
+ * the two it is rather than showing an empty product list, or "no products
+ * selected" reads as "sees nothing" when it means the opposite.
+ */
+const publicShape = (u: any, productIds: number[] = []) => ({
   id: u.id,
   uuid: u.uuid,
   email: u.email,
@@ -40,7 +48,44 @@ const publicShape = (u: any) => ({
   lastLoginAt: u.lastLoginAt,
   createdAt: u.createdAt,
   permissions: Object.fromEntries(SUB_ACCOUNT_PERMISSIONS.map((k) => [k, !!u[k]])),
+  productIds,
 });
+
+/** The product ids assigned to each of `subAccountIds`, keyed by sub-account. */
+const loadProductAssignments = async (subAccountIds: number[]) => {
+  const map = new Map<number, number[]>();
+  if (subAccountIds.length === 0) return map;
+
+  const rows: { subAccountId: number; productId: number }[] = await (
+    prisma as any
+  ).vendorSubAccountProduct.findMany({
+    where: { subAccountId: { in: subAccountIds } },
+    select: { subAccountId: true, productId: true },
+  });
+
+  for (const row of rows) {
+    const list = map.get(row.subAccountId);
+    if (list) list.push(row.productId);
+    else map.set(row.subAccountId, [row.productId]);
+  }
+  return map;
+};
+
+/**
+ * Read the product selection out of a request body.
+ *
+ * Absent means "leave as is", which is what lets the existing permission-only
+ * PATCH from an older client keep working without silently clearing a vendor's
+ * product selection. `null` and `[]` both mean "the whole catalogue".
+ */
+const readProductIds = (body: any): number[] | undefined => {
+  if (body?.productIds === undefined) return undefined;
+  if (body.productIds === null) return [];
+  if (!Array.isArray(body.productIds)) {
+    throw new AppException(400, 'productIds doit être une liste d\'identifiants de produits.');
+  }
+  return body.productIds;
+};
 
 /**
  * Read the two account-level switches out of a request body. Both are optional
@@ -99,12 +144,58 @@ router.get(
       orderBy: { createdAt: 'desc' },
     });
 
+    const assignments = await loadProductAssignments(subs.map((s) => s.id));
+
     res.json({
       status: 'success',
       data: {
-        subAccounts: subs.map(publicShape),
+        subAccounts: subs.map((s) => publicShape(s, assignments.get(s.id) || [])),
         maxSubAccounts: MAX_SUB_ACCOUNTS_PER_VENDOR,
         availablePermissions: SUB_ACCOUNT_PERMISSIONS,
+      },
+    });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// GET /assignable-products — the catalogue the picker offers
+// ---------------------------------------------------------------------------
+/**
+ * What this vendor may hand to a helper: its own products, the ones it bought,
+ * and the ones it has an approved claim on. Same three sources as
+ * /leads/my-products, so the picker cannot offer something a helper would then
+ * be unable to sell.
+ */
+router.get(
+  '/assignable-products',
+  authenticate,
+  authorize('VENDOR'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const products = await prisma.product.findMany({
+      where: vendorCatalogueWhere(req.user!.id),
+      select: {
+        id: true,
+        sku: true,
+        nameFr: true,
+        nameAr: true,
+        status: true,
+        retailPriceMad: true,
+        images: { where: { isPrimary: true }, take: 1, select: { imageUrl: true } },
+      },
+      orderBy: { nameFr: 'asc' },
+    });
+
+    res.json({
+      status: 'success',
+      data: {
+        products: products.map((p) => ({
+          id: p.id,
+          sku: p.sku,
+          name: p.nameFr || p.nameAr,
+          status: p.status,
+          retailPriceMad: p.retailPriceMad,
+          imageUrl: p.images[0]?.imageUrl || null,
+        })),
       },
     });
   }),
@@ -143,6 +234,7 @@ router.post(
 
     const vendorId = req.user!.id;
     const { fullName, email, password, phone, subAllowedModes } = req.body;
+    const productIds = readProductIds(req.body);
 
     const count = await prisma.user.count({
       where: { parentVendorId: vendorId, role: { name: 'VENDOR_HELPER' } },
@@ -200,7 +292,11 @@ router.post(
       include: { profile: true },
     });
 
-    res.status(201).json({ status: 'success', data: { subAccount: publicShape(sub) } });
+    // After the create, not inside it: the ids are filtered against what this
+    // vendor actually owns, which needs the sub-account's row to exist first.
+    const assigned = productIds?.length ? await setSubAccountProducts(sub.id, vendorId, productIds) : [];
+
+    res.status(201).json({ status: 'success', data: { subAccount: publicShape(sub, assigned) } });
   }),
 );
 
@@ -214,6 +310,7 @@ router.patch(
   asyncHandler(async (req: Request, res: Response) => {
     const sub = await loadOwnedSubAccount(String(req.params.uuid), req.user!.id);
     const { fullName, phone, subAllowedModes } = req.body;
+    const productIds = readProductIds(req.body);
 
     if (phone && phone !== sub.phone) {
       const clash = await prisma.user.findFirst({
@@ -254,7 +351,12 @@ router.patch(
       include: { profile: true },
     });
 
-    res.json({ status: 'success', data: { subAccount: publicShape(updated) } });
+    const assigned =
+      productIds === undefined
+        ? (await loadProductAssignments([sub.id])).get(sub.id) || []
+        : await setSubAccountProducts(sub.id, req.user!.id, productIds);
+
+    res.json({ status: 'success', data: { subAccount: publicShape(updated, assigned) } });
   }),
 );
 
@@ -275,10 +377,15 @@ router.patch(
       include: { profile: true },
     });
 
+    // Carried through untouched: suspending is not the place to quietly widen a
+    // helper back to the whole catalogue, and `publicShape`'s default of [] means
+    // exactly that.
+    const assigned = (await loadProductAssignments([sub.id])).get(sub.id) || [];
+
     res.json({
       status: 'success',
       message: isActive ? 'Sous-compte réactivé.' : 'Sous-compte suspendu.',
-      data: { subAccount: publicShape(updated) },
+      data: { subAccount: publicShape(updated, assigned) },
     });
   }),
 );

@@ -3,9 +3,11 @@ import { createPortal } from 'react-dom';
 import {
   UserCog, Plus, Trash2, KeyRound, Power, ShieldCheck, X, Mail, Phone,
   Pencil, Loader2, Users, CheckCircle2, Copy, Eye, AlertTriangle, CalendarClock,
+  Package, Search, ImageOff,
 } from 'lucide-react';
 import { vendorSubAccountsApi } from '../../lib/api';
 import { VENDOR_HELPER_BASE } from '../../lib/dashboardBase';
+import { normalizeSearch } from '../../utils/search';
 import {
   SUB_PERMISSION_GROUPS,
   ALL_SUB_PERMISSIONS,
@@ -38,6 +40,22 @@ interface SubAccount {
   lastLoginAt: string | null;
   createdAt: string;
   permissions: Record<string, boolean>;
+  /**
+   * Products this assistant is pinned to. EMPTY means the whole catalogue — the
+   * same rule the backend table uses, so an empty list is "everything", never
+   * "nothing". The editor turns that into an explicit two-way choice rather than
+   * showing an empty checklist that reads the wrong way round.
+   */
+  productIds: number[];
+}
+
+interface AssignableProduct {
+  id: number;
+  sku: string;
+  name: string;
+  status: string;
+  retailPriceMad: number;
+  imageUrl: string | null;
 }
 
 const MODE_LABELS: Record<AllowedModes, string> = {
@@ -45,6 +63,7 @@ const MODE_LABELS: Record<AllowedModes, string> = {
   SELLER: 'Vendeur uniquement',
   AFFILIATE: 'Affilié uniquement',
 };
+
 
 const emptyPermissions = () =>
   Object.fromEntries(ALL_SUB_PERMISSIONS.map((k) => [k, false])) as Record<string, boolean>;
@@ -69,6 +88,10 @@ export default function VendorSubAccounts() {
   const [passwordTarget, setPasswordTarget] = useState<SubAccount | null>(null);
   const [newPassword, setNewPassword] = useState('');
 
+  const [products, setProducts] = useState<AssignableProduct[]>([]);
+  const [productsLoaded, setProductsLoaded] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
+
   const [form, setForm] = useState({
     fullName: '',
     email: '',
@@ -78,6 +101,10 @@ export default function VendorSubAccounts() {
     subReadOnly: false,
     subAccessExpiresAt: '',
     permissions: emptyPermissions(),
+    // The two-way choice the API's empty-means-everything convention needs
+    // spelled out. `false` sends [], which the backend reads as no restriction.
+    restrictProducts: false,
+    productIds: [] as number[],
   });
 
   const load = async () => {
@@ -92,12 +119,29 @@ export default function VendorSubAccounts() {
     }
   };
 
+  /**
+   * Fetched the first time the editor opens rather than on mount: a vendor who
+   * never restricts anyone should not pay for a catalogue query, and the list is
+   * only ever read inside the modal.
+   */
+  const loadProducts = async () => {
+    if (productsLoaded) return;
+    try {
+      const res = await vendorSubAccountsApi.assignableProducts();
+      setProducts(res.data.data.products || []);
+      setProductsLoaded(true);
+    } catch {
+      toast.error('Impossible de charger vos produits.');
+    }
+  };
+
   useEffect(() => {
     load();
   }, []);
 
   const openCreate = () => {
     setEditing(null);
+    setProductSearch('');
     setForm({
       fullName: '',
       email: '',
@@ -107,12 +151,16 @@ export default function VendorSubAccounts() {
       subReadOnly: false,
       subAccessExpiresAt: '',
       permissions: { ...emptyPermissions(), subCanViewDashboard: true },
+      restrictProducts: false,
+      productIds: [],
     });
     setEditorOpen(true);
+    loadProducts();
   };
 
   const openEdit = (sub: SubAccount) => {
     setEditing(sub);
+    setProductSearch('');
     setForm({
       fullName: sub.fullName || '',
       email: sub.email || '',
@@ -122,9 +170,26 @@ export default function VendorSubAccounts() {
       subReadOnly: !!sub.subReadOnly,
       subAccessExpiresAt: toLocalInput(sub.subAccessExpiresAt),
       permissions: { ...emptyPermissions(), ...sub.permissions },
+      restrictProducts: (sub.productIds || []).length > 0,
+      productIds: [...(sub.productIds || [])],
     });
     setEditorOpen(true);
+    loadProducts();
   };
+
+  const toggleProduct = (id: number) =>
+    setForm((f) => ({
+      ...f,
+      productIds: f.productIds.includes(id)
+        ? f.productIds.filter((p) => p !== id)
+        : [...f.productIds, id],
+    }));
+
+  const visibleProducts = products.filter((p) => {
+    const q = normalizeSearch(productSearch);
+    if (!q) return true;
+    return normalizeSearch(`${p.name} ${p.sku}`).includes(q);
+  });
 
   /**
    * Toggling a permission also settles anything that depends on it: switching a
@@ -159,6 +224,11 @@ export default function VendorSubAccounts() {
       if (!form.email.trim()) return toast.error("L'email est requis.");
       if (form.password.length < 8) return toast.error('Le mot de passe doit faire au moins 8 caractères.');
     }
+    // Sending an empty list would be read as "the whole catalogue", the opposite
+    // of what picking "Produits sélectionnés" and choosing none looks like.
+    if (form.restrictProducts && form.productIds.length === 0) {
+      return toast.error('Sélectionnez au moins un produit, ou choisissez « Tout le catalogue ».');
+    }
 
     const payload = {
       fullName: form.fullName.trim(),
@@ -167,6 +237,7 @@ export default function VendorSubAccounts() {
       subReadOnly: form.subReadOnly,
       subAccessExpiresAt: form.subAccessExpiresAt ? new Date(form.subAccessExpiresAt).toISOString() : null,
       permissions: form.permissions,
+      productIds: form.restrictProducts ? form.productIds : [],
     };
 
     setSaving(true);
@@ -343,6 +414,15 @@ export default function VendorSubAccounts() {
                   <span className="px-2 py-1 rounded-lg bg-sky-50 text-sky-700 flex items-center gap-1">
                     <Eye className="w-3 h-3" />
                     Lecture seule
+                  </span>
+                )}
+                {/* Only shown when restricted: an unrestricted helper holds the
+                    whole catalogue, and a "tous les produits" chip on every card
+                    would be noise. */}
+                {(sub.productIds || []).length > 0 && (
+                  <span className="px-2 py-1 rounded-lg bg-violet-50 text-violet-700 flex items-center gap-1">
+                    <Package className="w-3 h-3" />
+                    {sub.productIds.length} produit{sub.productIds.length > 1 ? 's' : ''}
                   </span>
                 )}
                 {sub.subAccessExpiresAt && (
@@ -531,6 +611,137 @@ export default function VendorSubAccounts() {
                       Le compte cesse de fonctionner tout seul à cette date.
                     </span>
                   </div>
+                </div>
+
+                {/* ------------------------------------------------- products */}
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-black text-gray-500 uppercase tracking-wide mb-1">
+                      Produits accessibles
+                    </label>
+                    <p className="text-xs text-gray-400 font-medium">
+                      Choisissez ce que cet assistant peut voir et gérer. Les commandes, les liens de vente et les
+                      statistiques suivent la même limite.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setForm((f) => ({ ...f, restrictProducts: false }))}
+                      className={`px-4 py-3 rounded-xl text-sm font-bold border text-left transition-all ${
+                        !form.restrictProducts
+                          ? 'bg-primary-50 border-primary-300 text-primary-700'
+                          : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+                      }`}
+                    >
+                      Tout le catalogue
+                      <span className="block text-xs font-medium opacity-70 mt-0.5">
+                        Tous vos produits, présents et à venir.
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setForm((f) => ({ ...f, restrictProducts: true }))}
+                      className={`px-4 py-3 rounded-xl text-sm font-bold border text-left transition-all ${
+                        form.restrictProducts
+                          ? 'bg-primary-50 border-primary-300 text-primary-700'
+                          : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+                      }`}
+                    >
+                      Produits sélectionnés
+                      <span className="block text-xs font-medium opacity-70 mt-0.5">
+                        {form.productIds.length > 0
+                          ? `${form.productIds.length} produit${form.productIds.length > 1 ? 's' : ''} choisi${
+                              form.productIds.length > 1 ? 's' : ''
+                            }.`
+                          : 'Vous choisissez un par un.'}
+                      </span>
+                    </button>
+                  </div>
+
+                  {form.restrictProducts && (
+                    <div className="border border-gray-100 rounded-2xl overflow-hidden">
+                      <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-50/70 border-b border-gray-100">
+                        <Search className="w-4 h-4 text-gray-300 shrink-0" />
+                        <input
+                          value={productSearch}
+                          onChange={(e) => setProductSearch(e.target.value)}
+                          placeholder="Rechercher un produit ou un SKU…"
+                          className="flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-gray-300"
+                        />
+                        <button
+                          onClick={() =>
+                            setForm((f) => ({
+                              ...f,
+                              productIds:
+                                visibleProducts.length > 0 &&
+                                visibleProducts.every((p) => f.productIds.includes(p.id))
+                                  ? f.productIds.filter((id) => !visibleProducts.some((p) => p.id === id))
+                                  : [...new Set([...f.productIds, ...visibleProducts.map((p) => p.id)])],
+                            }))
+                          }
+                          className="text-[11px] font-bold text-primary-600 hover:text-primary-700 shrink-0"
+                        >
+                          {visibleProducts.length > 0 && visibleProducts.every((p) => form.productIds.includes(p.id))
+                            ? 'Tout retirer'
+                            : 'Tout sélectionner'}
+                        </button>
+                      </div>
+
+                      <div className="max-h-64 overflow-y-auto divide-y divide-gray-50">
+                        {!productsLoaded ? (
+                          <div className="flex items-center justify-center py-10">
+                            <Loader2 className="w-6 h-6 text-primary-400 animate-spin" />
+                          </div>
+                        ) : visibleProducts.length === 0 ? (
+                          <p className="px-4 py-10 text-center text-sm text-gray-400 font-medium">
+                            {products.length === 0
+                              ? "Vous n'avez encore aucun produit à partager."
+                              : 'Aucun produit ne correspond à cette recherche.'}
+                          </p>
+                        ) : (
+                          visibleProducts.map((product) => (
+                            <label
+                              key={product.id}
+                              className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50/60 transition-colors"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={form.productIds.includes(product.id)}
+                                onChange={() => toggleProduct(product.id)}
+                                className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 shrink-0"
+                              />
+                              {product.imageUrl ? (
+                                <img
+                                  src={product.imageUrl}
+                                  alt=""
+                                  className="w-9 h-9 rounded-lg object-cover bg-gray-50 shrink-0"
+                                />
+                              ) : (
+                                <div className="w-9 h-9 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
+                                  <ImageOff className="w-4 h-4 text-gray-300" />
+                                </div>
+                              )}
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-sm font-bold text-gray-800 truncate">{product.name}</span>
+                                <span className="block text-xs text-gray-400 font-medium truncate">
+                                  {product.sku}
+                                  {product.status !== 'APPROVED' && ` · ${product.status}`}
+                                </span>
+                              </span>
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {form.restrictProducts && (
+                    <p className="text-xs text-gray-400 font-medium flex items-start gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-px" />
+                      Un nouveau produit ajouté plus tard à votre catalogue ne lui sera pas accordé automatiquement —
+                      revenez ici pour le cocher.
+                    </p>
+                  )}
                 </div>
 
                 {/* ---------------------------------------------- permissions */}

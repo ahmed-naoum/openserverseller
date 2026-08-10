@@ -855,8 +855,8 @@ export default function AgentLeadDetail() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <button
             onClick={() => navigate('/agent/leads')}
             className={`text-sm mb-2 flex items-center gap-1 font-bold ${
@@ -865,12 +865,12 @@ export default function AgentLeadDetail() {
           >
             ← Retour aux leads
           </button>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">
             {isPrincess ? 'Espace Princesse Royale 👑' : isGirly ? 'Confirmation du Lead 🌸' : 'Confirmation du Lead 📋'}
           </h1>
           <p className="text-sm text-gray-500 mt-1">Appelez le client et mettez à jour le statut.</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 sm:flex-nowrap sm:shrink-0">
           {/* Theme Dropdown Select */}
           <div className="relative inline-block">
             <select
@@ -1063,10 +1063,6 @@ export default function AgentLeadDetail() {
                 </a>
               </div>
             )}
-            <div>
-              <p className="text-xs text-gray-400 font-medium uppercase mb-1">Reçu le</p>
-              <p className="text-gray-700 font-medium">{format(new Date(lead.createdAt), 'dd MMM yyyy à HH:mm')}</p>
-            </div>
             {lead.referralLink?.code && (() => {
               const linkUser = lead.referralLink.influencer || influencer || vendor;
               const refUrl = buildReferralUrl(
@@ -1398,7 +1394,7 @@ export default function AgentLeadDetail() {
           {/* No overflow-hidden: it would clip the city dropdown, which is
               absolutely positioned inside this card. The top bar keeps the
               rounded corners itself instead. */}
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 border border-gray-100 my-8">
+          <div className="bg-white rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 border border-gray-100 my-8">
             <div className={`absolute top-0 left-0 right-0 h-1.5 rounded-t-3xl ${
               isPrincess
                 ? 'bg-gradient-to-r from-amber-400 via-pink-400 to-rose-500'
@@ -1519,7 +1515,7 @@ export default function AgentLeadDetail() {
                 {formErrors.address && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.address}</p>}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-black text-gray-500 uppercase mb-1">Prix Encaisser (MAD)</label>
                   <input

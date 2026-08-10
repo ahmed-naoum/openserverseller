@@ -3,12 +3,12 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { dashboardApi, influencerApi } from '../../lib/api';
-import { isConfirmedRow, isDeliveredRow } from '../../lib/leadStatus';
+import { isConfirmedRow, isDeliveredRow, getLeadDate } from '../../lib/leadStatus';
 import { ReferralLink, InfluencerCommission } from '../../types';
 import {
   DollarSign, TrendingUp, Zap, MousePointerClick, ArrowUpRight, Crown,
-  Plus, ShoppingBag, Wallet, Activity, BarChart3, CheckCircle2, Truck, ExternalLink, Eye, RefreshCw,
-  MessageCircle, Mail, Smartphone, Copy
+  Plus, ShoppingBag, Wallet, BarChart3, CheckCircle2, Truck, ExternalLink, Eye, RefreshCw,
+  MessageCircle, Mail, Smartphone, Copy, CalendarClock
 } from 'lucide-react';
 import { ProCard } from '../../components/common/ProCard';
 import { TierProgressBanner } from '../../components/influencer/TierProgressBanner';
@@ -23,6 +23,64 @@ import {
   Tooltip as RechartsTooltip
 } from 'recharts';
 import toast from 'react-hot-toast';
+
+/**
+ * The Performance card can be read two ways. Both count leads rather than money,
+ * so neither carries a currency, and their colours mirror the confirmation and
+ * delivery stat cards above the chart. (It also used to offer wallet "revenue"
+ * and "balance" series; those were dropped — the wallet card covers them.)
+ */
+type ChartType = 'confirmed' | 'delivered';
+
+const CHART_STYLES: Record<ChartType, { color: string; dataKey: string; isMoney: boolean }> = {
+  confirmed: { color: '#f59e0b', dataKey: 'confirmed', isMoney: false },
+  delivered: { color: '#10b981', dataKey: 'delivered', isMoney: false }
+};
+
+/** Local midnight yesterday — the anchor the HIER range is built from. */
+const startOfYesterday = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+/**
+ * Local calendar date, not the UTC one toISOString() would give. West of
+ * Greenwich that shifts a day; the API filters on the vendor's own dates.
+ */
+const toISODate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+const CHART_TABS: { type: ChartType; labelKey: string }[] = [
+  { type: 'confirmed', labelKey: 'db_chart_confirmed' },
+  { type: 'delivered', labelKey: 'db_chart_delivered' }
+];
+
+/**
+ * One bound of the custom range, read the way the server reads it. The two must
+ * agree: the cards below count rows the API already filtered, so a bound parsed
+ * differently here would drop leads the totals still include.
+ *
+ * A bare `YYYY-MM-DD` is local midnight — `new Date('2026-08-09')` would be UTC
+ * midnight and shift the day. An inclusive end bound covers its whole day, or
+ * its whole minute once the vendor picks an hour, so "jusqu'à 14:30" keeps
+ * 14:30:45.
+ */
+const parseBound = (value: string, isEnd: boolean): Date | null => {
+  if (!value) return null;
+  const bare = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const d = bare ? new Date(Number(bare[1]), Number(bare[2]) - 1, Number(bare[3])) : new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  if (isEnd) {
+    if (bare) d.setHours(23, 59, 59, 999);
+    else d.setSeconds(59, 999);
+  }
+  return d;
+};
+
+/** The period presets, in the order they appear in the bar. */
+const RANGE_KEYS = ['all', 1, 'yesterday', 7, 30, 'custom'] as const;
 
 export default function VendorDashboard() {
   const { user } = useAuth();
@@ -45,16 +103,19 @@ export default function VendorDashboard() {
   });
   const [leadCountsByLink, setLeadCountsByLink] = useState<any[]>([]);
   const [helpers, setHelpers] = useState<any[]>([]);
-  const [dateRange, setDateRange] = useState<number | 'custom' | 'all'>('all');
+  const [dateRange, setDateRange] = useState<number | 'custom' | 'all' | 'yesterday'>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [chartType, setChartType] = useState<'revenue' | 'balance'>('revenue');
+  const [chartType, setChartType] = useState<ChartType>('confirmed');
   const [loading, setLoading] = useState(true);
   const [searchParams] = useSearchParams();
   const currentMode = searchParams.get('mode') || user?.mode || 'SELLER';
 
+  // One bound is enough to reload: "depuis lundi" is a range a vendor can ask
+  // for, and waiting for both left the page frozen on the previous window while
+  // they typed the first one.
   useEffect(() => {
-    if (dateRange !== 'custom' || (startDate && endDate)) {
+    if (dateRange !== 'custom' || startDate || endDate) {
       loadDashboard();
     }
   }, [dateRange, startDate, endDate, currentMode]);
@@ -62,24 +123,32 @@ export default function VendorDashboard() {
   const loadDashboard = async () => {
     try {
       setLoading(true);
+      // The dashboard and the links endpoint take the same bounds and share one
+      // parser, so every figure on the page describes the same window. HIER is
+      // a closed range — days=N always ends at "now" and would swallow today.
+      const yesterday = dateRange === 'yesterday' ? toISODate(startOfYesterday()) : null;
       const params: any = {};
+
       if (dateRange === 'custom') {
         if (startDate) params.start = startDate;
         if (endDate) params.end = endDate;
+      } else if (yesterday) {
+        params.start = yesterday;
+        params.end = yesterday;
       } else {
         params.days = dateRange;
       }
 
-      // Filter links stats by the same date range
-      const linkParams: any = {};
-      if (dateRange === 'custom') {
-        if (startDate) linkParams.start = startDate;
-        if (endDate) linkParams.end = endDate;
-      } else if (typeof dateRange === 'number') {
+      const linkParams: any = { ...params };
+      // `days` means nothing to the links endpoint, so a numeric preset is spelt
+      // out as the window it stands for. Local dates, not `toISOString` — that
+      // reports the UTC day and drops a day's links either side of midnight.
+      if (typeof dateRange === 'number') {
+        delete linkParams.days;
         const start = new Date();
+        start.setHours(0, 0, 0, 0);
         start.setDate(start.getDate() - (dateRange - 1));
-        linkParams.start = start.toISOString().split('T')[0];
-        linkParams.end = new Date().toISOString().split('T')[0];
+        linkParams.start = toISODate(start);
       }
 
       // Only the first call is essential. The other two belong to the links and
@@ -124,19 +193,20 @@ export default function VendorDashboard() {
     if (dateRange === 1) {
       return leadDate.toDateString() === now.toDateString();
     }
-    
+
+    if (dateRange === 'yesterday') {
+      return leadDate.toDateString() === startOfYesterday().toDateString();
+    }
+
     if (dateRange === 'custom') {
       if (!startDate && !endDate) return true;
-      if (startDate) {
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
-        if (leadDate < start) return false;
-      }
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        if (leadDate > end) return false;
-      }
+      // Parsed the way the API parsed them, hour included — pinning these to
+      // midnight/23:59 here would have quietly widened an hourly window back to
+      // the whole day and shown leads the totals above had already excluded.
+      const start = parseBound(startDate, false);
+      const end = parseBound(endDate, true);
+      if (start && leadDate < start) return false;
+      if (end && leadDate > end) return false;
       return true;
     }
 
@@ -182,40 +252,95 @@ export default function VendorDashboard() {
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       return Math.max(7, Math.min(diffDays + 1, 365)); // Ensure at least 7 days to draw a nice line, cap at 365
     }
+    if (dateRange === 'yesterday') return 1;
     return dateRange === 'custom' ? 7 : Number(dateRange);
   };
 
+  /**
+   * Last day of the selected range. Only "days back from now" ranges end today —
+   * HIER ends yesterday and a custom window ends on its own end date.
+   */
+  const rangeEnd = () => {
+    if (dateRange === 'yesterday') return startOfYesterday();
+    if (dateRange === 'custom' && endDate) return new Date(endDate);
+    return new Date();
+  };
+
   const numDays = getNumDays();
-  const chartDays = [...Array(numDays)].map((_, i) => {
-    const d = new Date(dateRange === 'custom' && endDate ? endDate : new Date());
-    d.setDate(d.getDate() - (numDays - 1 - i));
-    return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
-  });
 
-  const revenueData = chartDays.map(date => {
-    const amount = walletTransactions.reduce((sum, tx) => {
-      const txDate = new Date(tx.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
-      // Only count positive transactions (income) in the revenue chart
-      return (txDate === date && tx.amountMad > 0) ? sum + tx.amountMad : sum;
-    }, 0);
-    return { date, amount: Number(amount.toFixed(2)) };
-  });
+  // ---- Confirmed / delivered leads over time -------------------------------
+  // Built from dateFilteredCommissions, the same list the confirmation and
+  // delivery stat cards count, so the chart totals can never disagree with them.
+  // The wallet charts key off transactions, which is why these get their own
+  // buckets: a vendor can have leads on days with no wallet movement at all.
 
-  // Process Wallet Balance Data
-  const balanceData = chartDays.map((date, idx) => {
-    // Better logic: find the latest transaction that happened BEFORE or ON this date's end
-    const targetDate = new Date(dateRange === 'custom' && endDate ? endDate : new Date());
-    targetDate.setDate(targetDate.getDate() - (numDays - 1 - idx));
-    targetDate.setHours(23, 59, 59, 999);
-    
-    const latestTxBefore = walletTransactions
-      .filter(tx => new Date(tx.createdAt) <= targetDate)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+  // On TODAY and HIER a single day-bucket would draw one dot, so leads are
+  // spread over the 24 hours instead — that is the "date and time" view.
+  const leadsHourly = dateRange === 1 || dateRange === 'yesterday';
 
-    const val = latestTxBefore ? latestTxBefore.balanceAfterMad : (walletTransactions.length > 0 ? 0 : (wallet?.balanceMad || 0));
-    return { date, balance: Number(val.toFixed(2)) };
-  });
+  const leadsNumDays = (() => {
+    if (leadsHourly) return 1;
+    if (dateRange === 'custom') {
+      if (!startDate || !endDate) return numDays;
+      const span = Math.floor((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000) + 1;
+      return Math.max(1, Math.min(span, 365));
+    }
+    if (dateRange === 'all') {
+      const times = dateFilteredCommissions
+        .map(c => getLeadDate(c).getTime())
+        .filter(ts => !isNaN(ts));
+      if (times.length === 0) return 7;
+      const diffDays = Math.ceil(Math.abs(new Date().getTime() - Math.min(...times)) / 86400000);
+      return Math.max(7, Math.min(diffDays + 1, 365));
+    }
+    // 7J/30J keep every lead the stat cards counted: their filter starts at
+    // midnight N days back and runs through today, which is N+1 calendar days.
+    // One bucket short here and a boundary lead is counted but never drawn.
+    return Number(dateRange) + 1;
+  })();
 
+  const leadBucketKey = (d: Date) => leadsHourly
+    ? `${String(d.getHours()).padStart(2, '0')}h`
+    : d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+
+  const leadsChartKeys = leadsHourly
+    ? [...Array(24)].map((_, h) => `${String(h).padStart(2, '0')}h`)
+    : [...Array(leadsNumDays)].map((_, i) => {
+        const d = rangeEnd();
+        d.setDate(d.getDate() - (leadsNumDays - 1 - i));
+        return leadBucketKey(d);
+      });
+
+  const leadsData = (() => {
+    const buckets = new Map<string, { total: number; confirmed: number; delivered: number }>();
+    dateFilteredCommissions.forEach(c => {
+      const d = getLeadDate(c);
+      if (isNaN(d.getTime())) return;
+      const key = leadBucketKey(d);
+      const bucket = buckets.get(key) || { total: 0, confirmed: 0, delivered: 0 };
+      bucket.total += 1;
+      if (isConfirmedRow(c)) bucket.confirmed += 1;
+      if (isDeliveredRow(c)) bucket.delivered += 1;
+      buckets.set(key, bucket);
+    });
+    return leadsChartKeys.map(date => ({
+      date,
+      ...(buckets.get(date) || { total: 0, confirmed: 0, delivered: 0 })
+    }));
+  })();
+
+  const chartStyle = CHART_STYLES[chartType];
+  // Only lead-count series remain, so there is no money branch left to pick.
+  const chartData = leadsData;
+
+  const chartSubtitle = (() => {
+    const prefix = chartType === 'confirmed' ? 'db_confirmed_chart' : 'db_delivered_chart';
+    if (dateRange === 'custom') return t(`${prefix}_sub`, 'dashboard');
+    if (dateRange === 'all') return t(`${prefix}_all`, 'dashboard');
+    if (dateRange === 1) return t(`${prefix}_today`, 'dashboard');
+    if (dateRange === 'yesterday') return t(`${prefix}_yesterday`, 'dashboard');
+    return t(`${prefix}_days`, 'dashboard').replace('{days}', String(dateRange));
+  })();
 
   // Financial calculations based on filtered transactions
   const periodEarned = walletTransactions.reduce((sum, tx) => tx.amountMad > 0 ? sum + tx.amountMad : sum, 0);
@@ -277,8 +402,76 @@ export default function VendorDashboard() {
         </h1>
       </div>
 
+      {/* Période — first thing on the page because it scopes everything under
+          it: the stat cards, the wallet column, the chart and the per-link
+          totals all read this one window. It used to sit inside the chart card,
+          where it read as a chart control. */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 sm:p-3.5">
+        <div className="flex flex-col xl:flex-row xl:items-center gap-3">
+          <div className="flex items-center gap-2 shrink-0">
+            <CalendarClock className="w-4 h-4 text-slate-400" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">
+              {t('db_period', 'dashboard')}
+            </span>
+            <span className="text-[9px] font-bold text-slate-300 uppercase tracking-wider hidden sm:inline">
+              {t('db_period_hint', 'dashboard')}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            {RANGE_KEYS.map((range) => (
+              <button
+                key={String(range)}
+                onClick={() => setDateRange(range as any)}
+                aria-pressed={dateRange === range}
+                className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all border ${
+                  dateRange === range
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                    : 'bg-white text-slate-400 border-slate-200 hover:text-slate-700 hover:border-slate-300'
+                }`}
+              >
+                {range === 'custom' ? t('db_custom', 'dashboard') : range === 'all' ? t('db_all', 'dashboard') : range === 1 ? t('db_today', 'dashboard') : range === 'yesterday' ? t('db_yesterday', 'dashboard') : `${range}J`}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 xl:ml-auto">
+            {dateRange === 'custom' && (
+              <div className="flex flex-wrap items-center gap-2 animate-in slide-in-from-top-1 duration-300">
+                {/* `datetime-local`, not `date`: the server reads a bound to the
+                    minute, so a vendor can ask for this morning alone. */}
+                <input
+                  type="datetime-local"
+                  value={startDate}
+                  max={endDate || undefined}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  aria-label={t('db_period_from', 'dashboard')}
+                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none focus:border-slate-400 transition-all"
+                />
+                <span className="text-slate-300 font-bold text-[10px]">→</span>
+                <input
+                  type="datetime-local"
+                  value={endDate}
+                  min={startDate || undefined}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  aria-label={t('db_period_to', 'dashboard')}
+                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none focus:border-slate-400 transition-all"
+                />
+              </div>
+            )}
+            <button
+              onClick={() => loadDashboard()}
+              className="p-2 text-slate-400 hover:text-slate-600 transition-all"
+              title={t('db_refresh', 'dashboard')}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Tier Progress Banner */}
-      <TierProgressBanner 
+      <TierProgressBanner
         totalEarned={wallet?.totalEarnedMad || 0} 
         title={currentMode === 'SELLER' ? t('dashboard_seller', 'dashboard') : t('dashboard_affiliate', 'dashboard')}
         productsUrl={`${base}/inventory`}
@@ -526,7 +719,7 @@ export default function VendorDashboard() {
                 <h3 className="text-5xl font-black text-white">{displayBalance?.toLocaleString() || 0}</h3>
                 <span className="text-sm font-bold text-slate-400 uppercase">DH</span>
               </div>
-              <Link to="/influencer/wallet" className="flex items-center gap-2 text-xs font-black text-influencer-400 hover:text-white transition-colors group/link">
+              <Link to={`${base}/wallet`} className="flex items-center gap-2 text-xs font-black text-influencer-400 hover:text-white transition-colors group/link">
                 {t('db_manage_withdrawals', 'dashboard')} <ArrowUpRight className="w-3 h-3 group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 transition-transform" />
               </Link>
             </div>
@@ -576,120 +769,72 @@ export default function VendorDashboard() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
               <div className="space-y-1">
                 <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
-                  {chartType === 'revenue' ? (
-                    <><Activity className="w-6 h-6 text-influencer-500" /> {t('db_performance', 'dashboard')}</>
-                  ) : (
-                    <><Wallet className="w-6 h-6 text-blue-500" /> {t('db_balance_evolution', 'dashboard')}</>
-                  )}
+                  {chartType === 'confirmed' && <><CheckCircle2 className="w-6 h-6 text-amber-500" /> {t('db_confirmed_evolution', 'dashboard')}</>}
+                  {chartType === 'delivered' && <><Truck className="w-6 h-6 text-emerald-500" /> {t('db_delivered_evolution', 'dashboard')}</>}
                 </h2>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                  {chartType === 'revenue' 
-                    ? (dateRange === 'custom' 
-                        ? t('db_revenue_chart_sub', 'dashboard') 
-                        : dateRange === 'all' 
-                        ? t('db_revenue_chart_all', 'dashboard') 
-                        : dateRange === 1 
-                        ? t('db_revenue_chart_today', 'dashboard') 
-                        : t('db_revenue_chart_days', 'dashboard').replace('{days}', String(dateRange)))
-                    : (dateRange === 'custom' 
-                        ? t('db_balance_chart_sub', 'dashboard') 
-                        : dateRange === 'all' 
-                        ? t('db_balance_chart_all', 'dashboard') 
-                        : dateRange === 1 
-                        ? t('db_balance_chart_today', 'dashboard') 
-                        : t('db_balance_chart_days', 'dashboard').replace('{days}', String(dateRange)))}
+                  {chartSubtitle}
+                </p>
+                <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: chartStyle.color }}>
+                  {chartType === 'confirmed'
+                    ? `${confirmedItems} ${t('db_leads_confirmed', 'dashboard')}`
+                    : `${deliveredItems} ${t('db_leads_delivered', 'dashboard')}`}
                 </p>
               </div>
 
-              <div className="flex flex-col items-end gap-3">
-                <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-100">
+              {/* The period moved to the bar at the top of the page — it scopes
+                  every card, not just this chart. Only the series switch is
+                  local to the chart, so only it stays here. */}
+              <div className="flex flex-wrap justify-end gap-1 bg-slate-100/70 p-1 rounded-xl border border-slate-100 self-start">
+                {CHART_TABS.map(tab => (
                   <button
-                    onClick={() => loadDashboard()}
-                    className="p-2 text-slate-400 hover:text-slate-600 transition-all"
-                    title={t('db_refresh', 'dashboard')}
+                    key={tab.type}
+                    onClick={() => setChartType(tab.type)}
+                    className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                      chartType === tab.type ? 'bg-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                    style={chartType === tab.type ? { color: CHART_STYLES[tab.type].color } : undefined}
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                    {t(tab.labelKey, 'dashboard')}
                   </button>
-                  <div className="w-px h-3 bg-slate-200 mx-1" />
-                  <div className="flex items-center">
-                    {['all', 1, 7, 30, 'custom'].map((range) => (
-                      <button
-                        key={range}
-                        onClick={() => setDateRange(range as any)}
-                        className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all ${
-                          dateRange === range 
-                            ? 'bg-white text-slate-900 shadow-sm border border-slate-100' 
-                            : 'text-slate-400 hover:text-slate-600'
-                        }`}
-                      >
-                        {range === 'custom' ? t('db_custom', 'dashboard') : range === 'all' ? t('db_all', 'dashboard') : range === 1 ? t('db_today', 'dashboard') : `${range}J`}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="w-px h-3 bg-slate-200 mx-2" />
-                  <div className="flex bg-slate-200/50 p-0.5 rounded-lg">
-                    <button
-                      onClick={() => setChartType('revenue')}
-                      className={`px-3 py-1.5 text-[9px] font-black uppercase rounded-md transition-all ${
-                        chartType === 'revenue' ? 'bg-white text-influencer-600 shadow-sm' : 'text-slate-500'
-                      }`}
-                    >
-                      {t('db_sales', 'dashboard')}
-                    </button>
-                    <button
-                      onClick={() => setChartType('balance')}
-                      className={`px-3 py-1.5 text-[9px] font-black uppercase rounded-md transition-all ${
-                        chartType === 'balance' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'
-                      }`}
-                    >
-                      {t('db_balance_title', 'dashboard')}
-                    </button>
-                  </div>
-                </div>
-
-                {dateRange === 'custom' && (
-                  <div className="flex items-center gap-2 animate-in slide-in-from-top-1 duration-300">
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold text-slate-600 outline-none focus:border-slate-300 transition-all"
-                    />
-                    <span className="text-slate-300 font-bold text-[10px]">→</span>
-                    <input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className="px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold text-slate-600 outline-none focus:border-slate-300 transition-all"
-                    />
-                  </div>
-                )}
+                ))}
               </div>
             </div>
             <div className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartType === 'revenue' ? revenueData : balanceData}>
+                <AreaChart data={chartData}>
                   <defs>
                     <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={chartType === 'revenue' ? '#8b5cf6' : '#3b82f6'} stopOpacity={0.1}/>
-                      <stop offset="95%" stopColor={chartType === 'revenue' ? '#8b5cf6' : '#3b82f6'} stopOpacity={0}/>
+                      <stop offset="5%" stopColor={chartStyle.color} stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor={chartStyle.color} stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700, fill: '#64748b'}} />
-                  <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700, fill: '#64748b'}} tickFormatter={(val) => `${val} DH`} />
-                  <RechartsTooltip 
-                    contentStyle={{borderRadius: '20px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px'}}
-                    itemStyle={{fontWeight: 900, color: chartType === 'revenue' ? '#8b5cf6' : '#3b82f6'}}
-                    formatter={(val: number) => [`${val.toLocaleString()} DH`, chartType === 'revenue' ? t('db_revenue_title', 'dashboard') : t('db_balance_title', 'dashboard')]}
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{fontSize: 10, fontWeight: 700, fill: '#64748b'}}
+                    allowDecimals={chartStyle.isMoney}
+                    tickFormatter={(val) => chartStyle.isMoney ? `${val} DH` : `${val}`}
                   />
-                  <Area 
-                    type="monotone" 
-                    dataKey={chartType === 'revenue' ? 'amount' : 'balance'} 
-                    stroke={chartType === 'revenue' ? '#8b5cf6' : '#3b82f6'} 
-                    strokeWidth={4} 
-                    fillOpacity={1} 
-                    fill="url(#colorValue)" 
+                  <RechartsTooltip
+                    contentStyle={{borderRadius: '20px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px'}}
+                    itemStyle={{fontWeight: 900, color: chartStyle.color}}
+                    formatter={(val: number) => [
+                      chartStyle.isMoney ? `${val.toLocaleString()} DH` : `${val.toLocaleString()} ${t('db_leads_unit', 'dashboard')}`,
+                      chartType === 'confirmed' ? t('db_leads_confirmed', 'dashboard')
+                        : t('db_leads_delivered', 'dashboard')
+                    ]}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey={chartStyle.dataKey}
+                    stroke={chartStyle.color}
+                    strokeWidth={4}
+                    fillOpacity={1}
+                    fill="url(#colorValue)"
+                    dot={{ r: 3, fill: chartStyle.color, strokeWidth: 0 }}
                     animationDuration={1000}
                   />
                 </AreaChart>

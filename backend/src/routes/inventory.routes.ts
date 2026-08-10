@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
+import { productScopeOf, applyProductScope } from '../lib/subAccountProductScope.js';
 
 const router = Router();
 
@@ -15,6 +16,12 @@ router.get(
 
         const inventoryWhere: any = { userId: req.user!.id };
         const myProductsWhere: any = { ownerId: req.user!.id }; // Products the grosseller created
+
+        // Both halves of this screen narrow together for a scoped sub-account —
+        // the bought stock by its productId, the owned products by their own id.
+        const scope = productScopeOf(req);
+        applyProductScope(inventoryWhere, scope);
+        applyProductScope(myProductsWhere, scope, 'id');
 
         const [inventory, myProducts] = await Promise.all([
             prisma.productInventory.findMany({
@@ -129,6 +136,7 @@ router.get(
         const { page = 1, limit = 20 } = req.query;
 
         const where: any = { userId: req.user!.id, status: 'APPROVED' };
+        applyProductScope(where, productScopeOf(req));
 
         const [claims, total] = await Promise.all([
             prisma.affiliateClaim.findMany({

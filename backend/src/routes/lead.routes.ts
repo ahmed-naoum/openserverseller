@@ -10,6 +10,16 @@ import { emitNewTickets } from '../lib/ticketEvents.js';
 import { getAgentLeadScope, getAgentProductRestrictions } from '../utils/agentScope.js';
 import { isCompletePhone } from '../lib/phoneCompleteness.js';
 import { SAFE_USER_SELECT } from '../lib/safeUserSelect.js';
+import { parseDateRange } from '../lib/dateRange.js';
+import {
+  productScopeOf,
+  applyProductScope,
+  applyReferralLinkProductScope,
+  referralLinkProductFilter,
+  isProductInScope,
+  isLeadInProductScope,
+  OUT_OF_SCOPE,
+} from '../lib/subAccountProductScope.js';
 
 // How many rows one request may return. This is a memory ceiling, not a page
 // size — every list endpoint reports its true total separately (`total`,
@@ -25,6 +35,9 @@ const resolveRowLimit = (limit: unknown): number => {
   if (!parsed || Number.isNaN(parsed)) return DEFAULT_ROWS_PER_REQUEST;
   return Math.min(MAX_ROWS_PER_REQUEST, Math.max(1, parsed));
 };
+
+// Lives in `lib/` so the vendor dashboard reads the same window from the same
+// pair of inputs — see the note there on why there is only one copy.
 
 // Helper to call Coliaty API
 const callColiatyCreateParcel = async (parcelData: {
@@ -211,6 +224,11 @@ router.get(
 
     if (req.user!.roleName === 'VENDOR') {
       conditions.push({ vendorId: req.user!.id });
+      // A sub-account narrowed to some of the vendor's products works only the
+      // orders those products brought in. Pushed as its own condition so the
+      // count and the status tallies below narrow with the list.
+      const scopeFilter = referralLinkProductFilter(productScopeOf(req));
+      if (scopeFilter) conditions.push(scopeFilter);
     } else if (req.user!.roleName === 'CALL_CENTER_AGENT') {
       if (viewMode === 'ALL') {
         conditions.push({
@@ -283,12 +301,8 @@ router.get(
     if (hasOrder === 'yes') conditions.push({ order: { isNot: null } });
     if (hasOrder === 'no') conditions.push({ order: null });
 
-    if (dateFrom || dateTo) {
-      const createdAt: any = {};
-      if (dateFrom) createdAt.gte = new Date(`${dateFrom}T00:00:00.000Z`);
-      if (dateTo) createdAt.lte = new Date(`${dateTo}T23:59:59.999Z`);
-      conditions.push({ createdAt });
-    }
+    const createdRange = parseDateRange(dateFrom, dateTo);
+    if (createdRange) conditions.push({ createdAt: createdRange });
 
     if (search) {
       conditions.push({
@@ -569,7 +583,7 @@ router.get(
   authorize('CALL_CENTER_AGENT', 'CONFIRMATION_AGENT', 'AGENT', 'HELPER', 'SUPER_ADMIN', 'VENDOR'),
   asyncHandler(async (req, res) => {
     const agentId = req.user!.id;
-    const { influencerId, limit, search, city, productId } = req.query;
+    const { influencerId, limit, search, city, productId, dateFrom, dateTo } = req.query;
 
     const takeLimit = resolveRowLimit(limit);
 
@@ -662,13 +676,21 @@ router.get(
     if (city) extraConditions.push({ city: { equals: city as string, mode: 'insensitive' } });
     if (productId) extraConditions.push({ referralLink: { productId: Number(productId) } });
 
+    // Arrival window — both bounds optional and inclusive, date or date-time.
+    const createdRange = parseDateRange(dateFrom, dateTo);
+    if (createdRange) extraConditions.push({ createdAt: createdRange });
+
     if (extraConditions.length > 0) where.AND = extraConditions;
 
     const [leads, totalAvailable, totalScope, scopeRows] = await Promise.all([
       prisma.lead.findMany({
         where,
         take: takeLimit,
-        orderBy: { createdAt: 'desc' },
+        // Oldest first: the queue is worked front to back, so the lead that has
+        // been waiting longest is the one an agent should see at the top. With
+        // a row limit this also means the page shows the oldest N, not the
+        // newest N — which is the backlog, not the fresh arrivals.
+        orderBy: { createdAt: 'asc' },
         include: {
           referralLink: {
             include: { product: { include: { images: true } }, landingPage: true }
@@ -762,7 +784,7 @@ router.get(
   authorize('CALL_CENTER_AGENT', 'SUPER_ADMIN'),
   asyncHandler(async (req, res) => {
     const agentId = req.user!.id;
-    const { influencerId, limit, search, city, productId } = req.query;
+    const { influencerId, limit, search, city, productId, dateFrom, dateTo } = req.query;
 
     const takeLimit = resolveRowLimit(limit);
 
@@ -832,13 +854,23 @@ router.get(
     if (city) extraConditions.push({ city: { equals: city as string, mode: 'insensitive' } });
     if (productId) extraConditions.push({ referralLink: { productId: Number(productId) } });
 
+    // Arrival window — both bounds optional and inclusive, date or date-time.
+    // Same axis as the ordering below, so filtering and sorting agree.
+    const createdRange = parseDateRange(dateFrom, dateTo);
+    if (createdRange) extraConditions.push({ createdAt: createdRange });
+
     if (extraConditions.length > 0) where.AND = extraConditions;
 
     const [leads, totalAssigned, totalScope, scopeRows] = await Promise.all([
       prisma.lead.findMany({
         where,
         take: takeLimit,
-        orderBy: { updatedAt: 'desc' },
+        // Oldest first: a lead that has been sitting with an agent the longest
+        // is the one most worth taking over, so it belongs at the top. Ordering
+        // on `createdAt` rather than `updatedAt` — the latter is bumped by every
+        // status write and by the unassign cron, which shuffled this list for
+        // reasons that have nothing to do with how long a lead has been held.
+        orderBy: { createdAt: 'asc' },
         include: {
           assignedAgent: { select: SAFE_USER_SELECT },
           referralLink: {
@@ -980,11 +1012,10 @@ router.get(
     if (hasCode === 'yes') orderFilter.coliatyPackageCode = { not: null };
     if (hasCode === 'no') orderFilter.coliatyPackageCode = null;
 
-    if (dateFrom || dateTo) {
-      orderFilter.createdAt = {};
-      if (dateFrom) orderFilter.createdAt.gte = new Date(`${dateFrom}T00:00:00.000Z`);
-      if (dateTo) orderFilter.createdAt.lte = new Date(`${dateTo}T23:59:59.999Z`);
-    }
+    // The parcel's own creation window. `stats` below re-applies it on its way
+    // past the filter options, which are deliberately left unnarrowed.
+    const createdRange = parseDateRange(dateFrom, dateTo);
+    if (createdRange) orderFilter.createdAt = createdRange;
 
     if (minAmount || maxAmount) {
       orderFilter.totalAmountMad = {};
@@ -1136,24 +1167,50 @@ router.get(
       });
 
     // --- 4. Stats + filter options computed over the whole visible scope ---
+    // One pass, two audiences: the filter options describe everything the agent
+    // can reach, while the counters describe the window they asked for. Pulling
+    // `createdAt` here keeps that a single query — the counters used to be built
+    // from this unfiltered scope, so a date range moved the parcel list but left
+    // every total and rate on the dashboard unchanged.
     const scopeRows = await prisma.lead.findMany({
       where: baseWhere,
       select: {
         vendorId: true,
         assignedAgentId: true,
         paymentSituation: true,
-        vendor: { select: { email: true, profile: { select: { fullName: true } } } },
-        assignedAgent: { select: { email: true, profile: { select: { fullName: true } } } },
+        // Per-lead billing overrides, plus the rate of whoever gets invoiced —
+        // the profit counters below have to land on the same figure the invoice
+        // does, and billing follows the influencer on a referred lead.
+        customShippingFee: true,
+        customPlatformFeeRate: true,
+        referralLink: { select: { influencer: { select: { platformFeeRate: true } } } },
+        vendor: {
+          select: { email: true, platformFeeRate: true, profile: { select: { fullName: true } } },
+        },
+        // `saisieFeeMad` is what this agent bills per lead they enter — a real
+        // cost on a delivered parcel, so the profit counters below have to see it.
+        assignedAgent: {
+          select: { email: true, saisieFeeMad: true, profile: { select: { fullName: true } } },
+        },
         order: {
           select: {
             status: true,
             customerCity: true,
             coliatyPackageCode: true,
             totalAmountMad: true,
+            createdAt: true,
           },
         },
       },
     });
+
+    const inWindow = (at?: Date | null) => {
+      if (!createdRange) return true;
+      if (!at) return false;
+      if (createdRange.gte && at < createdRange.gte) return false;
+      if (createdRange.lte && at > createdRange.lte) return false;
+      return true;
+    };
 
     // A parcel stops moving once it lands in one of these — everything else is
     // still money in transit that the agent can influence.
@@ -1162,30 +1219,48 @@ router.get(
       'CANCELED', 'CANCELED_BY_SELLER', 'CANCELED_BY_SYSTEM', 'CANCELLED',
     ]);
 
+    // Same arithmetic the invoice runs (see admin payment-monitoring): the courier
+    // hands the full amount over, then delivery and the platform's cut come off it.
+    // Kept in step with that code on purpose — a parcel's profit here and on its
+    // invoice must be the same number.
+    const DEFAULT_SHIPPING_FEE = 57;
+    const DEFAULT_PLATFORM_FEE_RATE = 0.05;
+    // Mirrors the fallback in the bulk-dispatch route, so a lead billed at 8 MAD
+    // there is never counted at some other rate here.
+    const DEFAULT_SAISIE_FEE = 8;
+    const netOf = (row: any, gross: number) => {
+      const shipping = row.customShippingFee ?? DEFAULT_SHIPPING_FEE;
+      const rate =
+        row.customPlatformFeeRate ??
+        row.referralLink?.influencer?.platformFeeRate ??
+        row.vendor?.platformFeeRate ??
+        DEFAULT_PLATFORM_FEE_RATE;
+      const margin = gross - shipping;
+      const fee = margin > 0 ? margin * rate : 0;
+      return { shipping, fee, net: margin - fee };
+    };
+
     const statusCounts: Record<string, number> = {};
     const cities = new Set<string>();
     const vendorMap = new Map<number, string>();
     const agentMap = new Map<number, string>();
     let unassignedAgentCount = 0;
+    let scopeTotal = 0;
     let withColiaty = 0;
     let uninvoicedReturns = 0;
     let revenueTotal = 0;
     let revenueDelivered = 0;
     let revenueInTransit = 0;
     let revenueReturned = 0;
+    let profitDelivered = 0;
+    let shippingCostDelivered = 0;
+    let platformFeeDelivered = 0;
+    let agentCommissionDelivered = 0;
 
     for (const row of scopeRows) {
-      const st = row.order?.status || 'UNKNOWN';
-      const amount = Number(row.order?.totalAmountMad) || 0;
-      statusCounts[st] = (statusCounts[st] || 0) + 1;
+      // Options first, and for every row: a city or vendor that drops out of the
+      // picker the moment a window is applied is a filter the agent can't undo.
       if (row.order?.customerCity) cities.add(row.order.customerCity);
-      if (row.order?.coliatyPackageCode) withColiaty++;
-      if (st === 'RETURNED' && row.paymentSituation !== 'FACTURED') uninvoicedReturns++;
-
-      revenueTotal += amount;
-      if (st === 'DELIVERED') revenueDelivered += amount;
-      else if (st === 'RETURNED') revenueReturned += amount;
-      if (!CLOSED_STATUSES.has(st)) revenueInTransit += amount;
       if (row.vendorId && !vendorMap.has(row.vendorId)) {
         vendorMap.set(
           row.vendorId,
@@ -1205,6 +1280,31 @@ router.get(
       } else {
         unassignedAgentCount++;
       }
+
+      if (!inWindow(row.order?.createdAt)) continue;
+
+      const st = row.order?.status || 'UNKNOWN';
+      const amount = Number(row.order?.totalAmountMad) || 0;
+      scopeTotal++;
+      statusCounts[st] = (statusCounts[st] || 0) + 1;
+      if (row.order?.coliatyPackageCode) withColiaty++;
+      if (st === 'RETURNED' && row.paymentSituation !== 'FACTURED') uninvoicedReturns++;
+
+      revenueTotal += amount;
+      if (st === 'DELIVERED') {
+        revenueDelivered += amount;
+        const { shipping, fee, net } = netOf(row, amount);
+        // Charged once per lead the agent entered. An unassigned lead was never
+        // saisi by anyone, so it carries no fee rather than the default one.
+        const saisie = row.assignedAgentId
+          ? (row.assignedAgent as any)?.saisieFeeMad ?? DEFAULT_SAISIE_FEE
+          : 0;
+        shippingCostDelivered += shipping;
+        platformFeeDelivered += fee;
+        agentCommissionDelivered += saisie;
+        profitDelivered += net - saisie;
+      } else if (st === 'RETURNED') revenueReturned += amount;
+      if (!CLOSED_STATUSES.has(st)) revenueInTransit += amount;
     }
 
     // Products that actually appear on a parcel in this scope. `distinct` keeps
@@ -1236,7 +1336,7 @@ router.get(
         limit: limitNum,
         totalPages: Math.max(1, Math.ceil(total / limitNum)),
         stats: {
-          total: scopeRows.length,
+          total: scopeTotal,
           withColiaty,
           pending: statusCounts['PENDING'] || 0,
           delivered: statusCounts['DELIVERED'] || 0,
@@ -1248,6 +1348,12 @@ router.get(
           revenueDelivered: Math.round(revenueDelivered),
           revenueInTransit: Math.round(revenueInTransit),
           revenueReturned: Math.round(revenueReturned),
+          // Net of the delivered parcels, with the three deductions that produced
+          // it so the card can show its own arithmetic.
+          profitDelivered: Math.round(profitDelivered),
+          shippingCostDelivered: Math.round(shippingCostDelivered),
+          platformFeeDelivered: Math.round(platformFeeDelivered),
+          agentCommissionDelivered: Math.round(agentCommissionDelivered),
         },
         filterOptions: {
           cities: Array.from(cities).sort((a, b) => a.localeCompare(b)),
@@ -1449,8 +1555,8 @@ router.post(
 // The gate is knowledge of the customer's phone number: it is never rendered on
 // the assigned-leads page nor sent in that payload, so being able to type it
 // back proves the requesting agent already has a legitimate handle on this
-// customer. A written reason is mandatory and is stored on the status-history
-// row, and the agent losing the lead is notified.
+// customer. The takeover is recorded on the status-history row and the agent
+// losing the lead is notified; a reason is optional and only added when sent.
 router.post(
   '/:id/force-claim',
   authenticate,
@@ -1464,9 +1570,10 @@ router.post(
     if (phoneTail(phone).length < 9) {
       throw new AppException(400, 'Numéro de téléphone invalide.');
     }
-    if (reason.length < 10) {
-      throw new AppException(400, 'Merci de préciser le motif (10 caractères minimum).');
-    }
+
+    // Appended to the history note and the notification only when a reason was
+    // actually sent — the form no longer asks for one.
+    const reasonSuffix = reason ? ` Motif : ${reason}` : '';
 
     // Same one-lead-at-a-time rule as the normal claim.
     const activeLead = await prisma.lead.findFirst({
@@ -1560,7 +1667,7 @@ router.post(
           oldStatus: lead.status,
           newStatus: 'ASSIGNED',
           changedBy: agentId,
-          notes: `Réclamation forcée : repris à ${previousAgentName} par ${newAgentName}. Motif : ${reason}`,
+          notes: `Réclamation forcée : repris à ${previousAgentName} par ${newAgentName}.${reasonSuffix}`,
         },
       });
 
@@ -1573,7 +1680,7 @@ router.post(
       previousAgentId,
       'LEAD_FORCE_CLAIMED',
       '⚠️ Un lead vous a été retiré',
-      `${newAgentName} a réclamé le lead de ${lead.fullName}. Motif : ${reason}`
+      `${newAgentName} a réclamé le lead de ${lead.fullName}.${reasonSuffix}`
     );
 
     try {
@@ -1588,7 +1695,7 @@ router.post(
             leadId: lead.id,
             leadName: lead.fullName,
             byAgent: newAgentName,
-            reason,
+            reason: reason || null,
           });
         }
       }
@@ -1773,6 +1880,9 @@ router.get(
     if (req.user!.roleName === 'VENDOR' && lead.vendorId !== req.user!.id) {
       throw new AppException(403, 'Permission denied');
     }
+    if (!(await isLeadInProductScope(productScopeOf(req), lead.id))) {
+      throw new AppException(403, OUT_OF_SCOPE);
+    }
 
     const naming = (u: any) => u?.profile?.fullName || u?.email || null;
 
@@ -1907,6 +2017,9 @@ router.post(
     // If productId is provided, find or create a referral link to connect leads to the product
     let resolvedReferralLinkId: number | null = null;
     if (productId) {
+      if (!isProductInScope(productScopeOf(req), Number(productId))) {
+        throw new AppException(403, OUT_OF_SCOPE);
+      }
       const product = await prisma.product.findUnique({ where: { id: Number(productId) } });
       if (product) {
         // Find existing referral link for this vendor + product
@@ -2131,16 +2244,22 @@ router.get(
       if (account.productIds.length > 0) allowedProductIds = account.productIds;
     }
 
+    const productsWhere: any = {
+      status: 'APPROVED',
+      ...(allowedProductIds ? { id: { in: allowedProductIds } } : {}),
+      OR: [
+        { ownerId: Number(vendorId) },
+        { inventories: { some: { userId: Number(vendorId) } } },
+        { claims: { some: { userId: Number(vendorId), status: { in: ['APPROVED', 'ACTIVE'] } } } }
+      ]
+    };
+    // The sub-account equivalent of the agent narrowing just above: same rule,
+    // different table. Kept as a separate AND so it can only ever intersect with
+    // the agent's own restriction, never replace it.
+    applyProductScope(productsWhere, productScopeOf(req), 'id');
+
     const products = await prisma.product.findMany({
-      where: {
-        status: 'APPROVED',
-        ...(allowedProductIds ? { id: { in: allowedProductIds } } : {}),
-        OR: [
-          { ownerId: Number(vendorId) },
-          { inventories: { some: { userId: Number(vendorId) } } },
-          { claims: { some: { userId: Number(vendorId), status: { in: ['APPROVED', 'ACTIVE'] } } } }
-        ]
-      },
+      where: productsWhere,
       include: {
         images: {
           where: { isPrimary: true },
@@ -2213,6 +2332,12 @@ router.post(
       if (account.productIds.length > 0 && !account.productIds.includes(Number(productId))) {
         throw new AppException(403, 'Ce produit ne vous est pas assigné pour ce compte');
       }
+    }
+
+    // Same reasoning one level down, for a vendor sub-account narrowed to part
+    // of its vendor's catalogue.
+    if (!isProductInScope(productScopeOf(req), Number(productId))) {
+      throw new AppException(403, OUT_OF_SCOPE);
     }
 
     const product = await prisma.product.findUnique({ where: { id: Number(productId) } });
@@ -2466,6 +2591,10 @@ router.patch(
     if (req.user!.roleName === 'VENDOR') {
       where.vendorId = req.user!.id;
     }
+    // Narrowing the selection rather than rejecting it: a bulk action a scoped
+    // helper fires from a filtered list can only ever reach its own products,
+    // and the "no leads found" below is what a fully out-of-scope batch gets.
+    applyReferralLinkProductScope(where, productScopeOf(req));
 
     const leads = await prisma.lead.findMany({ where });
     if (leads.length === 0) {
@@ -2588,6 +2717,7 @@ router.patch(
     const where: any = { id: Number(id) };
     if (req.user!.roleName === 'VENDOR') where.vendorId = req.user!.id;
     if (req.user!.roleName === 'CALL_CENTER_AGENT') where.assignedAgentId = req.user!.id;
+    applyReferralLinkProductScope(where, productScopeOf(req));
 
     const lead = await prisma.lead.findFirst({ where });
     if (!lead) throw new AppException(404, 'Lead not found');
@@ -2735,6 +2865,7 @@ router.patch(
       where.assignedAgentId = req.user!.id;
     }
     // HELPER and SUPER_ADMIN have no additional filter — they can change any lead's status
+    applyReferralLinkProductScope(where, productScopeOf(req));
 
     const lead = await prisma.lead.findFirst({ where });
 
@@ -3576,10 +3707,20 @@ router.get(
     let ownedProducts: any[] = [];
     let claimedProducts: any[] = [];
 
+    // This is the product picker every lead screen reads. A sub-account narrowed
+    // to part of the catalogue gets only that part, so it cannot file a lead
+    // against a product it is not allowed to open — all three sources below
+    // narrow, or the dropdown would offer what the rest of the app refuses.
+    const scope = productScopeOf(req);
+    const inventoryWhere = applyProductScope({ userId }, scope);
+    const ownedWhere = applyProductScope({ ownerId: userId }, scope, 'id');
+    const claimWhere = (extra: any = {}) =>
+      applyProductScope({ userId, status: 'APPROVED', ...extra }, scope);
+
     if (requestedMode === 'SELLER') {
       // 1. Products from inventory (bought)
       inventoryProducts = await prisma.productInventory.findMany({
-        where: { userId },
+        where: inventoryWhere,
         include: {
           product: {
             include: { images: { where: { isPrimary: true }, take: 1 } },
@@ -3589,13 +3730,13 @@ router.get(
 
       // 2. Products created/owned by vendor
       ownedProducts = await prisma.product.findMany({
-        where: { ownerId: userId },
+        where: ownedWhere,
         include: { images: { where: { isPrimary: true }, take: 1 } },
       });
 
       // 3. Claims specifically in SELLER mode
       claimedProducts = await prisma.affiliateClaim.findMany({
-        where: { userId, status: 'APPROVED', userMode: 'SELLER' },
+        where: claimWhere({ userMode: 'SELLER' }),
         include: {
           product: {
             include: { images: { where: { isPrimary: true }, take: 1 } },
@@ -3605,7 +3746,7 @@ router.get(
     } else if (requestedMode === 'AFFILIATE') {
       // Products claimed specifically in AFFILIATE mode
       claimedProducts = await prisma.affiliateClaim.findMany({
-        where: { userId, status: 'APPROVED', userMode: 'AFFILIATE' },
+        where: claimWhere({ userMode: 'AFFILIATE' }),
         include: {
           product: {
             include: { images: { where: { isPrimary: true }, take: 1 } },
@@ -3615,7 +3756,7 @@ router.get(
     } else {
       // All products if no mode parameter specified
       inventoryProducts = await prisma.productInventory.findMany({
-        where: { userId },
+        where: inventoryWhere,
         include: {
           product: {
             include: { images: { where: { isPrimary: true }, take: 1 } },
@@ -3624,12 +3765,12 @@ router.get(
       });
 
       ownedProducts = await prisma.product.findMany({
-        where: { ownerId: userId },
+        where: ownedWhere,
         include: { images: { where: { isPrimary: true }, take: 1 } },
       });
 
       claimedProducts = await prisma.affiliateClaim.findMany({
-        where: { userId, status: 'APPROVED' },
+        where: claimWhere(),
         include: {
           product: {
             include: { images: { where: { isPrimary: true }, take: 1 } },
@@ -3729,6 +3870,9 @@ router.delete(
     if (req.user!.roleName === 'CALL_CENTER_AGENT' && lead.assignedAgentId !== req.user!.id) {
       throw new AppException(403, 'Not authorized to delete this assigned lead');
     }
+    if (!(await isLeadInProductScope(productScopeOf(req), lead.id))) {
+      throw new AppException(403, OUT_OF_SCOPE);
+    }
 
     // Must not be pushed to Coliaty already
     const existingOrder = await prisma.order.findUnique({
@@ -3799,6 +3943,7 @@ router.post(
       });
       where.referralLinkId = { in: influencerLinks.map(l => l.id) };
     }
+    applyReferralLinkProductScope(where, productScopeOf(req));
 
     const lead = await prisma.lead.findFirst({ where });
     if (!lead) {
@@ -3856,6 +4001,13 @@ router.post(
 
     if (!productId) {
       throw new AppException(400, 'Veuillez sélectionner un produit dans votre inventaire.');
+    }
+
+    // Imported orders are filed against this product and get a referral link for
+    // it, so a scoped helper importing an out-of-scope product would be creating
+    // leads it cannot then open.
+    if (!isProductInScope(productScopeOf(req), Number(productId))) {
+      throw new AppException(403, OUT_OF_SCOPE);
     }
 
     const product = await prisma.product.findUnique({
@@ -4078,6 +4230,11 @@ router.get(
       { phone: { not: null } },
     ];
 
+    // When the cart was abandoned. `counts` is derived from the same list, so
+    // the tab badges and the dashboard tile narrow with the window too.
+    const createdRange = parseDateRange(req.query.dateFrom, req.query.dateTo);
+    if (createdRange) and.push({ createdAt: createdRange });
+
     // Only restrict by referral code when the agent actually has assignments.
     if (hasScope) {
       const restrictions = await getAgentProductRestrictions(req.user!.id);
@@ -4096,7 +4253,10 @@ router.get(
       if (codes.length === 0) {
         return res.json({
           attempts: [], total: 0, page, totalPages: 0, scoped: true,
-          counts: { all: 0, unsaved: 0, complete: 0, incomplete: 0, converted: 0 },
+          counts: {
+            all: 0, unsaved: 0, complete: 0, incomplete: 0, converted: 0,
+            unsavedComplete: 0, unsavedIncomplete: 0,
+          },
         });
       }
       and.push({ referralCode: { in: codes } });
@@ -4143,20 +4303,29 @@ router.get(
      * A cart whose number is already a Lead is not work: someone is on it, or it
      * was handled long ago. Those never reach the page — which also removes the
      * "already in your leads" case, since an agent's own leads are a subset of
-     * every lead. The exception is a cart this page converted: those stay so the
-     * agent can audit their own recoveries under "Déjà converti".
+     * every lead. Carts this endpoint converted stay in the visible set so the
+     * agent dashboard can still count recoveries; the carts page filters them
+     * out with `status=unsaved` and never lists them.
      */
     const isVisible = (c: (typeof candidates)[number]) => !isSaved(c) || isConverted(c);
     const visible = candidates.filter(isVisible);
 
     const completeCount = visible.filter(isComplete).length;
     const convertedCount = visible.filter(isConverted).length;
+    // `all` / `complete` / `incomplete` / `converted` span the whole visible set
+    // and feed the dashboard tile. The agent page only ever lists the work queue
+    // (non-converted), so its phone-quality badges need that subset instead —
+    // counting the full set there would advertise carts the page never shows.
+    const queue = visible.filter((c) => !isConverted(c));
+    const queueComplete = queue.filter(isComplete).length;
     const counts = {
       all: visible.length,
-      unsaved: visible.length - convertedCount,
+      unsaved: queue.length,
       complete: completeCount,
       incomplete: visible.length - completeCount,
       converted: convertedCount,
+      unsavedComplete: queueComplete,
+      unsavedIncomplete: queue.length - queueComplete,
     };
 
     const matchesStatus = (c: (typeof candidates)[number]) => {
@@ -4312,7 +4481,7 @@ router.post(
         data: {
           vendorId: vendorId!,
           referralLinkId: link.id,
-          fullName: attempt.fullName || 'Client (panier abandonné)',
+          fullName: attempt.fullName || 'Client X',
           phone: normalizedPhone,
           whatsapp: normalizedPhone,
           city: attempt.city,

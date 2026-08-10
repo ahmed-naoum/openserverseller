@@ -7,6 +7,7 @@ import {
   SUB_ACCOUNT_PERMISSIONS,
   type SubAccountFlags,
 } from '../lib/vendorSubAccount.js';
+import { loadSubAccountProductScope, type ProductScope } from '../lib/subAccountProductScope.js';
 
 const prisma = new PrismaClient();
 
@@ -37,11 +38,17 @@ const readSubAccountFlags = (user: any): SubAccountFlags => {
  * Returns a denial to send, or null when the request may proceed. Shared by
  * `authenticate` and `optionalAuth` — a route guarded by the looser one is
  * still a route that reads the vendor's data.
+ *
+ * `productScope` is the second, orthogonal half of a helper's reach: the grants
+ * decide which screens it gets, the scope decides how much of the catalogue
+ * those screens show. It rides on `req.user` so the route files can narrow their
+ * own queries — see lib/subAccountProductScope.ts.
  */
 const applyVendorHelperIdentity = (
   req: Request,
   user: any,
   vendor: any,
+  productScope: ProductScope = null,
 ): { status: number; message: string } | null => {
   if (!vendor || vendor.role?.name !== 'VENDOR') {
     return { status: 403, message: "Ce sous-compte n'est rattaché à aucun compte vendeur actif." };
@@ -80,6 +87,7 @@ const applyVendorHelperIdentity = (
     isVendorHelper: true as const,
     parentVendorId: vendor.id,
     subPermissions: flags,
+    subProductIds: productScope,
   };
 
   if (decision.scope === 'vendor') {
@@ -124,6 +132,20 @@ const loadParentVendor = (parentVendorId: number | null) =>
   parentVendorId
     ? prisma.user.findUnique({ where: { id: parentVendorId }, include: { role: true } })
     : Promise.resolve(null);
+
+/**
+ * Everything a helper request needs beyond its own row: the parent it runs as,
+ * and how much of that parent's catalogue it may touch. Fetched together so the
+ * two indexed lookups cost one round trip rather than two, and only ever for
+ * users who actually are sub-accounts.
+ */
+const loadVendorHelperContext = async (user: any) => {
+  const [vendor, productScope] = await Promise.all([
+    loadParentVendor(user.parentVendorId),
+    loadSubAccountProductScope(user.id),
+  ]);
+  return { vendor, productScope };
+};
 
 const parseCookies = (cookieHeader: string | undefined): Record<string, string> => {
   const list: Record<string, string> = {};
@@ -199,8 +221,8 @@ export const authenticate = async (
     };
 
     if (user.role.name === VENDOR_HELPER_ROLE) {
-      const vendor = await loadParentVendor(user.parentVendorId);
-      const denial = applyVendorHelperIdentity(req, user, vendor);
+      const { vendor, productScope } = await loadVendorHelperContext(user);
+      const denial = applyVendorHelperIdentity(req, user, vendor, productScope);
       if (denial) return res.status(denial.status).json({ status: 'error', message: denial.message });
     }
 
@@ -307,8 +329,8 @@ export const optionalAuth = async (
       // same swap a sub-account would see an empty catalogue and the access
       // matrix would not apply here at all.
       if (user.role.name === VENDOR_HELPER_ROLE) {
-        const vendor = await loadParentVendor(user.parentVendorId);
-        const denial = applyVendorHelperIdentity(req, user, vendor);
+        const { vendor, productScope } = await loadVendorHelperContext(user);
+        const denial = applyVendorHelperIdentity(req, user, vendor, productScope);
         // These routes serve anonymous callers too, so a refusal degrades to
         // "not signed in" rather than a 403.
         if (denial) req.user = undefined;

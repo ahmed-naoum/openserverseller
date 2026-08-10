@@ -23,6 +23,12 @@
  *   /domain/connect|disconnect,
  *   /auth/save-subdomain, /auth/subdomain/*  - would move the storefront
  *   /upload/avatar, /upload/kyc          - would rewrite the vendor's identity
+ *
+ * This file answers "which screens?". A second, orthogonal limit answers "how
+ * much of the catalogue?" — see lib/subAccountProductScope.ts. The two compose:
+ * passing the matrix here gets a helper onto the inventory screen, and the scope
+ * decides which products that screen then holds. Granting a page here does NOT
+ * widen the product scope, and narrowing the scope does not grant a page.
  */
 
 /** Permission flags a vendor can grant to one of its sub-accounts. */

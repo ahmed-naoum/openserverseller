@@ -4,6 +4,12 @@ import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { isModeAllowedForSubAccount } from '../lib/vendorSubAccount.js';
 import { SAFE_USER_SELECT } from '../lib/safeUserSelect.js';
+import { parseDateRange } from '../lib/dateRange.js';
+import {
+  productScopeOf,
+  applyProductScope,
+  applyReferralLinkProductScope,
+} from '../lib/subAccountProductScope.js';
 
 const router = Router();
 
@@ -17,12 +23,18 @@ router.get(
     const mode = req.user!.mode || 'SELLER';
 
     let dateLimitStart: Date | undefined;
-    let dateLimitEnd = new Date();
+    let dateLimitEnd: Date | undefined = new Date();
 
-    if (start && end) {
-      dateLimitStart = new Date(start as string);
-      dateLimitEnd = new Date(end as string);
-      dateLimitEnd.setHours(23, 59, 59, 999);
+    // `start`/`end` are the period bar's bounds and take either a bare date or a
+    // `datetime-local` value — that is what lets the bar offer "Hier" (a window
+    // that closes before today) and an hour-precise custom range. Either bound
+    // alone is valid: "depuis lundi" has no end. The old branch here forced
+    // 23:59 on `end` and read a bare date as UTC midnight, so an hour never
+    // survived and a whole day could shift. `days` stays for older callers.
+    const parsed = parseDateRange(start, end);
+    if (parsed) {
+      dateLimitStart = parsed.gte;
+      dateLimitEnd = parsed.lte;
     } else if (days === 'all') {
       dateLimitStart = undefined; // No lower bound for all time
     } else {
@@ -32,7 +44,7 @@ router.get(
       dateLimitStart.setHours(0, 0, 0, 0);
     }
 
-    const whereBase: any = mode === 'SELLER' 
+    const whereBase: any = mode === 'SELLER'
       ? { referralLink: { product: { ownerId: userId } } }
       : { influencerId: userId };
 
@@ -41,6 +53,48 @@ router.get(
       if (dateLimitStart) whereBase.createdAt.gte = dateLimitStart;
       if (dateLimitEnd) whereBase.createdAt.lte = dateLimitEnd;
     }
+
+    /**
+     * Every figure on this screen narrows with the products a sub-account was
+     * given. A dashboard is a set of totals, so a half-scoped one is worse than
+     * none: the helper would read the vendor's whole revenue next to a product
+     * list holding two items and have no way to tell the two apart. The scope is
+     * therefore threaded through each query below rather than applied to the
+     * response.
+     */
+    const scope = productScopeOf(req);
+    const createdAtWindow =
+      dateLimitStart || dateLimitEnd
+        ? {
+            ...(dateLimitStart ? { gte: dateLimitStart } : {}),
+            ...(dateLimitEnd ? { lte: dateLimitEnd } : {}),
+          }
+        : undefined;
+
+    applyReferralLinkProductScope(whereBase, scope);
+
+    // Links are keyed by productId directly; leads and clicks reach it through
+    // their link, so they take the referral-link form of the same filter.
+    const linksWhere = applyProductScope(
+      mode === 'SELLER' ? { product: { ownerId: userId } } : { influencerId: userId },
+      scope,
+    );
+    const periodLeadsWhere = applyReferralLinkProductScope(
+      {
+        ...(mode === 'SELLER' ? { vendorId: userId } : { referralLink: { influencerId: userId } }),
+        createdAt: createdAtWindow,
+      },
+      scope,
+    );
+    const clicksWhere = applyReferralLinkProductScope(
+      {
+        ...(mode === 'SELLER'
+          ? { referralLink: { product: { ownerId: userId } } }
+          : { referralLink: { influencerId: userId } }),
+        createdAt: createdAtWindow,
+      },
+      scope,
+    );
 
     const [
       profile,
@@ -56,7 +110,7 @@ router.get(
     ] = await Promise.all([
       prisma.userProfile.findUnique({ where: { userId } }),
       prisma.referralLink.findMany({
-        where: mode === 'SELLER' ? { product: { ownerId: userId } } : { influencerId: userId },
+        where: linksWhere,
         include: { product: { include: { images: { where: { isPrimary: true }, take: 1 } } } },
         orderBy: { createdAt: 'desc' }
       }),
@@ -88,13 +142,7 @@ router.get(
         }
       }),
       prisma.lead.findMany({
-        where: {
-          ...(mode === 'SELLER' ? { vendorId: userId } : { referralLink: { influencerId: userId } }),
-          createdAt: dateLimitStart || dateLimitEnd ? {
-            ...(dateLimitStart ? { gte: dateLimitStart } : {}),
-            ...(dateLimitEnd ? { lte: dateLimitEnd } : {})
-          } : undefined
-        },
+        where: periodLeadsWhere,
         select: {
           status: true,
           order: {
@@ -106,20 +154,17 @@ router.get(
       }),
       prisma.lead.groupBy({
         by: ['referralLinkId'],
-        where: {
-          ...(mode === 'SELLER' ? { vendorId: userId } : { referralLink: { influencerId: userId } }),
-          createdAt: { gte: dateLimitStart, lte: dateLimitEnd }
-        },
+        where: applyReferralLinkProductScope(
+          {
+            ...(mode === 'SELLER' ? { vendorId: userId } : { referralLink: { influencerId: userId } }),
+            createdAt: { gte: dateLimitStart, lte: dateLimitEnd }
+          },
+          scope,
+        ),
         _count: true
       }),
       (prisma as any).referralLinkClick.findMany({
-        where: {
-          ...(mode === 'SELLER' ? { referralLink: { product: { ownerId: userId } } } : { referralLink: { influencerId: userId } }),
-          createdAt: dateLimitStart || dateLimitEnd ? {
-            ...(dateLimitStart ? { gte: dateLimitStart } : {}),
-            ...(dateLimitEnd ? { lte: dateLimitEnd } : {})
-          } : undefined
-        },
+        where: clicksWhere,
         select: {
           ipAddress: true,
           userAgent: true
@@ -192,7 +237,13 @@ router.get(
     };
 
     const totalEarnings = await prisma.influencerCommission.aggregate({
-      where: { ...(mode === 'SELLER' ? { referralLink: { product: { ownerId: userId } } } : { influencerId: userId }), status: 'APPROVED' },
+      where: applyReferralLinkProductScope(
+        {
+          ...(mode === 'SELLER' ? { referralLink: { product: { ownerId: userId } } } : { influencerId: userId }),
+          status: 'APPROVED',
+        },
+        scope,
+      ),
       _sum: { amount: true }
     });
 

@@ -7,6 +7,12 @@
  * backend/src/lib/vendorSubAccount.ts — that file is what actually enforces
  * them, this one only decides what to show. Adding a permission means touching
  * both, plus the Prisma schema.
+ *
+ * These are page and action grants. A vendor can ALSO pin a sub-account to part
+ * of its catalogue, which is a separate axis with no flag in this list: it lives
+ * in the `productIds` field on the sub-account and is enforced query-side by
+ * backend/src/lib/subAccountProductScope.ts. Granting a page here says nothing
+ * about how many products that page will show.
  */
 
 export type SubPermission =

@@ -11,7 +11,9 @@ const router = Router();
 router.get(
   '/',
   authenticate,
-  authorize('SELLER', 'GROSSELLER', 'INFLUENCER', 'VENDOR', 'SUPER_ADMIN', 'FINANCE_ADMIN'),
+  // CALL_CENTER_AGENT withdraws the facturation credited to its wallet through
+  // this same route, so an agent payout lands in the admin queue as any other.
+  authorize('SELLER', 'GROSSELLER', 'INFLUENCER', 'VENDOR', 'CALL_CENTER_AGENT', 'SUPER_ADMIN', 'FINANCE_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
     const { page = 1, limit = 20, status } = req.query;
 
@@ -60,7 +62,7 @@ router.get(
 router.post(
   '/',
   authenticate,
-  authorize('SELLER', 'GROSSELLER', 'INFLUENCER', 'VENDOR'),
+  authorize('SELLER', 'GROSSELLER', 'INFLUENCER', 'VENDOR', 'CALL_CENTER_AGENT'),
   payoutRateLimiter,
   [
     body('amountMad').isFloat({ min: 200 }),

@@ -6,10 +6,10 @@
  * Those are noise in a call queue, and separating them is the whole point of
  * this check.
  *
- * Not a full E.164 registry. Morocco's rule is applied strictly (the business is
- * Moroccan COD, and a wrong local number is a wasted call), while anything that
- * carries an explicit country code is judged against the ITU length envelope so
- * foreign customers are not thrown away.
+ * The rule is length only: ITU-T E.164 says a dialable number carries between 8
+ * and 15 digits, and anything inside that window is treated as callable. No
+ * country-specific prefix rule — a Moroccan-looking number and a foreign one are
+ * both real customers, and an agent judges the number better than a regex does.
  *
  * MUST stay in sync with backend/src/lib/phoneCompleteness.ts — the server does
  * the same split to build the tab counts and paginate.
@@ -25,13 +25,30 @@ export interface PhoneCompleteness {
   reason: string | null;
 }
 
+// ITU-T E.164: an international number never exceeds 15 digits including the
+// country code, and nothing under 8 is dialable.
+const MIN_DIGITS = 8;
+const MAX_DIGITS = 15;
+
 /** Moroccan subscriber numbers are 9 digits starting with 5 (fixed), 6 or 7 (mobile). */
 const MOROCCAN_SUBSCRIBER = /^[567]\d{8}$/;
 
-// ITU-T E.164: an international number never exceeds 15 digits including the
-// country code, and nothing under 8 is dialable across a border.
-const MIN_INTL_DIGITS = 8;
-const MAX_INTL_DIGITS = 15;
+/**
+ * Best-effort dial string. A number that names its country is canonicalised; a
+ * bare local one is only assumed Moroccan when it has the exact shape of a
+ * Moroccan subscriber number. Anything else is dialled exactly as it was typed,
+ * because guessing a country code would produce a number that rings nobody.
+ */
+function toE164(compact: string, digits: string): string {
+  if (compact.startsWith('+')) return `+${digits}`;
+  if (digits.startsWith('00')) return `+${digits.slice(2)}`;
+  if (digits.startsWith('212')) return `+${digits}`;
+
+  const subscriber = digits.replace(/^0+/, '');
+  if (MOROCCAN_SUBSCRIBER.test(subscriber)) return `+212${subscriber}`;
+
+  return digits;
+}
 
 export function checkPhoneCompleteness(raw?: string | null): PhoneCompleteness {
   const compact = (raw || '').trim().replace(/[\s.\-()/]/g, '');
@@ -40,44 +57,15 @@ export function checkPhoneCompleteness(raw?: string | null): PhoneCompleteness {
   const digits = compact.replace(/\D/g, '');
   if (!digits) return { quality: 'incomplete', e164: null, reason: 'Aucun chiffre saisi' };
 
-  const hasCountryCode = compact.startsWith('+') || compact.startsWith('00');
-  // Digits after the international access prefix: country code + subscriber.
-  const intlDigits = digits.startsWith('00') ? digits.slice(2) : digits;
-
-  // Moroccan either because it carries the 212 country code, or because it was
-  // typed bare — with no country code at all, a local number is what it is.
-  const carriesMoroccanCode = intlDigits.startsWith('212');
-  if (carriesMoroccanCode || !hasCountryCode) {
-    const subscriber = carriesMoroccanCode ? intlDigits.slice(3) : digits.replace(/^0+/, '');
-
-    if (MOROCCAN_SUBSCRIBER.test(subscriber)) {
-      return { quality: 'complete', e164: `+212${subscriber}`, reason: null };
-    }
-
-    const n = subscriber.length;
-    return {
-      quality: 'incomplete',
-      e164: null,
-      reason:
-        n === 0 ? 'Aucun chiffre saisi'
-        : n < 9 ? `Trop court — ${n}/9 chiffres`
-        : n > 9 ? `Trop long — ${n}/9 chiffres`
-        : 'Doit commencer par 05, 06 ou 07',
-    };
+  const n = digits.length;
+  if (n < MIN_DIGITS) {
+    return { quality: 'incomplete', e164: null, reason: `Trop court — ${n} chiffres, minimum ${MIN_DIGITS}` };
+  }
+  if (n > MAX_DIGITS) {
+    return { quality: 'incomplete', e164: null, reason: `Trop long — ${n} chiffres, maximum ${MAX_DIGITS}` };
   }
 
-  // Explicit country code, anywhere in the world.
-  if (intlDigits.length >= MIN_INTL_DIGITS && intlDigits.length <= MAX_INTL_DIGITS) {
-    return { quality: 'complete', e164: `+${intlDigits}`, reason: null };
-  }
-  return {
-    quality: 'incomplete',
-    e164: null,
-    reason:
-      intlDigits.length < MIN_INTL_DIGITS
-        ? `Trop court — ${intlDigits.length} chiffres`
-        : `Trop long — ${intlDigits.length} chiffres`,
-  };
+  return { quality: 'complete', e164: toE164(compact, digits), reason: null };
 }
 
 /**

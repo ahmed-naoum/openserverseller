@@ -253,6 +253,8 @@ export const leadsApi = {
   available: (params?: {
     influencerId?: number;
     limit?: number | string;
+    dateFrom?: string;
+    dateTo?: string;
     search?: string;
     city?: string;
     productId?: number | string;
@@ -266,8 +268,10 @@ export const leadsApi = {
     search?: string;
     city?: string;
     productId?: number | string;
+    dateFrom?: string;
+    dateTo?: string;
   }) => api.get('/leads/assigned-all', { params }),
-  forceClaim: (id: number, data: { phone: string; reason: string }) =>
+  forceClaim: (id: number, data: { phone: string; reason?: string }) =>
     api.post(`/leads/${id}/force-claim`, data),
   // Abandoned carts (call-center recovery)
   abandonedCarts: (params?: {
@@ -276,6 +280,8 @@ export const leadsApi = {
     search?: string;
     status?: 'all' | 'unsaved' | 'converted';
     phoneQuality?: 'all' | 'complete' | 'incomplete';
+    dateFrom?: string;
+    dateTo?: string;
   }) => api.get('/leads/abandoned-carts', { params }),
   convertCart: (id: string) => api.post(`/leads/abandoned-carts/${id}/convert`),
   detail: (id: number) => api.get(`/leads/${id}/detail`),
@@ -391,6 +397,20 @@ export const payoutsApi = {
     api.post('/payouts', data),
   getHistory: (id: number) => api.get(`/payouts/${id}/history`),
   updateStatus: (id: number, status: string) => api.patch(`/payouts/${id}/status`, { status }),
+};
+
+// Call-center facturation: colis livrés -> facture -> solde -> retrait.
+// The retrait itself goes through `payoutsApi` — an agent's withdrawal is an
+// ordinary payout request, and lands in the same admin queue.
+export const agentFacturationApi = {
+  summary: () => api.get('/agent-facturation/summary'),
+  billable: (params?: { page?: number; limit?: number; dateFrom?: string; dateTo?: string }) =>
+    api.get('/agent-facturation/billable', { params }),
+  generateInvoice: (data?: { leadIds?: number[]; dateFrom?: string; dateTo?: string }) =>
+    api.post('/agent-facturation/invoices', data || {}),
+  invoices: (params?: { page?: number; limit?: number }) =>
+    api.get('/agent-facturation/invoices', { params }),
+  invoice: (id: number) => api.get(`/agent-facturation/invoices/${id}`),
 };
 
 export const categoriesApi = {
@@ -645,6 +665,8 @@ export const fulfillmentApi = {
 /** Vendor sub-accounts. VENDOR-only: a sub-account cannot reach any of these. */
 export const vendorSubAccountsApi = {
   list: () => api.get('/vendor/sub-accounts'),
+  /** The vendor's own catalogue — what the product picker offers. */
+  assignableProducts: () => api.get('/vendor/sub-accounts/assignable-products'),
   create: (data: {
     fullName: string;
     email: string;
@@ -654,6 +676,8 @@ export const vendorSubAccountsApi = {
     subReadOnly?: boolean;
     subAccessExpiresAt?: string | null;
     permissions?: Record<string, boolean>;
+    /** Empty = the whole catalogue. See lib/subAccountPermissions.ts. */
+    productIds?: number[];
   }) => api.post('/vendor/sub-accounts', data),
   update: (uuid: string, data: {
     fullName?: string;
@@ -662,6 +686,7 @@ export const vendorSubAccountsApi = {
     subReadOnly?: boolean;
     subAccessExpiresAt?: string | null;
     permissions?: Record<string, boolean>;
+    productIds?: number[];
   }) => api.patch(`/vendor/sub-accounts/${uuid}`, data),
   setStatus: (uuid: string, isActive: boolean) =>
     api.patch(`/vendor/sub-accounts/${uuid}/status`, { isActive }),

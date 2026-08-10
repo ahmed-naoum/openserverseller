@@ -133,10 +133,10 @@ export default function AgentLeads() {
           </div>
           
           {assignedInfluencers.length > 0 && (
-            <div className="flex items-center gap-2 relative" ref={dropdownRef}>
+            <div className="flex flex-wrap items-center gap-2 relative w-full sm:w-auto" ref={dropdownRef}>
               <label className="text-sm text-gray-500 font-medium whitespace-nowrap">Vendeur/Influenceur:</label>
-              
-              <div className="relative min-w-[240px]">
+
+              <div className="relative w-full sm:w-auto sm:min-w-[240px]">
                 <button
                   type="button"
                   onClick={() => {
@@ -145,17 +145,17 @@ export default function AgentLeads() {
                   }}
                   className="w-full flex items-center justify-between py-2 px-3 border border-gray-200 bg-white rounded-xl text-sm font-semibold hover:border-gray-300 transition-colors shadow-sm text-left"
                 >
-                  <span className="truncate max-w-[200px]">
+                  <span className="truncate min-w-0">
                     {selectedInfluencerId
                       ? assignedInfluencers.find(inf => inf.id === selectedInfluencerId)?.fullName || 'Tous mes influenceurs/vendeurs'
                       : 'Tous mes influenceurs/vendeurs'
                     }
                   </span>
-                  <span className="text-gray-400">▼</span>
+                  <span className="text-gray-400 shrink-0 ml-2">▼</span>
                 </button>
 
                 {isDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl border border-gray-100 shadow-xl z-50 p-3 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="absolute right-0 mt-2 w-full sm:w-72 bg-white rounded-2xl border border-gray-100 shadow-xl z-50 p-3 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
                     <div className="relative">
                       <span className="absolute inset-y-0 left-3 flex items-center text-gray-400 pointer-events-none">🔍</span>
                       <input

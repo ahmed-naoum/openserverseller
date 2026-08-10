@@ -12,7 +12,7 @@ import {
   Users, MousePointerClick, UserCheck, ShoppingCart,
   Filter, Search, Calendar,
   MapPin, Phone, Package, Clock, Trash2, Headphones, RefreshCw,
-  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Truck, CheckCircle, CheckCircle2, XCircle, Box, AlertCircle, X, BarChart3, Activity, PieChart as PieIcon, Zap, TrendingUp, History, MessageSquare, Plus
+  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Truck, CheckCircle, CheckCircle2, XCircle, Box, AlertCircle, X, BarChart3, Activity, PieChart as PieIcon, Zap, TrendingUp, History, MessageSquare, Plus, Wallet
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { currentBasePath } from '../../lib/dashboardBase';
@@ -144,6 +144,19 @@ const PAYMENT_SITUATION_BADGES: Record<string, { label: string; color: string }>
   FACTURED: { label: 'Facturé', color: 'bg-blue-50 text-blue-600 border border-blue-100' },
 };
 
+const PAYMENT_SITUATIONS = ['NOT_PAID', 'PAID', 'FACTURED'] as const;
+
+// Situation reaches the UI in three shapes: the current codes, the older French
+// labels rows written before the codes still carry, and nothing at all (a lead
+// nobody has invoiced yet). Normalising here keeps the filter, the counts and
+// the badge in the table agreeing on what a row is.
+const getPaymentSituation = (c: InfluencerCommission): string => {
+  const sit = (c.order as any)?.lead?.paymentSituation;
+  if (sit === 'PAID' || sit === 'Payé') return 'PAID';
+  if (sit === 'FACTURED') return 'FACTURED';
+  return 'NOT_PAID';
+};
+
 export default function VendorLeads() {
   const { t } = useLanguage();
   const { user } = useAuth();
@@ -164,6 +177,7 @@ export default function VendorLeads() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [situationFilter, setSituationFilter] = useState<string>('ALL');
   const [showStats, setShowStats] = useState(true);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
@@ -218,7 +232,7 @@ export default function VendorLeads() {
     setCurrentPage(1);
     // tableDateRange/tableSelectedProductId shrink the result set too — without them
     // the table stays on a page that no longer exists and renders blank.
-  }, [statusFilter, searchTerm, startDate, endDate, itemsPerPage, tableDateRange, tableSelectedProductId]);
+  }, [statusFilter, situationFilter, searchTerm, startDate, endDate, itemsPerPage, tableDateRange, tableSelectedProductId]);
 
   const loadData = async () => {
     try {
@@ -297,21 +311,13 @@ export default function VendorLeads() {
   const confirmationRate = totalLeads > 0 ? (confirmedLeads / totalLeads) * 100 : 0;
   const deliveryRate = confirmedLeads > 0 ? (deliveredLeads / confirmedLeads) * 100 : 0;
 
-  // Payment situation totals
-  const paidLeads = dateFilteredCommissions.filter(c => {
-    const sit = (c.order as any)?.lead?.paymentSituation;
-    return sit === 'PAID' || sit === 'Payé';
-  }).length;
-  
-  const nonPaidLeads = dateFilteredCommissions.filter(c => {
-    const sit = (c.order as any)?.lead?.paymentSituation;
-    return sit === 'NOT_PAID' || sit === 'no Payé' || !sit;
-  }).length;
-  
-  const facturedLeads = dateFilteredCommissions.filter(c => {
-    const sit = (c.order as any)?.lead?.paymentSituation;
-    return sit === 'FACTURED';
-  }).length;
+  // Payment situation totals — counted before the status/search filters, like the
+  // status counts, so each option shows how many rows selecting it would give.
+  const situationCounts: Record<string, number> = {};
+  dateFilteredCommissions.forEach(c => {
+    const sit = getPaymentSituation(c);
+    situationCounts[sit] = (situationCounts[sit] || 0) + 1;
+  });
 
   // Build status counts for filter chips
   const statusCounts: Record<string, number> = {};
@@ -341,6 +347,10 @@ export default function VendorLeads() {
     // Status filter
     if (statusFilter !== 'ALL') {
       if (getDisplayStatus(c) !== statusFilter.toUpperCase()) return false;
+    }
+    // Situation filter (Non Payé / Payé / Facturé)
+    if (situationFilter !== 'ALL') {
+      if (getPaymentSituation(c) !== situationFilter) return false;
     }
     // Search filter
     if (!searchTerm) return true;
@@ -958,6 +968,28 @@ export default function VendorLeads() {
             </div>
           </div>
 
+          {/* Situation Filter */}
+          <div className="relative min-w-[200px]">
+            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+              <Wallet className="w-4 h-4 text-gray-400" />
+            </div>
+            <select
+              value={situationFilter}
+              onChange={(e) => setSituationFilter(e.target.value)}
+              className="w-full pl-10 pr-10 py-2.5 text-xs font-bold text-gray-700 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-influencer-500 transition-all appearance-none cursor-pointer hover:bg-gray-100/50"
+            >
+              <option value="ALL">{t('all_situations', 'leads', 'Toutes les situations ({count})').replace('{count}', String(dateFilteredCommissions.length))}</option>
+              {PAYMENT_SITUATIONS.map(sit => (
+                <option key={sit} value={sit}>
+                  {getPaymentLabel(sit)} ({situationCounts[sit] || 0})
+                </option>
+              ))}
+            </select>
+            <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+              <ChevronDown className="w-4 h-4 text-gray-400" />
+            </div>
+          </div>
+
           {/* Search Bar Only */}
           <div className="flex flex-col xl:flex-row items-start xl:items-center gap-4 w-full">
             <div className="relative flex-1 w-full">
@@ -1219,7 +1251,7 @@ export default function VendorLeads() {
                         {/* Situation */}
                         <td className="px-5 py-4">
                           {(() => {
-                            const sit = (commission.order as any)?.lead?.paymentSituation || 'NOT_PAID';
+                            const sit = getPaymentSituation(commission);
                             const badge = PAYMENT_SITUATION_BADGES[sit] || PAYMENT_SITUATION_BADGES.NOT_PAID;
                             return (
                               <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest ${badge.color}`}>
@@ -1440,6 +1472,8 @@ export default function VendorLeads() {
             <p className="text-gray-400 text-sm mt-1">
               {statusFilter !== 'ALL'
                 ? t('no_lead_status_desc', 'leads', 'Aucun lead avec le statut "{status}".').replace('{status}', getStatusLabel(statusFilter))
+                : situationFilter !== 'ALL'
+                ? t('no_lead_situation_desc', 'leads', 'Aucun lead avec la situation "{situation}".').replace('{situation}', getPaymentLabel(situationFilter))
                 : t('no_lead_desc', 'leads', 'Vos leads apparaîtront ici dès qu\'un client commande via vos liens.')}
             </p>
           </div>

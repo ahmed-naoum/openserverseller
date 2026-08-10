@@ -33,6 +33,13 @@ interface RequestUser {
   actorRoleName?: string;
   parentVendorId?: number;
   subPermissions?: import('../lib/vendorSubAccount.js').SubAccountFlags;
+  /**
+   * Product ids this sub-account was narrowed to, or null for the whole
+   * catalogue. Read it through `productScopeOf(req)` rather than directly — that
+   * helper also answers null for vendors and admins, so a call site can narrow
+   * its query without first checking who is asking.
+   */
+  subProductIds?: import('../lib/subAccountProductScope.js').ProductScope;
 }
 
 declare global {

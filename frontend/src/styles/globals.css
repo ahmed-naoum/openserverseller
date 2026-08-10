@@ -91,6 +91,18 @@
     @apply scroll-smooth;
     font-size: 14px;
   }
+
+  /* Date/time inputs ship with a wide intrinsic min-width (the widest the
+     "MM/DD/YYYY --:--" placeholder can get). As flex/grid children that
+     min-width wins over `w-full` and pushes the whole page sideways on a
+     narrow screen. Let them shrink; the layout decides their real width. */
+  input[type='date'],
+  input[type='datetime-local'],
+  input[type='time'],
+  input[type='month'],
+  input[type='week'] {
+    min-width: 0;
+  }
 }
 
 @layer components {

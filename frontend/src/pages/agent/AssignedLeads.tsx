@@ -3,9 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { leadsApi } from '../../lib/api';
 import { useSocket } from '../../contexts/SocketContext';
 import toast from 'react-hot-toast';
-import { format } from 'date-fns';
 import {
-  Sparkles, Zap, Package, Heart, Filter, X, Search, MapPin,
+  Sparkles, Zap, Package, Heart, Filter, X, Search,
   Users, ShieldAlert, Lock, Activity, PhoneOff,
 } from 'lucide-react';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
@@ -46,16 +45,16 @@ export default function AgentAssignedLeads() {
   const [leads, setLeads] = useState<any[]>([]);
   const [totalAssigned, setTotalAssigned] = useState(0);
   const [totalScope, setTotalScope] = useState(0);
-  // Show everything by default — a 20-row default reads as "there are only 20".
-  const [limit, setLimit] = useState<number | 'max'>('max');
+  // The count next to the heading reads "N / total" whenever the page is showing
+  // fewer than everything, so a 20-row default cannot be mistaken for "there are
+  // only 20" — the agent still sees how many are assigned in total.
+  const [limit, setLimit] = useState<number | 'max'>(20);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
-  const [city, setCity] = useState('');
   const [productId, setProductId] = useState<number | ''>('');
   const [filterOptions, setFilterOptions] = useState<{
-    cities: string[];
     products: { id: number; name: string }[];
-  }>({ cities: [], products: [] });
+  }>({ products: [] });
   const [assignedInfluencers, setAssignedInfluencers] = useState<any[]>([]);
   const [selectedInfluencerId, setSelectedInfluencerId] = useState<number | ''>('');
   const [hasActiveLead, setHasActiveLead] = useState(false);
@@ -69,7 +68,6 @@ export default function AgentAssignedLeads() {
   // Force-claim modal
   const [target, setTarget] = useState<any>(null);
   const [phoneInput, setPhoneInput] = useState('');
-  const [reasonInput, setReasonInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState('');
 
@@ -89,14 +87,13 @@ export default function AgentAssignedLeads() {
         influencerId: selectedInfluencerId ? Number(selectedInfluencerId) : undefined,
         limit,
         search: search.trim() || undefined,
-        city: city || undefined,
         productId: productId || undefined,
       });
       const data = res.data?.data || res.data;
       setLeads(data?.leads || []);
       setTotalAssigned(data?.totalAssigned ?? (data?.leads?.length || 0));
       setTotalScope(data?.totalScope ?? 0);
-      setFilterOptions(data?.filterOptions || { cities: [], products: [] });
+      setFilterOptions({ products: data?.filterOptions?.products || [] });
       setAssignedInfluencers(data?.assignedInfluencers || []);
       setHasActiveLead(data?.hasActiveLead || false);
       setActiveLeadId(data?.activeLeadId || null);
@@ -105,7 +102,7 @@ export default function AgentAssignedLeads() {
     } finally {
       setLoading(false);
     }
-  }, [selectedInfluencerId, limit, search, city, productId]);
+  }, [selectedInfluencerId, limit, search, productId]);
 
   useEffect(() => {
     loadData();
@@ -126,7 +123,7 @@ export default function AgentAssignedLeads() {
 
     const handleForceClaimed = ({ leadName, byAgent, reason }: any) => {
       toast.error(
-        `${byAgent} a réclamé votre lead${leadName ? ` « ${leadName} »` : ''}. Motif : ${reason}`,
+        `${byAgent} a réclamé votre lead${leadName ? ` « ${leadName} »` : ''}.${reason ? ` Motif : ${reason}` : ''}`,
         { icon: '⚠️', duration: 9000 }
       );
       loadData();
@@ -146,7 +143,6 @@ export default function AgentAssignedLeads() {
     }
     setTarget(lead);
     setPhoneInput('');
-    setReasonInput('');
     setModalError('');
   };
 
@@ -164,15 +160,11 @@ export default function AgentAssignedLeads() {
       setModalError('Saisissez le numéro complet du client.');
       return;
     }
-    if (reasonInput.trim().length < 10) {
-      setModalError('Le motif doit faire au moins 10 caractères.');
-      return;
-    }
 
     setSubmitting(true);
     setModalError('');
     try {
-      await leadsApi.forceClaim(target.id, { phone: phoneInput, reason: reasonInput.trim() });
+      await leadsApi.forceClaim(target.id, { phone: phoneInput });
       toast.success('Lead réclamé ! Redirection...');
       setTarget(null);
       navigate(`/agent/leads/${target.id}`);
@@ -185,8 +177,10 @@ export default function AgentAssignedLeads() {
     }
   };
 
-  const hasFilters = !!(search || city || productId);
-  const resetFilters = () => { setSearchInput(''); setCity(''); setProductId(''); };
+  const hasFilters = !!(search || productId);
+  const resetFilters = () => {
+    setSearchInput(''); setProductId('');
+  };
 
   const accentText = isPrincess ? 'text-amber-500' : isGirly ? 'text-pink-500' : 'text-indigo-500';
   const accentBorder = isPrincess ? 'border-amber-100' : isGirly ? 'border-pink-100' : 'border-indigo-100';
@@ -302,26 +296,26 @@ export default function AgentAssignedLeads() {
           </div>
 
           {assignedInfluencers.length > 0 && (
-            <div className="flex items-center gap-2 relative" ref={dropdownRef}>
-              <Filter className={`w-4 h-4 ${isPrincess ? 'text-amber-400' : isGirly ? 'text-pink-400' : 'text-indigo-400'}`} />
+            <div className="flex flex-wrap items-center gap-2 relative w-full sm:w-auto" ref={dropdownRef}>
+              <Filter className={`w-4 h-4 shrink-0 ${isPrincess ? 'text-amber-400' : isGirly ? 'text-pink-400' : 'text-indigo-400'}`} />
               <span className="text-xs font-black text-gray-500 uppercase">Vendeur/Influenceur:</span>
 
-              <div className="relative min-w-[240px]">
+              <div className="relative w-full sm:w-auto sm:min-w-[240px]">
                 <button
                   type="button"
                   onClick={() => { setIsDropdownOpen(!isDropdownOpen); setDropdownSearch(''); }}
                   className={`w-full flex items-center justify-between py-1.5 px-3 border rounded-xl bg-white text-xs font-bold text-gray-700 outline-none shadow-sm text-left hover:bg-gray-50 transition-all ${accentBorder}`}
                 >
-                  <span className="truncate max-w-[200px]">
+                  <span className="truncate min-w-0">
                     {selectedInfluencerId
                       ? assignedInfluencers.find(inf => inf.id === selectedInfluencerId)?.fullName || 'Tous mes influenceurs/vendeurs'
                       : 'Tous mes influenceurs/vendeurs'}
                   </span>
-                  <span className="text-gray-400">▼</span>
+                  <span className="text-gray-400 shrink-0 ml-2">▼</span>
                 </button>
 
                 {isDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl border border-gray-100 shadow-xl z-50 p-3 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="absolute right-0 mt-2 w-full sm:w-72 bg-white rounded-2xl border border-gray-100 shadow-xl z-50 p-3 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
                     <div className="relative">
                       <span className="absolute inset-y-0 left-3 flex items-center text-gray-400 pointer-events-none">🔍</span>
                       <input
@@ -403,21 +397,6 @@ export default function AgentAssignedLeads() {
                   <X className="w-4 h-4" />
                 </button>
               )}
-            </div>
-
-            <div className="w-full lg:w-[190px] flex-shrink-0">
-              <SearchableSelect
-                theme={theme}
-                value={city}
-                onChange={v => setCity(String(v))}
-                placeholder="Toutes les villes"
-                searchPlaceholder="Chercher une ville..."
-                icon={<MapPin className="w-4 h-4" />}
-                options={[
-                  { value: '', label: 'Toutes les villes' },
-                  ...filterOptions.cities.map(c => ({ value: c, label: c })),
-                ]}
-              />
             </div>
 
             <div className="w-full lg:w-[200px] flex-shrink-0">
@@ -542,10 +521,6 @@ export default function AgentAssignedLeads() {
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between text-[10px] text-gray-400 font-medium mb-4">
-                    <span>Assigné {format(new Date(lead.updatedAt || lead.createdAt), 'dd MMM à HH:mm')}</span>
-                  </div>
-
                   {isMine ? (
                     <button
                       onClick={() => navigate(`/agent/leads/${lead.id}`)}
@@ -640,8 +615,8 @@ export default function AgentAssignedLeads() {
               <div className="flex gap-2.5 p-3 bg-amber-50 border border-amber-100 rounded-2xl">
                 <span className="text-lg leading-none">⚠️</span>
                 <p className="text-[11px] font-semibold text-amber-800 leading-relaxed">
-                  {target.assignedAgent?.fullName || "L'agent"} sera notifié de la reprise et du motif que vous
-                  indiquez. La reprise est enregistrée dans l'historique du lead.
+                  {target.assignedAgent?.fullName || "L'agent"} sera notifié de la reprise. Celle-ci est
+                  enregistrée dans l'historique du lead.
                 </p>
               </div>
 
@@ -659,22 +634,6 @@ export default function AgentAssignedLeads() {
                 />
                 <p className="text-[10px] text-gray-400 font-medium mt-1.5">
                   Vous devez déjà connaître le numéro — il n'est affiché nulle part sur cette page.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1.5">
-                  Motif de la reprise <span className="text-rose-500">*</span>
-                </label>
-                <textarea
-                  value={reasonInput}
-                  onChange={(e) => setReasonInput(e.target.value)}
-                  rows={3}
-                  placeholder="Ex : le client m'a rappelé directement et souhaite finaliser avec moi."
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:bg-white focus:ring-2 focus:ring-rose-200 transition-all resize-none"
-                />
-                <p className={`text-[10px] font-bold mt-1 ${reasonInput.trim().length >= 10 ? 'text-emerald-600' : 'text-gray-400'}`}>
-                  {reasonInput.trim().length}/10 caractères minimum
                 </p>
               </div>
 

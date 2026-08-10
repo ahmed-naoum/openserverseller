@@ -85,8 +85,8 @@ export default function ColiatyDispatch() {
 
       {/* Main Content */}
       <div className="bg-white rounded-3xl border border-gray-100 shadow-xl overflow-hidden">
-        <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-2 flex-1 max-w-md w-full">
+        <div className="p-4 sm:p-6 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-2 flex-1 max-w-md w-full min-w-0">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
@@ -110,7 +110,7 @@ export default function ColiatyDispatch() {
             </button>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm font-bold text-gray-500">
               {selectedLeadIds.length} sélectionné(s)
             </span>

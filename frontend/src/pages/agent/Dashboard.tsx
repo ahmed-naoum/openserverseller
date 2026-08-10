@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { leadsApi } from '../../lib/api';
 import { Link } from 'react-router-dom';
 import {
   Headphones, Truck, CheckCircle2, Phone, PieChart as PieIcon,
   Activity, ArrowRight, RefreshCw, Sparkles, Zap, PackageCheck, Inbox, Send, ShoppingCart,
+  CalendarClock, X,
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip } from 'recharts';
 
@@ -20,6 +21,7 @@ const THEME: Record<ThemeKey, {
   chip: string; select: string; card: string; glow: string;
   icon: string; accentText: string; soft: string; softDot: string;
   cta: string; ctaGhost: string; link: string; spinner: string; track: string;
+  field: string;
 }> = {
   classic: {
     tag: 'Espace Confirmation Classique 🕶️',
@@ -40,6 +42,7 @@ const THEME: Record<ThemeKey, {
     link: 'text-indigo-600 hover:text-indigo-700',
     spinner: 'border-indigo-100 border-t-indigo-500',
     track: 'bg-indigo-50',
+    field: 'border-indigo-100 focus:ring-2 focus:ring-indigo-200',
   },
   girly: {
     tag: 'Espace Agent Féminin ✨',
@@ -60,6 +63,7 @@ const THEME: Record<ThemeKey, {
     link: 'text-pink-600 hover:text-pink-700',
     spinner: 'border-rose-100 border-t-pink-500',
     track: 'bg-pink-50',
+    field: 'border-pink-100 focus:ring-2 focus:ring-pink-200',
   },
   princess: {
     tag: 'Espace Princess Royal 👑✨',
@@ -80,6 +84,7 @@ const THEME: Record<ThemeKey, {
     link: 'text-amber-700 hover:text-amber-800',
     spinner: 'border-amber-100 border-t-amber-500',
     track: 'bg-amber-50',
+    field: 'border-amber-100 focus:ring-2 focus:ring-amber-200',
   },
 };
 
@@ -156,6 +161,63 @@ const DELIVERY_STATUSES: Record<string, { label: string; emoji: string; group: D
 const pct = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
 const fmtPct = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1));
 
+/**
+ * The period filter scopes every figure on this page by *arrival* time — when
+ * the lead came in, when the parcel was created, when the cart was abandoned.
+ * Not by when it was last touched: an agent asking "what did I do today" means
+ * today's leads, and a status that moved this morning on a lead from last week
+ * would otherwise pull the whole week into the count.
+ *
+ * An empty bound means unbounded on that side, so most presets are "since X"
+ * and stay correct as the day goes on. "Hier" is the exception: it needs a
+ * closing bound, otherwise it would mean yesterday *and* today.
+ */
+const PERIOD_PRESETS: { key: string; label: string; range: () => { from: string; to: string } }[] = [
+  { key: 'today', label: "Aujourd'hui", range: () => ({ from: startOfDaysAgo(0), to: '' }) },
+  { key: 'yesterday', label: 'Hier', range: () => ({ from: startOfDaysAgo(1), to: endOfDaysAgo(1) }) },
+  { key: '7d', label: '7 jours', range: () => ({ from: startOfDaysAgo(6), to: '' }) },
+  { key: '30d', label: '30 jours', range: () => ({ from: startOfDaysAgo(29), to: '' }) },
+  { key: 'all', label: 'Tout', range: () => ({ from: '', to: '' }) },
+];
+
+/** `datetime-local` speaks local wall-clock; `toISOString` would shift the hour. */
+const toDateTimeInput = (d: Date) => {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+/** Midnight, `days` days back — the start bound of a "derniers N jours" preset. */
+const startOfDaysAgo = (days: number) => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - days);
+  return toDateTimeInput(d);
+};
+
+/**
+ * 23:59 on the day `days` days back — the closing bound of a single-day preset.
+ * Deliberately not the next day's 00:00: the server treats a bound given to the
+ * minute as covering that whole minute, so midnight would leak the first sixty
+ * seconds of the following day into the count.
+ */
+const endOfDaysAgo = (days: number) => {
+  const d = new Date();
+  d.setHours(23, 59, 0, 0);
+  d.setDate(d.getDate() - days);
+  return toDateTimeInput(d);
+};
+
+/**
+ * `2026-08-09T14:30` → `09/08 à 14:30`. Read straight off the string: it is
+ * already the wall-clock the agent typed, and a round-trip through `Date` would
+ * only add a timezone to take back out.
+ */
+const fmtDateTimeInput = (value: string) => {
+  const [date, time] = value.split('T');
+  const [, month, day] = date.split('-');
+  return time ? `${day}/${month} à ${time}` : `${day}/${month}`;
+};
+
 export default function AgentDashboard() {
   const [theme, setTheme] = useState<ThemeKey>(
     () => (localStorage.getItem('agent-theme') as ThemeKey) || 'girly'
@@ -177,28 +239,74 @@ export default function AgentDashboard() {
   const t = THEME[theme];
   const isPlayful = theme !== 'classic';
 
+  // --- Period ---------------------------------------------------------------
+  // Empty on both sides = all time, which is what the page showed before the
+  // filter existed — so the default view is unchanged.
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
+  const hasRange = Boolean(dateFrom || dateTo);
+  const range = useMemo(
+    () => ({ dateFrom: dateFrom || undefined, dateTo: dateTo || undefined }),
+    [dateFrom, dateTo]
+  );
+
+  const applyPreset = (preset: (typeof PERIOD_PRESETS)[number]) => {
+    const { from, to } = preset.range();
+    setDateFrom(from);
+    setDateTo(to);
+  };
+
+  // Match on both bounds so a closed preset ("Hier") lights its chip. Anything
+  // that matches no preset is a custom range and lights none.
+  const activePreset = useMemo(() => {
+    if (!hasRange) return 'all';
+    return PERIOD_PRESETS.find(p => {
+      const { from, to } = p.range();
+      return from === dateFrom && to === dateTo;
+    })?.key ?? null;
+  }, [dateFrom, dateTo, hasRange]);
+
+  const rangeLabel = useMemo(() => {
+    if (!hasRange) return null;
+    if (dateFrom && dateTo) return `du ${fmtDateTimeInput(dateFrom)} au ${fmtDateTimeInput(dateTo)}`;
+    if (dateFrom) return `depuis le ${fmtDateTimeInput(dateFrom)}`;
+    return `jusqu'au ${fmtDateTimeInput(dateTo)}`;
+  }, [dateFrom, dateTo, hasRange]);
+
   // --- Data -----------------------------------------------------------------
   // Counts come from the server's group-by, never from a page of rows: a page
   // is capped (50 leads / 20 available) and silently under-reports the totals.
+  //
+  // The period is part of every key: two windows are two different answers, and
+  // sharing one cache entry would show the previous window's numbers until the
+  // refetch landed. `keepPreviousData` then holds the outgoing window on screen
+  // while the new one loads — without it every change of period drops the whole
+  // page back to the full-page spinner, which reads as a reload rather than a
+  // filter.
 
   const leadStatsQuery = useQuery({
-    queryKey: ['agent-lead-stats'],
-    queryFn: () => leadsApi.list({ withStats: 'true', limit: 1 }),
+    queryKey: ['agent-lead-stats', dateFrom, dateTo],
+    queryFn: () => leadsApi.list({ withStats: 'true', limit: 1, ...range }),
+    placeholderData: keepPreviousData,
   });
 
   const todoQuery = useQuery({
-    queryKey: ['agent-todo-leads'],
-    queryFn: () => leadsApi.list({ status: 'ASSIGNED,NEW', limit: 6 }),
+    queryKey: ['agent-todo-leads', dateFrom, dateTo],
+    queryFn: () => leadsApi.list({ status: 'ASSIGNED,NEW', limit: 6, ...range }),
+    placeholderData: keepPreviousData,
   });
 
   const deliveryQuery = useQuery({
-    queryKey: ['agent-delivery-stats'],
-    queryFn: () => leadsApi.livraison({ limit: 1 }),
+    queryKey: ['agent-delivery-stats', dateFrom, dateTo],
+    queryFn: () => leadsApi.livraison({ limit: 1, ...range }),
+    placeholderData: keepPreviousData,
   });
 
   const availableQuery = useQuery({
-    queryKey: ['agent-available-count'],
-    queryFn: () => leadsApi.available({ limit: 1 }),
+    queryKey: ['agent-available-count', dateFrom, dateTo],
+    queryFn: () => leadsApi.available({ limit: 1, ...range }),
+    placeholderData: keepPreviousData,
   });
 
   // The "Déjà converti" figure comes from the carts endpoint itself rather than
@@ -207,18 +315,23 @@ export default function AgentDashboard() {
   // agent sees when they click through. `counts` covers the whole visible set
   // regardless of paging, so limit: 1 is enough.
   const cartsQuery = useQuery({
-    queryKey: ['agent-cart-counts'],
-    queryFn: () => leadsApi.abandonedCarts({ limit: 1 }),
+    queryKey: ['agent-cart-counts', dateFrom, dateTo],
+    queryFn: () => leadsApi.abandonedCarts({ limit: 1, ...range }),
+    placeholderData: keepPreviousData,
   });
 
   const isLoading =
     leadStatsQuery.isLoading || deliveryQuery.isLoading || todoQuery.isLoading;
+  // `isFetching`, not `isRefetching`: a change of period is a fresh key, so it
+  // never counts as a refetch — and the numbers on screen would go stale with
+  // nothing spinning to say so.
   const isRefreshing =
-    leadStatsQuery.isRefetching ||
-    deliveryQuery.isRefetching ||
-    availableQuery.isRefetching ||
-    todoQuery.isRefetching ||
-    cartsQuery.isRefetching;
+    !isLoading &&
+    (leadStatsQuery.isFetching ||
+      deliveryQuery.isFetching ||
+      availableQuery.isFetching ||
+      todoQuery.isFetching ||
+      cartsQuery.isFetching);
 
   const refreshAll = () => {
     leadStatsQuery.refetch();
@@ -370,7 +483,15 @@ export default function AgentDashboard() {
                   : 'Tableau de Bord Agent 📊'}
             </h1>
             <p className="text-gray-500 text-xs sm:text-sm font-medium max-w-xl">
-              Résultats de confirmation et suivi de livraison — comptés sur la totalité de vos leads, pas sur une page.
+              Résultats de confirmation et suivi de livraison —{' '}
+              {rangeLabel ? (
+                <>
+                  comptés sur ce qui est arrivé{' '}
+                  <span className={`font-black ${t.accentText}`}>{rangeLabel}</span>.
+                </>
+              ) : (
+                'comptés sur la totalité de vos leads, pas sur une page.'
+              )}
             </p>
           </div>
 
@@ -402,8 +523,71 @@ export default function AgentDashboard() {
           </div>
         </div>
 
+        {/* Période — scopes every figure on this page, both phases included.
+            Presets cover the three windows an agent actually asks for; the two
+            fields underneath are there for anything else, to the minute. */}
+        <div className={`relative z-10 mt-5 rounded-2xl border bg-white/70 backdrop-blur-sm shadow-sm p-3 sm:p-3.5 ${t.card}`}>
+          <div className="flex flex-col xl:flex-row xl:items-center gap-3">
+            <div className="flex items-center gap-2 shrink-0">
+              <CalendarClock className={`w-4 h-4 ${t.icon}`} />
+              <span className="text-[10px] font-black uppercase tracking-wider text-gray-600">Période</span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              {PERIOD_PRESETS.map(preset => (
+                <button
+                  key={preset.key}
+                  type="button"
+                  onClick={() => applyPreset(preset)}
+                  aria-pressed={activePreset === preset.key}
+                  className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all ${
+                    activePreset === preset.key
+                      ? t.select
+                      : 'bg-white text-gray-500 border-gray-200 hover:text-gray-900 hover:border-gray-300'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 xl:ml-auto">
+              <input
+                type="datetime-local"
+                value={dateFrom}
+                max={dateTo || undefined}
+                onChange={e => setDateFrom(e.target.value)}
+                aria-label="Statistiques à partir de"
+                title="Statistiques à partir de"
+                className={`w-full sm:w-[180px] py-2 px-2.5 border rounded-xl bg-white text-xs font-bold text-gray-700 outline-none shadow-sm transition-all ${t.field}`}
+              />
+              <span className="text-[10px] font-black text-gray-300 uppercase">à</span>
+              <input
+                type="datetime-local"
+                value={dateTo}
+                min={dateFrom || undefined}
+                onChange={e => setDateTo(e.target.value)}
+                aria-label="Statistiques jusqu'à"
+                title="Statistiques jusqu'à"
+                className={`w-full sm:w-[180px] py-2 px-2.5 border rounded-xl bg-white text-xs font-bold text-gray-700 outline-none shadow-sm transition-all ${t.field}`}
+              />
+              {hasRange && (
+                <button
+                  type="button"
+                  onClick={() => { setDateFrom(''); setDateTo(''); }}
+                  title="Effacer la période"
+                  className="flex items-center gap-1 px-2.5 py-2 text-[10px] font-black uppercase tracking-wider text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Effacer
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Live counters — real totals, straight from the server aggregates */}
-        <div className="relative z-10 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 mt-6">
+        <div className="relative z-10 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 mt-3">
           <PulseStat
             to="/agent/leads"
             icon={<Inbox className="w-4 h-4" />}

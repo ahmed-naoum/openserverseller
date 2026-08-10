@@ -3,6 +3,12 @@ import { Router, Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import { authenticate, authorize, optionalAuth } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
+import {
+  productScopeOf,
+  applyProductScope,
+  isProductInScope,
+  OUT_OF_SCOPE,
+} from '../lib/subAccountProductScope.js';
 
 const router = Router();
 
@@ -242,6 +248,11 @@ router.get(
       ];
     }
 
+    // A sub-account narrowed to some of its vendor's products sees only those,
+    // whichever way it arrives here. Applied to the query rather than the
+    // response so `total` and the page count describe what it can actually open.
+    applyProductScope(where, productScopeOf(req), 'id');
+
     const [products, total] = await Promise.all([
       prisma.product.findMany({
         where,
@@ -307,6 +318,13 @@ router.get(
 
     if (isNaN(Number(id))) {
       throw new AppException(400, 'Invalid product ID');
+    }
+
+    // Guarding the detail page as well as the list: hiding a card is not the
+    // same as blocking the URL, and a helper who edits the id in the address bar
+    // must not land on a product its vendor kept back.
+    if (!isProductInScope(productScopeOf(req), Number(id))) {
+      throw new AppException(403, OUT_OF_SCOPE);
     }
 
     const [product, inventory, claim, pendingPurchase, pendingClaim] = await Promise.all([
@@ -641,6 +659,12 @@ router.patch(
   asyncHandler(async (req: any, res: Response) => {
     const { id } = req.params;
     const { brandingLabelMockupUrl, brandingLabelPrintUrl } = req.body;
+
+    // The one product write a vendor makes directly, so it is also the one place
+    // a scoped helper could rebrand a product it was not handed.
+    if (!isProductInScope(productScopeOf(req), Number(id))) {
+      throw new AppException(403, OUT_OF_SCOPE);
+    }
 
     const [inventory, claim] = await Promise.all([
       prisma.productInventory.findFirst({

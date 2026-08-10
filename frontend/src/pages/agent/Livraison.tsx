@@ -24,11 +24,12 @@ import {
   SlidersHorizontal,
   Printer,
   AlertTriangle,
-  Navigation,
   User,
   Banknote,
   Layers,
   Zap,
+  TrendingUp,
+  CalendarClock,
 } from 'lucide-react';
 
 interface Parcel {
@@ -95,6 +96,14 @@ interface Stats {
   revenueDelivered: number;
   revenueInTransit: number;
   revenueReturned: number;
+  /** Delivered revenue minus delivery fees, the platform's cut and the call
+   *  center's saisie fee — the same net the invoice pays out, so the two can be
+   *  reconciled line by line. */
+  profitDelivered: number;
+  shippingCostDelivered: number;
+  platformFeeDelivered: number;
+  /** Saisie fee of the assigned agent × delivered parcels. */
+  agentCommissionDelivered: number;
 }
 
 const EMPTY_STATS: Stats = {
@@ -109,6 +118,10 @@ const EMPTY_STATS: Stats = {
   revenueDelivered: 0,
   revenueInTransit: 0,
   revenueReturned: 0,
+  profitDelivered: 0,
+  shippingCostDelivered: 0,
+  platformFeeDelivered: 0,
+  agentCommissionDelivered: 0,
 };
 
 interface Filters {
@@ -273,6 +286,36 @@ const daysSince = (value: unknown): number | null => {
 const fmtAge = (days: number) => (days <= 0 ? "aujourd'hui" : days === 1 ? 'hier' : `il y a ${days} j`);
 
 const fmtMad = (n: number) => `${Math.round(Number(n) || 0).toLocaleString('fr-FR')} MAD`;
+
+/** Local `YYYY-MM-DD` — what a `date` input reads and writes. `toISOString`
+ *  would shift the day for anyone east of UTC late in the evening. */
+const toDateInput = (d: Date) => {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+const daysAgo = (days: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return toDateInput(d);
+};
+
+/**
+ * The same windows the agent dashboard offers, so the two pages answer "hier"
+ * with the same range. Both bounds are inclusive whole days server-side, which
+ * is why "Hier" closes on yesterday rather than opening onto today, and the
+ * multi-day presets leave `to` empty instead of pinning it to this morning.
+ */
+const DATE_PRESETS: { key: string; label: string; range: () => { from: string; to: string } }[] = [
+  { key: 'today', label: "Aujourd'hui", range: () => ({ from: daysAgo(0), to: '' }) },
+  { key: 'yesterday', label: 'Hier', range: () => ({ from: daysAgo(1), to: daysAgo(1) }) },
+  { key: '7d', label: '7 jours', range: () => ({ from: daysAgo(6), to: '' }) },
+  { key: '30d', label: '30 jours', range: () => ({ from: daysAgo(29), to: '' }) },
+  { key: 'all', label: 'Tout', range: () => ({ from: '', to: '' }) },
+];
+
+/** One decimal, only when it carries information — 2/16 has to read 12.5%, not 13%. */
+const fmtPct = (n: number) => `${String(Math.round(n * 10) / 10)}%`;
 
 /** Moroccan numbers reach WhatsApp as 212XXXXXXXXX, whatever shape they're stored in. */
 const waNumber = (phone: string) => {
@@ -623,10 +666,31 @@ export default function AgentLivraison() {
     [stats.byStatus]
   );
 
-  const deliveryRate = useMemo(() => {
+  // Share of everything in scope that actually landed. Parcels still moving count
+  // against it on purpose: the card sits next to "Total colis", so any narrower
+  // denominator gets read as a share of that total.
+  const deliveryRate = useMemo(
+    () => (stats.total > 0 ? (stats.delivered / stats.total) * 100 : null),
+    [stats.delivered, stats.total]
+  );
+
+  // The red warning still keys off closed parcels — a low rate above only means
+  // parcels are in transit, while losing most of the finished ones to returns is
+  // the thing actually worth flagging.
+  const closedDeliveryRate = useMemo(() => {
     const closed = stats.delivered + stats.returned;
     return closed > 0 ? Math.round((stats.delivered / closed) * 100) : null;
   }, [stats.delivered, stats.returned]);
+
+  // Match on both bounds so a closed preset ("Hier") lights its chip. A range
+  // typed by hand matches none, which is what tells the two apart.
+  const activeDatePreset = useMemo(() => {
+    if (!filters.dateFrom && !filters.dateTo) return 'all';
+    return DATE_PRESETS.find(p => {
+      const { from, to } = p.range();
+      return from === filters.dateFrom && to === filters.dateTo;
+    })?.key ?? null;
+  }, [filters.dateFrom, filters.dateTo]);
 
   const activeFilterChips = useMemo(() => {
     const chips: { key: string; label: string; clear: () => void }[] = [];
@@ -678,6 +742,11 @@ export default function AgentLivraison() {
       ...f,
       statuses: f.statuses.includes(status) ? f.statuses.filter(s => s !== status) : [...f.statuses, status],
     }));
+
+  const applyDatePreset = (preset: (typeof DATE_PRESETS)[number]) => {
+    const { from, to } = preset.range();
+    setFilters(f => ({ ...f, dateFrom: from, dateTo: to }));
+  };
 
   const applyGroup = (key: string) => {
     const group = STATUS_GROUPS.find(g => g.key === key);
@@ -846,12 +915,23 @@ export default function AgentLivraison() {
       shadow: 'shadow-emerald-200',
     },
     {
+      // What's actually left of the delivered parcels once the courier, the
+      // platform and the call center are paid — the card above is what was
+      // collected, not earned.
+      label: 'Bénéfice net (livré)',
+      value: fmtMad(stats.profitDelivered),
+      sub: `${fmtMad(stats.revenueDelivered)} encaissé · -${fmtMad(stats.shippingCostDelivered)} livraison · -${fmtMad(stats.platformFeeDelivered)} commission · -${fmtMad(stats.agentCommissionDelivered)} saisie agent`,
+      icon: TrendingUp,
+      color: stats.profitDelivered < 0 ? 'from-rose-400 to-red-500' : 'from-lime-400 to-green-500',
+      shadow: stats.profitDelivered < 0 ? 'shadow-rose-200' : 'shadow-lime-200',
+    },
+    {
       label: 'Taux de livraison',
-      value: deliveryRate === null ? '—' : `${deliveryRate}%`,
-      sub: `${stats.returned} retour${stats.returned > 1 ? 's' : ''} · ${fmtMad(stats.revenueReturned)}`,
+      value: deliveryRate === null ? '—' : fmtPct(deliveryRate),
+      sub: `${stats.delivered}/${stats.total} livrés · ${stats.returned} retour${stats.returned > 1 ? 's' : ''} · ${fmtMad(stats.revenueReturned)}`,
       icon: CheckCircle2,
-      color: deliveryRate !== null && deliveryRate < 60 ? 'from-rose-400 to-red-500' : 'from-violet-400 to-purple-500',
-      shadow: deliveryRate !== null && deliveryRate < 60 ? 'shadow-rose-200' : 'shadow-violet-200',
+      color: closedDeliveryRate !== null && closedDeliveryRate < 60 ? 'from-rose-400 to-red-500' : 'from-violet-400 to-purple-500',
+      shadow: closedDeliveryRate !== null && closedDeliveryRate < 60 ? 'shadow-rose-200' : 'shadow-violet-200',
     },
   ];
 
@@ -937,7 +1017,7 @@ export default function AgentLivraison() {
       </div>
 
       {/* KPIs — computed server-side over the agent's whole scope, not this page */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {kpis.map(kpi => (
           <div
             key={kpi.label}
@@ -1158,6 +1238,33 @@ export default function AgentLivraison() {
                   <option value="yes">Synchronisés</option>
                   <option value="no">Non synchronisés</option>
                 </select>
+              </div>
+
+              {/* Raccourcis de période — la fenêtre s'applique aussi aux KPIs
+                  en haut de page, qui sont calculés côté serveur sur la même
+                  plage que la liste. */}
+              <div className="sm:col-span-2 xl:col-span-4">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <CalendarClock className="w-3 h-3" />
+                  Période
+                </label>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  {DATE_PRESETS.map(preset => (
+                    <button
+                      key={preset.key}
+                      type="button"
+                      onClick={() => applyDatePreset(preset)}
+                      aria-pressed={activeDatePreset === preset.key}
+                      className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all ${
+                        activeDatePreset === preset.key
+                          ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                          : 'bg-white text-gray-500 border-gray-200 hover:text-gray-900 hover:border-gray-300'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div>
@@ -1550,15 +1657,6 @@ export default function AgentLivraison() {
                             <Copy className="w-3 h-3" />
                             Copier
                           </button>
-                          <a
-                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${parcel.customerAddress}, ${parcel.customerCity}, Maroc`)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[11px] font-bold hover:bg-blue-100 transition-colors"
-                          >
-                            <Navigation className="w-3 h-3" />
-                            Google Maps
-                          </a>
                         </div>
                       </div>
 

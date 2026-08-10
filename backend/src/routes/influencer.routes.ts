@@ -8,10 +8,40 @@ import { io } from '../index.js';
 import { containsBlockedWord } from '../utils/blockedWords.js';
 import { validateInfluencerSubdomain } from '../utils/subdomain.js';
 import { getNotifiableAgentIds } from '../utils/agentScope.js';
+import { parseDateRange } from '../lib/dateRange.js';
+import {
+  productScopeOf,
+  applyProductScope,
+  applyReferralLinkProductScope,
+  isProductInScope,
+  OUT_OF_SCOPE,
+} from '../lib/subAccountProductScope.js';
 
 const router = Router();
 const prisma = new PrismaClient();
 const recentClicks = new Map<string, number>();
+
+/**
+ * Refuse a per-link action when a scoped sub-account was not handed the link's
+ * product.
+ *
+ * A referral link IS a product's control surface — renaming its code, editing
+ * its landing page or switching it off all change what the customer sees for
+ * that product. So the link inherits the product's scope, and the id in the URL
+ * is checked rather than trusted, exactly as the product detail route does.
+ * Everyone else (vendors, influencers, admins) short-circuits on the first line.
+ */
+const assertLinkInScope = async (req: Request, linkId: number) => {
+  const scope = productScopeOf(req);
+  if (!scope) return;
+  const link = await prisma.referralLink.findUnique({
+    where: { id: linkId },
+    select: { productId: true },
+  });
+  if (!link || !isProductInScope(scope, link.productId)) {
+    throw new AppException(403, OUT_OF_SCOPE);
+  }
+};
 
 
 router.post(
@@ -65,6 +95,12 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { productId, customName } = req.body;
+
+    // A new link is a new selling surface for this product, so it needs the same
+    // grant as opening the product does.
+    if (!isProductInScope(productScopeOf(req), Number(productId))) {
+      throw new AppException(403, OUT_OF_SCOPE);
+    }
 
     const product = await prisma.product.findUnique({
       where: { id: Number(productId) },
@@ -155,6 +191,17 @@ router.post(
     const userId = req.user!.id;
     const { productId, brandingLabelPrintUrl, brandName, requestedQty, requestedLandingPageUrl, userMode } = req.body;
 
+    // Claiming widens the vendor's catalogue, which is the one thing a helper
+    // pinned to part of that catalogue should not be doing: the product it adds
+    // lands outside its own scope, so it could neither see nor sell what it just
+    // asked for. The vendor grants the product first, then the helper works it.
+    if (productScopeOf(req)) {
+      throw new AppException(
+        403,
+        "Votre accès est limité à certains produits : seul le vendeur peut en ajouter de nouveaux.",
+      );
+    }
+
     const product = await prisma.product.findUnique({
       where: { id: productId }
     });
@@ -209,18 +256,24 @@ router.get(
   authorize('VENDOR', 'INFLUENCER'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
+    // This endpoint is what the inventory, links and marketplace screens read to
+    // learn what this account may sell, so it is the single place that decides
+    // how much of the catalogue a scoped helper appears to hold. All three
+    // sources narrow together — leaving the links unfiltered would show a link
+    // hanging off a product that is no longer in the list.
+    const scope = productScopeOf(req);
     const [claims, links, ownedProducts] = await Promise.all([
       prisma.affiliateClaim.findMany({
-        where: { userId },
+        where: applyProductScope({ userId }, scope),
         include: {
           product: { include: { images: { where: { isPrimary: true }, take: 1 } } }
         }
       }),
       prisma.referralLink.findMany({
-        where: { influencerId: userId }
+        where: applyProductScope({ influencerId: userId }, scope)
       }),
       prisma.product.findMany({
-        where: { ownerId: userId },
+        where: applyProductScope({ ownerId: userId }, scope, 'id'),
         include: { images: { where: { isPrimary: true }, take: 1 } }
       })
     ]);
@@ -269,6 +322,9 @@ router.get(
         ]
       };
     }
+    // AND rather than an assignment: the mode filter above already writes to
+    // `product`, and overwriting it would widen this list instead of narrowing it.
+    applyProductScope(whereClause, productScopeOf(req));
 
     const links = await prisma.referralLink.findMany({
       where: whereClause,
@@ -278,14 +334,14 @@ router.get(
       orderBy: { createdAt: 'desc' }
     });
 
-    const startDate = start ? new Date(start as string) : undefined;
-    const endDate = end ? new Date(end as string) : undefined;
-    if (endDate) {
-      endDate.setHours(23, 59, 59, 999);
-    }
+    // Same parser as the dashboard's period bar, so a link's clicks and the
+    // totals above them describe one window. A single bound is enough now:
+    // "Aujourd'hui" sends no end, and requiring both used to leave every link
+    // counting all-time while the cards next to them showed the day.
+    const linkRange = parseDateRange(start, end);
 
     const formattedLinks = await Promise.all(links.map(async (link) => {
-      const dateFilter = startDate && endDate ? { createdAt: { gte: startDate, lte: endDate } } : {};
+      const dateFilter = linkRange ? { createdAt: linkRange } : {};
       
       const [clicksData, leadsCount, earningsSum] = await Promise.all([
         (prisma as any).referralLinkClick.findMany({
@@ -586,8 +642,15 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
 
+    // Earnings are per link, so they narrow with the products a sub-account was
+    // given. The totals take the same filter as the rows — a total that counted
+    // products the helper cannot open would be reporting the vendor's revenue,
+    // not the helper's scope.
+    const scope = productScopeOf(req);
+    const commissionWhere = applyReferralLinkProductScope({ influencerId: userId }, scope);
+
     const commissions = await prisma.influencerCommission.findMany({
-      where: { influencerId: userId },
+      where: commissionWhere,
       include: {
         referralLink: { include: { product: true } }
       },
@@ -596,7 +659,7 @@ router.get(
 
     const totals = await prisma.influencerCommission.groupBy({
       by: ['status'],
-      where: { influencerId: userId },
+      where: commissionWhere,
       _sum: { amount: true },
       _count: true
     });
@@ -632,6 +695,7 @@ router.get(
       } else if (mode === 'AFFILIATE') {
         whereOldest.product = { ownerId: { not: userId } };
       }
+      applyProductScope(whereOldest, productScopeOf(req));
       const oldestLink = await prisma.referralLink.findFirst({
         where: whereOldest,
         orderBy: { createdAt: 'asc' }
@@ -659,6 +723,11 @@ router.get(
     } else if (mode === 'AFFILIATE') {
       whereBase.product = { ownerId: { not: userId } };
     }
+    // One filter for the whole endpoint: clicks, leads and commissions below all
+    // reach their rows through `referralLink: whereBase`. It also settles the
+    // `?referralLinkId=` case above — asking for a link outside the scope now
+    // matches nothing instead of charting it.
+    applyProductScope(whereBase, productScopeOf(req));
 
     const [clicks, leads, commissions] = await Promise.all([
       (prisma as any).referralLinkClick.findMany({
@@ -759,7 +828,7 @@ router.delete(
     const userId = req.user!.id;
 
     const influencerLinks = await prisma.referralLink.findMany({
-      where: { influencerId: userId },
+      where: applyProductScope({ influencerId: userId }, productScopeOf(req)),
       select: { id: true }
     });
     const linkIds = influencerLinks.map(l => l.id);
@@ -810,7 +879,7 @@ router.post(
     }
 
     const influencerLinks = await prisma.referralLink.findMany({
-      where: { influencerId: userId },
+      where: applyProductScope({ influencerId: userId }, productScopeOf(req)),
       select: { id: true }
     });
     const linkIds = influencerLinks.map(l => l.id);
@@ -886,7 +955,7 @@ router.post(
     const userId = req.user!.id;
 
     const influencerLinks = await prisma.referralLink.findMany({
-      where: { influencerId: userId },
+      where: applyProductScope({ influencerId: userId }, productScopeOf(req)),
       select: { id: true }
     });
     const linkIds = influencerLinks.map(l => l.id);
@@ -984,7 +1053,7 @@ router.post(
     }
 
     const influencerLinks = await prisma.referralLink.findMany({
-      where: { influencerId: userId },
+      where: applyProductScope({ influencerId: userId }, productScopeOf(req)),
       select: { id: true }
     });
     const linkIds = influencerLinks.map(l => l.id);
@@ -1252,7 +1321,7 @@ router.get(
       ];
     } else {
       const influencerLinks = await prisma.referralLink.findMany({
-        where: { influencerId: userId },
+        where: applyProductScope({ influencerId: userId }, productScopeOf(req)),
         select: { id: true }
       });
       const linkIds = influencerLinks.map(l => l.id);
@@ -1261,6 +1330,12 @@ router.get(
         { referralLinkId: { in: linkIds } }
       ];
     }
+
+    // Applied after the branches, not inside one: every branch above ORs in
+    // `vendorId: userId`, which matches each lead the account owns whatever link
+    // it came from. Narrowing only the link half would still hand a scoped
+    // sub-account the vendor's whole customer book.
+    applyReferralLinkProductScope(leadWhereClause, productScopeOf(req));
 
     const leads = await prisma.lead.findMany({
       where: leadWhereClause,
@@ -1368,6 +1443,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const linkId = parseInt(String(req.params.id));
+    await assertLinkInScope(req, linkId);
 
     const link = await (prisma as any).referralLink.findUnique({
       where: { id: linkId }
@@ -1456,6 +1532,7 @@ router.put(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const linkId = parseInt(String(req.params.id));
+    await assertLinkInScope(req, linkId);
     const { themeColor, title, description, buttonText, customStructure } = req.body;
 
     const link = await (prisma as any).referralLink.findUnique({
@@ -1502,6 +1579,7 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const linkId = parseInt(String(req.params.id));
+    await assertLinkInScope(req, linkId);
 
     const link = await (prisma as any).referralLink.findUnique({
       where: { id: linkId },
@@ -1591,6 +1669,7 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const linkId = parseInt(String(req.params.id));
+    await assertLinkInScope(req, linkId);
     const { otp } = req.body;
 
     if (!otp) {
@@ -1660,6 +1739,7 @@ router.patch(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const linkId = parseInt(String(req.params.id));
+    await assertLinkInScope(req, linkId);
     const { isActive, status } = req.body;
 
     // Initial check: if Link exists

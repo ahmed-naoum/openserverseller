@@ -246,6 +246,7 @@ const navigation = {
     { name: 'WhatsApp Leads', href: '/agent/insert-lead', icon: Plus },
     { name: 'Paniers Abandonnés', href: '/agent/live-stream-paniers', icon: ShoppingCart },
     { name: 'Livraison', href: '/agent/livraison', icon: Truck },
+    { name: 'Facturation', href: '/agent/facturation', icon: FileText },
     { name: 'Paramètres', href: '/agent/settings', icon: Settings },
   ],
   admin: [
@@ -1835,7 +1836,13 @@ export default function DashboardLayout() {
             </div>
           </div>
 
-          <div className="relative max-w-[1600px] mx-auto">
+          {/* `overflow-x-clip` (not `hidden`) is deliberate: it contains a
+              stray wide child without turning this into a scroll container,
+              so sticky headers and dropdowns inside pages still escape
+              vertically. Without it one over-wide element scrolls the whole
+              document sideways on mobile, which drags the sticky header off
+              screen and strands `position: fixed` modals out of view. */}
+          <div className="relative max-w-[1600px] mx-auto min-w-0 overflow-x-clip">
             <AnnouncementBanner position="TOP" />
             <ProfileProgressBanner />
             <Outlet />
