@@ -1187,10 +1187,17 @@ router.get(
         vendor: {
           select: { email: true, platformFeeRate: true, profile: { select: { fullName: true } } },
         },
-        // `saisieFeeMad` is what this agent bills per lead they enter — a real
-        // cost on a delivered parcel, so the profit counters below have to see it.
+        // Two different rates, both needed: `saisieFeeMad` is what this agent
+        // bills per lead entered — a real cost on a delivered parcel — while
+        // `netProfitPerDeliveredParcelMad` is what the agent themself takes home
+        // from it. The counters below track each on its own line.
         assignedAgent: {
-          select: { email: true, saisieFeeMad: true, profile: { select: { fullName: true } } },
+          select: {
+            email: true,
+            saisieFeeMad: true,
+            netProfitPerDeliveredParcelMad: true,
+            profile: { select: { fullName: true } },
+          },
         },
         order: {
           select: {
@@ -1228,6 +1235,9 @@ router.get(
     // Mirrors the fallback in the bulk-dispatch route, so a lead billed at 8 MAD
     // there is never counted at some other rate here.
     const DEFAULT_SAISIE_FEE = 8;
+    // And the fallback the agent's own facturation uses, so the "bénéfice net"
+    // card and the invoices it will produce can never quote different money.
+    const DEFAULT_NET_PROFIT_PER_PARCEL = 10;
     const netOf = (row: any, gross: number) => {
       const shipping = row.customShippingFee ?? DEFAULT_SHIPPING_FEE;
       const rate =
@@ -1256,6 +1266,7 @@ router.get(
     let shippingCostDelivered = 0;
     let platformFeeDelivered = 0;
     let agentCommissionDelivered = 0;
+    let agentEarningsDelivered = 0;
 
     for (const row of scopeRows) {
       // Options first, and for every row: a city or vendor that drops out of the
@@ -1299,9 +1310,15 @@ router.get(
         const saisie = row.assignedAgentId
           ? (row.assignedAgent as any)?.saisieFeeMad ?? DEFAULT_SAISIE_FEE
           : 0;
+        // The agent's own take on the same parcel — an earning, not a cost, and
+        // the only one of these figures that is actually theirs.
+        const earned = row.assignedAgentId
+          ? (row.assignedAgent as any)?.netProfitPerDeliveredParcelMad ?? DEFAULT_NET_PROFIT_PER_PARCEL
+          : 0;
         shippingCostDelivered += shipping;
         platformFeeDelivered += fee;
         agentCommissionDelivered += saisie;
+        agentEarningsDelivered += earned;
         profitDelivered += net - saisie;
       } else if (st === 'RETURNED') revenueReturned += amount;
       if (!CLOSED_STATUSES.has(st)) revenueInTransit += amount;
@@ -1326,6 +1343,19 @@ router.get(
         sku: r.product?.sku || null,
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
+
+    // The rate the card quotes per parcel. Read straight from the requesting
+    // agent rather than divided out of the rounded total, so a fractional rate
+    // (12,5 MAD) is shown as set instead of drifting. Only an agent has one.
+    const agentRatePerParcel =
+      req.user!.roleName === 'CALL_CENTER_AGENT'
+        ? (
+            await prisma.user.findUnique({
+              where: { id: req.user!.id },
+              select: { netProfitPerDeliveredParcelMad: true },
+            })
+          )?.netProfitPerDeliveredParcelMad ?? DEFAULT_NET_PROFIT_PER_PARCEL
+        : null;
 
     res.json({
       status: 'success',
@@ -1354,6 +1384,10 @@ router.get(
           shippingCostDelivered: Math.round(shippingCostDelivered),
           platformFeeDelivered: Math.round(platformFeeDelivered),
           agentCommissionDelivered: Math.round(agentCommissionDelivered),
+          // What the agent takes home from the same delivered parcels. The four
+          // figures above are the business's P&L on them; this one is the agent's.
+          agentEarningsDelivered: Math.round(agentEarningsDelivered),
+          agentRatePerParcel,
         },
         filterOptions: {
           cities: Array.from(cities).sort((a, b) => a.localeCompare(b)),

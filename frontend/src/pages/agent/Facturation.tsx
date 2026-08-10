@@ -259,7 +259,7 @@ export default function AgentFacturation() {
                   <span className="font-bold text-gray-900">{detail.parcelCount}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500 font-medium">Tarif de saisie</span>
+                  <span className="text-gray-500 font-medium">Bénéfice net</span>
                   <span className="font-bold text-gray-900">{fmtMad(detail.feePerParcelMad)} / colis</span>
                 </div>
                 <div className="flex justify-between">

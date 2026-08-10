@@ -138,6 +138,10 @@ model User {
   autoAssignHelperVendors Boolean @default(false)
   autoAssignHelperInfluencers Boolean @default(false)
   saisieFeeMad          Float   @default(8.0)
+  // What a call-center agent nets per parcel they saisi that reached the
+  // customer. Distinct from `saisieFeeMad`, which is what the vendor is billed
+  // per lead entered — the two rates are set independently by an admin.
+  netProfitPerDeliveredParcelMad Float @default(10.0)
   canManageProducts     Boolean @default(false)
   canManageLeads        Boolean @default(false)
   canManageOrders       Boolean @default(false)

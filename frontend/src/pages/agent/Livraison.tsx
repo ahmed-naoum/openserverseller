@@ -104,6 +104,13 @@ interface Stats {
   platformFeeDelivered: number;
   /** Saisie fee of the assigned agent × delivered parcels. */
   agentCommissionDelivered: number;
+  /** What the agent themself earns: their rate × delivered parcels. This page
+   *  is agent-only, so this — not `profitDelivered` — is the figure the
+   *  "bénéfice net" card shows, and it matches their facturation to the dirham. */
+  agentEarningsDelivered: number;
+  /** The rate behind the figure above, as the admin set it. Null for the roles
+   *  that don't have one — only an agent is paid per parcel. */
+  agentRatePerParcel: number | null;
 }
 
 const EMPTY_STATS: Stats = {
@@ -122,6 +129,8 @@ const EMPTY_STATS: Stats = {
   shippingCostDelivered: 0,
   platformFeeDelivered: 0,
   agentCommissionDelivered: 0,
+  agentEarningsDelivered: 0,
+  agentRatePerParcel: null,
 };
 
 interface Filters {
@@ -286,6 +295,11 @@ const daysSince = (value: unknown): number | null => {
 const fmtAge = (days: number) => (days <= 0 ? "aujourd'hui" : days === 1 ? 'hier' : `il y a ${days} j`);
 
 const fmtMad = (n: number) => `${Math.round(Number(n) || 0).toLocaleString('fr-FR')} MAD`;
+
+/** A per-parcel rate, which an admin may have set to a half-dirham — so unlike
+ *  the totals above this one keeps its decimals. */
+const fmtRate = (n: number | null) =>
+  `${(Number(n) || 0).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} MAD`;
 
 /** Local `YYYY-MM-DD` — what a `date` input reads and writes. `toISOString`
  *  would shift the day for anyone east of UTC late in the evening. */
@@ -915,15 +929,21 @@ export default function AgentLivraison() {
       shadow: 'shadow-emerald-200',
     },
     {
-      // What's actually left of the delivered parcels once the courier, the
-      // platform and the call center are paid — the card above is what was
-      // collected, not earned.
+      // The agent's own earnings on the parcels that reached the customer — the
+      // card above is what the customer paid, this is what the agent keeps. The
+      // courier and the platform's cut come out of the vendor's margin, never
+      // out of this, so it can never go negative.
       label: 'Bénéfice net (livré)',
-      value: fmtMad(stats.profitDelivered),
-      sub: `${fmtMad(stats.revenueDelivered)} encaissé · -${fmtMad(stats.shippingCostDelivered)} livraison · -${fmtMad(stats.platformFeeDelivered)} commission · -${fmtMad(stats.agentCommissionDelivered)} saisie agent`,
+      value: fmtMad(stats.agentEarningsDelivered),
+      sub:
+        stats.delivered > 0
+          ? `${stats.delivered} colis livré${stats.delivered > 1 ? 's' : ''} × ${fmtRate(
+              stats.agentRatePerParcel
+            )} · à facturer dans Facturation`
+          : 'Aucun colis livré pour le moment',
       icon: TrendingUp,
-      color: stats.profitDelivered < 0 ? 'from-rose-400 to-red-500' : 'from-lime-400 to-green-500',
-      shadow: stats.profitDelivered < 0 ? 'shadow-rose-200' : 'shadow-lime-200',
+      color: 'from-lime-400 to-green-500',
+      shadow: 'shadow-lime-200',
     },
     {
       label: 'Taux de livraison',

@@ -20,6 +20,23 @@ import { normalizeSearch } from '../../utils/search';
 
 const DEFAULT_UNASSIGN_MESSAGE = "Ce lead ne vous est plus assigné.";
 
+/**
+ * How long ago the lead came in, in the words an agent would use on the call.
+ * A bare timestamp doesn't answer the question they actually have — whether the
+ * customer ordered minutes ago or has been waiting since last week.
+ */
+const fmtAge = (iso: string): string => {
+  const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (!isFinite(minutes) || minutes < 0) return '';
+  if (minutes < 1) return "à l'instant";
+  if (minutes < 60) return `il y a ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `il y a ${hours} h`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'hier';
+  return `il y a ${days} j`;
+};
+
 /** Why the lead left this agent — mirrors LeadUnassignReason on the server. */
 const UNASSIGN_MESSAGES: Record<string, string> = {
   FORCE_CLAIMED: "Ce lead vient d'être réclamé par un autre agent.",
@@ -31,6 +48,14 @@ const UNASSIGN_MESSAGES: Record<string, string> = {
 
 /** Customer-card fields an agent can correct in place while on the call. */
 type EditableFieldKey = 'fullName' | 'phone' | 'city' | 'address';
+
+/**
+ * How long the confirmation buttons stay disabled after the lead opens — long
+ * enough that the agent reads the file and calls before deciding, short enough
+ * not to stall a queue. Purely a UI guard: the server accepts the status change
+ * whenever it arrives, so this is safe to tune.
+ */
+const ACTION_COOLDOWN_SECONDS = 15;
 
 /**
  * Coliaty only accepts a local 10-digit number (06…/05…/07…), so the delivery
@@ -277,7 +302,7 @@ export default function AgentLeadDetail() {
 
       const calculateRemaining = () => {
         const elapsed = (Date.now() - startTime) / 1000;
-        return isNaN(elapsed) ? 0 : Math.max(0, 30 - elapsed);
+        return isNaN(elapsed) ? 0 : Math.max(0, ACTION_COOLDOWN_SECONDS - elapsed);
       };
 
       const calculateGlobal = () => {
@@ -1063,6 +1088,30 @@ export default function AgentLeadDetail() {
                 </a>
               </div>
             )}
+            {lead.createdAt && (() => {
+              const registered = new Date(lead.createdAt);
+              const age = fmtAge(lead.createdAt);
+              return (
+                <div>
+                  <p className="text-xs text-gray-400 font-medium uppercase mb-1">Enregistré le</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Clock className={`w-4 h-4 shrink-0 ${
+                      isPrincess ? 'text-amber-500' : isGirly ? 'text-pink-500' : 'text-indigo-500'
+                    }`} />
+                    <p className="text-lg font-bold text-gray-900">
+                      {format(registered, 'dd/MM/yyyy')}
+                      <span className="text-gray-400 font-medium"> à </span>
+                      {format(registered, 'HH:mm')}
+                    </p>
+                    {age && (
+                      <span className="px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200 text-[10px] font-black uppercase tracking-wider text-gray-500">
+                        {age}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
             {lead.referralLink?.code && (() => {
               const linkUser = lead.referralLink.influencer || influencer || vendor;
               const refUrl = buildReferralUrl(

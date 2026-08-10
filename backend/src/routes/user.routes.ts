@@ -77,6 +77,7 @@ router.get(
           canImpersonate: u.canImpersonate,
           platformFeeRate: u.platformFeeRate,
           saisieFeeMad: u.saisieFeeMad,
+          netProfitPerDeliveredParcelMad: u.netProfitPerDeliveredParcelMad,
           autoAssignInfluencers: u.autoAssignInfluencers,
           autoAssignHelperUsers: u.autoAssignHelperUsers,
           autoAssignHelperVendors: u.autoAssignHelperVendors,
@@ -284,7 +285,7 @@ router.patch(
       city, address, cinNumber, birthDate, language, avatarUrl,
       instagramUsername, tiktokUsername, facebookUsername, xUsername, youtubeUsername, snapchatUsername,
       instagramUrl, tiktokUrl, facebookUrl, youtubeUrl, snapchatUrl,
-      ribAccount, bankName, iceNumber, bankStatus, platformFeeRate, saisieFeeMad
+      ribAccount, bankName, iceNumber, bankStatus, platformFeeRate, saisieFeeMad, netProfitPerDeliveredParcelMad
     } = req.body;
 
     const user = await prisma.user.findUnique({
@@ -396,6 +397,8 @@ router.patch(
         autoSendLeadsToCallCenter: typeof autoSendLeadsToCallCenter === 'boolean' ? autoSendLeadsToCallCenter : undefined,
         platformFeeRate: platformFeeRate !== undefined ? Number(platformFeeRate) : undefined,
         saisieFeeMad: saisieFeeMad !== undefined ? Number(saisieFeeMad) : undefined,
+        netProfitPerDeliveredParcelMad:
+          netProfitPerDeliveredParcelMad !== undefined ? Number(netProfitPerDeliveredParcelMad) : undefined,
       },
       include: {
         profile: true,
@@ -500,6 +503,7 @@ router.get(
           autoSendLeadsToCallCenter: user.autoSendLeadsToCallCenter,
           platformFeeRate: user.platformFeeRate,
           saisieFeeMad: user.saisieFeeMad,
+          netProfitPerDeliveredParcelMad: user.netProfitPerDeliveredParcelMad,
           cguAccepted: user.cguAccepted,
           cguAcceptedAt: user.cguAcceptedAt,
           createdAt: user.createdAt,

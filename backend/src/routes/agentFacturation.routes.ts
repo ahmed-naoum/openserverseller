@@ -8,9 +8,10 @@ import { parseDateRange } from '../lib/dateRange.js';
  * Facturation for a CALL_CENTER_AGENT.
  *
  * The agent is paid per parcel they saisi that actually reached the customer,
- * at their own `saisieFeeMad`. This is the same figure the livraison screen
- * already shows as "saisie agent" in its profit breakdown — that card is the
- * cost side of these invoices, so the two must never disagree.
+ * at their own `netProfitPerDeliveredParcelMad` — an admin-set rate, separate
+ * from `saisieFeeMad`, which is what the *vendor* is billed per lead entered.
+ * The two answer different questions and are deliberately allowed to differ:
+ * the vendor pays for every lead saisi, the agent earns only on deliveries.
  *
  * The flow the screen drives, in order:
  *   1. delivered parcels not yet on an invoice are "à facturer"
@@ -23,9 +24,9 @@ import { parseDateRange } from '../lib/dateRange.js';
  */
 const router = Router();
 
-// Mirrors the fallback used by the bulk-dispatch route and the livraison stats.
-// A lead billed at 8 MAD there must never be billed at some other rate here.
-const DEFAULT_SAISIE_FEE = 8;
+// Mirrors the column default in the schema, for the case where a row predates
+// the field. Not the saisie fee — that one bills the vendor, not this agent.
+const DEFAULT_NET_PROFIT_PER_PARCEL = 10;
 
 const agentOnly = [authenticate, authorize('CALL_CENTER_AGENT')] as const;
 
@@ -44,9 +45,9 @@ const billableWhere = (agentId: number, range?: { gte?: Date; lte?: Date } | nul
 const feeOf = async (agentId: number) => {
   const agent = await prisma.user.findUnique({
     where: { id: agentId },
-    select: { saisieFeeMad: true },
+    select: { netProfitPerDeliveredParcelMad: true },
   });
-  return agent?.saisieFeeMad ?? DEFAULT_SAISIE_FEE;
+  return agent?.netProfitPerDeliveredParcelMad ?? DEFAULT_NET_PROFIT_PER_PARCEL;
 };
 
 const round2 = (n: number) => Math.round(n * 100) / 100;

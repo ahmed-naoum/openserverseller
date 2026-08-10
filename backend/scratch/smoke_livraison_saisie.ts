@@ -1,7 +1,9 @@
 /**
- * Smoke test for the call-center saisie fee on the livraison "Bénéfice net"
- * card. Mints an agent token, reads /leads/livraison, and checks the card's
- * arithmetic against the agent's own saisieFeeMad. Run with the dev server up.
+ * Smoke test for the call-center saisie fee in the /leads/livraison stats.
+ * Mints an agent token and checks the business-P&L counters against the agent's
+ * own saisieFeeMad. These no longer drive the "Bénéfice net (livré)" card — that
+ * shows the agent's own earnings now, covered by check_livraison_benefice_net.ts
+ * — but they still price the vendor's side. Run with the dev server up.
  */
 import jwt from 'jsonwebtoken';
 import { prisma } from '../src/lib/prisma.js';
@@ -57,7 +59,7 @@ const check = (name: string, ok: boolean, detail = '') => {
     `got ${s.agentCommissionDelivered}`
   );
 
-  // The card renders its own arithmetic, so the four numbers have to close.
+  // The four numbers still have to close against each other.
   const recomputed =
     s.revenueDelivered - s.shippingCostDelivered - s.platformFeeDelivered - s.agentCommissionDelivered;
   check(

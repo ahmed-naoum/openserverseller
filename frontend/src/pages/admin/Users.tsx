@@ -47,6 +47,7 @@ import {
   Store,
   Sparkles,
   Headphones,
+  TrendingUp,
   Plus
 } from 'lucide-react';
 
@@ -1339,6 +1340,7 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
     bankStatus: 'PENDING',
     platformFeeRate: 0.05,
     saisieFeeMad: 8.0,
+    netProfitPerDeliveredParcelMad: 10.0,
   });
 
   const { data: fullUserData, isLoading: isUserLoading } = useQuery({
@@ -1392,6 +1394,7 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
         bankStatus: fullUser.bankAccounts?.[0]?.status || 'PENDING',
         platformFeeRate: fullUser.platformFeeRate ?? (['SUPER_ADMIN', 'HELPER', 'CALL_CENTER_AGENT', 'CONFIRMATION_AGENT', 'SYSTEM_SUPPORT'].includes(fullUser.role) ? 0.00 : fullUser.role === 'VENDOR' ? 0.05 : 0.13),
         saisieFeeMad: fullUser.saisieFeeMad ?? 8.0,
+        netProfitPerDeliveredParcelMad: fullUser.netProfitPerDeliveredParcelMad ?? 10.0,
       });
     }
   }, [fullUser]);
@@ -1822,21 +1825,41 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
                     )}
 
                     {formData.role === 'CALL_CENTER_AGENT' && (
-                      <div className="mt-4 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50">
-                        <label className="block text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-2 flex items-center gap-2">
-                          <CreditCard size={14} />
-                          Frais de Saisie par Lead (MAD)
-                        </label>
-                        <p className="text-[10px] text-indigo-400 font-bold mb-3">Ce montant sera facturé au vendeur à chaque fois que cet agent saisit un de ses leads.</p>
-                        <input
-                          type="number"
-                          step="0.5"
-                          min="0"
-                          required
-                          className="input border-indigo-200 focus:border-indigo-400 bg-white"
-                          value={formData.saisieFeeMad}
-                          onChange={(e) => setFormData({ ...formData, saisieFeeMad: parseFloat(e.target.value) || 0 })}
-                        />
+                      <div className="mt-4 space-y-4">
+                        <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50">
+                          <label className="block text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-2 flex items-center gap-2">
+                            <CreditCard size={14} />
+                            Frais de Saisie par Lead (MAD)
+                          </label>
+                          <p className="text-[10px] text-indigo-400 font-bold mb-3">Ce montant sera facturé au vendeur à chaque fois que cet agent saisit un de ses leads.</p>
+                          <input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            required
+                            className="input border-indigo-200 focus:border-indigo-400 bg-white"
+                            value={formData.saisieFeeMad}
+                            onChange={(e) => setFormData({ ...formData, saisieFeeMad: parseFloat(e.target.value) || 0 })}
+                          />
+                        </div>
+
+                        <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100/50">
+                          <label className="block text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2 flex items-center gap-2">
+                            <TrendingUp size={14} />
+                            Bénéfice Net par Colis Livré (DH)
+                          </label>
+                          <p className="text-[10px] text-emerald-500 font-bold mb-3">Montant net gagné par cet agent pour chaque colis qu'il a saisi et qui a bien été livré.</p>
+                          <input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            required
+                            className="input border-emerald-200 focus:border-emerald-400 bg-white"
+                            placeholder="Ex: 10"
+                            value={formData.netProfitPerDeliveredParcelMad}
+                            onChange={(e) => setFormData({ ...formData, netProfitPerDeliveredParcelMad: parseFloat(e.target.value) || 0 })}
+                          />
+                        </div>
                       </div>
                     )}
 
