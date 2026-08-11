@@ -1,14 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { dashboardApi, influencerApi } from '../../lib/api';
-import { isConfirmedRow, isDeliveredRow, getLeadDate } from '../../lib/leadStatus';
+import { isConfirmedRow, isDeliveredRow, getLeadDate, getLeadActivityDate } from '../../lib/leadStatus';
 import { ReferralLink, InfluencerCommission } from '../../types';
 import {
   DollarSign, TrendingUp, Zap, MousePointerClick, ArrowUpRight, Crown,
   Plus, ShoppingBag, Wallet, BarChart3, CheckCircle2, Truck, ExternalLink, Eye, RefreshCw,
-  MessageCircle, Mail, Smartphone, Copy, CalendarClock
+  MessageCircle, Mail, Smartphone, Copy, CalendarClock, Filter
 } from 'lucide-react';
 import { ProCard } from '../../components/common/ProCard';
 import { TierProgressBanner } from '../../components/influencer/TierProgressBanner';
@@ -89,10 +89,14 @@ export default function VendorDashboard() {
   // links have to follow the URL rather than assume the vendor's own prefix.
   const base = currentBasePath(user?.role);
   const [referralLinks, setReferralLinks] = useState<ReferralLink[]>([]);
-  const [commissions, setCommissions] = useState<InfluencerCommission[]>([]);
-  const [allCommissions, setAllCommissions] = useState<InfluencerCommission[]>([]);
+  // The dashboard's own commission list is a page and nothing here renders it;
+  // the cards below count `periodLeads`, which comes from the sellerAffiliate endpoint.
+  const [periodLeads, setPeriodLeads] = useState<any[]>([]);
   const [wallet, setWallet] = useState<any>(null);
-  const [walletTransactions, setWalletTransactions] = useState<any[]>([]);
+  // No transaction list is rendered here — the page of rows the API returns is
+  // left unread, and only the window's totals below are used.
+  const [walletStats, setWalletStats] = useState<any>(null);
+  const [commissionsMeta, setCommissionsMeta] = useState<any>(null);
   const [stats, setStats] = useState<any>({
     conversions: 0,
     confirmed: 0,
@@ -101,8 +105,11 @@ export default function VendorDashboard() {
     uniqueVisitors: 0,
     whatsappClicks: 0
   });
-  const [leadCountsByLink, setLeadCountsByLink] = useState<any[]>([]);
+  const [leadCountsByLink, setLeadCountsByLink] = useState<{ referralLinkId: number; _count: number }[]>([]);
   const [helpers, setHelpers] = useState<any[]>([]);
+  const [tableDateRange, setTableDateRange] = useState<'TOUS' | 'AUJOURD_HUI' | '7J' | '15J' | '30J' | '90J' | 'CUSTOM'>('TOUS');
+  const [tableSelectedProductId, setTableSelectedProductId] = useState<string>('ALL');
+  const [dateBasis, setDateBasis] = useState<'STATUS' | 'CREATED'>('CREATED');
   const [dateRange, setDateRange] = useState<number | 'custom' | 'all' | 'yesterday'>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -111,67 +118,29 @@ export default function VendorDashboard() {
   const [searchParams] = useSearchParams();
   const currentMode = searchParams.get('mode') || user?.mode || 'SELLER';
 
-  // One bound is enough to reload: "depuis lundi" is a range a vendor can ask
-  // for, and waiting for both left the page frozen on the previous window while
-  // they typed the first one.
   useEffect(() => {
-    if (dateRange !== 'custom' || startDate || endDate) {
-      loadDashboard();
-    }
-  }, [dateRange, startDate, endDate, currentMode]);
+    loadDashboard();
+  }, [tableDateRange, startDate, endDate, currentMode, tableSelectedProductId, dateBasis]);
 
   const loadDashboard = async () => {
     try {
       setLoading(true);
-      // The dashboard and the links endpoint take the same bounds and share one
-      // parser, so every figure on the page describes the same window. HIER is
-      // a closed range — days=N always ends at "now" and would swallow today.
-      const yesterday = dateRange === 'yesterday' ? toISODate(startOfYesterday()) : null;
-      const params: any = {};
+      const params: any = { days: 'all' };
+      const linkParams: any = { days: 'all' };
 
-      if (dateRange === 'custom') {
-        if (startDate) params.start = startDate;
-        if (endDate) params.end = endDate;
-      } else if (yesterday) {
-        params.start = yesterday;
-        params.end = yesterday;
-      } else {
-        params.days = dateRange;
-      }
-
-      const linkParams: any = { ...params };
-      // `days` means nothing to the links endpoint, so a numeric preset is spelt
-      // out as the window it stands for. Local dates, not `toISOString` — that
-      // reports the UTC day and drops a day's links either side of midnight.
-      if (typeof dateRange === 'number') {
-        delete linkParams.days;
-        const start = new Date();
-        start.setHours(0, 0, 0, 0);
-        start.setDate(start.getDate() - (dateRange - 1));
-        linkParams.start = toISODate(start);
-      }
-
-      // Only the first call is essential. The other two belong to the links and
-      // orders sections, which a vendor sub-account may not have been granted —
-      // under Promise.all a single 403 there rejected the whole batch and left
-      // the dashboard blank. Let them fail softly and render what we do have.
-      const [dashboardRes, linksRes, customersRes] = await Promise.all([
+      const [dashboardRes, linksRes] = await Promise.all([
         dashboardApi.sellerAffiliate({ ...params, mode: currentMode }),
-        influencerApi.getLinks({ ...linkParams, mode: currentMode }).catch(() => null),
-        influencerApi.getCustomers({ all: true, mode: currentMode }).catch(() => null)
+        influencerApi.getLinks({ ...linkParams, mode: currentMode }).catch(() => null)
       ]);
 
       setReferralLinks(linksRes?.data || []);
-      // Use commissions from dashboardRes which are correctly filtered by date
-      setCommissions(dashboardRes.data.commissions || []);
       setWallet(dashboardRes.data.wallet);
-      setWalletTransactions(dashboardRes.data.walletTransactions || []);
+      setWalletStats(dashboardRes.data.walletStats || null);
+      setCommissionsMeta(dashboardRes.data.commissionsMeta || null);
       setStats(dashboardRes.data.stats || { conversions: 0, confirmed: 0, delivered: 0 });
       setLeadCountsByLink(dashboardRes.data.leadCountsByLink || []);
       setHelpers(dashboardRes.data.helpers || []);
-
-      const commissionsData = customersRes?.data?.data?.commissions || customersRes?.data?.commissions || [];
-      setAllCommissions(commissionsData);
+      setPeriodLeads(dashboardRes.data.periodLeads || []);
     } catch (error) {
       console.error('Failed to load dashboard:', error);
     } finally {
@@ -183,40 +152,69 @@ export default function VendorDashboard() {
   const uniqueVisitors = stats.uniqueVisitors || 0;
   const whatsappClicks = stats.whatsappClicks || 0;
 
-  // Filter allCommissions by date for the quick stats cards
-  const dateFilteredCommissions = allCommissions.filter(c => {
-    const leadDate = new Date(c.order?.createdAt || c.createdAt);
-    
-    if (dateRange === 'all') return true;
-    
+  const getRowDate = getLeadDate;
+
+  const dateFilteredCommissions = useMemo(() => periodLeads.filter(c => {
+    if (tableSelectedProductId !== 'ALL' && String(c.referralLinkId) !== tableSelectedProductId) {
+      return false;
+    }
+
+    const leadDate = getRowDate(c);
+
+    if (tableDateRange === 'TOUS') return true;
+
     const now = new Date();
-    if (dateRange === 1) {
+    if (tableDateRange === 'AUJOURD_HUI') {
       return leadDate.toDateString() === now.toDateString();
     }
 
-    if (dateRange === 'yesterday') {
-      return leadDate.toDateString() === startOfYesterday().toDateString();
-    }
-
-    if (dateRange === 'custom') {
+    if (tableDateRange === 'CUSTOM') {
       if (!startDate && !endDate) return true;
-      // Parsed the way the API parsed them, hour included — pinning these to
-      // midnight/23:59 here would have quietly widened an hourly window back to
-      // the whole day and shown leads the totals above had already excluded.
-      const start = parseBound(startDate, false);
-      const end = parseBound(endDate, true);
-      if (start && leadDate < start) return false;
-      if (end && leadDate > end) return false;
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        if (leadDate < start) return false;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        if (leadDate > end) return false;
+      }
       return true;
     }
 
     const d = new Date();
     d.setHours(0, 0, 0, 0);
-    if (dateRange === 7) d.setDate(now.getDate() - 7);
-    else if (dateRange === 30) d.setDate(now.getDate() - 30);
-    
+    if (tableDateRange === '7J') d.setDate(now.getDate() - 7);
+    else if (tableDateRange === '15J') d.setDate(now.getDate() - 15);
+    else if (tableDateRange === '30J') d.setDate(now.getDate() - 30);
+    else if (tableDateRange === '90J') d.setDate(now.getDate() - 90);
+
     return leadDate >= d;
-  });
+  }), [periodLeads, tableSelectedProductId, tableDateRange, startDate, endDate]);
+
+  const createdLeadsInPeriod = useMemo(() => periodLeads.filter(c => {
+    if (tableSelectedProductId !== 'ALL' && String(c.referralLinkId) !== tableSelectedProductId) {
+      return false;
+    }
+    const leadDate = getLeadDate(c);
+    if (tableDateRange === 'TOUS') return true;
+    const now = new Date();
+    if (tableDateRange === 'AUJOURD_HUI') return leadDate.toDateString() === now.toDateString();
+    if (tableDateRange === 'CUSTOM') {
+      if (!startDate && !endDate) return true;
+      if (startDate && leadDate < new Date(startDate)) return false;
+      if (endDate && leadDate > new Date(endDate)) return false;
+      return true;
+    }
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    if (tableDateRange === '7J') d.setDate(now.getDate() - 7);
+    else if (tableDateRange === '15J') d.setDate(now.getDate() - 15);
+    else if (tableDateRange === '30J') d.setDate(now.getDate() - 30);
+    else if (tableDateRange === '90J') d.setDate(now.getDate() - 90);
+    return leadDate >= d;
+  }), [periodLeads, tableSelectedProductId, tableDateRange, startDate, endDate]);
 
   const totalLeads = dateFilteredCommissions.length;
 
@@ -242,10 +240,15 @@ export default function VendorDashboard() {
   // Generate chart day keys based on range
   const getNumDays = () => {
     if (dateRange === 'all') {
+      // Both lists arrive newest-first and paged, so their oldest row is not on
+      // the page we hold. The API reports the two first-seen dates instead.
       const allDates = [
-        ...commissions.map(c => new Date(c.createdAt).getTime()),
-        ...walletTransactions.map(tx => new Date(tx.createdAt).getTime())
-      ];
+        commissionsMeta?.firstCommissionAt,
+        walletStats?.firstTransactionAt
+      ]
+        .filter(Boolean)
+        .map(d => new Date(d as string).getTime())
+        .filter(ts => !isNaN(ts));
       if (allDates.length === 0) return 7;
       const firstDate = new Date(Math.min(...allDates));
       const diffTime = Math.abs(new Date().getTime() - firstDate.getTime());
@@ -287,8 +290,8 @@ export default function VendorDashboard() {
     }
     if (dateRange === 'all') {
       const times = dateFilteredCommissions
-        .map(c => getLeadDate(c).getTime())
-        .filter(ts => !isNaN(ts));
+        .map((c: any) => getLeadDate(c).getTime())
+        .filter((ts: number) => !isNaN(ts));
       if (times.length === 0) return 7;
       const diffDays = Math.ceil(Math.abs(new Date().getTime() - Math.min(...times)) / 86400000);
       return Math.max(7, Math.min(diffDays + 1, 365));
@@ -313,7 +316,7 @@ export default function VendorDashboard() {
 
   const leadsData = (() => {
     const buckets = new Map<string, { total: number; confirmed: number; delivered: number }>();
-    dateFilteredCommissions.forEach(c => {
+    dateFilteredCommissions.forEach((c: any) => {
       const d = getLeadDate(c);
       if (isNaN(d.getTime())) return;
       const key = leadBucketKey(d);
@@ -342,19 +345,21 @@ export default function VendorDashboard() {
     return t(`${prefix}_days`, 'dashboard').replace('{days}', String(dateRange));
   })();
 
-  // Financial calculations based on filtered transactions
-  const periodEarned = walletTransactions.reduce((sum, tx) => tx.amountMad > 0 ? sum + tx.amountMad : sum, 0);
-  const periodWithdrawn = Math.abs(walletTransactions.reduce((sum, tx) => tx.amountMad < 0 ? sum + tx.amountMad : sum, 0));
-  
+  // Financial figures for the selected window. These are summed by the API over
+  // every transaction in the window — `walletTransactions` only holds the first
+  // page, so folding them here would report one page's worth of money.
+  const periodEarned = walletStats?.periodEarnedMad || 0;
+  const periodWithdrawn = walletStats?.periodWithdrawnMad || 0;
+
   // Use period-based stats if date filter is active, otherwise use all-time wallet totals
   const isFiltered = dateRange !== 'all';
   const displayEarned = isFiltered ? periodEarned : (wallet?.totalEarnedMad || 0);
   const displayWithdrawn = isFiltered ? periodWithdrawn : (wallet?.totalWithdrawnMad || 0);
-  
+
   // For balance, we usually show current balance unless it's a historical report
   // But to be consistent with "filter effect", we'll show the balance as of the end of the period
-  const displayBalance = (isFiltered && walletTransactions.length > 0) 
-    ? walletTransactions[0].balanceAfterMad 
+  const displayBalance = (isFiltered && walletStats?.transactionCount > 0)
+    ? walletStats.closingBalanceMad
     : (wallet?.balanceMad || 0);
 
   // Tier Calculation (always based on all-time earned for progression)
@@ -400,74 +405,6 @@ export default function VendorDashboard() {
           {currentMode === 'SELLER' && <span className="ml-2 text-emerald-600 text-lg font-bold">({t('dashboard_seller_short', 'dashboard')})</span>}
           {currentMode === 'AFFILIATE' && <span className="ml-2 text-indigo-600 text-lg font-bold">({t('dashboard_affiliate_short', 'dashboard')})</span>}
         </h1>
-      </div>
-
-      {/* Période — first thing on the page because it scopes everything under
-          it: the stat cards, the wallet column, the chart and the per-link
-          totals all read this one window. It used to sit inside the chart card,
-          where it read as a chart control. */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 sm:p-3.5">
-        <div className="flex flex-col xl:flex-row xl:items-center gap-3">
-          <div className="flex items-center gap-2 shrink-0">
-            <CalendarClock className="w-4 h-4 text-slate-400" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">
-              {t('db_period', 'dashboard')}
-            </span>
-            <span className="text-[9px] font-bold text-slate-300 uppercase tracking-wider hidden sm:inline">
-              {t('db_period_hint', 'dashboard')}
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-1.5">
-            {RANGE_KEYS.map((range) => (
-              <button
-                key={String(range)}
-                onClick={() => setDateRange(range as any)}
-                aria-pressed={dateRange === range}
-                className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all border ${
-                  dateRange === range
-                    ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-                    : 'bg-white text-slate-400 border-slate-200 hover:text-slate-700 hover:border-slate-300'
-                }`}
-              >
-                {range === 'custom' ? t('db_custom', 'dashboard') : range === 'all' ? t('db_all', 'dashboard') : range === 1 ? t('db_today', 'dashboard') : range === 'yesterday' ? t('db_yesterday', 'dashboard') : `${range}J`}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 xl:ml-auto">
-            {dateRange === 'custom' && (
-              <div className="flex flex-wrap items-center gap-2 animate-in slide-in-from-top-1 duration-300">
-                {/* `datetime-local`, not `date`: the server reads a bound to the
-                    minute, so a vendor can ask for this morning alone. */}
-                <input
-                  type="datetime-local"
-                  value={startDate}
-                  max={endDate || undefined}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  aria-label={t('db_period_from', 'dashboard')}
-                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none focus:border-slate-400 transition-all"
-                />
-                <span className="text-slate-300 font-bold text-[10px]">→</span>
-                <input
-                  type="datetime-local"
-                  value={endDate}
-                  min={startDate || undefined}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  aria-label={t('db_period_to', 'dashboard')}
-                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none focus:border-slate-400 transition-all"
-                />
-              </div>
-            )}
-            <button
-              onClick={() => loadDashboard()}
-              className="p-2 text-slate-400 hover:text-slate-600 transition-all"
-              title={t('db_refresh', 'dashboard')}
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Tier Progress Banner */}
@@ -579,6 +516,83 @@ export default function VendorDashboard() {
         </div>
       )}
 
+      {/* Global Stats Filter */}
+      <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col xl:flex-row items-start xl:items-center gap-4 justify-between">
+        <div className="flex items-center gap-2 mb-2 xl:mb-0">
+          <Filter className="w-4 h-4 text-influencer-500" />
+          <span className="text-xs font-black text-gray-900 uppercase tracking-widest">{t('filters_global', 'leads', 'Filtres Globaux')}</span>
+        </div>
+        
+        <div className="flex flex-col sm:flex-row items-center gap-4 w-full xl:w-auto">
+          {/* Product Filter */}
+          <select 
+            value={tableSelectedProductId}
+            onChange={(e) => setTableSelectedProductId(e.target.value)}
+            className="w-full sm:w-auto px-4 py-2.5 text-xs font-bold bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-influencer-500 transition-all text-gray-600"
+          >
+            <option value="ALL">{t('all_products', 'leads', 'Tous les produits')}</option>
+            {referralLinks.map(link => (
+              <option key={link.id} value={link.id}>
+                {link.product?.nameFr || link.code} {link.product?.sku ? `(${link.product.sku})` : ''}
+              </option>
+            ))}
+          </select>
+
+          {/* Date Range Pills */}
+          <div className="flex flex-wrap items-center bg-gray-50 p-1 rounded-xl border border-gray-100 w-full sm:w-auto">
+            {['TOUS', 'AUJOURD_HUI', '7J', '15J', '30J', '90J', 'CUSTOM'].map((r) => {
+              let label = r;
+              if (r === 'TOUS') label = t('range_all', 'leads', 'Tous');
+              else if (r === 'AUJOURD_HUI') label = t('range_today', 'leads', "Aujourd'hui");
+              else if (r === 'CUSTOM') label = t('range_custom', 'leads', 'Personnalisé');
+              else if (r.endsWith('J')) {
+                const count = r.replace('J', '');
+                label = t('range_days', 'leads', '{count}j').replace('{count}', count);
+              }
+              return (
+                <button
+                  key={r}
+                  onClick={() => setTableDateRange(r as any)}
+                  className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all flex-1 sm:flex-none text-center ${
+                    tableDateRange === r 
+                      ? 'bg-white text-gray-900 shadow-sm' 
+                      : 'text-gray-400 hover:text-gray-600'
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          {tableDateRange === 'CUSTOM' && (
+            <div className="flex items-center gap-2 animate-fadeIn w-full sm:w-auto">
+               <input 
+                 type="date"
+                 value={startDate}
+                 onChange={(e) => setStartDate(e.target.value)}
+                 className="flex-1 sm:flex-none text-[10px] font-bold bg-white border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-influencer-500/20"
+               />
+               <span className="text-[10px] text-gray-400 font-bold uppercase">{t('date_separator', 'leads', 'au')}</span>
+               <input 
+                 type="date"
+                 value={endDate}
+                 onChange={(e) => setEndDate(e.target.value)}
+                 className="flex-1 sm:flex-none text-[10px] font-bold bg-white border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-influencer-500/20"
+               />
+            </div>
+          )}
+
+          <button
+            onClick={() => loadDashboard()}
+            className="p-2 text-slate-400 hover:text-slate-600 transition-all"
+            title={t('db_refresh', 'dashboard')}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+      </div>
+
       {/* Stats Quick Cards: Grid of 7 */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 xl:gap-6">
         {/* Card 1: Vues de Page */}
@@ -654,9 +668,19 @@ export default function VendorDashboard() {
             </div>
           </div>
           <div className="mt-2">
-            <h3 className="text-3xl font-black text-purple-600 tracking-tight">
-              {totalLinkClicks > 0 ? ((totalLinkConversions / totalLinkClicks) * 100).toFixed(1) : '0.0'}%
-            </h3>
+            {(() => {
+              const visitors = Math.max(totalLinkClicks, uniqueVisitors);
+              const visitorCount = Math.max(totalLeads, visitors);
+              const convRate = visitorCount > 0 ? (totalLeads / visitorCount) * 100 : 0;
+              return (
+                <>
+                  <h3 className="text-3xl font-black text-purple-600 tracking-tight">
+                    {convRate.toFixed(1)}%
+                  </h3>
+                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Ratio ({totalLeads}/{visitorCount})</p>
+                </>
+              );
+            })()}
           </div>
           <div className="mt-4 pt-2 border-t border-slate-100/50 flex items-center justify-between text-[8px] font-extrabold text-purple-700 uppercase tracking-wider">
             <span>{t('db_leads_visitors', 'dashboard')}</span>

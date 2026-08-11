@@ -731,7 +731,7 @@ export const influencerApi = {
     requestedLandingPageUrl?: string;
     userMode?: string;
   }) => api.post('/influencer/claims', data),
-  getCustomers: (params?: { page?: number; limit?: number; search?: string; all?: boolean; mode?: string }) =>
+  getCustomers: (params?: { page?: number; limit?: number; search?: string; all?: boolean; summary?: boolean; mode?: string }) =>
     api.get('/influencer/customers', { params }),
   getCampaigns: () => api.get('/influencer/campaigns'),
   createCampaign: (data: any) => api.post('/influencer/campaigns', data),

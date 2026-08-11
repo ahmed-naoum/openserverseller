@@ -450,6 +450,7 @@ router.post(
               status: 'NEW',
               source: 'WOOCOMMERCE',
               sourceId: order.id.toString(),
+              requestedPriceMad: parseFloat(order.total) || null,
               notes: `Commande WooCommerce #${order.number || order.id} (${order.total || 0} ${order.currency || 'MAD'})`,
             },
           });

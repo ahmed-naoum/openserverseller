@@ -46,9 +46,9 @@ export const isConfirmedStatus = (status: string) => {
   return s === 'CONFIRMED' || s === 'PRICE_CONFIRMED' || DELIVERY_STATUSES.includes(s);
 };
 
-export const isConfirmedRow = (c: LeadRow) => isConfirmedStatus((c.order?.status || 'UNKNOWN').toUpperCase());
+export const isConfirmedRow = (c: LeadRow) => isConfirmedStatus((c.order?.status || (c as any).status || 'UNKNOWN').toUpperCase());
 
-export const isDeliveredRow = (c: LeadRow) => (c.order?.status || '').toUpperCase() === 'DELIVERED';
+export const isDeliveredRow = (c: LeadRow) => (c.order?.status || (c as any).status || '').toUpperCase() === 'DELIVERED';
 
 /**
  * The status a row is presented under. Confirmed leads that already have a
@@ -56,7 +56,7 @@ export const isDeliveredRow = (c: LeadRow) => (c.order?.status || '').toUpperCas
  * row filter must both use this, or a chip advertises N rows and matches none.
  */
 export const getDisplayStatus = (c: LeadRow) => {
-  const s = (c.order?.status || 'UNKNOWN').toUpperCase();
+  const s = (c.order?.status || (c as any).status || 'UNKNOWN').toUpperCase();
   if ((s === 'CONFIRMED' || s === 'PRICE_CONFIRMED') && c.order?.coliatyPackageCode) return 'CONFIRMED_DELIVERY';
   return s;
 };
@@ -81,18 +81,22 @@ export const getLeadDate = (c: LeadRow) => new Date((c.order?.createdAt as any) 
  * three are scanned.
  */
 export const getStatusChangedAt = (c: LeadRow): Date | null => {
-  const histories = [c.order?.statusHistory, c.order?.lead?.statusHistory, c.statusHistory];
+  const histories = [
+    c.order?.statusHistory,
+    c.order?.lead?.statusHistory,
+    (c as any).lead?.statusHistory,
+    c.statusHistory
+  ];
   let latest: number | null = null;
 
   for (const history of histories) {
     if (!Array.isArray(history)) continue;
     for (const entry of history) {
       if (!entry?.createdAt) continue;
-      const from = (entry.oldStatus || '').toUpperCase();
-      const to = (entry.newStatus || '').toUpperCase();
-      if (!to || from === to) continue;
       const time = new Date(entry.createdAt as any).getTime();
-      if (!Number.isNaN(time) && (latest === null || time > latest)) latest = time;
+      if (!Number.isNaN(time) && (latest === null || time > latest)) {
+        latest = time;
+      }
     }
   }
 

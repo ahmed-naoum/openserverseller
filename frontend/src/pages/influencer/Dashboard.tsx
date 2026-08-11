@@ -27,7 +27,7 @@ export default function InfluencerDashboard() {
   const { t, language } = useLanguage();
   const [referralLinks, setReferralLinks] = useState<ReferralLink[]>([]);
   const [commissions, setCommissions] = useState<InfluencerCommission[]>([]);
-  const [allCommissions, setAllCommissions] = useState<InfluencerCommission[]>([]);
+  const [periodLeads, setPeriodLeads] = useState<any[]>([]);
   const [wallet, setWallet] = useState<any>(null);
   const [walletTransactions, setWalletTransactions] = useState<any[]>([]);
   const [stats, setStats] = useState<any>({
@@ -40,58 +40,49 @@ export default function InfluencerDashboard() {
   });
   const [leadCountsByLink, setLeadCountsByLink] = useState<any[]>([]);
   const [helpers, setHelpers] = useState<any[]>([]);
-  const [dateRange, setDateRange] = useState<number | 'custom' | 'all'>('all');
+  const [dateRange, setDateRange] = useState<number | 'custom' | 'all' | 'yesterday'>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [chartType, setChartType] = useState<'revenue' | 'balance'>('revenue');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (dateRange !== 'custom' || (startDate && endDate)) {
-      loadDashboard();
-    }
+    loadDashboard();
   }, [dateRange, startDate, endDate]);
 
   const loadDashboard = async () => {
     try {
       setLoading(true);
-      const params: any = {};
+      const params: any = { days: dateRange };
       if (dateRange === 'custom') {
-        if (startDate) params.start = startDate;
-        if (endDate) params.end = endDate;
-      } else {
-        params.days = dateRange;
+        params.start = startDate;
+        params.end = endDate;
       }
 
-      // Filter links stats by the same date range
-      const linkParams: any = {};
+      const linkParams: any = { days: dateRange };
       if (dateRange === 'custom') {
-        if (startDate) linkParams.start = startDate;
-        if (endDate) linkParams.end = endDate;
-      } else if (typeof dateRange === 'number') {
-        const start = new Date();
-        start.setDate(start.getDate() - (dateRange - 1));
-        linkParams.start = start.toISOString().split('T')[0];
+        linkParams.start = startDate;
+        linkParams.end = endDate;
+      } else if (dateRange === 'all') {
+        linkParams.days = 'all';
+      } else if (dateRange === 'yesterday') {
+        linkParams.start = new Date(Date.now() - 86400000).toISOString().split('T')[0];
         linkParams.end = new Date().toISOString().split('T')[0];
       }
 
-      const [dashboardRes, linksRes, customersRes] = await Promise.all([
+      const [dashboardRes, linksRes] = await Promise.all([
         dashboardApi.influencer(params),
         influencerApi.getLinks(linkParams),
-        influencerApi.getCustomers({ all: true })
       ]);
       
       setReferralLinks(linksRes.data);
-      // Use commissions from dashboardRes which are correctly filtered by date
       setCommissions(dashboardRes.data.commissions || []);
       setWallet(dashboardRes.data.wallet);
       setWalletTransactions(dashboardRes.data.walletTransactions || []);
       setStats(dashboardRes.data.stats || { conversions: 0, confirmed: 0, delivered: 0 });
       setLeadCountsByLink(dashboardRes.data.leadCountsByLink || []);
       setHelpers(dashboardRes.data.helpers || []);
-
-      const commissionsData = customersRes.data?.data?.commissions || customersRes.data?.commissions || [];
-      setAllCommissions(commissionsData);
+      setPeriodLeads(dashboardRes.data.periodLeads || []);
     } catch (error) {
       console.error('Failed to load dashboard:', error);
     } finally {

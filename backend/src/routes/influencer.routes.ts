@@ -1253,12 +1253,13 @@ router.get(
   authorize('VENDOR', 'INFLUENCER'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { page = 1, limit = 20, search, mode, all } = req.query;
+    const { page = 1, limit = 20, search, mode, all, summary } = req.query;
 
     // The leads pages compute their stats/charts/pagination client-side, so they ask
     // for the whole dataset with `all=true`. Cap it so a very large account can't OOM
     // the response; `truncated` tells the client the numbers are incomplete.
     const fetchAll = all === 'true' || all === '1' || (all as any) === true;
+    const summaryOnly = summary === 'true' || summary === '1' || (summary as any) === true;
     const ALL_HARD_CAP = 5000;
 
     const safePage = Math.max(1, Number(page) || 1);
@@ -1298,26 +1299,60 @@ router.get(
 
     const commissions = await prisma.influencerCommission.findMany({
       where: commissionWhereClause,
-      include: {
-        order: {
-          include: {
-            items: true,
-            lead: {
-              include: {
-                statusHistory: {
-                  include: { changer: { select: { id: true, profile: { select: { fullName: true } } } } },
-                  orderBy: { createdAt: 'asc' }
+      include: summaryOnly
+        ? {
+            order: {
+              select: {
+                id: true,
+                customerName: true,
+                customerPhone: true,
+                customerCity: true,
+                customerAddress: true,
+                status: true,
+                totalAmountMad: true,
+                coliatyPackageCode: true,
+                coliatyPackageId: true,
+                createdAt: true,
+                lead: {
+                  select: {
+                    id: true,
+                    paymentSituation: true,
+                    callbackAt: true,
+                    requestedPriceMad: true,
+                    requestedPriceStatus: true,
+                    source: true,
+                  }
                 }
               }
             },
-            statusHistory: {
-              include: { changedByUser: { select: { id: true, profile: { select: { fullName: true } } } } },
-              orderBy: { createdAt: 'asc' }
+            referralLink: {
+              select: {
+                id: true,
+                code: true,
+                productId: true,
+              }
             }
           }
-        },
-        referralLink: { select: CUSTOMER_LIST_LINK_SELECT }
-      },
+        : {
+            order: {
+              include: {
+                items: true,
+                lead: {
+                  include: {
+                    statusHistory: {
+                      include: { changer: { select: { id: true, profile: { select: { fullName: true } } } } },
+                      orderBy: { createdAt: 'asc' }
+                    }
+                  }
+                },
+                statusHistory: {
+                  include: { changedByUser: { select: { id: true, profile: { select: { fullName: true } } } } },
+                  orderBy: { createdAt: 'asc' as const }
+                }
+              }
+            },
+            referralLink: { select: CUSTOMER_LIST_LINK_SELECT }
+          },
       orderBy: { createdAt: 'desc' },
       skip,
       take
@@ -1382,22 +1417,43 @@ router.get(
 
     const leads = await prisma.lead.findMany({
       where: leadWhereClause,
-      include: {
-        order: {
-          include: {
-            items: true,
-            statusHistory: {
-              include: { changedByUser: { select: { id: true, profile: { select: { fullName: true } } } } },
-              orderBy: { createdAt: 'asc' }
+      include: summaryOnly
+        ? {
+            order: {
+              select: {
+                id: true,
+                customerCity: true,
+                status: true,
+                totalAmountMad: true,
+                coliatyPackageCode: true,
+                coliatyPackageId: true,
+                createdAt: true,
+              }
+            },
+            referralLink: {
+              select: {
+                id: true,
+                code: true,
+                productId: true,
+              }
             }
           }
-        },
-        statusHistory: {
-          include: { changer: { select: { id: true, profile: { select: { fullName: true } } } } },
-          orderBy: { createdAt: 'asc' }
-        },
-        referralLink: { select: CUSTOMER_LIST_LINK_SELECT }
-      },
+        : {
+            order: {
+              include: {
+                items: true,
+                statusHistory: {
+                  include: { changedByUser: { select: { id: true, profile: { select: { fullName: true } } } } },
+                  orderBy: { createdAt: 'asc' as const }
+                }
+              }
+            },
+            statusHistory: {
+              include: { changer: { select: { id: true, profile: { select: { fullName: true } } } } },
+              orderBy: { createdAt: 'asc' as const }
+            },
+            referralLink: { select: CUSTOMER_LIST_LINK_SELECT }
+          },
       orderBy: { createdAt: 'desc' },
       // Was hardcoded to 100, which silently truncated every vendor with more leads
       // than that and made every client-side statistic wrong.
@@ -1421,23 +1477,24 @@ router.get(
       status: 'PENDING',
       createdAt: lead.createdAt,
       order: {
+        createdAt: (lead as any).order?.createdAt || lead.createdAt,
         customerName: lead.fullName,
         customerPhone: lead.phone,
         customerCity: (lead as any).order?.customerCity || lead.city,
         customerAddress: lead.address,
-        status: lead.status === 'NEW' ? 'LEAD' : lead.status,
+        status: (lead as any).order?.status || (lead.status === 'NEW' ? 'LEAD' : lead.status),
         productVariant: lead.productVariant,
         totalAmountMad: (lead as any).order?.totalAmountMad || lead.requestedPriceMad || 0,
         coliatyPackageCode: (lead as any).order?.coliatyPackageCode,
         coliatyPackageId: (lead as any).order?.coliatyPackageId,
-        statusHistory: (lead as any).order?.statusHistory || [],
-        items: (lead as any).order?.items || [],
+        statusHistory: summaryOnly ? [] : ((lead as any).order?.statusHistory || []),
+        items: summaryOnly ? [] : ((lead as any).order?.items || []),
         lead: {
           id: lead.id,
           paymentSituation: lead.paymentSituation,
           callbackDate: lead.callbackAt,
-          notes: lead.notes,
-          statusHistory: (lead as any).statusHistory || [],
+          notes: summaryOnly ? undefined : lead.notes,
+          statusHistory: summaryOnly ? [] : ((lead as any).statusHistory || []),
           requestedPriceMad: lead.requestedPriceMad,
           requestedPriceStatus: lead.requestedPriceStatus,
           source: lead.source,

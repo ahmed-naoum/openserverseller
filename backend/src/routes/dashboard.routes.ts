@@ -96,13 +96,52 @@ router.get(
       scope,
     );
 
+    /**
+     * The two ledgers below are the whole weight of this response. A vendor a
+     * few months old carries thousands of wallet rows, and they were serialised
+     * twice — once nested inside `wallet`, once beside it — for a screen that
+     * only ever folds them back down into four numbers. So the ledgers are
+     * pages now, and each figure the dashboard used to derive by walking the
+     * full array is aggregated in the database and returned alongside the page.
+     *
+     * The aggregates are deliberately not computed from the page: they describe
+     * the whole window, so they read the same whichever page was asked for.
+     */
+    const intParam = (value: unknown, fallback: number, max: number) => {
+      const n = parseInt(String(value ?? ''), 10);
+      return Number.isFinite(n) && n > 0 ? Math.min(n, max) : fallback;
+    };
+
+    const txPage = intParam(req.query.txPage, 1, Number.MAX_SAFE_INTEGER);
+    const txPageSize = intParam(req.query.txPageSize, 20, 100);
+    const commissionsPage = intParam(req.query.commissionsPage, 1, Number.MAX_SAFE_INTEGER);
+    const commissionsPageSize = intParam(req.query.commissionsPageSize, 20, 100);
+
+    // Reached through the relation rather than through a walletId, so the
+    // ledger queries do not have to wait on the wallet lookup to know their
+    // filter and can stay in the same parallel batch as everything else.
+    const txWhere: any = { wallet: { userId } };
+    if (createdAtWindow) txWhere.createdAt = createdAtWindow;
+
+    // A page is a window onto an ordered list, so the order has to be total:
+    // `createdAt` alone ties on rows written in the same millisecond and lets
+    // one drift between pages — appearing twice, or not at all.
+    const txOrder = [{ createdAt: 'desc' as const }, { id: 'desc' as const }];
+
     const [
       profile,
       referralLinks,
       commissions,
+      commissionsTotal,
+      commissionsFirst,
       campaigns,
       notifications,
       wallet,
+      walletTransactions,
+      txTotals,
+      txCredits,
+      txDebits,
+      txClosing,
       periodStats,
       periodLeadCounts,
       periodClicks,
@@ -111,18 +150,35 @@ router.get(
       prisma.userProfile.findUnique({ where: { userId } }),
       prisma.referralLink.findMany({
         where: linksWhere,
-        include: { product: { include: { images: { where: { isPrimary: true }, take: 1 } } } },
+        include: {
+          product: {
+            // `longDescription` is a product-page field: several KB of prose per
+            // link, on a screen that never renders it.
+            omit: { longDescription: true },
+            include: { images: { where: { isPrimary: true }, take: 1 } }
+          }
+        },
         orderBy: { createdAt: 'desc' }
       }),
       prisma.influencerCommission.findMany({
         where: whereBase,
-        include: { 
+        include: {
           referralLink: {
             include: { product: true }
           },
           order: true
         },
-        orderBy: { createdAt: 'desc' }
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (commissionsPage - 1) * commissionsPageSize,
+        take: commissionsPageSize
+      }),
+      prisma.influencerCommission.count({ where: whereBase }),
+      // The page is newest-first, so the oldest row it needs is never on it.
+      // The dashboard sizes its "tout" chart from that date, so it is returned
+      // as a figure of its own instead.
+      prisma.influencerCommission.aggregate({
+        where: whereBase,
+        _min: { createdAt: true }
       }),
       prisma.influencerCampaign.findMany({
         orderBy: { createdAt: 'desc' }
@@ -132,24 +188,55 @@ router.get(
         orderBy: { createdAt: 'desc' },
         take: 10
       }),
-      prisma.wallet.findUnique({ 
-        where: { userId },
-        include: { 
-          transactions: {
-            where: { createdAt: { gte: dateLimitStart, lte: dateLimitEnd } },
-            orderBy: { createdAt: 'desc' }
-          }
-        }
+      // Without the nested `transactions` the ledger is serialised once rather
+      // than twice — on its own that halved this response.
+      prisma.wallet.findUnique({ where: { userId } }),
+      prisma.walletTransaction.findMany({
+        where: txWhere,
+        orderBy: txOrder,
+        skip: (txPage - 1) * txPageSize,
+        take: txPageSize
+      }),
+      prisma.walletTransaction.aggregate({
+        where: txWhere,
+        _count: { _all: true },
+        _sum: { amountMad: true },
+        _min: { createdAt: true },
+        _max: { createdAt: true }
+      }),
+      // Credits and debits are summed apart because the dashboard shows money in
+      // and money out as two figures; netting them first loses both.
+      prisma.walletTransaction.aggregate({
+        where: { ...txWhere, amountMad: { gt: 0 } },
+        _count: { _all: true },
+        _sum: { amountMad: true }
+      }),
+      prisma.walletTransaction.aggregate({
+        where: { ...txWhere, amountMad: { lt: 0 } },
+        _count: { _all: true },
+        _sum: { amountMad: true }
+      }),
+      // The running balance as the window closed. It rides on the newest row,
+      // which only sits on the first page, so it is read on its own.
+      prisma.walletTransaction.findFirst({
+        where: txWhere,
+        orderBy: txOrder,
+        select: { balanceAfterMad: true, createdAt: true }
       }),
       prisma.lead.findMany({
-        where: periodLeadsWhere,
+        where: mode === 'SELLER' ? { vendorId: userId } : { referralLink: { influencerId: userId } },
         select: {
+          createdAt: true,
           status: true,
+          referralLinkId: true,
           order: {
             select: {
-              status: true
+              createdAt: true,
+              status: true,
+              statusHistory: { select: { createdAt: true } }
             }
-          }
+          },
+          statusHistory: { select: { createdAt: true } }
         }
       }),
       prisma.lead.groupBy({
@@ -247,17 +334,52 @@ router.get(
       _sum: { amount: true }
     });
 
+    const pageMeta = (total: number, page: number, pageSize: number) => ({
+      total,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      hasMore: page * pageSize < total
+    });
+
+    /**
+     * Everything the dashboard used to fold out of the ledger itself. A sum
+     * comes back null when the window caught no rows, and `periodWithdrawn` is
+     * reported positive because the screen labels it money out rather than a
+     * negative change in balance.
+     */
+    const walletStats = {
+      periodEarnedMad: txCredits._sum.amountMad || 0,
+      periodWithdrawnMad: Math.abs(txDebits._sum.amountMad || 0),
+      periodNetMad: txTotals._sum.amountMad || 0,
+      // Falls back to the live balance so an empty window reads as the wallet
+      // as it stands, which is what the old `walletTransactions[0]` did.
+      closingBalanceMad: txClosing?.balanceAfterMad ?? (wallet?.balanceMad || 0),
+      transactionCount: txTotals._count._all,
+      creditCount: txCredits._count._all,
+      debitCount: txDebits._count._all,
+      firstTransactionAt: txTotals._min.createdAt,
+      lastTransactionAt: txTotals._max.createdAt
+    };
+
     res.json({
       profile,
       referralLinks,
       commissions,
+      commissionsMeta: {
+        ...pageMeta(commissionsTotal, commissionsPage, commissionsPageSize),
+        firstCommissionAt: commissionsFirst._min.createdAt
+      },
       campaigns,
       stats,
       totalEarnings: totalEarnings._sum.amount || 0,
       notifications,
       wallet,
-      walletTransactions: wallet?.transactions || [],
+      walletTransactions,
+      walletTransactionsMeta: pageMeta(txTotals._count._all, txPage, txPageSize),
+      walletStats,
       leadCountsByLink,
+      periodLeads,
       helpers: (helperAssignments || []).map((ha: any) => ({
         email: ha.helper.email,
         phone: ha.helper.phone,
@@ -564,9 +686,11 @@ router.get(
           } : undefined
         },
         select: {
+          createdAt: true,
           status: true,
           order: {
             select: {
+              createdAt: true,
               status: true
             }
           }
@@ -682,6 +806,7 @@ router.get(
       wallet,
       walletTransactions: wallet?.transactions || [],
       leadCountsByLink,
+      periodLeads,
       helpers: (helperAssignments || []).map((ha: any) => ({
         email: ha.helper.email,
         phone: ha.helper.phone,

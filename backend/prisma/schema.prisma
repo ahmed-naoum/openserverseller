@@ -817,6 +817,10 @@ model WalletTransaction {
   order           Order?   @relation(fields: [orderId], references: [id])
   createdAt       DateTime @default(now())
 
+  // The dashboard reads this table one page and a few sums at a time, always as
+  // "one wallet, newest first, within a window". Unindexed that is a full scan
+  // per panel, which is what made paging alone not enough.
+  @@index([walletId, createdAt])
   @@map("wallet_transactions")
 }
 

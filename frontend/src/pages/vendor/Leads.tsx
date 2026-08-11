@@ -191,7 +191,7 @@ export default function VendorLeads() {
   // is created one day and delivered the next, so on the creation date "today +
   // Livré" answered with the leads created today that happen to be delivered —
   // never the ones actually delivered today, which is the question being asked.
-  const [dateBasis, setDateBasis] = useState<'STATUS' | 'CREATED'>('STATUS');
+  const [dateBasis, setDateBasis] = useState<'STATUS' | 'CREATED'>('CREATED');
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -780,6 +780,7 @@ export default function VendorLeads() {
             <div className="relative bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center border-b-4 border-b-amber-400 pb-8">
               <CheckCircle2 className="w-5 h-5 mx-auto mb-2 text-amber-600" />
               <h3 className="text-xl font-black text-amber-600">{confirmationRate.toFixed(1)}%</h3>
+              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Ratio ({confirmedLeads}/{totalLeads})</p>
               <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">{t('confirmation_rate', 'leads', 'Taux de Confirmation')}</p>
               <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-amber-500 text-white text-[13px] font-black px-5 py-2 rounded-full shadow-lg border-2 border-white whitespace-nowrap uppercase tracking-widest">
                 {t('leads_confirmed', 'leads', '{count} LEADS CONFIRMÉS').replace('{count}', String(confirmedLeads))}
@@ -788,6 +789,7 @@ export default function VendorLeads() {
             <div className="relative bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center border-b-4 border-b-emerald-400 pb-8">
               <Truck className="w-5 h-5 mx-auto mb-2 text-emerald-600" />
               <h3 className="text-xl font-black text-emerald-600">{deliveryRate.toFixed(1)}%</h3>
+              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Ratio ({deliveredLeads}/{confirmedLeads})</p>
               <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">{t('delivery_rate', 'leads', 'Taux de Livraison')}</p>
               <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[13px] font-black px-5 py-2 rounded-full shadow-lg border-2 border-white whitespace-nowrap uppercase tracking-widest">
                 {t('leads_delivered', 'leads', '{count} LEADS LIVRÉS').replace('{count}', String(deliveredLeads))}
