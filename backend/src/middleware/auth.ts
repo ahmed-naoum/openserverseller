@@ -157,6 +157,27 @@ const parseCookies = (cookieHeader: string | undefined): Record<string, string> 
   return list;
 };
 
+/**
+ * `lastLoginAt` doubles as a last-seen heartbeat, so it was rewritten on every
+ * authenticated request: 419 user rows had taken 224k updates, which is pure
+ * bloat and autovacuum pressure for a value nothing reads at that resolution.
+ * Coarsening it to this granularity removes ~99% of those writes.
+ */
+const LAST_SEEN_THROTTLE_MS = 5 * 60 * 1000;
+
+/**
+ * Fire-and-forget on purpose. The request does not depend on the heartbeat, and
+ * awaiting it meant a transient database error landed in the catch below and
+ * logged the user out with "Invalid or expired token".
+ */
+const touchLastSeen = (userId: number, current: Date | null) => {
+  if (current && Date.now() - current.getTime() < LAST_SEEN_THROTTLE_MS) return;
+
+  prisma.user
+    .update({ where: { id: userId }, data: { lastLoginAt: new Date() } })
+    .catch((err) => console.error('Failed to update lastLoginAt:', err));
+};
+
 export const authenticate = async (
   req: Request,
   res: Response,
@@ -238,10 +259,7 @@ export const authenticate = async (
       });
     }
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() },
-    });
+    touchLastSeen(user.id, user.lastLoginAt);
 
     next();
   } catch (error) {

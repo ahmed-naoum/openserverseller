@@ -27,7 +27,12 @@ import { maintenanceMiddleware } from './middleware/maintenance.js';
 import { startLeadsReassignmentCron } from './jobs/leadReassignment.js';
 import { seedTrafficData } from './lib/trafficTracker.js';
 import zlib from 'zlib';
+import { promisify } from 'util';
+
+/** Compresses on the libuv threadpool instead of the main thread. */
+const gzipAsync = promisify(zlib.gzip);
 import { startSessionCleanupCron } from './jobs/sessionCleanup.js';
+import { startLogRetentionCron } from './jobs/logRetention.js';
 import { setIO } from './lib/realtime.js';
 import { isSessionRecordingEnabled } from './lib/sessionRecording.js';
 import { startSampler, stopSampler, peekSnapshot, warmupServerMetrics } from './services/serverMetrics.service.js';
@@ -782,7 +787,10 @@ const setupChatSocket = () => {
         const durationSec = Math.round((Date.now() - buffer.startTime) / 1000);
         if (durationSec >= MIN_DURATION_TO_SAVE_SEC) {
           try {
-            const gzipBuffer = zlib.gzipSync(JSON.stringify(buffer.events));
+            // gzipSync blocked the event loop for the whole compression — on
+            // rrweb payloads this is tens of ms per disconnect, serialised
+            // against every other request the process is serving.
+            const gzipBuffer = await gzipAsync(JSON.stringify(buffer.events));
             await prisma.sessionRecording.create({
               data: {
                 sessionId: socket.id,
@@ -839,6 +847,10 @@ startLeadsReassignmentCron();
 
 // Purge expired / over-cap session recordings on a schedule.
 startSessionCleanupCron();
+
+// Purge aged-out traffic / activity / audit log rows. These three tables have no
+// natural ceiling and were the bulk of the database before this ran.
+startLogRetentionCron();
 
 // Cache immutable hardware facts (CPU model, GPU, OS) so the first SOC request is fast.
 // Starts no polling loop — an unwatched server costs nothing after this.

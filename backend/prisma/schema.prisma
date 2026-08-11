@@ -1352,6 +1352,10 @@ model ImmutableAuditLog {
   hash      String   // Current record's SHA-256 hash (fields + prevHash)
   signature String?  // Optional private-key signature
 
+  // The chain walks this table in timestamp order — head lookup on write,
+  // ascending pages on verify, and the retention cutoff. Without it every one
+  // of those is a seq scan over the whole table.
+  @@index([timestamp])
   @@map("immutable_audit_logs")
 }
 

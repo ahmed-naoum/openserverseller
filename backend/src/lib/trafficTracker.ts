@@ -165,6 +165,14 @@ export async function seedTrafficData() {
     console.error('Failed to load traffic logs from database:', err.message);
   }
   
+  // Everything below fabricates traffic with Math.random() and writes it to the
+  // real trafficLog table, so a production database ends up with invented
+  // requests, countries and IPs mixed into its analytics. Opt-in only.
+  if (process.env.SEED_FAKE_TRAFFIC !== 'true') {
+    console.log('Traffic tracker starting with no history (set SEED_FAKE_TRAFFIC=true to generate demo data).');
+    return;
+  }
+
   // Create ~2000 seed requests distributed ONLY in the previous 24 hours (24h to 48h ago)
   // so that today's stats start at 0 but we have yesterday's stats to compute trend changes!
   const totalRequests = 2000;
