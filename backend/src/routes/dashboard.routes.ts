@@ -232,11 +232,9 @@ router.get(
           order: {
             select: {
               createdAt: true,
-              status: true,
-              statusHistory: { select: { createdAt: true } }
+              status: true
             }
-          },
-          statusHistory: { select: { createdAt: true } }
+          }
         }
       }),
       prisma.lead.groupBy({
