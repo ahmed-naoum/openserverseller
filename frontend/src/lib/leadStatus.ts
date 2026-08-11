@@ -7,13 +7,23 @@
  * reports a lead statistic must import from here.
  */
 
+/** One row of `order_status_history` / `lead_status_history` as the API returns it. */
+type StatusHistoryEntry = {
+  oldStatus?: string | null;
+  newStatus?: string | null;
+  createdAt?: string | Date | null;
+};
+
 /** Minimal shape the helpers need — avoids coupling to the full API types. */
 type LeadRow = {
   createdAt: string | Date;
+  statusHistory?: StatusHistoryEntry[] | null;
   order?: {
     status?: string | null;
     createdAt?: string | Date | null;
     coliatyPackageCode?: string | null;
+    statusHistory?: StatusHistoryEntry[] | null;
+    lead?: { statusHistory?: StatusHistoryEntry[] | null } | null;
   } | null;
 };
 
@@ -56,3 +66,50 @@ export const getDisplayStatus = (c: LeadRow) => {
  * all read the same field or the numbers disagree with the rows.
  */
 export const getLeadDate = (c: LeadRow) => new Date((c.order?.createdAt as any) || c.createdAt);
+
+/**
+ * When the row last actually MOVED status, or null if it never has.
+ *
+ * Read from the status history rather than `updatedAt`: the order row is written
+ * for things that are not status changes (payment situation, tracking number,
+ * notes), and none of those should look like a delivery. Entries whose old and
+ * new status are equal are skipped for the same reason — the parcel webhook logs
+ * one on every situation push even when the status stayed put.
+ *
+ * A row carries up to three histories (order, the order's lead, and a bare lead
+ * row's own) and the caller cannot know which one holds the newest entry, so all
+ * three are scanned.
+ */
+export const getStatusChangedAt = (c: LeadRow): Date | null => {
+  const histories = [c.order?.statusHistory, c.order?.lead?.statusHistory, c.statusHistory];
+  let latest: number | null = null;
+
+  for (const history of histories) {
+    if (!Array.isArray(history)) continue;
+    for (const entry of history) {
+      if (!entry?.createdAt) continue;
+      const from = (entry.oldStatus || '').toUpperCase();
+      const to = (entry.newStatus || '').toUpperCase();
+      if (!to || from === to) continue;
+      const time = new Date(entry.createdAt as any).getTime();
+      if (!Number.isNaN(time) && (latest === null || time > latest)) latest = time;
+    }
+  }
+
+  return latest === null ? null : new Date(latest);
+};
+
+/**
+ * "When did this lead last move" — the last status change, or the creation date
+ * for a row that has never changed status.
+ *
+ * Never returns anything earlier than the creation date: a lead's early history
+ * (NEW → ASSIGNED) can predate the order row that `getLeadDate` reports, and a
+ * date filter that moved rows BACKWARDS in time would hide leads instead of
+ * surfacing them. On this basis a filter can only ever add rows.
+ */
+export const getLeadActivityDate = (c: LeadRow) => {
+  const created = getLeadDate(c);
+  const changed = getStatusChangedAt(c);
+  return changed && changed.getTime() > created.getTime() ? changed : created;
+};

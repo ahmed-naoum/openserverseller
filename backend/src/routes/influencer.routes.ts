@@ -1204,6 +1204,49 @@ router.get(
   })
 );
 
+// The customers list repeats its referral link on every row, so anything wide in
+// there is paid for once per lead. `include` dragged along the product's
+// `longDescription` (rich HTML) and the landing page's whole sitebuilder JSON —
+// on a 3k-lead account that was tens of MB of the same few products over and
+// over. The list only ever renders these five fields.
+const CUSTOMER_LIST_LINK_SELECT = {
+  id: true,
+  code: true,
+  productId: true,
+  product: {
+    select: {
+      id: true,
+      nameFr: true,
+      sku: true,
+      retailPriceMad: true,
+      images: { where: { isPrimary: true }, take: 1, select: { imageUrl: true } },
+    },
+  },
+  landingPage: { select: { id: true, customStructure: true } },
+} as const;
+
+// The only thing the list reads out of `customStructure` is the express_checkout
+// block, to price the pack the customer picked. Keep that block and drop the
+// rest of the page (hero copy, images, FAQs, testimonials…) before it ships.
+// `cache` is per-request, not module-level: a vendor editing pack prices in the
+// sitebuilder must see the new price on the very next load.
+function trimLandingStructure(landingPage: any, cache: Map<number, any>) {
+  if (!landingPage?.customStructure) return landingPage;
+  if (!cache.has(landingPage.id)) {
+    let trimmed: any = null;
+    try {
+      const structure = landingPage.customStructure;
+      const blocks = Array.isArray(structure) ? structure : structure.blocks || [];
+      const checkout = blocks.find((b: any) => b?.type === 'express_checkout');
+      trimmed = checkout ? { blocks: [checkout] } : null;
+    } catch {
+      trimmed = null;
+    }
+    cache.set(landingPage.id, trimmed);
+  }
+  return { ...landingPage, customStructure: cache.get(landingPage.id) };
+}
+
 router.get(
   '/customers',
   authenticate,
@@ -1273,7 +1316,7 @@ router.get(
             }
           }
         },
-        referralLink: { include: { product: { include: { images: { where: { isPrimary: true }, take: 1 } } }, landingPage: true } }
+        referralLink: { select: CUSTOMER_LIST_LINK_SELECT }
       },
       orderBy: { createdAt: 'desc' },
       skip,
@@ -1353,7 +1396,7 @@ router.get(
           include: { changer: { select: { id: true, profile: { select: { fullName: true } } } } },
           orderBy: { createdAt: 'asc' }
         },
-        referralLink: { include: { product: { include: { images: { where: { isPrimary: true }, take: 1 } } }, landingPage: true } }
+        referralLink: { select: CUSTOMER_LIST_LINK_SELECT }
       },
       orderBy: { createdAt: 'desc' },
       // Was hardcoded to 100, which silently truncated every vendor with more leads
@@ -1361,12 +1404,18 @@ router.get(
       take: fetchAll ? ALL_HARD_CAP : Math.max(safeLimit, 100)
     });
 
+    // One cache for both lists below, so a link shared by hundreds of rows is
+    // trimmed once per request rather than once per row.
+    const landingCache = new Map<number, any>();
+    const slimLink = (link: any) =>
+      link?.landingPage ? { ...link, landingPage: trimLandingStructure(link.landingPage, landingCache) } : link;
+
     // Map leads to a commission-like structure for the frontend
     const leadCommissions = leads.map(lead => ({
       id: `lead-${lead.id}`,
       influencerId: userId,
       referralLinkId: lead.referralLinkId,
-      referralLink: lead.referralLink,
+      referralLink: slimLink(lead.referralLink),
       orderId: (lead as any).order?.id || null,
       amount: 0,
       status: 'PENDING',
@@ -1409,7 +1458,9 @@ router.get(
     const leadOrderIds = new Set(
       leads.map(l => (l as any).order?.id).filter((id: number | undefined) => id != null)
     );
-    const dedupedCommissions = commissions.filter(c => !c.orderId || !leadOrderIds.has(c.orderId));
+    const dedupedCommissions = commissions
+      .filter(c => !c.orderId || !leadOrderIds.has(c.orderId))
+      .map(c => ({ ...c, referralLink: slimLink((c as any).referralLink) }));
 
     const combined = [...leadCommissions, ...dedupedCommissions].sort((a, b) =>
       new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime()

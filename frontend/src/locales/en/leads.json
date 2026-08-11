@@ -142,6 +142,13 @@
   "range_custom": "Custom",
   "range_days": "{count}d",
   "date_separator": "to",
+  "basis_status": "Status update",
+  "basis_created": "Created",
+  "basis_status_hint": "Filter on the date of the last status change",
+  "basis_created_hint": "Filter on the date the lead was created",
+  "basis_active_status": "↻ sorted: status update",
+  "basis_active_created": "↻ sorted: created",
+  "last_status_change": "Last status change",
   "yes": "Yes",
   "no": "No",
   "new_lead": "New Lead"

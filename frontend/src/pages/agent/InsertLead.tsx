@@ -70,6 +70,29 @@ const THEME: Record<ThemeKey, {
 
 const money = (n: number) => `${Number(n || 0).toFixed(2)} MAD`;
 
+/**
+ * Coliaty reports a rejected parcel as a field→message map, which the backend
+ * forwards verbatim as JSON. Unwrap it into the sentence the agent needs, and
+ * fall back to the raw text for our own pre-flight messages, which are already
+ * plain French.
+ */
+function humanizeDispatchError(raw: string): string {
+  if (!raw) return 'Erreur inconnue.';
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      const messages = (Object.values(parsed) as any[])
+        .flat()
+        .filter(v => typeof v === 'string' && v.trim())
+        .join(' · ');
+      if (messages) return messages;
+    }
+  } catch {
+    // Not JSON — the backend's own rejection messages come through as prose.
+  }
+  return raw;
+}
+
 export default function InsertLead() {
   const [theme, setTheme] = useState<ThemeKey>(() => {
     return (localStorage.getItem('agent-theme') as ThemeKey) || 'girly';
@@ -107,6 +130,9 @@ export default function InsertLead() {
   const [notes, setNotes] = useState('');
   const [packageReplacement, setPackageReplacement] = useState(false);
   const [packageOldTracking, setPackageOldTracking] = useState('');
+  // Coliaty's own "ne pas ouvrir" flag. Agents used to write the instruction
+  // into the free-text note, where the courier flow never acts on it.
+  const [packageNoOpen, setPackageNoOpen] = useState(false);
   const [customPrice, setCustomPrice] = useState('');
   const [packName, setPackName] = useState('');
   const [qte, setQte] = useState<number>(1);
@@ -125,6 +151,9 @@ export default function InsertLead() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [dispatchErrors, setDispatchErrors] = useState<
+    { leadId: number; name: string; phone: string; reason: string }[]
+  >([]);
 
   // Don't refire the query on every keystroke
   useEffect(() => {
@@ -161,6 +190,7 @@ export default function InsertLead() {
     mutationFn: async (leadIds: number[]) => {
       return ordersApi.bulkDispatch({ leadIds });
     },
+    onMutate: () => setDispatchErrors([]),
     onSuccess: (res) => {
       setSelectedLeadIds([]);
       queryClient.invalidateQueries({ queryKey: ['agent-pending-dispatch'] });
@@ -170,11 +200,24 @@ export default function InsertLead() {
       // flashed green before the error appeared.
       const results = res.data?.data?.results || [];
       const successes = results.filter((r: any) => r.status === 'success').length;
-      const errors = results.filter((r: any) => r.status === 'error').length;
+      const failed = results.filter((r: any) => r.status === 'error');
 
       if (successes > 0) toast.success(`${successes} expédition(s) réussie(s).`);
-      if (errors > 0) toast.error(`${errors} expédition(s) ont échoué.`);
-      if (!successes && !errors) toast.success(res.data?.message || 'Expédition traitée');
+      if (failed.length > 0) toast.error(`${failed.length} expédition(s) ont échoué.`);
+      if (!successes && !failed.length) toast.success(res.data?.message || 'Expédition traitée');
+
+      // A counter alone left the agent with no idea which lead was refused nor
+      // why, while the reason (bad number, city, price…) was already in the
+      // payload. The failed leads stay in the queue, so they can be fixed.
+      const byId = new Map(leads.map((l: any) => [l.id, l]));
+      setDispatchErrors(
+        failed.map((r: any) => ({
+          leadId: r.leadId,
+          name: (byId.get(r.leadId) as any)?.fullName || `Lead #${r.leadId}`,
+          phone: (byId.get(r.leadId) as any)?.phone || '',
+          reason: humanizeDispatchError(r.error),
+        }))
+      );
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.message || 'Erreur lors de l\'expédition en lot');
@@ -320,9 +363,12 @@ export default function InsertLead() {
     if (!selectedProductId) errors.product = 'Veuillez sélectionner un produit';
     if (!fullName.trim() || fullName.trim().length < 3) errors.fullName = 'Le nom complet doit contenir au moins 3 caractères';
     
-    const isMoroccan = /^(\+212|0)[0-9]{9}$/.test(phone);
-    if (!phone || !isMoroccan) {
-      errors.phone = 'Le numéro de téléphone doit être valide au Maroc (ex: 0612345678)';
+    // Coliaty only accepts mobiles: 06 or 07 followed by 8 digits. The old rule
+    // here was (+212|0) + any 9 digits, so a 05… landline passed validation,
+    // queued fine, and only blew up hours later inside a dispatch batch.
+    const dialled = phone.replace(/[\s.-]/g, '');
+    if (!dialled || !/^(?:\+?212|0)[67][0-9]{8}$/.test(dialled)) {
+      errors.phone = 'Numéro invalide : Coliaty exige un mobile 06… ou 07… (ex: 0612345678)';
     }
 
     if (!city) errors.city = 'Veuillez choisir une ville';
@@ -332,8 +378,9 @@ export default function InsertLead() {
       errors.packageOldTracking = "Le numéro de suivi du colis à remplacer est requis.";
     }
 
-    if (customPrice && (isNaN(Number(customPrice)) || Number(customPrice) < 0)) {
-      errors.customPrice = "Le prix personnalisé doit être un nombre positif.";
+    // Coliaty: "un nombre positif avec maximum 2 décimales".
+    if (customPrice && !/^\d+([.,]\d{1,2})?$/.test(customPrice.trim())) {
+      errors.customPrice = "Le prix doit être positif avec 2 décimales maximum (ex: 149.50).";
     }
 
     setFormErrors(errors);
@@ -362,6 +409,7 @@ export default function InsertLead() {
         source,
         package_replacement: packageReplacement,
         package_old_tracking: packageReplacement ? packageOldTracking : '',
+        package_no_open: packageNoOpen,
         package_note: notes,
         customPrice: customPrice !== '' ? Number(customPrice) : undefined,
         packName: packName || undefined,
@@ -385,6 +433,7 @@ export default function InsertLead() {
       setSelectedProductId('');
       setPackageReplacement(false);
       setPackageOldTracking('');
+      setPackageNoOpen(false);
       setCustomPrice('');
       setPackName('');
       setQte(1);
@@ -680,11 +729,13 @@ export default function InsertLead() {
                 )}
               </Field>
 
+              {/* Both map to real Coliaty parcel flags (package_replacement,
+                  package_no_open) — not to the note field. */}
               <Field label="Options d'expédition" htmlFor="replacement">
-                <div className={`h-11 flex items-center rounded-xl border px-3 transition-all ${
-                  packageReplacement ? t.soft : 'border-gray-200 bg-gray-50/60'
+                <div className={`h-11 flex items-center gap-3 rounded-xl border px-3 transition-all ${
+                  packageReplacement || packageNoOpen ? t.soft : 'border-gray-200 bg-gray-50/60'
                 }`}>
-                  <label htmlFor="replacement" className="flex items-center gap-2.5 cursor-pointer select-none w-full">
+                  <label htmlFor="replacement" className="flex items-center gap-2 cursor-pointer select-none" title="Colis de remplacement — exige le n° de suivi remplacé">
                     <input
                       id="replacement"
                       type="checkbox"
@@ -695,7 +746,20 @@ export default function InsertLead() {
                       }}
                       className="w-4 h-4 rounded border-gray-300"
                     />
-                    <span className="text-xs font-bold text-gray-700">Colis de remplacement</span>
+                    <span className="text-xs font-bold text-gray-700 whitespace-nowrap">Remplacement</span>
+                  </label>
+
+                  <span className="h-4 w-px bg-black/10 shrink-0" />
+
+                  <label htmlFor="noOpen" className="flex items-center gap-2 cursor-pointer select-none" title="Le client ne peut pas ouvrir le colis avant de payer">
+                    <input
+                      id="noOpen"
+                      type="checkbox"
+                      checked={packageNoOpen}
+                      onChange={e => setPackageNoOpen(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300"
+                    />
+                    <span className="text-xs font-bold text-gray-700 whitespace-nowrap">Ne pas ouvrir</span>
                   </label>
                 </div>
               </Field>
@@ -743,7 +807,7 @@ export default function InsertLead() {
                   rows={3}
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
-                  placeholder="Ex: Ne pas ouvrir avant de payer, livrer après 18h…"
+                  placeholder="Ex: Livrer après 18h, appeler avant d'arriver…"
                   className={inputCls(t, false) + ' h-auto py-2.5 resize-none'}
                 />
               </Field>
@@ -845,6 +909,36 @@ export default function InsertLead() {
             </button>
           </div>
         </div>
+
+        {/* Refused parcels, with Coliaty's own reason. These leads are still in
+            the queue below — fix the field it names, then re-send. */}
+        {dispatchErrors.length > 0 && (
+          <div className="px-5 sm:px-6 py-3 border-b border-rose-100 bg-rose-50/70">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-rose-500 shrink-0" />
+              <span className="text-xs font-black text-rose-700">
+                {dispatchErrors.length} colis refusé(s) par Coliaty
+              </span>
+              <button
+                type="button"
+                onClick={() => setDispatchErrors([])}
+                className="ml-auto px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider text-rose-600 hover:bg-rose-100 transition-colors"
+              >
+                Masquer
+              </button>
+            </div>
+            <ul className="mt-2 space-y-1">
+              {dispatchErrors.map(e => (
+                <li key={e.leadId} className="flex flex-wrap items-baseline gap-x-2 text-[11px]">
+                  <span className="font-black text-gray-800">{e.name}</span>
+                  {e.phone && <span className="font-medium text-gray-400 tabular-nums">{e.phone}</span>}
+                  <span className="text-rose-400" aria-hidden="true">→</span>
+                  <span className="font-medium text-rose-700">{e.reason}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Selection bar only appears when it has something to say */}
         {selectedLeadIds.length > 0 && (

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { influencerApi, leadsApi } from '../../lib/api';
@@ -7,7 +7,7 @@ import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { DELIVERY_STATUSES, isConfirmedStatus, isConfirmedRow, isDeliveredRow, getDisplayStatus, getLeadDate } from '../../lib/leadStatus';
+import { DELIVERY_STATUSES, isConfirmedStatus, isConfirmedRow, isDeliveredRow, getDisplayStatus, getLeadDate, getLeadActivityDate, getStatusChangedAt } from '../../lib/leadStatus';
 import {
   Users, MousePointerClick, UserCheck, ShoppingCart,
   Filter, Search, Calendar,
@@ -187,6 +187,11 @@ export default function VendorLeads() {
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [tableDateRange, setTableDateRange] = useState<'TOUS' | 'AUJOURD_HUI' | '7J' | '15J' | '30J' | '90J' | 'CUSTOM'>('TOUS');
   const [tableSelectedProductId, setTableSelectedProductId] = useState<string>('ALL');
+  // Which timestamp the date range, the sort and the trend chart read. A parcel
+  // is created one day and delivered the next, so on the creation date "today +
+  // Livré" answered with the leads created today that happen to be delivered —
+  // never the ones actually delivered today, which is the question being asked.
+  const [dateBasis, setDateBasis] = useState<'STATUS' | 'CREATED'>('STATUS');
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -232,7 +237,7 @@ export default function VendorLeads() {
     setCurrentPage(1);
     // tableDateRange/tableSelectedProductId shrink the result set too — without them
     // the table stays on a page that no longer exists and renders blank.
-  }, [statusFilter, situationFilter, searchTerm, startDate, endDate, itemsPerPage, tableDateRange, tableSelectedProductId]);
+  }, [statusFilter, situationFilter, searchTerm, startDate, endDate, itemsPerPage, tableDateRange, tableSelectedProductId, dateBasis]);
 
   const loadData = async () => {
     try {
@@ -257,14 +262,22 @@ export default function VendorLeads() {
     }
   };
  
-  // Filter commissions by date and product for ALL calculations
-  const dateFilteredCommissions = commissions.filter(c => {
+  // The date every filter, the sort and the trend chart read for a row. One
+  // definition for all of them: a row the range filter kept must not then be
+  // sorted or plotted under a different day.
+  const getRowDate = dateBasis === 'STATUS' ? getLeadActivityDate : getLeadDate;
+
+  // Filter commissions by date and product for ALL calculations.
+  // Memoised: this list feeds every stat, chart and counter below, and on an
+  // account with a few thousand leads re-deriving it on each keystroke in the
+  // search box was enough to make typing stutter.
+  const dateFilteredCommissions = useMemo(() => commissions.filter(c => {
     // Product filter
     if (tableSelectedProductId !== 'ALL' && String(c.referralLinkId) !== tableSelectedProductId) {
       return false;
     }
 
-    const leadDate = getLeadDate(c);
+    const leadDate = getRowDate(c);
 
     // Date filter
     if (tableDateRange === 'TOUS') return true;
@@ -295,9 +308,9 @@ export default function VendorLeads() {
     else if (tableDateRange === '15J') d.setDate(now.getDate() - 15);
     else if (tableDateRange === '30J') d.setDate(now.getDate() - 30);
     else if (tableDateRange === '90J') d.setDate(now.getDate() - 90);
-    
+
     return leadDate >= d;
-  });
+  }), [commissions, tableSelectedProductId, tableDateRange, startDate, endDate, dateBasis]);
 
   const totalClicks = links.reduce((sum, l) => sum + l.clicks, 0);
   const converted = links.reduce((sum, l) => sum + l.conversions, 0);
@@ -313,18 +326,24 @@ export default function VendorLeads() {
 
   // Payment situation totals — counted before the status/search filters, like the
   // status counts, so each option shows how many rows selecting it would give.
-  const situationCounts: Record<string, number> = {};
-  dateFilteredCommissions.forEach(c => {
-    const sit = getPaymentSituation(c);
-    situationCounts[sit] = (situationCounts[sit] || 0) + 1;
-  });
+  const situationCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    dateFilteredCommissions.forEach(c => {
+      const sit = getPaymentSituation(c);
+      counts[sit] = (counts[sit] || 0) + 1;
+    });
+    return counts;
+  }, [dateFilteredCommissions]);
 
   // Build status counts for filter chips
-  const statusCounts: Record<string, number> = {};
-  dateFilteredCommissions.forEach(c => {
-    const s = getDisplayStatus(c);
-    statusCounts[s] = (statusCounts[s] || 0) + 1;
-  });
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    dateFilteredCommissions.forEach(c => {
+      const s = getDisplayStatus(c);
+      counts[s] = (counts[s] || 0) + 1;
+    });
+    return counts;
+  }, [dateFilteredCommissions]);
 
   // Predefine all statuses we want to show in the filter
   const activeStatuses = [
@@ -343,7 +362,7 @@ export default function VendorLeads() {
     if (!activeStatuses.includes(s) && statusCounts[s] > 0) activeStatuses.push(s);
   });
 
-  const filteredCommissions = dateFilteredCommissions.filter(c => {
+  const filteredCommissions = useMemo(() => dateFilteredCommissions.filter(c => {
     // Status filter
     if (statusFilter !== 'ALL') {
       if (getDisplayStatus(c) !== statusFilter.toUpperCase()) return false;
@@ -360,12 +379,18 @@ export default function VendorLeads() {
       (c.order?.customerPhone?.includes(searchTerm)) ||
       (c.order?.customerCity?.toLowerCase().includes(term))
     );
-  });
+  }), [dateFilteredCommissions, statusFilter, situationFilter, searchTerm]);
 
-  // Sort by date descending (newest first) — same date field the filters use
-  const sortedCommissions = [...filteredCommissions].sort((a, b) => {
-    return getLeadDate(b).getTime() - getLeadDate(a).getTime();
-  });
+  // Sort by date descending (newest first) — same date field the filters use.
+  // The date key is read once per row instead of twice per comparison: the
+  // comparator runs ~n·log(n) times, so on a few thousand leads that was tens of
+  // thousands of Date objects built on every render.
+  const sortedCommissions = useMemo(() => {
+    return filteredCommissions
+      .map(c => ({ c, key: getRowDate(c).getTime() }))
+      .sort((a, b) => b.key - a.key)
+      .map(x => x.c);
+  }, [filteredCommissions, dateBasis]);
 
   const totalPages = Math.ceil(sortedCommissions.length / itemsPerPage);
   const paginatedCommissions = sortedCommissions.slice(
@@ -428,7 +453,7 @@ export default function VendorLeads() {
   const performanceData = (() => {
     const groupedMap = new Map();
     dateFilteredCommissions.forEach(comm => {
-      const dateKey = format(getLeadDate(comm), 'yyyy-MM-dd');
+      const dateKey = format(getRowDate(comm), 'yyyy-MM-dd');
       groupedMap.set(dateKey, (groupedMap.get(dateKey) || 0) + 1);
     });
 
@@ -674,6 +699,30 @@ export default function VendorLeads() {
                   </option>
                 ))}
               </select>
+
+              {/* Which date the range below is applied to. Sits next to the range
+                  because on its own "Aujourd'hui" is ambiguous: created today, or
+                  moved today? */}
+              <div className="flex items-center bg-gray-50 p-1 rounded-xl border border-gray-100 w-full sm:w-auto">
+                {(['STATUS', 'CREATED'] as const).map((b) => (
+                  <button
+                    key={b}
+                    onClick={() => setDateBasis(b)}
+                    title={b === 'STATUS'
+                      ? t('basis_status_hint', 'leads', 'Filtrer sur la date du dernier changement de statut')
+                      : t('basis_created_hint', 'leads', 'Filtrer sur la date de création du lead')}
+                    className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all flex-1 sm:flex-none text-center ${
+                      dateBasis === b
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-400 hover:text-gray-600'
+                    }`}
+                  >
+                    {b === 'STATUS'
+                      ? t('basis_status', 'leads', 'MAJ statut')
+                      : t('basis_created', 'leads', 'Création')}
+                  </button>
+                ))}
+              </div>
 
               {/* Date Range Pills */}
               <div className="flex flex-wrap items-center bg-gray-50 p-1 rounded-xl border border-gray-100 w-full sm:w-auto">
@@ -1074,7 +1123,17 @@ export default function VendorLeads() {
                     <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('th_pack_option', 'leads', 'Pack/Option')}</th>
                     <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('th_amount', 'leads', 'Montant')}</th>
                     <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('th_status', 'leads', 'Status')}</th>
-                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('th_date', 'leads', 'Date')}</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                      {t('th_date', 'leads', 'Date')}
+                      {/* Which of the two dates in the cell below the table is
+                          currently filtered and sorted on — otherwise the order
+                          of the rows looks arbitrary. */}
+                      <span className="block mt-0.5 text-[9px] font-black text-violet-500 normal-case tracking-normal">
+                        {dateBasis === 'STATUS'
+                          ? t('basis_active_status', 'leads', '↻ tri : maj statut')
+                          : t('basis_active_created', 'leads', '↻ tri : création')}
+                      </span>
+                    </th>
                     <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('th_situation', 'leads', 'Situation')}</th>
                     <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('th_comments', 'leads', 'Commentaires')}</th>
                     <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('th_actions', 'leads', 'Actions')}</th>
@@ -1236,16 +1295,45 @@ export default function VendorLeads() {
 
                         {/* Date */}
                         <td className="px-5 py-4">
-                          <div className="flex flex-col text-xs text-gray-500 font-medium whitespace-nowrap">
-                            <span className="flex items-center gap-1">
-                              <Calendar className="w-3 h-3" /> 
-                              {commission.createdAt ? format(new Date(commission.createdAt), 'dd MMM yyyy') : '-'}
-                            </span>
-                            <span className="flex items-center gap-1 mt-0.5 opacity-60">
-                              <Clock className="w-3 h-3" /> 
-                              {commission.createdAt ? format(new Date(commission.createdAt), 'HH:mm') : '-'}
-                            </span>
-                          </div>
+                          {(() => {
+                            // Creation reads the same field the filters do, not
+                            // `commission.createdAt`: on a lead that became an
+                            // order the two differ, and the cell used to show a
+                            // date the range filter had never looked at.
+                            const createdAt = getLeadDate(commission as any);
+                            // `format` throws on an invalid date and would take the
+                            // whole table down with it, so a row that somehow
+                            // arrives without one still renders, as it did before.
+                            const hasCreated = !Number.isNaN(createdAt.getTime());
+                            const changedAt = getStatusChangedAt(commission as any);
+                            const moved = changedAt && (!hasCreated || changedAt.getTime() > createdAt.getTime());
+                            return (
+                              <div className="flex flex-col text-xs text-gray-500 font-medium whitespace-nowrap">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  {hasCreated ? format(createdAt, 'dd MMM yyyy') : '-'}
+                                </span>
+                                <span className="flex items-center gap-1 mt-0.5 opacity-60">
+                                  <Clock className="w-3 h-3" />
+                                  {hasCreated ? format(createdAt, 'HH:mm') : '-'}
+                                </span>
+                                {moved && (
+                                  <span
+                                    className={`flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded border text-[9px] font-black uppercase w-fit ${
+                                      dateBasis === 'STATUS'
+                                        ? 'bg-violet-50 text-violet-600 border-violet-100'
+                                        : 'bg-gray-50 text-gray-400 border-gray-100'
+                                    }`}
+                                    title={t('last_status_change', 'leads', 'Dernier changement de statut')
+                                      + `: ${getStatusLabel(status)} — ${format(changedAt!, 'dd MMM yyyy HH:mm')}`}
+                                  >
+                                    <RefreshCw className="w-2.5 h-2.5" />
+                                    {format(changedAt!, 'dd MMM HH:mm')}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         {/* Situation */}

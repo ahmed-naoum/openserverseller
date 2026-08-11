@@ -142,6 +142,13 @@
   "range_custom": "مخصص",
   "range_days": "{count} يوم",
   "date_separator": "إلى",
+  "basis_status": "تحديث الحالة",
+  "basis_created": "الإنشاء",
+  "basis_status_hint": "التصفية حسب تاريخ آخر تغيير للحالة",
+  "basis_created_hint": "التصفية حسب تاريخ إنشاء الطلب",
+  "basis_active_status": "↻ الترتيب: تحديث الحالة",
+  "basis_active_created": "↻ الترتيب: الإنشاء",
+  "last_status_change": "آخر تغيير للحالة",
   "yes": "نعم",
   "no": "لا",
   "new_lead": "إضافة طلب جديد"

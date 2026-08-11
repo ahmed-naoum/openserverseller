@@ -2381,8 +2381,15 @@ router.post(
       throw new AppException(400, 'Validation failed');
     }
 
-    const { fullName, phone, whatsapp, city, address, productId, notes, vendorId: bodyVendorId, sourceMode, package_replacement, package_old_tracking, package_note, customPrice, packName, skipColiaty, source, qte } = req.body;
+    const { fullName, phone, whatsapp, city, address, productId, notes, vendorId: bodyVendorId, sourceMode, package_replacement, package_old_tracking, package_note, package_no_open, customPrice, packName, skipColiaty, source, qte } = req.body;
     const qteNum = qte && Number(qte) > 0 ? Number(qte) : 1;
+
+    // The three Coliaty parcel options, normalised once. A queued lead carries
+    // them on its order until bulk-dispatch reads them back — before this they
+    // only survived as prose inside `notes`, which nothing downstream parses.
+    const wantsNoOpen = package_no_open === true || package_no_open === 'true';
+    const isReplacement = package_replacement === true || package_replacement === 'true';
+    const oldTracking = isReplacement ? String(package_old_tracking || '').trim() : '';
 
     // HELPER, CALL_CENTER_AGENT, and SUPER_ADMIN must supply a vendorId in the request body
     const needsVendorId = ['HELPER', 'CALL_CENTER_AGENT', 'SUPER_ADMIN'].includes(req.user!.roleName);
@@ -2475,9 +2482,9 @@ router.post(
           package_addresse: address || city || 'Unknown',
           package_city: city || 'Casablanca',
           package_content: contentValue,
-          package_no_open: false,
-          package_replacement: package_replacement === true || package_replacement === 'true',
-          package_old_tracking: package_old_tracking || '',
+          package_no_open: wantsNoOpen,
+          package_replacement: isReplacement,
+          package_old_tracking: oldTracking,
           package_note: package_note || '',
         });
       } catch (coliatyError: any) {
@@ -2551,7 +2558,9 @@ router.post(
             paymentMethod: 'COD',
             status: 'PENDING',
             packageContent: product.nameFr || product.nameAr || 'Produit',
-            packageNoOpen: false,
+            packageNoOpen: wantsNoOpen,
+            packageReplacement: isReplacement,
+            packageOldTracking: oldTracking || null,
             productVariant: packName || null,
             coliatyPackageCode: coliatyResult?.package_code || null,
             coliatyPackageId: coliatyResult?.package_id || null,

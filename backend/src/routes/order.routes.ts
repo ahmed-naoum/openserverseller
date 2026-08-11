@@ -89,6 +89,31 @@ const callColiatyCreateParcel = async (parcelData: {
   }
 };
 
+/**
+ * Why a parcel cannot be sent to Coliaty, or null when it can.
+ *
+ * These are the rules Coliaty enforces itself and answers 400 for. Checking
+ * them here keeps a single bad row from riding along in a batch, where the
+ * agent would only see it as an anonymous failure counter afterwards.
+ */
+const rejectParcel = (parcel: {
+  package_phone: string;
+  package_price: number;
+  package_replacement?: boolean;
+  package_old_tracking?: string;
+}): string | null => {
+  if (!/^0[67]\d{8}$/.test(parcel.package_phone)) {
+    return `Numéro refusé par Coliaty (${parcel.package_phone}) : il doit commencer par 06 ou 07 et compter 10 chiffres.`;
+  }
+  if (!Number.isFinite(parcel.package_price) || parcel.package_price <= 0) {
+    return 'Prix invalide : Coliaty exige un montant positif.';
+  }
+  if (parcel.package_replacement && !String(parcel.package_old_tracking || '').trim()) {
+    return 'Colis de remplacement sans numéro de suivi à remplacer.';
+  }
+  return null;
+};
+
 router.get(
   '/',
   authenticate,
@@ -774,7 +799,7 @@ router.post(
     const newTickets: NewTicketPayload[] = [];
 
     // 1. Prepare parcels array
-    const parcels = leads.map((lead) => {
+    const entries = leads.map((lead) => {
       const order = lead.order!;
       const product = order.items[0]?.product;
       
@@ -802,62 +827,101 @@ router.post(
       // Extract package_note from the lead notes
       const packageNote = lead.notes || '';
 
-      return {
+      const o = order as any;
+      const parcel = {
         package_reciever: order.customerName,
         package_phone: normalizedColiatyPhone,
-        package_price: Number(order.totalAmountMad),
+        // Coliaty rejects a price with more than 2 decimals, which float maths
+        // produces on its own (49.9 * 3 = 149.70000000000002).
+        package_price: Math.round(Number(order.totalAmountMad) * 100) / 100,
         package_addresse: order.customerAddress,
         package_city: order.customerCity,
         package_content: baseContent.substring(0, 100),
-        package_no_open: false,
-        package_replacement: false,
+        // Read off the order instead of being pinned to false — these are the
+        // options the agent actually ticked on the insert form.
+        package_no_open: o.packageNoOpen ?? false,
+        package_replacement: o.packageReplacement ?? false,
         package_note: packageNote,
-        package_old_tracking: '',
+        package_old_tracking: o.packageOldTracking || '',
       };
+
+      return { lead, parcel, reject: rejectParcel(parcel) };
     });
 
-    const COLIATY_PUBLIC_KEY = getSecret('COLIATY_PUBLIC_KEY');
-    const COLIATY_SECRET_KEY = getSecret('COLIATY_SECRET_KEY');
-    const COLIATY_BASE_URL = getSecret('COLIATY_BASE_URL') || 'https://customer-api-v1.coliaty.com';
+    type Outcome =
+      | { status: 'success'; coliatyCode: string }
+      | { status: 'error'; error: string };
 
-    let successParcels: Record<string, string> = {};
-    let errorParcels: Record<string, any> = {};
+    const outcomes = new Map<number, Outcome>();
+    for (const entry of entries) {
+      if (entry.reject) outcomes.set(entry.lead.id, { status: 'error', error: entry.reject });
+    }
 
-    try {
-      const response = await axios.post(`${COLIATY_BASE_URL.replace(/\/$/, '')}/parcel/normal/mass`, {
-        parcels
-      }, {
-        headers: {
-          Authorization: `Bearer ${COLIATY_PUBLIC_KEY}:${COLIATY_SECRET_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        timeout: 30000, // Batch may take longer
-      });
+    // Coliaty caps /parcel/normal/mass at 100 parcels and answers 400 for the
+    // whole request past that — so "tout sélectionner" over a queue of 120 used
+    // to ship nothing at all. Send it in slices of 100, each one independent:
+    // a slice that fails is recorded against its own parcels instead of
+    // discarding the ones that already went through.
+    const MASS_LIMIT = 100;
+    const dispatchable = entries.filter((e) => !e.reject);
+    const cfg = getColiatyConfig();
 
-      if (response.data?.success || response.data?.code === 200) {
-        successParcels = response.data.data?.success_parcels || {};
-        errorParcels = response.data.data?.error_parcels || {};
-      } else {
-        throw new Error(response.data?.message || 'Erreur lors de la création en lot (Coliaty)');
+    for (let start = 0; start < dispatchable.length; start += MASS_LIMIT) {
+      const chunk = dispatchable.slice(start, start + MASS_LIMIT);
+
+      try {
+        // Through coliatyRequest, not raw axios: several batch calls back to
+        // back is exactly the pattern that gets the VPS IP rate-limited.
+        const response = await coliatyRequest<any>({
+          method: 'POST',
+          url: `${cfg.base}/parcel/normal/mass`,
+          headers: cfg.headers,
+          data: { parcels: chunk.map((e) => e.parcel) },
+          timeout: 30000, // Batch may take longer
+          context: `Expédition en lot (${chunk.length} colis)`,
+        });
+
+        if (!(response.data?.success || response.data?.code === 200)) {
+          throw new Error(response.data?.message || 'Erreur lors de la création en lot (Coliaty)');
+        }
+
+        const successParcels: Record<string, string> = response.data.data?.success_parcels || {};
+        const errorParcels: Record<string, any> = response.data.data?.error_parcels || {};
+
+        // Coliaty keys its answer by position *within the request*, so the
+        // index is the one inside this chunk, not inside the whole selection.
+        chunk.forEach((entry, i) => {
+          const parcelKey = `parcel_${i}`;
+          if (successParcels[parcelKey]) {
+            outcomes.set(entry.lead.id, { status: 'success', coliatyCode: successParcels[parcelKey] });
+          } else if (errorParcels[parcelKey]) {
+            outcomes.set(entry.lead.id, { status: 'error', error: JSON.stringify(errorParcels[parcelKey]) });
+          } else {
+            outcomes.set(entry.lead.id, { status: 'error', error: 'Le colis n\'a pas été traité par Coliaty.' });
+          }
+        });
+      } catch (err: any) {
+        const payload = err.response?.data;
+        const detail = payload
+          ? (typeof payload === 'string'
+              ? payload.substring(0, 200)
+              : [payload.message, payload.errors ? JSON.stringify(payload.errors) : ''].filter(Boolean).join(' '))
+          : err.message;
+
+        for (const entry of chunk) {
+          outcomes.set(entry.lead.id, { status: 'error', error: `Erreur Coliaty: ${detail}` });
+        }
       }
-    } catch (err: any) {
-      if (err.response?.data) {
-        const errorData = err.response.data;
-        const msg = typeof errorData === 'string' ? errorData.substring(0, 100) : (errorData.message || 'Erreur API Coliaty');
-        const details = errorData.errors ? JSON.stringify(errorData.errors) : '';
-        throw new AppException(400, `Erreur Coliaty: ${msg} ${details}`);
-      }
-      throw new AppException(500, `Erreur réseau avec Coliaty: ${err.message}`);
     }
 
     // 2. Process results
-    for (let i = 0; i < leads.length; i++) {
-      const lead = leads[i];
-      const parcelKey = `parcel_${i}`;
+    for (const lead of leads) {
+      const outcome: Outcome = outcomes.get(lead.id)
+        ?? { status: 'error', error: 'Le colis n\'a pas été traité par Coliaty.' };
 
-      if (successParcels[parcelKey]) {
-        const coliatyCode = successParcels[parcelKey];
-        
+      if (outcome.status === 'success') {
+        const coliatyCode = outcome.coliatyCode;
+
         await prisma.$transaction(async (tx) => {
           await tx.order.update({
             where: { id: lead.order!.id },
@@ -892,10 +956,8 @@ router.post(
         });
 
         results.push({ leadId: lead.id, status: 'success', coliatyCode });
-      } else if (errorParcels[parcelKey]) {
-        results.push({ leadId: lead.id, status: 'error', error: JSON.stringify(errorParcels[parcelKey]) });
       } else {
-        results.push({ leadId: lead.id, status: 'error', error: 'Le colis n\'a pas été traité par Coliaty.' });
+        results.push({ leadId: lead.id, status: 'error', error: outcome.error });
       }
     }
 

@@ -520,6 +520,15 @@ model Lead {
 
   // The reassignment cron re-runs this exact predicate every 10 seconds.
   @@index([status, releaseAt])
+  // Postgres does not index foreign keys on its own. Without these, every lead
+  // list (vendor dashboard, agent queue, /influencer/customers) sequentially
+  // scanned the whole table and sorted it in memory. `vendorId, createdAt`
+  // covers the filter and the ORDER BY together, which is the shape every
+  // vendor-facing list uses.
+  @@index([vendorId, createdAt])
+  @@index([referralLinkId])
+  @@index([assignedAgentId])
+  @@index([createdAt])
   @@map("leads")
 }
 
@@ -550,6 +559,8 @@ model LeadStatusHistory {
   notes     String?
   createdAt DateTime @default(now())
 
+  // Loaded as `WHERE leadId IN (...)` for a whole page of leads at a time.
+  @@index([leadId])
   @@map("lead_status_history")
 }
 
@@ -565,6 +576,8 @@ model CallLog {
   notes               String?
   createdAt           DateTime @default(now())
 
+  @@index([leadId])
+  @@index([agentId])
   @@map("call_logs")
 }
 
@@ -601,6 +614,13 @@ model Order {
   coliatyPickupRef    String?
   packageContent      String?
   packageNoOpen       Boolean  @default(false)
+  // Carried from the insert form all the way to Coliaty's parcel payload. They
+  // used to live only inside the lead's free-text notes, so bulk-dispatch had
+  // nothing to read and shipped every replacement as an ordinary new parcel.
+  // Coliaty rejects a replacement whose old tracking number is missing, so the
+  // two always travel together.
+  packageReplacement  Boolean  @default(false)
+  packageOldTracking  String?
   productVariant      String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -613,6 +633,9 @@ model Order {
   returns               OrderReturn[]
   productionJobs        ProductionJob[]
 
+  @@index([vendorId, createdAt])
+  @@index([status])
+  @@index([createdAt])
   @@map("orders")
 }
 
@@ -626,6 +649,8 @@ model OrderItem {
   unitPriceMad    Float
   totalPriceMad   Float
 
+  @@index([orderId])
+  @@index([productId])
   @@map("order_items")
 }
 
@@ -640,6 +665,7 @@ model OrderStatusHistory {
   notes         String?
   createdAt     DateTime @default(now())
 
+  @@index([orderId])
   @@map("order_status_history")
 }
 
@@ -1107,6 +1133,9 @@ model InfluencerCommission {
   paidAt         DateTime?
   createdAt      DateTime     @default(now())
 
+  @@index([influencerId, createdAt])
+  @@index([referralLinkId])
+  @@index([orderId])
   @@map("influencer_commissions")
 }
 

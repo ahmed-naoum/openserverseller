@@ -142,6 +142,13 @@
   "range_custom": "Personnalisé",
   "range_days": "{count}j",
   "date_separator": "au",
+  "basis_status": "MAJ statut",
+  "basis_created": "Création",
+  "basis_status_hint": "Filtrer sur la date du dernier changement de statut",
+  "basis_created_hint": "Filtrer sur la date de création du lead",
+  "basis_active_status": "↻ tri : maj statut",
+  "basis_active_created": "↻ tri : création",
+  "last_status_change": "Dernier changement de statut",
   "yes": "Oui",
   "no": "Non",
   "new_lead": "Nouveau Lead"
