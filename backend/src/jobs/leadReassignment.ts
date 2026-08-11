@@ -1,41 +1,45 @@
 import { prisma } from '../lib/prisma.js';
 import { emitLeadUnassigned } from '../lib/realtime.js';
+import {
+  DEAD_NO_REPLY,
+  MAX_NO_REPLY_RELEASES,
+  MAX_RELEASE_MS,
+  RELEASE_TRACKED_STATUSES,
+  resolveRelease,
+} from '../lib/leadRelease.js';
 
 
 // Check interval: every 10 seconds
 const CHECK_INTERVAL_MS = 10 * 1000;
-// Expiration limit for terminal/retry statuses: 2 hours
-const EXPIRATION_LIMIT_MS = 2 * 60 * 60 * 1000;
 
 export const startLeadsReassignmentCron = () => {
   console.log('[Cron] Leads Reassignment Job started.');
 
   setInterval(async () => {
     try {
-      const thresholdDate = new Date(Date.now() - EXPIRATION_LIMIT_MS);
+      const now = new Date();
+      // Rows written before `releaseAt` existed carry null and would otherwise
+      // never expire. Fall back to the old fixed-window behaviour for those,
+      // which drains the backlog without needing a data migration.
+      const legacyThreshold = new Date(Date.now() - MAX_RELEASE_MS);
 
-      const statusesToDrop = [
-        'NO_REPLY',
-        'INVALID',
-        'CONTACTED',
-        'INTERESTED',
-        'CALLBACK_REQUESTED',
-        'NOT_INTERESTED',
-        'UNREACHABLE'
-      ];
-
-      // Find all leads assigned to ANY agent that have these statuses
-      // and haven't been updated since the thresholdDate
+      // Every lead whose randomised hold window has run out. The deadline was
+      // rolled when the status was written (see lib/leadRelease.ts), so this
+      // job only enforces it — it never decides the timing itself.
       const expiredLeads = await prisma.lead.findMany({
         where: {
           assignedAgentId: { not: null },
-          status: { in: statusesToDrop },
-          updatedAt: { lte: thresholdDate }
+          status: { in: RELEASE_TRACKED_STATUSES },
+          OR: [
+            { releaseAt: { lte: now } },
+            { releaseAt: null, updatedAt: { lte: legacyThreshold } },
+          ],
         },
         select: {
           id: true,
           assignedAgentId: true,
           status: true,
+          noReplyReleases: true,
         }
       });
 
@@ -45,7 +49,21 @@ export const startLeadsReassignmentCron = () => {
         console.log(`[Cron] Found ${expiredLeads.length} leads with terminal/retry statuses to unassign.`);
 
         for (const lead of expiredLeads) {
-          console.log(`[Cron] Lead #${lead.id}: Unassigning due to timeout in status ${lead.status}.`);
+          // NO_REPLY burns one of the lead's five attempts here; every other
+          // tracked status recycles without consuming anything.
+          const { newStatus, releases, exhausted } = resolveRelease(lead.status, lead.noReplyReleases);
+
+          console.log(
+            exhausted
+              ? `[Cron] Lead #${lead.id}: ${MAX_NO_REPLY_RELEASES} NO_REPLY attempts exhausted — retiring to ${DEAD_NO_REPLY}.`
+              : `[Cron] Lead #${lead.id}: Unassigning due to timeout in status ${lead.status}.`
+          );
+
+          const notes = exhausted
+            ? `Système : ${MAX_NO_REPLY_RELEASES} tentatives sans réponse — lead retiré du pool (${DEAD_NO_REPLY}).`
+            : lead.status === 'NO_REPLY'
+              ? `Système : Lead désassigné automatiquement après le délai maximum dans le statut NO_REPLY (tentative ${releases}/${MAX_NO_REPLY_RELEASES}).`
+              : `Système : Lead désassigné automatiquement après le délai maximum dans le statut ${lead.status}.`;
 
         await prisma.$transaction(async (tx) => {
           // Close the current assignment
@@ -63,24 +81,31 @@ export const startLeadsReassignmentCron = () => {
             data: {
               leadId: lead.id,
               oldStatus: lead.status,
-              newStatus: 'AVAILABLE',
+              newStatus,
               changedBy: lead.assignedAgentId!,
-              notes: `Système : Lead désassigné automatiquement après le délai maximum dans le statut ${lead.status}.`,
+              notes,
             }
           });
 
-          // Unassign the lead and reset status
+          // Unassign the lead and reset status. `releaseAt` is cleared either
+          // way — an AVAILABLE lead is not counting down towards anything, and
+          // a retired one never counts down again.
           await tx.lead.update({
             where: { id: lead.id },
             data: {
               assignedAgentId: null,
-              status: 'AVAILABLE'
+              status: newStatus,
+              releaseAt: null,
+              noReplyReleases: releases,
             }
           });
         });
 
         // Close the lead page the previous agent may still have open on it.
-        emitLeadUnassigned(lead.assignedAgentId!, { leadId: lead.id, reason: 'EXPIRED' });
+        emitLeadUnassigned(lead.assignedAgentId!, {
+          leadId: lead.id,
+          reason: exhausted ? 'NO_REPLY_EXHAUSTED' : 'EXPIRED',
+        });
         }
       }
 

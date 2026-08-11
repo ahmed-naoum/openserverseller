@@ -1,0 +1,216 @@
+{
+  "badge": "مفتش مركز الاتصال",
+  "title": "مركز تفتيش الوكلاء",
+  "subtitle": "الأداء والحالات والنشاط الفعلي لكل وكيل في مركز الاتصال.",
+
+  "overview": {
+    "activeAgents": "الوكلاء النشطون",
+    "leadsHandled": "العملاء المعالجون",
+    "confirmed": "مؤكدة",
+    "delivered": "مسلّمة",
+    "confirmationRateShort": "نسبة التأكيد",
+    "claimClicks": "نقرات المطالبة"
+  },
+
+  "period": {
+    "label": "الفترة",
+    "today": "اليوم",
+    "days7": "٧ أيام",
+    "days30": "٣٠ يوماً",
+    "days90": "٩٠ يوماً",
+    "clear": "مسح",
+    "hint": "يُطبَّق على تاريخ إنشاء العملاء وعلى المطالبات ونقرات التواصل."
+  },
+
+  "search": {
+    "agents": "ابحث عن وكيل بالاسم أو البريد الإلكتروني...",
+    "leads": "ابحث بالاسم أو الهاتف أو المدينة أو العنوان..."
+  },
+
+  "sort": {
+    "leads": "ترتيب حسب العملاء",
+    "claims": "ترتيب حسب المطالبات",
+    "confirmation": "ترتيب حسب نسبة التأكيد",
+    "delivery": "ترتيب حسب نسبة التسليم",
+    "name": "ترتيب حسب الاسم"
+  },
+
+  "empty": {
+    "noAgentsFound": "لم يُعثر على أي وكيل",
+    "noAgentsFoundHint": "جرّب اسماً أو بريداً إلكترونياً آخر.",
+    "noAgents": "لا يوجد وكلاء في مركز الاتصال",
+    "noAgentsHint": "لا يوجد وكلاء في النظام حتى الآن.",
+    "noLeads": "لم يُعثر على أي عميل"
+  },
+
+  "card": {
+    "active": "نشط",
+    "inactive": "غير نشط",
+    "leads": "العملاء",
+    "agentActivity": "نشاط الوكيل",
+    "claimsShort": "مطالبات",
+    "reclaimsShort": "إعادة مطالبة",
+    "whatsapp": "واتساب",
+    "calls": "مكالمات",
+    "confirmationRate": "نسبة التأكيد",
+    "deliveryRate": "نسبة التسليم",
+    "inspect": "اضغط للتفتيش",
+    "claimsTitle": "{manual} مطالبة + {forced} مطالبة قسرية",
+    "reclaimsTitle": "عملاء طالب بهم هذا الوكيل أكثر من مرة",
+    "whatsappTitle": "مرات فتح واتساب",
+    "callsTitle": "نقرات زر الاتصال",
+    "deliveryRateTitle": "{delivered} مسلّمة من أصل {resolved} طرد أنهى رحلته · {transit} ما زالت في الطريق",
+    "noPhone": "لا يوجد رقم هاتف",
+    "lastClaim": "آخر مطالبة"
+  },
+
+  "metrics": {
+    "confirmedHint": "{queued} بانتظار الإرسال · {shipped} أُرسلت",
+    "performance": "الأداء",
+    "confirmationRate": "نسبة التأكيد",
+    "deliveryRate": "نسبة التسليم",
+    "lossRate": "نسبة الخسارة",
+    "confirmationRateHint": "{confirmed} مؤكدة / {treated} عميل تمت معالجته",
+    "deliveryRateHint": "{delivered} مسلّمة / {resolved} طرد أنهى رحلته",
+    "lossRateHint": "{lost} غير محوَّل / {treated} عميل تمت معالجته"
+  },
+
+  "activity": {
+    "title": "النشاط — النقرات والمطالبات",
+    "claimClicks": "نقرات «مطالبة»",
+    "claimClicksHint": "عدد المرات التي أخذ فيها هذا الوكيل عميلاً بنفسه",
+    "forcedClaims": "مطالبات قسرية",
+    "forcedClaimsHint": "عملاء انتُزعوا من وكيل آخر",
+    "totalAssignments": "إجمالي الإسنادات",
+    "totalAssignmentsHint": "المطالبات + إسنادات المشرف والإسناد التلقائي",
+    "distinctLeads": "عملاء متمايزون",
+    "distinctLeadsHint": "عملاء فريدون مرّوا بين يديه",
+    "reclaims": "إعادة المطالبات",
+    "reclaimsHint": "العميل نفسه أُخذ أكثر من مرة",
+    "whatsappClicks": "نقرات واتساب",
+    "callClicks": "نقرات الاتصال",
+    "statusChanges": "الحالات المعدَّلة",
+    "statusChangesHint": "تغييرات الحالة التي أجراها هذا الوكيل",
+    "footnote": "«إجمالي الإسنادات» يشمل العملاء الذين وزّعهم مشرف أو التوزيع التلقائي؛ أما «نقرات المطالبة» فتحصي فقط ما أخذه الوكيل بإرادته."
+  },
+
+  "unknown": {
+    "title": "{count} عميل يحملون حالة غير مُدرَجة",
+    "body": "{list} — حالات مرّرها الناقل كما هي. تُحتسب ضمن الإجمالي لكن ليس ضمن أي فئة."
+  },
+
+  "table": {
+    "all": "الكل",
+    "allLeads": "كل العملاء",
+    "selectedStatuses": "{count} حالات مختارة",
+    "client": "العميل",
+    "product": "المنتج",
+    "amount": "المبلغ",
+    "leadStatus": "حالة العميل",
+    "parcel": "الطرد",
+    "activity": "النشاط",
+    "date": "التاريخ",
+    "negotiatedPrice": "سعر متفاوض عليه",
+    "noParcel": "لا يوجد طرد",
+    "claimedTimes": "طالب به هذا الوكيل {count} مرة",
+    "claimedAt": "طُولب به {date}",
+    "page": "الصفحة {page} من {total} · {count} عميل"
+  },
+
+  "history": {
+    "title": "سجل الحالات",
+    "empty": "لا يوجد أي تغيير مُسجَّل.",
+    "thisAgent": "(هذا الوكيل)",
+    "details": "التفاصيل",
+    "address": "العنوان",
+    "source": "المصدر",
+    "payment": "الدفع",
+    "order": "الطلب",
+    "callback": "معاودة اتصال مبرمجة",
+    "firstClaim": "أول مطالبة",
+    "lastUpdate": "آخر تحديث",
+    "agentNote": "ملاحظة الوكيل"
+  },
+
+  "phase": {
+    "confirmation": "المرحلة ١: التأكيد",
+    "confirmationSubtitle": "✅ نتيجة مكالمة التأكيد",
+    "delivery": "المرحلة ٢: التوصيل عبر Coliaty",
+    "deliverySubtitle": "📦 جميع حالات التوصيل"
+  },
+
+  "phase1": {
+    "rate": "النسبة: {rate}% ({confirmed}/{treated} تمت معالجتهم)",
+    "other": "حالات أخرى",
+    "filterTitle": "تصفية على «{label}»"
+  },
+
+  "phase2": {
+    "rate": "النسبة: {rate}% ({delivered}/{parcels})",
+    "parcelsSent": "الطرود المُرسَلة",
+    "inProgress": "قيد المعالجة",
+    "empty": "لم يُرسَل أي طرد بعد",
+    "emptyHint": "أكّد عميلاً ثم ادفعه إلى Coliaty."
+  },
+
+  "group": {
+    "in_progress": "قيد المعالجة",
+    "confirmed": "مؤكد",
+    "lost": "غير محوَّل",
+    "pipeline": "التحضير",
+    "transit": "في الطريق",
+    "issue": "حوادث",
+    "done": "مسلّم",
+    "return": "مرتجعات وإلغاءات"
+  },
+
+  "status": {
+    "NEW": "جديد",
+    "LEAD": "عميل محتمل",
+    "AVAILABLE": "متاح (المجمّع)",
+    "ASSIGNED": "مُطالَب به",
+    "CONTACTED": "تم التواصل",
+    "INTERESTED": "مهتم",
+    "CALL_LATER": "معاودة اتصال مبرمجة",
+    "CALLBACK_REQUESTED": "طلب معاودة اتصال",
+    "CONFIRMED": "طلب مؤكد",
+    "PRICE_CONFIRMED": "السعر مؤكد",
+    "ORDERED": "تم الطلب",
+    "NO_REPLY": "تعذّر الوصول",
+    "WRONG_ORDER": "طلب خاطئ",
+    "CANCEL_REASON_PRICE": "رفض بسبب السعر",
+    "CANCEL_ORDER": "طلب ملغى",
+    "NOT_INTERESTED": "غير مهتم",
+    "UNREACHABLE": "غير قابل للاتصال",
+    "INVALID": "غير صالح",
+    "PRICE_REJECTED": "السعر مرفوض",
+    "PENDING": "قيد الانتظار",
+    "PUSHED_TO_DELIVERY": "أُرسل للتوصيل",
+    "NEW_PARCEL": "طرد جديد",
+    "WAITING_PREPARATION": "بانتظار التحضير",
+    "ENCORE_PREPARED": "قيد التحضير",
+    "PREPARED": "مُحضَّر",
+    "WAITING_PICKUP": "بانتظار الاستلام",
+    "IN_PRODUCTION": "قيد الإنتاج",
+    "READY_FOR_SHIPPING": "جاهز للشحن",
+    "PICKED_UP": "تم الاستلام",
+    "SENT": "مشحون",
+    "RECEIVED": "وصل (الوجهة)",
+    "DISTRIBUTION": "قيد التوصيل",
+    "PROGRAMMER": "مبرمج",
+    "PROGRAMMER_AUTO": "مبرمج (تلقائي)",
+    "SHIPPED": "مشحون (الطلب)",
+    "POSTPONED": "مؤجل",
+    "NOANSWER": "بلا رد",
+    "ERR": "رقم هاتف خاطئ",
+    "INCORRECT_ADDRESS": "عنوان خاطئ",
+    "DELIVERED": "مسلّم",
+    "RETURNED": "مرتجع",
+    "REFUSE": "مرفوض",
+    "CANCELED": "ملغى (الموزّع)",
+    "CANCELED_BY_SELLER": "ملغى (البائع)",
+    "CANCELED_BY_SYSTEM": "ملغى (النظام)",
+    "CANCELLED": "ملغى",
+    "REFUNDED": "مُسترجَع"
+  }
+}

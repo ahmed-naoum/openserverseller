@@ -2773,8 +2773,79 @@ export default function SiteBuilder() {
                           )}
                         </div>
 
+                        {/* 3b. Traffic Source Restriction */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-gray-600">Exiger une provenance (Page source)</span>
+                            <input
+                              type="checkbox"
+                              checked={pageSettings.cloaking?.filterSource ?? false}
+                              onChange={(e) => setPageSettings((prev: any) => ({
+                                ...prev,
+                                cloaking: { ...prev.cloaking, filterSource: e.target.checked }
+                              }))}
+                              className="rounded text-orange-500 focus:ring-orange-500 w-3.5 h-3.5 border-gray-300 cursor-pointer"
+                            />
+                          </div>
+                          {pageSettings.cloaking?.filterSource && (
+                            <>
+                              <p className="text-[10px] text-gray-500 leading-relaxed">
+                                Seuls les visiteurs arrivant depuis l'une de ces pages pourront voir celle-ci. Laissez la liste vide pour désactiver le filtre.
+                              </p>
+                              <Field
+                                label="Pages sources autorisées"
+                                type="text"
+                                value={pageSettings.cloaking?.allowedSources || ''}
+                                placeholder="Ex: https://a-maa.silacod.com/r/dddd"
+                                onChange={(v: string) => setPageSettings((prev: any) => ({
+                                  ...prev,
+                                  cloaking: { ...prev.cloaking, allowedSources: v }
+                                }))}
+                              />
+                              <p className="text-[10px] text-gray-500 leading-relaxed">
+                                Collez l'adresse complète de la page source (recommandé) : le code <em>et</em> le domaine sont alors vérifiés automatiquement. Vous pouvez aussi mettre juste le code (<span className="font-mono">dddd</span>). Séparez par des virgules.
+                              </p>
+                              <Field
+                                label="Domaines sources autorisés (Optionnel)"
+                                type="text"
+                                value={pageSettings.cloaking?.allowedSourceDomains || ''}
+                                placeholder="Ex: silacod.com"
+                                onChange={(v: string) => setPageSettings((prev: any) => ({
+                                  ...prev,
+                                  cloaking: { ...prev.cloaking, allowedSourceDomains: v }
+                                }))}
+                              />
+                              <p className="text-[10px] text-gray-500 leading-relaxed">
+                                Si vous remplissez ce champ, <strong>seuls</strong> ces domaines sont acceptés — y compris le vôtre, ajoutez-le si la page source est sur le même domaine. <span className="font-mono">silacod.com</span> accepte aussi ses sous-domaines. Vide = seul votre propre domaine (ou l'adresse complète indiquée ci-dessus) est accepté.
+                              </p>
+                              <Field
+                                label="Nombre max d'ouvertures par lien (Optionnel)"
+                                type="number"
+                                value={pageSettings.cloaking?.sourceMaxUses || ''}
+                                placeholder="Ex: 3"
+                                onChange={(v: any) => setPageSettings((prev: any) => ({
+                                  ...prev,
+                                  cloaking: { ...prev.cloaking, sourceMaxUses: v }
+                                }))}
+                              />
+                              <p className="text-[10px] text-gray-500 leading-relaxed">
+                                Limite le nombre de fois qu'un même lien peut être ouvert ou rafraîchi. Ex: <span className="font-mono">3</span> = au 4<sup>e</sup> chargement le visiteur est redirigé et doit repasser par la page source. Vide = illimité. <strong>Attention :</strong> si vous mettez une limite, seuls les clics sur un bouton du constructeur sont acceptés (un lien collé à la main n'a pas de jeton et sera redirigé).
+                              </p>
+                              <Field
+                                label="URL si mauvaise provenance"
+                                type="text"
+                                value={pageSettings.cloaking?.sourceRedirectUrl || ''}
+                                placeholder="Ex: https://google.com"
+                                onChange={(v: string) => setPageSettings((prev: any) => ({
+                                  ...prev,
+                                  cloaking: { ...prev.cloaking, sourceRedirectUrl: v }
+                                }))}
+                              />
+                            </>
+                          )}
+                        </div>
+
                         {/* 4. Language Restriction */}
-                        {/* 5. Language Restriction */}
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-[11px] font-bold text-gray-600">Restreindre par Langue</span>

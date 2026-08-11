@@ -8,6 +8,7 @@ import {
   Users, ShieldAlert, Lock, Activity, PhoneOff,
 } from 'lucide-react';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import { ReleaseCountdown } from '../../components/leads/ReleaseCountdown';
 
 // Mirrors FORCE_CLAIMABLE_STATUSES on the server. Anything past the
 // confirmation call never reaches this page.
@@ -473,9 +474,15 @@ export default function AgentAssignedLeads() {
                         <p className="text-xs text-gray-400 font-medium truncate">📍 {lead.city || 'Ville inconnue'}</p>
                       </div>
                     </div>
-                    <span className={`shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase border ${meta.className}`}>
-                      {meta.icon} {meta.label}
-                    </span>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase border ${meta.className}`}>
+                        {meta.icon} {meta.label}
+                      </span>
+                      {/* How long before the cron takes this lead back, and how
+                          many NO_REPLY attempts it has left — both are what
+                          decide whether taking it over is worth the trouble. */}
+                      <ReleaseCountdown lead={lead} onExpire={loadData} />
+                    </div>
                   </div>
 
                   {/* Who holds this lead right now */}

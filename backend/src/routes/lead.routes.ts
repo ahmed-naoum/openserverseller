@@ -11,6 +11,7 @@ import { getAgentLeadScope, getAgentProductRestrictions } from '../utils/agentSc
 import { isCompletePhone } from '../lib/phoneCompleteness.js';
 import { SAFE_USER_SELECT } from '../lib/safeUserSelect.js';
 import { parseDateRange } from '../lib/dateRange.js';
+import { DEAD_NO_REPLY, releaseAtFor } from '../lib/leadRelease.js';
 import {
   productScopeOf,
   applyProductScope,
@@ -516,6 +517,10 @@ router.get(
           requestedPriceMad: l.requestedPriceMad,
           requestedPriceStatus: l.requestedPriceStatus,
           updatedAt: l.updatedAt,
+          // Drives the auto-release countdown and the "tentative N/5" badge on
+          // the agent cards (components/leads/ReleaseCountdown).
+          releaseAt: l.releaseAt,
+          noReplyReleases: l.noReplyReleases,
           importBatch: l.importBatch
             ? { id: l.importBatch.id, fileName: (l.importBatch as any).fileName || null }
             : null,
@@ -583,7 +588,7 @@ router.get(
   authorize('CALL_CENTER_AGENT', 'CONFIRMATION_AGENT', 'AGENT', 'HELPER', 'SUPER_ADMIN', 'VENDOR'),
   asyncHandler(async (req, res) => {
     const agentId = req.user!.id;
-    const { influencerId, limit, search, city, productId, dateFrom, dateTo } = req.query;
+    const { influencerId, limit, search, city, productId, dateFrom, dateTo, phone } = req.query;
 
     const takeLimit = resolveRowLimit(limit);
 
@@ -676,6 +681,20 @@ router.get(
     if (city) extraConditions.push({ city: { equals: city as string, mode: 'insensitive' } });
     if (productId) extraConditions.push({ referralLink: { productId: Number(productId) } });
 
+    // Number lookup over the pool. Digits only, compared on the last 9, so
+    // 0667…, +212667… and 212667… all land on the same lead.
+    //
+    // Deliberately narrower than `search`: the pool is browsed by product, and
+    // the one thing an agent may legitimately hunt for is a number already in
+    // their hands (a customer calling back before anyone claimed them).
+    const phoneDigits = String(phone ?? '').replace(/\D/g, '');
+    if (phoneDigits.length >= 3) {
+      const tail = phoneDigits.slice(-9);
+      extraConditions.push({
+        OR: [{ phone: { contains: tail } }, { whatsapp: { contains: tail } }],
+      });
+    }
+
     // Arrival window — both bounds optional and inclusive, date or date-time.
     const createdRange = parseDateRange(dateFrom, dateTo);
     if (createdRange) extraConditions.push({ createdAt: createdRange });
@@ -686,15 +705,29 @@ router.get(
       prisma.lead.findMany({
         where,
         take: takeLimit,
-        // Oldest first: the queue is worked front to back, so the lead that has
-        // been waiting longest is the one an agent should see at the top. With
-        // a row limit this also means the page shows the oldest N, not the
-        // newest N — which is the backlog, not the fresh arrivals.
-        orderBy: { createdAt: 'asc' },
+        // The page reads most-claimed first and never-claimed last, but the row
+        // limit has to bite at the TOP of that list: the untouched leads at the
+        // foot are the ones that must stay on screen, and raising "Afficher"
+        // uncovers more of the already-worked ones above them.
+        //
+        // `take` only ever slices from the front, so the query asks for the
+        // exact inverse order and the rows are flipped back below. Ties run
+        // through createdAt then id so the cut is stable between polls even
+        // when an import gave a whole batch the same timestamp.
+        orderBy: [
+          { assignments: { _count: 'asc' } },
+          { createdAt: 'desc' },
+          { id: 'desc' },
+        ],
         include: {
           referralLink: {
             include: { product: { include: { images: true } }, landingPage: true }
-          }
+          },
+          // Every claim writes a LeadAssignment row (claim, force-claim and
+          // admin assignment alike) and the release cron only closes them, so
+          // the row count is how many agents have already worked this lead.
+          // On an AVAILABLE lead they are all historical by definition.
+          _count: { select: { assignments: true } },
         },
       }),
       prisma.lead.count({ where }),
@@ -738,9 +771,14 @@ router.get(
     res.json({
       status: 'success',
       data: {
-        leads: leads.map(l => ({
+        // Flipped back into display order: most-claimed at the head, the
+        // never-claimed tail at the foot. See the inverted orderBy above.
+        leads: leads.reverse().map(({ _count, ...l }) => ({
           ...l,
           productPrice: getPackPrice(l),
+          // Prior passes through the call center, shown on the claim cards so an
+          // agent can tell a fresh lead from one four agents already gave up on.
+          claimCount: _count.assignments,
           product: l.referralLink?.product ? {
             id: l.referralLink.product.id,
             name: l.referralLink.product.nameFr || l.referralLink.product.nameAr,
@@ -1572,7 +1610,7 @@ router.post(
 
       return tx.lead.update({
         where: { id: lead.id },
-        data: { assignedAgentId: req.user!.id, status: 'ASSIGNED' },
+        data: { assignedAgentId: req.user!.id, status: 'ASSIGNED', releaseAt: null },
       });
     });
 
@@ -1680,7 +1718,9 @@ router.post(
       // instead of silently overwriting a transfer that already happened.
       const { count } = await tx.lead.updateMany({
         where: { id: lead.id, assignedAgentId: previousAgentId },
-        data: { assignedAgentId: agentId, status: 'ASSIGNED' },
+        // Clearing releaseAt hands the new agent a clean slate — the previous
+        // holder's countdown must not fire under them.
+        data: { assignedAgentId: agentId, status: 'ASSIGNED', releaseAt: null },
       });
       if (count === 0) {
         throw new AppException(409, 'Ce lead vient de changer de main. Rafraîchissez la page.');
@@ -2739,6 +2779,102 @@ router.patch(
   })
 );
 
+// POST /bulk-delete - Delete several leads at once (SUPER_ADMIN)
+// Same cleanup as DELETE /:id — reserved stock goes back, the order and every
+// child row go with the lead — except that a parcel already at Coliaty is
+// skipped instead of aborting the whole batch.
+router.post(
+  '/bulk-delete',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req, res) => {
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new AppException(400, 'IDs array is required');
+    }
+    if (ids.length > 500) {
+      throw new AppException(400, 'Maximum 500 leads par suppression groupée');
+    }
+
+    const requestedIds = [...new Set(ids.map(Number).filter((n) => Number.isInteger(n)))];
+    const leads = await prisma.lead.findMany({
+      where: { id: { in: requestedIds } },
+      select: { id: true },
+    });
+
+    if (leads.length === 0) {
+      throw new AppException(404, 'No leads found to delete');
+    }
+
+    const orders = await prisma.order.findMany({
+      where: { leadId: { in: leads.map((l) => l.id) } },
+      select: { id: true, leadId: true, coliatyPackageCode: true },
+    });
+
+    const blockedIds = orders.filter((o) => o.coliatyPackageCode).map((o) => o.leadId!);
+    const blocked = new Set(blockedIds);
+    const deletableIds = leads.map((l) => l.id).filter((id) => !blocked.has(id));
+
+    if (deletableIds.length === 0) {
+      throw new AppException(
+        400,
+        'Ces leads ont déjà été envoyés en livraison. Annulez la commande avant de les supprimer.'
+      );
+    }
+
+    const orderIds = orders
+      .filter((o) => o.leadId !== null && !blocked.has(o.leadId))
+      .map((o) => o.id);
+
+    await prisma.$transaction(
+      async (tx) => {
+        if (orderIds.length > 0) {
+          const items = await tx.orderItem.findMany({
+            where: { orderId: { in: orderIds } },
+            select: { productId: true, quantity: true },
+          });
+
+          // Give reserved inventory back before the items disappear, exactly as
+          // the single delete does — one update per product, not per item.
+          const perProduct = new Map<number, number>();
+          for (const item of items) {
+            if (!item.productId) continue;
+            perProduct.set(item.productId, (perProduct.get(item.productId) || 0) + item.quantity);
+          }
+          for (const [productId, quantity] of perProduct) {
+            await tx.product.update({
+              where: { id: productId },
+              data: { stockQuantity: { increment: quantity } },
+            });
+          }
+
+          await tx.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
+          await tx.orderStatusHistory.deleteMany({ where: { orderId: { in: orderIds } } });
+          await tx.order.deleteMany({ where: { id: { in: orderIds } } });
+        }
+
+        await tx.leadAssignment.deleteMany({ where: { leadId: { in: deletableIds } } });
+        await tx.leadStatusHistory.deleteMany({ where: { leadId: { in: deletableIds } } });
+        await tx.callLog.deleteMany({ where: { leadId: { in: deletableIds } } });
+        await tx.lead.deleteMany({ where: { id: { in: deletableIds } } });
+      },
+      { timeout: 60000, maxWait: 15000 }
+    );
+
+    res.json({
+      status: 'success',
+      message: `${deletableIds.length} lead(s) supprimé(s)`,
+      data: {
+        deleted: deletableIds.length,
+        skipped: blockedIds.length,
+        skippedIds: blockedIds,
+        notFound: requestedIds.length - leads.length,
+      },
+    });
+  })
+);
+
 // PATCH /:id - Edit basic lead fields (HELPER, VENDOR, SUPER_ADMIN, CALL_CENTER_AGENT)
 router.patch(
   '/:id',
@@ -2885,6 +3021,9 @@ router.patch(
       'PRICE_CONFIRMED',
       'PRICE_REJECTED',
       'UNREACHABLE',
+      // Normally reached by the cron exhausting the NO_REPLY attempts, but an
+      // admin/helper may also retire a hopeless number by hand.
+      DEAD_NO_REPLY,
     ];
 
     if (!validStatuses.includes(status)) {
@@ -2925,6 +3064,11 @@ router.patch(
           callbackAt: callbackAt !== undefined ? callbackAt : lead.callbackAt,
           requestedPriceMad: requestedPriceMad !== undefined ? requestedPriceMad : lead.requestedPriceMad,
           requestedPriceStatus: requestedPriceMad !== undefined ? 'PENDING' : lead.requestedPriceStatus,
+          // Roll a fresh 1–2 h hold when this status is one the cron reclaims,
+          // and drop any stale countdown when it is not. Re-picking the same
+          // status re-rolls it, matching the old behaviour where `updatedAt`
+          // restarted the window.
+          releaseAt: releaseAtFor(status),
         },
       });
     });
@@ -3030,6 +3174,7 @@ router.post(
         data: {
           assignedAgentId: agent.id,
           status: 'ASSIGNED',
+          releaseAt: null,
         },
       });
     });

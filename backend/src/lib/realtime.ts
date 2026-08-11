@@ -30,7 +30,8 @@ export type LeadUnassignReason =
   | 'REASSIGNED'      // an admin moved it to somebody else
   | 'TIMEOUT_IDLE'    // auto-unassigned for inactivity
   | 'TIMEOUT_STATUS'  // auto-unassigned after too long in a holding status
-  | 'EXPIRED';        // terminal/retry status aged out
+  | 'EXPIRED'         // terminal/retry status aged out
+  | 'NO_REPLY_EXHAUSTED'; // out of NO_REPLY attempts — retired, not recycled
 
 /**
  * Tell an agent that a lead just left their hands.

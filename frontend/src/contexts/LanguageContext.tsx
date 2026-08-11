@@ -19,6 +19,7 @@ import supportEn from '../locales/en/support.json';
 import chatEn from '../locales/en/chat.json';
 import verificationEn from '../locales/en/verification.json';
 import notificationsEn from '../locales/en/notifications.json';
+import callCenterEn from '../locales/en/call-center.json';
 
 import homeFr from '../locales/fr/home.json';
 import dashboardFr from '../locales/fr/dashboard.json';
@@ -36,6 +37,7 @@ import supportFr from '../locales/fr/support.json';
 import chatFr from '../locales/fr/chat.json';
 import verificationFr from '../locales/fr/verification.json';
 import notificationsFr from '../locales/fr/notifications.json';
+import callCenterFr from '../locales/fr/call-center.json';
 
 import homeAr from '../locales/ar/home.json';
 import dashboardAr from '../locales/ar/dashboard.json';
@@ -53,6 +55,7 @@ import supportAr from '../locales/ar/support.json';
 import chatAr from '../locales/ar/chat.json';
 import verificationAr from '../locales/ar/verification.json';
 import notificationsAr from '../locales/ar/notifications.json';
+import callCenterAr from '../locales/ar/call-center.json';
 
 type LocaleDict = { [key: string]: any };
 export type Namespaces = 
@@ -71,7 +74,8 @@ export type Namespaces =
   | 'support'
   | 'chat'
   | 'verification'
-  | 'notifications';
+  | 'notifications'
+  | 'call-center';
 
 const translations: Record<string, Record<Namespaces, LocaleDict>> = {
   en: { 
@@ -90,7 +94,8 @@ const translations: Record<string, Record<Namespaces, LocaleDict>> = {
     support: supportEn as LocaleDict,
     chat: chatEn as LocaleDict,
     verification: verificationEn as LocaleDict,
-    notifications: notificationsEn as LocaleDict
+    notifications: notificationsEn as LocaleDict,
+    'call-center': callCenterEn as LocaleDict
   },
   fr: { 
     home: homeFr as LocaleDict, 
@@ -108,7 +113,8 @@ const translations: Record<string, Record<Namespaces, LocaleDict>> = {
     support: supportFr as LocaleDict,
     chat: chatFr as LocaleDict,
     verification: verificationFr as LocaleDict,
-    notifications: notificationsFr as LocaleDict
+    notifications: notificationsFr as LocaleDict,
+    'call-center': callCenterFr as LocaleDict
   },
   ar: { 
     home: homeAr as LocaleDict, 
@@ -126,7 +132,8 @@ const translations: Record<string, Record<Namespaces, LocaleDict>> = {
     support: supportAr as LocaleDict,
     chat: chatAr as LocaleDict,
     verification: verificationAr as LocaleDict,
-    notifications: notificationsAr as LocaleDict
+    notifications: notificationsAr as LocaleDict,
+    'call-center': callCenterAr as LocaleDict
   },
 };
 

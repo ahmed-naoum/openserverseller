@@ -1,0 +1,216 @@
+{
+  "badge": "Inspecteur Call Center",
+  "title": "Centre d'Inspection Agents",
+  "subtitle": "Performances, statuts et activité réelle de chaque agent du Call Center.",
+
+  "overview": {
+    "activeAgents": "Agents actifs",
+    "leadsHandled": "Leads traités",
+    "confirmed": "Confirmés",
+    "delivered": "Livrés",
+    "confirmationRateShort": "Taux conf.",
+    "claimClicks": "Clics réclamer"
+  },
+
+  "period": {
+    "label": "Période",
+    "today": "Aujourd'hui",
+    "days7": "7 jours",
+    "days30": "30 jours",
+    "days90": "90 jours",
+    "clear": "Effacer",
+    "hint": "Filtre appliqué à la date de création des leads, aux réclamations et aux clics de contact."
+  },
+
+  "search": {
+    "agents": "Rechercher un agent par nom ou email...",
+    "leads": "Rechercher par nom, téléphone, ville, adresse..."
+  },
+
+  "sort": {
+    "leads": "Trier par leads",
+    "claims": "Trier par réclamations",
+    "confirmation": "Trier par taux de confirmation",
+    "delivery": "Trier par taux de livraison",
+    "name": "Trier par nom"
+  },
+
+  "empty": {
+    "noAgentsFound": "Aucun agent trouvé",
+    "noAgentsFoundHint": "Essayez un autre nom ou email.",
+    "noAgents": "Aucun agent Call Center",
+    "noAgentsHint": "Il n'y a pas encore d'agents dans le système.",
+    "noLeads": "Aucun lead trouvé"
+  },
+
+  "card": {
+    "active": "Actif",
+    "inactive": "Inactif",
+    "leads": "Leads",
+    "agentActivity": "Activité agent",
+    "claimsShort": "Réclam.",
+    "reclaimsShort": "Re-récl.",
+    "whatsapp": "WhatsApp",
+    "calls": "Appels",
+    "confirmationRate": "Taux confirmation",
+    "deliveryRate": "Taux livraison",
+    "inspect": "Cliquez pour inspecter",
+    "claimsTitle": "{manual} réclamation(s) + {forced} forcée(s)",
+    "reclaimsTitle": "Leads réclamés plus d'une fois par cet agent",
+    "whatsappTitle": "Ouvertures WhatsApp",
+    "callsTitle": "Clics sur appeler",
+    "deliveryRateTitle": "{delivered} livré(s) sur {resolved} colis arrivés à terme · {transit} encore en route",
+    "noPhone": "Pas de téléphone",
+    "lastClaim": "Dernière réclamation"
+  },
+
+  "metrics": {
+    "confirmedHint": "{queued} en attente · {shipped} envoyés",
+    "performance": "Performance",
+    "confirmationRate": "Taux de confirmation",
+    "deliveryRate": "Taux de livraison",
+    "lossRate": "Taux de perte",
+    "confirmationRateHint": "{confirmed} confirmés / {treated} leads traités",
+    "deliveryRateHint": "{delivered} livrés / {resolved} colis arrivés à terme",
+    "lossRateHint": "{lost} non convertis / {treated} leads traités"
+  },
+
+  "activity": {
+    "title": "Activité — clics et réclamations",
+    "claimClicks": "Clics « Réclamer »",
+    "claimClicksHint": "Fois où cet agent a pris un lead lui-même",
+    "forcedClaims": "Réclamations forcées",
+    "forcedClaimsHint": "Leads repris à un autre agent",
+    "totalAssignments": "Attributions totales",
+    "totalAssignmentsHint": "Réclamations + attributions admin et automatiques",
+    "distinctLeads": "Leads distincts",
+    "distinctLeadsHint": "Leads uniques passés entre ses mains",
+    "reclaims": "Re-réclamations",
+    "reclaimsHint": "Même lead repris plusieurs fois",
+    "whatsappClicks": "Clics WhatsApp",
+    "callClicks": "Clics appel",
+    "statusChanges": "Statuts modifiés",
+    "statusChangesHint": "Changements de statut effectués par cet agent",
+    "footnote": "« Attributions totales » inclut les leads distribués par un admin ou par la répartition automatique ; « Clics Réclamer » ne compte que les prises volontaires de l'agent."
+  },
+
+  "unknown": {
+    "title": "{count} lead(s) portent un statut non répertorié",
+    "body": "{list} — statuts transmis tels quels par le transporteur. Ils sont comptés dans le total mais pas dans les catégories."
+  },
+
+  "table": {
+    "all": "Tout",
+    "allLeads": "Tous les leads",
+    "selectedStatuses": "{count} statuts sélectionnés",
+    "client": "Client",
+    "product": "Produit",
+    "amount": "Montant",
+    "leadStatus": "Statut lead",
+    "parcel": "Colis",
+    "activity": "Activité",
+    "date": "Date",
+    "negotiatedPrice": "Prix négocié",
+    "noParcel": "Pas de colis",
+    "claimedTimes": "Réclamé {count} fois par cet agent",
+    "claimedAt": "Réclamé {date}",
+    "page": "Page {page} sur {total} · {count} leads"
+  },
+
+  "history": {
+    "title": "Historique des statuts",
+    "empty": "Aucun changement enregistré.",
+    "thisAgent": "(cet agent)",
+    "details": "Détails",
+    "address": "Adresse",
+    "source": "Source",
+    "payment": "Paiement",
+    "order": "Commande",
+    "callback": "Rappel prévu",
+    "firstClaim": "Première réclamation",
+    "lastUpdate": "Dernière mise à jour",
+    "agentNote": "Note agent"
+  },
+
+  "phase": {
+    "confirmation": "Phase 1: Confirmation",
+    "confirmationSubtitle": "✅ Résultat de la confirmation",
+    "delivery": "Phase 2: Livraison Coliaty",
+    "deliverySubtitle": "📦 Tous les statuts de livraison"
+  },
+
+  "phase1": {
+    "rate": "Taux: {rate}% ({confirmed}/{treated} traités)",
+    "other": "Autres statuts",
+    "filterTitle": "Filtrer sur « {label} »"
+  },
+
+  "phase2": {
+    "rate": "Taux: {rate}% ({delivered}/{parcels})",
+    "parcelsSent": "Colis envoyés",
+    "inProgress": "En cours",
+    "empty": "Aucun colis envoyé pour le moment",
+    "emptyHint": "Confirmez un lead puis poussez-le vers Coliaty."
+  },
+
+  "group": {
+    "in_progress": "En cours",
+    "confirmed": "Confirmé",
+    "lost": "Non converti",
+    "pipeline": "Préparation",
+    "transit": "En transit",
+    "issue": "Incidents",
+    "done": "Livré",
+    "return": "Retours & annulations"
+  },
+
+  "status": {
+    "NEW": "Nouveau",
+    "LEAD": "Prospect",
+    "AVAILABLE": "Disponible (Pool)",
+    "ASSIGNED": "Réclamé",
+    "CONTACTED": "Contacté",
+    "INTERESTED": "Intéressé",
+    "CALL_LATER": "Rappel programmé",
+    "CALLBACK_REQUESTED": "Rappel demandé",
+    "CONFIRMED": "Commande confirmée",
+    "PRICE_CONFIRMED": "Prix confirmé",
+    "ORDERED": "Commandé",
+    "NO_REPLY": "Injoignable",
+    "WRONG_ORDER": "Mauvaise commande",
+    "CANCEL_REASON_PRICE": "Refus sur le prix",
+    "CANCEL_ORDER": "Commande annulée",
+    "NOT_INTERESTED": "Pas intéressé",
+    "UNREACHABLE": "Non joignable",
+    "INVALID": "Invalide",
+    "PRICE_REJECTED": "Prix refusé",
+    "PENDING": "En attente",
+    "PUSHED_TO_DELIVERY": "Envoyé en livraison",
+    "NEW_PARCEL": "Nouveau colis",
+    "WAITING_PREPARATION": "Attente préparation",
+    "ENCORE_PREPARED": "En préparation",
+    "PREPARED": "Préparé",
+    "WAITING_PICKUP": "Attente collecte",
+    "IN_PRODUCTION": "En production",
+    "READY_FOR_SHIPPING": "Prêt à expédier",
+    "PICKED_UP": "Collecté",
+    "SENT": "Expédié",
+    "RECEIVED": "Reçu (destination)",
+    "DISTRIBUTION": "En livraison",
+    "PROGRAMMER": "Programmé",
+    "PROGRAMMER_AUTO": "Programmé (auto)",
+    "SHIPPED": "Expédié (commande)",
+    "POSTPONED": "Reporté",
+    "NOANSWER": "Pas de réponse",
+    "ERR": "Tél. erroné",
+    "INCORRECT_ADDRESS": "Adresse erronée",
+    "DELIVERED": "Livré",
+    "RETURNED": "Retourné",
+    "REFUSE": "Refusé",
+    "CANCELED": "Annulé (livreur)",
+    "CANCELED_BY_SELLER": "Annulé (vendeur)",
+    "CANCELED_BY_SYSTEM": "Annulé (système)",
+    "CANCELLED": "Annulé",
+    "REFUNDED": "Remboursé"
+  }
+}

@@ -4,10 +4,11 @@ import { leadsApi } from '../../lib/api';
 import { useSocket } from '../../contexts/SocketContext';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
-import { Sparkles, Phone, MessageSquare, Zap, Package, Heart, Filter, ChevronRight, Activity, Check } from 'lucide-react';
+import { Sparkles, Phone, MessageSquare, Zap, Package, Heart, Filter, ChevronRight, Activity, Check, X } from 'lucide-react';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import { ReleaseCountdown } from '../../components/leads/ReleaseCountdown';
 
-const AssignedTimer = ({ lead, onTimeout, isGirly, isPrincess }: { lead: any; onTimeout?: () => void; isGirly: boolean; isPrincess: boolean }) => {
+const AssignedTimer =({ lead, onTimeout, isGirly, isPrincess }: { lead: any; onTimeout?: () => void; isGirly: boolean; isPrincess: boolean }) => {
   const [globalCooldown, setGlobalCooldown] = useState<number>(0);
 
   useEffect(() => {
@@ -127,6 +128,12 @@ export default function AgentLeads() {
   // work by product, not by searching a pool whose phone numbers they cannot
   // see yet. Free-text search, city and the arrival window were removed.
   const [availableProductId, setAvailableProductId] = useState<number | ''>('');
+  // Number lookup over the pool — the one text filter that survived, because it
+  // needs a number the agent already has rather than one they are fishing for.
+  // Debounced apart from the input's own value so typing does not fire a
+  // request per keystroke on top of the 8s poll.
+  const [availablePhone, setAvailablePhone] = useState('');
+  const [debouncedPhone, setDebouncedPhone] = useState('');
   const [totalScopeCount, setTotalScopeCount] = useState(0);
   const [availableFilterOptions, setAvailableFilterOptions] = useState<{
     cities: string[];
@@ -234,6 +241,7 @@ export default function AgentLeads() {
           influencerId: selectedInfluencerId ? Number(selectedInfluencerId) : undefined,
           limit: availableLimit,
           productId: availableProductId || undefined,
+          phone: debouncedPhone || undefined,
         }),
         // Without an explicit limit this falls back to the server's 50/page and
         // silently drops the rest of the agent's leads.
@@ -255,7 +263,12 @@ export default function AgentLeads() {
     } catch (error) {
       console.error('Failed to load leads:', error);
     }
-  }, [selectedInfluencerId, availableLimit, statusFilter, availableProductId]);
+  }, [selectedInfluencerId, availableLimit, statusFilter, availableProductId, debouncedPhone]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedPhone(availablePhone.replace(/\D/g, '')), 350);
+    return () => clearTimeout(timer);
+  }, [availablePhone]);
 
   // Real-time call center events for sound & notifications.
   //
@@ -281,7 +294,10 @@ export default function AgentLeads() {
 
       setAvailableLeads((prev) => {
         if (prev.some((l) => l.id === lead.id)) return prev;
-        return [lead, ...prev];
+        // Appended rather than prepended: the pool is ordered most-claimed
+        // first, and a lead arriving now has never been claimed, so the bottom
+        // is where it belongs — and where the next poll would put it anyway.
+        return [...prev, lead];
       });
       setTotalAvailableCount((prev) => prev + 1);
 
@@ -352,6 +368,27 @@ export default function AgentLeads() {
     ['ORDERED', 'CONFIRMED'].includes(lead.status) && !lead.order?.coliatyPackageCode;
 
   const deliverableLeads = useMemo(() => myLeads.filter(canPushToDelivery), [myLeads]);
+
+  /**
+   * The single freshest card in the pool, for the "LEAD RÉCENT 🔥" badge.
+   *
+   * Read off the timestamps rather than off a position: the pool is ordered by
+   * claim count now, so the newest arrival is no longer simply the last card
+   * (it is only last among the never-claimed band, and a full page of claimed
+   * leads can push it off the list entirely).
+   */
+  const newestAvailableId = useMemo(() => {
+    let newestId: number | null = null;
+    let newestTime = -Infinity;
+    for (const lead of availableLeads) {
+      const time = new Date(lead.updatedAt || lead.createdAt).getTime();
+      if (!isNaN(time) && time > newestTime) {
+        newestTime = time;
+        newestId = lead.id;
+      }
+    }
+    return newestId;
+  }, [availableLeads]);
 
   // Leads leave this list as they ship (or when a filter changes), so drop any
   // id that is no longer selectable rather than pushing a stale selection.
@@ -653,7 +690,7 @@ export default function AgentLeads() {
             {/* Limit Selector */}
             <div className="flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl">
               <span className="text-[10px] font-black text-gray-400 uppercase px-1.5">Afficher:</span>
-              {([20, 50, 100, 200, 'max'] as const).map((opt) => (
+              {([6, 20, 50, 100, 200, 'max'] as const).map((opt) => (
                 <button
                   key={opt}
                   type="button"
@@ -791,9 +828,35 @@ export default function AgentLeads() {
                 ]}
               />
             </div>
+
+            {/* Number lookup. Non-digits are stripped before the request, so a
+                number pasted as +212 6 67 … or 0667-… searches the same. */}
+            <div className="relative flex-1 min-w-0">
+              <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                type="tel"
+                inputMode="tel"
+                value={availablePhone}
+                onChange={(e) => setAvailablePhone(e.target.value)}
+                placeholder="Chercher par numéro (0667…, +212667…)"
+                className={`w-full pl-9 ${availablePhone ? 'pr-9' : 'pr-4'} py-2.5 border border-gray-200 bg-white rounded-xl outline-none text-sm font-bold shadow-sm transition-all placeholder:font-semibold placeholder:text-gray-400 hover:border-gray-300 focus:ring-2 ${
+                  isPrincess ? 'focus:ring-amber-400' : isGirly ? 'focus:ring-pink-400' : 'focus:ring-indigo-400'
+                }`}
+              />
+              {availablePhone && (
+                <button
+                  type="button"
+                  onClick={() => setAvailablePhone('')}
+                  title="Effacer la recherche"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-600 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
 
-          {availableProductId !== '' && (
+          {(availableProductId !== '' || debouncedPhone !== '') && (
             <div className="flex items-center gap-2 flex-wrap mt-2.5 pt-2.5 border-t border-gray-50">
               <span className="text-[11px] font-black text-gray-500">
                 {totalAvailableCount} résultat{totalAvailableCount > 1 ? 's' : ''}
@@ -803,7 +866,10 @@ export default function AgentLeads() {
               </span>
               <button
                 type="button"
-                onClick={() => setAvailableProductId('')}
+                onClick={() => {
+                  setAvailableProductId('');
+                  setAvailablePhone('');
+                }}
                 className="ml-auto px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
               >
                 Réinitialiser
@@ -814,11 +880,9 @@ export default function AgentLeads() {
 
         {availableLeads.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {availableLeads.map((lead, index) => {
+            {availableLeads.map((lead) => {
               const isNew = isNewLead(lead);
-              // The list runs oldest-first, so the most recent arrival is the
-              // last card, not the first one.
-              const isTopNewest = isNew && index === availableLeads.length - 1;
+              const isTopNewest = isNew && lead.id === newestAvailableId;
 
               return (
                 <div
@@ -879,6 +943,12 @@ export default function AgentLeads() {
                     <p className="text-xs text-gray-400 font-medium">📍 {lead.city || 'Ville inconnue'}</p>
                   </div>
                 </div>
+
+                {/* No claim-count badge on the card, on purpose. `claimCount`
+                    is still computed and still sent — it is what orders the
+                    pool (most-claimed at the head, never-claimed at the foot,
+                    and the row limit cutting from the top) — the agent just
+                    does not get told how many hands a lead has been through. */}
 
                 {lead.product && (
                   <div className={`flex items-center gap-3 mb-4 p-2.5 rounded-2xl border ${
@@ -946,7 +1016,25 @@ export default function AgentLeads() {
             ) : (
               <Zap className="w-12 h-12 text-indigo-300 mx-auto mb-4 animate-pulse" />
             )}
-            {availableProductId !== '' ? (
+            {debouncedPhone !== '' ? (
+              <>
+                <p className="text-gray-900 font-black text-sm">Aucun lead avec ce numéro.</p>
+                <p className="text-gray-400 text-xs mt-1 font-medium">
+                  Le numéro « {availablePhone} » n'est dans aucun lead disponible
+                  {availableProductId !== '' ? ' pour ce produit' : ''}. Il est peut-être déjà
+                  réclamé par un autre agent.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setAvailablePhone('')}
+                  className={`mt-5 px-5 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider text-white transition-all active:scale-95 ${
+                    isPrincess ? 'bg-amber-500 hover:bg-amber-600' : isGirly ? 'bg-pink-500 hover:bg-pink-600' : 'bg-indigo-600 hover:bg-indigo-700'
+                  }`}
+                >
+                  Effacer la recherche
+                </button>
+              </>
+            ) : availableProductId !== '' ? (
               <>
                 <p className="text-gray-900 font-black text-sm">Aucun lead pour ce produit.</p>
                 <p className="text-gray-400 text-xs mt-1 font-medium">
@@ -1115,6 +1203,7 @@ export default function AgentLeads() {
                         {lead.status === 'PRICE_CONFIRMED' ? 'PRIX CONFIRMÉ' : lead.status}
                       </span>
                       <AssignedTimer lead={lead} onTimeout={loadData} isGirly={isGirly} isPrincess={isPrincess} />
+                      <ReleaseCountdown lead={lead} onExpire={loadData} />
                       {lead.callbackAt && lead.status === 'CALL_LATER' && (
                         <span className={`text-[9px] font-black bg-white px-2 py-0.5 rounded border flex items-center gap-1 animate-pulse ${
                           isPrincess ? 'text-amber-600 border-amber-100' : isGirly ? 'text-pink-600 border-pink-100' : 'text-indigo-600 border-indigo-100'

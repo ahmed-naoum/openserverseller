@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { BACKEND_URL, publicApi } from '../../../lib/api';
 import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { SOURCE_PARAM, buildSourceToken, getCurrentLinkCode, readSourceRef } from '../../../utils/referral';
 
 export type BlockType = 'header' | 'hero' | 'image' | 'text' | 'button' | 'express_checkout' | 'spacer' | 'countdown' | 'whatsapp' | 'slider' | 'products' | 'audio' | 'video';
 
@@ -16,6 +17,25 @@ interface BlockRendererProps {
   renderCheckout?: (content: any) => React.ReactNode;
   isEditor?: boolean;
 }
+
+/**
+ * Stamps the current landing page's code onto links pointing at another /r/ page,
+ * so the destination can enforce its "Exiger une provenance" cloaking rule even
+ * when the browser drops the referrer. External links are returned untouched.
+ */
+const withSourceToken = (link: string): string => {
+  try {
+    if (!getCurrentLinkCode()) return link;
+
+    const target = new URL(link, window.location.href);
+    if (!readSourceRef(target)) return link;
+
+    target.searchParams.set(SOURCE_PARAM, buildSourceToken(window.location.href));
+    return target.toString();
+  } catch {
+    return link;
+  }
+};
 
 export default function BlockRenderer({ blocks, renderCheckout, isEditor = false }: BlockRendererProps) {
   const [isCheckoutInView, setIsCheckoutInView] = useState(false);
@@ -1472,7 +1492,7 @@ function ButtonBlockComponent({ content, isEditor, isCheckoutInView }: { content
         checkout.scrollIntoView({ behavior: 'smooth' });
       }
     } else if (content.link) {
-      window.open(content.link, '_blank');
+      window.open(withSourceToken(content.link), '_blank');
     }
   };
 

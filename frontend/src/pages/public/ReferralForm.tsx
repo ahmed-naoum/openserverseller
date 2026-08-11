@@ -7,6 +7,7 @@ import { Package, ShieldCheck, Truck, Clock, CheckCircle2, UserCircle2 } from 'l
 import toast from 'react-hot-toast';
 import BlockRenderer from '../../components/helper/sitebuilder/BlockRenderer';
 import WhatsAppWidget from '../../components/public/WhatsAppWidget';
+import { getCloakingConfig, needsGeoLookup, resolveGeoCloakRedirect, resolveInstantCloakRedirect } from '../../utils/cloaking';
 
 const getNoScriptUrl = (pixel: any) => {
   const platform = (pixel.platform || 'META').toUpperCase();
@@ -92,195 +93,19 @@ export default function ReferralForm() {
     }
   }, [data]);
 
-  // Client-side Cloaking & Redirect Filters
+  // GeoIP-based cloaking. The instant rules already ran in fetchData before the page
+  // was allowed to render; these need a third-party IP lookup, so they run after so
+  // legitimate visitors are not held behind a network round-trip.
   useEffect(() => {
-    if (data?.landingPage?.customStructure) {
-      const structure = data.landingPage.customStructure;
-      const settings = Array.isArray(structure) ? null : structure?.settings;
-      if (settings?.cloaking?.enabled) {
-        const c = settings.cloaking;
+    const cloaking = getCloakingConfig(data?.landingPage?.customStructure);
+    if (!cloaking || !needsGeoLookup(cloaking)) return;
 
-        // 1. Bot & Crawler Filtering
-        if (c.filterBots) {
-          const ua = (navigator.userAgent || '').toLowerCase();
-          const targetAgents = Array.isArray(c.selectedUserAgents) && c.selectedUserAgents.length > 0
-            ? c.selectedUserAgents.map((agent: any) => (typeof agent === 'string' ? agent : (agent?.value || agent?.name || String(agent || ''))).toLowerCase())
-            : null;
+    let cancelled = false;
+    resolveGeoCloakRedirect(cloaking).then((redirectUrl) => {
+      if (!cancelled && redirectUrl) window.location.replace(redirectUrl);
+    });
 
-          const defaultBotPattern = /bot|crawler|spider|crawling|scraper|snippet|curl|wget|python|postman|axios|node-fetch|httpclient|headless|puppeteer|phantomjs|selenium|cypress|facebookexternalhit|facebookplatform|facebookcatalog|facebookbot|googlebot|bingbot|slurp|yahoo|adbot|lighthouse|duckduckbot|baiduspider|yandexbot|sogou|exabot|facebot|ia_archiver|linkedinbot|twitterbot|slackbot|telegrambot|applebot|whatsapp|skypeuripreview|ahrefsbot|semrushbot|mj12bot|dotbot|rogerbot|moz|majestics12|seznambot|pingdom|archive\.org_bot|discordbot|pinterest|vkshare|redditbot|tumblr|flipboardproxy|feedfetcher|amazonbot|bytespider|ccbot|chatgpt-user|claudebot|coccocbot|dataminr|go-http-client|grapeshot|java|libwww|lwp-trivial|mail\.ru|megaindex|petalsearch|qwantify|screaming\sfrog|soso|tencenttraveler|zite|zoominfo|ahrefs|alexa|appinsights|archive|ask\sjeeves|bubing|catchpoint|cloudflare|criteo|datadog|duckduckgo|fastly|feedburner|flipboard|hubspot|incapsula|instagram|linkedin|majestic|monitor|msn|naver|nuzzel|outbrain|pagespeed|quora|reddit|semrush|skype|slack|snapchat|statuscake|telegram|updown|uptimerobot|vkontakte|yelp|youtube|zillow|zmeu/i;
-
-          const isBlockedBot = targetAgents
-            ? targetAgents.some((agent: string) => ua.includes(agent))
-            : defaultBotPattern.test(ua);
-
-          if (isBlockedBot) {
-            window.location.replace(c.botRedirectUrl || 'https://wikipedia.org');
-            return;
-          }
-        }
-
-        // 2. Direct Visits Filtering (No referrer)
-        if (c.filterDirect) {
-          if (!document.referrer) {
-            window.location.replace(c.directRedirectUrl || 'https://google.com');
-            return;
-          }
-        }
-
-        // 3. Desktop redirection (Mobile only mode)
-        if (c.redirectDesktop) {
-          const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-          if (!isMobile) {
-            window.location.replace(c.desktopRedirectUrl || 'https://www.silacod.com');
-            return;
-          }
-        }
-
-        // 4. Browser Language Filtering
-        if (c.filterLanguage && c.allowedLanguages) {
-          const userLang = (navigator.language || (navigator as any).userLanguage || '').toLowerCase();
-          const allowedList = c.allowedLanguages.split(',').map((l: string) => l.trim().toLowerCase());
-          const isAllowed = allowedList.some((lang: string) => userLang.includes(lang));
-          if (!isAllowed) {
-            window.location.replace(c.languageRedirectUrl || 'https://google.com');
-            return;
-          }
-        }
-
-        // 5. Country / Public IP GeoIP Filtering (Country Cloaking) & IP Data Inspection (VPN / DNS)
-        const needsGeoIp = (c.filterCountry && c.allowedCountries) || c.filterVpn || c.filterDns || c.filterIpRange || c.filterIpv6;
-
-        if (needsGeoIp) {
-          fetch('https://ipapi.co/json/')
-            .then((res) => res.json())
-            .then((ipData) => {
-              const userIp = ipData.ip || '';
-              const countryCode = (ipData.country_code || '').toUpperCase();
-              const isVpn = ipData.security?.vpn || ipData.security?.proxy || ipData.security?.tor || ipData.in_eu === false && false;
-              const orgDns = (ipData.org || ipData.asn || ipData.hostname || '').toLowerCase();
-
-              // 5a. IPv6 Filter
-              if (c.filterIpv6 && userIp.includes(':')) {
-                window.location.replace(c.ipv6RedirectUrl || 'https://google.com');
-                return;
-              }
-
-              // 5b. Country Cloaking
-              if (c.filterCountry && (c.allowedCountries || (Array.isArray(c.selectedCountries) && c.selectedCountries.length > 0))) {
-                const rawAllowedList = Array.isArray(c.selectedCountries) && c.selectedCountries.length > 0
-                  ? c.selectedCountries.map((item: any) => typeof item === 'string' ? item : (item?.code || item?.value || String(item || '')))
-                  : (c.allowedCountries || '').split(',').map((item: string) => item.trim());
-
-                const allowedTokens = rawAllowedList
-                  .flatMap((item: string) => (typeof item === 'string' ? item : String(item)).split('-').map(part => part.trim().toUpperCase()))
-                  .filter(Boolean);
-
-                const countryName = (ipData.country_name || '').toUpperCase();
-
-                const isCountryAllowed = allowedTokens.some((token: string) => {
-                  if (!token) return false;
-                  if (countryCode && (countryCode === token || token.includes(countryCode))) return true;
-                  if (countryName && (countryName.includes(token) || token.includes(countryName))) return true;
-                  return false;
-                });
-
-                if (!isCountryAllowed) {
-                  window.location.replace(c.countryRedirectUrl || 'https://google.com');
-                  return;
-                }
-              }
-
-              // 5c. VPN & Proxy Filter (GeoIP + Extension VPN DOM/Window Probing)
-              const win = window as any;
-              const hasExtensionVpnInjected = typeof window !== 'undefined' && (
-                win.urbanVpn || win.__URBAN_VPN__ || win.urban ||
-                win.browsec || win.veepn || win.__VEEPN__ ||
-                win.touchVpn || win.zenmate || win.setupVpn ||
-                !!document.querySelector('[id*="urban-vpn"], [class*="urban-vpn"], [id*="browsec"], [class*="browsec"], [id*="veepn"], [class*="veepn"], [id*="touchvpn"], [class*="touchvpn"], [id*="zenmate"], [class*="zenmate"]')
-              );
-
-              const isExtensionVpn = (c.detectExtensionVpn !== false) && hasExtensionVpnInjected;
-
-              if (c.filterVpn && (isVpn || isExtensionVpn)) {
-                window.location.replace(c.vpnRedirectUrl || 'https://google.com');
-                return;
-              }
-
-              // 5d. DNS / ISP Keyword Filter
-              if (c.filterDns) {
-                const selectedDnsList = Array.isArray(c.selectedDns) && c.selectedDns.length > 0
-                  ? c.selectedDns.map((d: any) => (typeof d === 'string' ? d : (d?.value || String(d || ''))).toLowerCase())
-                  : ['facebook.com', 'fb.com', 'facebook.net', 'fbcdn.net', 'fbcdn.com', 'tfbnw.net', 'fbsbx.com', 'akamaihd.net', 'facebook.fr', 'facebook.de', 'whatsapp.net', 'messenger.com', 'foursquare.com', 'energized.pro', 'addtoany.com', 'whatsapp.com', 'instagram.com', 'hootsuite.com', 'edgesuite.net', 'internet.org', 'appspot.com', 'wechat.com', 'fb.me', 'freebasics.com', 'fburl.com'];
-
-                const customDnsList = c.blockedDns
-                  ? c.blockedDns.split(',').map((k: string) => k.trim().toLowerCase()).filter(Boolean)
-                  : [];
-
-                const allDnsKeywords = [...selectedDnsList, ...customDnsList];
-                const isBlockedDns = allDnsKeywords.some((kw: string) => orgDns.includes(kw));
-
-                if (isBlockedDns) {
-                  window.location.replace(c.dnsRedirectUrl || 'https://google.com');
-                  return;
-                }
-              }
-
-              // 5e. IP Range Subnet Filter
-              if (c.filterIpRange && c.blockedIpRanges && userIp) {
-                const ranges = c.blockedIpRanges.split(/[\n,]+/).map((r: string) => r.trim()).filter(Boolean);
-                
-                const ipToLong = (ip: string) => {
-                  return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
-                };
-
-                const isIpInCidr = (ipStr: string, cidrStr: string) => {
-                  if (!cidrStr.includes('/')) return ipStr === cidrStr;
-                  const [rangeIp, bits] = cidrStr.split('/');
-                  const mask = ~((1 << (32 - parseInt(bits, 10))) - 1) >>> 0;
-                  return (ipToLong(ipStr) & mask) === (ipToLong(rangeIp) & mask);
-                };
-
-                const isBlockedIp = ranges.some((range: string) => {
-                  try {
-                    return isIpInCidr(userIp, range);
-                  } catch {
-                    return false;
-                  }
-                });
-
-                if (isBlockedIp) {
-                  window.location.replace(c.ipRangeRedirectUrl || 'https://google.com');
-                  return;
-                }
-              }
-            })
-            .catch(() => {
-              // Fallback to lightweight country check if primary GeoIP fails
-              if (c.filterCountry && (c.allowedCountries || (Array.isArray(c.selectedCountries) && c.selectedCountries.length > 0))) {
-                fetch('https://api.country.is')
-                  .then((res) => res.json())
-                  .then((resData) => {
-                    const countryCode = (resData.country || '').toUpperCase();
-                    const rawAllowedList = Array.isArray(c.selectedCountries) && c.selectedCountries.length > 0
-                      ? c.selectedCountries
-                      : (c.allowedCountries || '').split(',').map((item: string) => item.trim());
-
-                    const allowedTokens = rawAllowedList
-                      .flatMap((item: string) => item.split('-').map(part => part.trim().toUpperCase()))
-                      .filter(Boolean);
-
-                    const isAllowed = allowedTokens.some((token: string) => countryCode === token || token.includes(countryCode));
-
-                    if (countryCode && !isAllowed) {
-                      window.location.replace(c.countryRedirectUrl || 'https://google.com');
-                    }
-                  })
-                  .catch(() => {});
-              }
-            });
-        }
-      }
-    }
+    return () => { cancelled = true; };
   }, [data]);
 
   const activePixels = useMemo(() => {
@@ -361,12 +186,25 @@ export default function ReferralForm() {
       const res = await publicApi.getReferralLinkData(code!);
       // Handle standardized response wrapper
       const responseData = res.data.status === 'success' ? res.data.data : res.data;
+
+      // Cloaking is decided here, before any state that would render the page.
+      // A blocked visitor keeps the loading spinner and never sees the content.
+      const cloaking = getCloakingConfig(responseData?.landingPage?.customStructure);
+      if (cloaking) {
+        const redirectUrl = resolveInstantCloakRedirect(cloaking);
+        if (redirectUrl) {
+          window.location.replace(redirectUrl);
+          return; // stay on the spinner while the browser navigates away
+        }
+      }
+
       setData(responseData);
     } catch (err) {
       setError(true);
-    } finally {
       setLoading(false);
+      return;
     }
+    setLoading(false);
   };
 
   const [errors, setErrors] = useState<{ fullName?: string; phone?: string; city?: string }>({});

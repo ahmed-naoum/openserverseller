@@ -9,7 +9,7 @@ import {
   Users, Search, Download,
   ChevronLeft, ChevronRight,
   Phone, MapPin, Calendar, Tag, Headphones,
-  Trash2, CheckCircle2, Clock, Box, AlertCircle, Truck,
+  Trash2, CheckCircle2, CheckSquare, Clock, Box, AlertCircle, Truck,
   ChevronDown, ChevronUp, Package, X, Eye, RefreshCw,
   SlidersHorizontal, Wallet, TrendingUp, MessageCircle, Link2,
   FileSpreadsheet, PhoneCall, StickyNote, Home, Hash,
@@ -42,6 +42,9 @@ const STATUS_ORDER = [
   'INTERESTED', 'CONFIRMED', 'ORDERED', 'PUSHED_TO_DELIVERY', 'DELIVERED',
   'RETURNED', 'NOT_INTERESTED', 'UNREACHABLE', 'INVALID', 'CANCELLED',
 ];
+
+// A lead the call center has never seen — the only kind worth handing over
+const CALL_CENTER_READY_STATUSES = ['NEW', 'LEAD'];
 
 // Groups used by the KPI cards
 const IN_PROGRESS_STATUSES = ['ASSIGNED', 'CONTACTED', 'CALLBACK_REQUESTED'];
@@ -391,8 +394,15 @@ export default function AdminLeads() {
       window.removeEventListener('keydown', onKey);
     };
   }, [notePopover]);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  // Keyed by lead id and holding the row itself: a selection can span pages, and
+  // the bulk actions need each lead's status / phone / tracking code after the
+  // page it came from is gone.
+  const [selected, setSelected] = useState<Map<number, any>>(new Map());
   const [exporting, setExporting] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  // Both the row button and the bulk bar open the same confirmation
+  const [pushTargets, setPushTargets] = useState<any[] | null>(null);
+  const [deleteTargets, setDeleteTargets] = useState<any[] | null>(null);
 
   const [selectedLeadId, setSelectedLeadId] = useState<number | null>(null);
   const [leadDetail, setLeadDetail] = useState<any>(null);
@@ -514,6 +524,12 @@ export default function AdminLeads() {
     try {
       await leadsApi.delete(String(leadToDelete.id));
       toast.success('Lead supprimé avec succès');
+      setSelected(prev => {
+        if (!prev.has(leadToDelete.id)) return prev;
+        const next = new Map(prev);
+        next.delete(leadToDelete.id);
+        return next;
+      });
       setLeadToDelete(null);
       refetch();
     } catch (error: any) {
@@ -567,7 +583,7 @@ export default function AdminLeads() {
     try {
       let rows: any[];
       if (onlySelected) {
-        rows = leads.filter((l: any) => selectedIds.has(l.id));
+        rows = Array.from(selected.values());
       } else {
         const res = await leadsApi.list({ ...queryParams, page: 1, limit: 1000, withStats: 'false' } as any);
         rows = res.data?.data?.leads || [];
@@ -637,25 +653,117 @@ export default function AdminLeads() {
     }
   };
 
-  const pageIds = leads.map((l: any) => l.id);
-  const allPageSelected = pageIds.length > 0 && pageIds.every((id: number) => selectedIds.has(id));
+  const allPageSelected = leads.length > 0 && leads.every((l: any) => selected.has(l.id));
 
   const toggleAllOnPage = () => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (allPageSelected) pageIds.forEach((id: number) => next.delete(id));
-      else pageIds.forEach((id: number) => next.add(id));
+    setSelected(prev => {
+      const next = new Map(prev);
+      if (allPageSelected) leads.forEach((l: any) => next.delete(l.id));
+      else leads.forEach((l: any) => next.set(l.id, l));
       return next;
     });
   };
 
-  const toggleOne = (id: number) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+  const toggleOne = (lead: any) => {
+    setSelected(prev => {
+      const next = new Map(prev);
+      if (next.has(lead.id)) next.delete(lead.id);
+      else next.set(lead.id, lead);
       return next;
     });
+  };
+
+  const clearSelection = () => setSelected(new Map());
+
+  const selectedList = useMemo(() => Array.from(selected.values()), [selected]);
+
+  // Only a lead that has not left the vendor's hands yet can be handed over
+  const pushableLeads = useMemo(
+    () => selectedList.filter(l => CALL_CENTER_READY_STATUSES.includes(l.status)),
+    [selectedList]
+  );
+
+  // Already at Coliaty — the backend skips these, so warn before firing
+  const undeletableCount = useMemo(
+    () => (deleteTargets ?? selectedList).filter(l => l.coliatyPackageCode).length,
+    [deleteTargets, selectedList]
+  );
+
+  // Same guards the backend applies, run first so the user gets the offending
+  // number instead of a generic 400.
+  const openPushModal = (targets: any[]) => {
+    if (targets.length === 0) return;
+
+    const seen = new Map<string, any>();
+    for (const l of targets) {
+      const key = String(l.phone || '').replace(/\D/g, '');
+      if (!key) continue;
+      if (seen.has(key)) {
+        toast.error(`Doublon : le numéro ${l.phone} apparaît deux fois dans la sélection`);
+        return;
+      }
+      seen.set(key, l);
+    }
+
+    // Best-effort duplicate check against what is loaded on this page
+    const targetIds = new Set(targets.map(l => l.id));
+    const alreadyActive = leads.find((l: any) =>
+      !targetIds.has(l.id) &&
+      ['AVAILABLE', 'ASSIGNED'].includes(l.status) &&
+      seen.has(String(l.phone || '').replace(/\D/g, ''))
+    );
+    if (alreadyActive) {
+      toast.error(`Le numéro ${alreadyActive.phone} est déjà actif au Call Center (Lead #${alreadyActive.id})`);
+      return;
+    }
+
+    setPushTargets(targets);
+  };
+
+  const confirmPush = async () => {
+    if (!pushTargets || pushTargets.length === 0) return;
+    const ids = pushTargets.map(l => l.id);
+    setBulkBusy(true);
+    try {
+      await leadsApi.bulkUpdateStatus({ ids, status: 'AVAILABLE' });
+      toast.success(`${ids.length} lead${ids.length > 1 ? 's envoyés' : ' envoyé'} au Call Center`);
+      setPushTargets(null);
+      setSelected(prev => {
+        const next = new Map(prev);
+        ids.forEach(id => next.delete(id));
+        return next;
+      });
+      refetch();
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || 'Erreur lors de l\'envoi au Call Center');
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const confirmBulkDelete = async () => {
+    if (!deleteTargets || deleteTargets.length === 0) return;
+    const ids = deleteTargets.map(l => l.id);
+    setBulkBusy(true);
+    try {
+      const res = await leadsApi.bulkDelete(ids);
+      const { deleted = 0, skipped = 0 } = res.data?.data || {};
+      toast.success(`${deleted} lead${deleted > 1 ? 's supprimés' : ' supprimé'}`);
+      if (skipped > 0) {
+        toast(`${skipped} lead${skipped > 1 ? 's ignorés' : ' ignoré'} : déjà en livraison.`, { icon: '⚠️' });
+      }
+      setDeleteTargets(null);
+      setSelected(prev => {
+        const next = new Map(prev);
+        ids.forEach(id => next.delete(id));
+        return next;
+      });
+      refetch();
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || 'Erreur lors de la suppression groupée');
+    } finally {
+      setBulkBusy(false);
+    }
   };
 
   // Page buttons around the current page, clamped to real bounds
@@ -950,7 +1058,7 @@ export default function AdminLeads() {
         </div>
 
         {/* Active filters + selection actions */}
-        {(activeChips.length > 0 || selectedIds.size > 0) && (
+        {(activeChips.length > 0 || selected.size > 0) && (
           <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
             {activeChips.map(chip => (
               <span
@@ -961,11 +1069,10 @@ export default function AdminLeads() {
                 <button onClick={chip.clear} className="hover:text-primary-900"><X className="w-3 h-3" /></button>
               </span>
             ))}
-            {selectedIds.size > 0 && (
+            {selected.size > 0 && (
               <span className="inline-flex items-center gap-2 px-2.5 py-1 bg-slate-900 text-white rounded-lg text-[11px] font-bold">
-                {selectedIds.size} sélectionné{selectedIds.size > 1 ? 's' : ''}
-                <button onClick={() => exportCsv(true)} className="underline hover:no-underline">Exporter</button>
-                <button onClick={() => setSelectedIds(new Set())}><X className="w-3 h-3" /></button>
+                {selected.size} sélectionné{selected.size > 1 ? 's' : ''}
+                <button onClick={clearSelection} title="Effacer la sélection"><X className="w-3 h-3" /></button>
               </span>
             )}
             {activeChips.length > 0 && (
@@ -1033,7 +1140,8 @@ export default function AdminLeads() {
                   const orderStatus = lead.order?.status && lead.order.status !== lead.status
                     ? DETAILED_STATUS_LABELS[lead.order.status] : null;
                   const src = SOURCE_LABELS[lead.source] || { label: lead.source || '—', color: 'bg-gray-50 text-gray-600 border-gray-200' };
-                  const isSelected = selectedIds.has(lead.id);
+                  const isSelected = selected.has(lead.id);
+                  const canPushToCallCenter = CALL_CENTER_READY_STATUSES.includes(lead.status);
                   const clicks = lead.contactClicks || { whatsapp: 0, call: 0, lastWhatsappAt: null, lastCallAt: null };
 
                   return (
@@ -1045,7 +1153,7 @@ export default function AdminLeads() {
                           <input
                             type="checkbox"
                             checked={isSelected}
-                            onChange={() => toggleOne(lead.id)}
+                            onChange={() => toggleOne(lead)}
                             className="w-3.5 h-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
                           />
                         </td>
@@ -1289,6 +1397,15 @@ export default function AdminLeads() {
                         {/* Actions */}
                         <td className="px-4 py-3.5 text-right">
                           <div className="flex items-center justify-end gap-1">
+                            {canPushToCallCenter && (
+                              <button
+                                onClick={() => openPushModal([lead])}
+                                className="p-1.5 text-cyan-500 hover:text-white hover:bg-cyan-500 rounded-lg transition-all"
+                                title="Envoyer au Call Center"
+                              >
+                                <Headphones className="w-4 h-4" />
+                              </button>
+                            )}
                             <button
                               onClick={() => setExpandedRow(isExpanded ? null : lead.id)}
                               className={`p-1.5 rounded-lg transition-all ${isExpanded ? 'bg-gray-900 text-white' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}
@@ -1952,6 +2069,161 @@ export default function AdminLeads() {
                 Supprimer
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk delete confirmation */}
+      {deleteTargets && deleteTargets.length > 0 && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-6 flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-4">
+                <AlertCircle className="w-8 h-8 text-red-500" />
+              </div>
+              <h3 className="text-xl font-black text-gray-900 mb-2">
+                Supprimer {deleteTargets.length} lead{deleteTargets.length > 1 ? 's' : ''} ?
+              </h3>
+              <p className="text-sm text-gray-500 font-medium">
+                Cette action est irréversible. Les leads et leurs données liées (commandes non expédiées,
+                historiques, journaux d'appels) seront définitivement effacés.
+              </p>
+              {undeletableCount > 0 && (
+                <p className="mt-3 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                  {undeletableCount} lead{undeletableCount > 1 ? 's' : ''} déjà en livraison
+                  {undeletableCount > 1 ? ' seront ignorés' : ' sera ignoré'} — annulez la commande d'abord.
+                </p>
+              )}
+            </div>
+            <div className="bg-gray-50 px-6 py-4 flex gap-3">
+              <button
+                onClick={() => setDeleteTargets(null)}
+                disabled={bulkBusy}
+                className="flex-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all shadow-sm disabled:opacity-60"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={confirmBulkDelete}
+                disabled={bulkBusy}
+                className="flex-1 px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-bold transition-all shadow-md shadow-red-200 flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                <Trash2 className="w-4 h-4" />
+                {bulkBusy ? 'Suppression…' : `Supprimer (${deleteTargets.length})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Send to call center confirmation (row button and bulk bar share it) */}
+      {pushTargets && pushTargets.length > 0 && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-6 flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-cyan-50 rounded-full flex items-center justify-center mb-4">
+                <Headphones className="w-8 h-8 text-cyan-500" />
+              </div>
+              <h3 className="text-xl font-black text-gray-900 mb-2">
+                {pushTargets.length === 1
+                  ? 'Envoyer ce lead au Call Center ?'
+                  : `Envoyer ${pushTargets.length} leads au Call Center ?`}
+              </h3>
+              {pushTargets.length === 1 ? (
+                <p className="text-sm text-gray-500 font-medium">
+                  <strong className="text-gray-800">{pushTargets[0].fullName}</strong>
+                  {pushTargets[0].phone ? ` · ${pushTargets[0].phone}` : ''}
+                  <br />
+                  Il passera en « Disponible » et les agents pourront le réclamer immédiatement.
+                </p>
+              ) : (
+                <p className="text-sm text-gray-500 font-medium">
+                  Ces leads passeront en « Disponible » et les agents pourront les réclamer immédiatement.
+                </p>
+              )}
+              <div className="mt-4 w-full max-h-40 overflow-y-auto rounded-xl border border-gray-100 divide-y divide-gray-50 text-left">
+                {pushTargets.slice(0, 20).map(l => (
+                  <div key={l.id} className="px-3 py-2 flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-gray-700 truncate">{l.fullName}</span>
+                    <span className="text-[10px] font-semibold text-gray-400 whitespace-nowrap">{l.phone}</span>
+                  </div>
+                ))}
+                {pushTargets.length > 20 && (
+                  <div className="px-3 py-2 text-[10px] font-black uppercase tracking-wider text-gray-400">
+                    + {pushTargets.length - 20} autre{pushTargets.length - 20 > 1 ? 's' : ''}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="bg-gray-50 px-6 py-4 flex gap-3">
+              <button
+                onClick={() => setPushTargets(null)}
+                disabled={bulkBusy}
+                className="flex-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all shadow-sm disabled:opacity-60"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={confirmPush}
+                disabled={bulkBusy}
+                className="flex-1 px-4 py-2.5 bg-cyan-500 hover:bg-cyan-600 text-white rounded-xl text-sm font-bold transition-all shadow-md shadow-cyan-200 flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                <Headphones className="w-4 h-4" />
+                {bulkBusy ? 'Envoi…' : 'Envoyer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk action bar — floats above the table while a selection is live */}
+      {selected.size > 0 && (
+        <div className="fixed inset-x-0 bottom-6 z-40 flex justify-center px-4 pointer-events-none">
+          <div className="pointer-events-auto flex items-center gap-2 flex-wrap justify-center bg-slate-900 text-white rounded-2xl shadow-2xl shadow-slate-900/30 ring-1 ring-white/10 px-3 py-2.5 animate-in slide-in-from-bottom-4 duration-200">
+            <span className="flex items-center gap-2 px-2 text-xs font-black uppercase tracking-wider">
+              <CheckSquare className="w-4 h-4 text-primary-300" />
+              {selected.size} sélectionné{selected.size > 1 ? 's' : ''}
+            </span>
+
+            <span className="w-px h-6 bg-white/15" />
+
+            {pushableLeads.length > 0 && (
+              <button
+                onClick={() => openPushModal(pushableLeads)}
+                disabled={bulkBusy}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-cyan-500 hover:bg-cyan-400 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-60"
+                title="Les leads Nouveau / Lead de la sélection passeront en Disponible"
+              >
+                <Headphones className="w-3.5 h-3.5" />
+                Envoyer au Call Center ({pushableLeads.length})
+              </button>
+            )}
+
+            <button
+              onClick={() => exportCsv(true)}
+              disabled={exporting}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-60"
+            >
+              <Download className={`w-3.5 h-3.5 ${exporting ? 'animate-pulse' : ''}`} />
+              Exporter
+            </button>
+
+            <button
+              onClick={() => setDeleteTargets(selectedList)}
+              disabled={bulkBusy}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-500 hover:bg-rose-400 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-60"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Supprimer ({selected.size})
+            </button>
+
+            <button
+              onClick={clearSelection}
+              className="p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-xl transition-all"
+              title="Effacer la sélection"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}

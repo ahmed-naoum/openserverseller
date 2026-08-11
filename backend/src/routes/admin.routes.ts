@@ -1855,6 +1855,117 @@ router.get(
 
 // --- Call Center Inspector ---
 
+// A LeadAssignment row looks identical whether the agent took the lead
+// themselves or an admin/the round-robin job handed it to them. The only thing
+// that tells them apart is the note lead.routes.ts writes on the accompanying
+// status-history row, so that is what "how many times did this agent click
+// Réclamer" has to be counted from.
+const MANUAL_CLAIM_NOTE = 'Agent claimed lead manually';        // POST /leads/:id/claim
+const FORCE_CLAIM_NOTE_PREFIX = 'Réclamation forcée';           // POST /leads/:id/force-claim
+
+// Lead.status is a free-form column that three different systems write into:
+// the agent (via PATCH /leads/:id/status), the order-status mirror in
+// order.routes.ts, and the Coliaty webhook. So a lead an agent confirmed can
+// later read DELIVERED, RETURNED or any raw carrier code. These buckets are
+// what the scoreboard has to be computed from — counting only 'CONFIRMED'
+// undercounts every agent whose sales already shipped.
+
+// Still in the agent's hands — no outcome yet.
+const OPEN_STATUSES = [
+  'NEW', 'LEAD', 'AVAILABLE', 'ASSIGNED', 'CONTACTED', 'INTERESTED',
+  'CALL_LATER', 'CALLBACK_REQUESTED',
+];
+
+// The agent worked it and did not get a sale.
+const LOST_STATUSES = [
+  'NOT_INTERESTED', 'UNREACHABLE', 'NO_REPLY', 'INVALID', 'WRONG_ORDER',
+  'CANCEL_ORDER', 'CANCEL_REASON_PRICE', 'PRICE_REJECTED',
+  // Retired after MAX_NO_REPLY_RELEASES failed attempts (lib/leadRelease.ts).
+  'DEAD_NO_REPLY',
+];
+
+// Parcel states the Coliaty webhook writes onto the lead. Reaching any of them
+// means an order exists, so they all count as confirmed sales.
+const PARCEL_STATUSES = [
+  'NEW_PARCEL', 'WAITING_PICKUP', 'WAITING_PREPARATION', 'PREPARED',
+  'ENCORE_PREPARED', 'PICKED_UP', 'SENT', 'RECEIVED', 'DISTRIBUTION',
+  'PROGRAMMER', 'PROGRAMMER_AUTO', 'POSTPONED', 'NOANSWER', 'ERR',
+  'INCORRECT_ADDRESS', 'DELIVERED', 'RETURNED', 'CANCELED',
+  'CANCELED_BY_SELLER', 'CANCELED_BY_SYSTEM', 'REFUSE',
+];
+
+// The sale closed — everything downstream of the confirmation call.
+const CONFIRMED_STATUSES = [
+  'CONFIRMED', 'PRICE_CONFIRMED', 'ORDERED', 'PUSHED_TO_DELIVERY',
+  'PENDING', 'IN_PRODUCTION', 'READY_FOR_SHIPPING', 'SHIPPED',
+  'CANCELLED', 'REFUNDED',
+  ...PARCEL_STATUSES,
+];
+
+const DELIVERED_STATUSES = ['DELIVERED'];
+
+// Parcel reached a terminal state that is not a delivery — the goods came back.
+const DELIVERY_FAILED_STATUSES = [
+  'RETURNED', 'REFUSE', 'CANCELED', 'CANCELED_BY_SELLER',
+  'CANCELED_BY_SYSTEM', 'CANCELLED', 'REFUNDED',
+];
+
+// Turns a raw { status: count } map into the numbers the scoreboard shows.
+// `unknown` is deliberately surfaced instead of silently folded into a bucket:
+// the webhook writes unmapped carrier codes through verbatim, so a status the
+// buckets don't know about is a real thing that needs a label, not a rounding
+// error.
+function buildAgentMetrics(statusBreakdown: Record<string, number>) {
+  const bucket = (list: string[]) =>
+    Object.entries(statusBreakdown).reduce(
+      (sum, [status, count]) => sum + (list.includes(status.toUpperCase()) ? Number(count) : 0),
+      0
+    );
+
+  const total = Object.values(statusBreakdown).reduce((s, c) => s + Number(c), 0);
+  const open = bucket(OPEN_STATUSES);
+  const lost = bucket(LOST_STATUSES);
+  const confirmed = bucket(CONFIRMED_STATUSES);
+  const delivered = bucket(DELIVERED_STATUSES);
+  const deliveryFailed = bucket(DELIVERY_FAILED_STATUSES);
+  const inTransit = Math.max(0, confirmed - delivered - deliveryFailed);
+  const resolvedParcels = delivered + deliveryFailed;
+
+  const known = [...OPEN_STATUSES, ...LOST_STATUSES, ...CONFIRMED_STATUSES];
+  const unknownStatuses = Object.keys(statusBreakdown).filter(
+    (s) => !known.includes(s.toUpperCase())
+  );
+
+  const rate = (num: number, den: number) => (den > 0 ? Number(((num / den) * 100).toFixed(1)) : 0);
+
+  // Leads that actually reached an outcome. Claimed-but-not-yet-called leads
+  // are excluded from the rate denominators, matching how the agent's own
+  // dashboard scores Phase 1 (pages/agent/Dashboard.tsx) — counting un-called
+  // leads as failures would drag the rate down for work the agent has not had
+  // a chance to do yet, and the two screens must not disagree.
+  const treated = Math.max(0, total - open);
+
+  return {
+    total,
+    treated,
+    open,
+    lost,
+    confirmed,
+    delivered,
+    deliveryFailed,
+    inTransit,
+    // Share of the leads the agent finished that turned into an order.
+    confirmationRate: rate(confirmed, treated),
+    // Delivered over parcels that actually finished their journey. Dividing by
+    // `confirmed` instead would drag the number down for every parcel still in
+    // transit and make a good agent look bad on a fresh date range.
+    deliveryRate: rate(delivered, resolvedParcels),
+    lossRate: rate(lost, treated),
+    unknownStatuses,
+    unknown: unknownStatuses.reduce((s, k) => s + Number(statusBreakdown[k] || 0), 0),
+  };
+}
+
 // Get all call center agents with lead status breakdown
 router.get(
   '/call-center-agents',
@@ -1873,6 +1984,139 @@ router.get(
     }
     const hasDateFilter = Object.keys(dateFilter).length > 0;
 
+    // Same window, expressed as plain bounds for the raw-SQL click query below.
+    const windowFrom: Date = dateFilter.gte || new Date('1970-01-01');
+    const windowTo: Date = dateFilter.lte || new Date('2999-12-31');
+
+    // How often each agent actually pressed the buttons. Kept in one place so
+    // the roster and the drill-down report identical numbers.
+    //
+    // `assignments` counts every LeadAssignment row (claimed + force-claimed +
+    // handed over by an admin + round-robin), while `manualClaims` and
+    // `forcedClaims` are the subset the agent triggered themselves. The three
+    // do not have to add up: the auto-assign job writes no history row at all.
+    const loadActivity = async (agentIds: number[]) => {
+      const empty = new Map<number, any>();
+      if (agentIds.length === 0) return empty;
+
+      const assignmentWhere: any = { agentId: { in: agentIds } };
+      if (hasDateFilter) assignmentWhere.assignedAt = dateFilter;
+
+      const historyWhere: any = { changedBy: { in: agentIds }, newStatus: 'ASSIGNED' };
+      if (hasDateFilter) historyWhere.createdAt = dateFilter;
+
+      const statusChangeWhere: any = { changedBy: { in: agentIds } };
+      if (hasDateFilter) statusChangeWhere.createdAt = dateFilter;
+
+      const [assignments, distinctLeads, manualClaims, forcedClaims, statusChanges, lastAssignment] =
+        await Promise.all([
+          prisma.leadAssignment.groupBy({ by: ['agentId'], where: assignmentWhere, _count: true }),
+          // Distinct leads touched — `assignments` counts re-claims of the same
+          // lead twice, which is exactly the gap worth showing. Aggregated in
+          // the database: Prisma's `distinct` would stream every assignment row
+          // into Node just to count them.
+          prisma.$queryRaw<{ agentId: number; count: number }[]>`
+            SELECT "agentId", COUNT(DISTINCT "leadId")::int AS count
+            FROM lead_assignments
+            WHERE "agentId" = ANY(${agentIds}::int[])
+              AND "assignedAt" BETWEEN ${windowFrom} AND ${windowTo}
+            GROUP BY "agentId"
+          `,
+          prisma.leadStatusHistory.groupBy({
+            by: ['changedBy'],
+            where: { ...historyWhere, notes: MANUAL_CLAIM_NOTE },
+            _count: true,
+          }),
+          prisma.leadStatusHistory.groupBy({
+            by: ['changedBy'],
+            where: { ...historyWhere, notes: { startsWith: FORCE_CLAIM_NOTE_PREFIX } },
+            _count: true,
+          }),
+          // Every status the agent set — the real measure of work done, since a
+          // claim with no follow-up status change is a lead left to rot.
+          prisma.leadStatusHistory.groupBy({
+            by: ['changedBy'],
+            where: statusChangeWhere,
+            _count: true,
+          }),
+          prisma.leadAssignment.groupBy({
+            by: ['agentId'],
+            where: { agentId: { in: agentIds } },
+            _max: { assignedAt: true },
+          }),
+        ]);
+
+      // Contact clicks live in lead_contact_clicks. Raw SQL (same as
+      // lead.routes.ts) so this keeps working regardless of Prisma client
+      // generation state, and tolerant of the table being absent.
+      let clickRows: { userId: number; channel: string; count: number; lastAt: Date }[] = [];
+      try {
+        clickRows = await prisma.$queryRaw<typeof clickRows>`
+          SELECT "userId", "channel", COUNT(*)::int AS count, MAX("createdAt") AS "lastAt"
+          FROM lead_contact_clicks
+          WHERE "userId" = ANY(${agentIds}::int[])
+            AND "createdAt" BETWEEN ${windowFrom} AND ${windowTo}
+          GROUP BY "userId", "channel"
+        `;
+      } catch {
+        clickRows = [];
+      }
+
+      const distinctLeadCount: Record<number, number> = {};
+      distinctLeads.forEach((d) => {
+        distinctLeadCount[d.agentId] = Number(d.count);
+      });
+
+      const map = new Map<number, any>();
+      const entry = (id: number) => {
+        if (!map.has(id)) {
+          map.set(id, {
+            assignments: 0,
+            distinctLeads: 0,
+            manualClaims: 0,
+            forcedClaims: 0,
+            statusChanges: 0,
+            whatsappClicks: 0,
+            callClicks: 0,
+            lastWhatsappAt: null,
+            lastCallAt: null,
+            lastAssignedAt: null,
+          });
+        }
+        return map.get(id);
+      };
+
+      agentIds.forEach((id) => {
+        const e = entry(id);
+        e.distinctLeads = distinctLeadCount[id] || 0;
+      });
+      assignments.forEach((a: any) => { entry(a.agentId).assignments = a._count; });
+      manualClaims.forEach((h: any) => { entry(h.changedBy).manualClaims = h._count; });
+      forcedClaims.forEach((h: any) => { entry(h.changedBy).forcedClaims = h._count; });
+      statusChanges.forEach((h: any) => { entry(h.changedBy).statusChanges = h._count; });
+      lastAssignment.forEach((a: any) => { entry(a.agentId).lastAssignedAt = a._max.assignedAt; });
+      clickRows.forEach((row) => {
+        const e = entry(row.userId);
+        if (row.channel === 'WHATSAPP') {
+          e.whatsappClicks = Number(row.count);
+          e.lastWhatsappAt = row.lastAt;
+        } else if (row.channel === 'CALL') {
+          e.callClicks = Number(row.count);
+          e.lastCallAt = row.lastAt;
+        }
+      });
+
+      map.forEach((e) => {
+        e.totalClicks = e.whatsappClicks + e.callClicks;
+        // Claims the agent made and never moved off ASSIGNED are invisible in
+        // the status breakdown, so expose the ratio directly.
+        e.claimTotal = e.manualClaims + e.forcedClaims;
+        e.reclaimed = Math.max(0, e.assignments - e.distinctLeads);
+      });
+
+      return map;
+    };
+
     // If agentId is provided, return detailed leads for that agent
     if (agentId) {
       const conditions: any[] = [{ assignedAgentId: Number(agentId) }];
@@ -1881,8 +2125,11 @@ router.get(
         conditions.push({ createdAt: dateFilter });
       }
 
+      // A comma-separated value lets the UI filter by a whole bucket
+      // ("confirmed", "lost", …) with the same parameter as a single status.
       if (status && status !== 'ALL') {
-        conditions.push({ status: status as string });
+        const wanted = String(status).split(',').map((s) => s.trim()).filter(Boolean);
+        conditions.push(wanted.length > 1 ? { status: { in: wanted } } : { status: wanted[0] });
       }
 
       if (search) {
@@ -1891,6 +2138,7 @@ router.get(
             { fullName: { contains: search as string, mode: 'insensitive' } },
             { phone: { contains: search as string } },
             { city: { contains: search as string, mode: 'insensitive' } },
+            { address: { contains: search as string, mode: 'insensitive' } },
           ]
         });
       }
@@ -1905,7 +2153,11 @@ router.get(
               include: { product: { include: { images: true } }, landingPage: true },
             },
             order: true,
-            statusHistory: { orderBy: { createdAt: 'desc' }, take: 3 },
+            statusHistory: {
+              orderBy: { createdAt: 'desc' },
+              take: 5,
+              include: { changer: { include: { profile: true } } },
+            },
           },
           skip: (Number(page) - 1) * Number(limit),
           take: Number(limit),
@@ -1913,6 +2165,45 @@ router.get(
         }),
         prisma.lead.count({ where }),
       ]);
+
+      // Per-lead activity for the rows on this page: how many times this agent
+      // took this particular lead, and how many times they opened WhatsApp or
+      // dialled it.
+      const pageLeadIds = leads.map((l) => l.id);
+      const leadClaimMap = new Map<number, { claims: number; firstAt: Date | null; lastAt: Date | null }>();
+      const leadClickMap = new Map<number, { whatsapp: number; call: number }>();
+
+      if (pageLeadIds.length > 0) {
+        const claimRows = await prisma.leadAssignment.findMany({
+          where: { leadId: { in: pageLeadIds }, agentId: Number(agentId) },
+          select: { leadId: true, assignedAt: true },
+          orderBy: { assignedAt: 'asc' },
+        });
+        claimRows.forEach((r) => {
+          const e = leadClaimMap.get(r.leadId) || { claims: 0, firstAt: null, lastAt: null };
+          e.claims += 1;
+          if (!e.firstAt) e.firstAt = r.assignedAt;
+          e.lastAt = r.assignedAt;
+          leadClaimMap.set(r.leadId, e);
+        });
+
+        try {
+          const rows = await prisma.$queryRaw<{ leadId: number; channel: string; count: number }[]>`
+            SELECT "leadId", "channel", COUNT(*)::int AS count
+            FROM lead_contact_clicks
+            WHERE "leadId" = ANY(${pageLeadIds}::int[]) AND "userId" = ${Number(agentId)}
+            GROUP BY "leadId", "channel"
+          `;
+          rows.forEach((row) => {
+            const e = leadClickMap.get(row.leadId) || { whatsapp: 0, call: 0 };
+            if (row.channel === 'WHATSAPP') e.whatsapp = Number(row.count);
+            else if (row.channel === 'CALL') e.call = Number(row.count);
+            leadClickMap.set(row.leadId, e);
+          });
+        } catch {
+          // table not present — leave the counts at zero rather than 500ing
+        }
+      }
 
       // Status counts for this agent
       const statusCountsWhere: any = { assignedAgentId: Number(agentId) };
@@ -1929,9 +2220,14 @@ router.get(
         statusBreakdown[sc.status] = sc._count;
       });
 
+      const activityMap = await loadActivity([Number(agentId)]);
+      const activity = activityMap.get(Number(agentId)) || null;
+
       return res.json({
         status: 'success',
         data: {
+          metrics: buildAgentMetrics(statusBreakdown),
+          activity,
           leads: leads.map((l) => {
             // Calculate price from variant or product
             let productPrice = 0;
@@ -1959,6 +2255,9 @@ router.get(
               productPrice = l.referralLink?.product?.retailPriceMad || 0;
             }
 
+            const claims = leadClaimMap.get(l.id) || { claims: 0, firstAt: null, lastAt: null };
+            const clicks = leadClickMap.get(l.id) || { whatsapp: 0, call: 0 };
+
             return {
               id: l.id,
               fullName: l.fullName,
@@ -1969,6 +2268,11 @@ router.get(
               productVariant: l.productVariant,
               notes: l.notes,
               productPrice,
+              // The price the agent settled on during the call, when they
+              // negotiated one — this is what the courier actually collects.
+              confirmedPriceMad: l.confirmedPriceMad,
+              callbackAt: l.callbackAt,
+              paymentSituation: l.paymentSituation,
               product: l.referralLink?.product ? {
                 id: l.referralLink.product.id,
                 name: (l.referralLink.product as any).nameFr || (l.referralLink.product as any).nameAr,
@@ -1976,6 +2280,30 @@ router.get(
                 price: l.referralLink.product.retailPriceMad,
                 image: l.referralLink.product.images[0]?.imageUrl || null,
               } : null,
+              // Lead.status gets overwritten by the delivery side, so the
+              // parcel state is carried separately — without it there is no way
+              // to tell "agent confirmed, parcel still in transit" from
+              // "agent confirmed, parcel came back".
+              order: l.order ? {
+                id: l.order.id,
+                orderNumber: l.order.orderNumber,
+                status: l.order.status,
+                totalAmountMad: l.order.totalAmountMad,
+                createdAt: l.order.createdAt,
+              } : null,
+              claims: claims.claims,
+              firstClaimedAt: claims.firstAt,
+              lastClaimedAt: claims.lastAt,
+              contactClicks: { whatsapp: clicks.whatsapp, call: clicks.call },
+              statusHistory: l.statusHistory.map((h: any) => ({
+                id: h.id,
+                oldStatus: h.oldStatus,
+                newStatus: h.newStatus,
+                notes: h.notes,
+                createdAt: h.createdAt,
+                changedBy: h.changer?.profile?.fullName || h.changer?.email || `#${h.changedBy}`,
+                byThisAgent: h.changedBy === Number(agentId),
+              })),
               coliatyPackageCode: l.order?.coliatyPackageCode || null,
               source: l.source,
               createdAt: l.createdAt,
@@ -1987,7 +2315,7 @@ router.get(
             page: Number(page),
             limit: Number(limit),
             total,
-            totalPages: Math.ceil(total / Number(limit)),
+            totalPages: Math.max(1, Math.ceil(total / Number(limit))),
           },
         },
       });
@@ -2025,11 +2353,13 @@ router.get(
       agentStatusMap[lc.assignedAgentId][lc.status] = lc._count;
     });
 
+    const activityMap = await loadActivity(agents.map((a) => a.id));
+
     res.json({
       status: 'success',
       data: agents.map(agent => {
         const statusBreakdown = agentStatusMap[agent.id] || {};
-        const totalLeads = Object.values(statusBreakdown).reduce((sum, c) => sum + c, 0);
+        const metrics = buildAgentMetrics(statusBreakdown);
 
         return {
           id: agent.id,
@@ -2039,8 +2369,10 @@ router.get(
           fullName: agent.profile?.fullName || agent.email || `Agent #${agent.id}`,
           isActive: agent.isActive,
           createdAt: agent.createdAt,
-          totalLeads,
+          totalLeads: metrics.total,
           statusBreakdown,
+          metrics,
+          activity: activityMap.get(agent.id) || null,
         };
       }),
     });

@@ -1,0 +1,216 @@
+{
+  "badge": "Call Center Inspector",
+  "title": "Agent Inspection Center",
+  "subtitle": "Performance, statuses and real activity for every Call Center agent.",
+
+  "overview": {
+    "activeAgents": "Active agents",
+    "leadsHandled": "Leads handled",
+    "confirmed": "Confirmed",
+    "delivered": "Delivered",
+    "confirmationRateShort": "Conf. rate",
+    "claimClicks": "Claim clicks"
+  },
+
+  "period": {
+    "label": "Period",
+    "today": "Today",
+    "days7": "7 days",
+    "days30": "30 days",
+    "days90": "90 days",
+    "clear": "Clear",
+    "hint": "Applies to lead creation dates, claims and contact clicks."
+  },
+
+  "search": {
+    "agents": "Search an agent by name or email...",
+    "leads": "Search by name, phone, city, address..."
+  },
+
+  "sort": {
+    "leads": "Sort by leads",
+    "claims": "Sort by claims",
+    "confirmation": "Sort by confirmation rate",
+    "delivery": "Sort by delivery rate",
+    "name": "Sort by name"
+  },
+
+  "empty": {
+    "noAgentsFound": "No agent found",
+    "noAgentsFoundHint": "Try another name or email.",
+    "noAgents": "No Call Center agent",
+    "noAgentsHint": "There are no agents in the system yet.",
+    "noLeads": "No lead found"
+  },
+
+  "card": {
+    "active": "Active",
+    "inactive": "Inactive",
+    "leads": "Leads",
+    "agentActivity": "Agent activity",
+    "claimsShort": "Claims",
+    "reclaimsShort": "Re-claims",
+    "whatsapp": "WhatsApp",
+    "calls": "Calls",
+    "confirmationRate": "Confirmation rate",
+    "deliveryRate": "Delivery rate",
+    "inspect": "Click to inspect",
+    "claimsTitle": "{manual} claim(s) + {forced} forced",
+    "reclaimsTitle": "Leads this agent claimed more than once",
+    "whatsappTitle": "WhatsApp opens",
+    "callsTitle": "Call button clicks",
+    "deliveryRateTitle": "{delivered} delivered out of {resolved} parcels that finished their journey · {transit} still in transit",
+    "noPhone": "No phone number",
+    "lastClaim": "Last claim"
+  },
+
+  "metrics": {
+    "confirmedHint": "{queued} queued · {shipped} sent",
+    "performance": "Performance",
+    "confirmationRate": "Confirmation rate",
+    "deliveryRate": "Delivery rate",
+    "lossRate": "Loss rate",
+    "confirmationRateHint": "{confirmed} confirmed / {treated} leads handled",
+    "deliveryRateHint": "{delivered} delivered / {resolved} parcels that finished their journey",
+    "lossRateHint": "{lost} not converted / {treated} leads handled"
+  },
+
+  "activity": {
+    "title": "Activity — clicks and claims",
+    "claimClicks": "\"Claim\" clicks",
+    "claimClicksHint": "Times this agent took a lead themselves",
+    "forcedClaims": "Forced claims",
+    "forcedClaimsHint": "Leads taken over from another agent",
+    "totalAssignments": "Total assignments",
+    "totalAssignmentsHint": "Claims + admin and automatic assignments",
+    "distinctLeads": "Distinct leads",
+    "distinctLeadsHint": "Unique leads that passed through their hands",
+    "reclaims": "Re-claims",
+    "reclaimsHint": "Same lead taken more than once",
+    "whatsappClicks": "WhatsApp clicks",
+    "callClicks": "Call clicks",
+    "statusChanges": "Statuses changed",
+    "statusChangesHint": "Status changes made by this agent",
+    "footnote": "\"Total assignments\" includes leads handed out by an admin or by the automatic distribution; \"Claim clicks\" only counts leads the agent took on their own."
+  },
+
+  "unknown": {
+    "title": "{count} lead(s) carry an unlisted status",
+    "body": "{list} — statuses passed through as-is by the carrier. They count towards the total but not towards any category."
+  },
+
+  "table": {
+    "all": "All",
+    "allLeads": "All leads",
+    "selectedStatuses": "{count} statuses selected",
+    "client": "Client",
+    "product": "Product",
+    "amount": "Amount",
+    "leadStatus": "Lead status",
+    "parcel": "Parcel",
+    "activity": "Activity",
+    "date": "Date",
+    "negotiatedPrice": "Negotiated price",
+    "noParcel": "No parcel",
+    "claimedTimes": "Claimed {count} times by this agent",
+    "claimedAt": "Claimed {date}",
+    "page": "Page {page} of {total} · {count} leads"
+  },
+
+  "history": {
+    "title": "Status history",
+    "empty": "No change recorded.",
+    "thisAgent": "(this agent)",
+    "details": "Details",
+    "address": "Address",
+    "source": "Source",
+    "payment": "Payment",
+    "order": "Order",
+    "callback": "Scheduled callback",
+    "firstClaim": "First claim",
+    "lastUpdate": "Last update",
+    "agentNote": "Agent note"
+  },
+
+  "phase": {
+    "confirmation": "Phase 1: Confirmation",
+    "confirmationSubtitle": "✅ Confirmation outcome",
+    "delivery": "Phase 2: Coliaty Delivery",
+    "deliverySubtitle": "📦 Every delivery status"
+  },
+
+  "phase1": {
+    "rate": "Rate: {rate}% ({confirmed}/{treated} handled)",
+    "other": "Other statuses",
+    "filterTitle": "Filter on \"{label}\""
+  },
+
+  "phase2": {
+    "rate": "Rate: {rate}% ({delivered}/{parcels})",
+    "parcelsSent": "Parcels sent",
+    "inProgress": "In progress",
+    "empty": "No parcel sent yet",
+    "emptyHint": "Confirm a lead, then push it to Coliaty."
+  },
+
+  "group": {
+    "in_progress": "In progress",
+    "confirmed": "Confirmed",
+    "lost": "Not converted",
+    "pipeline": "Preparation",
+    "transit": "In transit",
+    "issue": "Issues",
+    "done": "Delivered",
+    "return": "Returns & cancellations"
+  },
+
+  "status": {
+    "NEW": "New",
+    "LEAD": "Prospect",
+    "AVAILABLE": "Available (Pool)",
+    "ASSIGNED": "Claimed",
+    "CONTACTED": "Contacted",
+    "INTERESTED": "Interested",
+    "CALL_LATER": "Callback scheduled",
+    "CALLBACK_REQUESTED": "Callback requested",
+    "CONFIRMED": "Order confirmed",
+    "PRICE_CONFIRMED": "Price confirmed",
+    "ORDERED": "Ordered",
+    "NO_REPLY": "No reply",
+    "WRONG_ORDER": "Wrong order",
+    "CANCEL_REASON_PRICE": "Refused on price",
+    "CANCEL_ORDER": "Order cancelled",
+    "NOT_INTERESTED": "Not interested",
+    "UNREACHABLE": "Unreachable",
+    "INVALID": "Invalid",
+    "PRICE_REJECTED": "Price rejected",
+    "PENDING": "Pending",
+    "PUSHED_TO_DELIVERY": "Sent to delivery",
+    "NEW_PARCEL": "New parcel",
+    "WAITING_PREPARATION": "Awaiting preparation",
+    "ENCORE_PREPARED": "Being prepared",
+    "PREPARED": "Prepared",
+    "WAITING_PICKUP": "Awaiting pickup",
+    "IN_PRODUCTION": "In production",
+    "READY_FOR_SHIPPING": "Ready to ship",
+    "PICKED_UP": "Picked up",
+    "SENT": "Shipped",
+    "RECEIVED": "Received (destination)",
+    "DISTRIBUTION": "Out for delivery",
+    "PROGRAMMER": "Scheduled",
+    "PROGRAMMER_AUTO": "Scheduled (auto)",
+    "SHIPPED": "Shipped (order)",
+    "POSTPONED": "Postponed",
+    "NOANSWER": "No answer",
+    "ERR": "Wrong phone no.",
+    "INCORRECT_ADDRESS": "Wrong address",
+    "DELIVERED": "Delivered",
+    "RETURNED": "Returned",
+    "REFUSE": "Refused",
+    "CANCELED": "Cancelled (courier)",
+    "CANCELED_BY_SELLER": "Cancelled (seller)",
+    "CANCELED_BY_SYSTEM": "Cancelled (system)",
+    "CANCELLED": "Cancelled",
+    "REFUNDED": "Refunded"
+  }
+}

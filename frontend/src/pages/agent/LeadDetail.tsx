@@ -44,6 +44,7 @@ const UNASSIGN_MESSAGES: Record<string, string> = {
   TIMEOUT_IDLE: "Temps écoulé : le lead a été libéré automatiquement pour inactivité.",
   TIMEOUT_STATUS: "Délai expiré : le lead a été libéré automatiquement.",
   EXPIRED: "Ce lead a expiré et a été remis dans le pool.",
+  NO_REPLY_EXHAUSTED: "Ce lead a épuisé ses 5 tentatives sans réponse : il est retiré du pool.",
 };
 
 /** Customer-card fields an agent can correct in place while on the call. */

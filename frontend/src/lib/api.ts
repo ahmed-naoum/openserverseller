@@ -249,6 +249,8 @@ export const leadsApi = {
     api.post(`/leads/${id}/respond-price-request`, { action }),
   bulkUpdateStatus: (data: { ids: number[]; status: string }) =>
     api.patch('/leads/bulk-status', data),
+  /** Admin-only. Skips leads already handed to Coliaty and reports them back. */
+  bulkDelete: (ids: number[]) => api.post('/leads/bulk-delete', { ids }),
   assign: (id: string, data: { agentId: string }) => api.post(`/leads/${id}/assign`, data),
   available: (params?: {
     influencerId?: number;
@@ -256,6 +258,8 @@ export const leadsApi = {
     dateFrom?: string;
     dateTo?: string;
     search?: string;
+    /** Digits of a phone/WhatsApp number; matched on the last 9 server-side. */
+    phone?: string;
     city?: string;
     productId?: number | string;
   }) => api.get('/leads/available', { params }),

@@ -493,6 +493,15 @@ model Lead {
   requestedPriceStatus String? @default("PENDING") // PENDING, APPROVED, REJECTED
   customPlatformFeeRate Float?
   customShippingFee     Float?
+  // Auto-release bookkeeping for the reassignment cron (jobs/leadReassignment).
+  // `releaseAt` is rolled per lead when it enters a droppable status instead of
+  // being derived from a fixed timeout, so an agent cannot learn the deadline
+  // and park leads against it; it is also what the agent cards count down to.
+  // `noReplyReleases` counts how many times NO_REPLY has actually sent this
+  // lead back to the pool — at MAX_NO_REPLY_RELEASES it stops being recycled
+  // and parks at DEAD_NO_REPLY. See lib/leadRelease.ts for both policies.
+  releaseAt       DateTime?
+  noReplyReleases Int              @default(0)
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
@@ -509,6 +518,8 @@ model Lead {
   assignments    LeadAssignment[]
   contactClicks  LeadContactClick[]
 
+  // The reassignment cron re-runs this exact predicate every 10 seconds.
+  @@index([status, releaseAt])
   @@map("leads")
 }
 
