@@ -5,12 +5,16 @@ import PageLoader from './components/PageLoader';
 import toast, { Toaster } from 'react-hot-toast';
 
 // Pages
-import HomePage from './pages/HomePage';
-import LoginPage from './pages/auth/LoginPage';
-import RegisterPage from './pages/auth/RegisterPage';
-import ForgotPassword from './pages/auth/ForgotPassword';
-import ResetPassword from './pages/auth/ResetPassword';
-import DashboardLayout from './components/layouts/DashboardLayout';
+const HomePage = lazy(() => import('./pages/HomePage'));
+const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
+const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/auth/ResetPassword'));
+// 1900 lines of dashboard chrome — nav, sidebar, account menus — reachable only
+// behind a login, but statically imported it sat in the entry chunk that every
+// public offer page downloads. Used purely as a route element, so it resolves
+// inside the router's existing Suspense boundary.
+const DashboardLayout = lazy(() => import('./components/layouts/DashboardLayout'));
 const VendorDashboard = lazy(() => import('./pages/vendor/Dashboard'));
 const VendorProducts = lazy(() => import('./pages/vendor/Products'));
 const VendorLeads = lazy(() => import('./pages/vendor/Leads'));
@@ -81,7 +85,7 @@ const AdminSecrets = lazy(() => import('./pages/admin/AdminSecrets'));
 const AdminDeployments = lazy(() => import('./pages/admin/Deployments'));
 const SecurityFirewall = lazy(() => import('./pages/admin/SecurityFirewall'));
 const AdminEventRegistrations = lazy(() => import('./pages/admin/AdminEventRegistrations'));
-import EventMasterclass from './pages/public/EventMasterclass';
+const EventMasterclass = lazy(() => import('./pages/public/EventMasterclass'));
 const WebhookLogs = lazy(() => import('./pages/admin/WebhookLogs'));
 const WebhookTester = lazy(() => import('./pages/admin/WebhookTester'));
 const GrossellerDashboard = lazy(() => import('./pages/grosseller/Dashboard'));
@@ -119,13 +123,13 @@ const SiteBuilder = lazy(() => import('./pages/helper/SiteBuilder'));
 const HelperScanner = lazy(() => import('./pages/helper/Scanner'));
 const Chat = lazy(() => import('./pages/common/Chat'));
 const AccountVerification = lazy(() => import('./pages/verify/AccountVerification'));
-import PublicMarketplace from './pages/marketplace/PublicMarketplace';
+const PublicMarketplace = lazy(() => import('./pages/marketplace/PublicMarketplace'));
 const ProductDetail = lazy(() => import('./pages/marketplace/ProductDetail'));
 const ReferralForm = lazy(() => import('./pages/public/ReferralForm'));
 const ThankYouPage = lazy(() => import('./pages/public/ThankYouPage'));
-import PendingVerificationPage from './pages/auth/PendingVerificationPage';
-import EmailVerificationPage from './pages/auth/EmailVerificationPage';
-import CompleteRegisterGoogle from './pages/auth/CompleteRegisterGoogle';
+const PendingVerificationPage = lazy(() => import('./pages/auth/PendingVerificationPage'));
+const EmailVerificationPage = lazy(() => import('./pages/auth/EmailVerificationPage'));
+const CompleteRegisterGoogle = lazy(() => import('./pages/auth/CompleteRegisterGoogle'));
 const SettingsPage = lazy(() => import('./pages/common/SettingsPage'));
 import NotFoundPage from './pages/common/NotFoundPage';
 const ProfileVerification = lazy(() => import('./pages/common/ProfileVerification'));
@@ -133,20 +137,20 @@ import MaintenancePage from './pages/common/MaintenancePage';
 const SupportTickets = lazy(() => import('./pages/common/SupportTickets'));
 const UserWallet = lazy(() => import('./pages/common/UserWallet'));
 const UserPixels = lazy(() => import('./pages/common/UserPixels'));
-import TermsPage from './pages/TermsPage';
-import PrivacyPage from './pages/PrivacyPage';
-import FaqPage from './pages/FaqPage';
-import ContactPage from './pages/ContactPage';
-import AboutPage from './pages/AboutPage';
-import CareersPage from './pages/CareersPage';
-import BlogPage from './pages/BlogPage';
-import PricingPage from './pages/PricingPage';
+const TermsPage = lazy(() => import('./pages/TermsPage'));
+const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
+const FaqPage = lazy(() => import('./pages/FaqPage'));
+const ContactPage = lazy(() => import('./pages/ContactPage'));
+const AboutPage = lazy(() => import('./pages/AboutPage'));
+const CareersPage = lazy(() => import('./pages/CareersPage'));
+const BlogPage = lazy(() => import('./pages/BlogPage'));
+const PricingPage = lazy(() => import('./pages/PricingPage'));
 import ScrollToTop from './components/common/ScrollToTop';
 import BlockedPage from './pages/common/BlockedPage';
 
 // Context
 import { AuthProvider } from './contexts/AuthContext';
-import { SocketProvider } from './contexts/SocketContext';
+import { SocketProvider, useSocket } from './contexts/SocketContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 
 // Guards
@@ -249,6 +253,26 @@ function YouCanQueryRedirector() {
   return null;
 }
 
+/**
+ * Loads rrweb only once a socket exists to send events over.
+ *
+ * Making the tracker lazy kept rrweb out of the entry chunk, but the component
+ * still mounted on every page, and mounting is what triggers the dynamic
+ * import — so the ~256 KB chunk was fetched during load anyway, on pages that
+ * never record anything. The tracker is a no-op without a socket, and guests
+ * connect theirs only once the main thread goes idle (see SocketContext), so
+ * gating on it also moves the download clear of the first paint.
+ */
+function SessionReplayGate() {
+  const { socket } = useSocket();
+  if (!socket) return null;
+  return (
+    <Suspense fallback={null}>
+      <LiveSessionTracker />
+    </Suspense>
+  );
+}
+
 const SPLASH_SEEN_KEY = 'splash_seen';
 
 /**
@@ -343,9 +367,7 @@ function App() {
     <AuthProvider>
       <LanguageProvider>
       <SocketProvider>
-        <Suspense fallback={null}>
-          <LiveSessionTracker />
-        </Suspense>
+        <SessionReplayGate />
         <MaintenanceGuard>
         <Suspense fallback={<RouteFallback />}>
         <Routes>
