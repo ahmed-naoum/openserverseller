@@ -221,11 +221,35 @@ export default function ReferralForm() {
     }
   }, [activePixels]);
 
+  /**
+   * Claims the request index.html started while the HTML was still parsing.
+   *
+   * The code in the URL is the only thing trusted for the match, so a
+   * client-side navigation to a different link falls through to a normal
+   * request instead of rendering the previous offer. It is claimed once — a
+   * remount must read fresh data rather than replay a stale body.
+   */
+  const takePreloadedBody = async (): Promise<any | null> => {
+    const preload = (window as any).__REFERRAL_PRELOAD__;
+    if (!preload || preload.code !== code) return null;
+    delete (window as any).__REFERRAL_PRELOAD__;
+    try {
+      return await preload.body;
+    } catch {
+      return null;
+    }
+  };
+
   const fetchData = async () => {
     try {
-      const res = await publicApi.getReferralLinkData(code!);
+      // Absent, stale or failed preload falls straight through to the normal
+      // request, so the handoff can save time but never break the page.
+      const body =
+        (await takePreloadedBody()) ??
+        (await publicApi.getReferralLinkData(code!)).data;
+
       // Handle standardized response wrapper
-      const responseData = res.data.status === 'success' ? res.data.data : res.data;
+      const responseData = body?.status === 'success' ? body.data : body;
 
       // Cloaking is decided here, before any state that would render the page.
       // A blocked visitor keeps the loading spinner and never sees the content.

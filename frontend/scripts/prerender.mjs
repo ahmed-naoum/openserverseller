@@ -35,7 +35,7 @@
  */
 
 import { existsSync } from 'node:fs';
-import { mkdir, writeFile, readFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, copyFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { preview } from 'vite';
@@ -124,6 +124,23 @@ function outputPath(route) {
 async function main() {
   if (!existsSync(DIST)) skip('dist/ not found — run `vite build` first');
 
+  /**
+   * A pristine copy of the built shell, for nginx to use as the SPA fallback.
+   *
+   * The homepage snapshot is written over dist/index.html, and that same file is
+   * what `try_files $uri $uri/ /index.html` hands to every route without a
+   * static file of its own. So a customer opening /r/<code> was served ~87 KB of
+   * homepage markup — nav, hero, the whole footer — which React then threw away
+   * and replaced with the offer. Pointing the fallback at this ~4 KB shell
+   * instead removes that from the critical path.
+   *
+   * Copied here, before anything else can fail: `skip()` below exits 0 when no
+   * Chrome is present, and nginx must never be left pointing at a file that a
+   * skipped prerender never produced.
+   */
+  await copyFile(path.join(DIST, 'index.html'), path.join(DIST, 'spa.html'));
+  console.log('[prerender] Saved unrendered shell to dist/spa.html (SPA fallback)');
+
   const executablePath = findChrome();
   if (!executablePath) skip('no Chrome/Chromium binary found');
   console.log(`[prerender] Using browser: ${executablePath}`);
@@ -171,6 +188,12 @@ async function main() {
             url.includes('fonts.gstatic.com') ||
             url.includes('google-analytics') ||
             url.includes('googletagmanager') ||
+            // Google Sign-In appends its own <script> tag on mount, and the
+            // snapshot below is taken after React has run — so without this the
+            // tag was serialised into the static HTML and the browser fetched
+            // GSI twice: once from the parsed snapshot, once when the provider
+            // re-injected it on hydration.
+            url.includes('accounts.google.com') ||
             ['media', 'font', 'websocket'].includes(req.resourceType());
           if (blocked) req.abort().catch(() => {});
           else req.continue().catch(() => {});
@@ -229,7 +252,15 @@ async function main() {
         // active SW gets the cached shell and client-renders — exactly today's
         // behaviour, so this is an improvement for everyone and a regression for
         // no one.
-        const html = await page.content();
+        // Aborting the request above stops the download but leaves the element
+        // behind, and a browser parsing the snapshot would fetch it for real.
+        // Google Sign-In is the only injector that reaches the prerendered
+        // routes, and none of them offer a Google button, so the tag is dropped
+        // outright rather than shipped for the client to re-request.
+        const html = (await page.content()).replace(
+          /<script[^>]*accounts\.google\.com[^>]*><\/script>/gi,
+          ''
+        );
         const outPath = outputPath(route);
         await mkdir(path.dirname(outPath), { recursive: true });
         await writeFile(outPath, html, 'utf8');

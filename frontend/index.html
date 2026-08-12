@@ -15,8 +15,74 @@
          part that actually matters on a cold visit (DNS) at a fraction of the cost. -->
     <link rel="dns-prefetch" href="https://challenges.cloudflare.com">
     <link rel="dns-prefetch" href="https://connect.facebook.net">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Loaded without blocking the parser. As a plain stylesheet this sat on the
+         critical path for ~750ms on a slow connection before anything could paint.
+         The `print` media type makes the browser fetch it at low priority without
+         waiting on it; `onload` promotes it to `all` once it arrives. Both families
+         already declare `display=swap`, so text renders in the fallback face and
+         swaps — a brief FOUT is the trade, and it is the right one on a page a
+         customer reaches from an ad. The <noscript> copy keeps crawlers and
+         script-less clients rendering the intended faces. -->
+    <link
+      rel="stylesheet"
+      media="print"
+      onload="this.media='all'; this.onload=null;"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cairo:wght@400;500;600;700;800&display=swap"
+    >
+    <noscript>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    </noscript>
     <title>SILACOD - Dropshipping White-Label Maroc</title>
+    <!--
+      Starts the offer request from the parsed HTML, before a single byte of the
+      bundle has run.
+
+      A customer opening /r/<code> used to wait through four serial steps before
+      the product could paint: the JS had to download and execute, React had to
+      mount, the route's own chunk had to be fetched, and only then did the data
+      request begin. Issued here it runs concurrently with the CSS and JS
+      downloads instead of queueing behind them, and ReferralForm consumes the
+      in-flight promise on mount.
+
+      Deliberately dependency-free and failure-tolerant: any error resolves to
+      null and the component falls back to its normal request, so the page
+      cannot be worse off than before. The x-client-* headers mirror the axios
+      interceptor so traffic analytics record the same fields; the request is
+      same-origin, so they cost no preflight.
+    -->
+    <script>
+      (function () {
+        var m = /^\/r\/([^/?#]+)/.exec(location.pathname);
+        if (!m || !window.fetch) return;
+
+        var raw = m[1], code;
+        try { code = decodeURIComponent(raw); } catch (e) { code = raw; }
+
+        var ua = navigator.userAgent;
+        var v = ua.match(/(chrome|safari|firefox|msie|trident(?=\/))\/?\s*(\d+)/i) || [];
+
+        window.__REFERRAL_PRELOAD__ = {
+          code: code,
+          body: fetch('/api/v1/influencer/links/' + raw + '/public', {
+            credentials: 'include',
+            headers: {
+              'x-client-screen': screen.width + 'x' + screen.height,
+              'x-client-window': window.innerWidth + 'x' + window.innerHeight,
+              'x-client-cookies': navigator.cookieEnabled ? '1' : '0',
+              'x-client-js': '1',
+              'x-client-platform': navigator.platform,
+              'x-client-browser-version': v.length > 2 ? v[2] : '',
+              'x-client-device-type':
+                /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)
+                  ? 'Mobile'
+                  : 'Desktop'
+            }
+          })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .catch(function () { return null; })
+        };
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
