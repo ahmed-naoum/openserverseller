@@ -5,8 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { leadsApi } from '../../lib/api';
 import toast from 'react-hot-toast';
-import * as XLSX from 'xlsx';
-import { 
+import {
   User, 
   Phone, 
   MapPin, 
@@ -25,6 +24,14 @@ import {
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
 import { CitySelect } from '../../components/ui/CitySelect';
 import { currentBasePath } from '../../lib/dashboardBase';
+
+/**
+ * `xlsx` is ~1.4 MB unminified and this screen is the only vendor page that
+ * touches it — for the template download and the bulk import, both behind a
+ * click. Imported statically it landed in the bundle every page preloads, so it
+ * was paid for by every visitor including one who never logs in.
+ */
+const loadXlsx = () => import('xlsx');
 
 export default function VendorInsertLead() {
   const { user } = useAuth();
@@ -269,7 +276,7 @@ export default function VendorInsertLead() {
     setFormErrors({});
   };
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
     const templateData = [
       {
         "Nom Complet": "Ali Mansour",
@@ -284,10 +291,19 @@ export default function VendorInsertLead() {
       }
     ];
 
-    const worksheet = XLSX.utils.json_to_sheet(templateData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Template Leads");
-    XLSX.writeFile(workbook, "modele_import_leads.xlsx");
+    // The first click pays for the chunk, so the button says so rather than
+    // sitting silent for the fetch.
+    const toastId = toast.loading('Préparation du modèle...');
+    try {
+      const XLSX = await loadXlsx();
+      const worksheet = XLSX.utils.json_to_sheet(templateData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Template Leads");
+      XLSX.writeFile(workbook, "modele_import_leads.xlsx");
+      toast.dismiss(toastId);
+    } catch {
+      toast.error("Impossible de charger le module Excel.", { id: toastId });
+    }
   };
 
   const normalizeStr = (str: string) => {
@@ -307,8 +323,9 @@ export default function VendorInsertLead() {
     e.target.value = '';
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
+        const XLSX = await loadXlsx();
         const data = new Uint8Array(event.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];

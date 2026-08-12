@@ -62,16 +62,35 @@ export default defineConfig({
      */
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+        /**
+         * Written as a function rather than the object form on purpose.
+         *
+         * The object form gave Rollup no home for Vite's `__vitePreload` helper,
+         * and it parked it inside `vendor-export`. That made the 1.35 MB
+         * spreadsheet/PDF chunk a *static* import of the entry — every visitor
+         * downloaded xlsx and jspdf to get a few lines of preload glue, even
+         * after both libraries were moved behind dynamic imports.
+         *
+         * A function is only consulted for real modules, so the helper and
+         * anything else virtual stays in the entry chunk where it belongs.
+         */
+        manualChunks(id: string) {
+          // Pinned explicitly. Left to Rollup this lands in whichever vendor
+          // chunk it feels like — it chose `vendor-export`, which is what made
+          // 1.35 MB of xlsx/jspdf a static import of the entry. `vendor-react`
+          // is already statically loaded on every page, so the helper is free
+          // there.
+          if (id.includes('preload-helper')) return 'vendor-react';
+          if (!id.includes('node_modules')) return;
+          if (/node_modules\/(react|react-dom|react-router-dom)\//.test(id)) return 'vendor-react';
           // Session replay: admin inspector + the guest tracker. Very large.
-          'vendor-rrweb': ['rrweb'],
+          if (/node_modules\/rrweb\//.test(id)) return 'vendor-rrweb';
           // Face matching for identity verification — ML models, never on landing.
-          'vendor-faceapi': ['face-api.js'],
-          // Spreadsheet + PDF export, dashboards only.
-          'vendor-export': ['xlsx', 'jspdf', 'jspdf-autotable', 'pdf-lib'],
-          'vendor-charts': ['recharts'],
-          'vendor-motion': ['framer-motion'],
+          if (/node_modules\/face-api\.js\//.test(id)) return 'vendor-faceapi';
+          // Spreadsheet + PDF export. Loaded on demand from the export buttons.
+          if (/node_modules\/(xlsx|jspdf|jspdf-autotable|pdf-lib)\//.test(id)) return 'vendor-export';
+          if (/node_modules\/recharts\//.test(id)) return 'vendor-charts';
+          if (/node_modules\/framer-motion\//.test(id)) return 'vendor-motion';
         },
       },
     },

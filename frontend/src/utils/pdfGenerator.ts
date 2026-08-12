@@ -1,9 +1,21 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
-export const generateInvoicePDF = (invoiceDetails: any) => {
+/**
+ * `jspdf` and `jspdf-autotable` load when an invoice is actually downloaded
+ * rather than at module load. Two screens import this file and both were
+ * statically reachable from the router, which put the PDF and spreadsheet
+ * libraries into the chunk every visitor preloads.
+ *
+ * The function is async as a result. Both call sites fire it from an onClick and
+ * ignore the return value, so nothing downstream changes.
+ */
+export const generateInvoicePDF = async (invoiceDetails: any) => {
+  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+  ]);
+
   const doc = new jsPDF();
   
   // Custom Fonts & Colors setup
