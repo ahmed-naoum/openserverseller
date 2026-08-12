@@ -14,6 +14,7 @@
     "db:studio": "prisma studio",
     "cities:fetch-osm": "tsx scripts/cities/fetch-osm-places.ts",
     "cities:import": "tsx scripts/cities/import-cities.ts",
+    "cities:ensure": "tsx scripts/cities/import-cities.ts --if-empty",
     "cities:geocode": "tsx scripts/cities/geocode-cities.ts",
     "cities:sync": "npm run cities:import && npm run cities:geocode",
     "cities:audit": "tsx scripts/cities/audit-hubs.ts --json",

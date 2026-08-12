@@ -508,6 +508,18 @@ async function applyOverrides(): Promise<number> {
 /* --------------------------------------------------------------------- main */
 
 async function main() {
+  // Bootstrap guard for deploy.sh. A populated table is left alone, so this
+  // costs one COUNT on a normal deploy; an empty one gets filled, which is the
+  // only state that produces a platform-wide empty city picker.
+  if (process.argv.includes('--if-empty')) {
+    const existing = await prisma.city.count();
+    if (existing > 0) {
+      console.log(`[cities] ${existing} cities already present — nothing to do.`);
+      return;
+    }
+    console.log('[cities] table is empty — running first import.');
+  }
+
   if (shouldRun('osm')) await importOsm();
   if (shouldRun('coliaty')) await importColiaty();
   if (shouldRun('observed')) await importObserved();

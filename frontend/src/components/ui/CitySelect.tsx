@@ -53,11 +53,22 @@ export function CitySelect({
   skipConfirmation = false,
   icon,
 }: CitySelectProps) {
-  const { cities, loading, resolve, refresh } = useCities({ deliverableOnly });
+  // Aliased: `error` is already this component's own prop for the invalid-input
+  // border, and shadowing it silently turns that border on whenever a fetch fails.
+  const { cities, loading, error: catalogueError, resolve, refresh } = useCities({ deliverableOnly });
   const { user } = useAuth();
   const [pending, setPending] = useState<City | null>(null);
 
   const canEdit = user?.role === 'SUPER_ADMIN';
+
+  /**
+   * No cities at all is an environment fault — the import has not been run
+   * against this database — not a legitimate empty result. Left unsaid, the
+   * picker just looks like a dropdown with nothing in it, and because an
+   * unresolvable name skips the map, the confirmation step vanishes too. Both
+   * symptoms have this one cause, so it is worth stating plainly.
+   */
+  const catalogueUnavailable = !loading && (!!catalogueError || cities.length === 0);
 
   const options = useMemo(
     () =>
@@ -83,6 +94,17 @@ export function CitySelect({
 
   const selected = useMemo(() => (value ? resolve(value) : null), [value, resolve]);
 
+  /**
+   * Nothing is committed until the map is confirmed, except where there is
+   * nothing to confirm: a value carried over from `optionsWithCurrent` (a city
+   * already stored on the record that the catalogue does not know) has no row
+   * and therefore no position to show.
+   *
+   * That fallback is also what an empty catalogue looks like from in here, which
+   * is why `catalogueUnavailable` is surfaced above rather than left to be
+   * inferred — the picker silently behaving like a text box is how an unrun
+   * import stayed invisible in production.
+   */
   const handleSelect = useCallback(
     (next: string | number) => {
       const name = String(next);
@@ -133,11 +155,21 @@ export function CitySelect({
         icon={icon ?? <MapPin className="w-4 h-4" />}
       />
 
-      {value && !loading && !selected && (
-        <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-amber-600">
-          <AlertTriangle className="w-3 h-3 shrink-0" />
-          Ville non répertoriée — vérifiez l'orthographe.
+      {catalogueUnavailable ? (
+        <p className="mt-1 flex items-start gap-1 text-[11px] font-semibold text-red-600">
+          <AlertTriangle className="w-3 h-3 shrink-0 mt-px" />
+          <span>
+            Liste des villes indisponible — la vérification sur carte est désactivée.
+            Prévenez un administrateur.
+          </span>
         </p>
+      ) : (
+        value && !loading && !selected && (
+          <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-amber-600">
+            <AlertTriangle className="w-3 h-3 shrink-0" />
+            Ville non répertoriée — vérifiez l'orthographe.
+          </p>
+        )
       )}
 
       {value && selected && selected.isDeliverable === false && (

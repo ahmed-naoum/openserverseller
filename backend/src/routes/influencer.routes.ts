@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -340,55 +340,85 @@ router.get(
     // counting all-time while the cards next to them showed the day.
     const linkRange = parseDateRange(start, end);
 
-    const formattedLinks = await Promise.all(links.map(async (link) => {
-      const dateFilter = linkRange ? { createdAt: linkRange } : {};
-      
-      const [clicksData, leadsCount, earningsSum] = await Promise.all([
-        (prisma as any).referralLinkClick.findMany({
-          where: {
-            referralLinkId: link.id,
-            ...dateFilter
-          },
-          select: { ipAddress: true, userAgent: true }
-        }),
-        prisma.lead.count({
-          where: {
-            referralLinkId: link.id,
-            ...dateFilter
-          }
-        }),
-        prisma.influencerCommission.aggregate({
-          where: {
-            referralLinkId: link.id,
-            ...dateFilter
-          },
-          _sum: { amount: true }
-        })
-      ]);
+    const dateFilter = linkRange ? { createdAt: linkRange } : {};
+    const linkIds = links.map((l) => l.id);
 
-      // Calculate unique clicks (IP + User Agent) and whatsapp clicks
-      const uniqueClicksSet = new Set();
-      let whatsappClicks = 0;
-      let rawViews = 0;
+    /**
+     * Three grouped reads for the whole list, not three reads per link.
+     *
+     * Each link used to run its own clicks/leads/earnings trio, and the clicks
+     * one was a `findMany` that pulled every matching row's ip and userAgent
+     * into Node so a `Set` could size them here. A vendor with a few hundred
+     * thousand clicks therefore moved all of them across the socket on every
+     * dashboard load — that read alone was ~2.7s — and the query count grew
+     * with the number of links.
+     *
+     * The counting now happens where the rows already are. The clicks query
+     * groups by identity for the same reason the traffic route does: a
+     * `COUNT(DISTINCT (ip, agent))` has no hash aggregate and degrades into a
+     * sort of the whole window. `agent` is COALESCEd before comparison so a
+     * null userAgent stays a page view instead of falling out of both counts.
+     */
+    const clickRows = linkIds.length
+      ? await prisma.$queryRaw<
+          { lid: number; raw_views: bigint; uniques: bigint; whatsapp: bigint }[]
+        >`
+          WITH grouped AS MATERIALIZED (
+            SELECT
+              "referralLinkId" AS lid,
+              "ipAddress" AS ip,
+              COALESCE("userAgent", 'unknown') AS agent,
+              COUNT(*)::bigint AS n
+            FROM referral_link_clicks
+            WHERE "referralLinkId" IN (${Prisma.join(linkIds)})
+            ${linkRange?.gte ? Prisma.sql`AND "createdAt" >= ${linkRange.gte}` : Prisma.empty}
+            ${linkRange?.lte ? Prisma.sql`AND "createdAt" <= ${linkRange.lte}` : Prisma.empty}
+            GROUP BY 1, 2, 3
+          )
+          SELECT
+            lid,
+            COALESCE(SUM(n) FILTER (WHERE agent <> 'whatsapp_click'), 0)::bigint AS raw_views,
+            COUNT(*) FILTER (WHERE agent <> 'whatsapp_click')::bigint AS uniques,
+            COALESCE(SUM(n) FILTER (WHERE agent = 'whatsapp_click'), 0)::bigint AS whatsapp
+          FROM grouped
+          GROUP BY lid
+        `
+      : [];
 
-      clicksData.forEach((c: any) => {
-        if (c.userAgent === 'whatsapp_click') {
-          whatsappClicks++;
-        } else {
-          rawViews++;
-          uniqueClicksSet.add(`${c.ipAddress}-${c.userAgent || 'unknown'}`);
-        }
-      });
+    const [leadRows, earningRows] = linkIds.length
+      ? await Promise.all([
+          prisma.lead.groupBy({
+            by: ['referralLinkId'],
+            where: { referralLinkId: { in: linkIds }, ...dateFilter },
+            _count: { _all: true },
+          }),
+          prisma.influencerCommission.groupBy({
+            by: ['referralLinkId'],
+            where: { referralLinkId: { in: linkIds }, ...dateFilter },
+            _sum: { amount: true },
+          }),
+        ])
+      : [[], []];
 
+    // Indexed by link id so the map below stays a lookup. A link with no clicks,
+    // no leads or no commissions simply has no row, and reads as zero.
+    const clicksById = new Map(clickRows.map((r) => [Number(r.lid), r]));
+    const leadsById = new Map(leadRows.map((r) => [r.referralLinkId, r._count._all]));
+    const earningsById = new Map(
+      earningRows.map((r) => [r.referralLinkId, r._sum.amount || 0])
+    );
+
+    const formattedLinks = links.map((link) => {
+      const c = clicksById.get(link.id);
       return {
         ...link,
-        clicks: uniqueClicksSet.size,
-        rawClicks: rawViews,
-        whatsappClicks,
-        conversions: leadsCount,
-        earnings: earningsSum._sum.amount || 0
+        clicks: Number(c?.uniques || 0),
+        rawClicks: Number(c?.raw_views || 0),
+        whatsappClicks: Number(c?.whatsapp || 0),
+        conversions: leadsById.get(link.id) || 0,
+        earnings: earningsById.get(link.id) || 0,
       };
-    }));
+    });
 
     res.json(formattedLinks);
   })

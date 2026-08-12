@@ -54,11 +54,23 @@ async function loadCities() {
     prisma.cityAlias.findMany({ select: { slug: true, cityId: true } }),
   ]);
 
-  cache = {
+  const loaded = {
     cities: rows,
     aliases: Object.fromEntries(aliasRows.map((a) => [a.slug, a.cityId])),
     at: Date.now(),
   };
+
+  // An empty table means the import has not run yet, not that Morocco has no
+  // cities. Caching that pins every city picker in the platform to an empty
+  // list for half an hour, and running the import is then not enough — the API
+  // has to be restarted before anyone sees a city. Retry on the next request
+  // instead, so the import alone fixes it.
+  if (!rows.length) {
+    console.warn('[cities] catalogue is empty — run `npm run cities:import`. Not caching.');
+    return loaded;
+  }
+
+  cache = loaded;
   return cache;
 }
 

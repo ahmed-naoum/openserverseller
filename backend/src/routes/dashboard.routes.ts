@@ -324,22 +324,37 @@ router.get(
      * hundred thousand clicks would otherwise ship every ip/userAgent pair over
      * the wire on each press of a period pill, to produce one number.
      *
-     * `IS DISTINCT FROM` rather than `<>` because a null agent is a page view,
-     * and `null <> 'whatsapp_click'` is null — the rows would fall out of both
-     * counts. The unique key pairs ip with the agent, a null agent reading as
-     * 'unknown', which is the identity the rest of the app uses.
+     * The identity is grouped rather than counted with `COUNT(DISTINCT (a, b))`.
+     * That form builds a composite ROW per click and Postgres has no hash
+     * aggregate for a composite type, so it sorts every row in the window — on a
+     * link with ~270k clicks that was ~2.7s of sort to return these three
+     * numbers. Grouping the two columns lets the planner use a HashAggregate,
+     * and the counts then come from the grouped rows: `views` sums the clicks
+     * per identity, `uniques` counts the identities themselves.
+     *
+     * `agent` is COALESCEd before it is compared, so `<>` is safe here even
+     * though `userAgent` is nullable — a null agent is a page view, and the
+     * plain `null <> 'whatsapp_click'` would be null and drop those rows from
+     * both counts. 'unknown' is the same identity the rest of the app uses.
      */
     const [row] = await prisma.$queryRaw<
       { views: bigint; uniques: bigint; whatsapp: bigint }[]
     >`
+      WITH grouped AS MATERIALIZED (
+        SELECT
+          "ipAddress" AS ip,
+          COALESCE("userAgent", 'unknown') AS agent,
+          COUNT(*)::bigint AS n
+        FROM referral_link_clicks
+        WHERE "referralLinkId" IN (${Prisma.join(links.map((l) => l.id))})
+        ${windowSql}
+        GROUP BY 1, 2
+      )
       SELECT
-        COUNT(*) FILTER (WHERE "userAgent" IS DISTINCT FROM 'whatsapp_click') AS views,
-        COUNT(DISTINCT ("ipAddress", COALESCE("userAgent", 'unknown')))
-          FILTER (WHERE "userAgent" IS DISTINCT FROM 'whatsapp_click') AS uniques,
-        COUNT(*) FILTER (WHERE "userAgent" = 'whatsapp_click') AS whatsapp
-      FROM referral_link_clicks
-      WHERE "referralLinkId" IN (${Prisma.join(links.map((l) => l.id))})
-      ${windowSql}
+        COALESCE(SUM(n) FILTER (WHERE agent <> 'whatsapp_click'), 0)::bigint AS views,
+        COUNT(*) FILTER (WHERE agent <> 'whatsapp_click')::bigint AS uniques,
+        COALESCE(SUM(n) FILTER (WHERE agent = 'whatsapp_click'), 0)::bigint AS whatsapp
+      FROM grouped
     `;
 
     res.json({

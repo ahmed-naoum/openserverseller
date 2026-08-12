@@ -84,6 +84,27 @@ else
   npx prisma db push || fail "prisma db push refused (destructive change?). Take a backup, then re-run with ALLOW_DATA_LOSS=1 if the change is intended."
 fi
 
+# ── City catalogue ──────────────────────────────────────────────────────────
+# Every city input in the platform reads this table, and it is populated by a
+# script rather than by migrations — so a fresh environment or a restored
+# database comes up with schema but no cities, and every city dropdown is empty.
+# That shipped to production once already.
+#
+# --if-empty makes this a COUNT on a normal deploy and a full import only on the
+# state that is actually broken. It is deliberately not `|| fail`: a Coliaty or
+# Overpass outage should not block a deploy of unrelated code, and the pickers
+# now say plainly when the catalogue is missing.
+#
+# Coordinates are NOT fetched here. `npm run cities:geocode` is rate-limited to
+# 1 request/second and runs for hours; cities without one are fully usable.
+log ">>> Ensuring the city catalogue is populated..."
+if npm run cities:ensure; then
+  :
+else
+  log "    ⚠️  city import failed — city pickers may be empty."
+  log "       Re-run by hand: cd backend && npm run cities:import"
+fi
+
 npm run build || fail "backend build failed"
 
 # ── Frontend (atomic) ───────────────────────────────────────────────────────
