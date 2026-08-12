@@ -733,6 +733,10 @@ export const influencerApi = {
   }) => api.post('/influencer/claims', data),
   getCustomers: (params?: { page?: number; limit?: number; search?: string; all?: boolean; summary?: boolean; mode?: string }) =>
     api.get('/influencer/customers', { params }),
+  // Full status history of one lead — the slim customers list only carries
+  // statusChangedAt/hasHistory per row; the history modal loads the rest here.
+  getCustomerHistory: (leadId: number, params?: { mode?: string }) =>
+    api.get(`/influencer/customers/${leadId}/history`, { params }),
   getCampaigns: () => api.get('/influencer/campaigns'),
   createCampaign: (data: any) => api.post('/influencer/campaigns', data),
   updateCampaign: (id: number, data: any) => api.patch(`/influencer/campaigns/${id}`, data),

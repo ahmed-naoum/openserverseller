@@ -513,22 +513,23 @@ const compressVideo = (inputPath: string, userUuid?: string, socketId?: string):
   return new Promise((resolve) => {
     const dir = path.dirname(inputPath);
     const fileBase = path.basename(inputPath, path.extname(inputPath));
-    const compressedFilename = `${fileBase}-compressed.mp4`;
+    const compressedFilename = `${fileBase}-compressed.webm`;
     const outputPath = path.join(dir, compressedFilename);
 
-    // Guaranteed compression: 720p cap, maxrate 1.2M, crf 32
+    // Guaranteed compression & WebM VP9/Opus conversion: 720p cap, maxrate 1.2M
     const args = [
       '-y',
       '-i', inputPath,
-      '-c:v', 'libx264',
-      '-preset', 'ultrafast',
-      '-crf', '32',
+      '-c:v', 'libvpx-vp9',
+      '-pix_fmt', 'yuv420p',
+      '-deadline', 'realtime',
+      '-cpu-used', '8',
+      '-b:v', '1M',
       '-maxrate', '1.2M',
       '-bufsize', '2.4M',
       '-vf', 'scale=min(1280\\,iw):min(720\\,ih):force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2',
-      '-c:a', 'aac',
+      '-c:a', 'libopus',
       '-b:a', '64k',
-      '-movflags', '+faststart',
       outputPath
     ];
 

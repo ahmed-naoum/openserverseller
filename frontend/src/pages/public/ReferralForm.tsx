@@ -108,6 +108,46 @@ export default function ReferralForm() {
     return () => { cancelled = true; };
   }, [data]);
 
+  // Anti-Vol / Right-Click & Inspect Protection
+  useEffect(() => {
+    const cloaking = getCloakingConfig(data?.landingPage?.customStructure);
+    if (!cloaking?.disableRightClick) return;
+
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      return false;
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // F12 Key
+      if (e.key === 'F12' || e.keyCode === 123) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+      // Ctrl+Shift+I (Inspector), Ctrl+Shift+J (Console), Ctrl+Shift+C (Inspect Element)
+      if (e.ctrlKey && e.shiftKey && ['i', 'j', 'c'].includes(e.key.toLowerCase())) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+      // Ctrl+U (View Source), Ctrl+S (Save Web Page)
+      if (e.ctrlKey && ['u', 's'].includes(e.key.toLowerCase())) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    };
+
+    document.addEventListener('contextmenu', handleContextMenu);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [data]);
+
   const activePixels = useMemo(() => {
     if (!data?.pixels || !Array.isArray(data.pixels)) return [];
     

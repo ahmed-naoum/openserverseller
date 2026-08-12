@@ -1247,6 +1247,27 @@ function trimLandingStructure(landingPage: any, cache: Map<number, any>) {
   return { ...landingPage, customStructure: cache.get(landingPage.id) };
 }
 
+// The express_checkout block boiled down further: the list prices a row's pack
+// by matching order.productVariant against an option name, so per link only
+// [{ name, price }] survives. Prices are shipped raw, not coerced — the pages
+// keep their own truthiness check on `price` exactly as they applied it to the
+// block itself.
+function extractPackOptions(landingPage: any): { name: string; price: any }[] | null {
+  if (!landingPage?.customStructure) return null;
+  try {
+    const structure = landingPage.customStructure;
+    const blocks = Array.isArray(structure) ? structure : structure.blocks || [];
+    const checkout = blocks.find((b: any) => b?.type === 'express_checkout');
+    const options = checkout?.content?.options;
+    if (!Array.isArray(options)) return null;
+    return options
+      .filter((o: any) => o && typeof o.name === 'string')
+      .map((o: any) => ({ name: o.name, price: o.price }));
+  } catch {
+    return null;
+  }
+}
+
 router.get(
   '/customers',
   authenticate,
@@ -1297,6 +1318,17 @@ router.get(
       commissionWhereClause.influencerId = userId;
     }
 
+    // The slim branch keeps every field the leads pages read per row and nothing
+    // else. The two history arrays collapse into their newest entry (`take: 1`
+    // below): the pages only ever derive "when did this row last move" and
+    // "does it have a history at all" from them — the full entries are served on
+    // demand by GET /customers/:leadId/history when the history modal opens.
+    const HISTORY_NEWEST_ONLY = {
+      select: { createdAt: true },
+      orderBy: { createdAt: 'desc' as const },
+      take: 1,
+    };
+
     const commissions = await prisma.influencerCommission.findMany({
       where: commissionWhereClause,
       include: summaryOnly
@@ -1310,17 +1342,23 @@ router.get(
                 customerAddress: true,
                 status: true,
                 totalAmountMad: true,
+                productVariant: true,
                 coliatyPackageCode: true,
                 coliatyPackageId: true,
                 createdAt: true,
+                items: { select: { quantity: true } },
+                statusHistory: HISTORY_NEWEST_ONLY,
                 lead: {
                   select: {
                     id: true,
+                    createdAt: true,
                     paymentSituation: true,
                     callbackAt: true,
+                    notes: true,
                     requestedPriceMad: true,
                     requestedPriceStatus: true,
                     source: true,
+                    statusHistory: HISTORY_NEWEST_ONLY,
                   }
                 }
               }
@@ -1428,8 +1466,11 @@ router.get(
                 coliatyPackageCode: true,
                 coliatyPackageId: true,
                 createdAt: true,
+                items: { select: { quantity: true } },
+                statusHistory: HISTORY_NEWEST_ONLY,
               }
             },
+            statusHistory: HISTORY_NEWEST_ONLY,
             referralLink: {
               select: {
                 id: true,
@@ -1466,16 +1507,36 @@ router.get(
     const slimLink = (link: any) =>
       link?.landingPage ? { ...link, landingPage: trimLandingStructure(link.landingPage, landingCache) } : link;
 
+    // In slim mode each history relation arrives as its single newest entry.
+    // The list only needs "when did this row last move" (the newest createdAt
+    // across both histories, matching the loose scan in frontend leadStatus.ts)
+    // and "is there a history to show" — the arrays themselves stay behind on
+    // GET /customers/:leadId/history.
+    const newestOf = (...historyHeads: any[]) => {
+      let latest: Date | null = null;
+      for (const head of historyHeads) {
+        const at = head?.[0]?.createdAt;
+        if (at && (!latest || at > latest)) latest = at;
+      }
+      return latest;
+    };
+
     // Map leads to a commission-like structure for the frontend
     const leadCommissions = leads.map(lead => ({
       id: `lead-${lead.id}`,
       influencerId: userId,
       referralLinkId: lead.referralLinkId,
-      referralLink: slimLink(lead.referralLink),
+      referralLink: summaryOnly ? lead.referralLink : slimLink(lead.referralLink),
       orderId: (lead as any).order?.id || null,
       amount: 0,
       status: 'PENDING',
       createdAt: lead.createdAt,
+      ...(summaryOnly
+        ? {
+            statusChangedAt: newestOf((lead as any).statusHistory, (lead as any).order?.statusHistory),
+            hasHistory: ((lead as any).statusHistory?.length || 0) + ((lead as any).order?.statusHistory?.length || 0) > 0,
+          }
+        : {}),
       order: {
         createdAt: (lead as any).order?.createdAt || lead.createdAt,
         customerName: lead.fullName,
@@ -1488,12 +1549,13 @@ router.get(
         coliatyPackageCode: (lead as any).order?.coliatyPackageCode,
         coliatyPackageId: (lead as any).order?.coliatyPackageId,
         statusHistory: summaryOnly ? [] : ((lead as any).order?.statusHistory || []),
-        items: summaryOnly ? [] : ((lead as any).order?.items || []),
+        items: (lead as any).order?.items || [],
         lead: {
           id: lead.id,
+          createdAt: lead.createdAt,
           paymentSituation: lead.paymentSituation,
           callbackDate: lead.callbackAt,
-          notes: summaryOnly ? undefined : lead.notes,
+          notes: lead.notes,
           statusHistory: summaryOnly ? [] : ((lead as any).statusHistory || []),
           requestedPriceMad: lead.requestedPriceMad,
           requestedPriceStatus: lead.requestedPriceStatus,
@@ -1517,7 +1579,31 @@ router.get(
     );
     const dedupedCommissions = commissions
       .filter(c => !c.orderId || !leadOrderIds.has(c.orderId))
-      .map(c => ({ ...c, referralLink: slimLink((c as any).referralLink) }));
+      .map(c => {
+        if (!summaryOnly) return { ...c, referralLink: slimLink((c as any).referralLink) };
+        const order: any = (c as any).order;
+        return {
+          ...c,
+          statusChangedAt: newestOf(order?.statusHistory, order?.lead?.statusHistory),
+          hasHistory: (order?.statusHistory?.length || 0) + (order?.lead?.statusHistory?.length || 0) > 0,
+          order: order
+            ? {
+                ...order,
+                statusHistory: [],
+                lead: order.lead
+                  ? {
+                      ...order.lead,
+                      // The row mapper above calls it callbackDate; the raw Lead
+                      // column is callbackAt. Ship both names so the two row
+                      // shapes read the same.
+                      callbackDate: order.lead.callbackAt,
+                      statusHistory: [],
+                    }
+                  : order.lead,
+              }
+            : order,
+        };
+      });
 
     const combined = [...leadCommissions, ...dedupedCommissions].sort((a, b) =>
       new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime()
@@ -1526,10 +1612,44 @@ router.get(
     // When we fetched everything, the array itself is the exact answer (already deduped).
     const total = fetchAll ? combined.length : totalCommissions + totalLeads;
 
+    // The product cell, thumbnail and pack price used to ride on every row as a
+    // nested referralLink — the same few products serialised thousands of times,
+    // and the landing page's sitebuilder JSON re-fetched from the DB once per
+    // row. Sent once per link instead, keyed by referralLinkId.
+    const linkIds = Array.from(new Set(
+      [...leads.map(l => l.referralLinkId), ...commissions.map(c => c.referralLinkId)]
+        .filter((id): id is number => id != null)
+    ));
+    const linkRows = linkIds.length
+      ? await prisma.referralLink.findMany({
+          where: { id: { in: linkIds } },
+          select: CUSTOMER_LIST_LINK_SELECT,
+        })
+      : [];
+    const linkMeta: Record<string, any> = {};
+    for (const link of linkRows) {
+      linkMeta[String(link.id)] = {
+        id: link.id,
+        code: link.code,
+        productId: link.productId,
+        product: link.product
+          ? {
+              id: link.product.id,
+              nameFr: link.product.nameFr,
+              sku: link.product.sku,
+              retailPriceMad: link.product.retailPriceMad,
+              imageUrl: (link.product as any).images?.[0]?.imageUrl ?? null,
+            }
+          : null,
+        packOptions: extractPackOptions((link as any).landingPage),
+      };
+    }
+
     res.json({
       status: 'success',
       data: {
         commissions: combined,
+        linkMeta,
         pagination: {
           page: fetchAll ? 1 : safePage,
           limit: fetchAll ? combined.length : safeLimit,
@@ -1539,6 +1659,97 @@ router.get(
           // true when the hard cap kicked in and the client is seeing a subset
           truncated: fetchAll && (leads.length >= ALL_HARD_CAP || commissions.length >= ALL_HARD_CAP)
         }
+      }
+    });
+  })
+);
+
+// The full status history of one lead, for the history modal. The slim customers
+// list above ships only statusChangedAt/hasHistory per row; the entries with
+// their notes and changer names — unbounded, a third of the old list payload —
+// load here for the single row the user actually opened.
+router.get(
+  '/customers/:leadId/history',
+  authenticate,
+  authorize('VENDOR', 'INFLUENCER'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const leadId = Number(req.params.leadId);
+    if (!Number.isInteger(leadId) || leadId <= 0) {
+      return res.status(400).json({ status: 'error', message: 'Invalid lead id' });
+    }
+    const { mode } = req.query;
+
+    // Same visibility branches as the /customers list: a lead is readable here
+    // exactly when it would have appeared on that list.
+    const where: any = { id: leadId };
+    if (mode === 'SELLER') {
+      where.OR = [
+        { vendorId: userId },
+        { referralLink: { product: { ownerId: userId } } }
+      ];
+    } else if (mode === 'AFFILIATE') {
+      where.OR = [
+        {
+          referralLink: {
+            influencerId: userId,
+            product: { OR: [{ ownerId: { not: userId } }, { ownerId: null }] }
+          }
+        },
+        { vendorId: userId, sourceMode: 'AFFILIATE' }
+      ];
+    } else {
+      where.OR = [
+        { vendorId: userId },
+        { referralLink: { influencerId: userId } }
+      ];
+    }
+    applyReferralLinkProductScope(where, productScopeOf(req));
+
+    const HISTORY_ENTRY = {
+      id: true,
+      oldStatus: true,
+      newStatus: true,
+      notes: true,
+      createdAt: true,
+    };
+
+    const lead = await prisma.lead.findFirst({
+      where,
+      select: {
+        id: true,
+        notes: true,
+        statusHistory: {
+          select: {
+            ...HISTORY_ENTRY,
+            changer: { select: { id: true, profile: { select: { fullName: true } } } },
+          },
+          orderBy: { createdAt: 'asc' }
+        },
+        order: {
+          select: {
+            statusHistory: {
+              select: {
+                ...HISTORY_ENTRY,
+                changedByUser: { select: { id: true, profile: { select: { fullName: true } } } },
+              },
+              orderBy: { createdAt: 'asc' }
+            }
+          }
+        }
+      }
+    });
+
+    if (!lead) {
+      return res.status(404).json({ status: 'error', message: 'Lead not found' });
+    }
+
+    res.json({
+      status: 'success',
+      data: {
+        leadHistory: lead.statusHistory,
+        orderHistory: lead.order?.statusHistory || [],
+        notes: lead.notes,
       }
     });
   })

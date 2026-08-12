@@ -307,6 +307,28 @@ export interface InfluencerCommission {
   status: 'PENDING' | 'APPROVED' | 'PAID';
   paidAt?: string;
   createdAt: string;
+  /** Slim list rows only: newest status-history timestamp, or null if none. */
+  statusChangedAt?: string | null;
+  /** Slim list rows only: whether GET /customers/:leadId/history has entries. */
+  hasHistory?: boolean;
+}
+
+/**
+ * Per-referral-link display data the customers list ships once instead of
+ * embedding a product + landing page on every row. Keyed by String(referralLinkId).
+ */
+export interface CustomerLinkMeta {
+  id: number;
+  code: string;
+  productId: number | null;
+  product: {
+    id: number;
+    nameFr?: string | null;
+    sku?: string | null;
+    retailPriceMad?: number | null;
+    imageUrl?: string | null;
+  } | null;
+  packOptions: { name: string; price: any }[] | null;
 }
 
 export interface InfluencerCampaign {

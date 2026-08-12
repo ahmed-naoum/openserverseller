@@ -608,7 +608,7 @@ export default function SiteBuilder() {
         marginTop: 0,
         marginBottom: 0
       };
-      case 'video': return { url: '', width: 100, autoplay: false, loop: false, muted: false, controls: true, paddingTop: 16, paddingBottom: 16, marginTop: 0, marginBottom: 0 };
+      case 'video': return { url: '', redirectUrl: '', width: 100, autoplay: false, loop: false, muted: false, controls: true, paddingTop: 16, paddingBottom: 16, marginTop: 0, marginBottom: 0 };
       default: return {};
     }
   };
@@ -878,6 +878,17 @@ export default function SiteBuilder() {
                       </p>
                     </div>
 
+                    <Field 
+                      label="Redirection à la fin de la vidéo (Optionnel)" 
+                      type="text" 
+                      value={activeBlock.content.redirectUrl || ''} 
+                      onChange={(v: any) => updateBlockContent('redirectUrl', v)} 
+                      placeholder="https://... ou /r/mon-lien" 
+                    />
+                    <p className="text-[11px] text-gray-500 -mt-2">
+                      Redirige automatiquement le visiteur vers ce lien (avec jeton de provenance) dès que la vidéo se termine.
+                    </p>
+
                     <div className="pt-2">
                       <div className="flex items-center justify-between mb-2">
                         <label className="block text-xs font-bold text-gray-500 uppercase">Uploader une vidéo</label>
@@ -1003,6 +1014,10 @@ export default function SiteBuilder() {
                       <label className="flex items-center gap-2 text-sm text-gray-700">
                         <input type="checkbox" checked={activeBlock.content.controls !== false} onChange={(e) => updateBlockContent('controls', e.target.checked)} />
                         Contrôles
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-gray-700 col-span-2 pt-1 border-t border-gray-100">
+                        <input type="checkbox" checked={activeBlock.content.protectDownload !== false} onChange={(e) => updateBlockContent('protectDownload', e.target.checked)} />
+                        <span className="font-semibold text-xs text-orange-950">Protéger la vidéo (Anti-téléchargement)</span>
                       </label>
                     </div>
 
@@ -3097,6 +3112,44 @@ export default function SiteBuilder() {
                               />
                             </>
                           )}
+                        </div>
+
+                        {/* 11. Anti-Vol Protection (Disable Right Click & Inspect) */}
+                        <div className="space-y-2 pt-2 border-t border-gray-100">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-gray-600">Désactiver Clic Droit & Inspecteur (F12)</span>
+                            <input 
+                              type="checkbox"
+                              checked={pageSettings.cloaking?.disableRightClick ?? false}
+                              onChange={(e) => setPageSettings((prev: any) => ({
+                                ...prev,
+                                cloaking: { ...prev.cloaking, disableRightClick: e.target.checked }
+                              }))}
+                              className="rounded text-orange-500 focus:ring-orange-500 w-3.5 h-3.5 border-gray-300 cursor-pointer"
+                            />
+                          </div>
+                          <p className="text-[10px] text-gray-400 font-medium leading-relaxed">
+                            Bloque le menu clic droit, le raccourci F12, Ctrl+Shift+I/J/C, Ctrl+U et Ctrl+S pour empêcher l'inspection et le vol de contenu.
+                          </p>
+                        </div>
+
+                        {/* 12. Video Download Protection */}
+                        <div className="space-y-2 pt-2 border-t border-gray-100">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-gray-600">Protéger Toutes les Vidéos (Anti-Téléchargement)</span>
+                            <input 
+                              type="checkbox"
+                              checked={pageSettings.cloaking?.protectVideos ?? false}
+                              onChange={(e) => setPageSettings((prev: any) => ({
+                                ...prev,
+                                cloaking: { ...prev.cloaking, protectVideos: e.target.checked }
+                              }))}
+                              className="rounded text-orange-500 focus:ring-orange-500 w-3.5 h-3.5 border-gray-300 cursor-pointer"
+                            />
+                          </div>
+                          <p className="text-[10px] text-gray-400 font-medium leading-relaxed">
+                            Masque les options de téléchargement de toutes les vidéos de la page et bloque le clic droit de sauvegarde.
+                          </p>
                         </div>
                       </div>
                     )}

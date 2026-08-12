@@ -118,9 +118,14 @@ export default function VendorDashboard() {
   const [searchParams] = useSearchParams();
   const currentMode = searchParams.get('mode') || user?.mode || 'SELLER';
 
+  // Only the mode changes what the server returns: the payload is the account's
+  // whole (slim) lead history plus aggregates, and every period pill, custom
+  // range and product filter below works on it client-side. Refetching on each
+  // pill click re-downloaded the identical payload — the deps used to include
+  // every filter state and made switching periods feel like a page load.
   useEffect(() => {
     loadDashboard();
-  }, [tableDateRange, startDate, endDate, currentMode, tableSelectedProductId, dateBasis]);
+  }, [currentMode]);
 
   const loadDashboard = async () => {
     try {

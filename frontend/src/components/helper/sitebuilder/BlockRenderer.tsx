@@ -188,7 +188,7 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
                 }}
               >
                 {content.url ? (
-                  <VideoBlockComponent content={content} resolveUrl={resolveUrl} />
+                  <VideoBlockComponent content={content} resolveUrl={resolveUrl} isEditor={isEditor} />
                 ) : (
                   <div className="w-full h-64 bg-gray-100 flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-200">
                     <span className="text-3xl mb-2">🎬</span>
@@ -505,7 +505,7 @@ function ProductsBlock({ content, resolveUrl }: ProductsBlockProps) {
       const event = new CustomEvent('select-product', { detail: { product } });
       window.dispatchEvent(event);
     } else {
-      window.open(linkUrl, '_blank');
+      window.location.replace(withSourceToken(linkUrl));
     }
   };
 
@@ -1291,9 +1291,10 @@ function getVideoEmbedUrl(rawUrl?: string, options: { autoplay?: boolean; loop?:
 interface VideoBlockComponentProps {
   content: any;
   resolveUrl: (url?: string) => string;
+  isEditor?: boolean;
 }
 
-function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) {
+function VideoBlockComponent({ content, resolveUrl, isEditor = false }: VideoBlockComponentProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   
@@ -1308,6 +1309,39 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
     setIsMuted(!!content.autoplay || !!content.muted);
     setShowUnmuteOverlay(!!content.autoplay);
   }, [content.autoplay, content.muted]);
+
+  // Handle postMessage events for YouTube/Vimeo iframe end detection
+  useEffect(() => {
+    if (isEditor || !content.redirectUrl || !content.redirectUrl.trim()) return;
+
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        let data = event.data;
+        if (typeof data === 'string') {
+          try { data = JSON.parse(data); } catch {}
+        }
+        if (
+          (data?.event === 'infoDelivery' && data?.info?.playerState === 0) ||
+          data?.event === 'finish' ||
+          data?.event === 'ended'
+        ) {
+          const targetUrl = withSourceToken(content.redirectUrl.trim());
+          window.location.replace(targetUrl);
+        }
+      } catch {}
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [isEditor, content.redirectUrl]);
+
+  const handleVideoEnd = () => {
+    setIsPlaying(false);
+    if (!isEditor && content.redirectUrl && content.redirectUrl.trim()) {
+      const targetUrl = withSourceToken(content.redirectUrl.trim());
+      window.location.replace(targetUrl);
+    }
+  };
 
   const embedData = getVideoEmbedUrl(content.url, {
     autoplay: !!content.autoplay,
@@ -1363,6 +1397,8 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
     }
   };
 
+  const isProtected = content.protectDownload !== false;
+
   return (
     <div 
       className="relative group overflow-hidden w-full flex justify-center" 
@@ -1375,6 +1411,10 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
         ref={videoRef}
         src={resolveUrl(content.url)} 
         controls={content.controls !== false && !showUnmuteOverlay}
+        controlsList={isProtected ? "nodownload noplaybackrate noremoteplayback" : undefined}
+        disablePictureInPicture={isProtected}
+        onContextMenu={(e) => { if (isProtected) e.preventDefault(); }}
+        onDragStart={(e) => { if (isProtected) e.preventDefault(); }}
         autoPlay={!!content.autoplay}
         loop={!!content.loop}
         muted={isMuted}
@@ -1382,7 +1422,7 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
         crossOrigin="anonymous"
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
-        onEnded={() => setIsPlaying(false)}
+        onEnded={handleVideoEnd}
         onVolumeChange={(e) => {
           if (!e.currentTarget.muted) {
             setIsMuted(false);
@@ -1492,7 +1532,7 @@ function ButtonBlockComponent({ content, isEditor, isCheckoutInView }: { content
         checkout.scrollIntoView({ behavior: 'smooth' });
       }
     } else if (content.link) {
-      window.open(withSourceToken(content.link), '_blank');
+      window.location.replace(withSourceToken(content.link));
     }
   };
 

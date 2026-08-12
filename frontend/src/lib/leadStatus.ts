@@ -17,13 +17,22 @@ type StatusHistoryEntry = {
 /** Minimal shape the helpers need — avoids coupling to the full API types. */
 type LeadRow = {
   createdAt: string | Date;
+  /** Server-precomputed newest history timestamp (slim list rows). */
+  statusChangedAt?: string | Date | null;
   statusHistory?: StatusHistoryEntry[] | null;
   order?: {
     status?: string | null;
     createdAt?: string | Date | null;
     coliatyPackageCode?: string | null;
     statusHistory?: StatusHistoryEntry[] | null;
-    lead?: { statusHistory?: StatusHistoryEntry[] | null } | null;
+    lead?: {
+      createdAt?: string | Date | null;
+      statusHistory?: StatusHistoryEntry[] | null;
+    } | null;
+  } | null;
+  lead?: {
+    createdAt?: string | Date | null;
+    statusHistory?: StatusHistoryEntry[] | null;
   } | null;
 };
 
@@ -64,8 +73,18 @@ export const getDisplayStatus = (c: LeadRow) => {
 /**
  * "When did this lead happen". Date filters, trend charts and table sorting must
  * all read the same field or the numbers disagree with the rows.
+ *
+ * For a lead that became an order, the lead's original creation date takes
+ * priority over the order creation date (which can occur days later). If no
+ * lead creation date exists, fallback to row `createdAt` or `order.createdAt`.
  */
-export const getLeadDate = (c: LeadRow) => new Date((c.order?.createdAt as any) || c.createdAt);
+export const getLeadDate = (c: LeadRow): Date => {
+  const leadCreated = (c as any).order?.lead?.createdAt || (c as any).lead?.createdAt;
+  const directCreated = c.createdAt;
+  const orderCreated = c.order?.createdAt;
+  const dateVal = leadCreated || directCreated || orderCreated;
+  return new Date(dateVal as any);
+};
 
 /**
  * When the row last actually MOVED status, or null if it never has.
@@ -81,6 +100,14 @@ export const getLeadDate = (c: LeadRow) => new Date((c.order?.createdAt as any) 
  * three are scanned.
  */
 export const getStatusChangedAt = (c: LeadRow): Date | null => {
+  // Slim list rows don't carry the arrays at all — the server already reduced
+  // them to their newest timestamp, which is exactly what the scan below
+  // computes. Rows from the full-fat shape fall through to the scan.
+  if (c.statusChangedAt != null) {
+    const time = new Date(c.statusChangedAt as any).getTime();
+    if (!Number.isNaN(time)) return new Date(time);
+  }
+
   const histories = [
     c.order?.statusHistory,
     c.order?.lead?.statusHistory,

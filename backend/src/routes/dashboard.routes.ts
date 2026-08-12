@@ -7,7 +7,6 @@ import { SAFE_USER_SELECT } from '../lib/safeUserSelect.js';
 import { parseDateRange } from '../lib/dateRange.js';
 import {
   productScopeOf,
-  applyProductScope,
   applyReferralLinkProductScope,
 } from '../lib/subAccountProductScope.js';
 
@@ -73,17 +72,13 @@ router.get(
 
     applyReferralLinkProductScope(whereBase, scope);
 
-    // Links are keyed by productId directly; leads and clicks reach it through
-    // their link, so they take the referral-link form of the same filter.
-    const linksWhere = applyProductScope(
-      mode === 'SELLER' ? { product: { ownerId: userId } } : { influencerId: userId },
-      scope,
-    );
-    const periodLeadsWhere = applyReferralLinkProductScope(
-      {
-        ...(mode === 'SELLER' ? { vendorId: userId } : { referralLink: { influencerId: userId } }),
-        createdAt: createdAtWindow,
-      },
+    // Deliberately date-unbounded: the dashboard's period bar filters this set
+    // client-side, so the server always hands over the whole (scoped) history.
+    // The scope, though, is not optional — the Leads page scopes its rows, and
+    // an unscoped dashboard next to a scoped leads list shows a sub-account two
+    // different totals for the same account.
+    const allLeadsWhere = applyReferralLinkProductScope(
+      mode === 'SELLER' ? { vendorId: userId } : { referralLink: { influencerId: userId } },
       scope,
     );
     const clicksWhere = applyReferralLinkProductScope(
@@ -95,6 +90,14 @@ router.get(
       },
       scope,
     );
+    // The click stats are three numbers, but the rows were fetched whole to
+    // compute them — every ipAddress/userAgent pair since the account existed,
+    // on every dashboard load. Counted in the database instead; the pair listing
+    // for the unique-visitor count is bounded by distinct visitors, not clicks.
+    const clickViewsWhere = {
+      AND: [clicksWhere, { OR: [{ userAgent: null }, { userAgent: { not: 'whatsapp_click' } }] }],
+    };
+    const clickWhatsappWhere = { AND: [clicksWhere, { userAgent: 'whatsapp_click' }] };
 
     /**
      * The two ledgers below are the whole weight of this response. A vendor a
@@ -112,8 +115,6 @@ router.get(
       return Number.isFinite(n) && n > 0 ? Math.min(n, max) : fallback;
     };
 
-    const txPage = intParam(req.query.txPage, 1, Number.MAX_SAFE_INTEGER);
-    const txPageSize = intParam(req.query.txPageSize, 20, 100);
     const commissionsPage = intParam(req.query.commissionsPage, 1, Number.MAX_SAFE_INTEGER);
     const commissionsPageSize = intParam(req.query.commissionsPageSize, 20, 100);
 
@@ -128,75 +129,35 @@ router.get(
     // one drift between pages — appearing twice, or not at all.
     const txOrder = [{ createdAt: 'desc' as const }, { id: 'desc' as const }];
 
+    // Only what the vendor dashboard actually renders is fetched. The page was
+    // measured reading 7 of this response's former 14 keys — the referral-link
+    // list (it uses GET /influencer/links), the commission and ledger row pages,
+    // campaigns, notifications, profile and totalEarnings were serialised on
+    // every load and never read. The whole-window aggregates stay.
     const [
-      profile,
-      referralLinks,
-      commissions,
       commissionsTotal,
       commissionsFirst,
-      campaigns,
-      notifications,
       wallet,
-      walletTransactions,
       txTotals,
       txCredits,
       txDebits,
       txClosing,
       periodStats,
-      periodLeadCounts,
-      periodClicks,
+      clickViews,
+      clickWhatsapp,
+      clickViewPairs,
       helperAssignments
     ] = await Promise.all([
-      prisma.userProfile.findUnique({ where: { userId } }),
-      prisma.referralLink.findMany({
-        where: linksWhere,
-        include: {
-          product: {
-            // `longDescription` is a product-page field: several KB of prose per
-            // link, on a screen that never renders it.
-            omit: { longDescription: true },
-            include: { images: { where: { isPrimary: true }, take: 1 } }
-          }
-        },
-        orderBy: { createdAt: 'desc' }
-      }),
-      prisma.influencerCommission.findMany({
-        where: whereBase,
-        include: {
-          referralLink: {
-            include: { product: true }
-          },
-          order: true
-        },
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        skip: (commissionsPage - 1) * commissionsPageSize,
-        take: commissionsPageSize
-      }),
       prisma.influencerCommission.count({ where: whereBase }),
-      // The page is newest-first, so the oldest row it needs is never on it.
-      // The dashboard sizes its "tout" chart from that date, so it is returned
-      // as a figure of its own instead.
+      // The dashboard sizes its "tout" chart from the oldest commission, so it
+      // is returned as a figure of its own.
       prisma.influencerCommission.aggregate({
         where: whereBase,
         _min: { createdAt: true }
       }),
-      prisma.influencerCampaign.findMany({
-        orderBy: { createdAt: 'desc' }
-      }),
-      prisma.notification.findMany({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-        take: 10
-      }),
       // Without the nested `transactions` the ledger is serialised once rather
       // than twice — on its own that halved this response.
       prisma.wallet.findUnique({ where: { userId } }),
-      prisma.walletTransaction.findMany({
-        where: txWhere,
-        orderBy: txOrder,
-        skip: (txPage - 1) * txPageSize,
-        take: txPageSize
-      }),
       prisma.walletTransaction.aggregate({
         where: txWhere,
         _count: { _all: true },
@@ -217,14 +178,14 @@ router.get(
         _sum: { amountMad: true }
       }),
       // The running balance as the window closed. It rides on the newest row,
-      // which only sits on the first page, so it is read on its own.
+      // so it is read on its own.
       prisma.walletTransaction.findFirst({
         where: txWhere,
         orderBy: txOrder,
         select: { balanceAfterMad: true, createdAt: true }
       }),
       prisma.lead.findMany({
-        where: mode === 'SELLER' ? { vendorId: userId } : { referralLink: { influencerId: userId } },
+        where: allLeadsWhere,
         select: {
           createdAt: true,
           status: true,
@@ -237,23 +198,11 @@ router.get(
           }
         }
       }),
-      prisma.lead.groupBy({
-        by: ['referralLinkId'],
-        where: applyReferralLinkProductScope(
-          {
-            ...(mode === 'SELLER' ? { vendorId: userId } : { referralLink: { influencerId: userId } }),
-            createdAt: { gte: dateLimitStart, lte: dateLimitEnd }
-          },
-          scope,
-        ),
-        _count: true
-      }),
-      (prisma as any).referralLinkClick.findMany({
-        where: clicksWhere,
-        select: {
-          ipAddress: true,
-          userAgent: true
-        }
+      (prisma as any).referralLinkClick.count({ where: clickViewsWhere }),
+      (prisma as any).referralLinkClick.count({ where: clickWhatsappWhere }),
+      (prisma as any).referralLinkClick.groupBy({
+        by: ['ipAddress', 'userAgent'],
+        where: clickViewsWhere
       }),
       (prisma as any).helperUserAssignment.findMany({
         where: {
@@ -279,23 +228,14 @@ router.get(
       })
     ]);
 
-    const leadCountsByLink = periodLeadCounts || [];
-    const periodClicksData = periodClicks || [];
-
-    let totalViews = 0;
-    const uniqueIPUAs = new Set<string>();
-    let whatsappClicks = 0;
-
-    periodClicksData.forEach((c: any) => {
-      if (c.userAgent === 'whatsapp_click') {
-        whatsappClicks++;
-      } else {
-        totalViews++;
-        uniqueIPUAs.add(`${c.ipAddress}-${c.userAgent || 'unknown'}`);
-      }
-    });
-
-    const uniqueVisitors = uniqueIPUAs.size;
+    const totalViews = clickViews;
+    const whatsappClicks = clickWhatsapp;
+    // Same visitor identity the in-memory fold used: ip + userAgent, a null
+    // agent reading as 'unknown' (which also collapses a null/'unknown' pair the
+    // database counts as two).
+    const uniqueVisitors = new Set(
+      (clickViewPairs || []).map((p: any) => `${p.ipAddress}-${p.userAgent || 'unknown'}`)
+    ).size;
 
     const deliveryStatuses = [
       'PENDING', 'PUSHED_TO_DELIVERY', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED', 'CONFIRMED_DELIVERY',
@@ -320,17 +260,6 @@ router.get(
       uniqueVisitors,
       whatsappClicks
     };
-
-    const totalEarnings = await prisma.influencerCommission.aggregate({
-      where: applyReferralLinkProductScope(
-        {
-          ...(mode === 'SELLER' ? { referralLink: { product: { ownerId: userId } } } : { influencerId: userId }),
-          status: 'APPROVED',
-        },
-        scope,
-      ),
-      _sum: { amount: true }
-    });
 
     const pageMeta = (total: number, page: number, pageSize: number) => ({
       total,
@@ -361,22 +290,13 @@ router.get(
     };
 
     res.json({
-      profile,
-      referralLinks,
-      commissions,
       commissionsMeta: {
         ...pageMeta(commissionsTotal, commissionsPage, commissionsPageSize),
         firstCommissionAt: commissionsFirst._min.createdAt
       },
-      campaigns,
       stats,
-      totalEarnings: totalEarnings._sum.amount || 0,
-      notifications,
       wallet,
-      walletTransactions,
-      walletTransactionsMeta: pageMeta(txTotals._count._all, txPage, txPageSize),
       walletStats,
-      leadCountsByLink,
       periodLeads,
       helpers: (helperAssignments || []).map((ha: any) => ({
         email: ha.helper.email,

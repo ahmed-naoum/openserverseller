@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { influencerApi, leadsApi } from '../../lib/api';
-import { ReferralLink, InfluencerCommission } from '../../types';
+import { ReferralLink, InfluencerCommission, CustomerLinkMeta } from '../../types';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -173,6 +173,7 @@ export default function VendorLeads() {
   };
 
   const [links, setLinks] = useState<ReferralLink[]>([]);
+  const [linkMeta, setLinkMeta] = useState<Record<string, CustomerLinkMeta>>({});
   const [commissions, setCommissions] = useState<InfluencerCommission[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -249,12 +250,16 @@ export default function VendorLeads() {
         influencerApi.getLinks({ mode: currentMode }).catch(() => null),
         // `all: true` — every stat, chart and the pagination on this page are computed
         // client-side, so a truncated page would make all of them wrong.
-        influencerApi.getCustomers({ all: true, mode: currentMode })
+        // `summary: true` — the slim row shape: history arrays reduced to
+        // statusChangedAt/hasHistory (the modal lazy-loads full entries) and the
+        // per-row product/landing JSON replaced by the linkMeta map.
+        influencerApi.getCustomers({ all: true, mode: currentMode, summary: true })
       ]);
       setLinks(linksRes?.data || []);
-      // API returns { status, data: { commissions, pagination } }
+      // API returns { status, data: { commissions, linkMeta, pagination } }
       const commissionsData = commissionsRes.data?.data?.commissions || commissionsRes.data?.commissions || [];
       setCommissions(commissionsData);
+      setLinkMeta(commissionsRes.data?.data?.linkMeta || {});
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -415,42 +420,48 @@ export default function VendorLeads() {
     return '#94a3b8';
   };
 
-  // Data for Confirmation Analytics
-  const totalConfirmed = Object.entries(statusCounts)
-    .filter(([status]) => isConfirmedStatus(status.toUpperCase()))
-    .reduce((sum, [, count]) => sum + count, 0);
+  // Data for Confirmation Analytics.
+  // Memoised like the counts they derive from: these fold over every row and
+  // used to re-run on each keystroke in the search box and each checkbox tick.
+  const { totalConfirmed, confirmationDistData, deliveryDistData } = useMemo(() => {
+    const confirmed = Object.entries(statusCounts)
+      .filter(([status]) => isConfirmedStatus(status.toUpperCase()))
+      .reduce((sum, [, count]) => sum + count, 0);
 
-  // Everything that is NOT confirmed, rather than an allow-list. An allow-list
-  // silently dropped any status nobody remembered to add (ORDERED, PRICE_REJECTED,
-  // CALLBACK_REQUESTED, UNKNOWN...), so the donut total never matched TOTAL LEADS.
-  const confirmationDistData = Object.entries(statusCounts)
-    .filter(([status]) => !isConfirmedStatus(status.toUpperCase()))
-    .map(([status, count]) => ({
-      name: getStatusLabel(status.toUpperCase()),
-      value: count,
-      color: getStatusColorHex(status.toUpperCase())
-    }));
+    // Everything that is NOT confirmed, rather than an allow-list. An allow-list
+    // silently dropped any status nobody remembered to add (ORDERED, PRICE_REJECTED,
+    // CALLBACK_REQUESTED, UNKNOWN...), so the donut total never matched TOTAL LEADS.
+    const confirmationDist = Object.entries(statusCounts)
+      .filter(([status]) => !isConfirmedStatus(status.toUpperCase()))
+      .map(([status, count]) => ({
+        name: getStatusLabel(status.toUpperCase()),
+        value: count,
+        color: getStatusColorHex(status.toUpperCase())
+      }));
 
-  if (totalConfirmed > 0) {
-    confirmationDistData.push({
-      name: getStatusLabel('CONFIRMED'),
-      value: totalConfirmed,
-      color: getStatusColorHex('CONFIRMED')
-    });
-  }
-  
-  confirmationDistData.sort((a, b) => b.value - a.value);
+    if (confirmed > 0) {
+      confirmationDist.push({
+        name: getStatusLabel('CONFIRMED'),
+        value: confirmed,
+        color: getStatusColorHex('CONFIRMED')
+      });
+    }
 
-  const deliveryDistData = Object.entries(statusCounts)
-    .filter(([status]) => DELIVERY_STATUSES.includes(status.toUpperCase()))
-    .map(([status, count]) => ({
-      name: getStatusLabel(status.toUpperCase()),
-      value: count,
-      color: getStatusColorHex(status.toUpperCase())
-    })).sort((a, b) => b.value - a.value);
+    confirmationDist.sort((a, b) => b.value - a.value);
+
+    const deliveryDist = Object.entries(statusCounts)
+      .filter(([status]) => DELIVERY_STATUSES.includes(status.toUpperCase()))
+      .map(([status, count]) => ({
+        name: getStatusLabel(status.toUpperCase()),
+        value: count,
+        color: getStatusColorHex(status.toUpperCase())
+      })).sort((a, b) => b.value - a.value);
+
+    return { totalConfirmed: confirmed, confirmationDistData: confirmationDist, deliveryDistData: deliveryDist };
+  }, [statusCounts, t]);
 
   // Data for Volume Trend (Performance) - Now uses global filters
-  const performanceData = (() => {
+  const performanceData = useMemo(() => {
     const groupedMap = new Map();
     dateFilteredCommissions.forEach(comm => {
       const dateKey = format(getRowDate(comm), 'yyyy-MM-dd');
@@ -463,34 +474,40 @@ export default function VendorLeads() {
         date: format(new Date(date), 'dd MMM'),
         Leads: count
       }));
-  })();
+  }, [dateFilteredCommissions, dateBasis]);
 
   // Data for City Distribution (Count leads that have a tracking number).
   // Must honour the GLOBAL FILTERS like every other card on this page.
-  const pushedLeadsForCity = dateFilteredCommissions.filter(c =>
-    c.order?.coliatyPackageCode || (c.order as any)?.trackingNumber
+  const { totalPushedLeads, cityDistData } = useMemo(() => {
+    const pushedLeadsForCity = dateFilteredCommissions.filter(c =>
+      c.order?.coliatyPackageCode || (c.order as any)?.trackingNumber
+    );
+
+    const cityCounts: Record<string, number> = {};
+    pushedLeadsForCity.forEach(c => {
+      let city = (c.order?.customerCity || 'Inconnue').trim();
+      // Normalize: lowercase then capitalize first letter of each word
+      city = city.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+
+      cityCounts[city] = (cityCounts[city] || 0) + 1;
+    });
+
+    const cityDist = Object.entries(cityCounts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10)
+      .map((item, i) => ({
+        ...item,
+        color: ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#f43f5e', '#84cc16', '#6366f1', '#ec4899'][i]
+      }));
+
+    return { totalPushedLeads: pushedLeadsForCity.length, cityDistData: cityDist };
+  }, [dateFilteredCommissions]);
+
+  const pushableLeads = useMemo(
+    () => sortedCommissions.filter(c => (c.order?.status || 'PENDING') === 'LEAD'),
+    [sortedCommissions]
   );
-  const totalPushedLeads = pushedLeadsForCity.length;
-
-  const cityCounts: Record<string, number> = {};
-  pushedLeadsForCity.forEach(c => {
-    let city = (c.order?.customerCity || 'Inconnue').trim();
-    // Normalize: lowercase then capitalize first letter of each word
-    city = city.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-    
-    cityCounts[city] = (cityCounts[city] || 0) + 1;
-  });
-
-  const cityDistData = Object.entries(cityCounts)
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 10)
-    .map((item, i) => ({
-      ...item,
-      color: ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#f43f5e', '#84cc16', '#6366f1', '#ec4899'][i]
-    }));
-
-  const pushableLeads = sortedCommissions.filter(c => (c.order?.status || 'PENDING') === 'LEAD');
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -589,6 +606,49 @@ export default function VendorLeads() {
         }
       }
     });
+  };
+
+  // Merge the two histories the way the modal has always shown them: one
+  // timeline, order entries' changedByUser normalised to `changer`, consecutive
+  // repeats of the same status collapsed.
+  const mergeHistories = (leadHistory: any[], orderHistory: any[]) =>
+    [
+      ...leadHistory.map((h: any) => ({ ...h, type: 'LEAD' })),
+      ...orderHistory.map((h: any) => ({ ...h, type: 'ORDER', changer: h.changedByUser })),
+    ]
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      .filter((entry, i, arr) => {
+        if (i === 0) return true;
+        return entry.newStatus !== arr[i - 1].newStatus;
+      });
+
+  const openHistoryModal = async (commission: InfluencerCommission) => {
+    const customerName = commission.order?.customerName || '-';
+    const leadNotes = (commission.order as any)?.lead?.notes || '';
+    const localLead = (commission.order as any)?.lead?.statusHistory || (commission as any)?.statusHistory || [];
+    const localOrder = (commission.order as any)?.statusHistory || [];
+    // Full-fat rows carry their entries; slim rows only say the entries exist
+    // (hasHistory) and the list is fetched for the one lead being opened.
+    if (localLead.length + localOrder.length > 0) {
+      setHistoryModal({ isOpen: true, customerName, leadNotes, history: mergeHistories(localLead, localOrder) });
+      return;
+    }
+    const leadId = String(commission.id).startsWith('lead-')
+      ? Number(String(commission.id).replace('lead-', ''))
+      : (commission.order as any)?.lead?.id;
+    if (!leadId) return;
+    try {
+      const res = await influencerApi.getCustomerHistory(Number(leadId), { mode: currentMode });
+      const data = res.data?.data || {};
+      setHistoryModal({
+        isOpen: true,
+        customerName,
+        leadNotes: leadNotes || data.notes || '',
+        history: mergeHistories(data.leadHistory || [], data.orderHistory || []),
+      });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || t('error_generic', 'leads', 'Erreur'));
+    }
   };
 
   const handleBulkDelete = () => {
@@ -1157,23 +1217,37 @@ export default function VendorLeads() {
                     }
                     
                     const StatusIcon = badge.icon || Package;
-                    const productImage = commission.referralLink?.product?.images?.[0]?.imageUrl;
+                    // Slim rows carry only referralLinkId; the product cell and
+                    // pack price resolve through the linkMeta map the response
+                    // ships once. The embedded referralLink reads stay as a
+                    // fallback for full-fat rows.
+                    const rowLink = linkMeta[String(commission.referralLinkId)];
+                    const embeddedProduct = commission.referralLink?.product;
+                    const productImage = rowLink?.product?.imageUrl ?? embeddedProduct?.images?.[0]?.imageUrl;
+                    const productName = rowLink?.product?.nameFr ?? embeddedProduct?.nameFr;
+                    const productSku = rowLink?.product?.sku ?? embeddedProduct?.sku;
+                    const productRetailPriceMad = rowLink?.product?.retailPriceMad ?? embeddedProduct?.retailPriceMad;
 
                     let packPriceMad: number | null = null;
                     const productVariant = commission.order?.productVariant || (commission as any).order?.productVariant;
-                    if (productVariant && commission.referralLink?.landingPage?.customStructure) {
-                      try {
-                        const structure = commission.referralLink.landingPage.customStructure;
-                        const blocks = Array.isArray(structure) ? structure : (structure.blocks || []);
-                        const checkoutBlock = blocks.find((b: any) => b.type === 'express_checkout');
-                        if (checkoutBlock?.content?.options) {
-                          const option = checkoutBlock.content.options.find((o: any) => o.name === productVariant);
-                          if (option && option.price) {
-                            packPriceMad = Number(option.price);
+                    if (productVariant) {
+                      const option = rowLink?.packOptions?.find(o => o.name === productVariant);
+                      if (option && option.price) {
+                        packPriceMad = Number(option.price);
+                      } else if (commission.referralLink?.landingPage?.customStructure) {
+                        try {
+                          const structure = commission.referralLink.landingPage.customStructure;
+                          const blocks = Array.isArray(structure) ? structure : (structure.blocks || []);
+                          const checkoutBlock = blocks.find((b: any) => b.type === 'express_checkout');
+                          if (checkoutBlock?.content?.options) {
+                            const opt = checkoutBlock.content.options.find((o: any) => o.name === productVariant);
+                            if (opt && opt.price) {
+                              packPriceMad = Number(opt.price);
+                            }
                           }
+                        } catch (e) {
+                          // fallback
                         }
-                      } catch (e) {
-                        // fallback
                       }
                     }
 
@@ -1240,9 +1314,9 @@ export default function VendorLeads() {
                               </div>
                             )}
                             <div className="flex flex-col">
-                              <span className="text-sm font-bold text-gray-900">{commission.referralLink?.product?.nameFr || '-'}</span>
+                              <span className="text-sm font-bold text-gray-900">{productName || '-'}</span>
                               <span className="text-[10px] text-gray-400 font-mono mt-0.5 uppercase">
-                                SKU: {commission.referralLink?.product?.sku || '-'} | QTE: {commission.order?.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1}
+                                SKU: {productSku || '-'} | QTE: {commission.order?.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1}
                               </span>
                             </div>
                           </div>
@@ -1265,8 +1339,8 @@ export default function VendorLeads() {
                               ? `${Number(commission.order!.totalAmountMad).toFixed(2)} MAD`
                               : packPriceMad !== null
                                 ? `${packPriceMad.toFixed(2)} MAD`
-                                : commission.referralLink?.product?.retailPriceMad
-                                  ? `${Number(commission.referralLink.product.retailPriceMad).toFixed(2)} MAD`
+                                : productRetailPriceMad
+                                  ? `${Number(productRetailPriceMad).toFixed(2)} MAD`
                                   : '-'}
                           </span>
                         </td>
@@ -1443,33 +1517,16 @@ export default function VendorLeads() {
                             )}
                             {/* History button always visible */}
                             {(() => {
+                              // Slim rows say whether entries exist without
+                              // carrying them; full-fat rows still carry the
+                              // arrays and open instantly.
                               const leadHistory = (commission.order as any)?.lead?.statusHistory || (commission as any)?.statusHistory || [];
                               const orderHistory = (commission.order as any)?.statusHistory || [];
-                              
-                              // Merge and normalize histories
-                              const mergedHistory = [
-                                ...leadHistory.map((h: any) => ({ ...h, type: 'LEAD' })),
-                                ...orderHistory.map((h: any) => ({ 
-                                  ...h, 
-                                  type: 'ORDER',
-                                  changer: h.changedByUser // Normalize to same field name
-                                }))
-                              ]
-                              .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-                              // Remove consecutive duplicate statuses (caused by both lead & order history updating)
-                              .filter((entry, i, arr) => {
-                                  if (i === 0) return true;
-                                  return entry.newStatus !== arr[i - 1].newStatus;
-                              });
+                              const rowHasHistory = (commission as any).hasHistory ?? (leadHistory.length + orderHistory.length > 0);
 
-                              return mergedHistory.length > 0 ? (
+                              return rowHasHistory ? (
                                 <button
-                                  onClick={() => setHistoryModal({
-                                    isOpen: true,
-                                    customerName: commission.order?.customerName || '-',
-                                    leadNotes: (commission.order as any)?.lead?.notes || '',
-                                    history: mergedHistory,
-                                  })}
+                                  onClick={() => openHistoryModal(commission)}
                                   className="p-1.5 rounded-lg text-violet-500 hover:bg-violet-50 transition-all" title={t('view_history', 'leads', 'Voir l\'historique')}
                                 >
                                   <History className="w-4 h-4" />

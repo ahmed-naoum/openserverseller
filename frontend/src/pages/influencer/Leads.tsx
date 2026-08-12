@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { influencerApi, leadsApi } from '../../lib/api';
-import { ReferralLink, InfluencerCommission } from '../../types';
+import { ReferralLink, InfluencerCommission, CustomerLinkMeta } from '../../types';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -153,6 +153,7 @@ export default function InfluencerLeads() {
   };
 
   const [links, setLinks] = useState<ReferralLink[]>([]);
+  const [linkMeta, setLinkMeta] = useState<Record<string, CustomerLinkMeta>>({});
   const [commissions, setCommissions] = useState<InfluencerCommission[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -220,12 +221,16 @@ export default function InfluencerLeads() {
         influencerApi.getLinks(),
         // `all: true` — every stat, chart and the pagination on this page are computed
         // client-side, so a truncated page would make all of them wrong.
-        influencerApi.getCustomers({ all: true })
+        // `summary: true` — the slim row shape: history arrays reduced to
+        // statusChangedAt/hasHistory (the modal lazy-loads full entries) and the
+        // per-row product/landing JSON replaced by the linkMeta map.
+        influencerApi.getCustomers({ all: true, summary: true })
       ]);
       setLinks(linksRes.data);
-      // API returns { status, data: { commissions, pagination } }
+      // API returns { status, data: { commissions, linkMeta, pagination } }
       const commissionsData = commissionsRes.data?.data?.commissions || commissionsRes.data?.commissions || [];
       setCommissions(commissionsData);
+      setLinkMeta(commissionsRes.data?.data?.linkMeta || {});
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -543,6 +548,49 @@ export default function InfluencerLeads() {
         }
       }
     });
+  };
+
+  // Merge the two histories the way the modal has always shown them: one
+  // timeline, order entries' changedByUser normalised to `changer`, consecutive
+  // repeats of the same status collapsed.
+  const mergeHistories = (leadHistory: any[], orderHistory: any[]) =>
+    [
+      ...leadHistory.map((h: any) => ({ ...h, type: 'LEAD' })),
+      ...orderHistory.map((h: any) => ({ ...h, type: 'ORDER', changer: h.changedByUser })),
+    ]
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      .filter((entry, i, arr) => {
+        if (i === 0) return true;
+        return entry.newStatus !== arr[i - 1].newStatus;
+      });
+
+  const openHistoryModal = async (commission: InfluencerCommission) => {
+    const customerName = commission.order?.customerName || '-';
+    const leadNotes = (commission.order as any)?.lead?.notes || '';
+    const localLead = (commission.order as any)?.lead?.statusHistory || (commission as any)?.statusHistory || [];
+    const localOrder = (commission.order as any)?.statusHistory || [];
+    // Full-fat rows carry their entries; slim rows only say the entries exist
+    // (hasHistory) and the list is fetched for the one lead being opened.
+    if (localLead.length + localOrder.length > 0) {
+      setHistoryModal({ isOpen: true, customerName, leadNotes, history: mergeHistories(localLead, localOrder) });
+      return;
+    }
+    const leadId = String(commission.id).startsWith('lead-')
+      ? Number(String(commission.id).replace('lead-', ''))
+      : (commission.order as any)?.lead?.id;
+    if (!leadId) return;
+    try {
+      const res = await influencerApi.getCustomerHistory(Number(leadId));
+      const data = res.data?.data || {};
+      setHistoryModal({
+        isOpen: true,
+        customerName,
+        leadNotes: leadNotes || data.notes || '',
+        history: mergeHistories(data.leadHistory || [], data.orderHistory || []),
+      });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || t('error_generic', 'leads', 'Erreur'));
+    }
   };
 
   const handleBulkDelete = () => {
@@ -1033,23 +1081,37 @@ export default function InfluencerLeads() {
                     }
                     
                     const StatusIcon = badge.icon || Package;
-                    const productImage = commission.referralLink?.product?.images?.[0]?.imageUrl;
+                    // Slim rows carry only referralLinkId; the product cell and
+                    // pack price resolve through the linkMeta map the response
+                    // ships once. The embedded referralLink reads stay as a
+                    // fallback for full-fat rows.
+                    const rowLink = linkMeta[String(commission.referralLinkId)];
+                    const embeddedProduct = commission.referralLink?.product;
+                    const productImage = rowLink?.product?.imageUrl ?? embeddedProduct?.images?.[0]?.imageUrl;
+                    const productName = rowLink?.product?.nameFr ?? embeddedProduct?.nameFr;
+                    const productSku = rowLink?.product?.sku ?? embeddedProduct?.sku;
+                    const productRetailPriceMad = rowLink?.product?.retailPriceMad ?? embeddedProduct?.retailPriceMad;
 
                     let packPriceMad: number | null = null;
                     const productVariant = commission.order?.productVariant || (commission as any).order?.productVariant;
-                    if (productVariant && commission.referralLink?.landingPage?.customStructure) {
-                      try {
-                        const structure = commission.referralLink.landingPage.customStructure;
-                        const blocks = Array.isArray(structure) ? structure : (structure.blocks || []);
-                        const checkoutBlock = blocks.find((b: any) => b.type === 'express_checkout');
-                        if (checkoutBlock?.content?.options) {
-                          const option = checkoutBlock.content.options.find((o: any) => o.name === productVariant);
-                          if (option && option.price) {
-                            packPriceMad = Number(option.price);
+                    if (productVariant) {
+                      const option = rowLink?.packOptions?.find(o => o.name === productVariant);
+                      if (option && option.price) {
+                        packPriceMad = Number(option.price);
+                      } else if (commission.referralLink?.landingPage?.customStructure) {
+                        try {
+                          const structure = commission.referralLink.landingPage.customStructure;
+                          const blocks = Array.isArray(structure) ? structure : (structure.blocks || []);
+                          const checkoutBlock = blocks.find((b: any) => b.type === 'express_checkout');
+                          if (checkoutBlock?.content?.options) {
+                            const opt = checkoutBlock.content.options.find((o: any) => o.name === productVariant);
+                            if (opt && opt.price) {
+                              packPriceMad = Number(opt.price);
+                            }
                           }
+                        } catch (e) {
+                          // fallback
                         }
-                      } catch (e) {
-                        // fallback
                       }
                     }
 
@@ -1116,9 +1178,9 @@ export default function InfluencerLeads() {
                               </div>
                             )}
                             <div className="flex flex-col">
-                              <span className="text-sm font-bold text-gray-900">{commission.referralLink?.product?.nameFr || '-'}</span>
+                              <span className="text-sm font-bold text-gray-900">{productName || '-'}</span>
                               <span className="text-[10px] text-gray-400 font-mono mt-0.5 uppercase">
-                                SKU: {commission.referralLink?.product?.sku || '-'} | QTE: {commission.order?.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1}
+                                SKU: {productSku || '-'} | QTE: {commission.order?.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1}
                               </span>
                             </div>
                           </div>
@@ -1141,8 +1203,8 @@ export default function InfluencerLeads() {
                               ? `${Number(commission.order!.totalAmountMad).toFixed(2)} MAD`
                               : packPriceMad !== null
                                 ? `${packPriceMad.toFixed(2)} MAD`
-                                : commission.referralLink?.product?.retailPriceMad
-                                  ? `${Number(commission.referralLink.product.retailPriceMad).toFixed(2)} MAD`
+                                : productRetailPriceMad
+                                  ? `${Number(productRetailPriceMad).toFixed(2)} MAD`
                                   : '-'}
                           </span>
                         </td>
@@ -1173,16 +1235,22 @@ export default function InfluencerLeads() {
 
                         {/* Date */}
                         <td className="px-5 py-4">
-                          <div className="flex flex-col text-xs text-gray-500 font-medium whitespace-nowrap">
-                            <span className="flex items-center gap-1">
-                              <Calendar className="w-3 h-3" /> 
-                              {commission.createdAt ? format(new Date(commission.createdAt), 'dd MMM yyyy') : '-'}
-                            </span>
-                            <span className="flex items-center gap-1 mt-0.5 opacity-60">
-                              <Clock className="w-3 h-3" /> 
-                              {commission.createdAt ? format(new Date(commission.createdAt), 'HH:mm') : '-'}
-                            </span>
-                          </div>
+                          {(() => {
+                            const createdAt = getLeadDate(commission as any);
+                            const hasCreated = !Number.isNaN(createdAt.getTime());
+                            return (
+                              <div className="flex flex-col text-xs text-gray-500 font-medium whitespace-nowrap">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" /> 
+                                  {hasCreated ? format(createdAt, 'dd MMM yyyy') : '-'}
+                                </span>
+                                <span className="flex items-center gap-1 mt-0.5 opacity-60">
+                                  <Clock className="w-3 h-3" /> 
+                                  {hasCreated ? format(createdAt, 'HH:mm') : '-'}
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         {/* Situation */}
@@ -1290,33 +1358,16 @@ export default function InfluencerLeads() {
                             )}
                             {/* History button always visible */}
                             {(() => {
+                              // Slim rows say whether entries exist without
+                              // carrying them; full-fat rows still carry the
+                              // arrays and open instantly.
                               const leadHistory = (commission.order as any)?.lead?.statusHistory || (commission as any)?.statusHistory || [];
                               const orderHistory = (commission.order as any)?.statusHistory || [];
-                              
-                              // Merge and normalize histories
-                              const mergedHistory = [
-                                ...leadHistory.map((h: any) => ({ ...h, type: 'LEAD' })),
-                                ...orderHistory.map((h: any) => ({ 
-                                  ...h, 
-                                  type: 'ORDER',
-                                  changer: h.changedByUser // Normalize to same field name
-                                }))
-                              ]
-                              .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-                              // Remove consecutive duplicate statuses (caused by both lead & order history updating)
-                              .filter((entry, i, arr) => {
-                                  if (i === 0) return true;
-                                  return entry.newStatus !== arr[i - 1].newStatus;
-                              });
+                              const rowHasHistory = (commission as any).hasHistory ?? (leadHistory.length + orderHistory.length > 0);
 
-                              return mergedHistory.length > 0 ? (
+                              return rowHasHistory ? (
                                 <button
-                                  onClick={() => setHistoryModal({
-                                    isOpen: true,
-                                    customerName: commission.order?.customerName || '-',
-                                    leadNotes: (commission.order as any)?.lead?.notes || '',
-                                    history: mergedHistory,
-                                  })}
+                                  onClick={() => openHistoryModal(commission)}
                                   className="p-1.5 rounded-lg text-violet-500 hover:bg-violet-50 transition-all" title={t('view_history', 'leads', 'Voir l\'historique')}
                                 >
                                   <History className="w-4 h-4" />
