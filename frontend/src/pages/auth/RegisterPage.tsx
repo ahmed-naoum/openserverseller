@@ -6,6 +6,7 @@ import { settingsApi } from '../../lib/api';
 import { Eye, EyeOff, User, Mail, Phone, Lock, Sparkles, Store, Link as LinkIcon } from 'lucide-react';
 import { FaTiktok, FaFacebook, FaInstagram, FaSnapchatGhost, FaYoutube } from 'react-icons/fa';
 import { GoogleLogin } from '@react-oauth/google';
+import GoogleAuthProvider from '../../components/auth/GoogleAuthProvider';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -854,15 +855,17 @@ export default function RegisterPage() {
                 {/* Google Login & Sign In Link */}
                 <div className="mt-6 flex flex-col items-center gap-4 border-t border-slate-100 pt-6">
                   <div className="w-full flex justify-center">
-                    <GoogleLogin 
-                      onSuccess={handleGoogleSuccess} 
-                      onError={() => toast.error(t('google_login_failed'))}
-                      useOneTap
-                      theme="outline"
-                      shape="pill"
-                      size="large"
-                      width="100%"
-                    />
+                    <GoogleAuthProvider>
+                      <GoogleLogin
+                        onSuccess={handleGoogleSuccess}
+                        onError={() => toast.error(t('google_login_failed'))}
+                        useOneTap
+                        theme="outline"
+                        shape="pill"
+                        size="large"
+                        width="100%"
+                      />
+                    </GoogleAuthProvider>
                   </div>
                   <p className="text-[13px] font-semibold text-slate-500 mt-2">
                     {t('already_have_account')}{' '}

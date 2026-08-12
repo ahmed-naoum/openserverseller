@@ -5,6 +5,7 @@ import { settingsApi } from '../../lib/api';
 import { VENDOR_HELPER_BASE } from '../../lib/dashboardBase';
 import { Eye, EyeOff, ShieldCheck, Mail, Lock } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
+import GoogleAuthProvider from '../../components/auth/GoogleAuthProvider';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -483,15 +484,17 @@ export default function LoginPage() {
 
                 <div className="mt-8 flex flex-col items-center gap-4">
                   <div className="w-full flex justify-center">
-                    <GoogleLogin 
-                      onSuccess={handleGoogleSuccess} 
-                      onError={() => toast.error(t('google_login_failed'))}
-                      useOneTap
-                      theme="outline"
-                      shape="pill"
-                      size="large"
-                      width="100%"
-                    />
+                    <GoogleAuthProvider>
+                      <GoogleLogin
+                        onSuccess={handleGoogleSuccess}
+                        onError={() => toast.error(t('google_login_failed'))}
+                        useOneTap
+                        theme="outline"
+                        shape="pill"
+                        size="large"
+                        width="100%"
+                      />
+                    </GoogleAuthProvider>
                   </div>
                   <p className="text-[13px] font-semibold text-slate-500 mt-2">
                     {t('dont_have_account')}{' '}

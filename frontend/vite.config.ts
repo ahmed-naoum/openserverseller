@@ -8,6 +8,14 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      /**
+       * Without this the plugin injects a bare `<script src="/registerSW.js">`,
+       * which parser-blocks the document for as long as the fetch takes —
+       * Lighthouse measured 480ms on a slow connection. The script's only
+       * statement is already wrapped in a `load` listener, so blocking on it
+       * buys nothing at all.
+       */
+      injectRegister: 'script-defer',
       workbox: {
         maximumFileSizeToCacheInBytes: 8000000
       },

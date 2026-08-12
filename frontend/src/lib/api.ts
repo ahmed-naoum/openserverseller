@@ -880,8 +880,43 @@ export const securityApi = {
   getDatabaseStats: () => api.get('/admin/security/database-stats'),
 };
 
+/**
+ * The maintenance flag is read twice on first paint — once by MaintenanceGuard
+ * and once by AuthContext — and the guard re-reads it on every navigation.
+ * Unshared that is two identical requests before the page's own data call, and
+ * because the client sends credentials each one also costs a CORS preflight
+ * whenever the API is not same-origin.
+ *
+ * Concurrent callers share one promise and the result is held for a short
+ * window, so a mount or a burst of navigation collapses to a single request.
+ * The window is deliberately short: this flag decides whether the platform is
+ * reachable at all, so it must not go stale for long.
+ *
+ * A rejection is never cached — one network blip would otherwise disable the
+ * check for the rest of the window.
+ */
+let maintenanceInFlight: Promise<any> | null = null;
+let maintenanceFetchedAt = 0;
+const MAINTENANCE_TTL_MS = 15_000;
+
+const getMaintenanceStatus = () => {
+  const fresh =
+    maintenanceInFlight && Date.now() - maintenanceFetchedAt < MAINTENANCE_TTL_MS;
+
+  if (!fresh) {
+    maintenanceFetchedAt = Date.now();
+    maintenanceInFlight = api.get('/settings/maintenance').catch((err) => {
+      maintenanceInFlight = null;
+      maintenanceFetchedAt = 0;
+      throw err;
+    });
+  }
+
+  return maintenanceInFlight!;
+};
+
 export const settingsApi = {
-  getMaintenanceStatus: () => api.get('/settings/maintenance'),
+  getMaintenanceStatus,
   verifyMaintenanceBypass: (password: string) => api.post('/settings/maintenance/verify', { password }),
   getAdminMaintenanceSettings: () => api.get('/settings/maintenance/admin'),
   updateMaintenanceSettings: (data: { enabled: boolean; secret: string; registrationBlocked: boolean; influencerRegistrationBlocked: boolean; showIdentityVerification?: boolean; showBankVerification?: boolean; showContractVerification?: boolean }) => api.put('/settings/maintenance', data),

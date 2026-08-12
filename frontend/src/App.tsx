@@ -49,7 +49,14 @@ const CallCenterInspector = lazy(() => import('./pages/admin/CallCenterInspector
 const InfluencerInspector = lazy(() => import('./pages/admin/InfluencerInspector'));
 const SupportInspector = lazy(() => import('./pages/admin/SupportInspector'));
 const LiveStreamInspector = lazy(() => import('./pages/admin/LiveStreamInspector'));
-import LiveSessionTracker from './components/common/LiveSessionTracker';
+/**
+ * Session replay pulls in rrweb (~256 KB). The tracker itself does nothing for
+ * an ordinary visitor — it bails out until the server pushes a record request —
+ * but a static import put rrweb in the entry graph, which put it on the
+ * `modulepreload` list of every page, including the public offer pages. Loaded
+ * lazily it costs those visitors nothing.
+ */
+const LiveSessionTracker = lazy(() => import('./components/common/LiveSessionTracker'));
 const ContactMessages = lazy(() => import('./pages/admin/ContactMessages'));
 const AdminLinks = lazy(() => import('./pages/admin/Links'));
 const AdminProfessionalEmails = lazy(() => import('./pages/admin/ProfessionalEmails'));
@@ -146,6 +153,7 @@ import { LanguageProvider } from './contexts/LanguageContext';
 import RoleGuard from './components/auth/RoleGuard';
 import UnauthGuard from './components/auth/UnauthGuard';
 import { settingsApi } from './lib/api';
+import { whenIdle } from './lib/whenIdle';
 
 /**
  * Shown while a route's chunk is in flight.
@@ -212,12 +220,16 @@ function PageTracker() {
       return;
     }
 
-    // Fire-and-forget network request to backend to register the page view in the HTTP logs
-    fetch('/api/v1/public/track', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: location.pathname }),
-    }).catch(() => {});
+    // Registers the page view in the HTTP logs. Nothing renders from it, so it
+    // waits for idle rather than joining the queue in front of the page's own
+    // data fetch.
+    return whenIdle(() => {
+      fetch('/api/v1/public/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: location.pathname }),
+      }).catch(() => {});
+    });
   }, [location.pathname, navigate]);
 
   return null;
@@ -237,11 +249,37 @@ function YouCanQueryRedirector() {
   return null;
 }
 
-function App() {
-  const [loading, setLoading] = useState(true);
+const SPLASH_SEEN_KEY = 'splash_seen';
 
-  // Automatic cache version checking and updating
-  useEffect(() => {
+/**
+ * The brand splash is a first-impression flourish, not a loading indicator — it
+ * runs on a fixed 2.5s timer whether or not the page is ready.
+ *
+ * So it now plays on the homepage only, once per browser session. It used to
+ * cover every route: a customer arriving on a vendor's offer page from a paid ad
+ * watched a logo animation for two and a half seconds instead of the product,
+ * and on a mid-range phone its blur filter and sixteen spark nodes competed with
+ * hydration for the main thread — making the real load slower, not just later.
+ */
+const shouldShowSplash = () => {
+  if (typeof window === 'undefined') return false;
+  if (window.location.pathname !== '/') return false;
+  try {
+    return !sessionStorage.getItem(SPLASH_SEEN_KEY);
+  } catch {
+    // Safari in private mode throws on sessionStorage. Showing the splash is the
+    // harmless direction to fail in.
+    return true;
+  }
+};
+
+function App() {
+  const [loading, setLoading] = useState(shouldShowSplash);
+
+  // Automatic cache version checking and updating. Deferred to idle: it only
+  // ever triggers a reload on a version change, so it has no business competing
+  // with the first paint of the page the visitor actually asked for.
+  useEffect(() => whenIdle(() => {
     settingsApi.getCacheVersion()
       .then((res) => {
         const serverVersion = res.data?.data?.version;
@@ -283,18 +321,31 @@ function App() {
       .catch((err) => {
         console.error('Failed to verify app version:', err);
       });
-  }, []);
+  }), []);
 
   return (
     <>
       <ScrollToTop />
       <YouCanQueryRedirector />
       <PageTracker />
-      {loading && <PageLoader onComplete={() => setLoading(false)} />}
+      {loading && (
+        <PageLoader
+          onComplete={() => {
+            try {
+              sessionStorage.setItem(SPLASH_SEEN_KEY, '1');
+            } catch {
+              // Private mode — the splash simply plays again next navigation.
+            }
+            setLoading(false);
+          }}
+        />
+      )}
     <AuthProvider>
       <LanguageProvider>
       <SocketProvider>
-        <LiveSessionTracker />
+        <Suspense fallback={null}>
+          <LiveSessionTracker />
+        </Suspense>
         <MaintenanceGuard>
         <Suspense fallback={<RouteFallback />}>
         <Routes>
@@ -406,7 +457,7 @@ function App() {
           <Route path="inventory" element={<InfluencerInventory />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="marketplace" element={
-            <Suspense fallback={<PageLoader />}>
+            <Suspense fallback={<RouteFallback />}>
               <InfluencerMarketplace />
             </Suspense>
           } />
@@ -451,7 +502,7 @@ function App() {
           <Route path="wallet" element={<UserWallet />} />
           <Route path="inventory" element={<VendorInventory />} />
           <Route path="marketplace" element={
-            <Suspense fallback={<PageLoader />}>
+            <Suspense fallback={<RouteFallback />}>
               <InfluencerMarketplace />
             </Suspense>
           } />
@@ -507,7 +558,7 @@ function App() {
           <Route path="wallet" element={<UserWallet />} />
           <Route path="inventory" element={<VendorInventory />} />
           <Route path="marketplace" element={
-            <Suspense fallback={<PageLoader />}>
+            <Suspense fallback={<RouteFallback />}>
               <InfluencerMarketplace />
             </Suspense>
           } />
