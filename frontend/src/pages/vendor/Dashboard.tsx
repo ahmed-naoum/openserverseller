@@ -52,6 +52,17 @@ const startOfYesterday = () => {
 const toISODate = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
+/**
+ * The day before `now`, as the same `toDateString()` key the day filters
+ * compare on. Built by stepping a copy back one day rather than subtracting
+ * 24h, so it stays correct across a DST change.
+ */
+const yesterdayDateString = (now: Date) => {
+  const d = new Date(now);
+  d.setDate(d.getDate() - 1);
+  return d.toDateString();
+};
+
 const CHART_TABS: { type: ChartType; labelKey: string }[] = [
   { type: 'confirmed', labelKey: 'db_chart_confirmed' },
   { type: 'delivered', labelKey: 'db_chart_delivered' }
@@ -110,7 +121,10 @@ export default function VendorDashboard() {
   const [trafficNonce, setTrafficNonce] = useState(0);
   const [leadCountsByLink, setLeadCountsByLink] = useState<{ referralLinkId: number; _count: number }[]>([]);
   const [helpers, setHelpers] = useState<any[]>([]);
-  const [tableDateRange, setTableDateRange] = useState<'TOUS' | 'AUJOURD_HUI' | '7J' | '15J' | '30J' | '90J' | 'CUSTOM'>('TOUS');
+  // No "Tous" option: the page opens on the last 30 days, like the Leads page
+  // it is read next to. An all-time window made the cards above answer a
+  // question nobody asks of a dashboard.
+  const [tableDateRange, setTableDateRange] = useState<'AUJOURD_HUI' | 'HIER' | '7J' | '15J' | '30J' | '90J' | 'CUSTOM'>('30J');
   const [tableSelectedProductId, setTableSelectedProductId] = useState<string>('ALL');
   const [dateBasis, setDateBasis] = useState<'STATUS' | 'CREATED'>('CREATED');
   const [dateRange, setDateRange] = useState<number | 'custom' | 'all' | 'yesterday'>('all');
@@ -164,13 +178,16 @@ export default function VendorDashboard() {
    * one as local midnight, where an ISO timestamp would shift the day.
    */
   const trafficWindow = useMemo<{ start?: string; end?: string }>(() => {
-    if (tableDateRange === 'TOUS') return {};
     if (tableDateRange === 'CUSTOM') {
       return { start: startDate || undefined, end: endDate || undefined };
     }
     const from = new Date();
     from.setHours(0, 0, 0, 0);
     if (tableDateRange === 'AUJOURD_HUI') return { start: toISODate(from), end: toISODate(from) };
+    if (tableDateRange === 'HIER') {
+      from.setDate(from.getDate() - 1);
+      return { start: toISODate(from), end: toISODate(from) };
+    }
     from.setDate(from.getDate() - Number(tableDateRange.replace('J', '')));
     return { start: toISODate(from) };
   }, [tableDateRange, startDate, endDate]);
@@ -210,11 +227,13 @@ export default function VendorDashboard() {
 
     const leadDate = getRowDate(c);
 
-    if (tableDateRange === 'TOUS') return true;
-
     const now = new Date();
     if (tableDateRange === 'AUJOURD_HUI') {
       return leadDate.toDateString() === now.toDateString();
+    }
+
+    if (tableDateRange === 'HIER') {
+      return leadDate.toDateString() === yesterdayDateString(now);
     }
 
     if (tableDateRange === 'CUSTOM') {
@@ -247,9 +266,9 @@ export default function VendorDashboard() {
       return false;
     }
     const leadDate = getLeadDate(c);
-    if (tableDateRange === 'TOUS') return true;
     const now = new Date();
     if (tableDateRange === 'AUJOURD_HUI') return leadDate.toDateString() === now.toDateString();
+    if (tableDateRange === 'HIER') return leadDate.toDateString() === yesterdayDateString(now);
     if (tableDateRange === 'CUSTOM') {
       if (!startDate && !endDate) return true;
       if (startDate && leadDate < new Date(startDate)) return false;
@@ -584,10 +603,10 @@ export default function VendorDashboard() {
 
           {/* Date Range Pills */}
           <div className="flex flex-wrap items-center bg-gray-50 p-1 rounded-xl border border-gray-100 w-full sm:w-auto">
-            {['TOUS', 'AUJOURD_HUI', '7J', '15J', '30J', '90J', 'CUSTOM'].map((r) => {
+            {['AUJOURD_HUI', 'HIER', '7J', '15J', '30J', '90J', 'CUSTOM'].map((r) => {
               let label = r;
-              if (r === 'TOUS') label = t('range_all', 'leads', 'Tous');
-              else if (r === 'AUJOURD_HUI') label = t('range_today', 'leads', "Aujourd'hui");
+              if (r === 'AUJOURD_HUI') label = t('range_today', 'leads', "Aujourd'hui");
+              else if (r === 'HIER') label = t('range_yesterday', 'leads', 'Hier');
               else if (r === 'CUSTOM') label = t('range_custom', 'leads', 'Personnalisé');
               else if (r.endsWith('J')) {
                 const count = r.replace('J', '');
@@ -713,16 +732,28 @@ export default function VendorDashboard() {
           </div>
           <div className="mt-2">
             {(() => {
-              // Both figures now describe the selected window, so the ratio can
-              // no longer read this period's leads against all-time visitors.
-              const visitorCount = Math.max(totalLeads, uniqueVisitors);
-              const convRate = visitorCount > 0 ? (totalLeads / visitorCount) * 100 : 0;
+              // Both figures describe the selected window, so the ratio can no
+              // longer read this period's leads against all-time visitors.
+              //
+              // The denominator is the visitor count as shown two cards to the
+              // left, nothing else. It used to be Math.max(leads, visitors),
+              // which pinned the card at 100% and printed a "Ratio (6/6)" next
+              // to a Uniques card reading 2 — two numbers on the same screen
+              // contradicting each other.
+              //
+              // Above 100% is a real reading, not an error: only landing-page
+              // visits are tracked, while leads also arrive from manual
+              // inserts, imports and WhatsApp, so a vendor who inserts orders
+              // by hand genuinely has more leads than tracked visitors.
+              const convRate = uniqueVisitors > 0 ? (totalLeads / uniqueVisitors) * 100 : null;
               return (
                 <>
                   <h3 className="text-3xl font-black text-purple-600 tracking-tight">
-                    {convRate.toFixed(1)}%
+                    {/* No visitors at all leaves the rate undefined — 0% would
+                        read as "nobody converted" on a window with leads. */}
+                    {convRate === null ? '—' : `${convRate.toFixed(1)}%`}
                   </h3>
-                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Ratio ({totalLeads}/{visitorCount})</p>
+                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Ratio ({totalLeads}/{uniqueVisitors})</p>
                 </>
               );
             })()}

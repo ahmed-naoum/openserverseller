@@ -512,10 +512,13 @@ export default function HelperTickets() {
 
   // Live "new ticket" alerts. Tracked by parcel code rather than as a bare
   // counter so a flag lives exactly as long as the parcel it belongs to sits in
-  // "En attente" — putting it on a bon de ramassage is what clears it.
-  const [newCodes, setNewCodes] = useState<Set<string>>(new Set());
+  // "En attente" — putting it on a bon de ramassage is what clears it. Persisted
+  // because an F5 (or a crashed tab) must not lose track of what still needs
+  // packing; stored as an array since a Set doesn't survive JSON.
+  const [newCodeList, setNewCodeList] = usePersistentState<string[]>('helper_tickets_new_codes', []);
   const [bannerHidden, setBannerHidden] = useState(false);
   const [lastAlert, setLastAlert] = useState<NewTicketAlert | null>(null);
+  const newCodes = useMemo(() => new Set(newCodeList), [newCodeList]);
   const pendingAlerts = newCodes.size;
 
   const searchRef = useRef<HTMLInputElement>(null);
@@ -816,7 +819,16 @@ export default function HelperTickets() {
     const previous = knownCodesRef.current;
     knownCodesRef.current = codes;
 
-    if (previous === null) return; // first load — everything on screen is old news
+    // First load: nothing on screen counts as an arrival, but the flags restored
+    // from localStorage still need reconciling — anything bagged in the meantime
+    // (another tab, another helper, a previous session) is no longer new.
+    if (previous === null) {
+      setNewCodeList((prev) => {
+        const kept = prev.filter((code) => codes.has(code));
+        return kept.length === prev.length ? prev : kept;
+      });
+      return;
+    }
 
     const fresh = [...codes].filter((code) => !previous.has(code));
     const gone = [...previous].filter((code) => !codes.has(code));
@@ -824,14 +836,13 @@ export default function HelperTickets() {
 
     gone.forEach((code) => announcedCodesRef.current.delete(code));
 
-    setNewCodes((prev) => {
-      const next = new Set(prev);
-      gone.forEach((code) => next.delete(code));
-      fresh.forEach((code) => next.add(code));
-      if (next.size !== prev.size) return next;
-      // Equal sizes can still hide a swap: one bagged while another arrived.
-      for (const code of next) if (!prev.has(code)) return next;
-      return prev;
+    setNewCodeList((prev) => {
+      const goneSet = new Set(gone);
+      const next = prev.filter((code) => !goneSet.has(code));
+      fresh.forEach((code) => {
+        if (!next.includes(code)) next.push(code);
+      });
+      return next.length === prev.length && next.every((code, i) => code === prev[i]) ? prev : next;
     });
 
     // Arrivals the socket already toasted must not be toasted again.

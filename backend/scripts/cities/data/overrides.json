@@ -1,0 +1,20 @@
+{
+  "_comment": [
+    "Hand corrections that the automatic pipeline cannot derive, applied as the",
+    "last import phase so they survive every re-import.",
+    "",
+    "mergeInto: the left slug is the same place as the right slug. The left row's",
+    "Coliaty linkage moves onto the right row, the left row is deleted, and the",
+    "left name becomes an alias. Use when the carrier's spelling created a",
+    "duplicate of a city OSM already had.",
+    "",
+    "coordinates: force a position. Written with geoSource 'manual', which no",
+    "re-import or geocode run overwrites."
+  ],
+
+  "mergeInto": {
+    "awrir": "aourir"
+  },
+
+  "coordinates": {}
+}

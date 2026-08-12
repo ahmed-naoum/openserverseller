@@ -16,6 +16,8 @@
     "cities:import": "tsx scripts/cities/import-cities.ts",
     "cities:geocode": "tsx scripts/cities/geocode-cities.ts",
     "cities:sync": "npm run cities:import && npm run cities:geocode",
+    "cities:audit": "tsx scripts/cities/audit-hubs.ts --json",
+    "cities:audit-pdf": "npm run cities:audit && python scripts/cities/build-hub-audit-pdf.py scripts/cities/data/hub-audit.pdf",
     "test": "vitest",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit"

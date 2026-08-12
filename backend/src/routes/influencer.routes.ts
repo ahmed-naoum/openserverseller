@@ -1521,6 +1521,84 @@ router.get(
       take: fetchAll ? ALL_HARD_CAP : Math.max(safeLimit, 100)
     });
 
+    // The leads list can filter and sort on WHEN a parcel reached a given step
+    // (ramassage, expédition, réception, livraison, reportation) rather than on
+    // when the row was created or last touched. Those timestamps live in the
+    // status histories, and shipping whole histories per row would undo the
+    // slim payload — so the newest entry per (row, step) is aggregated in two
+    // grouped queries and sent as a small map. Statuses are grouped exactly as
+    // MILESTONE_STATUSES in frontend/src/lib/leadStatus.ts: the two must agree
+    // or a row filters under a different step than the one it displays.
+    const MILESTONE_OF_STATUS: Record<string, string> = {
+      POSTPONED: 'POSTPONED', PROGRAMMER: 'POSTPONED', PROGRAMMER_AUTO: 'POSTPONED',
+      PICKED_UP: 'PICKUP',
+      SENT: 'SHIPPING', SHIPPED: 'SHIPPING',
+      RECEIVED: 'RECEPTION',
+      DELIVERED: 'DELIVERY',
+    };
+    const MILESTONE_TRACKED_STATUSES = Object.keys(MILESTONE_OF_STATUS);
+
+    const uniqueIds = (ids: any[]) =>
+      Array.from(new Set(ids.filter((id): id is number => typeof id === 'number')));
+    const milestoneOrderIds = uniqueIds([
+      ...commissions.map(c => c.orderId),
+      ...leads.map(l => (l as any).order?.id),
+    ]);
+    const milestoneLeadIds = uniqueIds([
+      ...leads.map(l => l.id),
+      ...commissions.map(c => (c as any).order?.lead?.id),
+    ]);
+
+    const [orderMilestoneRows, leadMilestoneRows] = await Promise.all([
+      milestoneOrderIds.length
+        ? prisma.orderStatusHistory.groupBy({
+            by: ['orderId', 'newStatus'],
+            where: { orderId: { in: milestoneOrderIds }, newStatus: { in: MILESTONE_TRACKED_STATUSES } },
+            _max: { createdAt: true },
+          })
+        : Promise.resolve([] as any[]),
+      milestoneLeadIds.length
+        ? prisma.leadStatusHistory.groupBy({
+            by: ['leadId', 'newStatus'],
+            where: { leadId: { in: milestoneLeadIds }, newStatus: { in: MILESTONE_TRACKED_STATUSES } },
+            _max: { createdAt: true },
+          })
+        : Promise.resolve([] as any[]),
+    ]);
+
+    const collectMilestones = (rows: any[], idKey: 'orderId' | 'leadId') => {
+      const byId = new Map<number, Record<string, Date>>();
+      for (const row of rows) {
+        const at: Date | null = row._max?.createdAt ?? null;
+        const key = MILESTONE_OF_STATUS[row.newStatus];
+        if (!at || !key) continue;
+        const bucket = byId.get(row[idKey]) || {};
+        // Several statuses can map to one step (SENT/SHIPPED); the later wins.
+        if (!bucket[key] || at > bucket[key]) bucket[key] = at;
+        byId.set(row[idKey], bucket);
+      }
+      return byId;
+    };
+    const orderMilestones = collectMilestones(orderMilestoneRows as any[], 'orderId');
+    const leadMilestones = collectMilestones(leadMilestoneRows as any[], 'leadId');
+
+    // A row carries an order history and a lead history and the step can be
+    // logged in either, so the later of the two wins — the same rule the
+    // statusChangedAt scan below uses.
+    const milestonesFor = (orderId?: number | null, leadId?: number | null) => {
+      const merged: Record<string, Date> = {};
+      for (const source of [
+        orderId != null ? orderMilestones.get(orderId) : null,
+        leadId != null ? leadMilestones.get(leadId) : null,
+      ]) {
+        if (!source) continue;
+        for (const [key, at] of Object.entries(source)) {
+          if (!merged[key] || at > merged[key]) merged[key] = at;
+        }
+      }
+      return merged;
+    };
+
     // One cache for both lists below, so a link shared by hundreds of rows is
     // trimmed once per request rather than once per row.
     const landingCache = new Map<number, any>();
@@ -1551,6 +1629,7 @@ router.get(
       amount: 0,
       status: 'PENDING',
       createdAt: lead.createdAt,
+      milestones: milestonesFor((lead as any).order?.id, lead.id),
       ...(summaryOnly
         ? {
             statusChangedAt: newestOf((lead as any).statusHistory, (lead as any).order?.statusHistory),
@@ -1600,10 +1679,12 @@ router.get(
     const dedupedCommissions = commissions
       .filter(c => !c.orderId || !leadOrderIds.has(c.orderId))
       .map(c => {
-        if (!summaryOnly) return { ...c, referralLink: slimLink((c as any).referralLink) };
+        const milestones = milestonesFor(c.orderId, (c as any).order?.lead?.id);
+        if (!summaryOnly) return { ...c, milestones, referralLink: slimLink((c as any).referralLink) };
         const order: any = (c as any).order;
         return {
           ...c,
+          milestones,
           statusChangedAt: newestOf(order?.statusHistory, order?.lead?.statusHistory),
           hasHistory: (order?.statusHistory?.length || 0) + (order?.lead?.statusHistory?.length || 0) > 0,
           order: order

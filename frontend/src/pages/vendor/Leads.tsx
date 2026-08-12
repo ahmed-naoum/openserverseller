@@ -7,7 +7,7 @@ import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { DELIVERY_STATUSES, isConfirmedStatus, isConfirmedRow, isDeliveredRow, getDisplayStatus, getLeadDate, getLeadActivityDate, getStatusChangedAt } from '../../lib/leadStatus';
+import { DELIVERY_STATUSES, isConfirmedStatus, isConfirmedRow, isDeliveredRow, getDisplayStatus, getLeadDate, getStatusChangedAt, getRowDateFor, DateBasis } from '../../lib/leadStatus';
 import {
   Users, MousePointerClick, UserCheck, ShoppingCart,
   Filter, Search, Calendar,
@@ -146,6 +146,22 @@ const PAYMENT_SITUATION_BADGES: Record<string, { label: string; color: string }>
 
 const PAYMENT_SITUATIONS = ['NOT_PAID', 'PAID', 'FACTURED'] as const;
 
+// Which date the range filter, the sort and the trend chart read. Beyond the
+// two dates every row has (creation, last status change), a parcel can be asked
+// about by the day it reached a step: "livré aujourd'hui" is a different set of
+// rows than "créé aujourd'hui et actuellement livré", and it was the second one
+// the page could answer before this filter existed. Order matches the delivery
+// dashboard operators already use.
+const DATE_BASIS_OPTIONS: Array<{ value: DateBasis; key: string; label: string; hint: string }> = [
+  { value: 'STATUS', key: 'basis_status', label: 'Status mise à jour', hint: 'Filtrer sur la date du dernier changement de statut' },
+  { value: 'POSTPONED', key: 'basis_postponed', label: 'Reportation', hint: 'Filtrer sur la date de report de la livraison' },
+  { value: 'CREATED', key: 'basis_created', label: 'Création', hint: 'Filtrer sur la date de création du lead' },
+  { value: 'PICKUP', key: 'basis_pickup', label: 'Ramassage', hint: 'Filtrer sur la date de ramassage du colis' },
+  { value: 'SHIPPING', key: 'basis_shipping', label: 'Expédition', hint: 'Filtrer sur la date d’expédition du colis' },
+  { value: 'RECEPTION', key: 'basis_reception', label: 'Reception', hint: 'Filtrer sur la date de réception à destination' },
+  { value: 'DELIVERY', key: 'basis_delivery', label: 'Livraison', hint: 'Filtrer sur la date de livraison au client' },
+];
+
 // Situation reaches the UI in three shapes: the current codes, the older French
 // labels rows written before the codes still carry, and nothing at all (a lead
 // nobody has invoiced yet). Normalising here keeps the filter, the counts and
@@ -186,13 +202,15 @@ export default function VendorLeads() {
   const [isPushingBulk, setIsPushingBulk] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
-  const [tableDateRange, setTableDateRange] = useState<'TOUS' | 'AUJOURD_HUI' | '7J' | '15J' | '30J' | '90J' | 'CUSTOM'>('TOUS');
+  // No "Tous" option: the page opens on the last 30 days. Loading every lead an
+  // account has ever had made the stats above answer a question nobody asks.
+  const [tableDateRange, setTableDateRange] = useState<'AUJOURD_HUI' | 'HIER' | '7J' | '15J' | '30J' | '90J' | 'CUSTOM'>('30J');
   const [tableSelectedProductId, setTableSelectedProductId] = useState<string>('ALL');
   // Which timestamp the date range, the sort and the trend chart read. A parcel
   // is created one day and delivered the next, so on the creation date "today +
   // Livré" answered with the leads created today that happen to be delivered —
   // never the ones actually delivered today, which is the question being asked.
-  const [dateBasis, setDateBasis] = useState<'STATUS' | 'CREATED'>('CREATED');
+  const [dateBasis, setDateBasis] = useState<DateBasis>('CREATED');
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -269,8 +287,13 @@ export default function VendorLeads() {
  
   // The date every filter, the sort and the trend chart read for a row. One
   // definition for all of them: a row the range filter kept must not then be
-  // sorted or plotted under a different day.
-  const getRowDate = dateBasis === 'STATUS' ? getLeadActivityDate : getLeadDate;
+  // sorted or plotted under a different day. Null on a parcel-step basis means
+  // the row never reached that step.
+  const getRowDate = (c: InfluencerCommission): Date | null => getRowDateFor(c as any, dateBasis);
+
+  const dateBasisOption = DATE_BASIS_OPTIONS.find(o => o.value === dateBasis) || DATE_BASIS_OPTIONS[0];
+  const getDateBasisLabel = (option: typeof DATE_BASIS_OPTIONS[number]) =>
+    t(option.key, 'leads', option.label);
 
   // Filter commissions by date and product for ALL calculations.
   // Memoised: this list feeds every stat, chart and counter below, and on an
@@ -282,18 +305,29 @@ export default function VendorLeads() {
       return false;
     }
 
-    const leadDate = getRowDate(c);
-
     // Date filter
-    if (tableDateRange === 'TOUS') return true;
-    
+    if (tableDateRange === 'CUSTOM' && !startDate && !endDate) return true;
+
+    // On a parcel-step basis a row that never reached the step has no date to
+    // compare against: it falls outside every range rather than landing at the
+    // start of time (or, worse, on its creation day).
+    const leadDate = getRowDate(c);
+    if (!leadDate) return false;
+
     const now = new Date();
     if (tableDateRange === 'AUJOURD_HUI') {
       return leadDate.toDateString() === now.toDateString();
     }
-    
+
+    // Yesterday is the single day before today, not "the last 24 hours" — the
+    // day pills below already cover rolling windows.
+    if (tableDateRange === 'HIER') {
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      return leadDate.toDateString() === yesterday.toDateString();
+    }
+
     if (tableDateRange === 'CUSTOM') {
-      if (!startDate && !endDate) return true;
       if (startDate) {
         const start = new Date(startDate);
         start.setHours(0, 0, 0, 0);
@@ -392,7 +426,9 @@ export default function VendorLeads() {
   // thousands of Date objects built on every render.
   const sortedCommissions = useMemo(() => {
     return filteredCommissions
-      .map(c => ({ c, key: getRowDate(c).getTime() }))
+      // Rows with no date on the chosen step (kept only when no range is
+      // active) sort to the bottom instead of scattering through the list.
+      .map(c => ({ c, key: getRowDate(c)?.getTime() ?? -Infinity }))
       .sort((a, b) => b.key - a.key)
       .map(x => x.c);
   }, [filteredCommissions, dateBasis]);
@@ -464,7 +500,10 @@ export default function VendorLeads() {
   const performanceData = useMemo(() => {
     const groupedMap = new Map();
     dateFilteredCommissions.forEach(comm => {
-      const dateKey = format(getRowDate(comm), 'yyyy-MM-dd');
+      // No date on this basis = no day to plot the row under.
+      const rowDate = getRowDate(comm);
+      if (!rowDate) return;
+      const dateKey = format(rowDate, 'yyyy-MM-dd');
       groupedMap.set(dateKey, (groupedMap.get(dateKey) || 0) + 1);
     });
 
@@ -771,35 +810,38 @@ export default function VendorLeads() {
               </select>
 
               {/* Which date the range below is applied to. Sits next to the range
-                  because on its own "Aujourd'hui" is ambiguous: created today, or
-                  moved today? */}
-              <div className="flex items-center bg-gray-50 p-1 rounded-xl border border-gray-100 w-full sm:w-auto">
-                {(['STATUS', 'CREATED'] as const).map((b) => (
-                  <button
-                    key={b}
-                    onClick={() => setDateBasis(b)}
-                    title={b === 'STATUS'
-                      ? t('basis_status_hint', 'leads', 'Filtrer sur la date du dernier changement de statut')
-                      : t('basis_created_hint', 'leads', 'Filtrer sur la date de création du lead')}
-                    className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all flex-1 sm:flex-none text-center ${
-                      dateBasis === b
-                        ? 'bg-white text-gray-900 shadow-sm'
-                        : 'text-gray-400 hover:text-gray-600'
-                    }`}
-                  >
-                    {b === 'STATUS'
-                      ? t('basis_status', 'leads', 'MAJ statut')
-                      : t('basis_created', 'leads', 'Création')}
-                  </button>
-                ))}
+                  because on its own "Aujourd'hui" is ambiguous: created today,
+                  moved today, or delivered today? */}
+              <div className="relative w-full sm:w-auto sm:min-w-[215px]">
+                <span className="absolute -top-2 left-3 px-1 bg-white text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                  {t('basis_label', 'leads', 'Type de date')}
+                </span>
+                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <Clock className="w-4 h-4 text-gray-400" />
+                </div>
+                <select
+                  value={dateBasis}
+                  onChange={(e) => setDateBasis(e.target.value as DateBasis)}
+                  title={t(`${dateBasisOption.key}_hint`, 'leads', dateBasisOption.hint)}
+                  className="w-full pl-10 pr-9 py-2.5 text-xs font-bold text-gray-700 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-influencer-500 transition-all appearance-none cursor-pointer hover:bg-gray-100/50"
+                >
+                  {DATE_BASIS_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {getDateBasisLabel(option)}
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                </div>
               </div>
 
               {/* Date Range Pills */}
               <div className="flex flex-wrap items-center bg-gray-50 p-1 rounded-xl border border-gray-100 w-full sm:w-auto">
-                {['TOUS', 'AUJOURD_HUI', '7J', '15J', '30J', '90J', 'CUSTOM'].map((r) => {
+                {['AUJOURD_HUI', 'HIER', '7J', '15J', '30J', '90J', 'CUSTOM'].map((r) => {
                   let label = r;
-                  if (r === 'TOUS') label = t('range_all', 'leads', 'Tous');
-                  else if (r === 'AUJOURD_HUI') label = t('range_today', 'leads', "Aujourd'hui");
+                  if (r === 'AUJOURD_HUI') label = t('range_today', 'leads', "Aujourd'hui");
+                  else if (r === 'HIER') label = t('range_yesterday', 'leads', 'Hier');
                   else if (r === 'CUSTOM') label = t('range_custom', 'leads', 'Personnalisé');
                   else if (r.endsWith('J')) {
                     const count = r.replace('J', '');
@@ -1201,9 +1243,7 @@ export default function VendorLeads() {
                           currently filtered and sorted on — otherwise the order
                           of the rows looks arbitrary. */}
                       <span className="block mt-0.5 text-[9px] font-black text-violet-500 normal-case tracking-normal">
-                        {dateBasis === 'STATUS'
-                          ? t('basis_active_status', 'leads', '↻ tri : maj statut')
-                          : t('basis_active_created', 'leads', '↻ tri : création')}
+                        {t('basis_active', 'leads', '↻ tri : {basis}').replace('{basis}', getDateBasisLabel(dateBasisOption).toLowerCase())}
                       </span>
                     </th>
                     <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('th_situation', 'leads', 'Situation')}</th>
@@ -1393,6 +1433,10 @@ export default function VendorLeads() {
                             const hasCreated = !Number.isNaN(createdAt.getTime());
                             const changedAt = getStatusChangedAt(commission as any);
                             const moved = changedAt && (!hasCreated || changedAt.getTime() > createdAt.getTime());
+                            // On a parcel-step basis the cell would otherwise
+                            // show neither of the dates the rows are ordered by.
+                            const isMilestoneBasis = dateBasis !== 'STATUS' && dateBasis !== 'CREATED';
+                            const milestoneAt = isMilestoneBasis ? getRowDate(commission) : null;
                             return (
                               <div className="flex flex-col text-xs text-gray-500 font-medium whitespace-nowrap">
                                 <span className="flex items-center gap-1">
@@ -1415,6 +1459,21 @@ export default function VendorLeads() {
                                   >
                                     <RefreshCw className="w-2.5 h-2.5" />
                                     {format(changedAt!, 'dd MMM HH:mm')}
+                                  </span>
+                                )}
+                                {isMilestoneBasis && (
+                                  <span
+                                    className={`flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded border text-[9px] font-black uppercase w-fit ${
+                                      milestoneAt
+                                        ? 'bg-violet-50 text-violet-600 border-violet-100'
+                                        : 'bg-gray-50 text-gray-400 border-gray-100'
+                                    }`}
+                                    title={getDateBasisLabel(dateBasisOption)}
+                                  >
+                                    <Truck className="w-2.5 h-2.5" />
+                                    {milestoneAt
+                                      ? format(milestoneAt, 'dd MMM HH:mm')
+                                      : t('basis_never_reached', 'leads', 'jamais')}
                                   </span>
                                 )}
                               </div>

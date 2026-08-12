@@ -1,0 +1,4661 @@
+{
+  "threshold": 120,
+  "hubs": [
+    {
+      "hub": "HUB AGADIR",
+      "centre": {
+        "lat": 30.3387947,
+        "lon": -9.4764214
+      },
+      "total": 46,
+      "unplaced": 3,
+      "cities": [
+        {
+          "id": 7291,
+          "name": "Houara",
+          "coliatyName": "Houara",
+          "region": null,
+          "latitude": 35.6328133,
+          "longitude": -5.967679,
+          "geoSource": "osm",
+          "distanceKm": 673
+        },
+        {
+          "id": 8702,
+          "name": "Inzegane",
+          "coliatyName": "Inzegane",
+          "region": "Casablanca-Settat",
+          "latitude": 33.554772,
+          "longitude": -7.5999679,
+          "geoSource": "nominatim",
+          "distanceKm": 399
+        },
+        {
+          "id": 3814,
+          "name": "Foum Zguid",
+          "coliatyName": "Foum Zguid",
+          "region": null,
+          "latitude": 30.085933,
+          "longitude": -6.874903,
+          "geoSource": "osm",
+          "distanceKm": 252
+        },
+        {
+          "id": 4781,
+          "name": "Tagadirt",
+          "coliatyName": "Tagadirt",
+          "region": null,
+          "latitude": 31.2467256,
+          "longitude": -7.7567692,
+          "geoSource": "osm",
+          "distanceKm": 193
+        },
+        {
+          "id": 3031,
+          "name": "Tata",
+          "coliatyName": "Tata",
+          "region": null,
+          "latitude": 29.746392,
+          "longitude": -7.9696051,
+          "geoSource": "osm",
+          "distanceKm": 159
+        },
+        {
+          "id": 8654,
+          "name": "Akka-Tata",
+          "coliatyName": "Akka-Tata",
+          "region": "Souss-Massa",
+          "latitude": 29.391861,
+          "longitude": -8.256762,
+          "geoSource": "nominatim",
+          "distanceKm": 158
+        },
+        {
+          "id": 3068,
+          "name": "Taliouine",
+          "coliatyName": "Taliouine",
+          "region": null,
+          "latitude": 30.5314629,
+          "longitude": -7.9215207,
+          "geoSource": "osm",
+          "distanceKm": 151
+        },
+        {
+          "id": 8759,
+          "name": "Tamanart - TATA",
+          "coliatyName": "Tamanart - TATA",
+          "region": "Souss-Massa",
+          "latitude": 29.1609816,
+          "longitude": -8.9588426,
+          "geoSource": "nominatim",
+          "distanceKm": 140
+        },
+        {
+          "id": 3325,
+          "name": "Aoulouz",
+          "coliatyName": "Aoulouz",
+          "region": null,
+          "latitude": 30.673307,
+          "longitude": -8.180695,
+          "geoSource": "osm",
+          "distanceKm": 130
+        },
+        {
+          "id": 3024,
+          "name": "Sidi Ifni",
+          "coliatyName": "Sidi Ifni",
+          "region": null,
+          "latitude": 29.3791253,
+          "longitude": -10.1715632,
+          "geoSource": "osm",
+          "distanceKm": 126
+        },
+        {
+          "id": 3279,
+          "name": "Igherm",
+          "coliatyName": "Igherm",
+          "region": null,
+          "latitude": 30.089004,
+          "longitude": -8.460942,
+          "geoSource": "osm",
+          "distanceKm": 101
+        },
+        {
+          "id": 3326,
+          "name": "Oulad Berhil",
+          "coliatyName": "Oulad Berhil",
+          "region": null,
+          "latitude": 30.6364,
+          "longitude": -8.477589,
+          "geoSource": "osm",
+          "distanceKm": 101
+        },
+        {
+          "id": 3021,
+          "name": "Mirleft",
+          "coliatyName": "Mirleft",
+          "region": null,
+          "latitude": 29.579707,
+          "longitude": -10.031733,
+          "geoSource": "osm",
+          "distanceKm": 100
+        },
+        {
+          "id": 8656,
+          "name": "Anzi-tiznit",
+          "coliatyName": "ANZI-TIZNIT",
+          "region": "Souss-Massa",
+          "latitude": 29.6752514,
+          "longitude": -9.3488986,
+          "geoSource": "nominatim",
+          "distanceKm": 75
+        },
+        {
+          "id": 8657,
+          "name": "Aoulad jerar-TIZNIT",
+          "coliatyName": "Aoulad jerar-TIZNIT",
+          "region": "Souss-Massa",
+          "latitude": 29.698624,
+          "longitude": -9.7312815,
+          "geoSource": "nominatim",
+          "distanceKm": 75
+        },
+        {
+          "id": 8697,
+          "name": "Idaousmlal-tiznit",
+          "coliatyName": "Idaousmlal-tiznit",
+          "region": "Souss-Massa",
+          "latitude": 29.698624,
+          "longitude": -9.7312815,
+          "geoSource": "nominatim",
+          "distanceKm": 75
+        },
+        {
+          "id": 3030,
+          "name": "Tiznit",
+          "coliatyName": "Tiznit",
+          "region": null,
+          "latitude": 29.698624,
+          "longitude": -9.7312815,
+          "geoSource": "osm",
+          "distanceKm": 75
+        },
+        {
+          "id": 3287,
+          "name": "Tafraouten",
+          "coliatyName": "Tafraoute",
+          "region": null,
+          "latitude": 30.705029,
+          "longitude": -8.882564,
+          "geoSource": "osm",
+          "distanceKm": 70
+        },
+        {
+          "id": 3028,
+          "name": "Aglou",
+          "coliatyName": "Aglou",
+          "region": null,
+          "latitude": 29.802491,
+          "longitude": -9.83336,
+          "geoSource": "osm",
+          "distanceKm": 69
+        },
+        {
+          "id": 3328,
+          "name": "Ait Iaaza",
+          "coliatyName": "Ait Iaaza",
+          "region": null,
+          "latitude": 30.5064594,
+          "longitude": -8.7911541,
+          "geoSource": "osm",
+          "distanceKm": 68
+        },
+        {
+          "id": 3023,
+          "name": "Taroudant",
+          "coliatyName": "Taroudannt",
+          "region": null,
+          "latitude": 30.470651,
+          "longitude": -8.877922,
+          "geoSource": "osm",
+          "distanceKm": 59
+        },
+        {
+          "id": 3332,
+          "name": "Massa",
+          "coliatyName": "MASSA",
+          "region": null,
+          "latitude": 29.972463,
+          "longitude": -9.6409,
+          "geoSource": "osm",
+          "distanceKm": 44
+        },
+        {
+          "id": 3972,
+          "name": "Sebt Guerdane",
+          "coliatyName": "Sebt El Guerdane",
+          "region": null,
+          "latitude": 30.3765279,
+          "longitude": -9.0208285,
+          "geoSource": "osm",
+          "distanceKm": 44
+        },
+        {
+          "id": 3208,
+          "name": "Ait Baha",
+          "coliatyName": "Ait baha ",
+          "region": null,
+          "latitude": 30.070334,
+          "longitude": -9.154578,
+          "geoSource": "osm",
+          "distanceKm": 43
+        },
+        {
+          "id": 8727,
+          "name": "Nouasser-belfaa",
+          "coliatyName": "Nouasser-belfaa",
+          "region": "Souss-Massa",
+          "latitude": 30.0445043,
+          "longitude": -9.5665813,
+          "geoSource": "nominatim",
+          "distanceKm": 34
+        },
+        {
+          "id": 3493,
+          "name": "Belfaa",
+          "coliatyName": "Belfaa",
+          "region": null,
+          "latitude": 30.0484384,
+          "longitude": -9.5641729,
+          "geoSource": "osm",
+          "distanceKm": 33
+        },
+        {
+          "id": 4376,
+          "name": "Taghazout",
+          "coliatyName": "taghazout",
+          "region": null,
+          "latitude": 30.544722,
+          "longitude": -9.709128,
+          "geoSource": "osm",
+          "distanceKm": 32
+        },
+        {
+          "id": 6674,
+          "name": "Tamraght",
+          "coliatyName": "Tamraght",
+          "region": null,
+          "latitude": 30.513951,
+          "longitude": -9.677378,
+          "geoSource": "osm",
+          "distanceKm": 27
+        },
+        {
+          "id": 3189,
+          "name": "Aourir",
+          "coliatyName": "Awrir",
+          "region": null,
+          "latitude": 30.498085,
+          "longitude": -9.671097,
+          "geoSource": "osm",
+          "distanceKm": 26
+        },
+        {
+          "id": 3457,
+          "name": "Ouled-Teima",
+          "coliatyName": "Oulad Teima",
+          "region": null,
+          "latitude": 30.3927088,
+          "longitude": -9.2132982,
+          "geoSource": "osm",
+          "distanceKm": 26
+        },
+        {
+          "id": 3405,
+          "name": "Anza",
+          "coliatyName": "Anza",
+          "region": null,
+          "latitude": 30.4520064,
+          "longitude": -9.6590808,
+          "geoSource": "osm",
+          "distanceKm": 22
+        },
+        {
+          "id": 4895,
+          "name": "Aït Amira",
+          "coliatyName": "Ait Amira",
+          "region": null,
+          "latitude": 30.1768183,
+          "longitude": -9.4891392,
+          "geoSource": "osm",
+          "distanceKm": 18
+        },
+        {
+          "id": 8706,
+          "name": "Khemis Ait Amira",
+          "coliatyName": "Khemis Ait Amira",
+          "region": "Souss-Massa",
+          "latitude": 30.1753169,
+          "longitude": -9.4966042,
+          "geoSource": "nominatim",
+          "distanceKm": 18
+        },
+        {
+          "id": 3430,
+          "name": "Biougra",
+          "coliatyName": "Biogra",
+          "region": null,
+          "latitude": 30.215517,
+          "longitude": -9.368543,
+          "geoSource": "osm",
+          "distanceKm": 17
+        },
+        {
+          "id": 8754,
+          "name": "Taddart - AGADIR",
+          "coliatyName": "Taddart - AGADIR",
+          "region": "Souss-Massa",
+          "latitude": 30.4348743,
+          "longitude": -9.5828263,
+          "geoSource": "nominatim",
+          "distanceKm": 15
+        },
+        {
+          "id": 3005,
+          "name": "Agadir",
+          "coliatyName": "AGADIR",
+          "region": null,
+          "latitude": 30.4205162,
+          "longitude": -9.5838532,
+          "geoSource": "osm",
+          "distanceKm": 14
+        },
+        {
+          "id": 3263,
+          "name": "Sidi Bibi",
+          "coliatyName": "Sidi Bibi",
+          "region": null,
+          "latitude": 30.237084,
+          "longitude": -9.526828,
+          "geoSource": "osm",
+          "distanceKm": 12
+        },
+        {
+          "id": 5012,
+          "name": "Dcheïra",
+          "coliatyName": "Dcheira",
+          "region": null,
+          "latitude": 30.3697677,
+          "longitude": -9.5392155,
+          "geoSource": "osm",
+          "distanceKm": 7
+        },
+        {
+          "id": 3440,
+          "name": "Temsia",
+          "coliatyName": "Temsia",
+          "region": null,
+          "latitude": 30.363795,
+          "longitude": -9.417027,
+          "geoSource": "osm",
+          "distanceKm": 6
+        },
+        {
+          "id": 4855,
+          "name": "Drargua",
+          "coliatyName": "Drarga",
+          "region": null,
+          "latitude": 30.3820295,
+          "longitude": -9.4764214,
+          "geoSource": "osm",
+          "distanceKm": 5
+        },
+        {
+          "id": 4857,
+          "name": "Lqliâa",
+          "coliatyName": "Lqliaa",
+          "region": null,
+          "latitude": 30.29865,
+          "longitude": -9.4620176,
+          "geoSource": "osm",
+          "distanceKm": 5
+        },
+        {
+          "id": 6105,
+          "name": "Tikiouine",
+          "coliatyName": "Tikiouine",
+          "region": null,
+          "latitude": 30.3787422,
+          "longitude": -9.5047697,
+          "geoSource": "osm",
+          "distanceKm": 5
+        },
+        {
+          "id": 3472,
+          "name": "Aït Melloul",
+          "coliatyName": "Ait Meloul",
+          "region": null,
+          "latitude": 30.3387947,
+          "longitude": -9.5044701,
+          "geoSource": "osm",
+          "distanceKm": 3
+        },
+        {
+          "id": 8659,
+          "name": "Azro agadir",
+          "coliatyName": "Azro agadir",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8715,
+          "name": "Lakhessas",
+          "coliatyName": "lakhessas",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8757,
+          "name": "Tamaait",
+          "coliatyName": "Tamaait",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        }
+      ],
+      "suspects": 10
+    },
+    {
+      "hub": "HUB BENIMELLAL",
+      "centre": {
+        "lat": 32.581700850000004,
+        "lon": -6.374159000000001
+      },
+      "total": 66,
+      "unplaced": 14,
+      "cities": [
+        {
+          "id": 8736,
+          "name": "Ouled Moussa",
+          "coliatyName": "Ouled Moussa",
+          "region": "Oriental",
+          "latitude": 34.8181846,
+          "longitude": -2.2446763,
+          "geoSource": "nominatim",
+          "distanceKm": 456
+        },
+        {
+          "id": 7215,
+          "name": "Wawizeght",
+          "coliatyName": "Wawizght",
+          "region": null,
+          "latitude": 34.8042507,
+          "longitude": -2.5577997,
+          "geoSource": "osm",
+          "distanceKm": 431
+        },
+        {
+          "id": 4703,
+          "name": "Adouz",
+          "coliatyName": "Adouz",
+          "region": null,
+          "latitude": 30.1514814,
+          "longitude": -9.1133243,
+          "geoSource": "osm",
+          "distanceKm": 375
+        },
+        {
+          "id": 8704,
+          "name": "Kamoun",
+          "coliatyName": "Kamoun",
+          "region": "Tanger-Tétouan-Al Hoceïma",
+          "latitude": 35.01,
+          "longitude": -4.13,
+          "geoSource": "nominatim",
+          "distanceKm": 340
+        },
+        {
+          "id": 5257,
+          "name": "Timlilt",
+          "coliatyName": "Timolilt",
+          "region": null,
+          "latitude": 31.0334802,
+          "longitude": -9.1391621,
+          "geoSource": "osm",
+          "distanceKm": 313
+        },
+        {
+          "id": 8752,
+          "name": "Souk Sebt",
+          "coliatyName": "souk sebt ",
+          "region": "Marrakech-Safi",
+          "latitude": 31.6454861,
+          "longitude": -7.8559066,
+          "geoSource": "nominatim",
+          "distanceKm": 174
+        },
+        {
+          "id": 8722,
+          "name": "Mghila",
+          "coliatyName": "Mghila",
+          "region": "Rabat-Salé-Kénitra",
+          "latitude": 33.9814901,
+          "longitude": -6.8105784,
+          "geoSource": "nominatim",
+          "distanceKm": 161
+        },
+        {
+          "id": 8714,
+          "name": "Lahri",
+          "coliatyName": "lahri",
+          "region": "Casablanca-Settat",
+          "latitude": 33.4623724,
+          "longitude": -7.6463859,
+          "geoSource": "nominatim",
+          "distanceKm": 154
+        },
+        {
+          "id": 6023,
+          "name": "Ait Hattab",
+          "coliatyName": "Ait Attab",
+          "region": null,
+          "latitude": 32.2709668,
+          "longitude": -5.1307878,
+          "geoSource": "osm",
+          "distanceKm": 122
+        },
+        {
+          "id": 3296,
+          "name": "M'rirt",
+          "coliatyName": "Mrirt",
+          "region": null,
+          "latitude": 33.163826,
+          "longitude": -5.565428,
+          "geoSource": "osm",
+          "distanceKm": 99
+        },
+        {
+          "id": 3295,
+          "name": "Tanant",
+          "coliatyName": "Tanant",
+          "region": null,
+          "latitude": 31.862498,
+          "longitude": -6.942027,
+          "geoSource": "osm",
+          "distanceKm": 96
+        },
+        {
+          "id": 8686,
+          "name": "El Borj-KHENIFRA",
+          "coliatyName": "El Borj-KHENIFRA",
+          "region": "Béni Mellal-Khénifra",
+          "latitude": 33.0344104,
+          "longitude": -5.5908867,
+          "geoSource": "nominatim",
+          "distanceKm": 89
+        },
+        {
+          "id": 4500,
+          "name": "El Kbab",
+          "coliatyName": "Elkbab",
+          "region": null,
+          "latitude": 32.741403,
+          "longitude": -5.52067,
+          "geoSource": "osm",
+          "distanceKm": 82
+        },
+        {
+          "id": 8689,
+          "name": "El Kebab-KHENIFRA",
+          "coliatyName": "El Kebab-KHENIFRA",
+          "region": "Béni Mellal-Khénifra",
+          "latitude": 32.7417947,
+          "longitude": -5.5239629,
+          "geoSource": "nominatim",
+          "distanceKm": 82
+        },
+        {
+          "id": 3192,
+          "name": "Aguelmous",
+          "coliatyName": "Aguelmous",
+          "region": null,
+          "latitude": 33.1575774,
+          "longitude": -5.8472009,
+          "geoSource": "osm",
+          "distanceKm": 81
+        },
+        {
+          "id": 8716,
+          "name": "Lehri-KHENIFRA",
+          "coliatyName": "Lehri-KHENIFRA",
+          "region": "Béni Mellal-Khénifra",
+          "latitude": 32.8312556,
+          "longitude": -5.5928037,
+          "geoSource": "nominatim",
+          "distanceKm": 78
+        },
+        {
+          "id": 3210,
+          "name": "Khénifra",
+          "coliatyName": "Khenifra",
+          "region": null,
+          "latitude": 32.9357718,
+          "longitude": -5.6696504,
+          "geoSource": "osm",
+          "distanceKm": 77
+        },
+        {
+          "id": 4871,
+          "name": "Moulay Bouazza",
+          "coliatyName": "molay bouaza",
+          "region": null,
+          "latitude": 33.224507,
+          "longitude": -6.197919,
+          "geoSource": "osm",
+          "distanceKm": 73
+        },
+        {
+          "id": 8725,
+          "name": "Moulay Bouazza Khenifra",
+          "coliatyName": "Moulay Bouazza Khenifra",
+          "region": "Béni Mellal-Khénifra",
+          "latitude": 33.226,
+          "longitude": -6.199,
+          "geoSource": "nominatim",
+          "distanceKm": 73
+        },
+        {
+          "id": 3654,
+          "name": "Azilal",
+          "coliatyName": "Azilal",
+          "region": null,
+          "latitude": 31.959295,
+          "longitude": -6.570991,
+          "geoSource": "osm",
+          "distanceKm": 72
+        },
+        {
+          "id": 3070,
+          "name": "Ouzoud",
+          "coliatyName": "Ouzoud",
+          "region": null,
+          "latitude": 32.0139913,
+          "longitude": -6.7144177,
+          "geoSource": "osm",
+          "distanceKm": 71
+        },
+        {
+          "id": 3171,
+          "name": "Aït Ishaq",
+          "coliatyName": "Ait IshaK",
+          "region": null,
+          "latitude": 32.7630212,
+          "longitude": -5.7261667,
+          "geoSource": "osm",
+          "distanceKm": 64
+        },
+        {
+          "id": 3890,
+          "name": "Khouribga",
+          "coliatyName": "Khouribga",
+          "region": null,
+          "latitude": 32.8856482,
+          "longitude": -6.908798,
+          "geoSource": "osm",
+          "distanceKm": 60
+        },
+        {
+          "id": 4824,
+          "name": "Dar Oulad Zidouh",
+          "coliatyName": "dar ouled zidoh",
+          "region": null,
+          "latitude": 32.308718,
+          "longitude": -6.902587,
+          "geoSource": "osm",
+          "distanceKm": 58
+        },
+        {
+          "id": 3891,
+          "name": "Oulad Ayad",
+          "coliatyName": "Oulad Ayad",
+          "region": null,
+          "latitude": 32.2011101,
+          "longitude": -6.7992245,
+          "geoSource": "osm",
+          "distanceKm": 58
+        },
+        {
+          "id": 4502,
+          "name": "Ouaoumana",
+          "coliatyName": "Ouaoumana",
+          "region": null,
+          "latitude": 32.711134,
+          "longitude": -5.806639,
+          "geoSource": "osm",
+          "distanceKm": 55
+        },
+        {
+          "id": 5170,
+          "name": "Kaf Nsour",
+          "coliatyName": "Kaf Nsour",
+          "region": null,
+          "latitude": 32.9150353,
+          "longitude": -5.9637191,
+          "geoSource": "osm",
+          "distanceKm": 53
+        },
+        {
+          "id": 3896,
+          "name": "Boujniba",
+          "coliatyName": "Boujniba",
+          "region": null,
+          "latitude": 32.898004,
+          "longitude": -6.776919,
+          "geoSource": "osm",
+          "distanceKm": 52
+        },
+        {
+          "id": 8696,
+          "name": "Hattane-Khouribga",
+          "coliatyName": "Hattane-Khouribga",
+          "region": "Béni Mellal-Khénifra",
+          "latitude": 32.8406383,
+          "longitude": -6.8046283,
+          "geoSource": "nominatim",
+          "distanceKm": 50
+        },
+        {
+          "id": 5478,
+          "name": "Bni Ayat",
+          "coliatyName": "Beni Ayat",
+          "region": null,
+          "latitude": 32.21552,
+          "longitude": -6.583267,
+          "geoSource": "osm",
+          "distanceKm": 45
+        },
+        {
+          "id": 3969,
+          "name": "Afourar",
+          "coliatyName": "Afourar",
+          "region": null,
+          "latitude": 32.209533,
+          "longitude": -6.535892,
+          "geoSource": "osm",
+          "distanceKm": 44
+        },
+        {
+          "id": 8745,
+          "name": "Sebt Oulad Nemma",
+          "coliatyName": "Sebt Oulad Nemma",
+          "region": "Béni Mellal-Khénifra",
+          "latitude": 32.294753,
+          "longitude": -6.700659,
+          "geoSource": "nominatim",
+          "distanceKm": 44
+        },
+        {
+          "id": 4733,
+          "name": "Zaouiat Cheikh",
+          "coliatyName": "Zaouiat Cheikh",
+          "region": null,
+          "latitude": 32.6441708,
+          "longitude": -5.916589,
+          "geoSource": "osm",
+          "distanceKm": 43
+        },
+        {
+          "id": 3917,
+          "name": "Oulad Mrah",
+          "coliatyName": "Oulad Mrah",
+          "region": null,
+          "latitude": 32.340314,
+          "longitude": -6.6876036,
+          "geoSource": "osm",
+          "distanceKm": 40
+        },
+        {
+          "id": 3918,
+          "name": "Oulad Zmam",
+          "coliatyName": "Oulad Zmam",
+          "region": null,
+          "latitude": 32.369135,
+          "longitude": -6.688376,
+          "geoSource": "osm",
+          "distanceKm": 38
+        },
+        {
+          "id": 8746,
+          "name": "Sidi Aissa-Beni-Mellal",
+          "coliatyName": "Sidi Aissa-Beni-Mellal",
+          "region": "Béni Mellal-Khénifra",
+          "latitude": 32.3441519,
+          "longitude": -6.6555527,
+          "geoSource": "nominatim",
+          "distanceKm": 37
+        },
+        {
+          "id": 3892,
+          "name": "Oued Zem",
+          "coliatyName": "Oued Zem",
+          "region": null,
+          "latitude": 32.862504,
+          "longitude": -6.571054,
+          "geoSource": "osm",
+          "distanceKm": 36
+        },
+        {
+          "id": 3970,
+          "name": "Foum Oudi",
+          "coliatyName": "Foum Oudi",
+          "region": null,
+          "latitude": 32.2776563,
+          "longitude": -6.4277728,
+          "geoSource": "osm",
+          "distanceKm": 34
+        },
+        {
+          "id": 5105,
+          "name": "El Ksiba",
+          "coliatyName": "El Ksiba",
+          "region": null,
+          "latitude": 32.568902,
+          "longitude": -6.034093,
+          "geoSource": "osm",
+          "distanceKm": 32
+        },
+        {
+          "id": 8762,
+          "name": "Tanougha-Beni Mellal",
+          "coliatyName": "Tanougha-Beni Mellal",
+          "region": "Béni Mellal-Khénifra",
+          "latitude": 32.4411086,
+          "longitude": -6.0907911,
+          "geoSource": "nominatim",
+          "distanceKm": 31
+        },
+        {
+          "id": 3919,
+          "name": "Fkih Ben Salah",
+          "coliatyName": "Fquih Ben Salah",
+          "region": null,
+          "latitude": 32.504541,
+          "longitude": -6.6860405,
+          "geoSource": "osm",
+          "distanceKm": 30
+        },
+        {
+          "id": 5297,
+          "name": "Tachrafat",
+          "coliatyName": "Tachrafat",
+          "region": null,
+          "latitude": 32.8329667,
+          "longitude": -6.4731831,
+          "geoSource": "osm",
+          "distanceKm": 29
+        },
+        {
+          "id": 3578,
+          "name": "Beni Mellal",
+          "coliatyName": "Beni Mellal",
+          "region": null,
+          "latitude": 32.334193,
+          "longitude": -6.353335,
+          "geoSource": "osm",
+          "distanceKm": 28
+        },
+        {
+          "id": 8688,
+          "name": "El Bradia",
+          "coliatyName": "El Bradia",
+          "region": "Béni Mellal-Khénifra",
+          "latitude": 32.3824177,
+          "longitude": -6.5537313,
+          "geoSource": "nominatim",
+          "distanceKm": 28
+        },
+        {
+          "id": 8699,
+          "name": "Ighram Laalam-Beni Mellal",
+          "coliatyName": "Ighram Laalam-Beni Mellal",
+          "region": "Béni Mellal-Khénifra",
+          "latitude": 32.334193,
+          "longitude": -6.353335,
+          "geoSource": "nominatim",
+          "distanceKm": 28
+        },
+        {
+          "id": 5037,
+          "name": "Sidi Jaber",
+          "coliatyName": "Sidi Jaber",
+          "region": null,
+          "latitude": 32.371994,
+          "longitude": -6.455683,
+          "geoSource": "osm",
+          "distanceKm": 25
+        },
+        {
+          "id": 6017,
+          "name": "Faryata",
+          "coliatyName": "Feryata",
+          "region": null,
+          "latitude": 32.4068858,
+          "longitude": -6.2330461,
+          "geoSource": "osm",
+          "distanceKm": 24
+        },
+        {
+          "id": 5957,
+          "name": "Tagzirt",
+          "coliatyName": "Tagzert",
+          "region": null,
+          "latitude": 32.4377248,
+          "longitude": -6.2068041,
+          "geoSource": "osm",
+          "distanceKm": 22
+        },
+        {
+          "id": 3893,
+          "name": "Bejaad",
+          "coliatyName": "Bejaad",
+          "region": null,
+          "latitude": 32.769785,
+          "longitude": -6.394983,
+          "geoSource": "osm",
+          "distanceKm": 21
+        },
+        {
+          "id": 6015,
+          "name": "Ait Ali",
+          "coliatyName": "Ait Ali",
+          "region": null,
+          "latitude": 32.4941976,
+          "longitude": -6.2184865,
+          "geoSource": "osm",
+          "distanceKm": 18
+        },
+        {
+          "id": 8652,
+          "name": "Ait Rbaa",
+          "coliatyName": "Ait Rbaa",
+          "region": "Béni Mellal-Khénifra",
+          "latitude": 32.5944997,
+          "longitude": -6.253314,
+          "geoSource": "nominatim",
+          "distanceKm": 11
+        },
+        {
+          "id": 3213,
+          "name": "Kasba Tadla",
+          "coliatyName": "Kasba Tadla",
+          "region": null,
+          "latitude": 32.602894,
+          "longitude": -6.269706,
+          "geoSource": "osm",
+          "distanceKm": 10
+        },
+        {
+          "id": 8644,
+          "name": "Aglmous",
+          "coliatyName": "Aglmous",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8667,
+          "name": "Bezaza",
+          "coliatyName": "Bezaza",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8669,
+          "name": "Bonouar",
+          "coliatyName": "Bonouar",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8684,
+          "name": "El Ayayta",
+          "coliatyName": "El Ayayta",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8692,
+          "name": "Fom Anser",
+          "coliatyName": "Fom Anser",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8693,
+          "name": "Foum Zaouia",
+          "coliatyName": "Foum Zaouia",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8709,
+          "name": "Kraza",
+          "coliatyName": "Kraza",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8731,
+          "name": "Oulad Borhmoun",
+          "coliatyName": "Oulad Borhmoun",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8732,
+          "name": "Oulad I3ich",
+          "coliatyName": "Oulad I3ich",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8735,
+          "name": "Oulad Zidoh",
+          "coliatyName": "Oulad Zidoh",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8763,
+          "name": "Tighassaline ville",
+          "coliatyName": "Tighassaline ville",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8764,
+          "name": "Tighsalin",
+          "coliatyName": "tighsalin",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8769,
+          "name": "Zawit Chikh",
+          "coliatyName": "Zawit Chikh",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8771,
+          "name": "Zwayr",
+          "coliatyName": "Zwayr",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        }
+      ],
+      "suspects": 9
+    },
+    {
+      "hub": "HUB OUJDA",
+      "centre": {
+        "lat": 34.9917479,
+        "lon": -2.9315265000000004
+      },
+      "total": 50,
+      "unplaced": 6,
+      "cities": [
+        {
+          "id": 4515,
+          "name": "Afra",
+          "coliatyName": "Afra",
+          "region": null,
+          "latitude": 30.7109191,
+          "longitude": -6.2352243,
+          "geoSource": "osm",
+          "distanceKm": 567
+        },
+        {
+          "id": 8683,
+          "name": "El aroui",
+          "coliatyName": "El aroui",
+          "region": "Casablanca-Settat",
+          "latitude": 33.5540414,
+          "longitude": -7.4826178,
+          "geoSource": "nominatim",
+          "distanceKm": 448
+        },
+        {
+          "id": 3081,
+          "name": "Figuig",
+          "coliatyName": "Figuig",
+          "region": null,
+          "latitude": 32.115048,
+          "longitude": -1.230396,
+          "geoSource": "osm",
+          "distanceKm": 357
+        },
+        {
+          "id": 3079,
+          "name": "Bouarfa",
+          "coliatyName": "Bouarfa",
+          "region": null,
+          "latitude": 32.532903,
+          "longitude": -1.963231,
+          "geoSource": "osm",
+          "distanceKm": 288
+        },
+        {
+          "id": 8710,
+          "name": "Krona",
+          "coliatyName": "Krona",
+          "region": "Tanger-Tétouan-Al Hoceïma",
+          "latitude": 35.7784385,
+          "longitude": -5.8079286,
+          "geoSource": "nominatim",
+          "distanceKm": 275
+        },
+        {
+          "id": 3078,
+          "name": "Tendrara",
+          "coliatyName": "Tandrara",
+          "region": null,
+          "latitude": 33.049438,
+          "longitude": -2.000089,
+          "geoSource": "osm",
+          "distanceKm": 232
+        },
+        {
+          "id": 8728,
+          "name": "Oued Amlil-OUJDA",
+          "coliatyName": "Oued Amlil-OUJDA ",
+          "region": "Fès-Meknès",
+          "latitude": 34.2011602,
+          "longitude": -4.2704925,
+          "geoSource": "nominatim",
+          "distanceKm": 151
+        },
+        {
+          "id": 3721,
+          "name": "Aïn Bni Mathar",
+          "coliatyName": "Ain Beni Mathar",
+          "region": null,
+          "latitude": 34.013156,
+          "longitude": -2.023083,
+          "geoSource": "osm",
+          "distanceKm": 137
+        },
+        {
+          "id": 3277,
+          "name": "Had Msila",
+          "coliatyName": "Had Msila",
+          "region": null,
+          "latitude": 34.4260379,
+          "longitude": -4.1758505,
+          "geoSource": "osm",
+          "distanceKm": 130
+        },
+        {
+          "id": 3874,
+          "name": "Jerada",
+          "coliatyName": "Jerada",
+          "region": null,
+          "latitude": 34.310531,
+          "longitude": -2.159979,
+          "geoSource": "osm",
+          "distanceKm": 104
+        },
+        {
+          "id": 3001,
+          "name": "Oujda",
+          "coliatyName": "Oujda",
+          "region": null,
+          "latitude": 34.677874,
+          "longitude": -1.929306,
+          "geoSource": "osm",
+          "distanceKm": 98
+        },
+        {
+          "id": 4005,
+          "name": "Bni Drar",
+          "coliatyName": "Bni Drar",
+          "region": null,
+          "latitude": 34.859507,
+          "longitude": -1.991664,
+          "geoSource": "osm",
+          "distanceKm": 87
+        },
+        {
+          "id": 3076,
+          "name": "Ahfir",
+          "coliatyName": "Ahfir",
+          "region": null,
+          "latitude": 34.955281,
+          "longitude": -2.100793,
+          "geoSource": "osm",
+          "distanceKm": 76
+        },
+        {
+          "id": 3694,
+          "name": "Boudinar",
+          "coliatyName": "Boudinar",
+          "region": null,
+          "latitude": 35.154017,
+          "longitude": -3.632216,
+          "geoSource": "osm",
+          "distanceKm": 66
+        },
+        {
+          "id": 3075,
+          "name": "Saïdia",
+          "coliatyName": "Saidia",
+          "region": null,
+          "latitude": 35.0822208,
+          "longitude": -2.2245756,
+          "geoSource": "osm",
+          "distanceKm": 65
+        },
+        {
+          "id": 3722,
+          "name": "Aïn Reggada",
+          "coliatyName": "Ain Regada",
+          "region": null,
+          "latitude": 34.9325732,
+          "longitude": -2.2291031,
+          "geoSource": "osm",
+          "distanceKm": 64
+        },
+        {
+          "id": 3750,
+          "name": "Taourirt",
+          "coliatyName": "Taourirt",
+          "region": null,
+          "latitude": 34.413438,
+          "longitude": -2.893825,
+          "geoSource": "osm",
+          "distanceKm": 64
+        },
+        {
+          "id": 3077,
+          "name": "Berkane",
+          "coliatyName": "Berkane",
+          "region": null,
+          "latitude": 34.9266755,
+          "longitude": -2.3294087,
+          "geoSource": "osm",
+          "distanceKm": 55
+        },
+        {
+          "id": 3563,
+          "name": "Midar",
+          "coliatyName": "Midar",
+          "region": null,
+          "latitude": 34.939898,
+          "longitude": -3.534348,
+          "geoSource": "osm",
+          "distanceKm": 55
+        },
+        {
+          "id": 3688,
+          "name": "Tafersit",
+          "coliatyName": "Taferssit",
+          "region": null,
+          "latitude": 35.0065558,
+          "longitude": -3.5403724,
+          "geoSource": "osm",
+          "distanceKm": 55
+        },
+        {
+          "id": 3968,
+          "name": "Madagh",
+          "coliatyName": "Madagh",
+          "region": null,
+          "latitude": 35.008654,
+          "longitude": -2.336222,
+          "geoSource": "osm",
+          "distanceKm": 54
+        },
+        {
+          "id": 8738,
+          "name": "Ras El Ma - NADOR",
+          "coliatyName": "Ras El Ma - NADOR",
+          "region": "Oriental",
+          "latitude": 35.1388574,
+          "longitude": -2.4234669,
+          "geoSource": "nominatim",
+          "distanceKm": 49
+        },
+        {
+          "id": 8665,
+          "name": "Ben Taieb oujda",
+          "coliatyName": "Ben Taieb oujda",
+          "region": "Oriental",
+          "latitude": 35.0440237,
+          "longitude": -3.4547554,
+          "geoSource": "nominatim",
+          "distanceKm": 48
+        },
+        {
+          "id": 4000,
+          "name": "Boughriba",
+          "coliatyName": "Boughriba",
+          "region": null,
+          "latitude": 34.9351969,
+          "longitude": -2.4306333,
+          "geoSource": "osm",
+          "distanceKm": 46
+        },
+        {
+          "id": 3821,
+          "name": "Driouch",
+          "coliatyName": "Driouich",
+          "region": null,
+          "latitude": 34.97694,
+          "longitude": -3.391005,
+          "geoSource": "osm",
+          "distanceKm": 42
+        },
+        {
+          "id": 7181,
+          "name": "Beni Oukil",
+          "coliatyName": "Beni Oukil",
+          "region": null,
+          "latitude": 35.0077312,
+          "longitude": -3.3772863,
+          "geoSource": "osm",
+          "distanceKm": 41
+        },
+        {
+          "id": 3711,
+          "name": "Aklim",
+          "coliatyName": "Aklim",
+          "region": null,
+          "latitude": 34.886741,
+          "longitude": -2.518554,
+          "geoSource": "osm",
+          "distanceKm": 39
+        },
+        {
+          "id": 3466,
+          "name": "Dar el Kebdani",
+          "coliatyName": "Dar Kebdani",
+          "region": null,
+          "latitude": 35.1192286,
+          "longitude": -3.3338008,
+          "geoSource": "osm",
+          "distanceKm": 39
+        },
+        {
+          "id": 8721,
+          "name": "Mariouari",
+          "coliatyName": "mariouari",
+          "region": "Oriental",
+          "latitude": 35.2998625,
+          "longitude": -2.9716214,
+          "geoSource": "nominatim",
+          "distanceKm": 34
+        },
+        {
+          "id": 3925,
+          "name": "Beni Chiker",
+          "coliatyName": "Bni Chiker",
+          "region": null,
+          "latitude": 35.277213,
+          "longitude": -3.013687,
+          "geoSource": "osm",
+          "distanceKm": 33
+        },
+        {
+          "id": 3924,
+          "name": "Farkhana",
+          "coliatyName": "Farkhana",
+          "region": null,
+          "latitude": 35.286107,
+          "longitude": -2.980918,
+          "geoSource": "osm",
+          "distanceKm": 33
+        },
+        {
+          "id": 14473,
+          "name": "Beni Ansar",
+          "coliatyName": "Beni Ansar",
+          "region": "Oriental",
+          "latitude": 35.259687,
+          "longitude": -2.933644,
+          "geoSource": "nominatim",
+          "distanceKm": 30
+        },
+        {
+          "id": 3871,
+          "name": "Beni Ensar",
+          "coliatyName": "Beni Ensar",
+          "region": null,
+          "latitude": 35.259687,
+          "longitude": -2.933644,
+          "geoSource": "osm",
+          "distanceKm": 30
+        },
+        {
+          "id": 3999,
+          "name": "Bni Sidel Jbel",
+          "coliatyName": "Bni Sidel Jbel",
+          "region": null,
+          "latitude": 35.1849015,
+          "longitude": -3.0480195,
+          "geoSource": "osm",
+          "distanceKm": 24
+        },
+        {
+          "id": 3074,
+          "name": "Kariat Arekmane",
+          "coliatyName": "Kariat Arekmane",
+          "region": null,
+          "latitude": 35.1032431,
+          "longitude": -2.7389833,
+          "geoSource": "osm",
+          "distanceKm": 21
+        },
+        {
+          "id": 3690,
+          "name": "Tiztoutine",
+          "coliatyName": "Tiztoutine",
+          "region": null,
+          "latitude": 34.97259,
+          "longitude": -3.155905,
+          "geoSource": "osm",
+          "distanceKm": 21
+        },
+        {
+          "id": 3007,
+          "name": "Nador",
+          "coliatyName": "Nador",
+          "region": null,
+          "latitude": 35.1739922,
+          "longitude": -2.9281198,
+          "geoSource": "osm",
+          "distanceKm": 20
+        },
+        {
+          "id": 8703,
+          "name": "Jaadar",
+          "coliatyName": "Jaadar",
+          "region": "Oriental",
+          "latitude": 35.1551565,
+          "longitude": -2.983172,
+          "geoSource": "nominatim",
+          "distanceKm": 19
+        },
+        {
+          "id": 3710,
+          "name": "Zaïo",
+          "coliatyName": "Zaio",
+          "region": null,
+          "latitude": 34.941906,
+          "longitude": -2.734164,
+          "geoSource": "osm",
+          "distanceKm": 19
+        },
+        {
+          "id": 3712,
+          "name": "Zeghanghane",
+          "coliatyName": "Zeghanghane",
+          "region": null,
+          "latitude": 35.1548806,
+          "longitude": -3.0045566,
+          "geoSource": "osm",
+          "distanceKm": 19
+        },
+        {
+          "id": 4121,
+          "name": "Ouled Settout",
+          "coliatyName": "Oulad Setout",
+          "region": null,
+          "latitude": 34.9232025,
+          "longitude": -2.7668379,
+          "geoSource": "osm",
+          "distanceKm": 17
+        },
+        {
+          "id": 3995,
+          "name": "Taouima",
+          "coliatyName": "TAOUIMA",
+          "region": null,
+          "latitude": 35.130338,
+          "longitude": -2.929409,
+          "geoSource": "osm",
+          "distanceKm": 15
+        },
+        {
+          "id": 8671,
+          "name": "Bouarg",
+          "coliatyName": "Bouarg",
+          "region": "Oriental",
+          "latitude": 35.1006376,
+          "longitude": -2.8647645,
+          "geoSource": "nominatim",
+          "distanceKm": 14
+        },
+        {
+          "id": 3801,
+          "name": "Selouane",
+          "coliatyName": "Selouane",
+          "region": null,
+          "latitude": 35.07284,
+          "longitude": -2.941719,
+          "geoSource": "osm",
+          "distanceKm": 9
+        },
+        {
+          "id": 8655,
+          "name": "Al Aruit",
+          "coliatyName": "Al Aruit",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8661,
+          "name": "Barichino",
+          "coliatyName": "Barichino",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8670,
+          "name": "Bouaanan",
+          "coliatyName": "bouaanan",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8700,
+          "name": "Ihdadn",
+          "coliatyName": "Ihdadn",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8712,
+          "name": "Laayoune Charkiya",
+          "coliatyName": "Laayoune Charkiya",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8761,
+          "name": "Tamsman",
+          "coliatyName": "TAMSMAN",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        }
+      ],
+      "suspects": 9
+    },
+    {
+      "hub": "HUB LAAYOUNE",
+      "centre": {
+        "lat": 28.0942557,
+        "lon": -11.6645492
+      },
+      "total": 14,
+      "unplaced": 3,
+      "cities": [
+        {
+          "id": 3050,
+          "name": "Dakhla",
+          "coliatyName": "Dakhla",
+          "region": null,
+          "latitude": 23.6940663,
+          "longitude": -15.9431274,
+          "geoSource": "osm",
+          "distanceKm": 650
+        },
+        {
+          "id": 4750,
+          "name": "Boujdour",
+          "coliatyName": "Boujdour",
+          "region": null,
+          "latitude": 26.1263378,
+          "longitude": -14.4836537,
+          "geoSource": "osm",
+          "distanceKm": 355
+        },
+        {
+          "id": 3580,
+          "name": "Assa",
+          "coliatyName": "Assa",
+          "region": null,
+          "latitude": 28.611352,
+          "longitude": -9.436696,
+          "geoSource": "osm",
+          "distanceKm": 225
+        },
+        {
+          "id": 3052,
+          "name": "Bouizakarne",
+          "coliatyName": "Bouizakarne",
+          "region": null,
+          "latitude": 29.177425,
+          "longitude": -9.711408,
+          "geoSource": "osm",
+          "distanceKm": 225
+        },
+        {
+          "id": 3053,
+          "name": "Guelmim",
+          "coliatyName": "Guelmim",
+          "region": null,
+          "latitude": 28.9863852,
+          "longitude": -10.0574351,
+          "geoSource": "osm",
+          "distanceKm": 186
+        },
+        {
+          "id": 3956,
+          "name": "Laâyoune",
+          "coliatyName": "Laayoune",
+          "region": null,
+          "latitude": 27.154512,
+          "longitude": -13.1953921,
+          "geoSource": "osm",
+          "distanceKm": 183
+        },
+        {
+          "id": 3204,
+          "name": "Es-Semara",
+          "coliatyName": "Essmara",
+          "region": null,
+          "latitude": 26.7435827,
+          "longitude": -11.6645492,
+          "geoSource": "osm",
+          "distanceKm": 150
+        },
+        {
+          "id": 3337,
+          "name": "Tarfaya",
+          "coliatyName": "Terfaya",
+          "region": null,
+          "latitude": 27.9401204,
+          "longitude": -12.9249934,
+          "geoSource": "osm",
+          "distanceKm": 125
+        },
+        {
+          "id": 3004,
+          "name": "Tan-Tan",
+          "coliatyName": "Tan Tan",
+          "region": null,
+          "latitude": 28.437553,
+          "longitude": -11.098664,
+          "geoSource": "osm",
+          "distanceKm": 67
+        },
+        {
+          "id": 5528,
+          "name": "El Ouatia",
+          "coliatyName": "Elouatya",
+          "region": null,
+          "latitude": 28.4977644,
+          "longitude": -11.3319395,
+          "geoSource": "osm",
+          "distanceKm": 55
+        },
+        {
+          "id": 3338,
+          "name": "Akhfennir",
+          "coliatyName": "Akhfennir",
+          "region": null,
+          "latitude": 28.0942557,
+          "longitude": -12.0511992,
+          "geoSource": "osm",
+          "distanceKm": 38
+        },
+        {
+          "id": 8690,
+          "name": "El Marssa Laayoune",
+          "coliatyName": "El Marssa Laayoune",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8711,
+          "name": "Laayoun Port",
+          "coliatyName": "Laayoun Port",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8756,
+          "name": "Tagant Klimmi",
+          "coliatyName": "Tagant Klimmi",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        }
+      ],
+      "suspects": 8
+    },
+    {
+      "hub": "HUB FES",
+      "centre": {
+        "lat": 33.988571,
+        "lon": -4.876516349999999
+      },
+      "total": 32,
+      "unplaced": 4,
+      "cities": [
+        {
+          "id": 4600,
+          "name": "Goulmane كولمان",
+          "coliatyName": "Boulmane",
+          "region": null,
+          "latitude": 30.032629,
+          "longitude": -8.9410065,
+          "geoSource": "osm",
+          "distanceKm": 583
+        },
+        {
+          "id": 3873,
+          "name": "Guercif",
+          "coliatyName": "Guercif",
+          "region": null,
+          "latitude": 34.225576,
+          "longitude": -3.352345,
+          "geoSource": "osm",
+          "distanceKm": 143
+        },
+        {
+          "id": 6330,
+          "name": "Missour",
+          "coliatyName": "Missour",
+          "region": null,
+          "latitude": 33.047057,
+          "longitude": -3.992578,
+          "geoSource": "osm",
+          "distanceKm": 133
+        },
+        {
+          "id": 4386,
+          "name": "Outat El Haj",
+          "coliatyName": "Outat El Haj",
+          "region": null,
+          "latitude": 33.337366,
+          "longitude": -3.696438,
+          "geoSource": "osm",
+          "distanceKm": 131
+        },
+        {
+          "id": 8755,
+          "name": "Taddart-Guercif",
+          "coliatyName": "Taddart-Guercif",
+          "region": "Oriental",
+          "latitude": 34.21615,
+          "longitude": -3.583368,
+          "geoSource": "nominatim",
+          "distanceKm": 122
+        },
+        {
+          "id": 3104,
+          "name": "Timahdite",
+          "coliatyName": "Timahdite",
+          "region": null,
+          "latitude": 33.238277,
+          "longitude": -5.060916,
+          "geoSource": "osm",
+          "distanceKm": 85
+        },
+        {
+          "id": 3013,
+          "name": "Taza",
+          "coliatyName": "Taza",
+          "region": null,
+          "latitude": 34.230155,
+          "longitude": -4.010104,
+          "geoSource": "osm",
+          "distanceKm": 84
+        },
+        {
+          "id": 4385,
+          "name": "Imouzzer Marmoucha",
+          "coliatyName": "Imouzar Marmoucha",
+          "region": null,
+          "latitude": 33.470015,
+          "longitude": -4.294914,
+          "geoSource": "osm",
+          "distanceKm": 79
+        },
+        {
+          "id": 3124,
+          "name": "Boulemane",
+          "coliatyName": "Boulemane",
+          "region": null,
+          "latitude": 33.365969,
+          "longitude": -4.7300908,
+          "geoSource": "osm",
+          "distanceKm": 71
+        },
+        {
+          "id": 3679,
+          "name": "Ghafsai",
+          "coliatyName": "Ghafsai",
+          "region": null,
+          "latitude": 34.628041,
+          "longitude": -4.910857,
+          "geoSource": "osm",
+          "distanceKm": 71
+        },
+        {
+          "id": 3281,
+          "name": "Taounate",
+          "coliatyName": "Taounate",
+          "region": null,
+          "latitude": 34.538476,
+          "longitude": -4.635994,
+          "geoSource": "osm",
+          "distanceKm": 65
+        },
+        {
+          "id": 3881,
+          "name": "Oued Amlil",
+          "coliatyName": "Oued Amlil",
+          "region": null,
+          "latitude": 34.191562,
+          "longitude": -4.267604,
+          "geoSource": "osm",
+          "distanceKm": 60
+        },
+        {
+          "id": 3656,
+          "name": "Karia Ba Mohamed",
+          "coliatyName": "Kariat Ba Mohamed",
+          "region": null,
+          "latitude": 34.364056,
+          "longitude": -5.214573,
+          "geoSource": "osm",
+          "distanceKm": 52
+        },
+        {
+          "id": 3905,
+          "name": "Ribate El Kheir",
+          "coliatyName": "Ribate El Kheir",
+          "region": null,
+          "latitude": 33.8154579,
+          "longitude": -4.4068912,
+          "geoSource": "osm",
+          "distanceKm": 47
+        },
+        {
+          "id": 6275,
+          "name": "Tahla",
+          "coliatyName": "Tahla",
+          "region": null,
+          "latitude": 34.050634,
+          "longitude": -4.4224,
+          "geoSource": "osm",
+          "distanceKm": 42
+        },
+        {
+          "id": 8691,
+          "name": "El Menzel - Sefrou",
+          "coliatyName": "El Menzel - Sefrou",
+          "region": "Fès-Meknès",
+          "latitude": 33.836,
+          "longitude": -4.547,
+          "geoSource": "nominatim",
+          "distanceKm": 35
+        },
+        {
+          "id": 8701,
+          "name": "Imouzzer-Kandar - FES",
+          "coliatyName": "Imouzzer-Kandar - FES",
+          "region": "Fès-Meknès",
+          "latitude": 33.73,
+          "longitude": -5.013,
+          "geoSource": "nominatim",
+          "distanceKm": 31
+        },
+        {
+          "id": 3802,
+          "name": "Moulay Yacoub",
+          "coliatyName": "Moulay Yacoub",
+          "region": null,
+          "latitude": 34.087468,
+          "longitude": -5.179435,
+          "geoSource": "osm",
+          "distanceKm": 30
+        },
+        {
+          "id": 6282,
+          "name": "Ain Allah",
+          "coliatyName": "Ain Allah",
+          "region": null,
+          "latitude": 34.0412866,
+          "longitude": -5.1411357,
+          "geoSource": "osm",
+          "distanceKm": 25
+        },
+        {
+          "id": 8739,
+          "name": "Ras El Ma-FES",
+          "coliatyName": "Ras El Ma-FES",
+          "region": "Fès-Meknès",
+          "latitude": 33.9892376,
+          "longitude": -5.1073314,
+          "geoSource": "nominatim",
+          "distanceKm": 21
+        },
+        {
+          "id": 8650,
+          "name": "Ain Chkef - FES",
+          "coliatyName": "Ain Chkef - FES",
+          "region": "Fès-Meknès",
+          "latitude": 33.9646801,
+          "longitude": -5.0876587,
+          "geoSource": "nominatim",
+          "distanceKm": 20
+        },
+        {
+          "id": 3111,
+          "name": "Sefrou",
+          "coliatyName": "Sefrou",
+          "region": null,
+          "latitude": 33.824898,
+          "longitude": -4.833336,
+          "geoSource": "osm",
+          "distanceKm": 19
+        },
+        {
+          "id": 3720,
+          "name": "Bhalil",
+          "coliatyName": "Bhalil",
+          "region": null,
+          "latitude": 33.852241,
+          "longitude": -4.870181,
+          "geoSource": "osm",
+          "distanceKm": 15
+        },
+        {
+          "id": 8682,
+          "name": "Douiyat - FES",
+          "coliatyName": "Douiyat - FES",
+          "region": "Fès-Meknès",
+          "latitude": 34.0346534,
+          "longitude": -5.0161926,
+          "geoSource": "nominatim",
+          "distanceKm": 14
+        },
+        {
+          "id": 3037,
+          "name": "Fès",
+          "coliatyName": "Fes",
+          "region": null,
+          "latitude": 34.0346534,
+          "longitude": -5.0161926,
+          "geoSource": "osm",
+          "distanceKm": 14
+        },
+        {
+          "id": 8734,
+          "name": "Oulad Tayeb - FES",
+          "coliatyName": "Oulad Tayeb - FES",
+          "region": "Fès-Meknès",
+          "latitude": 33.959838,
+          "longitude": -4.99562,
+          "geoSource": "nominatim",
+          "distanceKm": 11
+        },
+        {
+          "id": 3875,
+          "name": "Sidi Hrazem",
+          "coliatyName": "Sidi Harazem",
+          "region": null,
+          "latitude": 34.0258237,
+          "longitude": -4.8828517,
+          "geoSource": "osm",
+          "distanceKm": 4
+        },
+        {
+          "id": 8648,
+          "name": "Ain Bida Fes",
+          "coliatyName": "AIN BIDA FES",
+          "region": "Fès-Meknès",
+          "latitude": 33.9879044,
+          "longitude": -4.9029088,
+          "geoSource": "nominatim",
+          "distanceKm": 2
+        },
+        {
+          "id": 8649,
+          "name": "Ain Chgag",
+          "coliatyName": "Ain Chgag",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8651,
+          "name": "Ain Na9bi",
+          "coliatyName": "AIN NA9BI",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8705,
+          "name": "Khelallefa",
+          "coliatyName": "Khelallefa",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8765,
+          "name": "Tissa Taounat",
+          "coliatyName": "Tissa Taounat",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        }
+      ],
+      "suspects": 5
+    },
+    {
+      "hub": "HUB MARRAKECH",
+      "centre": {
+        "lat": 31.637886100000003,
+        "lon": -7.9431332999999995
+      },
+      "total": 36,
+      "unplaced": 4,
+      "cities": [
+        {
+          "id": 7317,
+          "name": "Ouled Yahia",
+          "coliatyName": "oulad yahya",
+          "region": null,
+          "latitude": 34.7945729,
+          "longitude": -2.4883152,
+          "geoSource": "osm",
+          "distanceKm": 617
+        },
+        {
+          "id": 8681,
+          "name": "Douar Soultan",
+          "coliatyName": "Douar Soultan",
+          "region": "Tanger-Tétouan-Al Hoceïma",
+          "latitude": 35.728629,
+          "longitude": -5.900856,
+          "geoSource": "nominatim",
+          "distanceKm": 493
+        },
+        {
+          "id": 8680,
+          "name": "Douar Bouaaza",
+          "coliatyName": "Douar Bouaaza",
+          "region": "Fès-Meknès",
+          "latitude": 34.3562561,
+          "longitude": -5.1074862,
+          "geoSource": "nominatim",
+          "distanceKm": 402
+        },
+        {
+          "id": 8589,
+          "name": "Aghmat",
+          "coliatyName": "Aghmat",
+          "region": null,
+          "latitude": 32.5760686,
+          "longitude": -3.8853936,
+          "geoSource": "osm",
+          "distanceKm": 396
+        },
+        {
+          "id": 8713,
+          "name": "Lagoussem",
+          "coliatyName": "Lagoussem",
+          "region": "Casablanca-Settat",
+          "latitude": 33.4872478,
+          "longitude": -7.6734709,
+          "geoSource": "nominatim",
+          "distanceKm": 207
+        },
+        {
+          "id": 3496,
+          "name": "Imintanoute",
+          "coliatyName": "Imintanoute",
+          "region": null,
+          "latitude": 31.1735007,
+          "longitude": -8.8519207,
+          "geoSource": "osm",
+          "distanceKm": 101
+        },
+        {
+          "id": 3041,
+          "name": "Sidi El Mokhtar",
+          "coliatyName": "Sidi Lmoukhtar",
+          "region": null,
+          "latitude": 31.5795378,
+          "longitude": -9.012154,
+          "geoSource": "osm",
+          "distanceKm": 101
+        },
+        {
+          "id": 3565,
+          "name": "Skhour Rhamna",
+          "coliatyName": "Skhour Rehamna",
+          "region": null,
+          "latitude": 32.4817297,
+          "longitude": -7.9151361,
+          "geoSource": "osm",
+          "distanceKm": 94
+        },
+        {
+          "id": 6556,
+          "name": "Demnate",
+          "coliatyName": "Demnate",
+          "region": null,
+          "latitude": 31.732224,
+          "longitude": -7.002676,
+          "geoSource": "osm",
+          "distanceKm": 90
+        },
+        {
+          "id": 3040,
+          "name": "Chichaoua",
+          "coliatyName": "Chichaoua",
+          "region": null,
+          "latitude": 31.5463197,
+          "longitude": -8.7602644,
+          "geoSource": "osm",
+          "distanceKm": 78
+        },
+        {
+          "id": 3564,
+          "name": "El Kelaâ des Sraghna",
+          "coliatyName": "El Kelaa Des Sraghna",
+          "region": null,
+          "latitude": 32.0538921,
+          "longitude": -7.4068642,
+          "geoSource": "osm",
+          "distanceKm": 69
+        },
+        {
+          "id": 3292,
+          "name": "El Attaouia",
+          "coliatyName": "El Aataouia",
+          "region": null,
+          "latitude": 31.8358768,
+          "longitude": -7.3133564,
+          "geoSource": "osm",
+          "distanceKm": 63
+        },
+        {
+          "id": 5266,
+          "name": "Majjat",
+          "coliatyName": "Mejjat",
+          "region": null,
+          "latitude": 31.357536,
+          "longitude": -8.5097496,
+          "geoSource": "osm",
+          "distanceKm": 62
+        },
+        {
+          "id": 3834,
+          "name": "Amizmiz",
+          "coliatyName": "Amizmiz",
+          "region": null,
+          "latitude": 31.2171012,
+          "longitude": -8.2332754,
+          "geoSource": "osm",
+          "distanceKm": 54
+        },
+        {
+          "id": 3039,
+          "name": "Mzoudia",
+          "coliatyName": "Mzoudia",
+          "region": null,
+          "latitude": 31.5801056,
+          "longitude": -8.4914511,
+          "geoSource": "osm",
+          "distanceKm": 52
+        },
+        {
+          "id": 3900,
+          "name": "Tamelelt",
+          "coliatyName": "Tamelelt",
+          "region": null,
+          "latitude": 31.8171219,
+          "longitude": -7.5097543,
+          "geoSource": "osm",
+          "distanceKm": 46
+        },
+        {
+          "id": 3687,
+          "name": "Asni",
+          "coliatyName": "Asni",
+          "region": null,
+          "latitude": 31.2496355,
+          "longitude": -7.980004,
+          "geoSource": "osm",
+          "distanceKm": 43
+        },
+        {
+          "id": 3093,
+          "name": "Sid Zouine",
+          "coliatyName": "Sidi Zouine",
+          "region": null,
+          "latitude": 31.6681645,
+          "longitude": -8.3461335,
+          "geoSource": "osm",
+          "distanceKm": 38
+        },
+        {
+          "id": 8718,
+          "name": "Loudaya",
+          "coliatyName": "Loudaya",
+          "region": "Marrakech-Safi",
+          "latitude": 31.6448217,
+          "longitude": -8.2780466,
+          "geoSource": "nominatim",
+          "distanceKm": 32
+        },
+        {
+          "id": 3033,
+          "name": "Ourika",
+          "coliatyName": "Ourika",
+          "region": null,
+          "latitude": 31.3780274,
+          "longitude": -7.8048323,
+          "geoSource": "osm",
+          "distanceKm": 32
+        },
+        {
+          "id": 3499,
+          "name": "Tahannaout",
+          "coliatyName": "Tahannaout",
+          "region": null,
+          "latitude": 31.3672735,
+          "longitude": -7.9447676,
+          "geoSource": "osm",
+          "distanceKm": 30
+        },
+        {
+          "id": 5226,
+          "name": "Sidi Bou Othmane",
+          "coliatyName": "Sidi Bou Othmane",
+          "region": null,
+          "latitude": 31.901685,
+          "longitude": -7.941499,
+          "geoSource": "osm",
+          "distanceKm": 29
+        },
+        {
+          "id": 3902,
+          "name": "Ait Ourir",
+          "coliatyName": "Ait Ourir",
+          "region": null,
+          "latitude": 31.563898,
+          "longitude": -7.662276,
+          "geoSource": "osm",
+          "distanceKm": 28
+        },
+        {
+          "id": 3553,
+          "name": "Tameslouht",
+          "coliatyName": "Tameslouht",
+          "region": null,
+          "latitude": 31.495084,
+          "longitude": -8.098377,
+          "geoSource": "osm",
+          "distanceKm": 22
+        },
+        {
+          "id": 3652,
+          "name": "Souihla",
+          "coliatyName": "Souihla",
+          "region": null,
+          "latitude": 31.6309505,
+          "longitude": -8.1645994,
+          "geoSource": "osm",
+          "distanceKm": 21
+        },
+        {
+          "id": 3550,
+          "name": "Tamansourt",
+          "coliatyName": "Tamnsourt",
+          "region": null,
+          "latitude": 31.755184,
+          "longitude": -8.109083,
+          "geoSource": "osm",
+          "distanceKm": 20
+        },
+        {
+          "id": 5499,
+          "name": "Sidi Abdallah Ghiat",
+          "coliatyName": "Sidi Abdellah Ghiat",
+          "region": null,
+          "latitude": 31.5183282,
+          "longitude": -7.8494843,
+          "geoSource": "osm",
+          "distanceKm": 16
+        },
+        {
+          "id": 8677,
+          "name": "Chouiter",
+          "coliatyName": "Chouiter",
+          "region": "Marrakech-Safi",
+          "latitude": 31.5765077,
+          "longitude": -7.8134585,
+          "geoSource": "nominatim",
+          "distanceKm": 14
+        },
+        {
+          "id": 8749,
+          "name": "Sidi Moussa MARRAKECH",
+          "coliatyName": "Sidi Moussa MARRAKECH",
+          "region": "Marrakech-Safi",
+          "latitude": 31.5367386,
+          "longitude": -7.9684534,
+          "geoSource": "nominatim",
+          "distanceKm": 11
+        },
+        {
+          "id": 4987,
+          "name": "Ouahat Sidi Brahim",
+          "coliatyName": "Ouahat Sidi Brahim",
+          "region": null,
+          "latitude": 31.7118332,
+          "longitude": -8.0039134,
+          "geoSource": "osm",
+          "distanceKm": 10
+        },
+        {
+          "id": 4988,
+          "name": "Oulad Hassoun",
+          "coliatyName": "Ouled Hassoun",
+          "region": null,
+          "latitude": 31.6480753,
+          "longitude": -7.8411816,
+          "geoSource": "osm",
+          "distanceKm": 10
+        },
+        {
+          "id": 3138,
+          "name": "Marrakech",
+          "coliatyName": "Marrakech",
+          "region": null,
+          "latitude": 31.6258257,
+          "longitude": -7.9891608,
+          "geoSource": "osm",
+          "distanceKm": 5
+        },
+        {
+          "id": 8662,
+          "name": "Belaaguid",
+          "coliatyName": "Belaaguid",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8664,
+          "name": "Ben Gruir",
+          "coliatyName": "Ben Gruir",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8737,
+          "name": "Ouled Yhya",
+          "coliatyName": "Ouled Yhya",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8743,
+          "name": "Sabt Mzouda",
+          "coliatyName": "Sabt Mzouda ",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        }
+      ],
+      "suspects": 5
+    },
+    {
+      "hub": "HUB OUARZAZAT",
+      "centre": {
+        "lat": 31.060412,
+        "lon": -6.910923
+      },
+      "total": 18,
+      "unplaced": 3,
+      "cities": [
+        {
+          "id": 4360,
+          "name": "Tazarine",
+          "coliatyName": "Tazarine",
+          "region": null,
+          "latitude": 30.1348047,
+          "longitude": -8.4032569,
+          "geoSource": "osm",
+          "distanceKm": 176
+        },
+        {
+          "id": 4527,
+          "name": "Alnif",
+          "coliatyName": "Alnif",
+          "region": null,
+          "latitude": 31.116268,
+          "longitude": -5.16687,
+          "geoSource": "osm",
+          "distanceKm": 166
+        },
+        {
+          "id": 3008,
+          "name": "Tinghir",
+          "coliatyName": "Tinghir",
+          "region": null,
+          "latitude": 31.52133,
+          "longitude": -5.531164,
+          "geoSource": "osm",
+          "distanceKm": 141
+        },
+        {
+          "id": 8726,
+          "name": "Nkoub-ZAGORA",
+          "coliatyName": "Nkoub-ZAGORA",
+          "region": "Drâa-Tafilalet",
+          "latitude": 30.3279053,
+          "longitude": -5.8369957,
+          "geoSource": "nominatim",
+          "distanceKm": 131
+        },
+        {
+          "id": 3066,
+          "name": "Zagora",
+          "coliatyName": "Zagora",
+          "region": null,
+          "latitude": 30.3279053,
+          "longitude": -5.8369957,
+          "geoSource": "osm",
+          "distanceKm": 131
+        },
+        {
+          "id": 6862,
+          "name": "Boumalne Dadès",
+          "coliatyName": "Boumaln Dadas",
+          "region": null,
+          "latitude": 31.372661,
+          "longitude": -5.986644,
+          "geoSource": "osm",
+          "distanceKm": 95
+        },
+        {
+          "id": 6863,
+          "name": "Kalaat M'Gouna",
+          "coliatyName": "Kalaat MGouna",
+          "region": null,
+          "latitude": 31.237704,
+          "longitude": -6.129345,
+          "geoSource": "osm",
+          "distanceKm": 77
+        },
+        {
+          "id": 3054,
+          "name": "Taznakht",
+          "coliatyName": "Taznakht",
+          "region": null,
+          "latitude": 30.5772847,
+          "longitude": -7.204837,
+          "geoSource": "osm",
+          "distanceKm": 61
+        },
+        {
+          "id": 8645,
+          "name": "Agouim-OUARZAZAT",
+          "coliatyName": "Agouim-OUARZAZAT",
+          "region": "Drâa-Tafilalet",
+          "latitude": 31.1563929,
+          "longitude": -7.4617715,
+          "geoSource": "nominatim",
+          "distanceKm": 54
+        },
+        {
+          "id": 3547,
+          "name": "Ighrem N'Ougdal",
+          "coliatyName": "Ighrem Nougdal",
+          "region": null,
+          "latitude": 31.228184,
+          "longitude": -7.423589,
+          "geoSource": "osm",
+          "distanceKm": 52
+        },
+        {
+          "id": 3130,
+          "name": "Télouet",
+          "coliatyName": "Télouet",
+          "region": null,
+          "latitude": 31.289901,
+          "longitude": -7.240707,
+          "geoSource": "osm",
+          "distanceKm": 40
+        },
+        {
+          "id": 3904,
+          "name": "Skoura",
+          "coliatyName": "Skoura",
+          "region": null,
+          "latitude": 31.060412,
+          "longitude": -6.55755,
+          "geoSource": "osm",
+          "distanceKm": 34
+        },
+        {
+          "id": 3523,
+          "name": "Ait Zineb",
+          "coliatyName": "Ait Zineb",
+          "region": null,
+          "latitude": 30.9888447,
+          "longitude": -7.1348,
+          "geoSource": "osm",
+          "distanceKm": 23
+        },
+        {
+          "id": 3060,
+          "name": "Aït Ben Haddou",
+          "coliatyName": "Ait Benhdou",
+          "region": null,
+          "latitude": 31.0451536,
+          "longitude": -7.1309706,
+          "geoSource": "osm",
+          "distanceKm": 21
+        },
+        {
+          "id": 3036,
+          "name": "Ouarzazate",
+          "coliatyName": "Ouarzazat",
+          "region": null,
+          "latitude": 30.920193,
+          "longitude": -6.910923,
+          "geoSource": "osm",
+          "distanceKm": 16
+        },
+        {
+          "id": 8643,
+          "name": "Agdez Zagora",
+          "coliatyName": "Agdez Zagora",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8674,
+          "name": "Boumaln",
+          "coliatyName": "Boumaln",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8698,
+          "name": "Idlsan",
+          "coliatyName": "Idlsan",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        }
+      ],
+      "suspects": 5
+    },
+    {
+      "hub": "HUB ERRACHIDIA",
+      "centre": {
+        "lat": 31.810858000000003,
+        "lon": -4.619043
+      },
+      "total": 14,
+      "unplaced": 0,
+      "cities": [
+        {
+          "id": 4749,
+          "name": "Aghbalou",
+          "coliatyName": "Aghbalou",
+          "region": null,
+          "latitude": 31.3112065,
+          "longitude": -7.7436902,
+          "geoSource": "osm",
+          "distanceKm": 301
+        },
+        {
+          "id": 5163,
+          "name": "Itzer",
+          "coliatyName": "Itzer",
+          "region": null,
+          "latitude": 32.879137,
+          "longitude": -5.054056,
+          "geoSource": "osm",
+          "distanceKm": 126
+        },
+        {
+          "id": 3085,
+          "name": "Zaida",
+          "coliatyName": "Zaida",
+          "region": null,
+          "latitude": 32.8192644,
+          "longitude": -4.9602291,
+          "geoSource": "osm",
+          "distanceKm": 117
+        },
+        {
+          "id": 3448,
+          "name": "Boumia",
+          "coliatyName": "Boumia",
+          "region": null,
+          "latitude": 32.725274,
+          "longitude": -5.101769,
+          "geoSource": "osm",
+          "distanceKm": 111
+        },
+        {
+          "id": 6647,
+          "name": "Merzouga",
+          "coliatyName": "Merzouga",
+          "region": null,
+          "latitude": 31.0999166,
+          "longitude": -4.0140878,
+          "geoSource": "osm",
+          "distanceKm": 98
+        },
+        {
+          "id": 4233,
+          "name": "Boudnib",
+          "coliatyName": "Boudnib",
+          "region": null,
+          "latitude": 31.951733,
+          "longitude": -3.607987,
+          "geoSource": "osm",
+          "distanceKm": 97
+        },
+        {
+          "id": 3020,
+          "name": "Midelt",
+          "coliatyName": "Midelt",
+          "region": null,
+          "latitude": 32.680347,
+          "longitude": -4.739897,
+          "geoSource": "osm",
+          "distanceKm": 97
+        },
+        {
+          "id": 3009,
+          "name": "Rissani",
+          "coliatyName": "Rissani",
+          "region": null,
+          "latitude": 31.284735,
+          "longitude": -4.266987,
+          "geoSource": "osm",
+          "distanceKm": 67
+        },
+        {
+          "id": 3019,
+          "name": "Arfoud",
+          "coliatyName": "Erfoud",
+          "region": null,
+          "latitude": 31.4324061,
+          "longitude": -4.2342572,
+          "geoSource": "osm",
+          "distanceKm": 56
+        },
+        {
+          "id": 3501,
+          "name": "Tinejdad",
+          "coliatyName": "Tinjdad",
+          "region": null,
+          "latitude": 31.510201,
+          "longitude": -5.03382,
+          "geoSource": "osm",
+          "distanceKm": 52
+        },
+        {
+          "id": 8741,
+          "name": "Rich - Errachidia",
+          "coliatyName": "Rich - Errachidia",
+          "region": "Drâa-Tafilalet",
+          "latitude": 32.25677,
+          "longitude": -4.498189,
+          "geoSource": "nominatim",
+          "distanceKm": 51
+        },
+        {
+          "id": 3314,
+          "name": "Aoufous",
+          "coliatyName": "Aoufous",
+          "region": null,
+          "latitude": 31.687792,
+          "longitude": -4.178487,
+          "geoSource": "osm",
+          "distanceKm": 44
+        },
+        {
+          "id": 3214,
+          "name": "Goulmima",
+          "coliatyName": "Goulmima",
+          "region": null,
+          "latitude": 31.692627,
+          "longitude": -4.953262,
+          "geoSource": "osm",
+          "distanceKm": 34
+        },
+        {
+          "id": 3083,
+          "name": "Errachidia",
+          "coliatyName": "Errachidia",
+          "region": null,
+          "latitude": 31.929089,
+          "longitude": -4.4340807,
+          "geoSource": "osm",
+          "distanceKm": 22
+        }
+      ],
+      "suspects": 2
+    },
+    {
+      "hub": "HUB Meknes",
+      "centre": {
+        "lat": 33.8984131,
+        "lon": -5.4666399
+      },
+      "total": 23,
+      "unplaced": 2,
+      "cities": [
+        {
+          "id": 8675,
+          "name": "Bridia",
+          "coliatyName": "Bridia",
+          "region": "Tanger-Tétouan-Al Hoceïma",
+          "latitude": 35.4783367,
+          "longitude": -5.9242965,
+          "geoSource": "nominatim",
+          "distanceKm": 181
+        },
+        {
+          "id": 14471,
+          "name": "Ain kerma",
+          "coliatyName": "Ain kerma",
+          "region": "Tanger-Tétouan-Al Hoceïma",
+          "latitude": 35.317108,
+          "longitude": -5.915893,
+          "geoSource": "nominatim",
+          "distanceKm": 163
+        },
+        {
+          "id": 3216,
+          "name": "Ain Leuh",
+          "coliatyName": "Ain Leuh",
+          "region": null,
+          "latitude": 33.292125,
+          "longitude": -5.338439,
+          "geoSource": "osm",
+          "distanceKm": 68
+        },
+        {
+          "id": 3761,
+          "name": "Sidi Addi",
+          "coliatyName": "Sidi Addi",
+          "region": null,
+          "latitude": 33.3959671,
+          "longitude": -5.3327353,
+          "geoSource": "osm",
+          "distanceKm": 57
+        },
+        {
+          "id": 8660,
+          "name": "Azrou IFRAN",
+          "coliatyName": "Azrou IFRAN",
+          "region": "Fès-Meknès",
+          "latitude": 33.4417206,
+          "longitude": -5.2230701,
+          "geoSource": "nominatim",
+          "distanceKm": 56
+        },
+        {
+          "id": 3016,
+          "name": "Ifrane",
+          "coliatyName": "Ifrane",
+          "region": null,
+          "latitude": 33.527605,
+          "longitude": -5.107408,
+          "geoSource": "osm",
+          "distanceKm": 53
+        },
+        {
+          "id": 3473,
+          "name": "Agourai",
+          "coliatyName": "Agourai",
+          "region": null,
+          "latitude": 33.643846,
+          "longitude": -5.589918,
+          "geoSource": "osm",
+          "distanceKm": 31
+        },
+        {
+          "id": 3018,
+          "name": "El Hajeb",
+          "coliatyName": "Elhajeb",
+          "region": null,
+          "latitude": 33.690156,
+          "longitude": -5.371938,
+          "geoSource": "osm",
+          "distanceKm": 25
+        },
+        {
+          "id": 3867,
+          "name": "Ain Taoujdate",
+          "coliatyName": "Ain Taoujdate",
+          "region": null,
+          "latitude": 33.940302,
+          "longitude": -5.208052,
+          "geoSource": "osm",
+          "distanceKm": 24
+        },
+        {
+          "id": 8723,
+          "name": "Mhaya - Meknes",
+          "coliatyName": "Mhaya - Meknes",
+          "region": "Fès-Meknès",
+          "latitude": 33.9770711,
+          "longitude": -5.2490448,
+          "geoSource": "nominatim",
+          "distanceKm": 22
+        },
+        {
+          "id": 4293,
+          "name": "Ait Yaazem",
+          "coliatyName": "Ait Yaazem",
+          "region": null,
+          "latitude": 33.73255,
+          "longitude": -5.579042,
+          "geoSource": "osm",
+          "distanceKm": 21
+        },
+        {
+          "id": 4034,
+          "name": "Ain Karma",
+          "coliatyName": "Ain Karma",
+          "region": null,
+          "latitude": 34.008594,
+          "longitude": -5.616954,
+          "geoSource": "osm",
+          "distanceKm": 19
+        },
+        {
+          "id": 3306,
+          "name": "Moulay Idriss Zerhoun",
+          "coliatyName": "Moulay Idriss Zerhoun",
+          "region": null,
+          "latitude": 34.055188,
+          "longitude": -5.525518,
+          "geoSource": "osm",
+          "distanceKm": 18
+        },
+        {
+          "id": 3307,
+          "name": "Boufekrane",
+          "coliatyName": "Boufakrane",
+          "region": null,
+          "latitude": 33.7571118,
+          "longitude": -5.48554,
+          "geoSource": "osm",
+          "distanceKm": 16
+        },
+        {
+          "id": 8685,
+          "name": "El Baraka - Meknes",
+          "coliatyName": "El Baraka - Meknes",
+          "region": "Fès-Meknès",
+          "latitude": 33.8952039,
+          "longitude": -5.5622437,
+          "geoSource": "nominatim",
+          "distanceKm": 9
+        },
+        {
+          "id": 3474,
+          "name": "Haj Kadour",
+          "coliatyName": "Haj Kaddour",
+          "region": null,
+          "latitude": 33.8284088,
+          "longitude": -5.4234193,
+          "geoSource": "osm",
+          "distanceKm": 9
+        },
+        {
+          "id": 4225,
+          "name": "Oued Jdida",
+          "coliatyName": "Oued Jdida",
+          "region": null,
+          "latitude": 33.924289,
+          "longitude": -5.3691,
+          "geoSource": "osm",
+          "distanceKm": 9
+        },
+        {
+          "id": 8742,
+          "name": "Sabaâ Aïyoun - Meknes",
+          "coliatyName": "Sabaâ Aïyoun - Meknes",
+          "region": "Fès-Meknès",
+          "latitude": 33.903146,
+          "longitude": -5.376872,
+          "geoSource": "nominatim",
+          "distanceKm": 8
+        },
+        {
+          "id": 3002,
+          "name": "Meknès",
+          "coliatyName": "Meknes",
+          "region": null,
+          "latitude": 33.8984131,
+          "longitude": -5.5321582,
+          "geoSource": "osm",
+          "distanceKm": 6
+        },
+        {
+          "id": 4226,
+          "name": "Dkhissa",
+          "coliatyName": "Dkhissa",
+          "region": null,
+          "latitude": 33.9373089,
+          "longitude": -5.4666399,
+          "geoSource": "osm",
+          "distanceKm": 4
+        },
+        {
+          "id": 8678,
+          "name": "Dkhissa-fes",
+          "coliatyName": "DKHISSA-FES",
+          "region": "Fès-Meknès",
+          "latitude": 33.9373089,
+          "longitude": -5.4666399,
+          "geoSource": "nominatim",
+          "distanceKm": 4
+        },
+        {
+          "id": 8672,
+          "name": "Bouderbala",
+          "coliatyName": "Bouderbala",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8729,
+          "name": "Ouisslan",
+          "coliatyName": "Ouisslan",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        }
+      ],
+      "suspects": 2
+    },
+    {
+      "hub": "HUB SAFI",
+      "centre": {
+        "lat": 31.92525435,
+        "lon": -9.28992565
+      },
+      "total": 18,
+      "unplaced": 0,
+      "cities": [
+        {
+          "id": 2999,
+          "name": "El Youssoufia",
+          "coliatyName": "El Yousoufia",
+          "region": null,
+          "latitude": 33.9845243,
+          "longitude": -6.8203304,
+          "geoSource": "osm",
+          "distanceKm": 325
+        },
+        {
+          "id": 8758,
+          "name": "Tamanart - SAFI",
+          "coliatyName": "Tamanart - SAFI",
+          "region": "Souss-Massa",
+          "latitude": 30.698824,
+          "longitude": -7.9311604,
+          "geoSource": "nominatim",
+          "distanceKm": 188
+        },
+        {
+          "id": 3899,
+          "name": "Tamanar",
+          "coliatyName": "Temanar",
+          "region": null,
+          "latitude": 31.003117,
+          "longitude": -9.678242,
+          "geoSource": "osm",
+          "distanceKm": 109
+        },
+        {
+          "id": 3685,
+          "name": "Smimou",
+          "coliatyName": "Smimou",
+          "region": null,
+          "latitude": 31.2097051,
+          "longitude": -9.7036625,
+          "geoSource": "osm",
+          "distanceKm": 89
+        },
+        {
+          "id": 3475,
+          "name": "Youssoufia",
+          "coliatyName": "Youssoufia",
+          "region": null,
+          "latitude": 32.245801,
+          "longitude": -8.532439,
+          "geoSource": "osm",
+          "distanceKm": 80
+        },
+        {
+          "id": 6106,
+          "name": "El Ghazoua",
+          "coliatyName": "Elghazoua",
+          "region": null,
+          "latitude": 31.4498205,
+          "longitude": -9.7330621,
+          "geoSource": "osm",
+          "distanceKm": 67
+        },
+        {
+          "id": 8676,
+          "name": "Chemaia",
+          "coliatyName": "Chemaia",
+          "region": "Marrakech-Safi",
+          "latitude": 32.0774118,
+          "longitude": -8.628196,
+          "geoSource": "nominatim",
+          "distanceKm": 65
+        },
+        {
+          "id": 3495,
+          "name": "Echemmaia",
+          "coliatyName": "ECHEMMAIA",
+          "region": null,
+          "latitude": 32.0774118,
+          "longitude": -8.628196,
+          "geoSource": "osm",
+          "distanceKm": 65
+        },
+        {
+          "id": 3022,
+          "name": "Essaouira",
+          "coliatyName": "Essaouira",
+          "region": null,
+          "latitude": 31.5118281,
+          "longitude": -9.7620903,
+          "geoSource": "osm",
+          "distanceKm": 64
+        },
+        {
+          "id": 3586,
+          "name": "Jamaat Shaim",
+          "coliatyName": "Jemâa-Shaim",
+          "region": null,
+          "latitude": 32.349518,
+          "longitude": -8.841235,
+          "geoSource": "osm",
+          "distanceKm": 63
+        },
+        {
+          "id": 8695,
+          "name": "Had Hrara",
+          "coliatyName": "HAD HRARA",
+          "region": "Marrakech-Safi",
+          "latitude": 32.4220966,
+          "longitude": -9.1756315,
+          "geoSource": "nominatim",
+          "distanceKm": 56
+        },
+        {
+          "id": 3045,
+          "name": "Ounagha",
+          "coliatyName": "OUNAGHA",
+          "region": null,
+          "latitude": 31.53312,
+          "longitude": -9.548635,
+          "geoSource": "osm",
+          "distanceKm": 50
+        },
+        {
+          "id": 3341,
+          "name": "Had Dra",
+          "coliatyName": "Had Draa",
+          "region": null,
+          "latitude": 31.5800528,
+          "longitude": -9.5393408,
+          "geoSource": "osm",
+          "distanceKm": 45
+        },
+        {
+          "id": 3006,
+          "name": "Safi",
+          "coliatyName": "Safi",
+          "region": null,
+          "latitude": 32.299424,
+          "longitude": -9.239533,
+          "geoSource": "osm",
+          "distanceKm": 42
+        },
+        {
+          "id": 3346,
+          "name": "Sebt Gzoula",
+          "coliatyName": "Sebt Gzoula",
+          "region": null,
+          "latitude": 32.108297,
+          "longitude": -9.084263,
+          "geoSource": "osm",
+          "distanceKm": 28
+        },
+        {
+          "id": 3347,
+          "name": "Bir Kouat",
+          "coliatyName": "Birkouate",
+          "region": null,
+          "latitude": 31.7601815,
+          "longitude": -9.3840686,
+          "geoSource": "osm",
+          "distanceKm": 20
+        },
+        {
+          "id": 8751,
+          "name": "Souiria",
+          "coliatyName": "Souiria",
+          "region": "Marrakech-Safi",
+          "latitude": 32.0354162,
+          "longitude": -9.3437617,
+          "geoSource": "nominatim",
+          "distanceKm": 13
+        },
+        {
+          "id": 3344,
+          "name": "Talmest",
+          "coliatyName": "Talmest",
+          "region": null,
+          "latitude": 31.8150925,
+          "longitude": -9.3403183,
+          "geoSource": "osm",
+          "distanceKm": 13
+        }
+      ],
+      "suspects": 2
+    },
+    {
+      "hub": "HUB CASABLANCA",
+      "centre": {
+        "lat": 33.59917455,
+        "lon": -7.50674435
+      },
+      "total": 18,
+      "unplaced": 2,
+      "cities": [
+        {
+          "id": 8750,
+          "name": "Sidi Rehal",
+          "coliatyName": "Sidi Rehal",
+          "region": "Marrakech-Safi",
+          "latitude": 31.2482137,
+          "longitude": -8.653989,
+          "geoSource": "nominatim",
+          "distanceKm": 283
+        },
+        {
+          "id": 8760,
+          "name": "Tamaris",
+          "coliatyName": "Tamaris",
+          "region": "Rabat-Salé-Kénitra",
+          "latitude": 34.2494415,
+          "longitude": -6.6808775,
+          "geoSource": "nominatim",
+          "distanceKm": 105
+        },
+        {
+          "id": 3840,
+          "name": "Bouznika",
+          "coliatyName": "BOUZNIKA",
+          "region": null,
+          "latitude": 33.781005,
+          "longitude": -7.1610294,
+          "geoSource": "osm",
+          "distanceKm": 38
+        },
+        {
+          "id": 3934,
+          "name": "Had Soualem",
+          "coliatyName": "Had Soualem",
+          "region": null,
+          "latitude": 33.422256,
+          "longitude": -7.8534097,
+          "geoSource": "osm",
+          "distanceKm": 38
+        },
+        {
+          "id": 3653,
+          "name": "Benslimane",
+          "coliatyName": "BEN SLIMAN",
+          "region": null,
+          "latitude": 33.6228983,
+          "longitude": -7.1267176,
+          "geoSource": "osm",
+          "distanceKm": 35
+        },
+        {
+          "id": 4027,
+          "name": "Dar Bouazza",
+          "coliatyName": "Dar Bouaza",
+          "region": null,
+          "latitude": 33.5215831,
+          "longitude": -7.8164369,
+          "geoSource": "osm",
+          "distanceKm": 30
+        },
+        {
+          "id": 8720,
+          "name": "Mansouria",
+          "coliatyName": "Mansouria",
+          "region": "Casablanca-Settat",
+          "latitude": 33.7303572,
+          "longitude": -7.2993301,
+          "geoSource": "nominatim",
+          "distanceKm": 24
+        },
+        {
+          "id": 3643,
+          "name": "Errahma",
+          "coliatyName": "errahma",
+          "region": null,
+          "latitude": 33.5343348,
+          "longitude": -7.7322843,
+          "geoSource": "osm",
+          "distanceKm": 22
+        },
+        {
+          "id": 4025,
+          "name": "Bouskoura",
+          "coliatyName": "Bouskoura",
+          "region": null,
+          "latitude": 33.456443,
+          "longitude": -7.650666,
+          "geoSource": "osm",
+          "distanceKm": 21
+        },
+        {
+          "id": 5999,
+          "name": "Mohammédia",
+          "coliatyName": "Mohammedia",
+          "region": null,
+          "latitude": 33.6958383,
+          "longitude": -7.3893292,
+          "geoSource": "osm",
+          "distanceKm": 15
+        },
+        {
+          "id": 8719,
+          "name": "Louizia",
+          "coliatyName": "Louizia",
+          "region": "Casablanca-Settat",
+          "latitude": 33.6038347,
+          "longitude": -7.6586459,
+          "geoSource": "nominatim",
+          "distanceKm": 14
+        },
+        {
+          "id": 3000,
+          "name": "Casablanca",
+          "coliatyName": "Casablanca",
+          "region": null,
+          "latitude": 33.5945144,
+          "longitude": -7.6200284,
+          "geoSource": "osm",
+          "distanceKm": 11
+        },
+        {
+          "id": 4076,
+          "name": "Chellalate",
+          "coliatyName": "Chellalat",
+          "region": null,
+          "latitude": 33.6366485,
+          "longitude": -7.4190547,
+          "geoSource": "osm",
+          "distanceKm": 9
+        },
+        {
+          "id": 3885,
+          "name": "Ain Harrouda",
+          "coliatyName": "Ain Harrouda",
+          "region": null,
+          "latitude": 33.6353722,
+          "longitude": -7.4513985,
+          "geoSource": "osm",
+          "distanceKm": 7
+        },
+        {
+          "id": 4078,
+          "name": "Lahraouiyine",
+          "coliatyName": "lahraouiyin",
+          "region": null,
+          "latitude": 33.5425305,
+          "longitude": -7.5299367,
+          "geoSource": "osm",
+          "distanceKm": 7
+        },
+        {
+          "id": 3886,
+          "name": "Tit Mellil",
+          "coliatyName": "Tit Melil",
+          "region": null,
+          "latitude": 33.551412,
+          "longitude": -7.483552,
+          "geoSource": "osm",
+          "distanceKm": 6
+        },
+        {
+          "id": 8666,
+          "name": "Ben yakhelf",
+          "coliatyName": "Ben yakhelf",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8744,
+          "name": "Sbitt",
+          "coliatyName": "SBITT",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        }
+      ],
+      "suspects": 1
+    },
+    {
+      "hub": "HUB EL JADIDA",
+      "centre": {
+        "lat": 33.0493573,
+        "lon": -8.49884
+      },
+      "total": 15,
+      "unplaced": 0,
+      "cities": [
+        {
+          "id": 8724,
+          "name": "Moulay Abdellah",
+          "coliatyName": "Moulay Abdellah",
+          "region": "Fès-Meknès",
+          "latitude": 34.0571617,
+          "longitude": -4.9935801,
+          "geoSource": "nominatim",
+          "distanceKm": 344
+        },
+        {
+          "id": 8767,
+          "name": "Tnine Gharbia zemamra",
+          "coliatyName": "Tnine Gharbia zemamra",
+          "region": "Casablanca-Settat",
+          "latitude": 32.5721071,
+          "longitude": -8.8568062,
+          "geoSource": "nominatim",
+          "distanceKm": 63
+        },
+        {
+          "id": 3206,
+          "name": "Loualidia",
+          "coliatyName": "oualidia",
+          "region": null,
+          "latitude": 32.7314358,
+          "longitude": -9.0340271,
+          "geoSource": "osm",
+          "distanceKm": 61
+        },
+        {
+          "id": 3911,
+          "name": "Bir Jdid",
+          "coliatyName": "BIR JDID",
+          "region": null,
+          "latitude": 33.37377,
+          "longitude": -7.998016,
+          "geoSource": "osm",
+          "distanceKm": 59
+        },
+        {
+          "id": 8707,
+          "name": "Khemis Des Zemamra",
+          "coliatyName": "KHEMIS DES ZEMAMRA",
+          "region": "Casablanca-Settat",
+          "latitude": 32.6213957,
+          "longitude": -8.7025854,
+          "geoSource": "nominatim",
+          "distanceKm": 51
+        },
+        {
+          "id": 3567,
+          "name": "Sidi Bennour",
+          "coliatyName": "Sidi Bennour",
+          "region": null,
+          "latitude": 32.6507792,
+          "longitude": -8.4242087,
+          "geoSource": "osm",
+          "distanceKm": 45
+        },
+        {
+          "id": 8766,
+          "name": "Tnine Chtouka (el jadida)",
+          "coliatyName": "Tnine Chtouka (el jadida)",
+          "region": "Casablanca-Settat",
+          "latitude": 33.3019909,
+          "longitude": -8.1557715,
+          "geoSource": "nominatim",
+          "distanceKm": 43
+        },
+        {
+          "id": 3352,
+          "name": "Ouled Ghanem",
+          "coliatyName": "Oualed ghanem",
+          "region": null,
+          "latitude": 32.8739338,
+          "longitude": -8.8588111,
+          "geoSource": "osm",
+          "distanceKm": 39
+        },
+        {
+          "id": 4949,
+          "name": "Haouzia",
+          "coliatyName": "Haouzia",
+          "region": null,
+          "latitude": 33.3063826,
+          "longitude": -8.3547988,
+          "geoSource": "osm",
+          "distanceKm": 32
+        },
+        {
+          "id": 3897,
+          "name": "Azemmour",
+          "coliatyName": "Azemmour",
+          "region": null,
+          "latitude": 33.288141,
+          "longitude": -8.343206,
+          "geoSource": "osm",
+          "distanceKm": 30
+        },
+        {
+          "id": 4388,
+          "name": "Oulad Frej",
+          "coliatyName": "Oulad frej",
+          "region": null,
+          "latitude": 32.954215,
+          "longitude": -8.219855,
+          "geoSource": "osm",
+          "distanceKm": 28
+        },
+        {
+          "id": 3686,
+          "name": "Sidi Smaïl",
+          "coliatyName": "Sidi Smail",
+          "region": null,
+          "latitude": 32.827312,
+          "longitude": -8.51366,
+          "geoSource": "osm",
+          "distanceKm": 25
+        },
+        {
+          "id": 3003,
+          "name": "El Jadida",
+          "coliatyName": "El Jadida",
+          "region": null,
+          "latitude": 33.2433309,
+          "longitude": -8.49884,
+          "geoSource": "osm",
+          "distanceKm": 22
+        },
+        {
+          "id": 3355,
+          "name": "Sidi Bouzid",
+          "coliatyName": "Sidi Bouzid",
+          "region": null,
+          "latitude": 33.229519,
+          "longitude": -8.550912,
+          "geoSource": "osm",
+          "distanceKm": 21
+        },
+        {
+          "id": 3351,
+          "name": "Sidi Abed",
+          "coliatyName": "Sidi Abed",
+          "region": null,
+          "latitude": 33.0493573,
+          "longitude": -8.6886396,
+          "geoSource": "osm",
+          "distanceKm": 18
+        }
+      ],
+      "suspects": 1
+    },
+    {
+      "hub": "Hub Kenitra",
+      "centre": {
+        "lat": 34.42956235,
+        "lon": -6.0816716
+      },
+      "total": 16,
+      "unplaced": 2,
+      "cities": [
+        {
+          "id": 7295,
+          "name": "Tizi Ayache",
+          "coliatyName": "Sidi Ayache",
+          "region": null,
+          "latitude": 35.1041989,
+          "longitude": -4.0600106,
+          "geoSource": "osm",
+          "distanceKm": 199
+        },
+        {
+          "id": 3921,
+          "name": "Sidi Taibi",
+          "coliatyName": "Sidi Taibi",
+          "region": null,
+          "latitude": 34.1916611,
+          "longitude": -6.6844815,
+          "geoSource": "osm",
+          "distanceKm": 61
+        },
+        {
+          "id": 4154,
+          "name": "Mehdia",
+          "coliatyName": "Mehdia",
+          "region": null,
+          "latitude": 34.2564899,
+          "longitude": -6.6720598,
+          "geoSource": "osm",
+          "distanceKm": 58
+        },
+        {
+          "id": 3423,
+          "name": "Moulay Bousselham",
+          "coliatyName": "Moulay Bousselham",
+          "region": null,
+          "latitude": 34.878009,
+          "longitude": -6.294076,
+          "geoSource": "osm",
+          "distanceKm": 54
+        },
+        {
+          "id": 3868,
+          "name": "Kénitra",
+          "coliatyName": "Kenitra",
+          "region": null,
+          "latitude": 34.26457,
+          "longitude": -6.570169,
+          "geoSource": "osm",
+          "distanceKm": 48
+        },
+        {
+          "id": 4161,
+          "name": "Lalla Mimouna",
+          "coliatyName": "Lalla Mimouna",
+          "region": null,
+          "latitude": 34.848871,
+          "longitude": -6.069173,
+          "geoSource": "osm",
+          "distanceKm": 47
+        },
+        {
+          "id": 3377,
+          "name": "Sidi Kacem",
+          "coliatyName": "Sidi Kacem",
+          "region": null,
+          "latitude": 34.226412,
+          "longitude": -5.711434,
+          "geoSource": "osm",
+          "distanceKm": 41
+        },
+        {
+          "id": 4942,
+          "name": "Khnichet",
+          "coliatyName": "Khenichet",
+          "region": null,
+          "latitude": 34.4383085,
+          "longitude": -5.6844179,
+          "geoSource": "osm",
+          "distanceKm": 36
+        },
+        {
+          "id": 3191,
+          "name": "Souk El Arba Du Gharb",
+          "coliatyName": "Souk Elarbaa Du Gharb",
+          "region": null,
+          "latitude": 34.6875201,
+          "longitude": -6.0002583,
+          "geoSource": "osm",
+          "distanceKm": 30
+        },
+        {
+          "id": 4155,
+          "name": "Sidi Allal Tazi",
+          "coliatyName": "Sidi Allal Tazi",
+          "region": null,
+          "latitude": 34.52185,
+          "longitude": -6.323673,
+          "geoSource": "osm",
+          "distanceKm": 24
+        },
+        {
+          "id": 3883,
+          "name": "Sidi Slimane",
+          "coliatyName": "Sidi Slimane",
+          "region": null,
+          "latitude": 34.259878,
+          "longitude": -5.927253,
+          "geoSource": "osm",
+          "distanceKm": 24
+        },
+        {
+          "id": 3359,
+          "name": "Sidi Yahya du Gharb",
+          "coliatyName": "Sidi Yahya El Gharb",
+          "region": null,
+          "latitude": 34.3078687,
+          "longitude": -6.3039061,
+          "geoSource": "osm",
+          "distanceKm": 24
+        },
+        {
+          "id": 3980,
+          "name": "Mechra Bel Ksiri",
+          "coliatyName": "Mechra Bel Ksiri",
+          "region": null,
+          "latitude": 34.573416,
+          "longitude": -5.956615,
+          "geoSource": "osm",
+          "distanceKm": 20
+        },
+        {
+          "id": 3922,
+          "name": "Dar Gueddari",
+          "coliatyName": "Dar Gueddari",
+          "region": null,
+          "latitude": 34.4208162,
+          "longitude": -6.0941702,
+          "geoSource": "osm",
+          "distanceKm": 2
+        },
+        {
+          "id": 8679,
+          "name": "Dlalha",
+          "coliatyName": "Dlalha",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        },
+        {
+          "id": 8768,
+          "name": "Wlad Oujih",
+          "coliatyName": "Wlad Oujih",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        }
+      ],
+      "suspects": 1
+    },
+    {
+      "hub": "Hub Khemisset - Tifelt",
+      "centre": {
+        "lat": 33.547573,
+        "lon": -6.3006683500000005
+      },
+      "total": 8,
+      "unplaced": 0,
+      "cities": [
+        {
+          "id": 4620,
+          "name": "Tifrelt",
+          "coliatyName": "tifelt",
+          "region": null,
+          "latitude": 30.1861027,
+          "longitude": -8.9348266,
+          "geoSource": "osm",
+          "distanceKm": 449
+        },
+        {
+          "id": 5425,
+          "name": "Al Kamoun",
+          "coliatyName": "Al Kamouni",
+          "region": null,
+          "latitude": 32.5643667,
+          "longitude": -6.2806178,
+          "geoSource": "osm",
+          "distanceKm": 109
+        },
+        {
+          "id": 3879,
+          "name": "Sidi Allal El Bahraoui",
+          "coliatyName": "Sidi Allal el Bahraoui",
+          "region": null,
+          "latitude": 34.010715,
+          "longitude": -6.532357,
+          "geoSource": "osm",
+          "distanceKm": 56
+        },
+        {
+          "id": 3012,
+          "name": "Khémisset",
+          "coliatyName": "Khemisset",
+          "region": null,
+          "latitude": 33.830287,
+          "longitude": -6.072605,
+          "geoSource": "osm",
+          "distanceKm": 38
+        },
+        {
+          "id": 3193,
+          "name": "Oulmès",
+          "coliatyName": "Oulmes",
+          "region": null,
+          "latitude": 33.425509,
+          "longitude": -6.004488,
+          "geoSource": "osm",
+          "distanceKm": 31
+        },
+        {
+          "id": 3916,
+          "name": "Rommani",
+          "coliatyName": "Rommani",
+          "region": null,
+          "latitude": 33.528608,
+          "longitude": -6.604434,
+          "geoSource": "osm",
+          "distanceKm": 28
+        },
+        {
+          "id": 4098,
+          "name": "Maaziz",
+          "coliatyName": "Maaziz",
+          "region": null,
+          "latitude": 33.6680618,
+          "longitude": -6.3207189,
+          "geoSource": "osm",
+          "distanceKm": 14
+        },
+        {
+          "id": 4099,
+          "name": "Tiddas",
+          "coliatyName": "Tiddas",
+          "region": null,
+          "latitude": 33.566538,
+          "longitude": -6.265945,
+          "geoSource": "osm",
+          "distanceKm": 4
+        }
+      ],
+      "suspects": 1
+    },
+    {
+      "hub": "Hub Settat - Berchid",
+      "centre": {
+        "lat": 33.08998575,
+        "lon": -7.55199
+      },
+      "total": 13,
+      "unplaced": 1,
+      "cities": [
+        {
+          "id": 8717,
+          "name": "Lgara",
+          "coliatyName": "LGARA",
+          "region": "Fès-Meknès",
+          "latitude": 34.0608818,
+          "longitude": -4.9649721,
+          "geoSource": "nominatim",
+          "distanceKm": 263
+        },
+        {
+          "id": 3887,
+          "name": "Médiouna",
+          "coliatyName": "Mediouna",
+          "region": null,
+          "latitude": 33.456251,
+          "longitude": -7.51944,
+          "geoSource": "osm",
+          "distanceKm": 41
+        },
+        {
+          "id": 8694,
+          "name": "Guisser- Settat",
+          "coliatyName": "Guisser- Settat",
+          "region": "Casablanca-Settat",
+          "latitude": 32.7709265,
+          "longitude": -7.5070386,
+          "geoSource": "nominatim",
+          "distanceKm": 36
+        },
+        {
+          "id": 8730,
+          "name": "Oulad Abbou Settat",
+          "coliatyName": "Oulad Abbou Settat",
+          "region": "Casablanca-Settat",
+          "latitude": 33.1147464,
+          "longitude": -7.9314943,
+          "geoSource": "nominatim",
+          "distanceKm": 35
+        },
+        {
+          "id": 4023,
+          "name": "Deroua",
+          "coliatyName": "Deroua",
+          "region": null,
+          "latitude": 33.3717782,
+          "longitude": -7.5358349,
+          "geoSource": "osm",
+          "distanceKm": 31
+        },
+        {
+          "id": 4024,
+          "name": "Nouaceur",
+          "coliatyName": "Nouaceur",
+          "region": null,
+          "latitude": 33.3678533,
+          "longitude": -7.5681451,
+          "geoSource": "osm",
+          "distanceKm": 31
+        },
+        {
+          "id": 8663,
+          "name": "Ben Ahmed - Settat",
+          "coliatyName": "Ben Ahmed - Settat",
+          "region": "Casablanca-Settat",
+          "latitude": 33.0652251,
+          "longitude": -7.2455078,
+          "geoSource": "nominatim",
+          "distanceKm": 29
+        },
+        {
+          "id": 8733,
+          "name": "Oulad Said Settat",
+          "coliatyName": "Oulad Said Settat",
+          "region": "Casablanca-Settat",
+          "latitude": 32.9677133,
+          "longitude": -7.812812,
+          "geoSource": "nominatim",
+          "distanceKm": 28
+        },
+        {
+          "id": 8748,
+          "name": "Sidi Hajjaj - Settat",
+          "coliatyName": "Sidi Hajjaj - Settat",
+          "region": "Casablanca-Settat",
+          "latitude": 32.9200068,
+          "longitude": -7.363723,
+          "geoSource": "nominatim",
+          "distanceKm": 26
+        },
+        {
+          "id": 3581,
+          "name": "Berrechid",
+          "coliatyName": "Berrchid",
+          "region": null,
+          "latitude": 33.2676746,
+          "longitude": -7.5811465,
+          "geoSource": "osm",
+          "distanceKm": 20
+        },
+        {
+          "id": 8687,
+          "name": "El bourouj- settat",
+          "coliatyName": "El bourouj- settat",
+          "region": "Casablanca-Settat",
+          "latitude": 33.002397,
+          "longitude": -7.619867,
+          "geoSource": "nominatim",
+          "distanceKm": 12
+        },
+        {
+          "id": 3508,
+          "name": "Settat",
+          "coliatyName": "Settat",
+          "region": null,
+          "latitude": 33.002397,
+          "longitude": -7.619867,
+          "geoSource": "osm",
+          "distanceKm": 12
+        },
+        {
+          "id": 8740,
+          "name": "Ras elaain settat",
+          "coliatyName": "Ras elaain settat",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        }
+      ],
+      "suspects": 1
+    },
+    {
+      "hub": "HUB TANGER",
+      "centre": {
+        "lat": 35.064378500000004,
+        "lon": -5.4786705
+      },
+      "total": 33,
+      "unplaced": 1,
+      "cities": [
+        {
+          "id": 4889,
+          "name": "Ain Bida",
+          "coliatyName": "Ain Bida",
+          "region": null,
+          "latitude": 34.0167401,
+          "longitude": -4.9158776,
+          "geoSource": "osm",
+          "distanceKm": 127
+        },
+        {
+          "id": 3433,
+          "name": "Fnideq",
+          "coliatyName": "Fnideq",
+          "region": null,
+          "latitude": 35.8392089,
+          "longitude": -5.3614246,
+          "geoSource": "osm",
+          "distanceKm": 87
+        },
+        {
+          "id": 3811,
+          "name": "Ksar Sghir",
+          "coliatyName": "Ksar Sghir",
+          "region": null,
+          "latitude": 35.843159,
+          "longitude": -5.5568524,
+          "geoSource": "osm",
+          "distanceKm": 87
+        },
+        {
+          "id": 3869,
+          "name": "Tanger",
+          "coliatyName": "Tanger",
+          "region": null,
+          "latitude": 35.7696302,
+          "longitude": -5.8033522,
+          "geoSource": "osm",
+          "distanceKm": 84
+        },
+        {
+          "id": 3730,
+          "name": "M'Diq",
+          "coliatyName": "M Diq",
+          "region": null,
+          "latitude": 35.6833598,
+          "longitude": -5.3232161,
+          "geoSource": "osm",
+          "distanceKm": 70
+        },
+        {
+          "id": 3799,
+          "name": "Assilah",
+          "coliatyName": "Assilah",
+          "region": null,
+          "latitude": 35.461928,
+          "longitude": -6.036545,
+          "geoSource": "osm",
+          "distanceKm": 67
+        },
+        {
+          "id": 3304,
+          "name": "Jorf El Melha",
+          "coliatyName": "Jorf El Melha",
+          "region": null,
+          "latitude": 34.488696,
+          "longitude": -5.509151,
+          "geoSource": "osm",
+          "distanceKm": 64
+        },
+        {
+          "id": 3575,
+          "name": "Martil",
+          "coliatyName": "Martil",
+          "region": null,
+          "latitude": 35.617441,
+          "longitude": -5.274154,
+          "geoSource": "osm",
+          "distanceKm": 64
+        },
+        {
+          "id": 3205,
+          "name": "Larache",
+          "coliatyName": "Larache",
+          "region": null,
+          "latitude": 35.1952327,
+          "longitude": -6.152913,
+          "geoSource": "osm",
+          "distanceKm": 63
+        },
+        {
+          "id": 4177,
+          "name": "Khemis Sahel",
+          "coliatyName": "Khemis Sahel",
+          "region": null,
+          "latitude": 35.255385,
+          "longitude": -6.080232,
+          "geoSource": "osm",
+          "distanceKm": 59
+        },
+        {
+          "id": 8753,
+          "name": "Stehat-Chefchaouen",
+          "coliatyName": "Stehat-Chefchaouen",
+          "region": "Tanger-Tétouan-Al Hoceïma",
+          "latitude": 35.345994,
+          "longitude": -4.956989,
+          "geoSource": "nominatim",
+          "distanceKm": 57
+        },
+        {
+          "id": 3092,
+          "name": "Tétouan",
+          "coliatyName": "Tetouan",
+          "region": null,
+          "latitude": 35.5697958,
+          "longitude": -5.3746918,
+          "geoSource": "osm",
+          "distanceKm": 57
+        },
+        {
+          "id": 14472,
+          "name": "Al aouamra",
+          "coliatyName": "Al aouamra",
+          "region": "Tanger-Tétouan-Al Hoceïma",
+          "latitude": 35.0678523,
+          "longitude": -6.0886251,
+          "geoSource": "nominatim",
+          "distanceKm": 56
+        },
+        {
+          "id": 4169,
+          "name": "Laouamra",
+          "coliatyName": "Laouamra",
+          "region": null,
+          "latitude": 35.067151,
+          "longitude": -6.088657,
+          "geoSource": "osm",
+          "distanceKm": 56
+        },
+        {
+          "id": 4196,
+          "name": "Had Kourt",
+          "coliatyName": "Had kourt",
+          "region": null,
+          "latitude": 34.615129,
+          "longitude": -5.736023,
+          "geoSource": "osm",
+          "distanceKm": 55
+        },
+        {
+          "id": 3071,
+          "name": "Oued Laou",
+          "coliatyName": "Ouad Laou",
+          "region": null,
+          "latitude": 35.450492,
+          "longitude": -5.093029,
+          "geoSource": "osm",
+          "distanceKm": 55
+        },
+        {
+          "id": 3704,
+          "name": "Bab Berred",
+          "coliatyName": "Bab berred",
+          "region": null,
+          "latitude": 34.998897,
+          "longitude": -4.890298,
+          "geoSource": "osm",
+          "distanceKm": 54
+        },
+        {
+          "id": 3974,
+          "name": "Aïn Dorij",
+          "coliatyName": "Ain Dorij",
+          "region": null,
+          "latitude": 34.6147446,
+          "longitude": -5.2887479,
+          "geoSource": "osm",
+          "distanceKm": 53
+        },
+        {
+          "id": 3305,
+          "name": "Ain Defali",
+          "coliatyName": "Ain defali",
+          "region": null,
+          "latitude": 34.5989528,
+          "longitude": -5.5487802,
+          "geoSource": "osm",
+          "distanceKm": 52
+        },
+        {
+          "id": 3981,
+          "name": "Arbaoua",
+          "coliatyName": "Arbaoua",
+          "region": null,
+          "latitude": 34.907017,
+          "longitude": -5.9285684,
+          "geoSource": "osm",
+          "distanceKm": 45
+        },
+        {
+          "id": 8668,
+          "name": "Bni Ahmed - chefchaoun",
+          "coliatyName": "Bni Ahmed - chefchaoun",
+          "region": "Tanger-Tétouan-Al Hoceïma",
+          "latitude": 34.84877,
+          "longitude": -5.0766193,
+          "geoSource": "nominatim",
+          "distanceKm": 44
+        },
+        {
+          "id": 4996,
+          "name": "Ounnana",
+          "coliatyName": "Ounnana",
+          "region": null,
+          "latitude": 34.6926496,
+          "longitude": -5.3313734,
+          "geoSource": "osm",
+          "distanceKm": 43
+        },
+        {
+          "id": 4993,
+          "name": "Sidi Redouane",
+          "coliatyName": "Sidi Redouane",
+          "region": null,
+          "latitude": 34.684499,
+          "longitude": -5.44819,
+          "geoSource": "osm",
+          "distanceKm": 42
+        },
+        {
+          "id": 3378,
+          "name": "Ksar el-Kebir",
+          "coliatyName": "Ksar El Kebir",
+          "region": null,
+          "latitude": 34.999218,
+          "longitude": -5.898724,
+          "geoSource": "osm",
+          "distanceKm": 39
+        },
+        {
+          "id": 4231,
+          "name": "Masmouda",
+          "coliatyName": "Mesmouda",
+          "region": null,
+          "latitude": 34.786229,
+          "longitude": -5.707764,
+          "geoSource": "osm",
+          "distanceKm": 37
+        },
+        {
+          "id": 8770,
+          "name": "Zoumi-Ouazzane",
+          "coliatyName": "Zoumi-Ouazzane",
+          "region": "Tanger-Tétouan-Al Hoceïma",
+          "latitude": 34.797672,
+          "longitude": -5.34936,
+          "geoSource": "nominatim",
+          "distanceKm": 32
+        },
+        {
+          "id": 3303,
+          "name": "Ouezzane",
+          "coliatyName": "Ouazzane",
+          "region": null,
+          "latitude": 34.796757,
+          "longitude": -5.578493,
+          "geoSource": "osm",
+          "distanceKm": 31
+        },
+        {
+          "id": 4192,
+          "name": "Bou Jedyane",
+          "coliatyName": "Boukedrane",
+          "region": null,
+          "latitude": 35.1109824,
+          "longitude": -5.7765161,
+          "geoSource": "osm",
+          "distanceKm": 28
+        },
+        {
+          "id": 3708,
+          "name": "Bab Taza",
+          "coliatyName": "Bab Taza",
+          "region": null,
+          "latitude": 35.061606,
+          "longitude": -5.197079,
+          "geoSource": "osm",
+          "distanceKm": 26
+        },
+        {
+          "id": 3048,
+          "name": "Chefchaouen",
+          "coliatyName": "Chefchaouen",
+          "region": null,
+          "latitude": 35.1687748,
+          "longitude": -5.2683454,
+          "geoSource": "osm",
+          "distanceKm": 22
+        },
+        {
+          "id": 3460,
+          "name": "Dardara",
+          "coliatyName": "DERDARA",
+          "region": null,
+          "latitude": 35.110272,
+          "longitude": -5.2871588,
+          "geoSource": "osm",
+          "distanceKm": 18
+        },
+        {
+          "id": 4136,
+          "name": "Brikcha",
+          "coliatyName": "Brikcha",
+          "region": null,
+          "latitude": 34.965241,
+          "longitude": -5.566101,
+          "geoSource": "osm",
+          "distanceKm": 14
+        },
+        {
+          "id": 8708,
+          "name": "Khmis elmduiaq",
+          "coliatyName": "Khmis elmduiaq",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        }
+      ],
+      "suspects": 1
+    },
+    {
+      "hub": "HUB AL HOCEïMA",
+      "centre": {
+        "lat": 35.101152549999995,
+        "lon": -4.06118415
+      },
+      "total": 11,
+      "unplaced": 1,
+      "cities": [
+        {
+          "id": 3072,
+          "name": "Issaguen",
+          "coliatyName": "issaguen",
+          "region": null,
+          "latitude": 34.916794,
+          "longitude": -4.569654,
+          "geoSource": "osm",
+          "distanceKm": 51
+        },
+        {
+          "id": 8653,
+          "name": "Ajdir- al houcaima",
+          "coliatyName": "Ajdir- al houcaima",
+          "region": "Fès-Meknès",
+          "latitude": 34.7419069,
+          "longitude": -3.9736924,
+          "geoSource": "nominatim",
+          "distanceKm": 41
+        },
+        {
+          "id": 3705,
+          "name": "Targuist",
+          "coliatyName": "targuist",
+          "region": null,
+          "latitude": 34.939869,
+          "longitude": -4.320451,
+          "geoSource": "osm",
+          "distanceKm": 30
+        },
+        {
+          "id": 3977,
+          "name": "Beni Boufrah",
+          "coliatyName": "Bni Boufrah",
+          "region": null,
+          "latitude": 35.1000691,
+          "longitude": -4.3102018,
+          "geoSource": "osm",
+          "distanceKm": 23
+        },
+        {
+          "id": 3073,
+          "name": "Al Hoceïma",
+          "coliatyName": "Al Hoceima",
+          "region": null,
+          "latitude": 35.245114,
+          "longitude": -3.930186,
+          "geoSource": "osm",
+          "distanceKm": 20
+        },
+        {
+          "id": 3469,
+          "name": "Beni Bouayach",
+          "coliatyName": "Bni Bouayach",
+          "region": null,
+          "latitude": 35.102236,
+          "longitude": -3.841024,
+          "geoSource": "osm",
+          "distanceKm": 20
+        },
+        {
+          "id": 3194,
+          "name": "Imzouren",
+          "coliatyName": "Imzouren",
+          "region": null,
+          "latitude": 35.1462944,
+          "longitude": -3.8497277,
+          "geoSource": "osm",
+          "distanceKm": 20
+        },
+        {
+          "id": 3706,
+          "name": "Bni Hadifa",
+          "coliatyName": "Bni Hadifa",
+          "region": null,
+          "latitude": 35.0221097,
+          "longitude": -4.1390989,
+          "geoSource": "osm",
+          "distanceKm": 11
+        },
+        {
+          "id": 3697,
+          "name": "Aït Kamra",
+          "coliatyName": "Ait Kamara",
+          "region": null,
+          "latitude": 35.1434894,
+          "longitude": -3.9877266,
+          "geoSource": "osm",
+          "distanceKm": 8
+        },
+        {
+          "id": 3978,
+          "name": "Rouadi",
+          "coliatyName": "Rouadi",
+          "region": null,
+          "latitude": 35.140401,
+          "longitude": -4.1346417,
+          "geoSource": "osm",
+          "distanceKm": 8
+        },
+        {
+          "id": 8673,
+          "name": "Boukidarn - houcaima",
+          "coliatyName": "Boukidarn - houcaima",
+          "region": null,
+          "latitude": null,
+          "longitude": null,
+          "geoSource": "failed",
+          "distanceKm": null
+        }
+      ],
+      "suspects": 0
+    },
+    {
+      "hub": "HUB RABAT",
+      "centre": {
+        "lat": 33.914435,
+        "lon": -6.9039822
+      },
+      "total": 13,
+      "unplaced": 0,
+      "cities": [
+        {
+          "id": 8647,
+          "name": "Ain Atiq",
+          "coliatyName": "Ain Atiq",
+          "region": "Casablanca-Settat",
+          "latitude": 33.5934829,
+          "longitude": -7.6560354,
+          "geoSource": "nominatim",
+          "distanceKm": 78
+        },
+        {
+          "id": 3923,
+          "name": "Sidi Bouknadel",
+          "coliatyName": "Sidi Bouknadel",
+          "region": null,
+          "latitude": 34.123948,
+          "longitude": -6.733029,
+          "geoSource": "osm",
+          "distanceKm": 28
+        },
+        {
+          "id": 4971,
+          "name": "Salé El Jadida",
+          "coliatyName": "Sale El Jadida",
+          "region": null,
+          "latitude": 33.9990238,
+          "longitude": -6.7428594,
+          "geoSource": "osm",
+          "distanceKm": 18
+        },
+        {
+          "id": 3086,
+          "name": "Salé",
+          "coliatyName": "Sale",
+          "region": null,
+          "latitude": 34.044889,
+          "longitude": -6.814017,
+          "geoSource": "osm",
+          "distanceKm": 17
+        },
+        {
+          "id": 8646,
+          "name": "Ain Aouda",
+          "coliatyName": "Ain Aouda",
+          "region": "Rabat-Salé-Kénitra",
+          "latitude": 33.803077,
+          "longitude": -6.79413,
+          "geoSource": "nominatim",
+          "distanceKm": 16
+        },
+        {
+          "id": 3038,
+          "name": "Rabat",
+          "coliatyName": "Rabat",
+          "region": null,
+          "latitude": 34.0218454,
+          "longitude": -6.8408929,
+          "geoSource": "osm",
+          "distanceKm": 13
+        },
+        {
+          "id": 8747,
+          "name": "SIDI CHAFII-Rabat",
+          "coliatyName": "SIDI CHAFII-Rabat",
+          "region": "Rabat-Salé-Kénitra",
+          "latitude": 34.0218454,
+          "longitude": -6.8408929,
+          "geoSource": "nominatim",
+          "distanceKm": 13
+        },
+        {
+          "id": 3010,
+          "name": "Skhirat",
+          "coliatyName": "Skhirat",
+          "region": null,
+          "latitude": 33.850672,
+          "longitude": -7.028026,
+          "geoSource": "osm",
+          "distanceKm": 13
+        },
+        {
+          "id": 3915,
+          "name": "Sidi Yahya Zaer",
+          "coliatyName": "Sidi Yahya Zaer",
+          "region": null,
+          "latitude": 33.8262331,
+          "longitude": -6.9039822,
+          "geoSource": "osm",
+          "distanceKm": 10
+        },
+        {
+          "id": 4031,
+          "name": "Tamesna",
+          "coliatyName": "Tamesna",
+          "region": null,
+          "latitude": 33.8319811,
+          "longitude": -6.9203446,
+          "geoSource": "osm",
+          "distanceKm": 9
+        },
+        {
+          "id": 4011,
+          "name": "Harhoura",
+          "coliatyName": "Harhoura",
+          "region": null,
+          "latitude": 33.914435,
+          "longitude": -6.9702597,
+          "geoSource": "osm",
+          "distanceKm": 6
+        },
+        {
+          "id": 6093,
+          "name": "Mers El Kheir",
+          "coliatyName": "Mers El Kheir",
+          "region": null,
+          "latitude": 33.8624551,
+          "longitude": -6.9312359,
+          "geoSource": "osm",
+          "distanceKm": 6
+        },
+        {
+          "id": 4012,
+          "name": "Témara",
+          "coliatyName": "Temara",
+          "region": null,
+          "latitude": 33.917166,
+          "longitude": -6.923804,
+          "geoSource": "osm",
+          "distanceKm": 2
+        }
+      ],
+      "suspects": 0
+    }
+  ]
+}

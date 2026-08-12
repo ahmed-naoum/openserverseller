@@ -427,6 +427,84 @@ async function importAliases(): Promise<number> {
   return written;
 }
 
+/* ------------------------------------------------------------------ phase 5 */
+
+/**
+ * Applies hand corrections from data/overrides.json.
+ *
+ * Some mistakes are not derivable. Coliaty's "Awrir" and OSM's "Aourir" are the
+ * same coastal town north of Agadir, but the two slugs are 5 and 6 characters
+ * apart in a way the fuzzy matcher deliberately will not bridge — at that length
+ * a one-edit tolerance would also merge genuinely distinct places. So the split
+ * row got its own Nominatim lookup and landed 200km away in the High Atlas.
+ *
+ * Runs last, and always, so a correction cannot be undone by a later re-import.
+ */
+async function applyOverrides(): Promise<number> {
+  const file = path.join(__dirname, 'data', 'overrides.json');
+  if (!fs.existsSync(file)) return 0;
+
+  const overrides = JSON.parse(fs.readFileSync(file, 'utf8'));
+  let applied = 0;
+
+  for (const [fromSlug, toSlug] of Object.entries(overrides.mergeInto || {})) {
+    const from = await prisma.city.findUnique({ where: { slug: fromSlug } });
+    const to = await prisma.city.findUnique({ where: { slug: String(toSlug) } });
+
+    if (!to) {
+      console.warn(`[overrides] target "${toSlug}" not found, skipping merge of "${fromSlug}"`);
+      continue;
+    }
+    if (!from) continue; // already merged by a previous run
+
+    // The carrier linkage has to move before the duplicate is deleted, and
+    // coliatyCityId is unique, so the source row is cleared first.
+    await prisma.city.update({
+      where: { id: from.id },
+      data: { coliatyCityId: null, isDeliverable: false },
+    });
+    await prisma.city.update({
+      where: { id: to.id },
+      data: {
+        coliatyCityId: from.coliatyCityId,
+        coliatyName: from.coliatyName,
+        coliatyCode: from.coliatyCode,
+        hubId: from.hubId,
+        hubName: from.hubName,
+        isDeliverable: from.isDeliverable || to.isDeliverable,
+      },
+    });
+    await prisma.cityAlias.deleteMany({ where: { cityId: from.id } });
+    await prisma.city.delete({ where: { id: from.id } });
+    // The old spelling still arrives on leads, so it has to keep resolving.
+    await prisma.cityAlias.upsert({
+      where: { slug: fromSlug },
+      create: { slug: fromSlug, alias: from.name, cityId: to.id, source: 'manual' },
+      update: { alias: from.name, cityId: to.id, source: 'manual' },
+    });
+
+    console.log(`[overrides] merged "${from.name}" -> "${to.name}" (${to.latitude}, ${to.longitude})`);
+    applied++;
+  }
+
+  for (const [slug, pos] of Object.entries<any>(overrides.coordinates || {})) {
+    const city = await prisma.city.findUnique({ where: { slug } });
+    if (!city) {
+      console.warn(`[overrides] "${slug}" not found, skipping coordinate override`);
+      continue;
+    }
+    await prisma.city.update({
+      where: { id: city.id },
+      data: { latitude: pos.lat, longitude: pos.lon, geoSource: 'manual' },
+    });
+    console.log(`[overrides] pinned "${city.name}" to ${pos.lat}, ${pos.lon}${pos.note ? ` — ${pos.note}` : ''}`);
+    applied++;
+  }
+
+  console.log(`[overrides] applied ${applied} correction(s)`);
+  return applied;
+}
+
 /* --------------------------------------------------------------------- main */
 
 async function main() {
@@ -434,6 +512,9 @@ async function main() {
   if (shouldRun('coliaty')) await importColiaty();
   if (shouldRun('observed')) await importObserved();
   if (shouldRun('aliases')) await importAliases();
+  // Never gated by --phase: a hand correction must apply on every run, or a
+  // partial re-import would silently reintroduce the mistake it fixed.
+  await applyOverrides();
 
   const [total, deliverable, geocoded] = await Promise.all([
     prisma.city.count(),

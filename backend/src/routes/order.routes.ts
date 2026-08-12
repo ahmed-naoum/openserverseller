@@ -105,7 +105,7 @@ const rejectParcel = (parcel: {
   if (!/^0[67]\d{8}$/.test(parcel.package_phone)) {
     return `Numéro refusé par Coliaty (${parcel.package_phone}) : il doit commencer par 06 ou 07 et compter 10 chiffres.`;
   }
-  if (!Number.isFinite(parcel.package_price) || parcel.package_price <= 0) {
+  if (!Number.isFinite(parcel.package_price) || parcel.package_price < 0) {
     return 'Prix invalide : Coliaty exige un montant positif.';
   }
   if (parcel.package_replacement && !String(parcel.package_old_tracking || '').trim()) {

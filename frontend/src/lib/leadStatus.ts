@@ -19,6 +19,8 @@ type LeadRow = {
   createdAt: string | Date;
   /** Server-precomputed newest history timestamp (slim list rows). */
   statusChangedAt?: string | Date | null;
+  /** Server-precomputed newest timestamp per parcel step (slim list rows). */
+  milestones?: Record<string, string | Date | null> | null;
   statusHistory?: StatusHistoryEntry[] | null;
   order?: {
     status?: string | null;
@@ -143,4 +145,84 @@ export const getLeadActivityDate = (c: LeadRow) => {
   const created = getLeadDate(c);
   const changed = getStatusChangedAt(c);
   return changed && changed.getTime() > created.getTime() ? changed : created;
+};
+
+/**
+ * The parcel steps a date filter can be based on, and the statuses that mark
+ * each one. A step is a group rather than a single status because Coliaty logs
+ * some of them under more than one code (SENT/SHIPPED), and because a delivery
+ * that was pushed forward reaches the same step through POSTPONED, PROGRAMMER
+ * or PROGRAMMER_AUTO depending on who moved it.
+ */
+export const MILESTONE_STATUSES = {
+  POSTPONED: ['POSTPONED', 'PROGRAMMER', 'PROGRAMMER_AUTO'],
+  PICKUP: ['PICKED_UP'],
+  SHIPPING: ['SENT', 'SHIPPED'],
+  RECEPTION: ['RECEIVED'],
+  DELIVERY: ['DELIVERED'],
+} as const;
+
+export type MilestoneBasis = keyof typeof MILESTONE_STATUSES;
+
+/** Every date a row can be filtered, sorted and charted on. */
+export type DateBasis = 'STATUS' | 'CREATED' | MilestoneBasis;
+
+/**
+ * When the row reached a parcel step, or null if it never did.
+ *
+ * The newest matching transition wins: a parcel that was postponed twice is
+ * asked about under its latest postponement, and a redelivery is reported on
+ * the day it was actually delivered.
+ */
+export const getMilestoneDate = (c: LeadRow, basis: MilestoneBasis): Date | null => {
+  const statuses = MILESTONE_STATUSES[basis] as readonly string[];
+
+  // Slim list rows: the server already reduced both histories to one timestamp
+  // per step, so there is nothing to scan.
+  const precomputed = (c as any).milestones?.[basis];
+  if (precomputed) {
+    const time = new Date(precomputed as any).getTime();
+    if (!Number.isNaN(time)) return new Date(time);
+  }
+
+  const histories = [
+    c.order?.statusHistory,
+    c.order?.lead?.statusHistory,
+    (c as any).lead?.statusHistory,
+    c.statusHistory
+  ];
+  let latest: number | null = null;
+
+  for (const history of histories) {
+    if (!Array.isArray(history)) continue;
+    for (const entry of history) {
+      if (!entry?.createdAt) continue;
+      if (!statuses.includes((entry.newStatus || '').toUpperCase())) continue;
+      const time = new Date(entry.createdAt as any).getTime();
+      if (!Number.isNaN(time) && (latest === null || time > latest)) latest = time;
+    }
+  }
+  if (latest !== null) return new Date(latest);
+
+  // Rows whose status was written without a history entry — imports, orders
+  // raised before the webhook logged transitions — would otherwise read as
+  // "never delivered" while sitting on DELIVERED. Fall back to when they last
+  // moved, which for those rows is the only timestamp the step has.
+  if (statuses.includes(getDisplayStatus(c))) return getStatusChangedAt(c) || getLeadDate(c);
+  return null;
+};
+
+/**
+ * The date a row is filtered, sorted and plotted under, for any basis.
+ *
+ * Null means the row never reached the chosen step. Callers must drop those
+ * rows from a date range rather than fall back to another date: a lead that was
+ * never delivered is not a delivery of any day.
+ */
+export const getRowDateFor = (c: LeadRow, basis: DateBasis): Date | null => {
+  if (basis === 'STATUS' || basis === 'CREATED') {
+    const date = basis === 'STATUS' ? getLeadActivityDate(c) : getLeadDate(c);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  return getMilestoneDate(c, basis);
 };

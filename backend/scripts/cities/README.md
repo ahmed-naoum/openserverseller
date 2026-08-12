@@ -58,3 +58,33 @@ A handful of small douars stay unplaceable. They remain fully usable — the
 picker shows "Position inconnue" instead of a map and the order proceeds. An
 admin can drop a pin from the city picker to fix one permanently; that writes
 `geoSource = 'manual'`, which re-imports never overwrite.
+
+## Checking the coordinates are right
+
+A geocoder will happily return a confident answer for the wrong town. The audit
+catches that by measuring every deliverable city against the **median** position
+of its hub — a hub serves a compact area, so a city far from its siblings is
+usually misplaced:
+
+```bash
+npm run cities:audit         # console + data/hub-audit.json
+npm run cities:audit-pdf     # 14-page report at data/hub-audit.pdf (needs reportlab)
+```
+
+Distance is a prompt, not a verdict. Dakhla genuinely is 650km from the Laayoune
+hub; `Inzegane` genuinely is wrong, sitting on Casablanca's coordinates when
+Inezgane borders Agadir. Each flag needs a human call.
+
+## Hand corrections
+
+`data/overrides.json` holds fixes the pipeline cannot derive, applied as the last
+import phase and never gated by `--phase`, so a partial re-import cannot
+reintroduce a mistake that was already fixed.
+
+- `mergeInto` — two rows are the same place. The carrier linkage moves to the
+  surviving row, the duplicate is deleted, and its name is kept as an alias.
+  This is how Coliaty's `Awrir` was folded into OSM's `Aourir`: at five
+  characters the fuzzy matcher will not bridge a one-edit gap, because at that
+  length it would also merge genuinely distinct towns — so the split row got its
+  own Nominatim lookup and landed 200km away in the High Atlas.
+- `coordinates` — force a position, written as `manual`.
