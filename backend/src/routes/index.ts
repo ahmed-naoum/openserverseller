@@ -15,6 +15,7 @@ import warehouseRoutes from './warehouse.routes.js';
 import notificationRoutes from './notification.routes.js';
 import adminRoutes from './admin.routes.js';
 import publicRoutes from './public.routes.js';
+import cityRoutes from './city.routes.js';
 import analyticsRoutes from './analytics.routes.js';
 import uploadRoutes from './upload.routes.js';
 import inventoryRoutes from './inventory.routes.js';
@@ -103,6 +104,7 @@ router.use('/deploy', deployRoutes);
 router.use('/admin', auditLog, adminRoutes);
 
 router.use('/public', publicRoutes);
+router.use('/cities', cityRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/inventory', auditLog, inventoryRoutes);

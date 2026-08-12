@@ -1,6 +1,8 @@
 import { prisma } from '../lib/prisma.js';
 import { emitLeadUnassigned } from '../lib/realtime.js';
 import {
+  CALL_LATER,
+  CALL_LATER_GRACE_MS,
   DEAD_NO_REPLY,
   MAX_NO_REPLY_RELEASES,
   MAX_RELEASE_MS,
@@ -22,17 +24,40 @@ export const startLeadsReassignmentCron = () => {
       // never expire. Fall back to the old fixed-window behaviour for those,
       // which drains the backlog without needing a data migration.
       const legacyThreshold = new Date(Date.now() - MAX_RELEASE_MS);
+      // CALL_LATER rows written before this feature carry no `releaseAt` at
+      // all, so they are matched on the reminder itself: a callback promised
+      // more than the grace period ago is overdue by the same rule.
+      const overdueCallbackThreshold = new Date(Date.now() - CALL_LATER_GRACE_MS);
 
-      // Every lead whose randomised hold window has run out. The deadline was
-      // rolled when the status was written (see lib/leadRelease.ts), so this
-      // job only enforces it — it never decides the timing itself.
+      // Every lead whose hold window has run out. The deadline was written with
+      // the status (see lib/leadRelease.ts), so this job only enforces it — it
+      // never decides the timing itself.
       const expiredLeads = await prisma.lead.findMany({
         where: {
           assignedAgentId: { not: null },
-          status: { in: RELEASE_TRACKED_STATUSES },
           OR: [
-            { releaseAt: { lte: now } },
-            { releaseAt: null, updatedAt: { lte: legacyThreshold } },
+            // Statuses on the randomised 1–2 h hold.
+            {
+              status: { in: RELEASE_TRACKED_STATUSES },
+              OR: [
+                { releaseAt: { lte: now } },
+                { releaseAt: null, updatedAt: { lte: legacyThreshold } },
+              ],
+            },
+            // CALL_LATER: the deadline is the agent's own reminder plus one
+            // hour. A lead whose callback is still ahead is being worked and
+            // must not be touched, which is why it cannot share the branch
+            // above — the `updatedAt` fallback there would drop it early.
+            {
+              status: CALL_LATER,
+              OR: [
+                { releaseAt: { lte: now } },
+                { releaseAt: null, callbackAt: { lte: overdueCallbackThreshold } },
+                // Parked in CALL_LATER with no reminder to count down to:
+                // drain it on the standard window rather than leave it stuck.
+                { releaseAt: null, callbackAt: null, updatedAt: { lte: legacyThreshold } },
+              ],
+            },
           ],
         },
         select: {
@@ -63,7 +88,9 @@ export const startLeadsReassignmentCron = () => {
             ? `Système : ${MAX_NO_REPLY_RELEASES} tentatives sans réponse — lead retiré du pool (${DEAD_NO_REPLY}).`
             : lead.status === 'NO_REPLY'
               ? `Système : Lead désassigné automatiquement après le délai maximum dans le statut NO_REPLY (tentative ${releases}/${MAX_NO_REPLY_RELEASES}).`
-              : `Système : Lead désassigné automatiquement après le délai maximum dans le statut ${lead.status}.`;
+              : lead.status === CALL_LATER
+                ? `Système : Rappel non effectué plus d'1 h après l'heure prévue — lead remis dans le pool.`
+                : `Système : Lead désassigné automatiquement après le délai maximum dans le statut ${lead.status}.`;
 
         await prisma.$transaction(async (tx) => {
           // Close the current assignment

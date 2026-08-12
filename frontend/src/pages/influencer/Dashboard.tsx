@@ -22,6 +22,13 @@ import {
 } from 'recharts';
 import toast from 'react-hot-toast';
 
+/**
+ * Local calendar date, not the UTC one toISOString() would give — the API reads
+ * a bare `YYYY-MM-DD` as local midnight, so a UTC date can shift the window a day.
+ */
+const toLocalISODate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 export default function InfluencerDashboard() {
   const { user } = useAuth();
   const { t, language } = useLanguage();
@@ -59,15 +66,23 @@ export default function InfluencerDashboard() {
         params.end = endDate;
       }
 
+      // GET /influencer/links reads `start`/`end` and ignores `days`, so a day
+      // pill has to be spelled out as a bound or the traffic cards stay on
+      // all-time while every other figure follows the period. The bound is the
+      // one /dashboard/influencer computes for the same `days`: local midnight
+      // N-1 days back, so both halves of the screen describe one window.
       const linkParams: any = { days: dateRange };
       if (dateRange === 'custom') {
         linkParams.start = startDate;
         linkParams.end = endDate;
       } else if (dateRange === 'all') {
         linkParams.days = 'all';
-      } else if (dateRange === 'yesterday') {
-        linkParams.start = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-        linkParams.end = new Date().toISOString().split('T')[0];
+      } else {
+        const from = new Date();
+        from.setDate(from.getDate() - (dateRange === 'yesterday' ? 1 : Number(dateRange) - 1));
+        from.setHours(0, 0, 0, 0);
+        linkParams.start = toLocalISODate(from);
+        if (dateRange === 'yesterday') linkParams.end = toLocalISODate(from);
       }
 
       const [dashboardRes, linksRes] = await Promise.all([

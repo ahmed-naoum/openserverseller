@@ -884,6 +884,93 @@ model MoroccanCity {
   @@map("moroccan_cities")
 }
 
+/**
+ * The single catalogue of places we deliver to, replacing the eight hand-seeded
+ * rows in moroccan_cities.
+ *
+ * It is a superset of Coliaty's list on purpose: Coliaty carries ~451 cities but
+ * customers order from localities it does not list, and those leads still have
+ * to be recorded, mapped, and handed to a courier some other way. `isDeliverable`
+ * is what separates the two — never assume a row here can be pushed to Coliaty.
+ *
+ * `slug` is the accent- and punctuation-stripped key every lookup goes through,
+ * so "Témara", "temara" and "TEMARA" all resolve to one row.
+ */
+model City {
+  id Int @id @default(autoincrement())
+  /// Display name. Not unique: two real localities in different provinces do
+  /// share a name ("Sidi Moussa"). `slug` is the identity of a row.
+  name String
+  slug String @unique
+  nameAr String?
+  nameFr String?
+  nameEn String?
+
+  region   String?
+  province String?
+
+  // Map position. Nullable because a city is usable before it is geocoded —
+  // the picker degrades to "location unknown" rather than blocking the order.
+  latitude  Float?
+  longitude Float?
+  /// Where the coordinates came from: osm | nominatim | manual
+  geoSource String?
+  /// OSM place classification (city, town, village, suburb, hamlet)
+  placeType String?
+  /// Provenance only — indexed but not unique, since the slug is what identifies
+  /// a row and a re-import may re-point an OSM node at a differently-slugged city.
+  osmId BigInt?
+
+  // Coliaty linkage. city_id/city_name must be sent back verbatim on dispatch,
+  // so they are stored exactly as the carrier returns them.
+  coliatyCityId Int?    @unique
+  coliatyName   String?
+  coliatyCode   String?
+  hubId         Int?
+  hubName       String?
+
+  /// True only when Coliaty lists the city, i.e. it can be dispatched to.
+  isDeliverable Boolean @default(false)
+  isMajor       Boolean @default(false)
+  isActive      Boolean @default(true)
+  /// coliaty | osm | observed — which import phase first created the row
+  source        String  @default("coliaty")
+
+  population Int?
+
+  aliases CityAlias[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isDeliverable])
+  @@index([name])
+  @@index([osmId])
+  @@map("cities")
+}
+
+/**
+ * Alternate spellings that must resolve to a canonical city.
+ *
+ * Leads arrive from Shopify, WooCommerce, YouCan and CSV imports where the city
+ * is free text — "Tangier", "Casa-anfa", "Agadir, Morocco". Without this table
+ * each variant shows up as an unrecognised city and blocks dispatch.
+ */
+model CityAlias {
+  id     Int    @id @default(autoincrement())
+  alias  String
+  slug   String @unique
+  cityId Int
+  city   City   @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  /// coliaty | osm | observed | manual
+  source String @default("manual")
+
+  createdAt DateTime @default(now())
+
+  @@index([cityId])
+  @@map("city_aliases")
+}
+
 model ActivityLog {
   id        Int      @id @default(autoincrement())
   userId    Int?
@@ -1084,6 +1171,10 @@ model ReferralLinkClick {
   createdAt      DateTime     @default(now())
 
   @@index([referralLinkId])
+  // The dashboard's traffic cards count a link's clicks inside a date window, so
+  // they read this pair together; on the link alone the window is a scan over
+  // every click the link ever took.
+  @@index([referralLinkId, createdAt])
   @@map("referral_link_clicks")
 }
 

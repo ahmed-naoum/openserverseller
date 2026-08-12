@@ -145,6 +145,41 @@ let coliatyCitiesCache: any = null;
 let coliatyCitiesCacheTime = 0;
 const CITIES_CACHE_TTL = 1000 * 60 * 60; // 1 hour
 
+/**
+ * Attaches our stored coordinates to the carrier's city list.
+ *
+ * The carrier's own fields are left untouched — city_id and city_name are sent
+ * back verbatim on dispatch — so this only ever adds `cityId`, `latitude` and
+ * `longitude` for the map picker to read. A city we have not placed yet simply
+ * comes back with nulls and the picker says so rather than pointing at nowhere.
+ */
+async function withCoordinates(cities: any[]): Promise<any[]> {
+  if (!Array.isArray(cities) || !cities.length) return cities;
+
+  try {
+    const rows = await prisma.city.findMany({
+      where: { coliatyCityId: { in: cities.map((c) => c.city_id).filter(Boolean) } },
+      select: { id: true, coliatyCityId: true, latitude: true, longitude: true, slug: true },
+    });
+    const byColiatyId = new Map(rows.map((r) => [r.coliatyCityId, r]));
+
+    return cities.map((city) => {
+      const hit = byColiatyId.get(city.city_id);
+      return {
+        ...city,
+        cityId: hit?.id ?? null,
+        latitude: hit?.latitude ?? null,
+        longitude: hit?.longitude ?? null,
+      };
+    });
+  } catch (err) {
+    // The city list is what lets agents dispatch at all; losing the map overlay
+    // is far better than failing the request.
+    console.error('[Coliaty] coordinate enrichment failed:', err);
+    return cities;
+  }
+}
+
 router.get(
   '/coliaty/cities',
   authenticate,
@@ -177,7 +212,7 @@ router.get(
       });
 
       if (response.data?.success) {
-        coliatyCitiesCache = response.data.data;
+        coliatyCitiesCache = await withCoordinates(response.data.data);
         coliatyCitiesCacheTime = Date.now();
         return res.json({
           status: 'success',
@@ -3055,6 +3090,11 @@ router.patch(
       throw new AppException(404, 'Lead not found');
     }
 
+    // The reminder the lead ends up carrying, which is what CALL_LATER counts
+    // down from — resolved before the update so the deadline and the stored
+    // `callbackAt` can never disagree.
+    const nextCallbackAt = callbackAt !== undefined ? callbackAt : lead.callbackAt;
+
     const updatedLead = await prisma.$transaction(async (tx) => {
       await tx.leadStatusHistory.create({
         data: {
@@ -3070,14 +3110,15 @@ router.patch(
         data: {
           status,
           notes: notes !== undefined ? notes : lead.notes,
-          callbackAt: callbackAt !== undefined ? callbackAt : lead.callbackAt,
+          callbackAt: nextCallbackAt,
           requestedPriceMad: requestedPriceMad !== undefined ? requestedPriceMad : lead.requestedPriceMad,
           requestedPriceStatus: requestedPriceMad !== undefined ? 'PENDING' : lead.requestedPriceStatus,
           // Roll a fresh 1–2 h hold when this status is one the cron reclaims,
           // and drop any stale countdown when it is not. Re-picking the same
           // status re-rolls it, matching the old behaviour where `updatedAt`
-          // restarted the window.
-          releaseAt: releaseAtFor(status),
+          // restarted the window. CALL_LATER is the exception: it counts down
+          // to the agent's own reminder plus one hour, not to a random window.
+          releaseAt: releaseAtFor(status, nextCallbackAt),
         },
       });
     });

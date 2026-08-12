@@ -2505,6 +2505,19 @@ router.get(
   authenticate,
   authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
+    const { startDate, endDate } = req.query;
+
+    // Optional lead creation-date window (same convention as the agent stats route)
+    const dateFilter: any = {};
+    if (startDate) dateFilter.gte = new Date(startDate as string);
+    if (endDate) {
+      const end = new Date(endDate as string);
+      end.setHours(23, 59, 59, 999);
+      dateFilter.lte = end;
+    }
+    const paidLeadWhere: any = { paymentSituation: { in: ['PAID', 'Payé'] } };
+    if (Object.keys(dateFilter).length > 0) paidLeadWhere.createdAt = dateFilter;
+
     // 1. Get Influencers with PAID leads (via ReferralLinks)
     const influencersWithPaidLeads = await prisma.user.findMany({
       where: {
@@ -2515,7 +2528,7 @@ router.get(
         referralLinks: {
           some: {
             leads: {
-              some: { paymentSituation: { in: ['PAID', 'Payé'] } }
+              some: paidLeadWhere
             }
           }
         }
@@ -2526,7 +2539,7 @@ router.get(
         referralLinks: {
           include: {
             leads: {
-              where: { paymentSituation: { in: ['PAID', 'Payé'] } },
+              where: paidLeadWhere,
               include: { order: true }
             }
           }
@@ -2539,14 +2552,14 @@ router.get(
       where: {
         role: { name: 'VENDOR' },
         leads: {
-          some: { paymentSituation: { in: ['PAID', 'Payé'] } }
+          some: paidLeadWhere
         }
       },
       include: {
         profile: true,
         role: true,
         leads: {
-          where: { paymentSituation: { in: ['PAID', 'Payé'] } },
+          where: paidLeadWhere,
           include: { order: true }
         }
       }
@@ -2615,11 +2628,22 @@ router.get(
   authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = Number(req.params.id);
+    const { startDate, endDate } = req.query;
+
+    // Optional lead creation-date window (mirrors the summary route above)
+    const dateFilter: any = {};
+    if (startDate) dateFilter.gte = new Date(startDate as string);
+    if (endDate) {
+      const end = new Date(endDate as string);
+      end.setHours(23, 59, 59, 999);
+      dateFilter.lte = end;
+    }
 
     // Fetch both direct leads and referral leads
     const leads = await prisma.lead.findMany({
       where: {
         paymentSituation: { in: ['PAID', 'Payé'] },
+        ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {}),
         OR: [
           { vendorId: userId },
           { referralLink: { influencerId: userId } }

@@ -24,6 +24,22 @@ export const RELEASE_TRACKED_STATUSES = [
 ];
 
 /**
+ * CALL_LATER is released too, but it is deliberately NOT in the list above: its
+ * deadline is anchored to the agent's own reminder (`callbackAt`), not to a
+ * randomised window, so the cron matches it with a separate predicate. Adding
+ * it to RELEASE_TRACKED_STATUSES would let the legacy `updatedAt` fallback drop
+ * leads whose callback is still hours in the future.
+ */
+export const CALL_LATER = 'CALL_LATER';
+
+/**
+ * How long an agent keeps a lead past the callback time they themselves chose.
+ * The reminder is the commitment; one hour after it, an uncalled lead is not
+ * being worked and goes back to the pool for someone else.
+ */
+export const CALL_LATER_GRACE_MS = 60 * 60 * 1000; // 1 hour
+
+/**
  * The hold window is randomised per lead instead of being a fixed two hours.
  * A constant timeout is learnable — an agent can sit on a lead knowing exactly
  * when it drops — and it also bunches every lead claimed in the same minute
@@ -53,13 +69,35 @@ export const rollReleaseAt = (from: number = Date.now()): Date =>
   new Date(from + MIN_RELEASE_MS + Math.random() * (MAX_RELEASE_MS - MIN_RELEASE_MS));
 
 /**
+ * Deadline for a CALL_LATER lead: the scheduled callback plus the grace period.
+ * A lead parked in CALL_LATER without a usable reminder has nothing to anchor
+ * to, so it falls back to the standard randomised hold rather than sitting on
+ * an agent forever.
+ */
+export const callLaterReleaseAt = (callbackAt: Date | string | null | undefined): Date => {
+  if (!callbackAt) return rollReleaseAt();
+  const at = new Date(callbackAt);
+  return Number.isNaN(at.getTime())
+    ? rollReleaseAt()
+    : new Date(at.getTime() + CALL_LATER_GRACE_MS);
+};
+
+/**
  * The deadline a lead should carry after being written to `status`, or null
  * when the status is not one the cron reclaims. Callers pass this straight into
  * `data.releaseAt` so a lead moving out of a tracked status always drops its
  * stale countdown instead of leaving one to fire later.
+ *
+ * `callbackAt` is the reminder the lead ends up carrying after the write — only
+ * CALL_LATER reads it, and it must be the post-write value, not the old one.
  */
-export const releaseAtFor = (status: string): Date | null =>
-  RELEASE_TRACKED_STATUSES.includes(status) ? rollReleaseAt() : null;
+export const releaseAtFor = (
+  status: string,
+  callbackAt?: Date | string | null,
+): Date | null => {
+  if (status === CALL_LATER) return callLaterReleaseAt(callbackAt);
+  return RELEASE_TRACKED_STATUSES.includes(status) ? rollReleaseAt() : null;
+};
 
 /**
  * What the cron should do with an expired lead: recycle it into the pool, or

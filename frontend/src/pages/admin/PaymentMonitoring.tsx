@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../lib/api';
 import { 
@@ -28,6 +28,102 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 
+// --- Date range filter (applies to the lead creation date, the "Date" column) ---
+
+const toDateInput = (d: Date) => format(d, 'yyyy-MM-dd');
+
+const DATE_PRESETS = [
+  { key: 'ALL', label: 'Tout' },
+  { key: 'TODAY', label: "Aujourd'hui" },
+  { key: '7D', label: '7 jours' },
+  { key: '30D', label: '30 jours' },
+  { key: 'MONTH', label: 'Ce mois' },
+];
+
+function presetRange(key: string): { from: string; to: string } {
+  const now = new Date();
+  const today = toDateInput(now);
+  switch (key) {
+    case 'TODAY':
+      return { from: today, to: today };
+    case '7D': {
+      const start = new Date(now);
+      start.setDate(start.getDate() - 6);
+      return { from: toDateInput(start), to: today };
+    }
+    case '30D': {
+      const start = new Date(now);
+      start.setDate(start.getDate() - 29);
+      return { from: toDateInput(start), to: today };
+    }
+    case 'MONTH':
+      return { from: toDateInput(new Date(now.getFullYear(), now.getMonth(), 1)), to: today };
+    default:
+      return { from: '', to: '' };
+  }
+}
+
+function DateRangeFilter({
+  from,
+  to,
+  preset,
+  onChange,
+}: {
+  from: string;
+  to: string;
+  preset: string;
+  onChange: (from: string, to: string, preset: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {DATE_PRESETS.map((p) => (
+        <button
+          key={p.key}
+          onClick={() => {
+            const range = presetRange(p.key);
+            onChange(range.from, range.to, p.key);
+          }}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
+            preset === p.key
+              ? 'bg-violet-600 text-white border-violet-600 shadow-lg shadow-violet-200'
+              : 'bg-white text-gray-600 border-gray-100 hover:bg-gray-50'
+          }`}
+        >
+          {p.label}
+        </button>
+      ))}
+
+      <div className="flex items-center gap-2 bg-white border border-gray-100 rounded-2xl px-3 py-1.5 shadow-sm">
+        <Calendar size={14} className="text-violet-500 flex-shrink-0" />
+        <input
+          type="date"
+          value={from}
+          max={to || undefined}
+          onChange={(e) => onChange(e.target.value, to, 'CUSTOM')}
+          className="bg-transparent text-xs font-bold text-gray-700 outline-none w-[7.5rem]"
+        />
+        <span className="text-xs font-black text-gray-300">→</span>
+        <input
+          type="date"
+          value={to}
+          min={from || undefined}
+          onChange={(e) => onChange(from, e.target.value, 'CUSTOM')}
+          className="bg-transparent text-xs font-bold text-gray-700 outline-none w-[7.5rem]"
+        />
+      </div>
+
+      {(from || to) && (
+        <button
+          onClick={() => onChange('', '', 'ALL')}
+          className="px-3 py-2 rounded-xl text-xs font-bold text-red-600 bg-red-50 border border-red-100 hover:bg-red-100 transition-all"
+        >
+          Réinitialiser
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function PaymentMonitoring() {
   const queryClient = useQueryClient();
   const [selectedUser, setSelectedUser] = useState<any>(null);
@@ -41,17 +137,34 @@ export default function PaymentMonitoring() {
   const [editingLeadFees, setEditingLeadFees] = useState<any>(null);
   const [customShippingFeeVal, setCustomShippingFeeVal] = useState('');
   const [customPlatformFeeRateVal, setCustomPlatformFeeRateVal] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [datePreset, setDatePreset] = useState('ALL');
+
+  const dateParams = useMemo(() => {
+    const params: { startDate?: string; endDate?: string } = {};
+    if (dateFrom) params.startDate = dateFrom;
+    if (dateTo) params.endDate = dateTo;
+    return params;
+  }, [dateFrom, dateTo]);
+
+  const handleDateChange = (from: string, to: string, preset: string) => {
+    setDateFrom(from);
+    setDateTo(to);
+    setDatePreset(preset);
+    setSelectedLeadIds([]);
+  };
 
   // 1. Fetch Users Summary
   const { data: summaryData, isLoading: isLoadingSummary } = useQuery({
-    queryKey: ['admin-payment-summary'],
-    queryFn: () => adminApi.getPaymentMonitoring(),
+    queryKey: ['admin-payment-summary', dateFrom, dateTo],
+    queryFn: () => adminApi.getPaymentMonitoring(dateParams),
   });
 
   // 2. Fetch Specific User Leads
   const { data: userLeadsData, isLoading: isLoadingUserLeads } = useQuery({
-    queryKey: ['admin-user-paid-leads', selectedUser?.id],
-    queryFn: () => adminApi.getUserPaymentMonitoring(selectedUser.id),
+    queryKey: ['admin-user-paid-leads', selectedUser?.id, dateFrom, dateTo],
+    queryFn: () => adminApi.getUserPaymentMonitoring(selectedUser.id, dateParams),
     enabled: !!selectedUser,
   });
 
@@ -140,6 +253,17 @@ export default function PaymentMonitoring() {
     (l.referralLink?.product?.nameFr || l.order?.items?.[0]?.product?.nameFr || l.productVariant || '').toLowerCase().includes(leadSearchTerm.toLowerCase())
   );
 
+  // Recomputed from the loaded (date-filtered) leads so the header total always
+  // matches the rows below it, instead of the whole-period summary snapshot.
+  const userLeadsNetTotal = userLeads.reduce((sum: number, l: any) => {
+    const gross = Number(l.order?.totalAmountMad) || 0;
+    const shipping = l.customShippingFee ?? 57;
+    const rate = l.customPlatformFeeRate ?? selectedUser?.platformFeeRate ?? (selectedUser?.role === 'INFLUENCER' ? 0.13 : 0.05);
+    const profit = gross - shipping;
+    const platformFee = profit > 0 ? profit * rate : 0;
+    return sum + (gross - shipping - platformFee);
+  }, 0);
+
   const handleSelectLead = (id: number) => {
     setSelectedLeadIds(prev => 
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
@@ -223,10 +347,17 @@ export default function PaymentMonitoring() {
             </div>
           </div>
           <div className="text-right">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total Payé</p>
-            <p className="text-2xl font-black text-green-600">{selectedUser.totalPaidAmount.toLocaleString()} <span className="text-sm">MAD</span></p>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+              Total Payé {(dateFrom || dateTo) && <span className="text-violet-500">(période)</span>}
+            </p>
+            <p className="text-2xl font-black text-green-600">
+              {(isLoadingUserLeads ? selectedUser.totalPaidAmount : userLeadsNetTotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-sm">MAD</span>
+            </p>
           </div>
         </div>
+
+        {/* Date Filter */}
+        <DateRangeFilter from={dateFrom} to={dateTo} preset={datePreset} onChange={handleDateChange} />
 
         {/* Leads Table */}
         <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
@@ -622,6 +753,9 @@ export default function PaymentMonitoring() {
           </div>
         </div>
       </div>
+
+      {/* Date Filter */}
+      <DateRangeFilter from={dateFrom} to={dateTo} preset={datePreset} onChange={handleDateChange} />
 
       {/* Filter Bar */}
       <div className="flex flex-wrap items-center gap-2">

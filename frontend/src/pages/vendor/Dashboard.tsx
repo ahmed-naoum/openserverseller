@@ -97,14 +97,17 @@ export default function VendorDashboard() {
   // left unread, and only the window's totals below are used.
   const [walletStats, setWalletStats] = useState<any>(null);
   const [commissionsMeta, setCommissionsMeta] = useState<any>(null);
-  const [stats, setStats] = useState<any>({
-    conversions: 0,
-    confirmed: 0,
-    delivered: 0,
-    totalViews: 0,
-    uniqueVisitors: 0,
-    whatsappClicks: 0
-  });
+  // The only server-side figures this page still holds. Everything else it shows
+  // is folded out of `periodLeads` in the browser — the response's own
+  // conversions/confirmed/delivered describe the whole history and no card reads
+  // them, so they are not kept. Clicks cannot be folded that way: the browser
+  // never receives the click rows, so these three follow the period bar back to
+  // the server on their own.
+  const [traffic, setTraffic] = useState({ totalViews: 0, uniqueVisitors: 0, whatsappClicks: 0 });
+  const [trafficLoading, setTrafficLoading] = useState(true);
+  // Bumped by the refresh button so the traffic cards reload with everything
+  // else — their window has not changed, so nothing else would re-trigger them.
+  const [trafficNonce, setTrafficNonce] = useState(0);
   const [leadCountsByLink, setLeadCountsByLink] = useState<{ referralLinkId: number; _count: number }[]>([]);
   const [helpers, setHelpers] = useState<any[]>([]);
   const [tableDateRange, setTableDateRange] = useState<'TOUS' | 'AUJOURD_HUI' | '7J' | '15J' | '30J' | '90J' | 'CUSTOM'>('TOUS');
@@ -142,7 +145,6 @@ export default function VendorDashboard() {
       setWallet(dashboardRes.data.wallet);
       setWalletStats(dashboardRes.data.walletStats || null);
       setCommissionsMeta(dashboardRes.data.commissionsMeta || null);
-      setStats(dashboardRes.data.stats || { conversions: 0, confirmed: 0, delivered: 0 });
       setLeadCountsByLink(dashboardRes.data.leadCountsByLink || []);
       setHelpers(dashboardRes.data.helpers || []);
       setPeriodLeads(dashboardRes.data.periodLeads || []);
@@ -153,9 +155,51 @@ export default function VendorDashboard() {
     }
   };
 
-  const totalViews = stats.totalViews || 0;
-  const uniqueVisitors = stats.uniqueVisitors || 0;
-  const whatsappClicks = stats.whatsappClicks || 0;
+  /**
+   * The window the traffic cards ask the server for, spelled exactly the way the
+   * lead filter below reads the same pills — otherwise the views card and the
+   * leads card next to it would describe two different periods. The day pills
+   * start at local midnight N days back and have no upper bound; AUJOURD_HUI is
+   * the single day. Bare `YYYY-MM-DD` is what the API's parser wants: it reads
+   * one as local midnight, where an ISO timestamp would shift the day.
+   */
+  const trafficWindow = useMemo<{ start?: string; end?: string }>(() => {
+    if (tableDateRange === 'TOUS') return {};
+    if (tableDateRange === 'CUSTOM') {
+      return { start: startDate || undefined, end: endDate || undefined };
+    }
+    const from = new Date();
+    from.setHours(0, 0, 0, 0);
+    if (tableDateRange === 'AUJOURD_HUI') return { start: toISODate(from), end: toISODate(from) };
+    from.setDate(from.getDate() - Number(tableDateRange.replace('J', '')));
+    return { start: toISODate(from) };
+  }, [tableDateRange, startDate, endDate]);
+
+  /**
+   * Clicks are the one thing on this screen the browser cannot narrow itself: it
+   * holds the lead history, never the click rows. So the period bar re-reads
+   * these three aggregates while every other card answers from memory, which is
+   * what keeps pressing a pill from feeling like a page load.
+   */
+  useEffect(() => {
+    let current = true;
+    setTrafficLoading(true);
+    dashboardApi
+      .sellerAffiliateTraffic({
+        ...trafficWindow,
+        ...(tableSelectedProductId !== 'ALL' ? { referralLinkId: tableSelectedProductId } : {})
+      })
+      .then(res => { if (current) setTraffic(res.data); })
+      .catch(() => { if (current) setTraffic({ totalViews: 0, uniqueVisitors: 0, whatsappClicks: 0 }); })
+      .finally(() => { if (current) setTrafficLoading(false); });
+    // Pills are pressed faster than these aggregates come back, so a stale reply
+    // must not land on top of a newer window.
+    return () => { current = false; };
+  }, [trafficWindow, tableSelectedProductId, currentMode, trafficNonce]);
+
+  const totalViews = traffic.totalViews || 0;
+  const uniqueVisitors = traffic.uniqueVisitors || 0;
+  const whatsappClicks = traffic.whatsappClicks || 0;
 
   const getRowDate = getLeadDate;
 
@@ -236,11 +280,6 @@ export default function VendorDashboard() {
   const totalItems = totalLeads;
   const confirmedItems = confirmedLeads;
   const deliveredItems = deliveredLeads;
-
-  const totalLinkClicks = referralLinks.reduce((sum, l) => sum + (l.clicks || 0), 0);
-  const totalLinkConversions = referralLinks.reduce((sum, l) => sum + (l.conversions || 0), 0);
-  const totalLinkRawClicks = referralLinks.reduce((sum, l) => sum + (l.rawClicks || l.clicks || 0), 0);
-  const totalLinkWhatsappClicks = referralLinks.reduce((sum, l) => sum + (l.whatsappClicks || 0), 0);
 
   // Generate chart day keys based on range
   const getNumDays = () => {
@@ -589,11 +628,11 @@ export default function VendorDashboard() {
           )}
 
           <button
-            onClick={() => loadDashboard()}
+            onClick={() => { loadDashboard(); setTrafficNonce(n => n + 1); }}
             className="p-2 text-slate-400 hover:text-slate-600 transition-all"
             title={t('db_refresh', 'dashboard')}
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading || trafficLoading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
@@ -609,7 +648,7 @@ export default function VendorDashboard() {
             </div>
           </div>
           <div className="mt-2">
-            <h3 className="text-3xl font-black text-blue-600 tracking-tight">{totalLinkRawClicks.toLocaleString()}</h3>
+            <h3 className={`text-3xl font-black text-blue-600 tracking-tight transition-opacity ${trafficLoading ? 'opacity-40' : ''}`}>{totalViews.toLocaleString()}</h3>
           </div>
           <div className="mt-4 pt-2 border-t border-slate-100/50 flex items-center justify-between text-[8px] font-extrabold text-slate-400 uppercase tracking-wider">
             <span>{t('db_total_views', 'dashboard')}</span>
@@ -625,7 +664,7 @@ export default function VendorDashboard() {
             </div>
           </div>
           <div className="mt-2">
-            <h3 className="text-3xl font-black text-indigo-600 tracking-tight">{totalLinkClicks.toLocaleString()}</h3>
+            <h3 className={`text-3xl font-black text-indigo-600 tracking-tight transition-opacity ${trafficLoading ? 'opacity-40' : ''}`}>{uniqueVisitors.toLocaleString()}</h3>
           </div>
           <div className="mt-4 pt-2 border-t border-slate-100/50 flex items-center justify-between text-[8px] font-extrabold text-slate-400 uppercase tracking-wider">
             <span>{t('db_unique_traffic', 'dashboard')}</span>
@@ -641,7 +680,7 @@ export default function VendorDashboard() {
             </div>
           </div>
           <div className="mt-2">
-            <h3 className="text-3xl font-black text-green-600 tracking-tight">{totalLinkWhatsappClicks.toLocaleString()}</h3>
+            <h3 className={`text-3xl font-black text-green-600 tracking-tight transition-opacity ${trafficLoading ? 'opacity-40' : ''}`}>{whatsappClicks.toLocaleString()}</h3>
           </div>
           <div className="mt-4 pt-2 border-t border-slate-100/50 flex items-center justify-between text-[8px] font-extrabold text-slate-400 uppercase tracking-wider">
             <span>{t('db_whatsapp_clicks', 'dashboard')}</span>
@@ -674,8 +713,9 @@ export default function VendorDashboard() {
           </div>
           <div className="mt-2">
             {(() => {
-              const visitors = Math.max(totalLinkClicks, uniqueVisitors);
-              const visitorCount = Math.max(totalLeads, visitors);
+              // Both figures now describe the selected window, so the ratio can
+              // no longer read this period's leads against all-time visitors.
+              const visitorCount = Math.max(totalLeads, uniqueVisitors);
               const convRate = visitorCount > 0 ? (totalLeads / visitorCount) * 100 : 0;
               return (
                 <>

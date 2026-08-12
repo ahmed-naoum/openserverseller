@@ -510,15 +510,21 @@ export default function HelperTickets() {
   const [scanValue, setScanValue] = useState('');
   const [scanFeedback, setScanFeedback] = useState<{ ok: boolean; text: string } | null>(null);
 
-  // Live "new ticket" alerts
-  const [pendingAlerts, setPendingAlerts] = useState(0);
+  // Live "new ticket" alerts. Tracked by parcel code rather than as a bare
+  // counter so a flag lives exactly as long as the parcel it belongs to sits in
+  // "En attente" — putting it on a bon de ramassage is what clears it.
+  const [newCodes, setNewCodes] = useState<Set<string>>(new Set());
+  const [bannerHidden, setBannerHidden] = useState(false);
   const [lastAlert, setLastAlert] = useState<NewTicketAlert | null>(null);
+  const pendingAlerts = newCodes.size;
 
   const searchRef = useRef<HTMLInputElement>(null);
   const scanRef = useRef<HTMLInputElement>(null);
   const lastClickedIndex = useRef<number | null>(null);
   const alertAudioRef = useRef<HTMLAudioElement | null>(null);
   const knownCodesRef = useRef<Set<string> | null>(null);
+  /** Codes the socket already toasted, so the refresh behind it stays quiet. */
+  const announcedCodesRef = useRef<Set<string>>(new Set());
   const alertsEnabledRef = useRef(alertsEnabled);
   const alertVolumeRef = useRef(alertVolume);
 
@@ -648,12 +654,16 @@ export default function HelperTickets() {
     }
   }, []);
 
-  /** Sound + toast + (when the tab is in the background) a system notification. */
-  const announceNewTickets = useCallback(
+  /**
+   * Sound + toast + (when the tab is in the background) a system notification.
+   * Deliberately does not touch the "+N" badge: that is derived from the pending
+   * list, so it can only clear once the parcels have left "En attente".
+   */
+  const notifyArrivals = useCallback(
     (count: number, actorName?: string, preview?: NewTicketAlert['tickets']) => {
       if (count <= 0) return;
 
-      setPendingAlerts((prev) => prev + count);
+      setBannerHidden(false);
       playAlertSound();
 
       const headline =
@@ -682,7 +692,6 @@ export default function HelperTickets() {
             <button
               onClick={() => {
                 setActiveTab('pending');
-                setPendingAlerts(0);
                 toast.dismiss(t.id);
               }}
               className="px-3 py-2 rounded-lg bg-slate-900 text-white text-[11px] font-black hover:bg-black transition-all flex-shrink-0"
@@ -720,12 +729,13 @@ export default function HelperTickets() {
 
       setLastAlert(payload);
 
-      // Register the codes now so the refresh below doesn't announce them twice.
-      if (knownCodesRef.current) {
-        payload.tickets?.forEach((t) => knownCodesRef.current!.add(t.packageCode));
-      }
+      // Toast straight away for instant feedback, and note which codes it covered
+      // so the refresh below doesn't announce the same arrivals a second time.
+      payload.tickets?.forEach((t) => {
+        if (t.packageCode) announcedCodesRef.current.add(t.packageCode);
+      });
 
-      announceNewTickets(count, payload.actor?.name, payload.tickets);
+      notifyArrivals(count, payload.actor?.name, payload.tickets);
       fetchData({ silent: true });
     };
 
@@ -733,16 +743,7 @@ export default function HelperTickets() {
     return () => {
       socket.off(TICKETS_NEW_EVENT, onNewTickets);
     };
-  }, [socket, canAccess, announceNewTickets, fetchData]);
-
-  // Sitting on the pending tab with the window in front means the desk has seen
-  // them; the badge clears itself so it only ever flags genuinely missed arrivals.
-  useEffect(() => {
-    if (activeTab === 'pending' && pendingAlerts > 0 && !document.hidden) {
-      const id = setTimeout(() => setPendingAlerts(0), 6000);
-      return () => clearTimeout(id);
-    }
-  }, [activeTab, pendingAlerts]);
+  }, [socket, canAccess, notifyArrivals, fetchData]);
 
   // ───────────────────────────────────────────────────────────── derived data
 
@@ -803,23 +804,39 @@ export default function HelperTickets() {
   const pendingParcels = useMemo(() => parcels.filter((p) => !p.pickupRef), [parcels]);
 
   /**
-   * Fallback for when the socket is down or the event was missed: any parcel code
-   * that shows up in "En attente" and wasn't there before is a new ticket.
+   * Single owner of the "+N nouveau" flag, and the fallback for when the socket
+   * is down: any code that turns up in "En attente" and wasn't there before is a
+   * new arrival, and any flagged code that leaves the list has been dealt with —
+   * which is precisely what "Créer bon de ramassage" does to it.
    */
   useEffect(() => {
     if (loading) return;
 
     const codes = new Set(pendingParcels.map((p) => p.code));
-
-    if (knownCodesRef.current === null) {
-      knownCodesRef.current = codes; // first load — nothing to announce
-      return;
-    }
-
-    const fresh = [...codes].filter((code) => !knownCodesRef.current!.has(code));
+    const previous = knownCodesRef.current;
     knownCodesRef.current = codes;
 
-    if (fresh.length > 0) announceNewTickets(fresh.length);
+    if (previous === null) return; // first load — everything on screen is old news
+
+    const fresh = [...codes].filter((code) => !previous.has(code));
+    const gone = [...previous].filter((code) => !codes.has(code));
+    if (fresh.length === 0 && gone.length === 0) return;
+
+    gone.forEach((code) => announcedCodesRef.current.delete(code));
+
+    setNewCodes((prev) => {
+      const next = new Set(prev);
+      gone.forEach((code) => next.delete(code));
+      fresh.forEach((code) => next.add(code));
+      if (next.size !== prev.size) return next;
+      // Equal sizes can still hide a swap: one bagged while another arrived.
+      for (const code of next) if (!prev.has(code)) return next;
+      return prev;
+    });
+
+    // Arrivals the socket already toasted must not be toasted again.
+    const unannounced = fresh.filter((code) => !announcedCodesRef.current.has(code));
+    if (unannounced.length > 0) notifyArrivals(unannounced.length);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingParcels, loading]);
 
@@ -1425,15 +1442,21 @@ export default function HelperTickets() {
 
   const renderTableRow = (parcel: Parcel, index: number) => {
     const isSelected = selected.has(parcel.code);
+    const isNewArrival = newCodes.has(parcel.code);
     return (
       <tr
         key={parcel.code}
         onClick={(e) => handleRowClick(index, parcel.code, e.shiftKey)}
         className={`cursor-pointer transition-colors select-none ${
-          isSelected ? 'bg-primary-50/70' : 'hover:bg-slate-50'
+          isSelected
+            ? 'bg-primary-50/70'
+            : isNewArrival
+              ? 'bg-emerald-50/70 hover:bg-emerald-100/70'
+              : 'hover:bg-slate-50'
         }`}
       >
-        <td className="px-4 py-2.5">
+        {/* Inset shadow rather than a border: <tr>/<td> borders collapse away. */}
+        <td className={`px-4 py-2.5 ${isNewArrival ? 'shadow-[inset_3px_0_0_0_#10b981]' : ''}`}>
           <input
             type="checkbox"
             checked={isSelected}
@@ -1446,7 +1469,14 @@ export default function HelperTickets() {
           />
         </td>
         <td className="px-4 py-2.5">
-          <span className="font-mono text-xs font-bold text-slate-800">{parcel.code}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono text-xs font-bold text-slate-800">{parcel.code}</span>
+            {isNewArrival && (
+              <span className="px-1.5 py-0.5 rounded-md bg-emerald-500 text-white text-[9px] font-black uppercase tracking-wider whitespace-nowrap">
+                Nouveau
+              </span>
+            )}
+          </div>
           <span className="block text-[10px] font-bold text-slate-400">#{parcel.orderNumber}</span>
         </td>
         <td className="px-4 py-2.5">
@@ -1528,6 +1558,7 @@ export default function HelperTickets() {
 
   const renderCard = (parcel: Parcel, index: number) => {
     const isSelected = selected.has(parcel.code);
+    const isNewArrival = newCodes.has(parcel.code);
     return (
       <div
         key={parcel.code}
@@ -1535,7 +1566,9 @@ export default function HelperTickets() {
         className={`rounded-2xl p-4 border-2 transition-all cursor-pointer select-none ${
           isSelected
             ? 'border-primary-500 bg-white shadow-lg shadow-primary-500/10'
-            : 'bg-white border-slate-100 hover:border-primary-200 hover:shadow-md'
+            : isNewArrival
+              ? 'border-emerald-400 bg-emerald-50/60 hover:shadow-md'
+              : 'bg-white border-slate-100 hover:border-primary-200 hover:shadow-md'
         }`}
       >
         <div className="flex items-start justify-between mb-3">
@@ -1551,6 +1584,11 @@ export default function HelperTickets() {
               className="w-4 h-4 rounded border-2 border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
             />
             <span className="font-mono text-[11px] font-black text-slate-700">{parcel.code}</span>
+            {isNewArrival && (
+              <span className="px-1.5 py-0.5 rounded-md bg-emerald-500 text-white text-[9px] font-black uppercase tracking-wider whitespace-nowrap">
+                Nouveau
+              </span>
+            )}
           </div>
           <span className="text-[10px] font-black text-slate-400">#{parcel.orderNumber}</span>
         </div>
@@ -2559,7 +2597,7 @@ export default function HelperTickets() {
       </div>
 
       {/* Live arrival banner */}
-      {pendingAlerts > 0 && (
+      {pendingAlerts > 0 && !bannerHidden && (
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-5 py-4 animate-in slide-in-from-top-2 duration-300">
           <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center flex-shrink-0">
             <Truck size={20} />
@@ -2585,9 +2623,9 @@ export default function HelperTickets() {
               </button>
             )}
             <button
-              onClick={() => setPendingAlerts(0)}
+              onClick={() => setBannerHidden(true)}
               className="p-2.5 rounded-xl text-emerald-600 hover:bg-emerald-100 transition-all"
-              title="Masquer"
+              title="Masquer le bandeau (le badge reste jusqu’au bon de ramassage)"
             >
               <X size={16} />
             </button>

@@ -71,27 +71,14 @@ async function main() {
   const roleMap = Object.fromEntries(roles.map((r) => [r.name, r.id]));
   console.log(`✅ Created ${roles.length} roles`);
 
-  // Seed Moroccan Cities
-  console.log('🏙️ Creating Moroccan cities...');
-  const cities = [
-    { nameAr: 'الدار البيضاء', nameFr: 'Casablanca', nameEn: 'Casablanca', region: 'Casablanca-Settat', isMajor: true },
-    { nameAr: 'الرباط', nameFr: 'Rabat', nameEn: 'Rabat', region: 'Rabat-Salé-Kénitra', isMajor: true },
-    { nameAr: 'مراكش', nameFr: 'Marrakech', nameEn: 'Marrakech', region: 'Marrakech-Safi', isMajor: true },
-    { nameAr: 'فاس', nameFr: 'Fès', nameEn: 'Fes', region: 'Fès-Meknès', isMajor: true },
-    { nameAr: 'طنجة', nameFr: 'Tanger', nameEn: 'Tangier', region: 'Tanger-Tétouan-Al Hoceïma', isMajor: true },
-    { nameAr: 'أغادير', nameFr: 'Agadir', nameEn: 'Agadir', region: 'Souss-Massa', isMajor: true },
-    { nameAr: 'مكناس', nameFr: 'Meknès', nameEn: 'Meknes', region: 'Fès-Meknès', isMajor: false },
-    { nameAr: 'وجدة', nameFr: 'Oujda', nameEn: 'Oujda', region: 'Oriental', isMajor: false },
-  ];
-
-  for (const city of cities) {
-    await prisma.moroccanCity.upsert({
-      where: { nameFr: city.nameFr },
-      update: {},
-      create: city,
-    });
-  }
-  console.log(`✅ Created ${cities.length} cities`);
+  // Cities are no longer seeded here. The catalogue is ~5.8k rows built from
+  // Coliaty, OpenStreetMap and our own order history, with map coordinates —
+  // far past what a hand-written list can carry:
+  //
+  //   npm run cities:sync
+  //
+  // See scripts/cities/ for the individual phases.
+  console.log('🏙️ Cities: run `npm run cities:sync` (not seeded here).');
 
   // Seed Categories
   console.log('📁 Creating categories...');

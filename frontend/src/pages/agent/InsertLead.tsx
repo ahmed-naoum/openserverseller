@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import { CitySelect } from '../../components/ui/CitySelect';
 
 type ThemeKey = 'classic' | 'girly' | 'princess';
 
@@ -716,14 +717,12 @@ export default function InsertLead() {
                 {loadingCities ? (
                   <FieldSkeleton />
                 ) : (
-                  <SearchableSelect
+                  <CitySelect
                     theme={theme}
-                    icon={<MapPin className="w-4 h-4" />}
-                    options={Array.from(new Set(cities.map(c => c.city_name))).map(name => ({ value: name, label: name }))}
+                    deliverableOnly
                     value={city}
-                    onChange={val => setCity(val as string)}
+                    onChange={name => setCity(name)}
                     placeholder="Sélectionner une ville..."
-                    searchPlaceholder="Rechercher une ville..."
                     error={!!formErrors.city}
                   />
                 )}

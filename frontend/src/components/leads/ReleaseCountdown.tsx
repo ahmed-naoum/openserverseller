@@ -33,10 +33,11 @@ interface ReleaseCountdownProps {
 /**
  * Counts down to the auto-release performed by jobs/leadReassignment.
  *
- * The deadline is rolled server-side per lead (1–2 h, randomised) and read
- * straight off the record rather than recomputed from `updatedAt` — the badge
- * must never disagree with the job that actually drops the lead. Renders
- * nothing for a lead that is not on a countdown.
+ * The deadline is written server-side per lead — randomised 1–2 h for most
+ * statuses, the scheduled callback plus 1 h for CALL_LATER — and read straight
+ * off the record rather than recomputed here: the badge must never disagree
+ * with the job that actually drops the lead. Renders nothing for a lead that is
+ * not on a countdown.
  */
 export function ReleaseCountdown({ lead, onExpire, className = '' }: ReleaseCountdownProps) {
   const deadline = lead.releaseAt ? new Date(lead.releaseAt).getTime() : NaN;
@@ -69,6 +70,10 @@ export function ReleaseCountdown({ lead, onExpire, className = '' }: ReleaseCoun
   if (Number.isNaN(deadline)) return null;
 
   const isNoReply = lead.status === 'NO_REPLY';
+  // CALL_LATER counts down to the reminder the agent picked plus one hour, not
+  // to the randomised hold every other status gets — say so, or the badge reads
+  // as an unrelated timer sitting next to the callback time.
+  const isCallLater = lead.status === 'CALL_LATER';
   // `noReplyReleases` counts releases already spent, so the attempt in progress
   // is the next one up.
   const attempt = (lead.noReplyReleases ?? 0) + 1;
@@ -83,7 +88,11 @@ export function ReleaseCountdown({ lead, onExpire, className = '' }: ReleaseCoun
             ? 'text-slate-500 bg-slate-50 border-slate-200'
             : 'text-slate-700 bg-slate-100 border-slate-200'
         }`}
-        title="Délai avant remise automatique dans le pool (tiré au hasard entre 1 h et 2 h)"
+        title={
+          isCallLater
+            ? "Délai avant remise automatique dans le pool (1 h après l'heure de rappel prévue)"
+            : 'Délai avant remise automatique dans le pool (tiré au hasard entre 1 h et 2 h)'
+        }
       >
         <Hourglass className="w-2.5 h-2.5 shrink-0" />
         {expired ? 'Libération imminente' : `Libéré dans ${formatRemaining(remaining)}`}

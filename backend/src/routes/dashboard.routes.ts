@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import { Prisma } from '@prisma/client';
 import { Router, Request, Response } from 'express';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
@@ -7,6 +8,7 @@ import { SAFE_USER_SELECT } from '../lib/safeUserSelect.js';
 import { parseDateRange } from '../lib/dateRange.js';
 import {
   productScopeOf,
+  applyProductScope,
   applyReferralLinkProductScope,
 } from '../lib/subAccountProductScope.js';
 
@@ -81,23 +83,12 @@ router.get(
       mode === 'SELLER' ? { vendorId: userId } : { referralLink: { influencerId: userId } },
       scope,
     );
-    const clicksWhere = applyReferralLinkProductScope(
-      {
-        ...(mode === 'SELLER'
-          ? { referralLink: { product: { ownerId: userId } } }
-          : { referralLink: { influencerId: userId } }),
-        createdAt: createdAtWindow,
-      },
-      scope,
-    );
-    // The click stats are three numbers, but the rows were fetched whole to
-    // compute them — every ipAddress/userAgent pair since the account existed,
-    // on every dashboard load. Counted in the database instead; the pair listing
-    // for the unique-visitor count is bounded by distinct visitors, not clicks.
-    const clickViewsWhere = {
-      AND: [clicksWhere, { OR: [{ userAgent: null }, { userAgent: { not: 'whatsapp_click' } }] }],
-    };
-    const clickWhatsappWhere = { AND: [clicksWhere, { userAgent: 'whatsapp_click' }] };
+    // The click figures used to be computed here too, over this response's
+    // window — which the dashboard never sends, because it loads once and
+    // filters in the browser. So they were always all-time, three numbers that
+    // sat unchanged under a period bar the user was pressing. They live on
+    // /seller-affiliate/traffic below now, re-read per window, and this response
+    // is no longer scanning the click table on every load to produce them.
 
     /**
      * The two ledgers below are the whole weight of this response. A vendor a
@@ -143,9 +134,6 @@ router.get(
       txDebits,
       txClosing,
       periodStats,
-      clickViews,
-      clickWhatsapp,
-      clickViewPairs,
       helperAssignments
     ] = await Promise.all([
       prisma.influencerCommission.count({ where: whereBase }),
@@ -198,12 +186,6 @@ router.get(
           }
         }
       }),
-      (prisma as any).referralLinkClick.count({ where: clickViewsWhere }),
-      (prisma as any).referralLinkClick.count({ where: clickWhatsappWhere }),
-      (prisma as any).referralLinkClick.groupBy({
-        by: ['ipAddress', 'userAgent'],
-        where: clickViewsWhere
-      }),
       (prisma as any).helperUserAssignment.findMany({
         where: {
           targetUserId: userId,
@@ -228,15 +210,6 @@ router.get(
       })
     ]);
 
-    const totalViews = clickViews;
-    const whatsappClicks = clickWhatsapp;
-    // Same visitor identity the in-memory fold used: ip + userAgent, a null
-    // agent reading as 'unknown' (which also collapses a null/'unknown' pair the
-    // database counts as two).
-    const uniqueVisitors = new Set(
-      (clickViewPairs || []).map((p: any) => `${p.ipAddress}-${p.userAgent || 'unknown'}`)
-    ).size;
-
     const deliveryStatuses = [
       'PENDING', 'PUSHED_TO_DELIVERY', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED', 'CONFIRMED_DELIVERY',
       'NEW_PARCEL', 'WAITING_PICKUP', 'PICKED_UP', 'SENT', 'RECEIVED', 'DISTRIBUTION', 'PROGRAMMER_AUTO', 'POSTPONED',
@@ -255,10 +228,7 @@ router.get(
     const stats = {
       conversions,
       confirmed,
-      delivered,
-      totalViews,
-      uniqueVisitors,
-      whatsappClicks
+      delivered
     };
 
     const pageMeta = (total: number, page: number, pageSize: number) => ({
@@ -304,6 +274,78 @@ router.get(
         fullName: ha.helper.profile?.fullName || 'N/A',
         avatarUrl: ha.helper.profile?.avatarUrl || null
       }))
+    });
+  })
+);
+
+/**
+ * The three traffic figures on the vendor dashboard, for one window.
+ *
+ * They live apart from `/seller-affiliate` because that response is deliberately
+ * fetched once and filtered client-side, and click counts cannot be: the browser
+ * never holds the click rows. So the period bar re-reads this route alone —
+ * three aggregates instead of the whole dashboard payload — and the lead cards
+ * beside them keep answering instantly from memory.
+ *
+ * `referralLinkId` mirrors the product picker: it names the one link whose
+ * traffic to count, the same way the client narrows its lead list.
+ */
+router.get(
+  '/seller-affiliate/traffic',
+  authenticate,
+  authorize('VENDOR'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const { start, end, referralLinkId } = req.query;
+    const mode = req.user!.mode || 'SELLER';
+
+    const linkWhere: any =
+      mode === 'SELLER' ? { product: { ownerId: userId } } : { influencerId: userId };
+    applyProductScope(linkWhere, productScopeOf(req));
+
+    const wanted = parseInt(String(referralLinkId ?? ''), 10);
+    if (Number.isFinite(wanted) && wanted > 0) linkWhere.id = wanted;
+
+    // Resolved to ids first so the aggregate below can be one flat scan instead
+    // of a join that repeats the ownership and scope filters per click row.
+    const links = await prisma.referralLink.findMany({ where: linkWhere, select: { id: true } });
+    if (links.length === 0) {
+      return res.json({ totalViews: 0, uniqueVisitors: 0, whatsappClicks: 0 });
+    }
+
+    const range = parseDateRange(start, end);
+    const windowSql = Prisma.sql`
+      ${range?.gte ? Prisma.sql`AND "createdAt" >= ${range.gte}` : Prisma.empty}
+      ${range?.lte ? Prisma.sql`AND "createdAt" <= ${range.lte}` : Prisma.empty}
+    `;
+
+    /**
+     * Counted in the database rather than folded in Node: an account with a few
+     * hundred thousand clicks would otherwise ship every ip/userAgent pair over
+     * the wire on each press of a period pill, to produce one number.
+     *
+     * `IS DISTINCT FROM` rather than `<>` because a null agent is a page view,
+     * and `null <> 'whatsapp_click'` is null — the rows would fall out of both
+     * counts. The unique key pairs ip with the agent, a null agent reading as
+     * 'unknown', which is the identity the rest of the app uses.
+     */
+    const [row] = await prisma.$queryRaw<
+      { views: bigint; uniques: bigint; whatsapp: bigint }[]
+    >`
+      SELECT
+        COUNT(*) FILTER (WHERE "userAgent" IS DISTINCT FROM 'whatsapp_click') AS views,
+        COUNT(DISTINCT ("ipAddress", COALESCE("userAgent", 'unknown')))
+          FILTER (WHERE "userAgent" IS DISTINCT FROM 'whatsapp_click') AS uniques,
+        COUNT(*) FILTER (WHERE "userAgent" = 'whatsapp_click') AS whatsapp
+      FROM referral_link_clicks
+      WHERE "referralLinkId" IN (${Prisma.join(links.map((l) => l.id))})
+      ${windowSql}
+    `;
+
+    res.json({
+      totalViews: Number(row?.views || 0),
+      uniqueVisitors: Number(row?.uniques || 0),
+      whatsappClicks: Number(row?.whatsapp || 0),
     });
   })
 );

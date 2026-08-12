@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { leadsApi, ordersApi } from '../../lib/api';
+import { CitySelect } from '../../components/ui/CitySelect';
 import toast from 'react-hot-toast';
 import { format, isValid } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -1976,24 +1977,15 @@ export default function AgentLivraison() {
                         Chargement des villes...
                       </div>
                     ) : (
-                      <select
-                        required
+                      /* A city already out for delivery is the expensive one to get
+                         wrong, so the hub is shown alongside each option and the map
+                         confirms the destination before the change is applied. */
+                      <CitySelect
+                        deliverableOnly
+                        showHub
                         value={editForm.city}
-                        onChange={e => setEditForm({ ...editForm, city: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-                      >
-                        <option value="">Sélectionner une ville...</option>
-                        {/* The stored city may predate the current Coliaty list — keep it
-                            selectable so opening the form never silently blanks it. */}
-                        {editForm.city && !coliatyCities.some(c => c.city_name === editForm.city) && (
-                          <option value={editForm.city}>{editForm.city} (ville actuelle)</option>
-                        )}
-                        {coliatyCities.map(city => (
-                          <option key={city.city_id} value={city.city_name}>
-                            {city.city_name} (Hub : {city.hub_name})
-                          </option>
-                        ))}
-                      </select>
+                        onChange={name => setEditForm({ ...editForm, city: name })}
+                      />
                     )}
                   </div>
 

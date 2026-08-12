@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { authApi, api, uploadApi, BACKEND_URL } from '../../lib/api';
+import { CitySelect } from '../../components/ui/CitySelect';
 import toast from 'react-hot-toast';
 import {
   Mail, Shield, Building2, CreditCard, CheckCircle2, Clock, Lock,
@@ -687,9 +688,14 @@ function IdentityVerificationForm({ onComplete }: { onComplete: () => void }) {
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">{tVerif('identity_city', 'Ville *')}</label>
-            <input type="text" value={kycForm.city} onChange={(e) => handleFieldChange('city', e.target.value)}
-              className={`w-full px-4 py-3 bg-white border-2 rounded-xl focus:ring-4 outline-none transition-all font-medium ${fieldErrors.city ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500/10' : 'border-slate-200 focus:border-primary-500 focus:ring-primary-500/10'}`}
-              placeholder={tVerif('identity_city_placeholder', 'Casablanca')} />
+            {/* Not restricted to deliverable cities: this is where the user
+                lives, which is independent of where Coliaty ships. */}
+            <CitySelect
+              value={kycForm.city}
+              onChange={(name) => handleFieldChange('city', name)}
+              error={!!fieldErrors.city}
+              placeholder={tVerif('identity_city_placeholder', 'Casablanca')}
+            />
             {fieldErrors.city && <p className="text-[10px] text-rose-500 font-bold mt-1 flex items-center gap-1"><AlertTriangle size={10} />{fieldErrors.city}</p>}
           </div>
           <div className="sm:col-span-2">

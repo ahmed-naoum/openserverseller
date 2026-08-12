@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { leadsApi } from '../../lib/api';
+import { leadsApi, citiesApi } from '../../lib/api';
 import { useSocket } from '../../contexts/SocketContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { CityMapModal } from '../../components/ui/CityMapModal';
+import { useCities, invalidateCityCache, City } from '../../hooks/useCities';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { buildReferralUrl } from '../../utils/referral';
@@ -2174,7 +2177,12 @@ function CityPicker({
   autoFocus?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [pendingCity, setPendingCity] = useState<City | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+
+  // The catalogue is what carries coordinates; Coliaty's own list does not.
+  const { resolve: resolveCity } = useCities();
+  const { user } = useAuth();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -2252,7 +2260,12 @@ function CityPicker({
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
                   setOpen(false);
-                  onSelect(c.city_name);
+                  // The map confirms the destination before the change is saved.
+                  // A city we have no coordinates for cannot be confirmed, so it
+                  // is committed directly rather than opening an empty map.
+                  const target = resolveCity(c.city_name);
+                  if (target?.latitude != null) setPendingCity(target);
+                  else onSelect(c.city_name);
                 }}
                 className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all flex items-center justify-between ${
                   value === c.city_name ? selectedClass : 'hover:bg-gray-50 text-gray-700 font-medium'
@@ -2267,6 +2280,27 @@ function CityPicker({
           )}
         </div>
       )}
+
+      <CityMapModal
+        open={!!pendingCity}
+        city={pendingCity}
+        onConfirm={(confirmed) => {
+          setPendingCity(null);
+          onSelect(confirmed.name);
+        }}
+        // Cancelling reopens the list so the agent can pick a different city
+        // rather than being left with the value they were trying to replace.
+        onCancel={() => {
+          setPendingCity(null);
+          setOpen(true);
+        }}
+        canEdit={user?.role === 'SUPER_ADMIN'}
+        onSaveCoordinates={async (cityId, latitude, longitude) => {
+          await citiesApi.updateCoordinates(cityId, { latitude, longitude });
+          invalidateCityCache();
+          setPendingCity((prev) => (prev ? { ...prev, latitude, longitude } : prev));
+        }}
+      />
     </div>
   );
 }

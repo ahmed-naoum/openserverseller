@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../lib/api';
+import { CitySelect } from '../../components/ui/CitySelect';
 import toast from 'react-hot-toast';
 import {
   Users, Plus, Search, Edit2, X, Save, ChevronLeft, ChevronRight,
@@ -900,17 +901,13 @@ export default function HelperLeads() {
                 {loadingCities ? (
                   <div className={`${inputCls} animate-pulse bg-gray-100`}>Chargement...</div>
                 ) : (
-                  <select
-                    required
+                  <CitySelect
+                    deliverableOnly
                     value={deliveryForm.city}
-                    onChange={e => setDeliveryForm({ ...deliveryForm, city: e.target.value })}
-                    className={inputCls}
-                  >
-                    <option value="">— Ville —</option>
-                    {coliatyCities.map(city => (
-                      <option key={city.city_id} value={city.city_name}>{city.city_name}</option>
-                    ))}
-                  </select>
+                    onChange={name => setDeliveryForm({ ...deliveryForm, city: name })}
+                    placeholder="— Ville —"
+                    error={!!formErrors.city}
+                  />
                 )}
                 {formErrors.city && <p className="text-[10px] text-red-500 font-bold mt-1">{formErrors.city}</p>}
               </Field>

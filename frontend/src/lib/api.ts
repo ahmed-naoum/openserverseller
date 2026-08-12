@@ -425,6 +425,17 @@ export const categoriesApi = {
   delete: (id: number) => api.delete(`/categories/${id}`),
 };
 
+/**
+ * The city catalogue backing every city picker: Coliaty's deliverable cities
+ * plus the wider Moroccan localities that only appear in historical orders.
+ */
+export const citiesApi = {
+  list: (params?: { deliverableOnly?: boolean }) => api.get('/cities', { params }),
+  resolve: (name: string) => api.get('/cities/resolve', { params: { name } }),
+  updateCoordinates: (id: number, data: { latitude: number; longitude: number }) =>
+    api.patch(`/cities/${id}/coordinates`, data),
+};
+
 export const publicApi = {
   cities: () => api.get('/public/cities'),
   categories: () => api.get('/public/categories'),
@@ -568,8 +579,10 @@ export const adminApi = {
   getHelperAffiliateStats: () => api.get('/admin/helpers/affiliate-stats'),
   updateHelperAffiliateConfig: (id: number, data: { canManageAffiliateInvites?: boolean; helperCommissionPerDeliveredLead?: number }) =>
     api.patch(`/admin/helpers/${id}/affiliate-config`, data),
-  getPaymentMonitoring: () => api.get('/admin/payment-monitoring'),
-  getUserPaymentMonitoring: (id: number) => api.get(`/admin/payment-monitoring/user/${id}`),
+  getPaymentMonitoring: (params?: { startDate?: string; endDate?: string }) =>
+    api.get('/admin/payment-monitoring', { params }),
+  getUserPaymentMonitoring: (id: number, params?: { startDate?: string; endDate?: string }) =>
+    api.get(`/admin/payment-monitoring/user/${id}`, { params }),
   bulkUpdatePaymentSituation: (data: { leadIds: number[]; situation: string }) => 
     api.patch('/admin/payment-monitoring/bulk-update', data),
   updateLeadPaymentFees: (id: number, data: { customPlatformFeeRate?: number | null; customShippingFee?: number | null }) => 
@@ -701,6 +714,10 @@ export const vendorSubAccountsApi = {
 
 export const dashboardApi = {
   sellerAffiliate: (params?: any) => api.get('/dashboard/seller-affiliate', { params }),
+  // The traffic cards only: the dashboard payload is loaded once and filtered in
+  // the browser, but click counts have to be re-read per window.
+  sellerAffiliateTraffic: (params?: { start?: string; end?: string; referralLinkId?: string | number }) =>
+    api.get('/dashboard/seller-affiliate/traffic', { params }),
   switchMode: (mode: 'SELLER' | 'AFFILIATE') => api.patch('/dashboard/seller-affiliate/switch-mode', { mode }),
   grosseller: () => api.get('/dashboard/grosseller'),
   agent: () => api.get('/dashboard/agent'),

@@ -32,16 +32,33 @@ router.get(
   })
 );
 
+/**
+ * Public city list for landing pages and checkout forms.
+ *
+ * Only deliverable cities are exposed here: a customer picking a city we cannot
+ * ship to produces an order nobody can fulfil. Staff-facing screens use
+ * /api/cities, which serves the full catalogue including historical localities.
+ *
+ * The legacy `nameFr` key is kept alongside `name` so landing pages built
+ * against the old moroccan_cities shape keep rendering after this switch.
+ */
 router.get(
   '/cities',
   asyncHandler(async (_req: Request, res: Response) => {
-    const cities = await prisma.moroccanCity.findMany({
-      orderBy: [{ isMajor: 'desc' }, { nameFr: 'asc' }],
+    const rows = await prisma.city.findMany({
+      where: { isActive: true, isDeliverable: true },
+      orderBy: [{ isMajor: 'desc' }, { name: 'asc' }],
+      select: {
+        id: true, name: true, slug: true, nameAr: true, region: true,
+        latitude: true, longitude: true, isMajor: true,
+      },
     });
 
     res.json({
       status: 'success',
-      data: { cities },
+      data: {
+        cities: rows.map((c) => ({ ...c, nameFr: c.name })),
+      },
     });
   })
 );

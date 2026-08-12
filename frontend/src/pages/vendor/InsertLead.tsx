@@ -23,6 +23,7 @@ import {
   X
 } from 'lucide-react';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import { CitySelect } from '../../components/ui/CitySelect';
 import { currentBasePath } from '../../lib/dashboardBase';
 
 export default function VendorInsertLead() {
@@ -816,14 +817,10 @@ export default function VendorInsertLead() {
                           {t('lead_city_loading', 'dashboard') || 'Chargement des villes...'}
                         </div>
                       ) : (
-                        <SearchableSelect
-                          icon={<MapPin className="w-4 h-4" />}
-                          options={Array.from(new Set(cities.map(c => c.city_name))).map(name => ({
-                            value: name,
-                            label: name
-                          }))}
+                        <CitySelect
+                          deliverableOnly
                           value={city}
-                          onChange={(val) => setCity(val as string)}
+                          onChange={(name) => setCity(name)}
                           placeholder={t('lead_city_placeholder', 'dashboard') || "Sélectionner une ville..."}
                           searchPlaceholder={t('lead_city_search', 'dashboard') || "Rechercher une ville..."}
                           error={!!formErrors.city}
