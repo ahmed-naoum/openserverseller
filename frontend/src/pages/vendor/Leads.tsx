@@ -633,12 +633,22 @@ export default function VendorLeads() {
       setHistoryModal({ isOpen: true, customerName, leadNotes, history: mergeHistories(localLead, localOrder) });
       return;
     }
+    // A commission row on an order that was never a lead has no lead id — it is
+    // fetched by its order instead, so the button never dead-clicks.
     const leadId = String(commission.id).startsWith('lead-')
       ? Number(String(commission.id).replace('lead-', ''))
       : (commission.order as any)?.lead?.id;
-    if (!leadId) return;
+    const orderId = (commission as any).orderId ?? (commission.order as any)?.id;
+    if (!leadId && !orderId) {
+      toast.error(t('history_unavailable', 'leads', 'Historique indisponible'));
+      return;
+    }
     try {
-      const res = await influencerApi.getCustomerHistory(Number(leadId), { mode: currentMode });
+      const res = await influencerApi.getCustomerHistory({
+        ...(leadId ? { leadId: Number(leadId) } : {}),
+        ...(orderId ? { orderId: Number(orderId) } : {}),
+        mode: currentMode,
+      });
       const data = res.data?.data || {};
       setHistoryModal({
         isOpen: true,

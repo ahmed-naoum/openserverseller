@@ -1268,6 +1268,107 @@ function extractPackOptions(landingPage: any): { name: string; price: any }[] | 
   }
 }
 
+/**
+ * Which rows of the customers list an account may see.
+ *
+ * Extracted from the handler so the history route further down authorises
+ * against the very same predicate the list selects by. Two copies of "may this
+ * account see this row" drift, and the way that shows up is a row rendering a
+ * History button that answers 404 when it is clicked.
+ */
+function buildCustomerCommissionWhere(userId: number, mode: unknown, search?: string) {
+  const where: any = {
+    order: search ? {
+      OR: [
+        { customerName: { contains: search, mode: 'insensitive' } },
+        { customerPhone: { contains: search, mode: 'insensitive' } },
+        { customerCity: { contains: search, mode: 'insensitive' } },
+      ]
+    } : { isNot: null }
+  };
+
+  if (mode === 'SELLER') {
+    where.OR = [
+      { referralLink: { product: { ownerId: userId } } },
+      { order: { vendorId: userId } }
+    ];
+  } else if (mode === 'AFFILIATE') {
+    where.influencerId = userId;
+    where.referralLink = {
+      product: {
+        OR: [
+          { ownerId: { not: userId } },
+          { ownerId: null }
+        ]
+      }
+    };
+  } else {
+    where.influencerId = userId;
+  }
+
+  return where;
+}
+
+async function buildCustomerLeadWhere(req: Request, userId: number, mode: unknown, search?: string) {
+  // The search predicate lives under AND, not OR — every mode branch below assigns
+  // `.OR = [...]`, which would otherwise overwrite it and silently return the
+  // vendor's whole lead list for any search term.
+  const where: any = {
+    ...(search ? {
+      AND: [{
+        OR: [
+          { fullName: { contains: search, mode: 'insensitive' } },
+          { phone: { contains: search, mode: 'insensitive' } },
+          { city: { contains: search, mode: 'insensitive' } },
+        ]
+      }]
+    } : {})
+  };
+
+  if (mode === 'SELLER') {
+    where.OR = [
+      { vendorId: userId },
+      { referralLink: { product: { ownerId: userId } } }
+    ];
+  } else if (mode === 'AFFILIATE') {
+    where.OR = [
+      {
+        referralLink: {
+          influencerId: userId,
+          product: {
+            OR: [
+              { ownerId: { not: userId } },
+              { ownerId: null }
+            ]
+          }
+        }
+      },
+      {
+        vendorId: userId,
+        sourceMode: 'AFFILIATE'
+      }
+    ];
+  } else {
+    const influencerLinks = await prisma.referralLink.findMany({
+      where: applyProductScope({ influencerId: userId }, productScopeOf(req)),
+      select: { id: true }
+    });
+    const linkIds = influencerLinks.map(l => l.id);
+    where.OR = [
+      { vendorId: userId },
+      { referralLinkId: { in: linkIds } }
+    ];
+  }
+
+  // Applied after the branches, not inside one: every branch above ORs in
+  // `vendorId: userId`, which matches each lead the account owns whatever link
+  // it came from. Narrowing only the link half would still hand a scoped
+  // sub-account the vendor's whole customer book.
+  applyReferralLinkProductScope(where, productScopeOf(req));
+
+  return where;
+}
+
 router.get(
   '/customers',
   authenticate,
@@ -1289,34 +1390,7 @@ router.get(
     const skip = fetchAll ? 0 : (safePage - 1) * safeLimit;
     const take = fetchAll ? ALL_HARD_CAP : safeLimit;
 
-    const commissionWhereClause: any = {
-      order: search ? {
-        OR: [
-          { customerName: { contains: search as string, mode: 'insensitive' } },
-          { customerPhone: { contains: search as string, mode: 'insensitive' } },
-          { customerCity: { contains: search as string, mode: 'insensitive' } },
-        ]
-      } : { isNot: null }
-    };
-
-    if (mode === 'SELLER') {
-      commissionWhereClause.OR = [
-        { referralLink: { product: { ownerId: userId } } },
-        { order: { vendorId: userId } }
-      ];
-    } else if (mode === 'AFFILIATE') {
-      commissionWhereClause.influencerId = userId;
-      commissionWhereClause.referralLink = { 
-        product: { 
-          OR: [
-            { ownerId: { not: userId } },
-            { ownerId: null }
-          ]
-        }
-      };
-    } else {
-      commissionWhereClause.influencerId = userId;
-    }
+    const commissionWhereClause = buildCustomerCommissionWhere(userId, mode, search as string | undefined);
 
     // The slim branch keeps every field the leads pages read per row and nothing
     // else. The two history arrays collapse into their newest entry (`take: 1`
@@ -1397,61 +1471,7 @@ router.get(
     });
 
     // New Leads (not yet orders).
-    // The search predicate lives under AND, not OR — every mode branch below assigns
-    // `leadWhereClause.OR = [...]`, which would otherwise overwrite it and silently
-    // return the vendor's whole lead list for any search term.
-    let leadWhereClause: any = {
-      ...(search ? {
-        AND: [{
-          OR: [
-            { fullName: { contains: search as string, mode: 'insensitive' } },
-            { phone: { contains: search as string, mode: 'insensitive' } },
-            { city: { contains: search as string, mode: 'insensitive' } },
-          ]
-        }]
-      } : {})
-    };
-
-    if (mode === 'SELLER') {
-      leadWhereClause.OR = [
-        { vendorId: userId },
-        { referralLink: { product: { ownerId: userId } } }
-      ];
-    } else if (mode === 'AFFILIATE') {
-      leadWhereClause.OR = [
-        {
-          referralLink: {
-            influencerId: userId,
-            product: { 
-              OR: [
-                { ownerId: { not: userId } },
-                { ownerId: null }
-              ]
-            }
-          }
-        },
-        {
-          vendorId: userId,
-          sourceMode: 'AFFILIATE'
-        }
-      ];
-    } else {
-      const influencerLinks = await prisma.referralLink.findMany({
-        where: applyProductScope({ influencerId: userId }, productScopeOf(req)),
-        select: { id: true }
-      });
-      const linkIds = influencerLinks.map(l => l.id);
-      leadWhereClause.OR = [
-        { vendorId: userId },
-        { referralLinkId: { in: linkIds } }
-      ];
-    }
-
-    // Applied after the branches, not inside one: every branch above ORs in
-    // `vendorId: userId`, which matches each lead the account owns whatever link
-    // it came from. Narrowing only the link half would still hand a scoped
-    // sub-account the vendor's whole customer book.
-    applyReferralLinkProductScope(leadWhereClause, productScopeOf(req));
+    const leadWhereClause = await buildCustomerLeadWhere(req, userId, mode, search as string | undefined);
 
     const leads = await prisma.lead.findMany({
       where: leadWhereClause,
@@ -1616,40 +1636,45 @@ router.get(
     // nested referralLink — the same few products serialised thousands of times,
     // and the landing page's sitebuilder JSON re-fetched from the DB once per
     // row. Sent once per link instead, keyed by referralLinkId.
-    const linkIds = Array.from(new Set(
-      [...leads.map(l => l.referralLinkId), ...commissions.map(c => c.referralLinkId)]
-        .filter((id): id is number => id != null)
-    ));
-    const linkRows = linkIds.length
-      ? await prisma.referralLink.findMany({
-          where: { id: { in: linkIds } },
-          select: CUSTOMER_LIST_LINK_SELECT,
-        })
-      : [];
+    // Only the slim shape needs it: the heavy rows still carry their own link,
+    // so building the map there would be a second read of the same landing pages
+    // and a second copy on the wire.
     const linkMeta: Record<string, any> = {};
-    for (const link of linkRows) {
-      linkMeta[String(link.id)] = {
-        id: link.id,
-        code: link.code,
-        productId: link.productId,
-        product: link.product
-          ? {
-              id: link.product.id,
-              nameFr: link.product.nameFr,
-              sku: link.product.sku,
-              retailPriceMad: link.product.retailPriceMad,
-              imageUrl: (link.product as any).images?.[0]?.imageUrl ?? null,
-            }
-          : null,
-        packOptions: extractPackOptions((link as any).landingPage),
-      };
+    if (summaryOnly) {
+      const linkIds = Array.from(new Set(
+        [...leads.map(l => l.referralLinkId), ...commissions.map(c => c.referralLinkId)]
+          .filter((id): id is number => id != null)
+      ));
+      const linkRows = linkIds.length
+        ? await prisma.referralLink.findMany({
+            where: { id: { in: linkIds } },
+            select: CUSTOMER_LIST_LINK_SELECT,
+          })
+        : [];
+      for (const link of linkRows) {
+        linkMeta[String(link.id)] = {
+          id: link.id,
+          code: link.code,
+          productId: link.productId,
+          product: link.product
+            ? {
+                id: link.product.id,
+                nameFr: link.product.nameFr,
+                sku: link.product.sku,
+                retailPriceMad: link.product.retailPriceMad,
+                imageUrl: (link.product as any).images?.[0]?.imageUrl ?? null,
+              }
+            : null,
+          packOptions: extractPackOptions((link as any).landingPage),
+        };
+      }
     }
 
     res.json({
       status: 'success',
       data: {
         commissions: combined,
-        linkMeta,
+        ...(summaryOnly ? { linkMeta } : {}),
         pagination: {
           page: fetchAll ? 1 : safePage,
           limit: fetchAll ? combined.length : safeLimit,
@@ -1664,47 +1689,54 @@ router.get(
   })
 );
 
-// The full status history of one lead, for the history modal. The slim customers
-// list above ships only statusChangedAt/hasHistory per row; the entries with
-// their notes and changer names — unbounded, a third of the old list payload —
-// load here for the single row the user actually opened.
+/**
+ * The full status history behind one row of the customers list, for the history
+ * modal. The slim list ships only statusChangedAt/hasHistory per row; the
+ * entries with their notes and changer names — unbounded, and a third of the old
+ * list payload — load here for the single row the user actually opened.
+ *
+ * Takes `leadId` or `orderId` because the list has two kinds of row, and an
+ * order that was never a lead (an import, an order raised directly) has history
+ * of its own with no lead to hang it on. Whichever the caller has, it is
+ * authorised against the same two predicates the list selects by: a row it was
+ * willing to show must not answer 404 when its History button is clicked.
+ */
 router.get(
-  '/customers/:leadId/history',
+  '/customers/history',
   authenticate,
   authorize('VENDOR', 'INFLUENCER'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const leadId = Number(req.params.leadId);
-    if (!Number.isInteger(leadId) || leadId <= 0) {
-      return res.status(400).json({ status: 'error', message: 'Invalid lead id' });
-    }
     const { mode } = req.query;
 
-    // Same visibility branches as the /customers list: a lead is readable here
-    // exactly when it would have appeared on that list.
-    const where: any = { id: leadId };
-    if (mode === 'SELLER') {
-      where.OR = [
-        { vendorId: userId },
-        { referralLink: { product: { ownerId: userId } } }
-      ];
-    } else if (mode === 'AFFILIATE') {
-      where.OR = [
-        {
-          referralLink: {
-            influencerId: userId,
-            product: { OR: [{ ownerId: { not: userId } }, { ownerId: null }] }
-          }
-        },
-        { vendorId: userId, sourceMode: 'AFFILIATE' }
-      ];
-    } else {
-      where.OR = [
-        { vendorId: userId },
-        { referralLink: { influencerId: userId } }
-      ];
+    const leadId = Number(req.query.leadId);
+    const orderId = Number(req.query.orderId);
+    const hasLead = Number.isInteger(leadId) && leadId > 0;
+    const hasOrder = Number.isInteger(orderId) && orderId > 0;
+    if (!hasLead && !hasOrder) {
+      return res.status(400).json({ status: 'error', message: 'leadId or orderId is required' });
     }
-    applyReferralLinkProductScope(where, productScopeOf(req));
+
+    const leadWhere = await buildCustomerLeadWhere(req, userId, mode);
+    const commissionWhere = buildCustomerCommissionWhere(userId, mode);
+
+    // The list admits a row through EITHER half — as a lead it owns, or through
+    // a commission on its order — so both are asked here. `AND` rather than a
+    // spread: the built clauses carry their own OR/scope keys and merging by
+    // key would drop one of them.
+    const [visibleLead, visibleCommission] = await Promise.all([
+      hasLead
+        ? prisma.lead.findFirst({ where: { AND: [{ id: leadId }, leadWhere] }, select: { id: true } })
+        : Promise.resolve(null),
+      prisma.influencerCommission.findFirst({
+        where: { AND: [hasOrder ? { orderId } : { order: { leadId } }, commissionWhere] },
+        select: { id: true }
+      }),
+    ]);
+
+    if (!visibleLead && !visibleCommission) {
+      return res.status(404).json({ status: 'error', message: 'Not found' });
+    }
 
     const HISTORY_ENTRY = {
       id: true,
@@ -1713,43 +1745,55 @@ router.get(
       notes: true,
       createdAt: true,
     };
-
-    const lead = await prisma.lead.findFirst({
-      where,
+    const LEAD_HISTORY = {
       select: {
-        id: true,
-        notes: true,
-        statusHistory: {
-          select: {
-            ...HISTORY_ENTRY,
-            changer: { select: { id: true, profile: { select: { fullName: true } } } },
-          },
-          orderBy: { createdAt: 'asc' }
-        },
-        order: {
-          select: {
-            statusHistory: {
-              select: {
-                ...HISTORY_ENTRY,
-                changedByUser: { select: { id: true, profile: { select: { fullName: true } } } },
-              },
-              orderBy: { createdAt: 'asc' }
-            }
-          }
-        }
-      }
-    });
+        ...HISTORY_ENTRY,
+        changer: { select: { id: true, profile: { select: { fullName: true } } } },
+      },
+      orderBy: { createdAt: 'asc' as const }
+    };
+    const ORDER_HISTORY = {
+      select: {
+        ...HISTORY_ENTRY,
+        changedByUser: { select: { id: true, profile: { select: { fullName: true } } } },
+      },
+      orderBy: { createdAt: 'asc' as const }
+    };
 
-    if (!lead) {
-      return res.status(404).json({ status: 'error', message: 'Lead not found' });
+    // Reached by lead when there is one, by order otherwise; an order-only row
+    // still returns its own history rather than an empty timeline.
+    const lead = hasLead
+      ? await prisma.lead.findUnique({
+          where: { id: leadId },
+          select: {
+            id: true,
+            notes: true,
+            statusHistory: LEAD_HISTORY,
+            order: { select: { statusHistory: ORDER_HISTORY } }
+          }
+        })
+      : null;
+
+    const orderOnly = !lead && hasOrder
+      ? await prisma.order.findUnique({
+          where: { id: orderId },
+          select: {
+            statusHistory: ORDER_HISTORY,
+            lead: { select: { notes: true, statusHistory: LEAD_HISTORY } }
+          }
+        })
+      : null;
+
+    if (!lead && !orderOnly) {
+      return res.status(404).json({ status: 'error', message: 'Not found' });
     }
 
     res.json({
       status: 'success',
       data: {
-        leadHistory: lead.statusHistory,
-        orderHistory: lead.order?.statusHistory || [],
-        notes: lead.notes,
+        leadHistory: lead?.statusHistory || orderOnly?.lead?.statusHistory || [],
+        orderHistory: lead?.order?.statusHistory || orderOnly?.statusHistory || [],
+        notes: lead?.notes ?? orderOnly?.lead?.notes ?? null,
       }
     });
   })
