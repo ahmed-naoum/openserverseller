@@ -61,26 +61,75 @@
         var ua = navigator.userAgent;
         var v = ua.match(/(chrome|safari|firefox|msie|trident(?=\/))\/?\s*(\d+)/i) || [];
 
-        window.__REFERRAL_PRELOAD__ = {
-          code: code,
-          body: fetch('/api/v1/influencer/links/' + raw + '/public', {
-            credentials: 'include',
-            headers: {
-              'x-client-screen': screen.width + 'x' + screen.height,
-              'x-client-window': window.innerWidth + 'x' + window.innerHeight,
-              'x-client-cookies': navigator.cookieEnabled ? '1' : '0',
-              'x-client-js': '1',
-              'x-client-platform': navigator.platform,
-              'x-client-browser-version': v.length > 2 ? v[2] : '',
-              'x-client-device-type':
-                /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)
-                  ? 'Mobile'
-                  : 'Desktop'
-            }
-          })
-            .then(function (r) { return r.ok ? r.json() : null; })
-            .catch(function () { return null; })
-        };
+        var body = fetch('/api/v1/influencer/links/' + raw + '/public', {
+          credentials: 'include',
+          headers: {
+            'x-client-screen': screen.width + 'x' + screen.height,
+            'x-client-window': window.innerWidth + 'x' + window.innerHeight,
+            'x-client-cookies': navigator.cookieEnabled ? '1' : '0',
+            'x-client-js': '1',
+            'x-client-platform': navigator.platform,
+            'x-client-browser-version': v.length > 2 ? v[2] : '',
+            'x-client-device-type':
+              /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)
+                ? 'Mobile'
+                : 'Desktop'
+          }
+        })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .catch(function () { return null; });
+
+        window.__REFERRAL_PRELOAD__ = { code: code, body: body };
+
+        /*
+          Start the hero image as soon as the payload names it.
+          ----------------------------------------------------
+          The request above already runs during HTML parse, but the browser did
+          not learn the image URL until React had downloaded, mounted, fetched
+          the route chunk and rendered — so the largest element on the page
+          began downloading several steps after its URL was known. Issuing a
+          <link rel=preload> here collapses that gap to nothing.
+
+          Only the first image block is preloaded, and only if it appears in the
+          first three: BlockRenderer marks every image eager/high-priority, so
+          preloading a below-the-fold one would compete with the real LCP
+          element for bandwidth rather than help it.
+
+          The href must resolve to exactly what BlockRenderer renders, or the
+          image downloads twice. It does, because both are relative to the page
+          origin — resolveUrl() prefixes BACKEND_URL, which with VITE_API_URL
+          unset is window.location.origin. Re-pointing BACKEND_URL at another
+          host without updating this would silently double-fetch the image.
+
+          Failure-tolerant like the fetch above: any unexpected shape simply
+          skips the preload, and the page behaves exactly as it did before.
+        */
+        body.then(function (payload) {
+          if (!payload) return;
+
+          var d = payload.status === 'success' ? payload.data : payload;
+          var cs = d && d.landingPage && d.landingPage.customStructure;
+          if (typeof cs === 'string') {
+            try { cs = JSON.parse(cs); } catch (e) { return; }
+          }
+
+          var blocks = cs && cs.blocks;
+          if (!blocks || !blocks.length) return;
+
+          for (var i = 0; i < blocks.length && i < 3; i++) {
+            var b = blocks[i];
+            if (!b || b.type !== 'image' || !b.content || !b.content.url) continue;
+            if (b.content.url.indexOf('data:') === 0) return;
+
+            var link = document.createElement('link');
+            link.rel = 'preload';
+            link.as = 'image';
+            link.href = b.content.url;
+            link.fetchPriority = 'high';
+            document.head.appendChild(link);
+            return;
+          }
+        }).catch(function () { /* never let a preload break the page */ });
       })();
     </script>
   </head>
