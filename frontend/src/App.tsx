@@ -393,9 +393,23 @@ function App() {
             </Suspense>
           } />
           <Route path="/r/:code" element={
+            /*
+              A static skeleton, not a spinner: this fallback covers the chunk
+              download only, and the dark slate-900 screen it replaced flashed
+              black before ReferralForm's own light grey page. Deliberately not
+              animated — nothing here moves, so there is no second animation
+              competing with the payload spinner that follows.
+
+              bg-gray-50 matches ReferralForm's own background, so the handoff
+              from this to the real page is a fill, not a repaint.
+            */
             <Suspense fallback={
-              <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-                <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+              <div className="min-h-screen bg-gray-50 p-4">
+                <div className="max-w-md mx-auto">
+                  <div className="h-48 bg-gray-200 rounded-2xl" />
+                  <div className="h-6 bg-gray-200 rounded mt-4 w-2/3" />
+                  <div className="h-6 bg-gray-200 rounded mt-2 w-1/3" />
+                </div>
               </div>
             }>
               <ReferralForm />
