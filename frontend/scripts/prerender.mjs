@@ -137,9 +137,26 @@ async function main() {
    * Copied here, before anything else can fail: `skip()` below exits 0 when no
    * Chrome is present, and nginx must never be left pointing at a file that a
    * skipped prerender never produced.
+   *
+   * Guarded on the source still being a shell, because this script is runnable
+   * on its own (`npm run prerender`). On a second run without a rebuild,
+   * dist/index.html is already the homepage snapshot, and copying that would
+   * quietly turn the fallback into the very 87 KB page this exists to avoid.
+   * An unrendered shell is recognisable by its empty #root.
    */
-  await copyFile(path.join(DIST, 'index.html'), path.join(DIST, 'spa.html'));
-  console.log('[prerender] Saved unrendered shell to dist/spa.html (SPA fallback)');
+  const shellPath = path.join(DIST, 'index.html');
+  const spaPath = path.join(DIST, 'spa.html');
+  const shellHtml = await readFile(shellPath, 'utf8');
+
+  if (/<div id="root">\s*<\/div>/.test(shellHtml)) {
+    await copyFile(shellPath, spaPath);
+    console.log('[prerender] Saved unrendered shell to dist/spa.html (SPA fallback)');
+  } else if (existsSync(spaPath)) {
+    console.log('[prerender] index.html is already prerendered — keeping the existing spa.html');
+  } else {
+    console.warn('[prerender] WARNING: index.html is already prerendered and there is no spa.html.');
+    console.warn('[prerender] Run `vite build` before prerendering, or nginx falls back to the homepage snapshot.');
+  }
 
   const executablePath = findChrome();
   if (!executablePath) skip('no Chrome/Chromium binary found');

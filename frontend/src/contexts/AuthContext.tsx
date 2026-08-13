@@ -104,28 +104,28 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+/**
+ * What a signed-out visitor gets instead of a request.
+ *
+ * Nothing public reads these — the only consumers are RoleGuard, the profile
+ * verification banners and the admin screens, all of them behind a login. But
+ * RoleGuard waits on a non-null value before it will redirect, so a guest who
+ * lands on a dashboard URL must still be handed something, or it stalls on its
+ * loading state instead of bouncing them to /login.
+ *
+ * Same shape as the error fallback below, for the same reason: assume the
+ * verification steps exist rather than silently hiding them.
+ */
+const GUEST_PLATFORM_SETTINGS = {
+  showIdentityVerification: true,
+  showBankVerification: true,
+  showContractVerification: true
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [platformSettings, setPlatformSettings] = useState<any>(null);
-
-  /**
-   * What a signed-out visitor gets instead of a request.
-   *
-   * Nothing public reads these — the only consumers are RoleGuard, the profile
-   * verification banners and the admin screens, all of them behind a login. But
-   * RoleGuard waits on a non-null value before it will redirect, so a guest who
-   * lands on a dashboard URL must still be handed something or it stalls on its
-   * loading state instead of bouncing them to /login.
-   *
-   * Same shape as the error fallback below, for the same reason: assume the
-   * verification steps exist rather than silently hiding them.
-   */
-  const GUEST_PLATFORM_SETTINGS = {
-    showIdentityVerification: true,
-    showBankVerification: true,
-    showContractVerification: true
-  };
 
   const refreshPlatformSettings = async () => {
     try {
