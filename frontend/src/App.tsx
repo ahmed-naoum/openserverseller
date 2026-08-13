@@ -394,24 +394,17 @@ function App() {
           } />
           <Route path="/r/:code" element={
             /*
-              A static skeleton, not a spinner: this fallback covers the chunk
-              download only, and the dark slate-900 screen it replaced flashed
-              black before ReferralForm's own light grey page. Deliberately not
-              animated — nothing here moves, so there is no second animation
-              competing with the payload spinner that follows.
+              Bare background, no placeholder of any kind. This fallback covers
+              the lazy chunk download only, and anything drawn here is visible
+              for a few hundred milliseconds before being replaced — a spinner
+              flashed, and a skeleton read as content that never arrived.
 
               bg-gray-50 matches ReferralForm's own background, so the handoff
-              from this to the real page is a fill, not a repaint.
+              to the real page is a fill rather than a repaint. It must stay a
+              rendered element, not null: null lets whatever painted before show
+              through, which on a client-side navigation is the previous page.
             */
-            <Suspense fallback={
-              <div className="min-h-screen bg-gray-50 p-4">
-                <div className="max-w-md mx-auto">
-                  <div className="h-48 bg-gray-200 rounded-2xl" />
-                  <div className="h-6 bg-gray-200 rounded mt-4 w-2/3" />
-                  <div className="h-6 bg-gray-200 rounded mt-2 w-1/3" />
-                </div>
-              </div>
-            }>
+            <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
               <ReferralForm />
             </Suspense>
           } />
