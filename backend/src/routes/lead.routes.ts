@@ -5,6 +5,7 @@ import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import axios from 'axios';
 import { getSecret } from '../lib/secretStore.js';
+import { toColiatyCityName } from '../lib/coliatyCityName.js';
 import { getIO, emitLeadUnassigned } from '../lib/realtime.js';
 import { emitNewTickets } from '../lib/ticketEvents.js';
 import { getAgentLeadScope, getAgentProductRestrictions } from '../utils/agentScope.js';
@@ -2515,7 +2516,9 @@ router.post(
           package_phone: normalizedColiatyPhone,
           package_price: Number(totalAmountMad),
           package_addresse: address || city || 'Unknown',
-          package_city: city || 'Casablanca',
+          // Translated to the carrier's spelling; the address keeps ours, since
+          // that one is read by a human courier rather than matched by name.
+          package_city: await toColiatyCityName(city) || 'Casablanca',
           package_content: contentValue,
           package_no_open: wantsNoOpen,
           package_replacement: isReplacement,
@@ -3487,7 +3490,9 @@ router.post(
     // Override lead data with modal input if provided
     const receiverName = package_reciever || lead.fullName;
     const receiverPhone = package_phone || lead.phone;
-    const receiverCity = package_city || lead.city || 'Casablanca';
+    // Whether it came from the delivery modal or straight off the lead, the city
+    // is translated to Coliaty's spelling before it goes on the parcel.
+    const receiverCity = (await toColiatyCityName(package_city || lead.city)) || 'Casablanca';
     const receiverAddress = package_addresse || lead.address || lead.city || 'Unknown';
 
     // Create a Coliaty parcel (MANDATORY)

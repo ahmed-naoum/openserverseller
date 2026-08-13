@@ -6,6 +6,7 @@ import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { prisma } from '../lib/prisma.js';
 import { getSecret } from '../lib/secretStore.js';
+import { toColiatyCityName, coliatyCityNameResolver } from '../lib/coliatyCityName.js';
 import { productScopeOf, applyOrderProductScope } from '../lib/subAccountProductScope.js';
 import {
   coliatyRequest,
@@ -798,6 +799,12 @@ router.post(
     const successfulLeadIdsByVendor: Record<number, number[]> = {};
     const newTickets: NewTicketPayload[] = [];
 
+    // Resolved for the whole batch up front: the map below is synchronous, and
+    // a per-parcel lookup would be one query each.
+    const resolveDispatchCity = await coliatyCityNameResolver(
+      leads.map((lead) => lead.order?.customerCity)
+    );
+
     // 1. Prepare parcels array
     const entries = leads.map((lead) => {
       const order = lead.order!;
@@ -828,6 +835,10 @@ router.post(
       const packageNote = lead.notes || '';
 
       const o = order as any;
+      // Sent in Coliaty's own spelling rather than ours. Bulk dispatch takes
+      // only lead ids, so no picker or warning stands between the stored city
+      // and the carrier — this is the only place the two can be reconciled.
+      const dispatchCity = resolveDispatchCity(order.customerCity);
       const parcel = {
         package_reciever: order.customerName,
         package_phone: normalizedColiatyPhone,
@@ -835,7 +846,7 @@ router.post(
         // produces on its own (49.9 * 3 = 149.70000000000002).
         package_price: Math.round(Number(order.totalAmountMad) * 100) / 100,
         package_addresse: order.customerAddress,
-        package_city: order.customerCity,
+        package_city: dispatchCity,
         package_content: baseContent.substring(0, 100),
         // Read off the order instead of being pinned to false — these are the
         // options the agent actually ticked on the insert form.
@@ -1142,6 +1153,13 @@ router.post(
       throw new AppException(500, '[Coliaty] Clés API non configurées.');
     }
 
+    // Redirecting a parcel is the one case where the wrong spelling is most
+    // costly — it is already in the carrier's network — so the new destination
+    // goes over in their naming. Our own record below deliberately keeps the
+    // spelling the agent entered: that is what the customer and the exports read.
+    const redirectCity =
+      request_type === 'CHANGE_DESTINATION' ? await toColiatyCityName(package_city) : package_city;
+
     try {
       const response = await axios.post(`${COLIATY_BASE_URL.replace(/\/$/, '')}/parcel-change-demand/create`, {
         package_code: (order as any).coliatyPackageCode,
@@ -1150,7 +1168,7 @@ router.post(
         package_reciever,
         package_price,
         package_note,
-        ...(request_type === 'CHANGE_DESTINATION' ? { package_city, package_address } : {})
+        ...(request_type === 'CHANGE_DESTINATION' ? { package_city: redirectCity, package_address } : {})
       }, {
         headers: {
           Authorization: `Bearer ${COLIATY_PUBLIC_KEY}:${COLIATY_SECRET_KEY}`,

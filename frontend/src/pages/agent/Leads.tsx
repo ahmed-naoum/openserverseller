@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { Sparkles, Phone, MessageSquare, Zap, Package, Heart, Filter, ChevronRight, Activity, Check, X } from 'lucide-react';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import { findColiatyCity } from '../../hooks/useCities';
 import { ReleaseCountdown } from '../../components/leads/ReleaseCountdown';
 
 const AssignedTimer =({ lead, onTimeout, isGirly, isPrincess }: { lead: any; onTimeout?: () => void; isGirly: boolean; isPrincess: boolean }) => {
@@ -356,12 +357,8 @@ export default function AgentLeads() {
    * publishes. Returns '' when there is no match — which is what blocks the push
    * before a parcel is attempted for a city Coliaty does not know.
    */
-  const resolveColiatyCity = (rawCity: string, cities: any[]): string => {
-    const value = (rawCity || '').trim().toLowerCase();
-    if (!value || cities.length === 0) return '';
-    const exact = cities.find((c) => (c.city_name || '').trim().toLowerCase() === value);
-    return exact ? exact.city_name : '';
-  };
+  const resolveColiatyCity = (rawCity: string, cities: any[]): string =>
+    findColiatyCity(rawCity, cities)?.city_name || '';
 
   /** A lead can only be shipped once, and only after the confirmation call. */
   const canPushToDelivery = (lead: any) =>

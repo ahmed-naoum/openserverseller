@@ -4,7 +4,7 @@ import { leadsApi, citiesApi } from '../../lib/api';
 import { useSocket } from '../../contexts/SocketContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { CityMapModal } from '../../components/ui/CityMapModal';
-import { useCities, invalidateCityCache, City } from '../../hooks/useCities';
+import { useCities, invalidateCityCache, findColiatyCity, City } from '../../hooks/useCities';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { buildReferralUrl } from '../../utils/referral';
@@ -96,13 +96,15 @@ const resolveVariantPrice = (lead: any): number | null => {
 /**
  * Maps a free-text city onto its official Coliaty spelling, or '' when there is
  * no match — a parcel cannot be created for a city Coliaty does not know.
+ *
+ * The comparison lives in useCities so this file and agent/Leads.tsx cannot
+ * drift apart again; they held byte-identical copies of it. Both compared raw
+ * lowercased strings, which meant every city we spell with an accent — Fès,
+ * Kénitra, Salé, Laâyoune — resolved to '' and read as "not a Coliaty city",
+ * blocking the delivery form on a city the carrier serves perfectly well.
  */
-const resolveColiatyCity = (rawCity: string, cities: any[]): string => {
-  const value = (rawCity || '').trim().toLowerCase();
-  if (!value || cities.length === 0) return '';
-  const exact = cities.find((c) => (c.city_name || '').trim().toLowerCase() === value);
-  return exact ? exact.city_name : '';
-};
+const resolveColiatyCity = (rawCity: string, cities: any[]): string =>
+  findColiatyCity(rawCity, cities)?.city_name || '';
 
 const STATUS_LABELS: Record<string, { label: string, icon: string, color: string, ring: string }> = {
   NEW: { label: 'Nouveau', icon: '🆕', color: 'bg-blue-100 text-blue-800', ring: 'bg-blue-500' },
@@ -616,12 +618,13 @@ export default function AgentLeadDetail() {
    * would be a false alarm on what is really a network problem.
    */
   const cityMatch: 'empty' | 'unknown' | 'matched' | 'unmatched' = useMemo(() => {
-    const value = (editedCity || '').trim().toLowerCase();
+    const value = (editedCity || '').trim();
     if (!value) return 'empty';
     if (loadingCities || coliatyCities.length === 0) return 'unknown';
-    return coliatyCities.some((c) => (c.city_name || '').trim().toLowerCase() === value)
-      ? 'matched'
-      : 'unmatched';
+    // The same matcher the dispatch uses, so the badge cannot contradict whether
+    // the parcel will actually be accepted. Disagreeing is what taught agents to
+    // "correct" a valid city until it stopped being one.
+    return findColiatyCity(value, coliatyCities) ? 'matched' : 'unmatched';
   }, [editedCity, coliatyCities, loadingCities]);
 
   /**
@@ -2178,6 +2181,15 @@ function CityPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [pendingCity, setPendingCity] = useState<City | null>(null);
+  /**
+   * The carrier's spelling of the row awaiting confirmation.
+   *
+   * The catalogue row is looked up only to get a position to draw on the map;
+   * its display name is not what ships. Holding the Coliaty name separately is
+   * what stops the confirm handler committing "Laâyoune" for a list the agent
+   * picked "Laayoune" from.
+   */
+  const [pendingColiatyName, setPendingColiatyName] = useState('');
   const ref = useRef<HTMLDivElement>(null);
 
   // The catalogue is what carries coordinates; Coliaty's own list does not.
@@ -2264,8 +2276,12 @@ function CityPicker({
                   // A city we have no coordinates for cannot be confirmed, so it
                   // is committed directly rather than opening an empty map.
                   const target = resolveCity(c.city_name);
-                  if (target?.latitude != null) setPendingCity(target);
-                  else onSelect(c.city_name);
+                  if (target?.latitude != null) {
+                    setPendingColiatyName(c.city_name);
+                    setPendingCity(target);
+                  } else {
+                    onSelect(c.city_name);
+                  }
                 }}
                 className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all flex items-center justify-between ${
                   value === c.city_name ? selectedClass : 'hover:bg-gray-50 text-gray-700 font-medium'
@@ -2286,7 +2302,13 @@ function CityPicker({
         city={pendingCity}
         onConfirm={(confirmed) => {
           setPendingCity(null);
-          onSelect(confirmed.name);
+          // The carrier's spelling, not the catalogue's. Committing
+          // `confirmed.name` here is what put "Laâyoune" in a field the agent
+          // had filled from a list showing "Laayoune", and every check
+          // downstream then called that unrecognised. The fallback covers a row
+          // reached without going through the list.
+          onSelect(pendingColiatyName || confirmed.name);
+          setPendingColiatyName('');
         }}
         // Cancelling reopens the list so the agent can pick a different city
         // rather than being left with the value they were trying to replace.
