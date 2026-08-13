@@ -142,13 +142,32 @@ async function main() {
    * on its own (`npm run prerender`). On a second run without a rebuild,
    * dist/index.html is already the homepage snapshot, and copying that would
    * quietly turn the fallback into the very 87 KB page this exists to avoid.
-   * An unrendered shell is recognisable by its empty #root.
+   * An unrendered shell is recognisable by its size.
    */
   const shellPath = path.join(DIST, 'index.html');
   const spaPath = path.join(DIST, 'spa.html');
   const shellHtml = await readFile(shellPath, 'utf8');
 
-  if (/<div id="root">\s*<\/div>/.test(shellHtml)) {
+  /**
+   * Structural, not textual.
+   *
+   * Testing for a literal `<div id="root"></div>` meant that putting a loading
+   * skeleton inside #root — or adding an attribute, or switching to single
+   * quotes — would silently drop through to the warn-and-continue branch below
+   * and ship a build with no SPA fallback. That is a plausible next edit on a
+   * page being tuned for LCP, and it would look harmless in review.
+   *
+   * The `else if` backstop cannot save it either: deploy.sh wipes the staging
+   * directory before every build, so a previous spa.html never exists there.
+   *
+   * Size is the honest discriminator. The built shell is ~5 KB; a prerendered
+   * snapshot is ~90 KB. The threshold sits four times above one and four times
+   * below the other, and if the shell ever genuinely outgrows it the failure is
+   * loud rather than silent.
+   */
+  const SHELL_MAX_BYTES = 20_000;
+
+  if (shellHtml.length < SHELL_MAX_BYTES) {
     await copyFile(shellPath, spaPath);
     console.log('[prerender] Saved unrendered shell to dist/spa.html (SPA fallback)');
   } else if (existsSync(spaPath)) {
@@ -184,7 +203,15 @@ async function main() {
   });
 
   const results = [];
-  const shellSize = (await readFile(path.join(DIST, 'index.html'), 'utf8')).length;
+  // Measured from spa.html, not index.html: the loop below overwrites
+  // index.html with the homepage snapshot, so on a standalone re-run this
+  // reported the previous run's ~90 KB page as "the shell" — the very number
+  // the spa.html copy exists to shrink. spa.html is the only copy of the shell
+  // that survives a prerender. The fallback covers the branch that warns above,
+  // where there is no shell left on disk to measure.
+  const shellSize = existsSync(spaPath)
+    ? (await readFile(spaPath, 'utf8')).length
+    : shellHtml.length;
 
   try {
     for (const route of ROUTES) {

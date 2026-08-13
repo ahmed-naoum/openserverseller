@@ -144,7 +144,19 @@ if ! VITE_OUT_DIR="$STAGING_DIR" npm run build; then
   fail "frontend build failed — live site untouched, still serving the previous build"
 fi
 
-[ -f "${STAGING_DIR}/index.html" ] || { rm -rf "$STAGING_DIR"; fail "build produced no index.html — refusing to swap"; }
+[ -s "${STAGING_DIR}/index.html" ] || { rm -rf "$STAGING_DIR"; fail "build produced no index.html — refusing to swap"; }
+
+# Warned, not enforced, and that is deliberate.
+#
+# nginx still falls back to /index.html, so a missing spa.html costs nothing
+# today beyond serving the homepage snapshot on deep links. Failing the deploy
+# over it would mean the only event that can trip this — see the shell-size
+# guard in frontend/scripts/prerender.mjs — permanently blocks every deploy,
+# including hotfixes, over a file nothing currently reads.
+#
+# Turn this into a hard failure in the same change that points try_files at
+# /spa.html, not before.
+[ -s "${STAGING_DIR}/spa.html" ] || log "    WARNING: build produced no spa.html — SPA fallback missing (harmless until nginx try_files points at it)"
 
 log ">>> Swapping in the new build..."
 if [ -d "$BUILD_DIR" ]; then
