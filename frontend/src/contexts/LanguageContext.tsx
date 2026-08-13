@@ -1,25 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { authApi } from '../lib/api';
 
-// Static imports of dictionary translations
-import homeEn from '../locales/en/home.json';
-import dashboardEn from '../locales/en/dashboard.json';
-import loginEn from '../locales/en/login.json';
-import registerEn from '../locales/en/register.json';
-import forgotEn from '../locales/en/forgot-password.json';
-import pendingEn from '../locales/en/pending-verification.json';
-import inventoryEn from '../locales/en/inventory.json';
-import linksEn from '../locales/en/links.json';
-import leadsEn from '../locales/en/leads.json';
-import walletEn from '../locales/en/wallet.json';
-import invoicesEn from '../locales/en/invoices.json';
-import marketplaceEn from '../locales/en/marketplace.json';
-import supportEn from '../locales/en/support.json';
-import chatEn from '../locales/en/chat.json';
-import verificationEn from '../locales/en/verification.json';
-import notificationsEn from '../locales/en/notifications.json';
-import callCenterEn from '../locales/en/call-center.json';
 
 import homeFr from '../locales/fr/home.json';
 import dashboardFr from '../locales/fr/dashboard.json';
@@ -77,65 +59,69 @@ export type Namespaces =
   | 'notifications'
   | 'call-center';
 
-const translations: Record<string, Record<Namespaces, LocaleDict>> = {
-  en: { 
-    home: homeEn as LocaleDict, 
-    dashboard: dashboardEn as LocaleDict,
-    login: loginEn as LocaleDict,
-    register: registerEn as LocaleDict,
-    'forgot-password': forgotEn as LocaleDict,
-    'pending-verification': pendingEn as LocaleDict,
-    inventory: inventoryEn as LocaleDict,
-    links: linksEn as LocaleDict,
-    leads: leadsEn as LocaleDict,
-    wallet: walletEn as LocaleDict,
-    invoices: invoicesEn as LocaleDict,
-    marketplace: marketplaceEn as LocaleDict,
-    support: supportEn as LocaleDict,
-    chat: chatEn as LocaleDict,
-    verification: verificationEn as LocaleDict,
-    notifications: notificationsEn as LocaleDict,
-    'call-center': callCenterEn as LocaleDict
-  },
-  fr: { 
-    home: homeFr as LocaleDict, 
-    dashboard: dashboardFr as LocaleDict,
-    login: loginFr as LocaleDict,
-    register: registerFr as LocaleDict,
-    'forgot-password': forgotFr as LocaleDict,
-    'pending-verification': pendingFr as LocaleDict,
-    inventory: inventoryFr as LocaleDict,
-    links: linksFr as LocaleDict,
-    leads: leadsFr as LocaleDict,
-    wallet: walletFr as LocaleDict,
-    invoices: invoicesFr as LocaleDict,
-    marketplace: marketplaceFr as LocaleDict,
-    support: supportFr as LocaleDict,
-    chat: chatFr as LocaleDict,
-    verification: verificationFr as LocaleDict,
-    notifications: notificationsFr as LocaleDict,
-    'call-center': callCenterFr as LocaleDict
-  },
-  ar: { 
-    home: homeAr as LocaleDict, 
-    dashboard: dashboardAr as LocaleDict,
-    login: loginAr as LocaleDict,
-    register: registerAr as LocaleDict,
-    'forgot-password': forgotAr as LocaleDict,
-    'pending-verification': pendingAr as LocaleDict,
-    inventory: inventoryAr as LocaleDict,
-    links: linksAr as LocaleDict,
-    leads: leadsAr as LocaleDict,
-    wallet: walletAr as LocaleDict,
-    invoices: invoicesAr as LocaleDict,
-    marketplace: marketplaceAr as LocaleDict,
-    support: supportAr as LocaleDict,
-    chat: chatAr as LocaleDict,
-    verification: verificationAr as LocaleDict,
-    notifications: notificationsAr as LocaleDict,
-    'call-center': callCenterAr as LocaleDict
-  },
+/**
+ * Dictionaries load one language at a time, on demand.
+ *
+ * All 51 JSON files were imported statically, which put ~424 KB of translations
+ * into the entry chunk every visitor downloads — including the public offer
+ * pages at /r/:code, whose copy is hardcoded and which read none of it. Each
+ * language is now a single lazily-loaded chunk.
+ */
+const LOADERS: Record<string, () => Promise<{ default: Record<string, LocaleDict> }>> = {
+  en: () => import('../locales/en'),
+  fr: () => import('../locales/fr'),
+  ar: () => import('../locales/ar'),
 };
+
+export const SUPPORTED_LANGUAGES = ['en', 'fr', 'ar'];
+
+/**
+ * Held at module scope rather than component state for two reasons: a language
+ * already fetched is never fetched twice, and loadLanguage can fill this before
+ * React renders — which is what lets the translate function stay synchronous.
+ */
+const loaded: Record<string, Record<string, LocaleDict>> = {};
+const inFlight: Record<string, Promise<void>> = {};
+// A language that failed is not retried. The translate function asks for a
+// missing dictionary on every render, so without this a dead chunk would spin
+// forever instead of quietly falling through to the key.
+const failed = new Set<string>();
+
+export function loadLanguage(lang: string): Promise<void> {
+  if (loaded[lang] || !LOADERS[lang] || failed.has(lang)) return Promise.resolve();
+  if (!inFlight[lang]) {
+    inFlight[lang] = LOADERS[lang]()
+      .then((m) => {
+        loaded[lang] = m.default;
+      })
+      // A dictionary that fails to load must never take the page down: the
+      // translate function falls back to English, then to the key itself.
+      .catch(() => {
+        failed.add(lang);
+      })
+      .finally(() => {
+        delete inFlight[lang];
+      });
+  }
+  return inFlight[lang];
+}
+
+/**
+ * Which language to fetch before the app mounts. Mirrors the priority order in
+ * the provider below, minus the signed-in preference — that only arrives with
+ * the user object after mount, and switching then simply loads another chunk.
+ */
+export function initialLanguage(): string {
+  try {
+    const saved = localStorage.getItem('guest_lang');
+    if (saved && SUPPORTED_LANGUAGES.includes(saved)) return saved;
+  } catch {
+    /* storage unavailable */
+  }
+  const browser =
+    typeof navigator !== 'undefined' ? navigator.language.split('-')[0] : '';
+  return SUPPORTED_LANGUAGES.includes(browser) ? browser : 'ar';
+}
 
 interface LanguageContextType {
   language: string;
@@ -147,7 +133,31 @@ const LanguageContext = createContext<LanguageContextType | null>(null);
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const { user, refreshUser } = useAuth();
-  const [language, setLanguageState] = useState<string>('ar');
+  // Seeded from the same resolver main.tsx preloads with, so the very first
+  // render already matches the dictionary that was fetched. Starting at a hard
+  // 'ar' meant a French visitor rendered Arabic for one frame.
+  const [language, setLanguageState] = useState<string>(initialLanguage);
+
+  // Bumped when a dictionary arrives, purely to re-render consumers: the
+  // dictionaries themselves live at module scope, so nothing else would tell
+  // React that a translated string has changed.
+  const [dictVersion, setDictVersion] = useState(0);
+
+  /**
+   * Fetches a dictionary the moment something actually asks for a string from
+   * it, and re-renders when it lands.
+   *
+   * Demand-driven rather than loaded on mount, because this provider wraps
+   * every route including the public offer pages — and those carry hardcoded
+   * copy, never call the translate function, and so must not pay for a
+   * dictionary. Loading on mount would put one back on exactly the pages the
+   * change exists to spare. It also means a screen reached by client-side
+   * navigation is never stranded without its strings.
+   */
+  const ensureLoaded = (lang: string) => {
+    if (loaded[lang] || failed.has(lang)) return;
+    loadLanguage(lang).then(() => setDictVersion((v) => v + 1));
+  };
 
   // Resolve language based on priorities
   useEffect(() => {
@@ -211,14 +221,17 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     };
 
     // Get string from selected language namespace
-    const langDict = translations[language]?.[namespace];
+    ensureLoaded(language);
+    const langDict = loaded[language]?.[namespace];
     const val = langDict ? getNestedValue(langDict, key) : undefined;
     if (val !== undefined) {
       return String(val);
     }
 
-    // Fallback to English namespace
-    const fallbackDict = translations['en']?.[namespace];
+    // Fallback to English namespace. Fetched only once a lookup has actually
+    // fallen through to it — a complete dictionary never pulls English at all.
+    ensureLoaded('en');
+    const fallbackDict = loaded['en']?.[namespace];
     const fallbackVal = fallbackDict ? getNestedValue(fallbackDict, key) : undefined;
     if (fallbackVal !== undefined) {
       return String(fallbackVal);
@@ -227,8 +240,17 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     return fallbackValue !== undefined ? fallbackValue : key;
   };
 
+  // Rebuilt when a dictionary lands so consumers re-read their strings; without
+  // dictVersion in the dependencies a translated screen would keep the values it
+  // resolved before the chunk arrived.
+  const value = useMemo(
+    () => ({ language, setLanguage, t }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [language, dictVersion]
+  );
+
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, t }}>
+    <LanguageContext.Provider value={value}>
       {children}
     </LanguageContext.Provider>
   );
