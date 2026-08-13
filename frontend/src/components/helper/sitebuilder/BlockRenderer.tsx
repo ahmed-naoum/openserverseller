@@ -1295,8 +1295,10 @@ interface VideoBlockComponentProps {
 }
 
 function VideoBlockComponent({ content, resolveUrl, isEditor = false }: VideoBlockComponentProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
   // Browsers enforce muted for autoplay.
   // If autoplay is true, we force muted to true initially, otherwise fallback to content.muted
@@ -1309,6 +1311,42 @@ function VideoBlockComponent({ content, resolveUrl, isEditor = false }: VideoBlo
     setIsMuted(!!content.autoplay || !!content.muted);
     setShowUnmuteOverlay(!!content.autoplay);
   }, [content.autoplay, content.muted]);
+
+  useEffect(() => {
+    const handleFSChange = () => {
+      const fsElement = document.fullscreenElement || (document as any).webkitFullscreenElement;
+      setIsFullscreen(!!fsElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFSChange);
+    document.addEventListener('webkitfullscreenchange', handleFSChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFSChange);
+      document.removeEventListener('webkitfullscreenchange', handleFSChange);
+    };
+  }, []);
+
+  const handleFullscreenToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const target = containerRef.current || videoRef.current;
+    if (!target) return;
+
+    if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) {
+      if (target.requestFullscreen) {
+        target.requestFullscreen().catch(() => {});
+      } else if ((target as any).webkitRequestFullscreen) {
+        (target as any).webkitRequestFullscreen();
+      } else if (videoRef.current && (videoRef.current as any).webkitEnterFullscreen) {
+        (videoRef.current as any).webkitEnterFullscreen();
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      } else if ((document as any).webkitExitFullscreen) {
+        (document as any).webkitExitFullscreen();
+      }
+    }
+  };
 
   // Handle postMessage events for YouTube/Vimeo iframe end detection
   useEffect(() => {
@@ -1350,16 +1388,19 @@ function VideoBlockComponent({ content, resolveUrl, isEditor = false }: VideoBlo
     controls: content.controls !== false,
   });
 
+  const showFullscreenButton = content.showFullscreenBtn !== false;
+
   if (embedData) {
     return (
       <div 
-        className="relative group overflow-hidden w-full flex justify-center rounded-2xl shadow-lg bg-black" 
+        ref={containerRef}
+        className={`relative group overflow-hidden flex justify-center bg-black rounded-2xl shadow-lg ${isFullscreen ? 'fixed inset-0 z-[99999] w-screen h-screen rounded-none items-center' : 'w-full'}`} 
         style={{ 
-          width: content.width ? `${content.width}%` : '100%',
-          maxHeight: content.maxHeight ? `${content.maxHeight}px` : 'none',
+          width: isFullscreen ? '100vw' : (content.width ? `${content.width}%` : '100%'),
+          maxHeight: isFullscreen ? 'none' : (content.maxHeight ? `${content.maxHeight}px` : 'none'),
         }}
       >
-        <div className="w-full aspect-video">
+        <div className={isFullscreen ? "w-full h-full flex items-center justify-center" : "w-full aspect-video"}>
           <iframe 
             src={embedData.embedUrl} 
             title="Video Player"
@@ -1368,6 +1409,25 @@ function VideoBlockComponent({ content, resolveUrl, isEditor = false }: VideoBlo
             allowFullScreen
           />
         </div>
+
+        {/* Custom Fullscreen Toggle Button */}
+        {showFullscreenButton && (
+          <button
+            onClick={handleFullscreenToggle}
+            title={isFullscreen ? "Quitter le plein écran" : "Plein écran"}
+            className="absolute top-3 right-3 bg-black/60 hover:bg-black/85 text-white p-2.5 rounded-xl backdrop-blur-md shadow-lg transition-all z-30 hover:scale-110 opacity-80 hover:opacity-100 cursor-pointer flex items-center justify-center border border-white/20"
+          >
+            {isFullscreen ? (
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 9L4 4m0 0l5 0m-5 0l0 5m11 0l5-5m0 0l-5 0m5 0l0 5M9 15l-5 5m0 0l5 0m-5 0l0-5m11 0l5 5m0 0l-5 0m5 0l0-5" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+              </svg>
+            )}
+          </button>
+        )}
       </div>
     );
   }
@@ -1401,10 +1461,11 @@ function VideoBlockComponent({ content, resolveUrl, isEditor = false }: VideoBlo
 
   return (
     <div 
-      className="relative group overflow-hidden w-full flex justify-center" 
+      ref={containerRef}
+      className={`relative group overflow-hidden flex justify-center bg-black rounded-2xl ${isFullscreen ? 'fixed inset-0 z-[99999] w-screen h-screen rounded-none items-center' : 'w-full'}`} 
       style={{ 
-        width: content.width ? `${content.width}%` : '100%',
-        maxHeight: content.maxHeight ? `${content.maxHeight}px` : 'none',
+        width: isFullscreen ? '100vw' : (content.width ? `${content.width}%` : '100%'),
+        maxHeight: isFullscreen ? 'none' : (content.maxHeight ? `${content.maxHeight}px` : 'none'),
       }}
     >
       <video 
@@ -1436,9 +1497,9 @@ function VideoBlockComponent({ content, resolveUrl, isEditor = false }: VideoBlo
             }));
           }
         }}
-        className="h-auto w-full object-contain"
+        className={isFullscreen ? "w-full h-full object-contain" : "h-auto w-full object-contain"}
         style={{ 
-          maxHeight: content.maxHeight ? `${content.maxHeight}px` : 'none',
+          maxHeight: isFullscreen ? 'none' : (content.maxHeight ? `${content.maxHeight}px` : 'none'),
         }}
       />
 
@@ -1475,7 +1536,7 @@ function VideoBlockComponent({ content, resolveUrl, isEditor = false }: VideoBlo
       {!isPlaying && !showUnmuteOverlay && (
         <div 
           onClick={handlePlayToggle}
-          className="absolute inset-0 flex items-center justify-center bg-black/20 cursor-pointer transition-opacity duration-300 hover:bg-black/35"
+          className="absolute inset-0 flex items-center justify-center bg-black/20 cursor-pointer transition-opacity duration-300 hover:bg-black/35 z-10"
         >
           <div 
             className="w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center shadow-2xl transform transition-all duration-300 hover:scale-110 active:scale-95"
@@ -1492,6 +1553,25 @@ function VideoBlockComponent({ content, resolveUrl, isEditor = false }: VideoBlo
             </svg>
           </div>
         </div>
+      )}
+
+      {/* Custom Fullscreen Toggle Button */}
+      {showFullscreenButton && (
+        <button
+          onClick={handleFullscreenToggle}
+          title={isFullscreen ? "Quitter le plein écran" : "Plein écran"}
+          className="absolute top-3 right-3 bg-black/60 hover:bg-black/85 text-white p-2.5 rounded-xl backdrop-blur-md shadow-lg transition-all z-30 hover:scale-110 opacity-80 hover:opacity-100 cursor-pointer flex items-center justify-center border border-white/20"
+        >
+          {isFullscreen ? (
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 9L4 4m0 0l5 0m-5 0l0 5m11 0l5-5m0 0l-5 0m5 0l0 5M9 15l-5 5m0 0l5 0m-5 0l0-5m11 0l5 5m0 0l-5 0m5 0l0-5" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+          )}
+        </button>
       )}
     </div>
   );

@@ -2929,7 +2929,19 @@ router.patch(
   authorize('SUPER_ADMIN', 'VENDOR', 'HELPER', 'CALL_CENTER_AGENT'),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { fullName, phone, whatsapp, city, address, notes, productVariant, confirmedPriceMad } = req.body;
+    const {
+      fullName,
+      phone,
+      whatsapp,
+      city,
+      address,
+      notes,
+      productVariant,
+      confirmedPriceMad,
+      packageNoOpen,
+      packageReplacement,
+      packageOldTracking,
+    } = req.body;
 
     const where: any = { id: Number(id) };
     if (req.user!.roleName === 'VENDOR') where.vendorId = req.user!.id;
@@ -3006,6 +3018,46 @@ router.patch(
         confirmedPriceMad: agreedPrice !== undefined ? agreedPrice : lead.confirmedPriceMad,
       },
     });
+
+    // If an associated pending order exists (e.g. queued lead), keep order and items in sync
+    const orderUpdate: any = {};
+    if (fullName) orderUpdate.customerName = fullName;
+    if (normalizedPhone) orderUpdate.customerPhone = normalizedPhone;
+    if (city !== undefined) orderUpdate.customerCity = city;
+    if (address !== undefined) orderUpdate.customerAddress = address;
+    if (productVariant !== undefined) orderUpdate.productVariant = String(productVariant).trim() || null;
+    if (agreedPrice !== undefined && agreedPrice !== null) {
+      orderUpdate.totalAmountMad = agreedPrice;
+    }
+    if (packageNoOpen !== undefined) orderUpdate.packageNoOpen = Boolean(packageNoOpen);
+    if (packageReplacement !== undefined) orderUpdate.packageReplacement = Boolean(packageReplacement);
+    if (packageOldTracking !== undefined) orderUpdate.packageOldTracking = packageOldTracking || null;
+
+    if (Object.keys(orderUpdate).length > 0) {
+      await (prisma.order as any).updateMany({
+        where: { leadId: lead.id, status: 'PENDING' },
+        data: orderUpdate,
+      });
+
+      if (agreedPrice !== undefined && agreedPrice !== null) {
+        const pendingOrders = await prisma.order.findMany({
+          where: { leadId: lead.id, status: 'PENDING' },
+          include: { items: true },
+        });
+        for (const ord of pendingOrders) {
+          if (ord.items.length === 1) {
+            const item = ord.items[0];
+            await prisma.orderItem.update({
+              where: { id: item.id },
+              data: {
+                totalPriceMad: agreedPrice,
+                unitPriceMad: item.quantity > 0 ? agreedPrice / item.quantity : agreedPrice,
+              },
+            });
+          }
+        }
+      }
+    }
 
     res.json({ status: 'success', message: 'Lead updated', data: { lead: updated } });
   })

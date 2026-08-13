@@ -21,7 +21,8 @@ import {
   Search,
   Loader2,
   RotateCcw,
-  Trash2
+  Trash2,
+  Pencil
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
@@ -240,6 +241,107 @@ export default function InsertLead() {
       setConfirmDeleteId(null);
     }
   });
+
+  // Edit Lead Modal states & handlers
+  const [editingLead, setEditingLead] = useState<any | null>(null);
+  const [editFullName, setEditFullName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editCity, setEditCity] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [editPackName, setEditPackName] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editPackageReplacement, setEditPackageReplacement] = useState(false);
+  const [editPackageOldTracking, setEditPackageOldTracking] = useState('');
+  const [editPackageNoOpen, setEditPackageNoOpen] = useState(false);
+  const [editFormErrors, setEditFormErrors] = useState<Record<string, string>>({});
+
+  const handleOpenEditModal = (lead: any) => {
+    setEditingLead(lead);
+    setEditFullName(lead.fullName || lead.order?.customerName || '');
+
+    let rawPhone = lead.phone || lead.order?.customerPhone || '';
+    if (rawPhone.startsWith('+212')) rawPhone = '0' + rawPhone.slice(4);
+    else if (rawPhone.startsWith('212')) rawPhone = '0' + rawPhone.slice(3);
+    setEditPhone(rawPhone);
+
+    setEditCity(lead.city || lead.order?.customerCity || '');
+    setEditAddress(lead.address || lead.order?.customerAddress || '');
+    setEditPackName(lead.productVariant || lead.order?.productVariant || '');
+
+    const initialPrice = lead.order?.totalAmountMad ?? lead.confirmedPriceMad ?? lead.productPrice ?? '';
+    setEditPrice(initialPrice !== '' && initialPrice !== null && initialPrice !== undefined ? String(initialPrice) : '');
+
+    setEditNotes(lead.notes || '');
+    setEditPackageReplacement(Boolean(lead.order?.packageReplacement));
+    setEditPackageOldTracking(lead.order?.packageOldTracking || '');
+    setEditPackageNoOpen(Boolean(lead.order?.packageNoOpen));
+    setEditFormErrors({});
+  };
+
+  const updateLeadMutation = useMutation({
+    mutationFn: async (payload: { id: number; data: any }) => {
+      return leadsApi.update(payload.id.toString(), payload.data);
+    },
+    onSuccess: () => {
+      toast.success("Lead modifié avec succès !");
+      setEditingLead(null);
+      queryClient.invalidateQueries({ queryKey: ['agent-pending-dispatch'] });
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Erreur lors de la modification du lead');
+    }
+  });
+
+  const validateEditForm = () => {
+    const errors: Record<string, string> = {};
+    if (!editFullName.trim() || editFullName.trim().length < 3) {
+      errors.fullName = 'Le nom complet doit contenir au moins 3 caractères';
+    }
+    const dialled = editPhone.replace(/[\s.-]/g, '');
+    if (!dialled || !/^(?:\+?212|0)[67][0-9]{8}$/.test(dialled)) {
+      errors.phone = 'Numéro invalide : Coliaty exige un mobile 06… ou 07… (ex: 0612345678)';
+    }
+    if (!editCity) {
+      errors.city = 'Veuillez choisir une ville';
+    }
+    if (!editAddress.trim() || editAddress.trim().length < 8) {
+      errors.address = "L'adresse doit être plus détaillée (min. 8 caractères)";
+    }
+    if (editPackageReplacement && !editPackageOldTracking.trim()) {
+      errors.packageOldTracking = 'Le numéro de suivi du colis à remplacer est requis.';
+    }
+    if (editPrice && !/^\d+([.,]\d{1,2})?$/.test(editPrice.trim())) {
+      errors.price = 'Le prix doit être positif avec 2 décimales maximum (ex: 149.50).';
+    }
+    setEditFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLead) return;
+    if (!validateEditForm()) {
+      toast.error('Veuillez corriger les erreurs du formulaire');
+      return;
+    }
+
+    const payload: any = {
+      fullName: editFullName.trim(),
+      phone: editPhone.trim(),
+      whatsapp: editPhone.trim(),
+      city: editCity,
+      address: editAddress.trim(),
+      notes: editNotes,
+      productVariant: editPackName.trim() || null,
+      confirmedPriceMad: editPrice !== '' ? Number(editPrice.replace(',', '.')) : null,
+      packageNoOpen: editPackageNoOpen,
+      packageReplacement: editPackageReplacement,
+      packageOldTracking: editPackageReplacement ? editPackageOldTracking.trim() : '',
+    };
+
+    updateLeadMutation.mutate({ id: editingLead.id, data: payload });
+  };
 
   const toggleSelectAll = () => {
     if (selectedLeadIds.length === leads.length) {
@@ -1095,15 +1197,25 @@ export default function InsertLead() {
                             </button>
                           </div>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => setConfirmDeleteId(lead.id)}
-                            disabled={deleteMutation.isPending}
-                            className="p-1.5 text-gray-300 hover:bg-rose-50 hover:text-rose-600 rounded-lg transition-colors inline-flex items-center justify-center disabled:opacity-50"
-                            title="Supprimer de la liste d'attente"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="inline-flex items-center gap-1 justify-center">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditModal(lead)}
+                              className={`p-1.5 text-gray-400 hover:bg-gray-100 hover:${t.icon} rounded-lg transition-colors inline-flex items-center justify-center`}
+                              title="Modifier ce lead"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(lead.id)}
+                              disabled={deleteMutation.isPending}
+                              className="p-1.5 text-gray-300 hover:bg-rose-50 hover:text-rose-600 rounded-lg transition-colors inline-flex items-center justify-center disabled:opacity-50"
+                              title="Supprimer de la liste d'attente"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -1306,6 +1418,237 @@ export default function InsertLead() {
                 className="w-full py-4 bg-white border border-gray-200 text-gray-700 rounded-2xl font-black text-sm hover:bg-gray-50 transition-all shadow-sm"
               >
                 FERMER
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Lead Modal */}
+      {editingLead && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh] my-auto border border-gray-100">
+            {/* Modal Top Accent & Header */}
+            <div className={`p-5 sm:p-6 text-white shrink-0 relative overflow-hidden ${t.accentBar}`}>
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl pointer-events-none" />
+              <div className="relative z-10 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-11 h-11 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md shrink-0">
+                    <Pencil className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg font-black truncate">Modifier le Lead #{editingLead.id}</h3>
+                      {editingLead.product?.name && (
+                        <span className="hidden sm:inline-block px-2 py-0.5 rounded-md bg-white/20 text-[10px] font-black truncate max-w-[200px]">
+                          {editingLead.product.name}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-white/80 text-xs font-medium flex items-center gap-1.5 mt-0.5 truncate">
+                      <span>Vendeur : {editingLead.vendor?.fullName || '—'}</span>
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => setEditingLead(null)}
+                  className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all shrink-0 active:scale-95"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <form onSubmit={handleSaveEdit} className="overflow-y-auto p-5 sm:p-6 space-y-5 flex-1">
+              {/* Section 1: Client & Livraison */}
+              <div className="space-y-3">
+                <SectionTitle step="1" theme={t} icon={<User className="w-3.5 h-3.5" />}>
+                  Client &amp; livraison
+                </SectionTitle>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Nom complet" htmlFor="editFullName" required error={editFormErrors.fullName}>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                      <input
+                        id="editFullName"
+                        type="text"
+                        value={editFullName}
+                        onChange={e => setEditFullName(e.target.value)}
+                        placeholder="Ex: Ahmed Naoum"
+                        className={inputCls(t, !!editFormErrors.fullName) + ' pl-9'}
+                      />
+                    </div>
+                  </Field>
+
+                  <Field label="Téléphone" htmlFor="editPhone" required error={editFormErrors.phone}>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                      <input
+                        id="editPhone"
+                        type="tel"
+                        value={editPhone}
+                        onChange={e => setEditPhone(e.target.value)}
+                        placeholder="0612345678"
+                        className={inputCls(t, !!editFormErrors.phone) + ' pl-9'}
+                      />
+                    </div>
+                  </Field>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Ville" htmlFor="editCity" required error={editFormErrors.city}>
+                    {loadingCities ? (
+                      <FieldSkeleton />
+                    ) : (
+                      <CitySelect
+                        theme={theme}
+                        deliverableOnly
+                        value={editCity}
+                        onChange={name => setEditCity(name)}
+                        placeholder="Sélectionner une ville..."
+                        error={!!editFormErrors.city}
+                      />
+                    )}
+                  </Field>
+
+                  <Field label="Options d'expédition" htmlFor="editReplacement">
+                    <div className={`h-11 flex items-center gap-3 rounded-xl border px-3 transition-all ${
+                      editPackageReplacement || editPackageNoOpen ? t.soft : 'border-gray-200 bg-gray-50/60'
+                    }`}>
+                      <label htmlFor="editReplacement" className="flex items-center gap-2 cursor-pointer select-none" title="Colis de remplacement">
+                        <input
+                          id="editReplacement"
+                          type="checkbox"
+                          checked={editPackageReplacement}
+                          onChange={e => {
+                            setEditPackageReplacement(e.target.checked);
+                            if (!e.target.checked) setEditPackageOldTracking('');
+                          }}
+                          className="w-4 h-4 rounded border-gray-300"
+                        />
+                        <span className="text-xs font-bold text-gray-700 whitespace-nowrap">Remplacement</span>
+                      </label>
+
+                      <span className="h-4 w-px bg-black/10 shrink-0" />
+
+                      <label htmlFor="editNoOpen" className="flex items-center gap-2 cursor-pointer select-none" title="Le client ne peut pas ouvrir le colis avant de payer">
+                        <input
+                          id="editNoOpen"
+                          type="checkbox"
+                          checked={editPackageNoOpen}
+                          onChange={e => setEditPackageNoOpen(e.target.checked)}
+                          className="w-4 h-4 rounded border-gray-300"
+                        />
+                        <span className="text-xs font-bold text-gray-700 whitespace-nowrap">Ne pas ouvrir</span>
+                      </label>
+                    </div>
+                  </Field>
+                </div>
+
+                {editPackageReplacement && (
+                  <Field label="N° de suivi à remplacer" htmlFor="editOldTracking" required error={editFormErrors.packageOldTracking}>
+                    <input
+                      id="editOldTracking"
+                      type="text"
+                      value={editPackageOldTracking}
+                      onChange={e => setEditPackageOldTracking(e.target.value)}
+                      placeholder="Ex: CO123456789"
+                      className={inputCls(t, !!editFormErrors.packageOldTracking)}
+                    />
+                  </Field>
+                )}
+
+                <Field label="Adresse détaillée" htmlFor="editAddress" required error={editFormErrors.address}>
+                  <textarea
+                    id="editAddress"
+                    rows={2}
+                    value={editAddress}
+                    onChange={e => setEditAddress(e.target.value)}
+                    placeholder="Quartier, rue, n° de porte… (min. 8 caractères)"
+                    className={inputCls(t, !!editFormErrors.address) + ' h-auto py-2 resize-none'}
+                  />
+                </Field>
+              </div>
+
+              <hr className="border-gray-100" />
+
+              {/* Section 2: Commande, Pack & Notes */}
+              <div className="space-y-3">
+                <SectionTitle step="2" theme={t} icon={<Package className="w-3.5 h-3.5" />}>
+                  Commande &amp; prix
+                </SectionTitle>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Nom du pack / Variante" htmlFor="editPackName" hint="Optionnel">
+                    <input
+                      id="editPackName"
+                      type="text"
+                      value={editPackName}
+                      onChange={e => setEditPackName(e.target.value)}
+                      placeholder="Ex: Pack 2 + 1 Gratuit"
+                      className={inputCls(t, false)}
+                    />
+                  </Field>
+
+                  <Field label="Prix total à encaisser (MAD)" htmlFor="editPrice" hint="Optionnel" error={editFormErrors.price}>
+                    <input
+                      id="editPrice"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={editPrice}
+                      onChange={e => setEditPrice(e.target.value)}
+                      placeholder="Ex: 199.00"
+                      className={inputCls(t, !!editFormErrors.price)}
+                    />
+                  </Field>
+                </div>
+
+                <Field label="Notes (internes & livraison Coliaty)" htmlFor="editNotes" hint="Optionnel">
+                  <textarea
+                    id="editNotes"
+                    rows={2}
+                    value={editNotes}
+                    onChange={e => setEditNotes(e.target.value)}
+                    placeholder="Ex: Livrer après 18h, appeler avant d'arriver…"
+                    className={inputCls(t, false) + ' h-auto py-2 resize-none'}
+                  />
+                </Field>
+              </div>
+            </form>
+
+            {/* Modal Footer */}
+            <div className="p-4 sm:p-5 bg-gray-50 border-t border-gray-100 shrink-0 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setEditingLead(null)}
+                disabled={updateLeadMutation.isPending}
+                className="px-4 py-2.5 border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 transition-all text-xs font-black tracking-wider rounded-xl"
+              >
+                ANNULER
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={updateLeadMutation.isPending}
+                className={`px-5 py-2.5 text-white text-xs font-black tracking-wider transition-all shadow-md rounded-xl flex items-center justify-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${t.ctaRing} ${
+                  updateLeadMutation.isPending ? 'opacity-60 cursor-not-allowed bg-gray-400 shadow-none' : `${t.cta} active:scale-95`
+                }`}
+              >
+                {updateLeadMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    ENREGISTREMENT…
+                  </>
+                ) : (
+                  <>
+                    <Pencil className="w-3.5 h-3.5" />
+                    ENREGISTRER
+                  </>
+                )}
               </button>
             </div>
           </div>

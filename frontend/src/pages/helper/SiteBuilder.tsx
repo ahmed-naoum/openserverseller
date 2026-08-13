@@ -608,7 +608,7 @@ export default function SiteBuilder() {
         marginTop: 0,
         marginBottom: 0
       };
-      case 'video': return { url: '', redirectUrl: '', width: 100, autoplay: false, loop: false, muted: false, controls: true, paddingTop: 16, paddingBottom: 16, marginTop: 0, marginBottom: 0 };
+      case 'video': return { url: '', redirectUrl: '', width: 100, autoplay: false, loop: false, muted: false, controls: true, showFullscreenBtn: true, paddingTop: 16, paddingBottom: 16, marginTop: 0, marginBottom: 0 };
       default: return {};
     }
   };
@@ -1014,6 +1014,10 @@ export default function SiteBuilder() {
                       <label className="flex items-center gap-2 text-sm text-gray-700">
                         <input type="checkbox" checked={activeBlock.content.controls !== false} onChange={(e) => updateBlockContent('controls', e.target.checked)} />
                         Contrôles
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-gray-700 col-span-2 pt-1 border-t border-gray-100">
+                        <input type="checkbox" checked={activeBlock.content.showFullscreenBtn !== false} onChange={(e) => updateBlockContent('showFullscreenBtn', e.target.checked)} />
+                        <span className="font-semibold text-xs text-gray-800">Bouton Plein écran (Plein écran disponible même sans contrôles)</span>
                       </label>
                       <label className="flex items-center gap-2 text-sm text-gray-700 col-span-2 pt-1 border-t border-gray-100">
                         <input type="checkbox" checked={activeBlock.content.protectDownload !== false} onChange={(e) => updateBlockContent('protectDownload', e.target.checked)} />
