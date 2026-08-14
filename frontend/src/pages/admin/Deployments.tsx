@@ -213,6 +213,27 @@ export default function Deployments() {
   const canDeploy = !isBusy && !isLoading;
   const hasPendingCommits = pending.length > 0 && !isBusy;
 
+  const [togglingAuto, setTogglingAuto] = useState(false);
+
+  const toggleAutoDeploy = async () => {
+    setTogglingAuto(true);
+    try {
+      const nextState = status?.autoDeployEnabled === false;
+      const res = await api.post('/deploy/toggle-auto', { enabled: nextState });
+      const active = res.data?.data?.autoDeployEnabled;
+      toast.success(
+        active ? 'Déploiement automatique ACTIVÉ sur Push GitHub !' : 'Déploiement automatique DÉSACTIVÉ.'
+      );
+      queryClient.invalidateQueries({ queryKey: ['deploy-status'] });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Impossible de modifier le paramètre.');
+    } finally {
+      setTogglingAuto(false);
+    }
+  };
+
+  const autoPushActive = status?.autoDeployEnabled !== false;
+
   return (
     <div className="space-y-8 font-['Inter'] max-w-7xl mx-auto pb-12">
       {/* Sleek Hero Header */}
@@ -222,16 +243,34 @@ export default function Deployments() {
 
         <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-3">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[11px] font-bold uppercase tracking-wider">
                 <Server className="w-3.5 h-3.5 text-indigo-400" /> Infrastructure Live
               </span>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold uppercase tracking-wider">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" /> Serveur Actif
               </span>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[11px] font-bold uppercase tracking-wider">
-                <Zap className="w-3.5 h-3.5 text-purple-400 animate-pulse" /> Déploiement Auto sur Push
-              </span>
+
+              {/* Interactive Auto-Deploy Toggle */}
+              <button
+                type="button"
+                onClick={toggleAutoDeploy}
+                disabled={togglingAuto}
+                className={`inline-flex items-center gap-2 px-3.5 py-1 rounded-full border text-[11px] font-extrabold tracking-wider uppercase transition-all shadow-md active:scale-95 cursor-pointer ${
+                  autoPushActive
+                    ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 hover:bg-purple-500/30'
+                    : 'bg-slate-800/90 text-slate-400 border-slate-700 hover:bg-slate-700/90'
+                }`}
+                title="Cliquer pour activer ou désactiver le déploiement automatique sur Push GitHub"
+              >
+                <Zap className={`w-3.5 h-3.5 ${autoPushActive ? 'text-purple-400 animate-pulse' : 'text-slate-500'}`} />
+                <span>Auto-Push: {autoPushActive ? 'ACTIVÉ' : 'DÉSACTIVÉ'}</span>
+                <span className={`w-7 h-3.5 rounded-full p-0.5 transition-colors flex items-center ${
+                  autoPushActive ? 'bg-purple-500 justify-end' : 'bg-slate-600 justify-start'
+                }`}>
+                  <span className="w-2.5 h-2.5 rounded-full bg-white shadow-sm" />
+                </span>
+              </button>
             </div>
 
             <h1 className="text-3xl md:text-4xl font-black tracking-tight text-white">

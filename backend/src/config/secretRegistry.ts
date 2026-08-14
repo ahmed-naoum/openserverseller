@@ -295,6 +295,14 @@ export const SECRET_REGISTRY: SecretDefinition[] = [
       "Secret partagé avec GitHub pour signer les webhooks de déploiement. Tant qu'il est vide, le webhook refuse toutes les requêtes.",
   },
   {
+    key: 'AUTO_DEPLOY_ON_PUSH',
+    label: 'Déploiement automatique sur Push GitHub',
+    category: 'ops',
+    secret: false,
+    description:
+      "Active ou désactive le lancement automatique du script de déploiement lors d'un push sur GitHub.",
+  },
+  {
     key: 'EXTERNAL_LOG_STREAM_URL',
     label: 'Flux de logs externe — URL',
     category: 'ops',
