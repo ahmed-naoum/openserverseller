@@ -1541,26 +1541,6 @@ export default function HelperTickets() {
             >
               <Copy size={14} />
             </button>
-            <button
-              onClick={() => handleSingleLabel(parcel.code, 'print')}
-              disabled={downloadingCode === parcel.code}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-all disabled:opacity-40"
-              title="Imprimer le ticket"
-            >
-              <Printer size={14} />
-            </button>
-            <button
-              onClick={() => handleSingleLabel(parcel.code, 'download')}
-              disabled={downloadingCode === parcel.code}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all disabled:opacity-40"
-              title="Télécharger le ticket"
-            >
-              {downloadingCode === parcel.code ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <Download size={14} />
-              )}
-            </button>
           </div>
         </td>
       </tr>
@@ -1634,26 +1614,6 @@ export default function HelperTickets() {
               title="Copier le code"
             >
               <Copy size={14} />
-            </button>
-            <button
-              onClick={() => handleSingleLabel(parcel.code, 'print')}
-              disabled={downloadingCode === parcel.code}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-all disabled:opacity-40"
-              title="Imprimer le ticket"
-            >
-              <Printer size={14} />
-            </button>
-            <button
-              onClick={() => handleSingleLabel(parcel.code, 'download')}
-              disabled={downloadingCode === parcel.code}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all disabled:opacity-40"
-              title="Télécharger le ticket"
-            >
-              {downloadingCode === parcel.code ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <Download size={14} />
-              )}
             </button>
           </div>
         </div>
@@ -2403,7 +2363,7 @@ export default function HelperTickets() {
               )}
             </form>
             <p className="text-[11px] font-bold text-slate-400 mt-2.5">
-              Chaque code scanné est ajouté à la sélection. Utilisez ensuite « Créer bon » ou « Imprimer ».
+              Chaque code scanné est ajouté à la sélection. Utilisez ensuite « Créer bon de ramassage ».
             </p>
           </div>
         )}
@@ -2671,24 +2631,6 @@ export default function HelperTickets() {
             </div>
 
             <div className="flex flex-wrap items-center justify-center gap-2 sm:ml-auto">
-              <button
-                onClick={() => runBulkLabels(selectedCodes, 'print', '')}
-                disabled={busyLabel !== null}
-                className="flex items-center gap-2 px-4 py-2.5 bg-white/10 text-white rounded-xl text-xs font-black hover:bg-white/20 transition-all disabled:opacity-40"
-                title="Imprimer (P)"
-              >
-                {busyLabel === 'print' ? <Loader2 size={15} className="animate-spin" /> : <Printer size={15} />}
-                Imprimer
-              </button>
-              <button
-                onClick={() => runBulkLabels(selectedCodes, 'download', `tickets-${selectedCount}pcs.pdf`)}
-                disabled={busyLabel !== null}
-                className="flex items-center gap-2 px-4 py-2.5 bg-white/10 text-white rounded-xl text-xs font-black hover:bg-white/20 transition-all disabled:opacity-40"
-                title="Télécharger (D)"
-              >
-                {busyLabel === 'download' ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
-                Télécharger
-              </button>
               <button
                 onClick={() => setConfirmCreate(true)}
                 disabled={creatingBon}
