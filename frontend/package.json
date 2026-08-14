@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "sitemap": "node scripts/generate-sitemap.mjs",
-    "prerender": "node scripts/prerender.mjs",
+    "prerender": "node --max-old-space-size=4096 scripts/prerender.mjs",
     "build": "tsc && npm run sitemap && vite build && npm run prerender",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx",
