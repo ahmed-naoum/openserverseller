@@ -502,12 +502,14 @@ function App() {
         }>
           <Route index element={<AgentDashboard />} />
           <Route path="leads" element={<AgentLeads />} />
+          <Route path="assigned-leads" element={<AgentMyLeads />} />
           <Route path="insert-lead" element={<InsertLead />} />
           <Route path="dispatch" element={<Navigate to="/agent/insert-lead" replace />} />
           <Route path="my-leads" element={<AgentMyLeads />} />
           <Route path="leads/:id" element={<AgentLeadDetail />} />
           <Route path="orders" element={<AgentOrders />} />
           <Route path="livraison" element={<AgentLivraison />} />
+          <Route path="facturation" element={<UserInvoices />} />
           <Route path="live-stream-paniers" element={<AgentAbandonedCarts />} />
           <Route path="marketplace" element={<PublicMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
