@@ -1213,6 +1213,7 @@ interface VideoBlockComponentProps {
 function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoadingVideo, setIsLoadingVideo] = useState(true);
   
   // Browsers enforce muted for autoplay.
   // If autoplay is true, we force muted to true initially, otherwise fallback to content.muted
@@ -1224,7 +1225,14 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
   useEffect(() => {
     setIsMuted(!!content.autoplay || !!content.muted);
     setShowUnmuteOverlay(!!content.autoplay);
-  }, [content.autoplay, content.muted]);
+    setIsLoadingVideo(true);
+  }, [content.url, content.autoplay, content.muted]);
+
+  useEffect(() => {
+    if (videoRef.current && videoRef.current.readyState >= 3) {
+      setIsLoadingVideo(false);
+    }
+  }, [content.url]);
 
   const embedData = getVideoEmbedUrl(content.url, {
     autoplay: !!content.autoplay,
@@ -1282,7 +1290,7 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
 
   return (
     <div 
-      className="relative group overflow-hidden w-full flex justify-center" 
+      className="relative group overflow-hidden w-full flex justify-center bg-black/90 rounded-2xl" 
       style={{ 
         width: content.width ? `${content.width}%` : '100%',
         maxHeight: content.maxHeight ? `${content.maxHeight}px` : 'none',
@@ -1297,7 +1305,17 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
         muted={isMuted}
         playsInline
         crossOrigin="anonymous"
-        onPlay={() => setIsPlaying(true)}
+        onLoadStart={() => setIsLoadingVideo(true)}
+        onWaiting={() => setIsLoadingVideo(true)}
+        onSeeking={() => setIsLoadingVideo(true)}
+        onSeeked={() => setIsLoadingVideo(false)}
+        onCanPlay={() => setIsLoadingVideo(false)}
+        onCanPlayThrough={() => setIsLoadingVideo(false)}
+        onLoadedData={() => setIsLoadingVideo(false)}
+        onPlay={() => {
+          setIsPlaying(true);
+          setIsLoadingVideo(false);
+        }}
         onPause={() => setIsPlaying(false)}
         onEnded={() => setIsPlaying(false)}
         onVolumeChange={(e) => {
@@ -1319,8 +1337,21 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
         }}
       />
 
+      {/* Video Buffering / Loading Spinner Overlay */}
+      {isLoadingVideo && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/45 backdrop-blur-[2px] z-20 pointer-events-none transition-opacity duration-300">
+          <div className="relative flex items-center justify-center">
+            <div className="w-14 h-14 rounded-full border-4 border-white/20 border-t-orange-500 border-r-orange-500 animate-spin shadow-2xl" />
+            <div className="absolute w-3.5 h-3.5 bg-orange-500 rounded-full animate-ping" />
+          </div>
+          <span className="mt-3 text-[11px] font-black text-white tracking-widest uppercase bg-black/70 px-3.5 py-1.5 rounded-full backdrop-blur-md border border-white/10 shadow-xl animate-pulse">
+            Chargement de la vidéo...
+          </span>
+        </div>
+      )}
+
       {/* Unmute Overlay for Autoplay Videos */}
-      {showUnmuteOverlay && isPlaying && (
+      {!isLoadingVideo && showUnmuteOverlay && isPlaying && (
         <div 
           onClick={handleUnmute}
           className="absolute inset-0 flex items-center justify-center bg-transparent cursor-pointer z-10"
@@ -1349,7 +1380,7 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
       )}
 
       {/* Play button overlay when paused */}
-      {!isPlaying && !showUnmuteOverlay && (
+      {!isLoadingVideo && !isPlaying && !showUnmuteOverlay && (
         <div 
           onClick={handlePlayToggle}
           className="absolute inset-0 flex items-center justify-center bg-black/20 cursor-pointer transition-opacity duration-300 hover:bg-black/35"
