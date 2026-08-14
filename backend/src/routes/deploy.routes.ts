@@ -16,7 +16,7 @@ import { Router } from 'express';
 import crypto from 'node:crypto';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
-import { getSecret, getSecretBool, setSecret, isEncryptionKeyConfigured } from '../lib/secretStore.js';
+import { getSecret } from '../lib/secretStore.js';
 import {
   getDeployStatus,
   startDeploy,
@@ -144,31 +144,12 @@ router.post('/webhook', async (req, res) => {
 
   console.log(`[deploy] webhook: ${commits.length} commit(s) on ${branch}`);
 
-  let autoDeployed = false;
-  const targetBranch = process.env.DEPLOY_BRANCH || 'master';
-  const autoDeployEnabled = getSecretBool('AUTO_DEPLOY_ON_PUSH', true);
-
-  if (autoDeployEnabled && branch === targetBranch && !isDeploying()) {
-    try {
-      const pusherName = payload.pusher?.name || payload.head_commit?.author?.name || 'GitHub Webhook';
-      const result = await startDeploy({
-        trigger: 'WEBHOOK',
-        triggeredBy: `GitHub Push (${pusherName})`,
-        onLog: (line) => emit('deploy:log', { line }),
-        onStatus: (st, dep) => emit('deploy:status', { status: st, deployment: dep }),
-      });
-      autoDeployed = true;
-      console.log(`[deploy] Auto-deploy triggered for push to ${branch} by ${pusherName}: ${result.id}`);
-    } catch (deployErr: any) {
-      console.error('[deploy] Auto-deploy trigger failed:', deployErr?.message || deployErr);
-    }
-  } else if (!autoDeployEnabled) {
-    console.log(`[deploy] Webhook push received on ${branch}, but auto-deploy is disabled.`);
-  }
-
+  // Deliberately notify-only. Auto-deploying on push would take the public site
+  // down unattended the first time a bad commit lands, and deploy.sh touches the
+  // database. A human clicking Deploy is the guardrail.
   return res.json({
     status: 'success',
-    data: { received: commits.length, pendingCount, autoDeployed },
+    data: { received: commits.length, pendingCount },
   });
 });
 
@@ -177,32 +158,6 @@ router.post('/webhook', async (req, res) => {
  * ──────────────────────────────────────────────────────────────────────────── */
 
 router.use(authenticate, authorize('SUPER_ADMIN'));
-
-// POST /api/v1/deploy/toggle-auto — toggle automatic deployment on push ON/OFF
-router.post('/toggle-auto', async (req, res) => {
-  try {
-    const { enabled } = req.body;
-    const isEnabled = enabled === undefined ? !getSecretBool('AUTO_DEPLOY_ON_PUSH', true) : Boolean(enabled);
-
-    if (isEncryptionKeyConfigured()) {
-      await setSecret('AUTO_DEPLOY_ON_PUSH', isEnabled ? 'true' : 'false', {
-        id: (req as any).user?.id,
-        email: (req as any).user?.email,
-      });
-    } else {
-      process.env.AUTO_DEPLOY_ON_PUSH = isEnabled ? 'true' : 'false';
-    }
-
-    await emit('deploy:status', { autoDeployEnabled: isEnabled });
-
-    res.json({
-      status: 'success',
-      data: { autoDeployEnabled: isEnabled },
-    });
-  } catch (err: any) {
-    res.status(500).json({ status: 'error', message: err.message });
-  }
-});
 
 // GET /api/v1/deploy/status — git state + whether a deploy is in flight
 router.get('/status', async (_req, res) => {
@@ -217,11 +172,10 @@ router.get('/status', async (_req, res) => {
       orderBy: { createdAt: 'desc' },
     });
     const webhookConfigured = Boolean(getSecret('GITHUB_WEBHOOK_SECRET'));
-    const autoDeployEnabled = getSecretBool('AUTO_DEPLOY_ON_PUSH', true);
 
     res.json({
       status: 'success',
-      data: { ...status, pendingCommits, lastDeployment: last, webhookConfigured, autoDeployEnabled },
+      data: { ...status, pendingCommits, lastDeployment: last, webhookConfigured },
     });
   } catch (err: any) {
     res.status(500).json({ status: 'error', message: err.message });
