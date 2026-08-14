@@ -20,9 +20,11 @@ import VendorSubAccounts from './pages/vendor/SubAccounts';
 import AgentDashboard from './pages/agent/Dashboard';
 import AgentLeads from './pages/agent/Leads';
 import AgentMyLeads from './pages/agent/MyLeads';
+import AgentAssignedLeads from './pages/agent/AssignedLeads';
 import AgentLeadDetail from './pages/agent/LeadDetail';
 import AgentOrders from './pages/agent/Orders';
 import AgentLivraison from './pages/agent/Livraison';
+import AgentFacturation from './pages/agent/Facturation';
 import InsertLead from './pages/agent/InsertLead';
 import ColiatyDispatch from './pages/agent/ColiatyDispatch';
 import AgentAbandonedCarts from './pages/agent/AbandonedCarts';
@@ -502,14 +504,14 @@ function App() {
         }>
           <Route index element={<AgentDashboard />} />
           <Route path="leads" element={<AgentLeads />} />
-          <Route path="assigned-leads" element={<AgentMyLeads />} />
+          <Route path="assigned-leads" element={<AgentAssignedLeads />} />
           <Route path="insert-lead" element={<InsertLead />} />
           <Route path="dispatch" element={<Navigate to="/agent/insert-lead" replace />} />
           <Route path="my-leads" element={<AgentMyLeads />} />
           <Route path="leads/:id" element={<AgentLeadDetail />} />
           <Route path="orders" element={<AgentOrders />} />
           <Route path="livraison" element={<AgentLivraison />} />
-          <Route path="facturation" element={<UserInvoices />} />
+          <Route path="facturation" element={<AgentFacturation />} />
           <Route path="live-stream-paniers" element={<AgentAbandonedCarts />} />
           <Route path="marketplace" element={<PublicMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />

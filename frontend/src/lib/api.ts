@@ -235,7 +235,14 @@ export const productsApi = {
 };
 
 export const leadsApi = {
-  list: (params?: { status?: string; page?: number; limit?: number; search?: string; viewMode?: string; mode?: string; vendorId?: string; productId?: string; isSuspicious?: boolean; city?: string; coliatyPackageCode?: string; accountId?: string; agentId?: string; source?: string; sourceMode?: string; paymentSituation?: string; hasOrder?: 'yes' | 'no'; dateFrom?: string; dateTo?: string; sort?: string; withStats?: string }) =>
+  /**
+   * `status` filters on where the lead stands now; `historyStatus` (agents only)
+   * filters on what the agent did to it, so a lead the cron handed back to the
+   * pool is still listed under the outcome they recorded. `dateField` picks
+   * which timestamp `dateFrom`/`dateTo` narrow — the status change or the lead's
+   * arrival.
+   */
+  list: (params?: { status?: string; historyStatus?: string; page?: number; limit?: number; search?: string; viewMode?: string; mode?: string; vendorId?: string; productId?: string; isSuspicious?: boolean; city?: string; coliatyPackageCode?: string; accountId?: string; agentId?: string; source?: string; sourceMode?: string; paymentSituation?: string; hasOrder?: 'yes' | 'no'; dateFrom?: string; dateTo?: string; dateField?: 'createdAt' | 'updatedAt'; dateType?: 'createdAt' | 'updatedAt'; sort?: string; withStats?: string }) =>
     api.get('/leads', { params }),
   create: (data: any) => api.post('/leads', data),
   import: (data: { leads: any[]; sourceMode?: string }) => api.post('/leads/import', data),

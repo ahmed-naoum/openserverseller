@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import {
   Headphones, Truck, CheckCircle2, Phone, PieChart as PieIcon,
   Activity, ArrowRight, RefreshCw, Sparkles, Zap, PackageCheck, Inbox, Send, ShoppingCart,
-  CalendarClock, X,
+  CalendarClock, X, Filter, History,
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip } from 'recharts';
 
@@ -180,6 +180,33 @@ const PERIOD_PRESETS: { key: string; label: string; range: () => { from: string;
   { key: 'all', label: 'Tout', range: () => ({ from: '', to: '' }) },
 ];
 
+/**
+ * Which timestamp the period is read against. Two different questions, and an
+ * agent needs both: "what did I get through today" is the work, "how are
+ * today's arrivals doing" is the intake. A status moved this morning on a lead
+ * from last week belongs to the first and not to the second.
+ */
+const DATE_MODES = [
+  { key: 'updatedAt', label: 'Mise à jour', hint: 'Compté à la date du changement de statut' },
+  { key: 'createdAt', label: 'Création', hint: "Compté à la date d'arrivée du lead" },
+] as const;
+
+type DateMode = (typeof DATE_MODES)[number]['key'];
+
+/**
+ * How Phase 1 counts. Both readings are true and neither replaces the other: an
+ * agent who rings the same number three times before giving up did three
+ * NO_REPLY calls on one lead. "Par lead" files each lead once, under the last
+ * thing the agent did to it, so the slices add up to the leads worked; "par
+ * action" counts every status change, so they add up to the work done.
+ */
+const COUNT_MODES = [
+  { key: 'leads', label: 'Par lead', hint: 'Chaque lead compté une fois, sous sa dernière action' },
+  { key: 'actions', label: 'Par action', hint: 'Chaque changement de statut compté' },
+] as const;
+
+type CountMode = (typeof COUNT_MODES)[number]['key'];
+
 /** `datetime-local` speaks local wall-clock; `toISOString` would shift the hour. */
 const toDateTimeInput = (d: Date) => {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -244,17 +271,27 @@ export default function AgentDashboard() {
   // filter existed — so the default view is unchanged.
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [dateMode, setDateMode] = useState<DateMode>('updatedAt');
+  const [countMode, setCountMode] = useState<CountMode>('leads');
 
   const hasRange = Boolean(dateFrom || dateTo);
   const range = useMemo(
     () => ({
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
-      dateField: 'updatedAt',
-      dateType: 'updatedAt',
+      dateField: dateMode,
+      dateType: dateMode,
     }),
-    [dateFrom, dateTo]
+    [dateFrom, dateTo, dateMode]
   );
+
+  /** The tile drill-down: the same leads, in the same window, on the leads page. */
+  const drillDownTo = (action: string) => {
+    const params = new URLSearchParams({ historyStatus: action, dateField: dateMode });
+    if (dateFrom) params.set('dateFrom', dateFrom);
+    if (dateTo) params.set('dateTo', dateTo);
+    return `/agent/leads?${params.toString()}`;
+  };
 
   const applyPreset = (preset: (typeof PERIOD_PRESETS)[number]) => {
     const { from, to } = preset.range();
@@ -291,25 +328,25 @@ export default function AgentDashboard() {
   // filter.
 
   const leadStatsQuery = useQuery({
-    queryKey: ['agent-lead-stats', dateFrom, dateTo],
+    queryKey: ['agent-lead-stats', dateFrom, dateTo, dateMode],
     queryFn: () => leadsApi.list({ withStats: 'true', limit: 1, ...range }),
     placeholderData: keepPreviousData,
   });
 
   const todoQuery = useQuery({
-    queryKey: ['agent-todo-leads', dateFrom, dateTo],
+    queryKey: ['agent-todo-leads', dateFrom, dateTo, dateMode],
     queryFn: () => leadsApi.list({ status: 'ASSIGNED,NEW', limit: 6, ...range }),
     placeholderData: keepPreviousData,
   });
 
   const deliveryQuery = useQuery({
-    queryKey: ['agent-delivery-stats', dateFrom, dateTo],
+    queryKey: ['agent-delivery-stats', dateFrom, dateTo, dateMode],
     queryFn: () => leadsApi.livraison({ limit: 1, ...range }),
     placeholderData: keepPreviousData,
   });
 
   const availableQuery = useQuery({
-    queryKey: ['agent-available-count', dateFrom, dateTo],
+    queryKey: ['agent-available-count', dateFrom, dateTo, dateMode],
     queryFn: () => leadsApi.available({ limit: 1, ...range }),
     placeholderData: keepPreviousData,
   });
@@ -320,7 +357,7 @@ export default function AgentDashboard() {
   // agent sees when they click through. `counts` covers the whole visible set
   // regardless of paging, so limit: 1 is enough.
   const cartsQuery = useQuery({
-    queryKey: ['agent-cart-counts', dateFrom, dateTo],
+    queryKey: ['agent-cart-counts', dateFrom, dateTo, dateMode],
     queryFn: () => leadsApi.abandonedCarts({ limit: 1, ...range }),
     placeholderData: keepPreviousData,
   });
@@ -346,8 +383,23 @@ export default function AgentDashboard() {
     cartsQuery.refetch();
   };
 
-  const byLeadStatus: Record<string, number> =
-    leadStatsQuery.data?.data?.data?.stats?.byStatus || {};
+  const leadStats = leadStatsQuery.data?.data?.data?.stats;
+  const byLeadStatus: Record<string, number> = leadStats?.byStatus || {};
+
+  /**
+   * Everything this agent did in the window, rebuilt server-side from the status
+   * history they wrote. It is the only figure here that survives a lead leaving
+   * them: the reassignment cron clears `assignedAgentId` when it hands a lead
+   * back to the pool, so counting off the leads table loses the claim, the
+   * calls and the outcome all at once.
+   */
+  const activity = leadStats?.agentActivity;
+  const byAction: Record<string, number> = activity?.byAction || {};
+  const byActionLeads: Record<string, number> = activity?.byLead || {};
+  const totalActions: number = activity?.totalActions ?? 0;
+  const leadsWorked: number = activity?.leadsWorked ?? 0;
+  /** Leads pulled out of the pool — the real "Réclamé", claims handed back included. */
+  const claimedTotal: number = activity?.claimed ?? 0;
   const deliveryStats = deliveryQuery.data?.data?.data?.stats;
   const byDeliveryStatus: Record<string, number> = deliveryStats?.byStatus || {};
   const parcelsTotal: number = deliveryStats?.total ?? 0;
@@ -373,26 +425,55 @@ export default function AgentDashboard() {
   const cartsSub = `sur ${cartsTotal} panier${cartsTotal > 1 ? 's' : ''} au total`;
 
   // --- Phase 1: confirmation outcomes --------------------------------------
+  // Both modes read the same server tally, from opposite ends: `byStatus` files
+  // each lead under the agent's last word on it, `byAction` counts every status
+  // change they made.
+  const counts = countMode === 'actions' ? byAction : byLeadStatus;
+
   const outcomes = useMemo(
     () =>
       CONFIRMATION_OUTCOMES.map(o => {
-        if (o.key !== 'CONFIRMED') return { ...o, value: byLeadStatus[o.key] || 0 };
-        // A lead that shipped was confirmed first, but leaves the confirmation
-        // scope once Coliaty stamps it — add the parcels back so CONFIRMED
-        // reflects all the work done, not only what's still queued. The tile
-        // spells the split out, because its link only lists the queued ones.
-        const queued = byLeadStatus.CONFIRMED || 0;
+        if (o.key !== 'CONFIRMED') return { ...o, value: counts[o.key] || 0 };
+
+        const queued = counts.CONFIRMED || 0;
+        // Per lead, a confirmation that shipped now sits under
+        // PUSHED_TO_DELIVERY — folded back in here so CONFIRMED reflects all the
+        // work done, not only what is still queued, and folded in rather than
+        // added alongside so the lead stays in exactly one slice.
+        const pushed = countMode === 'actions' ? 0 : counts.PUSHED_TO_DELIVERY || 0;
         return {
           ...o,
-          value: queued + parcelsTotal,
-          hint: parcelsTotal > 0 ? `${queued} en attente · ${parcelsTotal} envoyés` : o.hint,
+          value: queued + pushed,
+          hint: pushed > 0 ? `${queued} en attente · ${pushed} envoyés` : o.hint,
         };
       }),
-    [byLeadStatus, parcelsTotal]
+    [counts, countMode]
   );
 
-  const assignedRow = { ...IN_PROGRESS_ROW, value: byLeadStatus.ASSIGNED || 0 };
-  const phase1Rows = [...outcomes, assignedRow];
+  // Per lead this is a claim with no outcome recorded after it — which is not
+  // the same as a lead still in hand, since the pool may have taken it back;
+  // "Actions Requises" below is the current plate. Per action it is every claim
+  // made. Both hints carry the claim total, because that is the figure an agent
+  // means by "combien j'ai réclamé".
+  const assignedRow = {
+    ...IN_PROGRESS_ROW,
+    value: counts.ASSIGNED || 0,
+    hint:
+      countMode === 'actions'
+        ? `${byActionLeads.ASSIGNED || 0} leads réclamés`
+        : `Réclamé, sans résultat enregistré · ${claimedTotal} réclamés au total`,
+  };
+  const cartConvertedRow = {
+    key: 'ABANDONED_CART_CONVERTED',
+    emoji: '🛒',
+    label: 'PANIERS CONVERTIS',
+    hint: `Paniers abandonnés convertis en leads · ${cartsSub}`,
+    color: '#f43f5e',
+    tile: 'bg-rose-50/70 border-rose-100 text-rose-700',
+    bar: 'bg-rose-500',
+    value: cartsConverted,
+  };
+  const phase1Rows = [...outcomes, assignedRow, cartConvertedRow];
 
   // Two totals on purpose: the rate is scored on results only, everything the
   // eye compares (bars, donut, tile %) is scored on the whole pipeline.
@@ -491,11 +572,12 @@ export default function AgentDashboard() {
               Résultats de confirmation et suivi de livraison —{' '}
               {rangeLabel ? (
                 <>
-                  comptés sur ce qui est arrivé{' '}
+                  comptés sur ce qui a été{' '}
+                  {dateMode === 'createdAt' ? 'reçu' : 'mis à jour'}{' '}
                   <span className={`font-black ${t.accentText}`}>{rangeLabel}</span>.
                 </>
               ) : (
-                'comptés sur la totalité de vos leads, pas sur une page.'
+                'comptés sur la totalité de votre travail, pas sur une page.'
               )}
             </p>
           </div>
@@ -589,6 +671,37 @@ export default function AgentDashboard() {
               )}
             </div>
           </div>
+
+          {/* Which timestamp the period reads. Kept on its own row under the
+              dates because it re-scores every figure above and below it — it is
+              a second filter, not a formatting option. */}
+          <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-dashed border-gray-200">
+            <div className="flex items-center gap-2 shrink-0">
+              <Filter className={`w-3.5 h-3.5 ${t.icon}`} />
+              <span className="text-[10px] font-black uppercase tracking-wider text-gray-600">Filtrer par date de</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {DATE_MODES.map(m => (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => setDateMode(m.key)}
+                  aria-pressed={dateMode === m.key}
+                  title={m.hint}
+                  className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all ${
+                    dateMode === m.key
+                      ? t.select
+                      : 'bg-white text-gray-500 border-gray-200 hover:text-gray-900 hover:border-gray-300'
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+            <span className="text-[10px] font-semibold text-gray-400 sm:ml-1">
+              {DATE_MODES.find(m => m.key === dateMode)?.hint}
+            </span>
+          </div>
         </div>
 
         {/* Live counters — real totals, straight from the server aggregates */}
@@ -645,7 +758,7 @@ export default function AgentDashboard() {
         <section className={`bg-white p-5 sm:p-6 rounded-3xl border shadow-sm relative overflow-hidden ${t.card}`}>
           <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl ${t.glow} pointer-events-none`} />
 
-          <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 relative z-10">
+          <header className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4 relative z-10">
             <div>
               <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
                 <Headphones className={`w-5 h-5 ${t.icon}`} />
@@ -655,13 +768,61 @@ export default function AgentDashboard() {
                 ✅ Résultat de la confirmation
               </p>
             </div>
-            <span
-              className={`px-3 py-1.5 text-xs font-black rounded-xl border w-fit ${t.soft}`}
-              title="Calculé sur les leads déjà traités — les leads ASSIGNED (appel non passé) sont exclus."
-            >
-              Taux: {fmtPct(confirmationRate)}% ({confirmedTotal}/{treatedTotal} traités)
-            </span>
+            <div className="flex flex-col items-start sm:items-end gap-2">
+              <span
+                className={`px-3 py-1.5 text-xs font-black rounded-xl border w-fit ${t.soft}`}
+                title={
+                  countMode === 'actions'
+                    ? 'Calculé sur les actions de résultat — les réclamations (ASSIGNED) sont exclues.'
+                    : 'Calculé sur les leads déjà traités — les leads ASSIGNED (appel non passé) sont exclus.'
+                }
+              >
+                Taux: {fmtPct(confirmationRate)}% ({confirmedTotal}/{treatedTotal} traités)
+              </span>
+              <div className="flex items-center gap-1">
+                {COUNT_MODES.map(m => (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => setCountMode(m.key)}
+                    aria-pressed={countMode === m.key}
+                    title={m.hint}
+                    className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border transition-all ${
+                      countMode === m.key
+                        ? t.select
+                        : 'bg-white text-gray-500 border-gray-200 hover:text-gray-900 hover:border-gray-300'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </header>
+
+          {/* What the agent actually did in the window — counted off the status
+              history, so a lead handed back to the pool still carries the calls
+              that were made on it. */}
+          <div className="relative z-10 grid grid-cols-3 gap-2 mb-5">
+            <ActivityStat
+              icon={<History className="w-3.5 h-3.5" />}
+              label="Actions"
+              value={totalActions}
+              hint="Changements de statut enregistrés"
+            />
+            <ActivityStat
+              icon={<Headphones className="w-3.5 h-3.5" />}
+              label="Leads traités"
+              value={leadsWorked}
+              hint="Leads distincts touchés"
+            />
+            <ActivityStat
+              icon={<Zap className="w-3.5 h-3.5" />}
+              label="Réclamés"
+              value={claimedTotal}
+              hint="Leads sortis du pool, même rendus depuis"
+            />
+          </div>
 
           {/* Donut + legend */}
           <div className="relative z-10 flex flex-col sm:flex-row items-center gap-4 mb-5">
@@ -716,47 +877,51 @@ export default function AgentDashboard() {
           </div>
 
           {/* The six outcome tiles, in the same order as the lead page buttons.
-              ASSIGNED closes the grid as a full-width row: same visual language,
-              but its shape says "state in progress", not "seventh result". */}
+              ASSIGNED & PANIERS CONVERTIS close the grid as full-width rows: same visual language,
+              their shape says "state in progress / recovery", not "standard result". */}
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5 relative z-10">
-            {phase1Rows.map(o => (
-              <Link
-                key={o.key}
-                to={`/agent/leads?status=${o.key}`}
-                className={`p-3.5 rounded-2xl border shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 ${o.tile} ${
-                  o.key === 'ASSIGNED'
-                    ? 'col-span-2 lg:col-span-3 flex items-center gap-3'
-                    : 'block'
-                }`}
-                title={`Voir les leads « ${o.label} »`}
-              >
-                {o.key === 'ASSIGNED' ? (
-                  <>
-                    <span className="text-base leading-none shrink-0">{o.emoji}</span>
-                    <span className="text-2xl font-black leading-none tabular-nums shrink-0">{o.value}</span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[9px] font-black tracking-wider uppercase opacity-90 leading-tight">{o.label}</span>
-                      <span className="block text-[9px] font-semibold opacity-60 leading-tight">{o.hint}</span>
-                    </span>
-                    <span className="text-[9px] font-black opacity-60 tabular-nums shrink-0">
-                      {fmtPct(pct(o.value, pipelineTotal))}%
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-base leading-none">{o.emoji}</span>
-                      <span className="text-[9px] font-black opacity-60 tabular-nums">
+            {phase1Rows.map(o => {
+              const isFullWidth = o.key === 'ASSIGNED' || o.key === 'ABANDONED_CART_CONVERTED';
+              const targetUrl = o.key === 'ABANDONED_CART_CONVERTED' ? '/agent/live-stream-paniers' : drillDownTo(o.key);
+              return (
+                <Link
+                  key={o.key}
+                  to={targetUrl}
+                  className={`p-3.5 rounded-2xl border shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 ${o.tile} ${
+                    isFullWidth
+                      ? 'col-span-2 lg:col-span-3 flex items-center gap-3'
+                      : 'block'
+                  }`}
+                  title={o.key === 'ABANDONED_CART_CONVERTED' ? 'Voir les paniers abandonnés' : `Voir les leads que vous avez marqués « ${o.label} » sur la période`}
+                >
+                  {isFullWidth ? (
+                    <>
+                      <span className="text-base leading-none shrink-0">{o.emoji}</span>
+                      <span className="text-2xl font-black leading-none tabular-nums shrink-0">{o.value}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[9px] font-black tracking-wider uppercase opacity-90 leading-tight">{o.label}</span>
+                        <span className="block text-[9px] font-semibold opacity-60 leading-tight">{o.hint}</span>
+                      </span>
+                      <span className="text-[9px] font-black opacity-60 tabular-nums shrink-0">
                         {fmtPct(pct(o.value, pipelineTotal))}%
                       </span>
-                    </div>
-                    <p className="text-2xl font-black mt-1.5 leading-none tabular-nums">{o.value}</p>
-                    <p className="text-[9px] font-black tracking-wider uppercase mt-1.5 opacity-90 leading-tight">{o.label}</p>
-                    <p className="text-[9px] font-semibold opacity-60 leading-tight">{o.hint}</p>
-                  </>
-                )}
-              </Link>
-            ))}
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-base leading-none">{o.emoji}</span>
+                        <span className="text-[9px] font-black opacity-60 tabular-nums">
+                          {fmtPct(pct(o.value, pipelineTotal))}%
+                        </span>
+                      </div>
+                      <p className="text-2xl font-black mt-1.5 leading-none tabular-nums">{o.value}</p>
+                      <p className="text-[9px] font-black tracking-wider uppercase mt-1.5 opacity-90 leading-tight">{o.label}</p>
+                      <p className="text-[9px] font-semibold opacity-60 leading-tight">{o.hint}</p>
+                    </>
+                  )}
+                </Link>
+              );
+            })}
           </div>
         </section>
 
@@ -945,6 +1110,24 @@ function PulseStat({ to, icon, label, sub, value, tone, live }: {
         <p className="hidden sm:block text-[9px] font-semibold text-gray-400 truncate">{sub}</p>
       </div>
     </Link>
+  );
+}
+
+/** A raw count of agent activity — no link, because it spans every outcome. */
+function ActivityStat({ icon, label, value, hint }: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  hint: string;
+}) {
+  return (
+    <div className="px-3 py-2.5 rounded-2xl border border-gray-100 bg-gray-50/50" title={hint}>
+      <div className="flex items-center gap-1.5 text-gray-400">
+        {icon}
+        <span className="text-[9px] font-black uppercase tracking-wider truncate">{label}</span>
+      </div>
+      <p className="text-xl font-black text-gray-900 mt-1 leading-none tabular-nums">{value}</p>
+    </div>
   );
 }
 

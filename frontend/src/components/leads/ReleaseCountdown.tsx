@@ -70,10 +70,9 @@ export function ReleaseCountdown({ lead, onExpire, className = '' }: ReleaseCoun
   if (Number.isNaN(deadline)) return null;
 
   const isNoReply = lead.status === 'NO_REPLY';
-  // CALL_LATER counts down to the reminder the agent picked plus one hour, not
-  // to the randomised hold every other status gets — say so, or the badge reads
-  // as an unrelated timer sitting next to the callback time.
   const isCallLater = lead.status === 'CALL_LATER';
+  const isPriceCancel = lead.status === 'CANCEL_REASON_PRICE';
+  const isShortRelease = ['CANCEL_ORDER', 'WRONG_ORDER'].includes(lead.status || '');
   // `noReplyReleases` counts releases already spent, so the attempt in progress
   // is the next one up.
   const attempt = (lead.noReplyReleases ?? 0) + 1;
@@ -91,7 +90,11 @@ export function ReleaseCountdown({ lead, onExpire, className = '' }: ReleaseCoun
         title={
           isCallLater
             ? "Délai avant remise automatique dans le pool (1 h après l'heure de rappel prévue)"
-            : 'Délai avant remise automatique dans le pool (tiré au hasard entre 1 h et 2 h)'
+            : isPriceCancel
+            ? 'Délai de 24 heures avant remise automatique dans le pool'
+            : isShortRelease
+            ? 'Délai de 2 minutes avant désassignation de l\'agent'
+            : 'Délai avant remise automatique dans le pool'
         }
       >
         <Hourglass className="w-2.5 h-2.5 shrink-0" />

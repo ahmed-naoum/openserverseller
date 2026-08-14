@@ -7,6 +7,7 @@ import {
   MAX_NO_REPLY_RELEASES,
   MAX_RELEASE_MS,
   RELEASE_TRACKED_STATUSES,
+  SYSTEM_NOTE_PREFIX,
   resolveRelease,
 } from '../lib/leadRelease.js';
 
@@ -84,13 +85,16 @@ export const startLeadsReassignmentCron = () => {
               : `[Cron] Lead #${lead.id}: Unassigning due to timeout in status ${lead.status}.`
           );
 
+          // Every note here opens with SYSTEM_NOTE_PREFIX on purpose: the row is
+          // stamped with the agent's id, and that prefix is what stops the agent
+          // dashboard from reading a timeout as work the agent did.
           const notes = exhausted
-            ? `Système : ${MAX_NO_REPLY_RELEASES} tentatives sans réponse — lead retiré du pool (${DEAD_NO_REPLY}).`
+            ? `${SYSTEM_NOTE_PREFIX} ${MAX_NO_REPLY_RELEASES} tentatives sans réponse — lead retiré du pool (${DEAD_NO_REPLY}).`
             : lead.status === 'NO_REPLY'
-              ? `Système : Lead désassigné automatiquement après le délai maximum dans le statut NO_REPLY (tentative ${releases}/${MAX_NO_REPLY_RELEASES}).`
+              ? `${SYSTEM_NOTE_PREFIX} Lead désassigné automatiquement après le délai maximum dans le statut NO_REPLY (tentative ${releases}/${MAX_NO_REPLY_RELEASES}).`
               : lead.status === CALL_LATER
-                ? `Système : Rappel non effectué plus d'1 h après l'heure prévue — lead remis dans le pool.`
-                : `Système : Lead désassigné automatiquement après le délai maximum dans le statut ${lead.status}.`;
+                ? `${SYSTEM_NOTE_PREFIX} Rappel non effectué plus d'1 h après l'heure prévue — lead remis dans le pool.`
+                : `${SYSTEM_NOTE_PREFIX} Lead désassigné automatiquement après le délai maximum dans le statut ${lead.status}.`;
 
         await prisma.$transaction(async (tx) => {
           // Close the current assignment
@@ -162,7 +166,7 @@ export const startLeadsReassignmentCron = () => {
                 oldStatus: lead.status,
                 newStatus: 'AVAILABLE',
                 changedBy: lead.assignedAgentId!,
-                notes: 'Système : Lead désassigné automatiquement pour inactivité (7 minutes).',
+                notes: `${SYSTEM_NOTE_PREFIX} Lead désassigné automatiquement pour inactivité (7 minutes).`,
               }
             });
             
@@ -182,7 +186,10 @@ export const startLeadsReassignmentCron = () => {
         where: {
           assignedAgentId: { not: null },
           status: { in: ['WRONG_ORDER', 'CANCEL_ORDER'] },
-          updatedAt: { lte: shortTimeoutThreshold }
+          OR: [
+            { releaseAt: { lte: now } },
+            { releaseAt: null, updatedAt: { lte: shortTimeoutThreshold } },
+          ],
         },
         select: { id: true, assignedAgentId: true, status: true }
       });
@@ -202,13 +209,13 @@ export const startLeadsReassignmentCron = () => {
                 oldStatus: lead.status,
                 newStatus: lead.status,
                 changedBy: lead.assignedAgentId!,
-                notes: `Système : Agent désassigné après 2 minutes. Statut conservé: ${lead.status}.`,
+                notes: `${SYSTEM_NOTE_PREFIX} Agent désassigné après 2 minutes. Statut conservé: ${lead.status}.`,
               }
             });
             
             await tx.lead.update({
               where: { id: lead.id },
-              data: { assignedAgentId: null }
+              data: { assignedAgentId: null, releaseAt: null }
             });
           });
 

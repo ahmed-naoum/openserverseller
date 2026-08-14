@@ -12,7 +12,7 @@ import { getAgentLeadScope, getAgentProductRestrictions } from '../utils/agentSc
 import { isCompletePhone } from '../lib/phoneCompleteness.js';
 import { SAFE_USER_SELECT } from '../lib/safeUserSelect.js';
 import { parseDateRange } from '../lib/dateRange.js';
-import { DEAD_NO_REPLY, releaseAtFor } from '../lib/leadRelease.js';
+import { DEAD_NO_REPLY, SYSTEM_NOTE_PREFIX, releaseAtFor } from '../lib/leadRelease.js';
 import {
   productScopeOf,
   applyProductScope,
@@ -29,6 +29,29 @@ import {
 // reads, only how many rows are rendered at once.
 const MAX_ROWS_PER_REQUEST = 5000;
 const DEFAULT_ROWS_PER_REQUEST = 200;
+
+/**
+ * Everything an agent can do to a lead that the agent dashboard scores them on,
+ * in the order the tiles show it. `ASSIGNED` is the claim itself — a state, not
+ * a result — and `PUSHED_TO_DELIVERY` is the hand-off to Coliaty; both are
+ * listed so a lead always lands in exactly one bucket.
+ *
+ * These figures are read off `lead_status_history` rather than off the leads
+ * table, because `assignedAgentId` is wiped the moment the reassignment cron
+ * sends a lead back to the shared pool — and with it every trace that this
+ * agent claimed it, called it and recorded an outcome. `changedBy` survives
+ * that, so work stays attributed to whoever actually did it.
+ */
+const AGENT_TRACKED_ACTIONS = [
+  'ASSIGNED',
+  'CALL_LATER',
+  'NO_REPLY',
+  'CONFIRMED',
+  'WRONG_ORDER',
+  'CANCEL_REASON_PRICE',
+  'CANCEL_ORDER',
+  'PUSHED_TO_DELIVERY',
+] as const;
 
 const resolveRowLimit = (limit: unknown): number => {
   if (!limit) return DEFAULT_ROWS_PER_REQUEST;
@@ -239,6 +262,7 @@ router.get(
       page = 1, limit = 50, status, agentId, search, viewMode, excludeProcessed, mode, vendorId, productId,
       // Admin-oriented filters (all optional / additive)
       city, source, sourceMode, paymentSituation, hasOrder, dateFrom, dateTo, dateField, dateType, sort, withStats,
+      historyStatus,
     } = req.query;
 
     // Callers that want everything pass a large limit; clamp it so a single
@@ -267,22 +291,19 @@ router.get(
       const scopeFilter = referralLinkProductFilter(productScopeOf(req));
       if (scopeFilter) conditions.push(scopeFilter);
     } else if (req.user!.roleName === 'CALL_CENTER_AGENT') {
-      if (viewMode === 'ALL') {
-        conditions.push({
-          OR: [
-            { assignedAgentId: req.user!.id },
-            { status: { in: ['AVAILABLE'] } },
-            { statusHistory: { some: { changedBy: req.user!.id } } },
-          ]
-        });
-      } else {
-        conditions.push({
-          OR: [
-            { assignedAgentId: req.user!.id },
-            { statusHistory: { some: { changedBy: req.user!.id } } },
-          ]
-        });
-      }
+      // A lead sits on exactly one agent's plate — the one it is assigned to.
+      // Widening this to "every lead I ever touched" put leads the cron had
+      // already released, and leads another agent had since claimed, back on
+      // the first agent's page: that is how one lead came to show up as
+      // assigned in two accounts at once. Past work is counted from the status
+      // history in `withStats` and reached through `historyStatus`; neither
+      // hands the lead itself back.
+      const agentScope: any[] = [{ assignedAgentId: req.user!.id }];
+      // The dashboard drill-down is the one view that asks for past work on
+      // purpose, so it — and only it — reopens the history.
+      if (historyStatus) agentScope.push({ statusHistory: { some: { changedBy: req.user!.id } } });
+      if (viewMode === 'ALL') agentScope.push({ status: { in: ['AVAILABLE'] } });
+      conditions.push(agentScope.length === 1 ? agentScope[0] : { OR: agentScope });
     } else if (req.user!.roleName === 'HELPER') {
       if (!req.user!.canManageLeads) {
         throw new AppException(403, 'Permission denied: Vous n\'avez pas le droit de gérer les leads');
@@ -346,7 +367,30 @@ router.get(
 
     const targetDateField = (dateField || dateType) === 'createdAt' ? 'createdAt' : 'updatedAt';
     const createdRange = parseDateRange(dateFrom, dateTo);
-    if (createdRange) conditions.push({ [targetDateField]: createdRange });
+
+    // "Show me the leads I marked X" — how the agent dashboard tiles drill down.
+    // Matches on the agent's own history instead of the lead's current status,
+    // so a lead the cron handed back to the pool stays reachable from the figure
+    // that counted it. Under `updatedAt` the period narrows the action itself,
+    // which is what the tile counted — narrowing the lead instead would answer a
+    // different question and come back with a different number.
+    const agentHistoryFilter =
+      historyStatus && req.user!.roleName === 'CALL_CENTER_AGENT'
+        ? {
+          changedBy: req.user!.id,
+          newStatus: String(historyStatus),
+          // Same exclusion the stats use, so the list and the tile that opened
+          // it are counting the same rows.
+          OR: [{ notes: null }, { notes: { not: { startsWith: SYSTEM_NOTE_PREFIX } } }],
+          ...(createdRange && targetDateField === 'updatedAt' ? { createdAt: createdRange } : {}),
+        }
+        : null;
+
+    if (agentHistoryFilter) conditions.push({ statusHistory: { some: agentHistoryFilter } });
+
+    if (createdRange && !(agentHistoryFilter && targetDateField === 'updatedAt')) {
+      conditions.push({ [targetDateField]: createdRange });
+    }
 
     if (search) {
       conditions.push({
@@ -492,43 +536,96 @@ router.get(
         scopeTotal += row._count._all;
       }
 
+      // Every action this agent recorded in the window, and what it did to the
+      // agent's own tallies. Only ever set for CALL_CENTER_AGENT.
+      let agentActivity: any = undefined;
+
       if (req.user!.roleName === 'CALL_CENTER_AGENT') {
-        const historyWhere: any = { changedBy: req.user!.id };
-        const createdRange = parseDateRange(dateFrom, dateTo);
-        const targetDateField = (dateField || dateType) === 'createdAt' ? 'createdAt' : 'updatedAt';
-        if (createdRange) {
-          historyWhere[targetDateField] = createdRange;
+        // The group-by above answers "what are these leads now", which for an
+        // agent is the wrong question twice over: a lead the cron released is
+        // back at AVAILABLE and a lead someone else took is theirs, yet both
+        // still carry work this agent did. So the agent's own figures are
+        // rebuilt from scratch out of the history rows they wrote.
+        const historyWhere: any = {
+          changedBy: req.user!.id,
+          // The reassignment cron stamps its release rows with the agent's id so
+          // the lead's timeline reads as one story. They are not agent actions,
+          // and letting them through would both credit the agent for every lead
+          // that timed out on them and — being the newest row — make the release
+          // their "last action", pulling the lead out of the outcome they really
+          // recorded. See SYSTEM_NOTE_PREFIX.
+          OR: [{ notes: null }, { notes: { not: { startsWith: SYSTEM_NOTE_PREFIX } } }],
+        };
+        const historyRange = parseDateRange(dateFrom, dateTo);
+        if (historyRange) {
+          // Two readings of "période", picked by `dateField`:
+          //   updatedAt  → when the agent did it — the action's own timestamp
+          //   createdAt  → when the lead came in, whenever it was worked
+          if (targetDateField === 'createdAt') historyWhere.lead = { is: { createdAt: historyRange } };
+          else historyWhere.createdAt = historyRange;
         }
 
-        const agentHistory = await prisma.leadStatusHistory.findMany({
+        const actionRows = await prisma.leadStatusHistory.findMany({
           where: historyWhere,
-          select: { leadId: true, newStatus: true },
-          distinct: ['leadId', 'newStatus'],
+          // Newest first, so the first row seen for a lead is the agent's last
+          // word on it.
+          orderBy: { createdAt: 'desc' },
+          select: { leadId: true, newStatus: true, lead: { select: { status: true } } },
         });
 
-        const historyCounts: Record<string, Set<number>> = {};
-        for (const h of agentHistory) {
-          if (!historyCounts[h.newStatus]) historyCounts[h.newStatus] = new Set();
-          historyCounts[h.newStatus].add(h.leadId);
+        // "How many NO_REPLY?" has two honest answers and the dashboard shows
+        // both: `byAction` counts the calls (a lead rung twice counts twice),
+        // `byStatus` counts the leads sitting on that outcome. Only the second
+        // sums to `leadsWorked`, so it is what the donut and the percentages
+        // are built on — the first would have one lead in several slices.
+        const byAction: Record<string, number> = {};
+        const leadsPerAction: Record<string, Set<number>> = {};
+        const lastActionPerLead = new Map<number, string>();
+
+        for (const row of actionRows) {
+          byAction[row.newStatus] = (byAction[row.newStatus] || 0) + 1;
+          (leadsPerAction[row.newStatus] ||= new Set()).add(row.leadId);
+          if (lastActionPerLead.has(row.leadId)) continue;
+          // A lead already handed to Coliaty is booked as pushed whatever the
+          // last row says. The hand-off only started writing its own history
+          // row recently, so without this the leads pushed before that would
+          // still read as merely CONFIRMED.
+          lastActionPerLead.set(
+            row.leadId,
+            row.lead?.status === 'PUSHED_TO_DELIVERY' ? 'PUSHED_TO_DELIVERY' : row.newStatus
+          );
         }
 
-        for (const [st, count] of Object.entries(byStatus)) {
-          if (!historyCounts[st] && count > 0) {
-            historyCounts[st] = new Set();
-          }
+        const agentByStatus: Record<string, number> = {};
+        for (const action of lastActionPerLead.values()) {
+          agentByStatus[action] = (agentByStatus[action] || 0) + 1;
         }
 
-        const mergedByStatus: Record<string, number> = {};
-        let mergedTotal = 0;
-        for (const [st, leadSet] of Object.entries(historyCounts)) {
-          mergedByStatus[st] = leadSet.size;
-          mergedTotal += leadSet.size;
+        const byLead: Record<string, number> = {};
+        for (const [action, leadIds] of Object.entries(leadsPerAction)) {
+          byLead[action] = leadIds.size;
         }
 
-        if (Object.keys(mergedByStatus).length > 0) {
-          byStatus = { ...byStatus, ...mergedByStatus };
-          scopeTotal = Object.values(byStatus).reduce((a, b) => a + b, 0);
+        // Zero-fill so a tile the agent never lit still renders as 0 instead of
+        // vanishing from the grid.
+        for (const action of AGENT_TRACKED_ACTIONS) {
+          byAction[action] ??= 0;
+          byLead[action] ??= 0;
+          agentByStatus[action] ??= 0;
         }
+
+        byStatus = agentByStatus;
+        scopeTotal = lastActionPerLead.size;
+
+        agentActivity = {
+          totalActions: actionRows.length,
+          leadsWorked: lastActionPerLead.size,
+          // Leads this agent pulled out of the pool — the true "Réclamé", which
+          // survives the claim being handed back.
+          claimed: byLead.ASSIGNED,
+          byAction,
+          byLead,
+        };
       }
 
       stats = {
@@ -538,6 +635,7 @@ router.get(
         ordersRevenue: orderAgg._sum.totalAmountMad || 0,
         deliveredCount: deliveredAgg._count._all,
         deliveredRevenue: deliveredAgg._sum.totalAmountMad || 0,
+        ...(agentActivity ? { agentActivity } : {}),
       };
 
       filterOptions = {
@@ -3689,6 +3787,21 @@ router.post(
         data: { status: 'PUSHED_TO_DELIVERY' }
       });
 
+      // The hand-off is an action like any other, and the agent dashboard reads
+      // its figures out of this table — without a row here the push would leave
+      // no trace of who sent the parcel.
+      await tx.leadStatusHistory.create({
+        data: {
+          leadId: lead.id,
+          oldStatus: lead.status,
+          newStatus: 'PUSHED_TO_DELIVERY',
+          changedBy: req.user!.id,
+          notes: coliatyResult
+            ? `Poussé à Coliaty (ref: ${coliatyResult.package_code})`
+            : 'Poussé en livraison (Coliaty non configuré)',
+        },
+      });
+
       // --- STOCK DECREMENT ---
       await tx.product.update({
         where: { id: productToOrder!.id },
@@ -4564,10 +4677,22 @@ router.get(
       { phone: { not: null } },
     ];
 
-    // When the cart was abandoned. `counts` is derived from the same list, so
-    // the tab badges and the dashboard tile narrow with the window too.
-    const createdRange = parseDateRange(req.query.dateFrom, req.query.dateTo);
-    if (createdRange) and.push({ createdAt: createdRange });
+    // When the cart was abandoned / converted. `counts` is derived from the same list,
+    // so the tab badges and the dashboard tile narrow with the window too.
+    const dateField = (req.query.dateField as string) || (req.query.dateType as string) || 'createdAt';
+    const dateRange = parseDateRange(req.query.dateFrom, req.query.dateTo);
+    if (dateRange) {
+      if (dateField === 'updatedAt') {
+        and.push({
+          OR: [
+            { updatedAt: dateRange },
+            { convertedAt: dateRange },
+          ],
+        });
+      } else {
+        and.push({ createdAt: dateRange });
+      }
+    }
 
     // Only restrict by referral code when the agent actually has assignments.
     if (hasScope) {
@@ -4626,12 +4751,31 @@ router.get(
         )
       : new Set<string>();
 
+    const convertedLeadIds = candidates
+      .map((c) => c.convertedLeadId)
+      .filter((id): id is number => id !== null);
+
+    const convertedAgentLeadIds = convertedLeadIds.length > 0
+      ? new Set(
+          (await prisma.lead.findMany({
+            where: {
+              id: { in: convertedLeadIds },
+              ...(req.user!.roleName === 'CALL_CENTER_AGENT' ? { assignedAgentId: req.user!.id } : {}),
+            },
+            select: { id: true },
+          })).map((l) => l.id)
+        )
+      : new Set<number>();
+
     const isSaved = (c: { phone: string | null }) => {
       const core = normalizePhone(c.phone);
       return !!core && knownCores.has(core);
     };
     const isComplete = (c: { phone: string | null }) => isCompletePhone(c.phone);
-    const isConverted = (c: { convertedLeadId: number | null }) => c.convertedLeadId != null;
+    const isConverted = (c: { convertedLeadId: number | null }) =>
+      c.convertedLeadId != null && (
+        req.user!.roleName !== 'CALL_CENTER_AGENT' || convertedAgentLeadIds.has(c.convertedLeadId)
+      );
 
     /**
      * A cart whose number is already a Lead is not work: someone is on it, or it

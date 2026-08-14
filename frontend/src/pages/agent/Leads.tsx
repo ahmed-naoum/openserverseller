@@ -160,6 +160,26 @@ export default function AgentLeads() {
     const params = new URLSearchParams(searchParams);
     if (next) params.set('status', next);
     else params.delete('status');
+    // A history drill-down and a current-status filter answer different
+    // questions; picking one from the toolbar drops the other.
+    params.delete('historyStatus');
+    setSearchParams(params, { replace: true });
+  };
+
+  // ?historyStatus=NO_REPLY&dateFrom=…&dateTo=… — the agent dashboard tiles link
+  // in here. Filters on what this agent recorded rather than on where the lead
+  // stands now, so the leads the cron already handed back to the pool are the
+  // ones the tile counted, not a shorter list.
+  const historyStatus = searchParams.get('historyStatus') || '';
+  const historyRange = {
+    dateFrom: searchParams.get('dateFrom') || undefined,
+    dateTo: searchParams.get('dateTo') || undefined,
+    dateField: (searchParams.get('dateField') as 'createdAt' | 'updatedAt') || undefined,
+  };
+
+  const clearHistoryFilter = () => {
+    const params = new URLSearchParams(searchParams);
+    ['historyStatus', 'dateFrom', 'dateTo', 'dateField'].forEach(k => params.delete(k));
     setSearchParams(params, { replace: true });
   };
 
@@ -246,7 +266,11 @@ export default function AgentLeads() {
         }),
         // Without an explicit limit this falls back to the server's 50/page and
         // silently drops the rest of the agent's leads.
-        leadsApi.list({ status: statusFilter, limit: 5000 })
+        leadsApi.list({
+          status: statusFilter,
+          limit: 5000,
+          ...(historyStatus ? { historyStatus, ...historyRange } : {}),
+        })
       ]);
       const availData = availRes.data?.data || availRes.data;
       setAvailableLeads(availData?.leads || []);
@@ -259,12 +283,27 @@ export default function AgentLeads() {
 
       const myData = myRes.data?.data || myRes.data;
       const allMyLeads = myData?.leads || [];
-      const allowedAgentStatuses = ['ASSIGNED', 'CALL_LATER', 'NO_REPLY', 'CONFIRMED', 'WRONG_ORDER', 'CANCEL_REASON_PRICE', 'CANCEL_ORDER', 'INVALID', 'CONTACTED', 'PRICE_CONFIRMED'];
-      setMyLeads(allMyLeads.filter((l: any) => allowedAgentStatuses.includes(l.status)));
+      // The default plate: statuses the agent can still act on. CANCEL_ORDER is
+      // deliberately absent — it is terminal, the lead drops back to the pool
+      // within two minutes, and a card for it is nothing but noise between the
+      // leads that do need a call. It stays counted on the dashboard and stays
+      // reachable from the dropdown below.
+      const plateStatuses = ['ASSIGNED', 'CALL_LATER', 'NO_REPLY', 'CONFIRMED', 'WRONG_ORDER', 'CANCEL_REASON_PRICE', 'CANCEL_ORDER', 'INVALID', 'CONTACTED', 'PRICE_CONFIRMED'];
+      // Both an explicit status pick and a history drill-down are the agent
+      // asking for something specific — the whitelist steps aside for either,
+      // otherwise picking "Annulé" would filter the list down to nothing.
+      setMyLeads(
+        historyStatus || statusFilter
+          ? allMyLeads
+          : allMyLeads.filter((l: any) => plateStatuses.includes(l.status))
+      );
     } catch (error) {
       console.error('Failed to load leads:', error);
     }
-  }, [selectedInfluencerId, availableLimit, statusFilter, availableProductId, debouncedPhone]);
+  }, [
+    selectedInfluencerId, availableLimit, statusFilter, availableProductId, debouncedPhone,
+    historyStatus, historyRange.dateFrom, historyRange.dateTo, historyRange.dateField,
+  ]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedPhone(availablePhone.replace(/\D/g, '')), 350);
@@ -1088,6 +1127,27 @@ export default function AgentLeads() {
           </div>
         </div>
 
+        {/* Arrived from a dashboard tile. Says so plainly, because this is the
+            one view that lists leads no longer assigned to the agent — without
+            the banner they read as a bug rather than as history. */}
+        {historyStatus && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-2xl border border-indigo-100 bg-indigo-50/60 px-4 py-2.5">
+            <p className="text-xs font-bold text-indigo-800">
+              🕘 Historique : les leads que vous avez marqués{' '}
+              <span className="font-black">{historyStatus.replace(/_/g, ' ')}</span>
+              {historyRange.dateFrom || historyRange.dateTo ? ' sur la période choisie' : ''} — y compris
+              ceux déjà repartis dans le pool.
+            </p>
+            <button
+              type="button"
+              onClick={clearHistoryFilter}
+              className="shrink-0 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-white border border-indigo-200 hover:bg-indigo-100 transition-colors"
+            >
+              Effacer le filtre
+            </button>
+          </div>
+        )}
+
         {/* Bulk delivery bar — only leads past the confirmation call and without a
             parcel yet can be shipped, so the selection is limited to those. */}
         {deliverableLeads.length > 0 && (
@@ -1194,6 +1254,7 @@ export default function AgentLeads() {
                         lead.status === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-700' :
                         lead.status === 'WRONG_ORDER' ? 'bg-amber-100 text-amber-700' :
                         lead.status === 'CANCEL_REASON_PRICE' ? 'bg-red-100 text-red-700' :
+                        lead.status === 'CANCEL_ORDER' ? 'bg-red-100 text-red-700' :
                         lead.status === 'PRICE_CONFIRMED' ? 'bg-emerald-100 text-emerald-700' :
                         'bg-gray-100 text-gray-700'
                       }`}>

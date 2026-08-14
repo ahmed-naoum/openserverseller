@@ -21,6 +21,7 @@ export const RELEASE_TRACKED_STATUSES = [
   'CALLBACK_REQUESTED',
   'NOT_INTERESTED',
   'UNREACHABLE',
+  'CANCEL_REASON_PRICE',
 ];
 
 /**
@@ -40,12 +41,20 @@ export const CALL_LATER = 'CALL_LATER';
 export const CALL_LATER_GRACE_MS = 60 * 60 * 1000; // 1 hour
 
 /**
+ * CANCEL_REASON_PRICE holds for 24 hours before returning to the pool.
+ */
+export const PRICE_CANCEL_RELEASE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+export const priceCancelReleaseAt = (from: number = Date.now()): Date =>
+  new Date(from + PRICE_CANCEL_RELEASE_MS);
+
+/**
  * The hold window is randomised per lead instead of being a fixed two hours.
  * A constant timeout is learnable — an agent can sit on a lead knowing exactly
  * when it drops — and it also bunches every lead claimed in the same minute
  * into one release spike. A 1–2 h roll removes both.
  */
-export const MIN_RELEASE_MS = 60 * 60 * 1000; // 1 hour
+export const MIN_RELEASE_MS = 1 * 60 * 60 * 1000; // 1 hour
 export const MAX_RELEASE_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 /**
@@ -63,6 +72,19 @@ export const MAX_NO_REPLY_RELEASES = 5;
  * and out of force-claim (FORCE_CLAIMABLE_STATUSES).
  */
 export const DEAD_NO_REPLY = 'DEAD_NO_REPLY';
+
+/**
+ * Prefix every history row the cron writes carries.
+ *
+ * Those rows are stamped `changedBy: <the agent>` so the lead's timeline reads
+ * as one story — but the system letting a lead go is not something the agent
+ * did. The agent dashboard counts its figures out of that table and filters on
+ * this prefix to tell the two apart: without it an agent would be credited with
+ * an action for every lead that timed out on them, and the release row — being
+ * the newest — would become their "last action" and pull the lead out of the
+ * outcome they actually recorded.
+ */
+export const SYSTEM_NOTE_PREFIX = 'Système :';
 
 /** A fresh randomised release deadline, 1–2 h out. */
 export const rollReleaseAt = (from: number = Date.now()): Date =>
@@ -82,6 +104,16 @@ export const callLaterReleaseAt = (callbackAt: Date | string | null | undefined)
     : new Date(at.getTime() + CALL_LATER_GRACE_MS);
 };
 
+export const SHORT_RELEASE_STATUSES = [
+  'CANCEL_ORDER',
+  'WRONG_ORDER',
+];
+
+export const SHORT_RELEASE_MS = 2 * 60 * 1000; // 2 minutes
+
+export const shortReleaseAt = (from: number = Date.now()): Date =>
+  new Date(from + SHORT_RELEASE_MS);
+
 /**
  * The deadline a lead should carry after being written to `status`, or null
  * when the status is not one the cron reclaims. Callers pass this straight into
@@ -96,6 +128,8 @@ export const releaseAtFor = (
   callbackAt?: Date | string | null,
 ): Date | null => {
   if (status === CALL_LATER) return callLaterReleaseAt(callbackAt);
+  if (status === 'CANCEL_REASON_PRICE') return priceCancelReleaseAt();
+  if (SHORT_RELEASE_STATUSES.includes(status)) return shortReleaseAt();
   return RELEASE_TRACKED_STATUSES.includes(status) ? rollReleaseAt() : null;
 };
 
