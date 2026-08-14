@@ -1304,6 +1304,7 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
       <video 
         ref={videoRef}
         src={resolveUrl(content.url)} 
+        preload="auto"
         controls={content.controls !== false && !showUnmuteOverlay}
         autoPlay={!!content.autoplay}
         loop={!!content.loop}

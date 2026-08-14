@@ -246,10 +246,19 @@ app.use(validateRequestSize(5 * 1024 * 1024));
 
 app.use('/uploads', (req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  res.header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Range');
+  res.header('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges');
+  res.header('Accept-Ranges', 'bytes');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
   next();
-}, express.static(path.join(process.cwd(), 'uploads')));
+}, express.static(path.join(process.cwd(), 'uploads'), {
+  acceptRanges: true,
+  cacheControl: true,
+  maxAge: '30d'
+}));
 
 // setupPassport() is invoked after loadSecrets() (near server.listen) so the
 // Google strategy is registered with the credentials from the database.
