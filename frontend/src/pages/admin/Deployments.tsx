@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   GitBranch, GitCommit, RefreshCw, Rocket, CheckCircle2, XCircle,
   Clock, Terminal, Loader2, ShieldCheck, ShieldAlert,
-  User as UserIcon, Activity, Server, Check
+  User as UserIcon, Activity, Server, Check, Zap
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -228,6 +228,9 @@ export default function Deployments() {
               </span>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold uppercase tracking-wider">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" /> Serveur Actif
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[11px] font-bold uppercase tracking-wider">
+                <Zap className="w-3.5 h-3.5 text-purple-400 animate-pulse" /> Déploiement Auto sur Push
               </span>
             </div>
 

@@ -144,12 +144,29 @@ router.post('/webhook', async (req, res) => {
 
   console.log(`[deploy] webhook: ${commits.length} commit(s) on ${branch}`);
 
-  // Deliberately notify-only. Auto-deploying on push would take the public site
-  // down unattended the first time a bad commit lands, and deploy.sh touches the
-  // database. A human clicking Deploy is the guardrail.
+  let autoDeployed = false;
+  const targetBranch = process.env.DEPLOY_BRANCH || 'master';
+  const autoDeployEnabled = process.env.AUTO_DEPLOY_ON_PUSH !== 'false';
+
+  if (autoDeployEnabled && branch === targetBranch && !isDeploying()) {
+    try {
+      const pusherName = payload.pusher?.name || payload.head_commit?.author?.name || 'GitHub Webhook';
+      const result = await startDeploy({
+        trigger: 'WEBHOOK',
+        triggeredBy: `GitHub Push (${pusherName})`,
+        onLog: (line) => emit('deploy:log', { line }),
+        onStatus: (st, dep) => emit('deploy:status', { status: st, deployment: dep }),
+      });
+      autoDeployed = true;
+      console.log(`[deploy] Auto-deploy triggered for push to ${branch} by ${pusherName}: ${result.id}`);
+    } catch (deployErr: any) {
+      console.error('[deploy] Auto-deploy trigger failed:', deployErr?.message || deployErr);
+    }
+  }
+
   return res.json({
     status: 'success',
-    data: { received: commits.length, pendingCount, autoDeployed: false },
+    data: { received: commits.length, pendingCount, autoDeployed },
   });
 });
 
@@ -172,10 +189,11 @@ router.get('/status', async (_req, res) => {
       orderBy: { createdAt: 'desc' },
     });
     const webhookConfigured = Boolean(getSecret('GITHUB_WEBHOOK_SECRET'));
+    const autoDeployEnabled = process.env.AUTO_DEPLOY_ON_PUSH !== 'false';
 
     res.json({
       status: 'success',
-      data: { ...status, pendingCommits, lastDeployment: last, webhookConfigured },
+      data: { ...status, pendingCommits, lastDeployment: last, webhookConfigured, autoDeployEnabled },
     });
   } catch (err: any) {
     res.status(500).json({ status: 'error', message: err.message });
