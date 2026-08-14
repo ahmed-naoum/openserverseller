@@ -1225,14 +1225,19 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
   useEffect(() => {
     setIsMuted(!!content.autoplay || !!content.muted);
     setShowUnmuteOverlay(!!content.autoplay);
-    setIsLoadingVideo(true);
-  }, [content.url, content.autoplay, content.muted]);
+  }, [content.autoplay, content.muted]);
 
   useEffect(() => {
-    if (videoRef.current && videoRef.current.readyState >= 3) {
-      setIsLoadingVideo(false);
+    if (videoRef.current) {
+      if (videoRef.current.readyState >= 2 || videoRef.current.currentTime > 0) {
+        setIsLoadingVideo(false);
+      }
     }
   }, [content.url]);
+
+  const handleVideoReady = () => {
+    setIsLoadingVideo(false);
+  };
 
   const embedData = getVideoEmbedUrl(content.url, {
     autoplay: !!content.autoplay,
@@ -1290,7 +1295,7 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
 
   return (
     <div 
-      className="relative group overflow-hidden w-full flex justify-center bg-black/90 rounded-2xl" 
+      className="relative group overflow-hidden w-full flex justify-center rounded-2xl" 
       style={{ 
         width: content.width ? `${content.width}%` : '100%',
         maxHeight: content.maxHeight ? `${content.maxHeight}px` : 'none',
@@ -1305,14 +1310,21 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
         muted={isMuted}
         playsInline
         crossOrigin="anonymous"
-        onLoadStart={() => setIsLoadingVideo(true)}
+        onLoadStart={() => {
+          if (videoRef.current && videoRef.current.readyState < 2) {
+            setIsLoadingVideo(true);
+          }
+        }}
+        onLoadedMetadata={handleVideoReady}
+        onLoadedData={handleVideoReady}
+        onCanPlay={handleVideoReady}
+        onCanPlayThrough={handleVideoReady}
         onWaiting={() => setIsLoadingVideo(true)}
-        onSeeking={() => setIsLoadingVideo(true)}
-        onSeeked={() => setIsLoadingVideo(false)}
-        onCanPlay={() => setIsLoadingVideo(false)}
-        onCanPlayThrough={() => setIsLoadingVideo(false)}
-        onLoadedData={() => setIsLoadingVideo(false)}
         onPlay={() => {
+          setIsPlaying(true);
+          setIsLoadingVideo(false);
+        }}
+        onPlaying={() => {
           setIsPlaying(true);
           setIsLoadingVideo(false);
         }}
@@ -1325,6 +1337,9 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
           }
         }}
         onTimeUpdate={(e) => {
+          if (e.currentTarget.currentTime > 0) {
+            setIsLoadingVideo(false);
+          }
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('video-time-update', { 
               detail: { currentTime: e.currentTarget.currentTime } 
@@ -1337,16 +1352,10 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
         }}
       />
 
-      {/* Video Buffering / Loading Spinner Overlay */}
+      {/* Sleek Fast Video Loading Spinner Overlay (No text, no dark backdrop) */}
       {isLoadingVideo && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/45 backdrop-blur-[2px] z-20 pointer-events-none transition-opacity duration-300">
-          <div className="relative flex items-center justify-center">
-            <div className="w-14 h-14 rounded-full border-4 border-white/20 border-t-orange-500 border-r-orange-500 animate-spin shadow-2xl" />
-            <div className="absolute w-3.5 h-3.5 bg-orange-500 rounded-full animate-ping" />
-          </div>
-          <span className="mt-3 text-[11px] font-black text-white tracking-widest uppercase bg-black/70 px-3.5 py-1.5 rounded-full backdrop-blur-md border border-white/10 shadow-xl animate-pulse">
-            Chargement de la vidéo...
-          </span>
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 transition-opacity duration-200">
+          <div className="w-10 h-10 rounded-full border-3 border-white/30 border-t-white animate-spin drop-shadow-md" />
         </div>
       )}
 
