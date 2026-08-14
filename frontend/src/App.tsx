@@ -181,8 +181,74 @@ function YouCanQueryRedirector() {
   return null;
 }
 
+function shouldShowPublicLogoLoader(pathname: string): boolean {
+  // Explicitly exclude /r/ referral/offer landing pages (e.g. /r/4F4B028F)
+  if (pathname.startsWith('/r/') || pathname === '/r') {
+    return false;
+  }
+
+  // Explicitly exclude all protected / dashboard routes
+  if (
+    pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/agent') ||
+    pathname.startsWith('/influencer') ||
+    pathname.startsWith('/grosseller') ||
+    pathname.startsWith('/helper') ||
+    pathname.startsWith('/confirmation')
+  ) {
+    return false;
+  }
+
+  // Public marketing & auth pages
+  const publicExactPaths = [
+    '/',
+    '/login',
+    '/register',
+    '/register/complete-google',
+    '/influencer/register',
+    '/forgot-password',
+    '/reset-password',
+    '/marketplace',
+    '/pricing',
+    '/about',
+    '/faq',
+    '/faqs',
+    '/contact',
+    '/careers',
+    '/blog',
+    '/terms',
+    '/privacy',
+    '/privacy-policy',
+    '/masterclass',
+    '/event',
+    '/pending-verification',
+    '/maintenance',
+    '/verify-email',
+    '/blocked',
+  ];
+
+  if (publicExactPaths.includes(pathname)) return true;
+
+  if (
+    pathname.startsWith('/marketplace/') ||
+    pathname.startsWith('/product/')
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function App() {
-  const [loading, setLoading] = useState(true);
+  const location = useLocation();
+  const [loading, setLoading] = useState(() => shouldShowPublicLogoLoader(window.location.pathname));
+
+  useEffect(() => {
+    if (!shouldShowPublicLogoLoader(location.pathname)) {
+      setLoading(false);
+    }
+  }, [location.pathname]);
 
   // Automatic cache version checking and updating
   useEffect(() => {
@@ -234,7 +300,9 @@ function App() {
       <ScrollToTop />
       <YouCanQueryRedirector />
       <PageTracker />
-      {loading && <PageLoader onComplete={() => setLoading(false)} />}
+      {loading && shouldShowPublicLogoLoader(location.pathname) && (
+        <PageLoader onComplete={() => setLoading(false)} />
+      )}
     <AuthProvider>
       <LanguageProvider>
       <SocketProvider>
@@ -349,7 +417,11 @@ function App() {
           <Route path="inventory" element={<InfluencerInventory />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="marketplace" element={
-            <Suspense fallback={<PageLoader />}>
+            <Suspense fallback={
+              <div className="min-h-[400px] flex items-center justify-center p-8">
+                <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            }>
               <InfluencerMarketplace />
             </Suspense>
           } />
@@ -395,7 +467,11 @@ function App() {
           <Route path="sub-accounts" element={<VendorSubAccounts />} />
           <Route path="inventory" element={<VendorInventory />} />
           <Route path="marketplace" element={
-            <Suspense fallback={<PageLoader />}>
+            <Suspense fallback={
+              <div className="min-h-[400px] flex items-center justify-center p-8">
+                <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            }>
               <InfluencerMarketplace />
             </Suspense>
           } />
