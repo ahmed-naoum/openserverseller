@@ -267,9 +267,8 @@ export default function AgentDashboard() {
   const isPlayful = theme !== 'classic';
 
   // --- Period ---------------------------------------------------------------
-  // Empty on both sides = all time, which is what the page showed before the
-  // filter existed — so the default view is unchanged.
-  const [dateFrom, setDateFrom] = useState('');
+  // Default period: Aujourd'hui (since midnight today).
+  const [dateFrom, setDateFrom] = useState(() => startOfDaysAgo(0));
   const [dateTo, setDateTo] = useState('');
   const [dateMode, setDateMode] = useState<DateMode>('updatedAt');
   const [countMode, setCountMode] = useState<CountMode>('leads');
