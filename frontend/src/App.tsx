@@ -16,6 +16,7 @@ import VendorProducts from './pages/vendor/Products';
 import VendorLeads from './pages/vendor/Leads';
 
 import VendorInventory from './pages/vendor/Inventory';
+import VendorSubAccounts from './pages/vendor/SubAccounts';
 import AgentDashboard from './pages/agent/Dashboard';
 import AgentLeads from './pages/agent/Leads';
 import AgentMyLeads from './pages/agent/MyLeads';
@@ -391,6 +392,7 @@ function App() {
           <Route path="woocommerce-callback" element={<WooCommerceCallback />} />
 
           <Route path="wallet" element={<UserWallet />} />
+          <Route path="sub-accounts" element={<VendorSubAccounts />} />
           <Route path="inventory" element={<VendorInventory />} />
           <Route path="marketplace" element={
             <Suspense fallback={<PageLoader />}>
