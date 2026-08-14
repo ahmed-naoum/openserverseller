@@ -99,6 +99,10 @@ export default function VendorInventory() {
       const currentMode = user?.mode || 'SELLER';
 
       const activeClaims = data.filter((c: any) => {
+        // A refused or revoked request is not something the vendor can act on, and the
+        // tabs and counters below only speak in pending/building/approved — leaving it
+        // in would park a dead card under "Tous" that nothing else on the page counts.
+        if (c.status === 'REJECTED' || c.status === 'REVOKED') return false;
         // Show a product in the mode it was actually claimed under, not based on who owns it.
         // Owned products come back with userMode 'SELLER', marketplace claims carry the mode
         // that was active when the user clicked "Add to my products".
