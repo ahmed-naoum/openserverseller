@@ -187,10 +187,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { user, tokens } = response.data.data;
     localStorage.setItem('accessToken', tokens.accessToken);
     localStorage.setItem('refreshToken', tokens.refreshToken);
-    // Fetch full user profile (includes emailVerified, brand.bankAccounts) so
-    // the verification progress is correct immediately after login.
+    // Fetch full user profile & platform settings so verification progress is correct immediately
     try {
-      const meRes = await authApi.me();
+      const [meRes] = await Promise.all([
+        authApi.me(),
+        refreshPlatformSettings()
+      ]);
       setUser(meRes.data.data.user);
     } catch {
       setUser(user);
@@ -209,7 +211,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('accessToken', tokens.accessToken);
     localStorage.setItem('refreshToken', tokens.refreshToken);
     try {
-      const meRes = await authApi.me();
+      const [meRes] = await Promise.all([
+        authApi.me(),
+        refreshPlatformSettings()
+      ]);
       setUser(meRes.data.data.user);
       return meRes.data.data.user;
     } catch {
@@ -224,7 +229,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('accessToken', tokens.accessToken);
     localStorage.setItem('refreshToken', tokens.refreshToken);
     try {
-      const meRes = await authApi.me();
+      const [meRes] = await Promise.all([
+        authApi.me(),
+        refreshPlatformSettings()
+      ]);
       setUser(meRes.data.data.user);
       return meRes.data.data.user;
     } catch {
@@ -264,7 +272,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('accessToken', tokens.accessToken);
     localStorage.setItem('refreshToken', tokens.refreshToken);
     try {
-      const meRes = await authApi.me();
+      const [meRes] = await Promise.all([
+        authApi.me(),
+        refreshPlatformSettings()
+      ]);
       setUser(meRes.data.data.user);
     } catch {
       setUser(user);
@@ -282,6 +293,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     localStorage.setItem('accessToken', tokens.accessToken);
     localStorage.setItem('refreshToken', tokens.refreshToken);
+    try {
+      await refreshPlatformSettings();
+    } catch {}
     setUser(user);
     return user;
   };
@@ -296,6 +310,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     localStorage.setItem('accessToken', tokens.accessToken);
     localStorage.setItem('refreshToken', tokens.refreshToken);
+    try {
+      await refreshPlatformSettings();
+    } catch {}
     setUser(user);
     return user;
   };

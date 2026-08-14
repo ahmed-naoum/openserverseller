@@ -272,10 +272,16 @@ router.get(
           OR: [
             { assignedAgentId: req.user!.id },
             { status: { in: ['AVAILABLE'] } },
+            { statusHistory: { some: { changedBy: req.user!.id } } },
           ]
         });
       } else {
-        conditions.push({ assignedAgentId: req.user!.id });
+        conditions.push({
+          OR: [
+            { assignedAgentId: req.user!.id },
+            { statusHistory: { some: { changedBy: req.user!.id } } },
+          ]
+        });
       }
     } else if (req.user!.roleName === 'HELPER') {
       if (!req.user!.canManageLeads) {
@@ -479,11 +485,50 @@ router.get(
           : Promise.resolve([]),
       ]);
 
-      const byStatus: Record<string, number> = {};
+      let byStatus: Record<string, number> = {};
       let scopeTotal = 0;
       for (const row of byStatusRows) {
         byStatus[row.status] = row._count._all;
         scopeTotal += row._count._all;
+      }
+
+      if (req.user!.roleName === 'CALL_CENTER_AGENT') {
+        const historyWhere: any = { changedBy: req.user!.id };
+        const createdRange = parseDateRange(dateFrom, dateTo);
+        const targetDateField = (dateField || dateType) === 'createdAt' ? 'createdAt' : 'updatedAt';
+        if (createdRange) {
+          historyWhere[targetDateField] = createdRange;
+        }
+
+        const agentHistory = await prisma.leadStatusHistory.findMany({
+          where: historyWhere,
+          select: { leadId: true, newStatus: true },
+          distinct: ['leadId', 'newStatus'],
+        });
+
+        const historyCounts: Record<string, Set<number>> = {};
+        for (const h of agentHistory) {
+          if (!historyCounts[h.newStatus]) historyCounts[h.newStatus] = new Set();
+          historyCounts[h.newStatus].add(h.leadId);
+        }
+
+        for (const [st, count] of Object.entries(byStatus)) {
+          if (!historyCounts[st] && count > 0) {
+            historyCounts[st] = new Set();
+          }
+        }
+
+        const mergedByStatus: Record<string, number> = {};
+        let mergedTotal = 0;
+        for (const [st, leadSet] of Object.entries(historyCounts)) {
+          mergedByStatus[st] = leadSet.size;
+          mergedTotal += leadSet.size;
+        }
+
+        if (Object.keys(mergedByStatus).length > 0) {
+          byStatus = { ...byStatus, ...mergedByStatus };
+          scopeTotal = Object.values(byStatus).reduce((a, b) => a + b, 0);
+        }
       }
 
       stats = {
