@@ -1225,19 +1225,20 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
   useEffect(() => {
     setIsMuted(!!content.autoplay || !!content.muted);
     setShowUnmuteOverlay(!!content.autoplay);
-  }, [content.autoplay, content.muted]);
+    setIsLoadingVideo(true);
+  }, [content.url, content.autoplay, content.muted]);
 
+  // Attempt autoplay playback when component mounts or url changes
   useEffect(() => {
-    if (videoRef.current) {
-      if (videoRef.current.readyState >= 2 || videoRef.current.currentTime > 0) {
+    if (content.autoplay && videoRef.current) {
+      videoRef.current.play().then(() => {
+        setIsPlaying(true);
         setIsLoadingVideo(false);
-      }
+      }).catch(() => {
+        // Autoplay may be delayed until buffering completes
+      });
     }
-  }, [content.url]);
-
-  const handleVideoReady = () => {
-    setIsLoadingVideo(false);
-  };
+  }, [content.url, content.autoplay]);
 
   const embedData = getVideoEmbedUrl(content.url, {
     autoplay: !!content.autoplay,
@@ -1295,7 +1296,7 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
 
   return (
     <div 
-      className="relative group overflow-hidden w-full flex justify-center rounded-2xl" 
+      className="relative group overflow-hidden w-full flex justify-center rounded-2xl bg-slate-900" 
       style={{ 
         width: content.width ? `${content.width}%` : '100%',
         maxHeight: content.maxHeight ? `${content.maxHeight}px` : 'none',
@@ -1311,16 +1312,8 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
         muted={isMuted}
         playsInline
         crossOrigin="anonymous"
-        onLoadStart={() => {
-          if (videoRef.current && videoRef.current.readyState < 2) {
-            setIsLoadingVideo(true);
-          }
-        }}
-        onLoadedMetadata={handleVideoReady}
-        onLoadedData={handleVideoReady}
-        onCanPlay={handleVideoReady}
-        onCanPlayThrough={handleVideoReady}
         onWaiting={() => setIsLoadingVideo(true)}
+        onStalled={() => setIsLoadingVideo(true)}
         onPlay={() => {
           setIsPlaying(true);
           setIsLoadingVideo(false);
@@ -1353,21 +1346,21 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
         }}
       />
 
-      {/* Sleek Fast Video Loading Spinner Overlay (No text, no dark backdrop) */}
+      {/* Video Buffering / Loading Spinner Overlay (Shown while video is loading/buffering before playback starts) */}
       {isLoadingVideo && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 transition-opacity duration-200">
-          <div className="w-10 h-10 rounded-full border-3 border-white/30 border-t-white animate-spin drop-shadow-md" />
+        <div className="absolute inset-0 flex items-center justify-center bg-black/30 backdrop-blur-[1px] pointer-events-none z-20 transition-opacity duration-200">
+          <div className="w-12 h-12 rounded-full border-4 border-white/20 border-t-orange-500 animate-spin drop-shadow-2xl" />
         </div>
       )}
 
-      {/* Unmute Overlay for Autoplay Videos */}
-      {!isLoadingVideo && showUnmuteOverlay && isPlaying && (
+      {/* Unmute Overlay for Autoplay Videos (Shown ONLY AFTER video playback starts) */}
+      {!isLoadingVideo && isPlaying && showUnmuteOverlay && (
         <div 
           onClick={handleUnmute}
           className="absolute inset-0 flex items-center justify-center bg-transparent cursor-pointer z-10"
         >
           <div 
-            className="backdrop-blur-sm px-5 py-3 rounded-xl flex items-center justify-center gap-3 shadow-2xl transform hover:scale-105 transition-all"
+            className="backdrop-blur-sm px-5 py-3 rounded-xl flex items-center justify-center gap-3 shadow-2xl transform hover:scale-105 transition-all animate-fade-in"
             style={{
               backgroundColor: content.unmuteBtnColor || 'rgba(239, 68, 68, 0.95)',
               color: content.unmuteTextColor || '#ffffff'
@@ -1393,7 +1386,7 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
       {!isLoadingVideo && !isPlaying && !showUnmuteOverlay && (
         <div 
           onClick={handlePlayToggle}
-          className="absolute inset-0 flex items-center justify-center bg-black/20 cursor-pointer transition-opacity duration-300 hover:bg-black/35"
+          className="absolute inset-0 flex items-center justify-center bg-black/20 cursor-pointer transition-opacity duration-300 hover:bg-black/35 z-10"
         >
           <div 
             className="w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center shadow-2xl transform transition-all duration-300 hover:scale-110 active:scale-95"
