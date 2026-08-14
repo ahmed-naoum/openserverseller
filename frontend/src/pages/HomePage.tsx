@@ -235,14 +235,23 @@ export default function HomePage() {
                 </Link>
               ) : (
                 <>
-                  {/* Login Button (Dark Blue Square Icon Wrapper) */}
-                  <Link to="/login" aria-label={t('login_label')} title={t('login_label')} className="w-[42px] h-[42px] bg-[#2e315e] hover:bg-[#1e2142] text-white rounded-[10px] flex items-center justify-center transition-colors">
-                    <LogIn className="w-[20px] h-[20px]" />
+                  {/* Login Button (with icon and text) */}
+                  <Link
+                    to="/login"
+                    aria-label={t('login_label')}
+                    title={t('login_label')}
+                    className="rounded-[10px] bg-[#2e315e] hover:bg-[#1e2142] px-4 xl:px-5 py-2.5 flex items-center justify-center gap-2 text-[15px] font-bold text-white transition-all shadow-sm"
+                  >
+                    <LogIn className="w-[18px] h-[18px]" />
+                    <span className="translate-y-[2px]">{t('login_label')}</span>
                   </Link>
 
                   {/* Solid Orange/Coral Register Button */}
-                  <Link to="/register" className="rounded-[10px] bg-[#c93d0f] hover:bg-[#b7350b] px-6 py-2.5 flex items-center justify-center text-[15px] font-bold text-white transition-all shadow-sm">
-                    <span className="translate-y-[4px]">{t('get_started_free')}</span>
+                  <Link
+                    to="/register"
+                    className="rounded-[10px] bg-[#c93d0f] hover:bg-[#b7350b] px-6 py-2.5 flex items-center justify-center text-[15px] font-bold text-white transition-all shadow-sm"
+                  >
+                    <span className="translate-y-[2px]">{t('get_started_free')}</span>
                   </Link>
                 </>
               )}
@@ -267,34 +276,94 @@ export default function HomePage() {
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="lg:hidden absolute top-[90px] left-0 right-0 bg-white border-b border-slate-100 shadow-xl z-40"
+              transition={{ duration: 0.2 }}
+              className="lg:hidden absolute top-[90px] left-0 right-0 bg-white border-b border-slate-100 shadow-2xl z-40 max-h-[calc(100vh-100px)] overflow-y-auto"
             >
-              <div className="px-4 py-6 space-y-4 text-right flex flex-col items-end">
-                <LanguageSwitcherWidget />
-                <Link to="/influencer/register" onClick={() => setMobileMenuOpen(false)} className="block font-bold text-[#2e315e] py-2">{t('influencers_label')}</Link>
-                <a href="#marketplace" onClick={() => setMobileMenuOpen(false)} className="block font-bold text-[#2e315e] py-2">{t('products_label')}</a>
-                <Link to="/contact" onClick={() => setMobileMenuOpen(false)} className="block font-bold text-[#2e315e] py-2">{t('contact_us')}</Link>
+              <div className="p-5 space-y-4 max-w-lg mx-auto">
+                {/* Language Switcher */}
+                <div className="w-full">
+                  <LanguageSwitcherWidget variant="mobile-menu" />
+                </div>
+
+                {/* Navigation Links */}
+                <div className="flex flex-col gap-1 w-full pt-1">
+                  <Link
+                    to="/influencer/register"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center justify-between px-4 py-3 rounded-xl font-bold text-[15px] text-[#2e315e] hover:bg-slate-50 active:bg-slate-100 transition-colors ${
+                      language === 'ar' ? 'text-right flex-row-reverse' : 'text-left flex-row'
+                    }`}
+                  >
+                    <span>{t('influencers_label')}</span>
+                    <ChevronRight className={`w-4 h-4 text-slate-300 ${language === 'ar' ? 'rotate-180' : ''}`} />
+                  </Link>
+
+                  <a
+                    href="#marketplace"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center justify-between px-4 py-3 rounded-xl font-bold text-[15px] text-[#2e315e] hover:bg-slate-50 active:bg-slate-100 transition-colors ${
+                      language === 'ar' ? 'text-right flex-row-reverse' : 'text-left flex-row'
+                    }`}
+                  >
+                    <span>{t('products_label')}</span>
+                    <ChevronRight className={`w-4 h-4 text-slate-300 ${language === 'ar' ? 'rotate-180' : ''}`} />
+                  </a>
+
+                  <Link
+                    to="/contact"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center justify-between px-4 py-3 rounded-xl font-bold text-[15px] text-[#2e315e] hover:bg-slate-50 active:bg-slate-100 transition-colors ${
+                      language === 'ar' ? 'text-right flex-row-reverse' : 'text-left flex-row'
+                    }`}
+                  >
+                    <span>{t('contact_us')}</span>
+                    <ChevronRight className={`w-4 h-4 text-slate-300 ${language === 'ar' ? 'rotate-180' : ''}`} />
+                  </Link>
+                </div>
+
+                {/* Divider */}
+                <div className="h-px bg-slate-100 my-2" />
+
+                {/* Actions */}
                 {isAuthenticated ? (
-                  <Link to={
-                    user?.role === 'SUPER_ADMIN' || user?.role === 'FINANCE_ADMIN' || user?.role === 'SYSTEM_SUPPORT' ? '/admin' :
-                    user?.role === 'CALL_CENTER_AGENT' ? '/agent' :
-                    user?.role === 'FULFILLMENT_OPERATOR' ? '/warehouse' :
-                    user?.role === 'COURIER_PARTNER' ? '/courier' :
-                    user?.role === 'GROSSELLER' ? '/grosseller' :
-                    user?.role === 'INFLUENCER' ? '/influencer' :
-                    user?.role === 'CONFIRMATION_AGENT' ? '/confirmation' :
-                    user?.role === 'HELPER' ? '/helper' :
-                    user?.role === 'UNCONFIRMED' ? '/verify' : basePathFor(user?.role)
-                  } onClick={() => setMobileMenuOpen(false)} className="block w-full text-center bg-[#2e315e] text-white font-bold py-3.5 rounded-xl">
-                    <span className="block -translate-y-[1px]">{t('go_to_dashboard')}</span>
+                  <Link
+                    to={
+                      user?.role === 'SUPER_ADMIN' || user?.role === 'FINANCE_ADMIN' || user?.role === 'SYSTEM_SUPPORT' ? '/admin' :
+                      user?.role === 'CALL_CENTER_AGENT' ? '/agent' :
+                      user?.role === 'FULFILLMENT_OPERATOR' ? '/warehouse' :
+                      user?.role === 'COURIER_PARTNER' ? '/courier' :
+                      user?.role === 'GROSSELLER' ? '/grosseller' :
+                      user?.role === 'INFLUENCER' ? '/influencer' :
+                      user?.role === 'CONFIRMATION_AGENT' ? '/confirmation' :
+                      user?.role === 'HELPER' ? '/helper' :
+                      user?.role === 'UNCONFIRMED' ? '/verify' : basePathFor(user?.role)
+                    }
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="w-full flex items-center justify-center gap-2 bg-[#2e315e] hover:bg-[#1e2142] text-white font-black py-3.5 rounded-xl text-[15px] shadow-sm active:scale-[0.98] transition-all"
+                  >
+                    <span>{t('go_to_dashboard')}</span>
                   </Link>
                 ) : (
-                  <>
-                    <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block font-bold text-[#2e315e] py-2">{t('login_label')}</Link>
-                    <Link to="/register" onClick={() => setMobileMenuOpen(false)} className="block w-full text-center bg-[#c93d0f] text-white font-bold py-3.5 rounded-xl">
-                      <span className="block -translate-y-[1px]">{t('get_started_free')}</span>
+                  <div className="flex flex-col gap-2.5 w-full">
+                    {/* Login Button with Icon */}
+                    <Link
+                      to="/login"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="w-full flex items-center justify-center gap-2 bg-[#2e315e] hover:bg-[#1e2142] text-white font-black py-3.5 rounded-xl text-[15px] shadow-sm active:scale-[0.98] transition-all"
+                    >
+                      <LogIn className="w-4 h-4" />
+                      <span>{t('login_label')}</span>
                     </Link>
-                  </>
+
+                    {/* Register Button */}
+                    <Link
+                      to="/register"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="w-full flex items-center justify-center gap-2 bg-[#c93d0f] hover:bg-[#b7350b] text-white font-black py-3.5 rounded-xl text-[15px] shadow-sm active:scale-[0.98] transition-all"
+                    >
+                      <span>{t('get_started_free')}</span>
+                    </Link>
+                  </div>
                 )}
               </div>
             </motion.div>

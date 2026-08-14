@@ -5,11 +5,13 @@ import { useSocket } from '../../contexts/SocketContext';
 import { helperApi, publicApi, uploadApi, adminApi } from '../../lib/api';
 import BlockRenderer, { EditorBlock, BlockType } from '../../components/helper/sitebuilder/BlockRenderer';
 import WhatsAppWidget, { IconRenderer } from '../../components/public/WhatsAppWidget';
+import SiteBuilderV2 from '../../components/helper/sitebuilder/v2/SiteBuilderV2';
+import { DEMO_SHOWCASE_TEMPLATE } from '../../components/helper/sitebuilder/v2/templates';
 import { 
   Type, Image as ImageIcon, Heading, LayoutTemplate, Link as LinkIcon, 
   ShoppingCart, ArrowUp, ArrowDown, Trash2, Save, ChevronLeft, Loader2,
   Clock, Space, Upload, ShieldCheck, ShieldAlert, Plus, ExternalLink, Code, Copy, Download, MessageSquare,
-  Layers, GripVertical, Undo2, Redo2, ShoppingBag, Music, Video
+  Layers, GripVertical, Undo2, Redo2, ShoppingBag, Music, Video, Sparkles
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { buildReferralUrl } from '../../utils/referral';
@@ -613,6 +615,26 @@ export default function SiteBuilder() {
     }
   };
 
+  const [isV2DemoOpen, setIsV2DemoOpen] = useState(false);
+
+  if (isV2DemoOpen) {
+    return (
+      <SiteBuilderV2
+        initialBlocks={blocks.length > 1 ? blocks : DEMO_SHOWCASE_TEMPLATE.blocks}
+        initialSettings={pageSettings?.backgroundColor ? pageSettings : DEMO_SHOWCASE_TEMPLATE.settings}
+        onCloseDemo={() => setIsV2DemoOpen(false)}
+        referralCode={referralCode}
+        ownerSubdomain={ownerSubdomain}
+        ownerCustomDomain={ownerCustomDomain}
+        ownerCustomDomainStatus={ownerCustomDomainStatus}
+        accounts={accounts}
+        ownerId={ownerId}
+        productData={productData}
+        onSave={handleSave}
+      />
+    );
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -626,7 +648,7 @@ export default function SiteBuilder() {
       
       {/* Top Navbar */}
       <div className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0 z-20">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <button 
             onClick={() => {
               const role = user?.roleName || user?.role;
@@ -650,8 +672,19 @@ export default function SiteBuilder() {
             <div className="w-6 h-6 rounded bg-purple-100 flex items-center justify-center text-purple-600">
               <LayoutTemplate className="w-3.5 h-3.5" />
             </div>
-            <span className="font-bold text-gray-900">Constructeur de Page (BETA)</span>
+            <span className="font-bold text-gray-900 text-sm">Constructeur de Page (BETA)</span>
           </div>
+
+          {/* V2 Demo Button */}
+          <button
+            type="button"
+            onClick={() => setIsV2DemoOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 via-amber-500 to-emerald-500 hover:opacity-95 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all animate-pulse hover:animate-none ml-2 cursor-pointer"
+            title="Tester la nouvelle interface Studio V2 en démo"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>✨ Essayer Démo Studio V2</span>
+          </button>
         </div>
         <div className="flex items-center gap-2">
           {/* Undo / Redo */}
@@ -1465,15 +1498,67 @@ export default function SiteBuilder() {
 
                 {activeBlock.type === 'audio' && (
                   <div className="space-y-6">
-                    <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-100">
-                      <div className="flex items-center gap-3 mb-2">
-                        <Music className="w-5 h-5 text-indigo-500" />
-                        <span className="font-black text-indigo-900 text-sm">Lecteur Audio Multi-Cartes</span>
+                    {/* Style Switcher */}
+                    <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-2.5">
+                      <div className="text-[11px] font-black text-emerald-950 uppercase flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">💬 Style d'affichage</span>
+                        <span className="text-[9px] bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded font-extrabold">NOUVEAU</span>
                       </div>
-                      <p className="text-xs text-indigo-700 leading-relaxed">
-                        Ajoutez un ou plusieurs audios. Ils s'afficheront sous forme de cartes élégantes alignées (jusqu'à 3 par ligne sur grand écran).
-                      </p>
+                      <div className="grid grid-cols-2 gap-1.5 bg-white p-1 rounded-xl border border-emerald-200 shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={() => updateBlockContent('themeStyle', 'whatsapp')}
+                          className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
+                            (activeBlock.content.themeStyle || 'whatsapp') === 'whatsapp'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          <span>💬 WhatsApp</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateBlockContent('themeStyle', 'classic')}
+                          className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
+                            activeBlock.content.themeStyle === 'classic'
+                              ? 'bg-slate-900 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          <span>🎵 Classique</span>
+                        </button>
+                      </div>
                     </div>
+
+                    {(activeBlock.content.themeStyle || 'whatsapp') === 'whatsapp' && (
+                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                        <h4 className="text-[10px] font-bold text-slate-500 uppercase">Apparence WhatsApp</h4>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Field label="Couleur Bulle" type="color" value={activeBlock.content.bubbleColor || '#ffffff'} onChange={(v: string) => updateBlockContent('bubbleColor', v)} />
+                          <Field label="Bouton Play" type="color" value={activeBlock.content.playBtnColor || '#25D366'} onChange={(v: string) => updateBlockContent('playBtnColor', v)} />
+                        </div>
+                        <Field label="Couleur Onde Active" type="color" value={activeBlock.content.activeWaveColor || '#34B7F1'} onChange={(v: string) => updateBlockContent('activeWaveColor', v)} />
+                        
+                        <div className="space-y-1.5 pt-1 border-t border-slate-200/60">
+                          <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={activeBlock.content.showCheckmarks !== false} 
+                              onChange={(e) => updateBlockContent('showCheckmarks', e.target.checked)} 
+                            />
+                            Afficher doubles coches bleues (✓✓)
+                          </label>
+                          <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={activeBlock.content.showSpeedToggle !== false} 
+                              onChange={(e) => updateBlockContent('showSpeedToggle', e.target.checked)} 
+                            />
+                            Bouton vitesse de lecture (1x, 1.5x, 2x)
+                          </label>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="space-y-4">
                       {((activeBlock.content.audios as any[]) || [
@@ -1501,19 +1586,61 @@ export default function SiteBuilder() {
                               )}
                             </div>
 
-                            <Field 
-                              label="Titre de la carte" 
-                              type="text" 
-                              value={audio.title || ''} 
-                              placeholder="Ex: Écoutez le témoignage"
-                              onChange={(v: string) => {
-                                const currentAudios = [...(activeBlock.content.audios || [
-                                  { id: '1', title: activeBlock.content.title || '', url: activeBlock.content.url || '' }
-                                ])];
-                                currentAudios[idx] = { ...currentAudios[idx], title: v };
-                                updateBlockContent('audios', currentAudios);
-                              }} 
-                            />
+                            {(activeBlock.content.themeStyle || 'whatsapp') === 'whatsapp' ? (
+                              <>
+                                <Field 
+                                  label="Nom du Contact / Client" 
+                                  type="text" 
+                                  value={audio.senderName || audio.title || ''} 
+                                  placeholder="Ex: Fatima Zahra (Casablanca)"
+                                  onChange={(v: string) => {
+                                    const currentAudios = [...(activeBlock.content.audios || [
+                                      { id: '1', title: activeBlock.content.title || '', url: activeBlock.content.url || '' }
+                                    ])];
+                                    currentAudios[idx] = { ...currentAudios[idx], senderName: v, title: v };
+                                    updateBlockContent('audios', currentAudios);
+                                  }} 
+                                />
+                                <div className="grid grid-cols-2 gap-2">
+                                  <Field 
+                                    label="Heure du message" 
+                                    type="text" 
+                                    value={audio.time || '11:42'} 
+                                    placeholder="11:42"
+                                    onChange={(v: string) => {
+                                      const currentAudios = [...(activeBlock.content.audios || [])];
+                                      currentAudios[idx] = { ...currentAudios[idx], time: v };
+                                      updateBlockContent('audios', currentAudios);
+                                    }} 
+                                  />
+                                  <Field 
+                                    label="Photo Profil (Avatar)" 
+                                    type="text" 
+                                    value={audio.avatarUrl || ''} 
+                                    placeholder="https://..."
+                                    onChange={(v: string) => {
+                                      const currentAudios = [...(activeBlock.content.audios || [])];
+                                      currentAudios[idx] = { ...currentAudios[idx], avatarUrl: v };
+                                      updateBlockContent('audios', currentAudios);
+                                    }} 
+                                  />
+                                </div>
+                              </>
+                            ) : (
+                              <Field 
+                                label="Titre de la carte" 
+                                type="text" 
+                                value={audio.title || ''} 
+                                placeholder="Ex: Écoutez le témoignage"
+                                onChange={(v: string) => {
+                                  const currentAudios = [...(activeBlock.content.audios || [
+                                    { id: '1', title: activeBlock.content.title || '', url: activeBlock.content.url || '' }
+                                  ])];
+                                  currentAudios[idx] = { ...currentAudios[idx], title: v };
+                                  updateBlockContent('audios', currentAudios);
+                                }} 
+                              />
+                            )}
 
                             <div>
                               <label className="flex items-center justify-center gap-2 p-3 border-2 border-dashed border-gray-200 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 cursor-pointer transition-all">

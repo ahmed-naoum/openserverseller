@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Globe, ChevronDown } from 'lucide-react';
 
 interface LanguageSwitcherWidgetProps {
-  variant?: 'header' | 'footer' | 'dashboard-header';
+  variant?: 'header' | 'footer' | 'dashboard-header' | 'mobile-menu';
 }
 
 export default function LanguageSwitcherWidget({ variant = 'header' }: LanguageSwitcherWidgetProps) {
@@ -30,13 +30,17 @@ export default function LanguageSwitcherWidget({ variant = 'header' }: LanguageS
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const buttonClasses = variant === 'footer'
+  const buttonClasses = variant === 'mobile-menu'
+    ? "w-full h-11 px-4 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200/70 text-slate-800 flex items-center justify-between transition-all font-bold text-sm focus:outline-none shadow-sm cursor-pointer"
+    : variant === 'footer'
     ? "h-12 px-4 rounded-xl bg-white text-slate-900 flex items-center justify-center hover:bg-slate-100 transition-all gap-2 font-black text-sm focus:outline-none shadow-sm cursor-pointer"
     : variant === 'dashboard-header'
     ? "relative p-0 w-[33px] h-[33px] bg-white rounded-lg border border-slate-100 hover:border-primary-200 transition-all shadow-sm hover:shadow-md active:scale-95 flex items-center justify-center focus:outline-none"
     : "flex items-center gap-2 px-4 h-[42px] rounded-[10px] bg-slate-50 hover:bg-slate-100 border border-slate-200/60 text-slate-700 font-semibold text-sm transition-all shadow-sm focus:outline-none";
 
-  const dropdownClasses = variant === 'footer'
+  const dropdownClasses = variant === 'mobile-menu'
+    ? "absolute mt-2 w-full rounded-2xl bg-white border border-slate-150 shadow-xl z-[1000] overflow-hidden focus:outline-none left-0 right-0 origin-top"
+    : variant === 'footer'
     ? `absolute bottom-full mb-2 w-36 rounded-2xl bg-white border border-slate-150 shadow-xl z-[1000] overflow-hidden focus:outline-none ${
         language === 'ar' ? 'left-0 origin-bottom-left' : 'right-0 origin-bottom-right'
       }`
@@ -45,7 +49,7 @@ export default function LanguageSwitcherWidget({ variant = 'header' }: LanguageS
       }`;
 
   return (
-    <div className="relative inline-block text-left" ref={dropdownRef}>
+    <div className={variant === 'mobile-menu' ? "relative w-full text-left" : "relative inline-block text-left"} ref={dropdownRef}>
       <motion.button
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}

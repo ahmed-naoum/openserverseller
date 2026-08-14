@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { citiesApi } from '../lib/api';
+// City catalogue hook - cache invalidated
 
 /**
  * Loads the city catalogue once per page load and shares it across every picker.

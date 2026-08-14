@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { BACKEND_URL, publicApi } from '../../../lib/api';
 import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { SOURCE_PARAM, buildSourceToken, getCurrentLinkCode, readSourceRef } from '../../../utils/referral';
 
 export type BlockType = 'header' | 'hero' | 'image' | 'text' | 'button' | 'express_checkout' | 'spacer' | 'countdown' | 'whatsapp' | 'slider' | 'products' | 'audio' | 'video';
 
@@ -17,25 +16,6 @@ interface BlockRendererProps {
   renderCheckout?: (content: any) => React.ReactNode;
   isEditor?: boolean;
 }
-
-/**
- * Stamps the current landing page's code onto links pointing at another /r/ page,
- * so the destination can enforce its "Exiger une provenance" cloaking rule even
- * when the browser drops the referrer. External links are returned untouched.
- */
-const withSourceToken = (link: string): string => {
-  try {
-    if (!getCurrentLinkCode()) return link;
-
-    const target = new URL(link, window.location.href);
-    if (!readSourceRef(target)) return link;
-
-    target.searchParams.set(SOURCE_PARAM, buildSourceToken(window.location.href));
-    return target.toString();
-  } catch {
-    return link;
-  }
-};
 
 export default function BlockRenderer({ blocks, renderCheckout, isEditor = false }: BlockRendererProps) {
   const [isCheckoutInView, setIsCheckoutInView] = useState(false);
@@ -188,7 +168,7 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
                 }}
               >
                 {content.url ? (
-                  <VideoBlockComponent content={content} resolveUrl={resolveUrl} isEditor={isEditor} />
+                  <VideoBlockComponent content={content} resolveUrl={resolveUrl} />
                 ) : (
                   <div className="w-full h-64 bg-gray-100 flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-200">
                     <span className="text-3xl mb-2">🎬</span>
@@ -267,68 +247,13 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
             );
 
           case 'audio':
-            const audios = content.audios || [
-              { id: 'default', title: content.title || '', url: content.url || '' }
-            ];
-
             return (
-              <div 
+              <AudioBlockComponent 
                 key={id} 
-                className="w-full max-w-6xl mx-auto px-6 flex flex-col items-center" 
-                style={{ 
-                  paddingTop: `${content.paddingTop ?? 16}px`,
-                  paddingBottom: `${content.paddingBottom ?? 16}px`,
-                  marginTop: `${content.marginTop ?? 0}px`,
-                  marginBottom: `${content.marginBottom ?? 0}px`,
-                }}
-              >
-                <div 
-                  className={`grid grid-cols-1 gap-6 w-full ${
-                    audios.length === 1 
-                      ? 'max-w-md mx-auto grid-cols-1' 
-                      : audios.length === 2 
-                        ? 'max-w-3xl mx-auto md:grid-cols-2' 
-                        : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
-                  }`}
-                >
-                  {audios.map((audio: any, idx: number) => (
-                    <div 
-                      key={audio.id || idx}
-                      className="w-full bg-white rounded-2xl border border-gray-100 shadow-md p-5 flex flex-col gap-3 transition-all hover:shadow-lg"
-                      style={{
-                        backgroundColor: content.bgColor || '#ffffff',
-                        borderColor: content.borderColor || '#f3f4f6',
-                      }}
-                    >
-                      {audio.title ? (
-                        <div className="text-xs font-black text-gray-500 uppercase tracking-widest text-center mb-1 truncate">
-                          {audio.title}
-                        </div>
-                      ) : (
-                        <div className="text-xs font-black text-gray-400 uppercase tracking-widest text-center mb-1 italic">
-                          Audio {idx + 1}
-                        </div>
-                      )}
-                      {audio.url ? (
-                        <audio 
-                          src={resolveUrl(audio.url)}
-                          controls={content.controls !== false}
-                          controlsList="nodownload"
-                          autoPlay={!!content.autoplay && idx === 0}
-                          loop={!!content.loop}
-                          className="w-full accent-orange-500"
-                        />
-                      ) : (
-                        <div className="w-full py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400 gap-2">
-                          <span className="text-2xl">🎵</span>
-                          <span className="text-xs font-bold text-gray-500">Lecteur Audio — Aucun fichier</span>
-                          <span className="text-[10px] text-gray-400">Téléchargez un audio dans les propriétés</span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
+                content={content} 
+                resolveUrl={resolveUrl} 
+                isEditor={isEditor} 
+              />
             );
 
           case 'express_checkout':
@@ -352,15 +277,7 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
                 {renderCheckout ? (
                   renderCheckout(content)
                 ) : (
-                  <div className="bg-white rounded-3xl p-8 border border-gray-200 shadow-xl opacity-80 pointer-events-none h-full">
-                    <h2 className="text-2xl font-black text-center mb-6">Commander Maintenant (Aperçu)</h2>
-                    <div className="space-y-4">
-                      <div className="h-12 bg-gray-50 rounded-xl border border-gray-200" />
-                      <div className="h-12 bg-gray-50 rounded-xl border border-gray-200" />
-                      <div className="h-12 bg-gray-50 rounded-xl border border-gray-200" />
-                      <div className="h-14 bg-orange-500 rounded-xl mt-6" />
-                    </div>
-                  </div>
+                  <DefaultCheckoutPreview content={content} />
                 )}
               </div>
             );
@@ -505,7 +422,7 @@ function ProductsBlock({ content, resolveUrl }: ProductsBlockProps) {
       const event = new CustomEvent('select-product', { detail: { product } });
       window.dispatchEvent(event);
     } else {
-      window.location.replace(withSourceToken(linkUrl));
+      window.open(linkUrl, '_blank');
     }
   };
 
@@ -1291,14 +1208,11 @@ function getVideoEmbedUrl(rawUrl?: string, options: { autoplay?: boolean; loop?:
 interface VideoBlockComponentProps {
   content: any;
   resolveUrl: (url?: string) => string;
-  isEditor?: boolean;
 }
 
-function VideoBlockComponent({ content, resolveUrl, isEditor = false }: VideoBlockComponentProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   
   // Browsers enforce muted for autoplay.
   // If autoplay is true, we force muted to true initially, otherwise fallback to content.muted
@@ -1312,75 +1226,6 @@ function VideoBlockComponent({ content, resolveUrl, isEditor = false }: VideoBlo
     setShowUnmuteOverlay(!!content.autoplay);
   }, [content.autoplay, content.muted]);
 
-  useEffect(() => {
-    const handleFSChange = () => {
-      const fsElement = document.fullscreenElement || (document as any).webkitFullscreenElement;
-      setIsFullscreen(!!fsElement);
-    };
-
-    document.addEventListener('fullscreenchange', handleFSChange);
-    document.addEventListener('webkitfullscreenchange', handleFSChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFSChange);
-      document.removeEventListener('webkitfullscreenchange', handleFSChange);
-    };
-  }, []);
-
-  const handleFullscreenToggle = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const target = containerRef.current || videoRef.current;
-    if (!target) return;
-
-    if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) {
-      if (target.requestFullscreen) {
-        target.requestFullscreen().catch(() => {});
-      } else if ((target as any).webkitRequestFullscreen) {
-        (target as any).webkitRequestFullscreen();
-      } else if (videoRef.current && (videoRef.current as any).webkitEnterFullscreen) {
-        (videoRef.current as any).webkitEnterFullscreen();
-      }
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {});
-      } else if ((document as any).webkitExitFullscreen) {
-        (document as any).webkitExitFullscreen();
-      }
-    }
-  };
-
-  // Handle postMessage events for YouTube/Vimeo iframe end detection
-  useEffect(() => {
-    if (isEditor || !content.redirectUrl || !content.redirectUrl.trim()) return;
-
-    const handleMessage = (event: MessageEvent) => {
-      try {
-        let data = event.data;
-        if (typeof data === 'string') {
-          try { data = JSON.parse(data); } catch {}
-        }
-        if (
-          (data?.event === 'infoDelivery' && data?.info?.playerState === 0) ||
-          data?.event === 'finish' ||
-          data?.event === 'ended'
-        ) {
-          const targetUrl = withSourceToken(content.redirectUrl.trim());
-          window.location.replace(targetUrl);
-        }
-      } catch {}
-    };
-
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [isEditor, content.redirectUrl]);
-
-  const handleVideoEnd = () => {
-    setIsPlaying(false);
-    if (!isEditor && content.redirectUrl && content.redirectUrl.trim()) {
-      const targetUrl = withSourceToken(content.redirectUrl.trim());
-      window.location.replace(targetUrl);
-    }
-  };
-
   const embedData = getVideoEmbedUrl(content.url, {
     autoplay: !!content.autoplay,
     loop: !!content.loop,
@@ -1388,19 +1233,16 @@ function VideoBlockComponent({ content, resolveUrl, isEditor = false }: VideoBlo
     controls: content.controls !== false,
   });
 
-  const showFullscreenButton = content.showFullscreenBtn !== false;
-
   if (embedData) {
     return (
       <div 
-        ref={containerRef}
-        className={`relative group overflow-hidden flex justify-center bg-black rounded-2xl shadow-lg ${isFullscreen ? 'fixed inset-0 z-[99999] w-screen h-screen rounded-none items-center' : 'w-full'}`} 
+        className="relative group overflow-hidden w-full flex justify-center rounded-2xl shadow-lg bg-black" 
         style={{ 
-          width: isFullscreen ? '100vw' : (content.width ? `${content.width}%` : '100%'),
-          maxHeight: isFullscreen ? 'none' : (content.maxHeight ? `${content.maxHeight}px` : 'none'),
+          width: content.width ? `${content.width}%` : '100%',
+          maxHeight: content.maxHeight ? `${content.maxHeight}px` : 'none',
         }}
       >
-        <div className={isFullscreen ? "w-full h-full flex items-center justify-center" : "w-full aspect-video"}>
+        <div className="w-full aspect-video">
           <iframe 
             src={embedData.embedUrl} 
             title="Video Player"
@@ -1409,25 +1251,6 @@ function VideoBlockComponent({ content, resolveUrl, isEditor = false }: VideoBlo
             allowFullScreen
           />
         </div>
-
-        {/* Custom Fullscreen Toggle Button */}
-        {showFullscreenButton && (
-          <button
-            onClick={handleFullscreenToggle}
-            title={isFullscreen ? "Quitter le plein écran" : "Plein écran"}
-            className="absolute top-3 right-3 bg-black/60 hover:bg-black/85 text-white p-2.5 rounded-xl backdrop-blur-md shadow-lg transition-all z-30 hover:scale-110 opacity-80 hover:opacity-100 cursor-pointer flex items-center justify-center border border-white/20"
-          >
-            {isFullscreen ? (
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 9L4 4m0 0l5 0m-5 0l0 5m11 0l5-5m0 0l-5 0m5 0l0 5M9 15l-5 5m0 0l5 0m-5 0l0-5m11 0l5 5m0 0l-5 0m5 0l0-5" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-              </svg>
-            )}
-          </button>
-        )}
       </div>
     );
   }
@@ -1457,25 +1280,18 @@ function VideoBlockComponent({ content, resolveUrl, isEditor = false }: VideoBlo
     }
   };
 
-  const isProtected = content.protectDownload !== false;
-
   return (
     <div 
-      ref={containerRef}
-      className={`relative group overflow-hidden flex justify-center bg-black rounded-2xl ${isFullscreen ? 'fixed inset-0 z-[99999] w-screen h-screen rounded-none items-center' : 'w-full'}`} 
+      className="relative group overflow-hidden w-full flex justify-center" 
       style={{ 
-        width: isFullscreen ? '100vw' : (content.width ? `${content.width}%` : '100%'),
-        maxHeight: isFullscreen ? 'none' : (content.maxHeight ? `${content.maxHeight}px` : 'none'),
+        width: content.width ? `${content.width}%` : '100%',
+        maxHeight: content.maxHeight ? `${content.maxHeight}px` : 'none',
       }}
     >
       <video 
         ref={videoRef}
         src={resolveUrl(content.url)} 
         controls={content.controls !== false && !showUnmuteOverlay}
-        controlsList={isProtected ? "nodownload noplaybackrate noremoteplayback" : undefined}
-        disablePictureInPicture={isProtected}
-        onContextMenu={(e) => { if (isProtected) e.preventDefault(); }}
-        onDragStart={(e) => { if (isProtected) e.preventDefault(); }}
         autoPlay={!!content.autoplay}
         loop={!!content.loop}
         muted={isMuted}
@@ -1483,7 +1299,7 @@ function VideoBlockComponent({ content, resolveUrl, isEditor = false }: VideoBlo
         crossOrigin="anonymous"
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
-        onEnded={handleVideoEnd}
+        onEnded={() => setIsPlaying(false)}
         onVolumeChange={(e) => {
           if (!e.currentTarget.muted) {
             setIsMuted(false);
@@ -1497,9 +1313,9 @@ function VideoBlockComponent({ content, resolveUrl, isEditor = false }: VideoBlo
             }));
           }
         }}
-        className={isFullscreen ? "w-full h-full object-contain" : "h-auto w-full object-contain"}
+        className="h-auto w-full object-contain"
         style={{ 
-          maxHeight: isFullscreen ? 'none' : (content.maxHeight ? `${content.maxHeight}px` : 'none'),
+          maxHeight: content.maxHeight ? `${content.maxHeight}px` : 'none',
         }}
       />
 
@@ -1536,7 +1352,7 @@ function VideoBlockComponent({ content, resolveUrl, isEditor = false }: VideoBlo
       {!isPlaying && !showUnmuteOverlay && (
         <div 
           onClick={handlePlayToggle}
-          className="absolute inset-0 flex items-center justify-center bg-black/20 cursor-pointer transition-opacity duration-300 hover:bg-black/35 z-10"
+          className="absolute inset-0 flex items-center justify-center bg-black/20 cursor-pointer transition-opacity duration-300 hover:bg-black/35"
         >
           <div 
             className="w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center shadow-2xl transform transition-all duration-300 hover:scale-110 active:scale-95"
@@ -1553,25 +1369,6 @@ function VideoBlockComponent({ content, resolveUrl, isEditor = false }: VideoBlo
             </svg>
           </div>
         </div>
-      )}
-
-      {/* Custom Fullscreen Toggle Button */}
-      {showFullscreenButton && (
-        <button
-          onClick={handleFullscreenToggle}
-          title={isFullscreen ? "Quitter le plein écran" : "Plein écran"}
-          className="absolute top-3 right-3 bg-black/60 hover:bg-black/85 text-white p-2.5 rounded-xl backdrop-blur-md shadow-lg transition-all z-30 hover:scale-110 opacity-80 hover:opacity-100 cursor-pointer flex items-center justify-center border border-white/20"
-        >
-          {isFullscreen ? (
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 9L4 4m0 0l5 0m-5 0l0 5m11 0l5-5m0 0l-5 0m5 0l0 5M9 15l-5 5m0 0l5 0m-5 0l0-5m11 0l5 5m0 0l-5 0m5 0l0-5" />
-            </svg>
-          ) : (
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-            </svg>
-          )}
-        </button>
       )}
     </div>
   );
@@ -1612,7 +1409,7 @@ function ButtonBlockComponent({ content, isEditor, isCheckoutInView }: { content
         checkout.scrollIntoView({ behavior: 'smooth' });
       }
     } else if (content.link) {
-      window.location.replace(withSourceToken(content.link));
+      window.open(content.link, '_blank');
     }
   };
 
@@ -1676,5 +1473,488 @@ function ButtonBlockComponent({ content, isEditor, isCheckoutInView }: { content
     </div>
   );
 }
+
+function DefaultCheckoutPreview({ content }: { content: any }) {
+  const isRtl = /[\u0600-\u06FF]/.test(
+    (content.nameLabel || '') +
+    (content.title || '') +
+    (content.subtitle || '') +
+    (content.buttonText || '') +
+    'الاسم الكامل'
+  );
+
+  return (
+    <div 
+      dir={isRtl ? "rtl" : "ltr"}
+      className={`p-6 sm:p-8 w-full max-w-xl mx-auto shadow-lg rounded-3xl ${isRtl ? 'text-right' : 'text-left'}`}
+      style={{ 
+        backgroundColor: content.formBgColor || '#ffffff',
+        border: `${content.borderWidth ?? 1}px solid ${content.borderColor ?? '#e2e8f0'}`,
+        borderRadius: `${content.borderRadiusTL ?? 24}px ${content.borderRadiusTR ?? 24}px ${content.borderRadiusBR ?? 24}px ${content.borderRadiusBL ?? 24}px`
+      }}
+    >
+      <div className="mb-6 text-center">
+        <h2 className="text-2xl font-black text-slate-900 mb-1">
+          {content.title || 'اطلب الآن'}
+        </h2>
+        {content.showPrice !== false && (
+          <div className="flex items-center justify-center gap-3 mb-2">
+            {content.showOldPrice && (
+              <span 
+                className="font-bold line-through opacity-60"
+                style={{ 
+                  color: content.oldPriceColor || '#9ca3af',
+                  fontSize: `${content.oldPriceSize || (content.priceSize || 30) * 0.7}px`
+                }}
+              >
+                {content.oldPriceValue || 299} <span className="text-xs uppercase ml-0.5">MAD</span>
+              </span>
+            )}
+            <div 
+              className="font-black"
+              style={{ 
+                color: content.priceColor || '#ea580c',
+                fontSize: `${content.priceSize || 32}px`
+              }}
+            >
+              {content.price || (content.options?.[0]?.price) || 199} <span className="text-sm uppercase ml-1 opacity-60">MAD</span>
+            </div>
+          </div>
+        )}
+        <p className="text-slate-500 text-xs font-medium">
+          {content.subtitle || 'املأ النموذج أدناه لحجز منتجك. الدفع عند الاستلام.'}
+        </p>
+      </div>
+
+      {content.options && content.options.length > 0 && (
+        <div className="mb-6 grid grid-cols-1 gap-2">
+          {content.options.map((opt: any, i: number) => {
+            const optionColor = opt.color || content.packColor || '#ea580c';
+            const isFirst = i === 0;
+            return (
+              <div 
+                key={i} 
+                className="py-3 px-3.5 transition-all flex justify-between items-center outline-none border rounded-2xl"
+                style={{ 
+                  borderColor: optionColor, 
+                  borderWidth: `${content.packBorderWidth ?? 2}px`,
+                  borderRadius: `${content.packBorderRadius ?? 16}px`,
+                  backgroundColor: isFirst ? `${optionColor}12` : '#ffffff'
+                }}
+              >
+                <div>
+                  <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Option {i + 1}</div>
+                  <div className="font-black text-slate-900 text-xs" style={isFirst ? { color: optionColor } : {}}>{opt.name || `Pack ${i + 1}`}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {opt.oldPrice && (
+                    <span className="font-bold line-through opacity-50 text-xs text-slate-400">
+                      {opt.oldPrice} MAD
+                    </span>
+                  )}
+                  <div className="font-black text-sm" style={{ color: opt.priceColor || optionColor }}>
+                    {opt.price || '...'} <span className="text-[10px] opacity-60">MAD</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      
+      <div className="space-y-3">
+        {[
+          { label: content.nameLabel || 'الاسم الكامل *', placeholder: content.namePlaceholder || 'مثال: يوسف بن جلون', isPhone: false },
+          { label: content.phoneLabel || 'رقم الهاتف *', placeholder: content.phonePlaceholder || '06 XX XX XX XX', isPhone: true },
+          { label: content.cityLabel || 'المدينة *', placeholder: content.cityPlaceholder || 'مثال: الدار البيضاء', isPhone: false },
+          { label: content.addressLabel || 'العنوان (اختياري)', placeholder: content.addressPlaceholder || 'عنوانك الكامل لترهين التوصيل...', isPhone: false }
+        ].map((field, i) => (
+          <div key={i}>
+            <label className="block text-xs font-bold text-slate-700 mb-1">{field.label}</label>
+            <div 
+              dir={field.isPhone ? "ltr" : (isRtl ? "rtl" : "ltr")}
+              className={`w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-400 text-xs ${isRtl ? 'text-right' : 'text-left'}`}
+            >
+              {field.placeholder}
+            </div>
+          </div>
+        ))}
+
+        <div 
+          className="w-full font-black py-3.5 px-4 shadow-md flex items-center justify-center gap-2 mt-4 cursor-default text-center rounded-2xl"
+          style={{ 
+            backgroundColor: content.themeColor || '#ea580c',
+            color: content.buttonTextColor || '#ffffff',
+            fontSize: content.buttonSize ? `${content.buttonSize}px` : '16px',
+            border: content.buttonBorderWidth !== undefined && content.buttonBorderWidth !== '' ? `${content.buttonBorderWidth}px solid ${content.buttonBorderColor || '#ea580c'}` : 'none',
+            borderRadius: content.buttonBorderRadius !== undefined && content.buttonBorderRadius !== '' ? `${content.buttonBorderRadius}px` : '16px',
+          }}
+        >
+          {content.buttonText || 'تأكيد الطلب'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// AUDIO BLOCK COMPONENT & WHATSAPP UI PLAYER
+// ==========================================
+
+const formatAudioTime = (seconds: number) => {
+  if (isNaN(seconds) || seconds < 0) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+};
+
+const getWaveformBars = (seed: string | number) => {
+  const str = String(seed || 'audio');
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  const baseHeights = [
+    6, 14, 22, 10, 18, 28, 34, 20, 12, 24,
+    30, 18, 10, 26, 32, 28, 14, 22, 28, 20,
+    10, 16, 26, 32, 18, 8, 14, 24, 18, 10, 6, 12
+  ];
+  return baseHeights.map((h, i) => {
+    const variation = ((Math.abs(hash + i * 19) % 9) - 4);
+    return Math.max(5, Math.min(32, h + variation));
+  });
+};
+
+function AudioBlockComponent({ content, resolveUrl, isEditor }: { content: any; resolveUrl: (url?: string) => string; isEditor: boolean }) {
+  const audios = content.audios || [
+    { id: 'default', title: content.title || '', url: content.url || '' }
+  ];
+
+  const isWhatsAppTheme = content.themeStyle === 'whatsapp' || !content.themeStyle;
+
+  return (
+    <div 
+      className="w-full max-w-5xl mx-auto px-4 sm:px-6 flex flex-col items-center select-none" 
+      style={{ 
+        paddingTop: `${content.paddingTop ?? 16}px`,
+        paddingBottom: `${content.paddingBottom ?? 16}px`,
+        marginTop: `${content.marginTop ?? 0}px`,
+        marginBottom: `${content.marginBottom ?? 0}px`,
+      }}
+    >
+      <div 
+        className={`grid grid-cols-1 gap-4 sm:gap-6 w-full ${
+          audios.length === 1 
+            ? 'max-w-md mx-auto grid-cols-1' 
+            : audios.length === 2 
+              ? 'max-w-3xl mx-auto md:grid-cols-2' 
+              : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+        }`}
+      >
+        {audios.map((audio: any, idx: number) => {
+          if (isWhatsAppTheme) {
+            return (
+              <WhatsAppVoiceNotePlayer 
+                key={audio.id || idx}
+                audio={audio}
+                idx={idx}
+                content={content}
+                resolveUrl={resolveUrl}
+                isEditor={isEditor}
+              />
+            );
+          }
+
+          return (
+            <div 
+              key={audio.id || idx}
+              className="w-full bg-white rounded-2xl border border-gray-100 shadow-md p-5 flex flex-col gap-3 transition-all hover:shadow-lg"
+              style={{
+                backgroundColor: content.bgColor || '#ffffff',
+                borderColor: content.borderColor || '#f3f4f6',
+              }}
+            >
+              {audio.title ? (
+                <div className="text-xs font-black text-gray-500 uppercase tracking-widest text-center mb-1 truncate">
+                  {audio.title}
+                </div>
+              ) : (
+                <div className="text-xs font-black text-gray-400 uppercase tracking-widest text-center mb-1 italic">
+                  Audio {idx + 1}
+                </div>
+              )}
+              {audio.url ? (
+                <audio 
+                  src={resolveUrl(audio.url)}
+                  controls={content.controls !== false}
+                  controlsList="nodownload"
+                  autoPlay={!!content.autoplay && idx === 0}
+                  loop={!!content.loop}
+                  className="w-full accent-orange-500"
+                />
+              ) : (
+                <div className="w-full py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400 gap-2">
+                  <span className="text-2xl">🎵</span>
+                  <span className="text-xs font-bold text-gray-500">Lecteur Audio — Aucun fichier</span>
+                  <span className="text-[10px] text-gray-400">Téléchargez un audio dans les propriétés</span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function WhatsAppVoiceNotePlayer({ 
+  audio, 
+  idx, 
+  content, 
+  resolveUrl, 
+  isEditor 
+}: { 
+  audio: any; 
+  idx: number; 
+  content: any; 
+  resolveUrl: (url?: string) => string; 
+  isEditor: boolean; 
+}) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState<number>(1);
+  const waveformRef = useRef<HTMLDivElement | null>(null);
+
+  const bars = getWaveformBars(audio.id || audio.url || idx);
+  const audioSrc = audio.url ? resolveUrl(audio.url) : '';
+
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+
+    const onTimeUpdate = () => setCurrentTime(el.currentTime);
+    const onLoadedMetadata = () => setDuration(el.duration || 0);
+    const onEnded = () => {
+      setIsPlaying(false);
+      setCurrentTime(0);
+    };
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+
+    el.addEventListener('timeupdate', onTimeUpdate);
+    el.addEventListener('loadedmetadata', onLoadedMetadata);
+    el.addEventListener('ended', onEnded);
+    el.addEventListener('play', onPlay);
+    el.addEventListener('pause', onPause);
+
+    return () => {
+      el.removeEventListener('timeupdate', onTimeUpdate);
+      el.removeEventListener('loadedmetadata', onLoadedMetadata);
+      el.removeEventListener('ended', onEnded);
+      el.removeEventListener('play', onPlay);
+      el.removeEventListener('pause', onPause);
+    };
+  }, [audioSrc]);
+
+  const togglePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!audioRef.current || !audioSrc) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch(() => {});
+    }
+  };
+
+  const cycleSpeed = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const speeds = [1, 1.5, 2];
+    const nextIdx = (speeds.indexOf(playbackRate) + 1) % speeds.length;
+    const nextSpeed = speeds[nextIdx];
+    setPlaybackRate(nextSpeed);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = nextSpeed;
+    }
+  };
+
+  const handleWaveformClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    if (!waveformRef.current || !audioRef.current || !duration) return;
+    const rect = waveformRef.current.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const fraction = Math.max(0, Math.min(1, clickX / rect.width));
+    const targetTime = fraction * duration;
+    audioRef.current.currentTime = targetTime;
+    setCurrentTime(targetTime);
+  };
+
+  const progressFraction = duration > 0 ? currentTime / duration : 0;
+  const bubbleColor = content.bubbleColor || audio.bubbleColor || '#ffffff';
+  const playBtnColor = content.playBtnColor || '#25D366';
+  const activeWaveColor = content.activeWaveColor || '#34B7F1';
+
+  const senderTitle = audio.senderName || audio.title || `Client ${idx + 1}`;
+  const timestamp = audio.time || '11:42';
+
+  return (
+    <div className="w-full flex flex-col items-center">
+      {/* Hidden Audio Element */}
+      {audioSrc && (
+        <audio 
+          ref={audioRef}
+          src={audioSrc}
+          preload="metadata"
+          loop={!!content.loop}
+          autoPlay={!isEditor && !!content.autoplay && idx === 0}
+        />
+      )}
+
+      {/* WhatsApp Chat Message Bubble */}
+      <div 
+        className="w-full relative rounded-2xl p-3.5 shadow-md border border-slate-200/70 transition-all hover:shadow-lg"
+        style={{ backgroundColor: bubbleColor }}
+      >
+        {/* Chat Bubble Speech Tail */}
+        <div 
+          className="absolute -top-1.5 left-4 w-3.5 h-3.5 transform rotate-45 border-l border-t border-slate-200/70 shadow-xs"
+          style={{ backgroundColor: bubbleColor }}
+        />
+
+        {/* Header: Avatar + Sender Name */}
+        <div className="flex items-center gap-2.5 mb-2.5 pb-2 border-b border-slate-100/80">
+          {/* Avatar with WhatsApp Mic Badge */}
+          <div className="relative shrink-0">
+            {audio.avatarUrl ? (
+              <img 
+                src={resolveUrl(audio.avatarUrl)} 
+                alt="Avatar" 
+                className="w-9 h-9 rounded-full object-cover border border-slate-200 shadow-2xs"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 border border-slate-300 shadow-2xs">
+                <svg className="w-5 h-5 fill-current text-slate-400" viewBox="0 0 24 24">
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                </svg>
+              </div>
+            )}
+            {/* Green Mic Badge */}
+            <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs">
+              <svg className="w-2.5 h-2.5 fill-current" viewBox="0 0 24 24">
+                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z" />
+              </svg>
+            </div>
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-black text-slate-800 truncate">{senderTitle}</span>
+              <span className="w-3.5 h-3.5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[8px] font-black shrink-0">✓</span>
+            </div>
+            <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Message Vocal Audio
+            </span>
+          </div>
+
+          {/* WhatsApp Logo Icon */}
+          <div className="w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+              <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.73-1.45L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.42 9.864-9.852.002-2.63-1.023-5.101-2.883-6.963C16.593 1.928 14.122.904 11.492.904 6.056.904 1.63 5.324 1.626 10.757c-.001 1.701.446 3.362 1.3 4.8l-.949 3.466 3.549-.931.131.078zm11.233-5.267c-.27-.135-1.597-.788-1.846-.878-.249-.09-.43-.135-.61.135-.18.27-.697.878-.854 1.058-.158.18-.316.202-.586.067-.27-.135-1.14-.42-2.172-1.341-.803-.715-1.344-1.602-1.502-1.872-.158-.27-.017-.417.118-.552.122-.122.27-.316.405-.473.135-.158.18-.27.27-.45.09-.18.045-.338-.022-.473-.068-.135-.61-1.472-.836-2.015-.22-.53-.442-.458-.61-.466-.157-.008-.338-.009-.52-.009-.18 0-.473.067-.72.338-.248.27-.947.923-.947 2.25s.968 2.613 1.103 2.793c.135.18 1.905 2.909 4.614 4.081.645.278 1.148.444 1.54.568.647.206 1.237.177 1.703.107.519-.078 1.597-.653 1.823-1.283.226-.63.226-1.17.158-1.283-.068-.112-.248-.18-.518-.315z" />
+            </svg>
+          </div>
+        </div>
+
+        {/* Audio Player Row */}
+        {audioSrc ? (
+          <div className="flex items-center gap-3">
+            {/* Play/Pause Button */}
+            <button
+              type="button"
+              onClick={togglePlay}
+              className="w-11 h-11 rounded-full flex items-center justify-center text-white shadow-md transition-all transform hover:scale-105 active:scale-95 shrink-0"
+              style={{ backgroundColor: playBtnColor }}
+            >
+              {isPlaying ? (
+                <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5 fill-current ml-0.5" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              )}
+            </button>
+
+            {/* Waveform Scrubber */}
+            <div className="flex-1 flex flex-col justify-center min-w-0">
+              <div 
+                ref={waveformRef}
+                onClick={handleWaveformClick}
+                className="h-9 flex items-center gap-[2.5px] cursor-pointer py-1 group/wave"
+                title="Cliquez pour naviguer dans l'audio"
+              >
+                {bars.map((height, bIdx) => {
+                  const barFraction = (bIdx + 1) / bars.length;
+                  const isPassed = barFraction <= progressFraction;
+
+                  return (
+                    <span 
+                      key={bIdx}
+                      className="flex-1 rounded-full transition-colors duration-150 group-hover/wave:opacity-90"
+                      style={{
+                        height: `${height}px`,
+                        backgroundColor: isPassed ? activeWaveColor : '#cbd5e1',
+                        minWidth: '2px',
+                        maxWidth: '4px'
+                      }}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* Time & Duration Display */}
+              <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 font-bold -mt-0.5">
+                <span>{formatAudioTime(currentTime)}</span>
+                <span>{duration > 0 ? formatAudioTime(duration) : (audio.duration ? formatAudioTime(audio.duration) : '0:35')}</span>
+              </div>
+            </div>
+
+            {/* Speed Pill Toggle (1x, 1.5x, 2x) */}
+            {content.showSpeedToggle !== false && (
+              <button
+                type="button"
+                onClick={cycleSpeed}
+                className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono font-bold text-[10px] rounded-lg shadow-2xs border border-slate-200 transition-all shrink-0 active:scale-95"
+                title="Changer la vitesse de lecture"
+              >
+                {playbackRate}x
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="py-4 px-3 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-center space-y-1">
+            <span className="text-sm font-bold text-slate-500 block">🎤 Aucun fichier audio associé</span>
+            <span className="text-[10px] text-slate-400 block">Téléchargez un MP3 dans le panneau de droite</span>
+          </div>
+        )}
+
+        {/* Footer: Timestamp & Double Blue Checks */}
+        <div className="flex items-center justify-end gap-1 mt-2 text-[10px] text-slate-400 font-medium">
+          <span>{timestamp}</span>
+          {content.showCheckmarks !== false && (
+            <svg className="w-3.5 h-3.5 fill-current text-sky-500" viewBox="0 0 24 24">
+              <path d="M18 7l-1.41-1.41-6.34 6.34 1.41 1.41L18 7zm4.24-1.41L11.66 16.17 7.41 11.93 6 13.34l5.66 5.66 12-12-1.42-1.41zM.41 13.34l5.66 5.66 1.41-1.41L1.83 11.93.41 13.34z" />
+            </svg>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 
 

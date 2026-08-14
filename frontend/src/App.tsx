@@ -5,211 +5,142 @@ import PageLoader from './components/PageLoader';
 import toast, { Toaster } from 'react-hot-toast';
 
 // Pages
-const HomePage = lazy(() => import('./pages/HomePage'));
-const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
-const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
-const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
-const ResetPassword = lazy(() => import('./pages/auth/ResetPassword'));
-// 1900 lines of dashboard chrome — nav, sidebar, account menus — reachable only
-// behind a login, but statically imported it sat in the entry chunk that every
-// public offer page downloads. Used purely as a route element, so it resolves
-// inside the router's existing Suspense boundary.
-const DashboardLayout = lazy(() => import('./components/layouts/DashboardLayout'));
-const VendorDashboard = lazy(() => import('./pages/vendor/Dashboard'));
-const VendorProducts = lazy(() => import('./pages/vendor/Products'));
-const VendorLeads = lazy(() => import('./pages/vendor/Leads'));
+import HomePage from './pages/HomePage';
+import LoginPage from './pages/auth/LoginPage';
+import RegisterPage from './pages/auth/RegisterPage';
+import ForgotPassword from './pages/auth/ForgotPassword';
+import ResetPassword from './pages/auth/ResetPassword';
+import DashboardLayout from './components/layouts/DashboardLayout';
+import VendorDashboard from './pages/vendor/Dashboard';
+import VendorProducts from './pages/vendor/Products';
+import VendorLeads from './pages/vendor/Leads';
 
-const VendorInventory = lazy(() => import('./pages/vendor/Inventory'));
-const AgentDashboard = lazy(() => import('./pages/agent/Dashboard'));
-const AgentLeads = lazy(() => import('./pages/agent/Leads'));
-const AgentAssignedLeads = lazy(() => import('./pages/agent/AssignedLeads'));
-const AgentMyLeads = lazy(() => import('./pages/agent/MyLeads'));
-const AgentLeadDetail = lazy(() => import('./pages/agent/LeadDetail'));
-const AgentOrders = lazy(() => import('./pages/agent/Orders'));
-const AgentLivraison = lazy(() => import('./pages/agent/Livraison'));
-const InsertLead = lazy(() => import('./pages/agent/InsertLead'));
-const ColiatyDispatch = lazy(() => import('./pages/agent/ColiatyDispatch'));
-const AgentAbandonedCarts = lazy(() => import('./pages/agent/AbandonedCarts'));
-const AgentFacturation = lazy(() => import('./pages/agent/Facturation'));
-const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
-const AdminUsers = lazy(() => import('./pages/admin/Users'));
-const AdminProducts = lazy(() => import('./pages/admin/Products'));
-const AdminCategories = lazy(() => import('./pages/admin/AdminCategories'));
-const AdminOrders = lazy(() => import('./pages/admin/Orders'));
-const AdminFinance = lazy(() => import('./pages/admin/Finance'));
-const AdminFulfillment = lazy(() => import('./pages/admin/Fulfillment'));
-const AdminAffiliateClaims = lazy(() => import('./pages/admin/AffiliateClaims'));
-const AdminCampaigns = lazy(() => import('./pages/admin/Campaigns'));
-const AdminCustomers = lazy(() => import('./pages/admin/Customers'));
-const AdminAnnouncements = lazy(() => import('./pages/admin/Announcements'));
-const AdminVerifications = lazy(() => import('./pages/admin/AdminVerifications'));
-const AdminSupport = lazy(() => import('./pages/admin/Support'));
-const AdminLeads = lazy(() => import('./pages/admin/Leads'));
-const AdminPaymentMonitoring = lazy(() => import('./pages/admin/PaymentMonitoring'));
-const AdminInvoices = lazy(() => import('./pages/admin/Invoices'));
-const ActivityLogs = lazy(() => import('./pages/admin/ActivityLogs'));
-const BackupManager = lazy(() => import('./pages/admin/BackupManager'));
-const CallCenterInspector = lazy(() => import('./pages/admin/CallCenterInspector'));
-const InfluencerInspector = lazy(() => import('./pages/admin/InfluencerInspector'));
-const SupportInspector = lazy(() => import('./pages/admin/SupportInspector'));
-const LiveStreamInspector = lazy(() => import('./pages/admin/LiveStreamInspector'));
-/**
- * Session replay pulls in rrweb (~256 KB). The tracker itself does nothing for
- * an ordinary visitor — it bails out until the server pushes a record request —
- * but a static import put rrweb in the entry graph, which put it on the
- * `modulepreload` list of every page, including the public offer pages. Loaded
- * lazily it costs those visitors nothing.
- */
-const LiveSessionTracker = lazy(() => import('./components/common/LiveSessionTracker'));
-const ContactMessages = lazy(() => import('./pages/admin/ContactMessages'));
-const AdminLinks = lazy(() => import('./pages/admin/Links'));
-const AdminProfessionalEmails = lazy(() => import('./pages/admin/ProfessionalEmails'));
-const PlatformArchitecture = lazy(() => import('./pages/admin/PlatformArchitecture'));
+import VendorInventory from './pages/vendor/Inventory';
+import AgentDashboard from './pages/agent/Dashboard';
+import AgentLeads from './pages/agent/Leads';
+import AgentMyLeads from './pages/agent/MyLeads';
+import AgentLeadDetail from './pages/agent/LeadDetail';
+import AgentOrders from './pages/agent/Orders';
+import AgentLivraison from './pages/agent/Livraison';
+import InsertLead from './pages/agent/InsertLead';
+import ColiatyDispatch from './pages/agent/ColiatyDispatch';
+import AgentAbandonedCarts from './pages/agent/AbandonedCarts';
+import AdminDashboard from './pages/admin/Dashboard';
+import AdminUsers from './pages/admin/Users';
+import AdminProducts from './pages/admin/Products';
+import AdminCategories from './pages/admin/AdminCategories';
+import AdminOrders from './pages/admin/Orders';
+import AdminFinance from './pages/admin/Finance';
+import AdminFulfillment from './pages/admin/Fulfillment';
+import AdminAffiliateClaims from './pages/admin/AffiliateClaims';
+import AdminCampaigns from './pages/admin/Campaigns';
+import AdminCustomers from './pages/admin/Customers';
+import AdminAnnouncements from './pages/admin/Announcements';
+import AdminVerifications from './pages/admin/AdminVerifications';
+import AdminSupport from './pages/admin/Support';
+import AdminLeads from './pages/admin/Leads';
+import AdminPaymentMonitoring from './pages/admin/PaymentMonitoring';
+import AdminInvoices from './pages/admin/Invoices';
+import ActivityLogs from './pages/admin/ActivityLogs';
+import BackupManager from './pages/admin/BackupManager';
+import CallCenterInspector from './pages/admin/CallCenterInspector';
+import InfluencerInspector from './pages/admin/InfluencerInspector';
+import SupportInspector from './pages/admin/SupportInspector';
+import LiveStreamInspector from './pages/admin/LiveStreamInspector';
+import LiveSessionTracker from './components/common/LiveSessionTracker';
+import ContactMessages from './pages/admin/ContactMessages';
+import AdminLinks from './pages/admin/Links';
+import AdminProfessionalEmails from './pages/admin/ProfessionalEmails';
+import PlatformArchitecture from './pages/admin/PlatformArchitecture';
 
 
-const YouCanCallback = lazy(() => import('./pages/vendor/YouCanCallback'));
-const ShopifyCallback = lazy(() => import('./pages/vendor/ShopifyCallback'));
-const WooCommerceCallback = lazy(() => import('./pages/vendor/WooCommerceCallback'));
-const VendorInsertLead = lazy(() => import('./pages/vendor/InsertLead'));
-const VendorDomains = lazy(() => import('./pages/vendor/Domains'));
-const YouCanLeads = lazy(() => import('./pages/vendor/YouCanLeads'));
-const ShopifyLeads = lazy(() => import('./pages/vendor/ShopifyLeads'));
-const WooCommerceLeads = lazy(() => import('./pages/vendor/WooCommerceLeads'));
-const GoogleSheetsLeads = lazy(() => import('./pages/vendor/GoogleSheetsLeads'));
-const IntegrationsPage = lazy(() => import('./pages/vendor/IntegrationsPage'));
-const VendorSubAccounts = lazy(() => import('./pages/vendor/SubAccounts'));
-import SubAccountGuard from './components/auth/SubAccountGuard';
-import { VENDOR_HELPER_BASE } from './lib/dashboardBase';
-const PlatformSettings = lazy(() => import('./pages/admin/PlatformSettings'));
-const AdminSecrets = lazy(() => import('./pages/admin/AdminSecrets'));
-const AdminDeployments = lazy(() => import('./pages/admin/Deployments'));
-const SecurityFirewall = lazy(() => import('./pages/admin/SecurityFirewall'));
-const AdminEventRegistrations = lazy(() => import('./pages/admin/AdminEventRegistrations'));
-const EventMasterclass = lazy(() => import('./pages/public/EventMasterclass'));
-const WebhookLogs = lazy(() => import('./pages/admin/WebhookLogs'));
-const WebhookTester = lazy(() => import('./pages/admin/WebhookTester'));
-const GrossellerDashboard = lazy(() => import('./pages/grosseller/Dashboard'));
-const GrossellerProfile = lazy(() => import('./pages/grosseller/Profile'));
-const GrossellerInventory = lazy(() => import('./pages/grosseller/Inventory'));
-const GrossellerMarketplace = lazy(() => import('./pages/grosseller/Marketplace'));
-const GrossellerAddProduct = lazy(() => import('./pages/grosseller/AddProduct'));
-const GrossellerSelling = lazy(() => import('./pages/grosseller/Selling'));
-const GrossellerPending = lazy(() => import('./pages/grosseller/Pending'));
-const GrossellerApproved = lazy(() => import('./pages/grosseller/Approved'));
-const GrossellerPayouts = lazy(() => import('./pages/grosseller/Payouts'));
-const GrossellerOrders = lazy(() => import('./pages/grosseller/Orders'));
-const UserInvoices = lazy(() => import('./pages/common/UserInvoices'));
-const GrossellerAnalytics = lazy(() => import('./pages/grosseller/Analytics'));
-const GrossellerSupport = lazy(() => import('./pages/grosseller/Support'));
-const InfluencerDashboard = lazy(() => import('./pages/influencer/Dashboard'));
-const InfluencerProfile = lazy(() => import('./pages/influencer/Profile'));
-const InfluencerLinks = lazy(() => import('./pages/influencer/Links'));
-const InfluencerCampaigns = lazy(() => import('./pages/influencer/Campaigns'));
-const InfluencerLeads = lazy(() => import('./pages/influencer/Leads'));
+import YouCanCallback from './pages/vendor/YouCanCallback';
+import ShopifyCallback from './pages/vendor/ShopifyCallback';
+import WooCommerceCallback from './pages/vendor/WooCommerceCallback';
+import VendorInsertLead from './pages/vendor/InsertLead';
+import VendorDomains from './pages/vendor/Domains';
+import YouCanLeads from './pages/vendor/YouCanLeads';
+import ShopifyLeads from './pages/vendor/ShopifyLeads';
+import WooCommerceLeads from './pages/vendor/WooCommerceLeads';
+import GoogleSheetsLeads from './pages/vendor/GoogleSheetsLeads';
+import IntegrationsPage from './pages/vendor/IntegrationsPage';
+import PlatformSettings from './pages/admin/PlatformSettings';
+import AdminSecrets from './pages/admin/AdminSecrets';
+import AdminDeployments from './pages/admin/Deployments';
+import SecurityFirewall from './pages/admin/SecurityFirewall';
+import AdminEventRegistrations from './pages/admin/AdminEventRegistrations';
+import EventMasterclass from './pages/public/EventMasterclass';
+import WebhookLogs from './pages/admin/WebhookLogs';
+import WebhookTester from './pages/admin/WebhookTester';
+import GrossellerDashboard from './pages/grosseller/Dashboard';
+import GrossellerProfile from './pages/grosseller/Profile';
+import GrossellerInventory from './pages/grosseller/Inventory';
+import GrossellerMarketplace from './pages/grosseller/Marketplace';
+import GrossellerAddProduct from './pages/grosseller/AddProduct';
+import GrossellerSelling from './pages/grosseller/Selling';
+import GrossellerPending from './pages/grosseller/Pending';
+import GrossellerApproved from './pages/grosseller/Approved';
+import GrossellerPayouts from './pages/grosseller/Payouts';
+import GrossellerOrders from './pages/grosseller/Orders';
+import UserInvoices from './pages/common/UserInvoices';
+import GrossellerAnalytics from './pages/grosseller/Analytics';
+import GrossellerSupport from './pages/grosseller/Support';
+import InfluencerDashboard from './pages/influencer/Dashboard';
+import InfluencerProfile from './pages/influencer/Profile';
+import InfluencerLinks from './pages/influencer/Links';
+import InfluencerCampaigns from './pages/influencer/Campaigns';
+import InfluencerLeads from './pages/influencer/Leads';
 const InfluencerMarketplace = lazy(() => import('./pages/influencer/Marketplace'));
-const InfluencerInventory = lazy(() => import('./pages/influencer/Inventory'));
-const Notifications = lazy(() => import('./pages/common/Notifications'));
-const ConfirmationDashboard = lazy(() => import('./pages/confirmation/Dashboard'));
-const HelperDashboard = lazy(() => import('./pages/helper/Dashboard'));
-const HelperLeads = lazy(() => import('./pages/helper/Leads'));
-const HelperColis = lazy(() => import('./pages/helper/Colis'));
-const HelperRetours = lazy(() => import('./pages/helper/Retours'));
-const HelperTickets = lazy(() => import('./pages/helper/Tickets'));
-const HelperUsers = lazy(() => import('./pages/helper/Users'));
-const HelperLinks = lazy(() => import('./pages/helper/Links'));
-const HelperAffiliate = lazy(() => import('./pages/helper/HelperAffiliate'));
-const AdminHelpersAffiliate = lazy(() => import('./pages/admin/AdminHelpersAffiliate'));
-const SiteBuilder = lazy(() => import('./pages/helper/SiteBuilder'));
-const HelperScanner = lazy(() => import('./pages/helper/Scanner'));
-const Chat = lazy(() => import('./pages/common/Chat'));
-const AccountVerification = lazy(() => import('./pages/verify/AccountVerification'));
-const PublicMarketplace = lazy(() => import('./pages/marketplace/PublicMarketplace'));
+import InfluencerInventory from './pages/influencer/Inventory';
+import Notifications from './pages/common/Notifications';
+import ConfirmationDashboard from './pages/confirmation/Dashboard';
+import HelperDashboard from './pages/helper/Dashboard';
+import HelperLeads from './pages/helper/Leads';
+import HelperColis from './pages/helper/Colis';
+import HelperRetours from './pages/helper/Retours';
+import HelperTickets from './pages/helper/Tickets';
+import HelperUsers from './pages/helper/Users';
+import HelperLinks from './pages/helper/Links';
+import HelperAffiliate from './pages/helper/HelperAffiliate';
+import AdminHelpersAffiliate from './pages/admin/AdminHelpersAffiliate';
+import SiteBuilder from './pages/helper/SiteBuilder';
+import HelperScanner from './pages/helper/Scanner';
+import Chat from './pages/common/Chat';
+import AccountVerification from './pages/verify/AccountVerification';
+import PublicMarketplace from './pages/marketplace/PublicMarketplace';
 const ProductDetail = lazy(() => import('./pages/marketplace/ProductDetail'));
 const ReferralForm = lazy(() => import('./pages/public/ReferralForm'));
 const ThankYouPage = lazy(() => import('./pages/public/ThankYouPage'));
-const PendingVerificationPage = lazy(() => import('./pages/auth/PendingVerificationPage'));
-const EmailVerificationPage = lazy(() => import('./pages/auth/EmailVerificationPage'));
-const CompleteRegisterGoogle = lazy(() => import('./pages/auth/CompleteRegisterGoogle'));
-const SettingsPage = lazy(() => import('./pages/common/SettingsPage'));
+import PendingVerificationPage from './pages/auth/PendingVerificationPage';
+import EmailVerificationPage from './pages/auth/EmailVerificationPage';
+import CompleteRegisterGoogle from './pages/auth/CompleteRegisterGoogle';
+import SettingsPage from './pages/common/SettingsPage';
 import NotFoundPage from './pages/common/NotFoundPage';
-const ProfileVerification = lazy(() => import('./pages/common/ProfileVerification'));
+import ProfileVerification from './pages/common/ProfileVerification';
 import MaintenancePage from './pages/common/MaintenancePage';
-const SupportTickets = lazy(() => import('./pages/common/SupportTickets'));
-const UserWallet = lazy(() => import('./pages/common/UserWallet'));
-const UserPixels = lazy(() => import('./pages/common/UserPixels'));
-const TermsPage = lazy(() => import('./pages/TermsPage'));
-const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
-const FaqPage = lazy(() => import('./pages/FaqPage'));
-const ContactPage = lazy(() => import('./pages/ContactPage'));
-const AboutPage = lazy(() => import('./pages/AboutPage'));
-const CareersPage = lazy(() => import('./pages/CareersPage'));
-const BlogPage = lazy(() => import('./pages/BlogPage'));
-const PricingPage = lazy(() => import('./pages/PricingPage'));
+import SupportTickets from './pages/common/SupportTickets';
+import UserWallet from './pages/common/UserWallet';
+import UserPixels from './pages/common/UserPixels';
+import TermsPage from './pages/TermsPage';
+import PrivacyPage from './pages/PrivacyPage';
+import FaqPage from './pages/FaqPage';
+import ContactPage from './pages/ContactPage';
+import AboutPage from './pages/AboutPage';
+import CareersPage from './pages/CareersPage';
+import BlogPage from './pages/BlogPage';
+import PricingPage from './pages/PricingPage';
 import ScrollToTop from './components/common/ScrollToTop';
 import BlockedPage from './pages/common/BlockedPage';
 
 // Context
 import { AuthProvider } from './contexts/AuthContext';
-import { SocketProvider, useSocket } from './contexts/SocketContext';
+import { SocketProvider } from './contexts/SocketContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 
 // Guards
 import RoleGuard from './components/auth/RoleGuard';
 import UnauthGuard from './components/auth/UnauthGuard';
 import { settingsApi } from './lib/api';
-import { whenIdle } from './lib/whenIdle';
-
-/**
- * Shown while a route's chunk is in flight.
- *
- * The dashboard sections are code-split, so the first visit to one fetches its
- * chunk. Public marketing pages and the auth flow are deliberately NOT split:
- * they are the latency-sensitive entry points, and the prerenderer captures ten
- * of them, so keeping them in the entry bundle costs a page nothing.
- */
-function RouteFallback() {
-  return (
-    <div className="min-h-screen bg-[#FDFDFD] flex items-center justify-center p-4">
-      <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-    </div>
-  );
-}
-
-/**
- * A deploy replaces every hash-named chunk and deletes the previous build, so a
- * tab opened before the deploy asks for a file that no longer exists. React
- * surfaces that as a rejected lazy import and renders nothing — a white screen
- * that only a manual refresh clears.
- *
- * Reloading once fixes it, because the fresh index.html points at the new
- * hashes. The sessionStorage mark is what keeps this from becoming a reload
- * loop when the failure is something other than a stale chunk (offline, a
- * genuine 500), in which case the error is left to surface normally.
- */
-const CHUNK_RELOAD_MARK = 'chunk_reload_at';
-
-function isStaleChunkError(reason: unknown): boolean {
-  const message = String((reason as any)?.message ?? reason ?? '');
-  return (
-    /Failed to fetch dynamically imported module/i.test(message) ||
-    /error loading dynamically imported module/i.test(message) ||
-    /Importing a module script failed/i.test(message)
-  );
-}
-
-function reloadOnceForStaleChunk(reason: unknown): void {
-  if (!isStaleChunkError(reason)) return;
-
-  // Two reloads inside a minute means the reload is not fixing it; stop.
-  const last = Number(sessionStorage.getItem(CHUNK_RELOAD_MARK) || 0);
-  if (last && Date.now() - last < 60_000) return;
-
-  sessionStorage.setItem(CHUNK_RELOAD_MARK, String(Date.now()));
-  window.location.reload();
-}
-
-window.addEventListener('unhandledrejection', (e) => reloadOnceForStaleChunk(e.reason));
-window.addEventListener('error', (e) => reloadOnceForStaleChunk((e as ErrorEvent).error ?? e));
 
 function PageTracker() {
   const location = useLocation();
@@ -224,16 +155,12 @@ function PageTracker() {
       return;
     }
 
-    // Registers the page view in the HTTP logs. Nothing renders from it, so it
-    // waits for idle rather than joining the queue in front of the page's own
-    // data fetch.
-    return whenIdle(() => {
-      fetch('/api/v1/public/track', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: location.pathname }),
-      }).catch(() => {});
-    });
+    // Fire-and-forget network request to backend to register the page view in the HTTP logs
+    fetch('/api/v1/public/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: location.pathname }),
+    }).catch(() => {});
   }, [location.pathname, navigate]);
 
   return null;
@@ -253,57 +180,11 @@ function YouCanQueryRedirector() {
   return null;
 }
 
-/**
- * Loads rrweb only once a socket exists to send events over.
- *
- * Making the tracker lazy kept rrweb out of the entry chunk, but the component
- * still mounted on every page, and mounting is what triggers the dynamic
- * import — so the ~256 KB chunk was fetched during load anyway, on pages that
- * never record anything. The tracker is a no-op without a socket, and guests
- * connect theirs only once the main thread goes idle (see SocketContext), so
- * gating on it also moves the download clear of the first paint.
- */
-function SessionReplayGate() {
-  const { socket } = useSocket();
-  if (!socket) return null;
-  return (
-    <Suspense fallback={null}>
-      <LiveSessionTracker />
-    </Suspense>
-  );
-}
-
-const SPLASH_SEEN_KEY = 'splash_seen';
-
-/**
- * The brand splash is a first-impression flourish, not a loading indicator — it
- * runs on a fixed 2.5s timer whether or not the page is ready.
- *
- * So it now plays on the homepage only, once per browser session. It used to
- * cover every route: a customer arriving on a vendor's offer page from a paid ad
- * watched a logo animation for two and a half seconds instead of the product,
- * and on a mid-range phone its blur filter and sixteen spark nodes competed with
- * hydration for the main thread — making the real load slower, not just later.
- */
-const shouldShowSplash = () => {
-  if (typeof window === 'undefined') return false;
-  if (window.location.pathname !== '/') return false;
-  try {
-    return !sessionStorage.getItem(SPLASH_SEEN_KEY);
-  } catch {
-    // Safari in private mode throws on sessionStorage. Showing the splash is the
-    // harmless direction to fail in.
-    return true;
-  }
-};
-
 function App() {
-  const [loading, setLoading] = useState(shouldShowSplash);
+  const [loading, setLoading] = useState(true);
 
-  // Automatic cache version checking and updating. Deferred to idle: it only
-  // ever triggers a reload on a version change, so it has no business competing
-  // with the first paint of the page the visitor actually asked for.
-  useEffect(() => whenIdle(() => {
+  // Automatic cache version checking and updating
+  useEffect(() => {
     settingsApi.getCacheVersion()
       .then((res) => {
         const serverVersion = res.data?.data?.version;
@@ -345,31 +226,19 @@ function App() {
       .catch((err) => {
         console.error('Failed to verify app version:', err);
       });
-  }), []);
+  }, []);
 
   return (
     <>
       <ScrollToTop />
       <YouCanQueryRedirector />
       <PageTracker />
-      {loading && (
-        <PageLoader
-          onComplete={() => {
-            try {
-              sessionStorage.setItem(SPLASH_SEEN_KEY, '1');
-            } catch {
-              // Private mode — the splash simply plays again next navigation.
-            }
-            setLoading(false);
-          }}
-        />
-      )}
+      {loading && <PageLoader onComplete={() => setLoading(false)} />}
     <AuthProvider>
       <LanguageProvider>
       <SocketProvider>
-        <SessionReplayGate />
+        <LiveSessionTracker />
         <MaintenanceGuard>
-        <Suspense fallback={<RouteFallback />}>
         <Routes>
           {/* Public Routes */}
           <Route path="/maintenance" element={<MaintenancePage />} />
@@ -393,18 +262,11 @@ function App() {
             </Suspense>
           } />
           <Route path="/r/:code" element={
-            /*
-              Bare background, no placeholder of any kind. This fallback covers
-              the lazy chunk download only, and anything drawn here is visible
-              for a few hundred milliseconds before being replaced — a spinner
-              flashed, and a skeleton read as content that never arrived.
-
-              bg-gray-50 matches ReferralForm's own background, so the handoff
-              to the real page is a fill rather than a repaint. It must stay a
-              rendered element, not null: null lets whatever painted before show
-              through, which on a client-side navigation is the previous page.
-            */
-            <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+            <Suspense fallback={
+              <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+                <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            }>
               <ReferralForm />
             </Suspense>
           } />
@@ -486,7 +348,7 @@ function App() {
           <Route path="inventory" element={<InfluencerInventory />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="marketplace" element={
-            <Suspense fallback={<RouteFallback />}>
+            <Suspense fallback={<PageLoader />}>
               <InfluencerMarketplace />
             </Suspense>
           } />
@@ -531,7 +393,7 @@ function App() {
           <Route path="wallet" element={<UserWallet />} />
           <Route path="inventory" element={<VendorInventory />} />
           <Route path="marketplace" element={
-            <Suspense fallback={<RouteFallback />}>
+            <Suspense fallback={<PageLoader />}>
               <InfluencerMarketplace />
             </Suspense>
           } />
@@ -550,62 +412,8 @@ function App() {
           <Route path="shopify-callback" element={<ShopifyCallback />} />
           <Route path="invoices" element={<UserInvoices />} />
           <Route path="support" element={<SupportTickets />} />
-          <Route path="sub-accounts" element={<VendorSubAccounts />} />
           <Route path="verification" element={<ProfileVerification />} />
           <Route path="notifications" element={<Notifications />} />
-        </Route>
-
-        {/*
-          Vendor sub-account dashboard.
-
-          The same page components as /dashboard above, mounted at a second
-          prefix for role VENDOR_HELPER. The backend re-points these accounts at
-          their parent vendor, so the pages show the vendor's data; which of
-          them a given sub-account may open is decided by the permission flags
-          its vendor granted (nav filtering in DashboardLayout, enforcement in
-          backend/src/lib/vendorSubAccount.ts).
-
-          Note there is deliberately no `sub-accounts` route here: only the
-          account owner hands out permissions.
-        */}
-        <Route path={VENDOR_HELPER_BASE} element={
-          <RoleGuard allowedRoles={['VENDOR_HELPER']}>
-            <DashboardLayout />
-          </RoleGuard>
-        }>
-          {/* Hiding a nav link is not blocking a URL — SubAccountGuard refuses
-              pages this helper was not granted, however it got there. */}
-          <Route element={<SubAccountGuard />}>
-          <Route index element={<VendorDashboard />} />
-          <Route path="products" element={<VendorProducts />} />
-          <Route path="leads" element={<VendorLeads />} />
-          <Route path="leads/new" element={<VendorInsertLead />} />
-          <Route path="youcan-leads" element={<YouCanLeads />} />
-          <Route path="shopify-leads" element={<ShopifyLeads />} />
-          <Route path="woocommerce-leads" element={<WooCommerceLeads />} />
-          <Route path="google-sheets-leads" element={<GoogleSheetsLeads />} />
-          <Route path="wallet" element={<UserWallet />} />
-          <Route path="inventory" element={<VendorInventory />} />
-          <Route path="marketplace" element={
-            <Suspense fallback={<RouteFallback />}>
-              <InfluencerMarketplace />
-            </Suspense>
-          } />
-          <Route path="product/:id" element={<ProductDetail />} />
-          <Route path="chat" element={<Chat />} />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="pixels" element={<UserPixels platform="META" />} />
-          <Route path="pixels/meta" element={<UserPixels platform="META" />} />
-          <Route path="pixels/google" element={<UserPixels platform="GOOGLE" />} />
-          <Route path="pixels/tiktok" element={<UserPixels platform="TIKTOK" />} />
-          <Route path="pixels/snapchat" element={<UserPixels platform="SNAPCHAT" />} />
-          <Route path="domains" element={<VendorDomains />} />
-          <Route path="links" element={<InfluencerLinks />} />
-          <Route path="integrations" element={<IntegrationsPage />} />
-          <Route path="invoices" element={<UserInvoices />} />
-          <Route path="support" element={<SupportTickets />} />
-          <Route path="notifications" element={<Notifications />} />
-          </Route>
         </Route>
 
         {/* Agent Dashboard */}
@@ -616,14 +424,12 @@ function App() {
         }>
           <Route index element={<AgentDashboard />} />
           <Route path="leads" element={<AgentLeads />} />
-          <Route path="assigned-leads" element={<AgentAssignedLeads />} />
           <Route path="insert-lead" element={<InsertLead />} />
           <Route path="dispatch" element={<Navigate to="/agent/insert-lead" replace />} />
           <Route path="my-leads" element={<AgentMyLeads />} />
           <Route path="leads/:id" element={<AgentLeadDetail />} />
           <Route path="orders" element={<AgentOrders />} />
           <Route path="livraison" element={<AgentLivraison />} />
-          <Route path="facturation" element={<AgentFacturation />} />
           <Route path="live-stream-paniers" element={<AgentAbandonedCarts />} />
           <Route path="marketplace" element={<PublicMarketplace />} />
           <Route path="product/:id" element={<ProductDetail />} />
@@ -641,25 +447,19 @@ function App() {
         } />
 
         <Route path="/dashboard/links/:id/builder" element={
-          <RoleGuard allowedRoles={['VENDOR']}>
-            <SiteBuilder />
-          </RoleGuard>
-        } />
-
-        <Route path={`${VENDOR_HELPER_BASE}/links/:id/builder`} element={
-          <RoleGuard allowedRoles={['VENDOR_HELPER']}>
+          <RoleGuard allowedRoles={['SUPER_ADMIN', 'VENDOR', 'HELPER']}>
             <SiteBuilder />
           </RoleGuard>
         } />
 
         <Route path="/influencer/links/:id/builder" element={
-          <RoleGuard allowedRoles={['INFLUENCER']}>
+          <RoleGuard allowedRoles={['SUPER_ADMIN', 'INFLUENCER', 'HELPER', 'VENDOR']}>
             <SiteBuilder />
           </RoleGuard>
         } />
 
         <Route path="/admin/links/:id/builder" element={
-          <RoleGuard allowedRoles={['SUPER_ADMIN']}>
+          <RoleGuard allowedRoles={['SUPER_ADMIN', 'HELPER', 'VENDOR']}>
             <SiteBuilder />
           </RoleGuard>
         } />
@@ -750,7 +550,6 @@ function App() {
           {/* Catch-all 404 Route */}
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
-        </Suspense>
       </MaintenanceGuard>
       </SocketProvider>
 
