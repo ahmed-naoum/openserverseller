@@ -46,7 +46,7 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
 
   return (
     <div className="w-full flex flex-col">
-      {blocks.map((block) => {
+      {blocks.map((block, index) => {
         const { id, type, content } = block;
 
         switch (type) {
@@ -135,16 +135,16 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
                 {content.url ? (
                   <img 
                     src={resolveUrl(content.url)} 
-                    alt="Block Content" 
+                    alt={content.alt || 'Block Content'} 
                     className="h-auto w-full object-contain"
-                    loading="eager"
+                    loading={index < 2 ? 'eager' : 'lazy'}
                     // @ts-ignore
-                    fetchpriority="high"
+                    fetchpriority={index === 0 ? 'high' : 'auto'}
                     decoding="async"
                     style={{ 
                       width: content.width ? `${content.width}%` : '100%',
                       maxHeight: content.maxHeight ? `${content.maxHeight}px` : 'none',
-                      minHeight: '200px' // Reduce CLS for images without strict heights
+                      minHeight: '200px'
                     }}
                   />
                 ) : (

@@ -169,19 +169,21 @@ export default function ReferralForm() {
         const platform = (pixel.platform || 'META').toUpperCase();
 
         if (platform === 'META') {
-          // @ts-ignore
-          !function(f,b,e,v,n,t,s)
-          // @ts-ignore
-          {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-          // @ts-ignore
-          n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-          // @ts-ignore
-          if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-          // @ts-ignore
-          n.queue=[];t=b.createElement(e);t.async=!0;
-          // @ts-ignore
-          t.src=v;b.head.appendChild(t)}(window, document,'script',
-          'https://connect.facebook.net/en_US/fbevents.js');
+          if (!(window as any).fbq) {
+            // @ts-ignore
+            !function(f,b,e,v,n,t,s)
+            // @ts-ignore
+            {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+            // @ts-ignore
+            n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+            // @ts-ignore
+            if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+            // @ts-ignore
+            n.queue=[];t=b.createElement(e);t.async=!0;
+            // @ts-ignore
+            t.src=v;b.head.appendChild(t)}(window, document,'script',
+            'https://connect.facebook.net/en_US/fbevents.js');
+          }
 
           (window as any).fbq('init', pixel.pixelId);
           (window as any).fbq('track', 'PageView');

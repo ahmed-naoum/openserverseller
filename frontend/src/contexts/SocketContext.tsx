@@ -16,6 +16,16 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
+    // Public landing pages (/r/*) do NOT need socket connections
+    if (location.pathname.startsWith('/r/')) {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+        setSocket(null);
+      }
+      return;
+    }
+
     const token = localStorage.getItem('accessToken');
 
     const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD && typeof window !== 'undefined' ? `${window.location.origin}/api/v1` : 'http://localhost:3001/api/v1');

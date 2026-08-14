@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { record } from 'rrweb';
 import { useSocket } from '../../contexts/SocketContext';
 import { useLocation } from 'react-router-dom';
 
@@ -19,6 +18,7 @@ export default function LiveSessionTracker() {
 
   const eventsBufferRef = useRef<any[]>([]);
   const stopRecordRef = useRef<(() => void) | null>(null);
+  const recordFnRef = useRef<any>(null);
   const flushTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordingRef = useRef(false);
   const pathRef = useRef(location.pathname + location.search);
@@ -38,11 +38,13 @@ export default function LiveSessionTracker() {
       socket.emit('rrweb:events', { events, path: pathRef.current });
     };
 
-    const startCapture = () => {
+    const startCapture = async () => {
       if (recordingRef.current) return;
       recordingRef.current = true;
       eventsBufferRef.current = [];
       try {
+        const { record } = await import('rrweb');
+        recordFnRef.current = record;
         stopRecordRef.current = record({
           emit(event) {
             eventsBufferRef.current.push(event);
@@ -85,7 +87,7 @@ export default function LiveSessionTracker() {
     const forceSnapshot = () => {
       if (!recordingRef.current) return;
       try {
-        const take = (record as any).takeFullSnapshot;
+        const take = recordFnRef.current?.takeFullSnapshot;
         if (typeof take === 'function') {
           take(true);
         } else {
@@ -131,7 +133,7 @@ export default function LiveSessionTracker() {
   useEffect(() => {
     if (!recordingRef.current) return;
     try {
-      const take = (record as any).takeFullSnapshot;
+      const take = recordFnRef.current?.takeFullSnapshot;
       if (typeof take === 'function') take(true);
     } catch { /* noop */ }
   }, [location.pathname]);
