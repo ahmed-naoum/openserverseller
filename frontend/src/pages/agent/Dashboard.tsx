@@ -247,7 +247,12 @@ export default function AgentDashboard() {
 
   const hasRange = Boolean(dateFrom || dateTo);
   const range = useMemo(
-    () => ({ dateFrom: dateFrom || undefined, dateTo: dateTo || undefined }),
+    () => ({
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+      dateField: 'updatedAt',
+      dateType: 'updatedAt',
+    }),
     [dateFrom, dateTo]
   );
 

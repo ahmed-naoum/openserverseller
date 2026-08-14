@@ -512,6 +512,8 @@ export default function AgentLivraison() {
     if (filters.hasCode) params.hasCode = filters.hasCode;
     if (filters.dateFrom) params.dateFrom = filters.dateFrom;
     if (filters.dateTo) params.dateTo = filters.dateTo;
+    params.dateField = 'updatedAt';
+    params.dateType = 'updatedAt';
     if (filters.minAmount) params.minAmount = filters.minAmount;
     if (filters.maxAmount) params.maxAmount = filters.maxAmount;
     return params;

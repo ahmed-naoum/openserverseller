@@ -238,7 +238,7 @@ router.get(
     const {
       page = 1, limit = 50, status, agentId, search, viewMode, excludeProcessed, mode, vendorId, productId,
       // Admin-oriented filters (all optional / additive)
-      city, source, sourceMode, paymentSituation, hasOrder, dateFrom, dateTo, sort, withStats,
+      city, source, sourceMode, paymentSituation, hasOrder, dateFrom, dateTo, dateField, dateType, sort, withStats,
     } = req.query;
 
     // Callers that want everything pass a large limit; clamp it so a single
@@ -338,8 +338,9 @@ router.get(
     if (hasOrder === 'yes') conditions.push({ order: { isNot: null } });
     if (hasOrder === 'no') conditions.push({ order: null });
 
+    const targetDateField = (dateField || dateType) === 'createdAt' ? 'createdAt' : 'updatedAt';
     const createdRange = parseDateRange(dateFrom, dateTo);
-    if (createdRange) conditions.push({ createdAt: createdRange });
+    if (createdRange) conditions.push({ [targetDateField]: createdRange });
 
     if (search) {
       conditions.push({
@@ -1088,8 +1089,10 @@ router.get(
 
     // The parcel's own creation window. `stats` below re-applies it on its way
     // past the filter options, which are deliberately left unnarrowed.
+    const { dateField, dateType } = req.query as Record<string, string | undefined>;
+    const targetDateField = (dateField || dateType) === 'createdAt' ? 'createdAt' : 'updatedAt';
     const createdRange = parseDateRange(dateFrom, dateTo);
-    if (createdRange) orderFilter.createdAt = createdRange;
+    if (createdRange) orderFilter[targetDateField] = createdRange;
 
     if (minAmount || maxAmount) {
       orderFilter.totalAmountMad = {};
