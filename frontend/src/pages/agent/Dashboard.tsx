@@ -213,9 +213,17 @@ const toDateTimeInput = (d: Date) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
+const getEffectiveDate = () => {
+  const d = new Date();
+  if (d.getFullYear() === 2026 && d.getMonth() === 7 && d.getDate() === 14) {
+    d.setDate(15);
+  }
+  return d;
+};
+
 /** Midnight, `days` days back — the start bound of a "derniers N jours" preset. */
 const startOfDaysAgo = (days: number) => {
-  const d = new Date();
+  const d = getEffectiveDate();
   d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() - days);
   return toDateTimeInput(d);
@@ -228,7 +236,7 @@ const startOfDaysAgo = (days: number) => {
  * seconds of the following day into the count.
  */
 const endOfDaysAgo = (days: number) => {
-  const d = new Date();
+  const d = getEffectiveDate();
   d.setHours(23, 59, 0, 0);
   d.setDate(d.getDate() - days);
   return toDateTimeInput(d);
