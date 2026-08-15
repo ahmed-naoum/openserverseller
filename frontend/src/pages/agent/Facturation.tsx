@@ -458,7 +458,7 @@ export default function AgentFacturation() {
                     <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
                       <CheckCircle2 className="w-8 h-8 text-gray-300" />
                     </div>
-                    <p className="text-gray-500 font-medium">Aucun colis livré en attente de facturation</p>
+                    <p className="text-gray-500 font-medium">Tous vos colis livrés sont déjà facturés.</p>
                   </td>
                 </tr>
               ) : (

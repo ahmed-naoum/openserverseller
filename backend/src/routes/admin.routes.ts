@@ -2720,7 +2720,7 @@ router.patch(
   asyncHandler(async (req: Request, res: Response) => {
     const { leadIds, situation } = req.body;
 
-    if (!Array.isArray(leadIds) || !['PAID', 'NOT_PAID', 'FACTURED', 'Payé', 'no Payé'].includes(situation)) {
+    if (!Array.isArray(leadIds) || !['PAID', 'NOT_PAID', 'FACTURED', 'FACTURED-CC', 'Payé', 'no Payé'].includes(situation)) {
       res.status(400).json({ status: 'error', message: 'Invalid request' });
       return;
     }

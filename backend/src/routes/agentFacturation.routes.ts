@@ -30,16 +30,19 @@ const DEFAULT_NET_PROFIT_PER_PARCEL = 10;
 
 const agentOnly = [authenticate, authorize('CALL_CENTER_AGENT')] as const;
 
-/** Every delivered parcel of this agent that no invoice has claimed yet. */
+const deliveredCondition = {
+  OR: [
+    { status: 'DELIVERED' },
+    { order: { is: { status: 'DELIVERED' } } },
+  ],
+};
+
+/** Every delivered parcel of this agent with paymentSituation FACTURED that no agent invoice has claimed yet. */
 const billableWhere = (agentId: number, range?: { gte?: Date; lte?: Date } | null) => ({
   assignedAgentId: agentId,
   agentInvoiceItem: { is: null },
-  order: {
-    is: {
-      status: 'DELIVERED',
-      ...(range ? { createdAt: range } : {}),
-    },
-  },
+  paymentSituation: 'FACTURED',
+  ...(range ? { createdAt: range } : {}),
 });
 
 const feeOf = async (agentId: number) => {
@@ -66,15 +69,25 @@ router.get(
     const [deliveredTotal, billableCount, billableValue, invoiceAgg, wallet, pendingPayouts] =
       await Promise.all([
         prisma.lead.count({
-          where: { assignedAgentId: agentId, order: { is: { status: 'DELIVERED' } } },
+          where: {
+            assignedAgentId: agentId,
+            OR: [
+              { paymentSituation: { in: ['FACTURED', 'FACTURED-CC'] } },
+              { status: 'DELIVERED' },
+              { order: { is: { status: 'DELIVERED' } } },
+            ],
+          },
         }),
         prisma.lead.count({ where: billableWhere(agentId) }),
-        // Gross value of the parcels awaiting invoicing — context for the agent,
-        // not their pay. What they earn is count × fee.
         prisma.order.aggregate({
           where: {
-            status: 'DELIVERED',
-            lead: { is: { assignedAgentId: agentId, agentInvoiceItem: { is: null } } },
+            lead: {
+              is: {
+                assignedAgentId: agentId,
+                agentInvoiceItem: { is: null },
+                paymentSituation: 'FACTURED',
+              },
+            },
           },
           _sum: { totalAmountMad: true },
         }),
@@ -278,6 +291,11 @@ router.post(
             amountMad: feePerParcelMad,
             parcelValueMad: Number(l.order?.totalAmountMad) || 0,
           })),
+        });
+
+        await tx.lead.updateMany({
+          where: { id: { in: leads.map(l => l.id) } },
+          data: { paymentSituation: 'FACTURED-CC' },
         });
 
         // An agent may never have had a wallet — nothing else credits one.
