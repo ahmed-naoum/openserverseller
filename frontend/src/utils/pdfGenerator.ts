@@ -150,7 +150,29 @@ export const generateInvoicePDF = async (invoiceDetails: any) => {
   
   finalY += 18;
 
-  if (!invoiceDetails.invoiceNumber?.startsWith('RET-')) {
+  const isAgentInvoice =
+    invoiceDetails.type === 'AGENT' ||
+    String(invoiceDetails.invoiceNumber || '').startsWith('FAC-CC-') ||
+    invoiceDetails.user?.role === 'CALL_CENTER_AGENT' ||
+    invoiceDetails.user?.role?.name === 'CALL_CENTER_AGENT' ||
+    invoiceDetails.feePerParcelMad !== undefined;
+
+  if (isAgentInvoice) {
+    doc.setTextColor(...lightGray);
+    doc.text('Commandes livrées facturées:', pageWidth - 90, finalY);
+    doc.setTextColor(...textColor);
+    doc.text(`${numLeads} colis`, pageWidth - 14, finalY, { align: 'right' });
+
+    if (invoiceDetails.feePerParcelMad) {
+      finalY += 8;
+      doc.setTextColor(...lightGray);
+      doc.text('Tarif par colis:', pageWidth - 90, finalY);
+      doc.setTextColor(...textColor);
+      doc.text(`${invoiceDetails.feePerParcelMad} MAD`, pageWidth - 14, finalY, { align: 'right' });
+    }
+
+    finalY += 8;
+  } else if (!invoiceDetails.invoiceNumber?.startsWith('RET-')) {
     doc.setTextColor(...lightGray);
     doc.text('Sous-total brut:', pageWidth - 90, finalY);
     doc.setTextColor(...textColor);

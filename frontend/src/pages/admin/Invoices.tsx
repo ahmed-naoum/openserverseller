@@ -39,10 +39,21 @@ export default function AdminInvoices() {
   const pagination = data?.data?.data?.pagination;
   const details = invoiceDetails?.data?.data;
 
+  const isAgent = (inv: any) => {
+    if (!inv) return false;
+    return (
+      inv.type === 'AGENT' ||
+      String(inv.invoiceNumber || '').startsWith('FAC-CC-') ||
+      inv.userRole === 'CALL_CENTER_AGENT' ||
+      inv.user?.role === 'CALL_CENTER_AGENT' ||
+      inv.user?.role?.name === 'CALL_CENTER_AGENT' ||
+      inv.feePerParcelMad !== undefined
+    );
+  };
+
   // Calculate overall stats from current invoices list
   const overallStats = invoices.reduce((acc: any, inv: any) => {
-    const isAgent = inv.type === 'AGENT' || inv.invoiceNumber?.startsWith('FAC-CC-');
-    if (!isAgent) {
+    if (!isAgent(inv)) {
       const delivery = (inv.leadsCount || 0) * 57;
       const codFee = (inv.totalAmountMad / 0.95) * 0.05;
       acc.totalDelivery += delivery;
@@ -72,6 +83,8 @@ export default function AdminInvoices() {
         totalPlatformFee += fee;
       });
     }
+
+    const isAgentDet = isAgent(details);
 
     return (
       <div className="space-y-6">
@@ -110,12 +123,16 @@ export default function AdminInvoices() {
                       <th className="py-3 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Client</th>
                       <th className="py-3 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Destination</th>
                       <th className="py-3 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Produit</th>
-                      <th className="py-3 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">Montant</th>
+                      <th className="py-3 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">
+                        {isAgentDet ? 'Commission Agent' : 'Montant'}
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {details.leads?.map((lead: any) => {
-                       const amount = lead.order?.totalAmountMad || 0;
+                       const amount = isAgentDet 
+                         ? (lead.amountMad || lead.earnedMad || details.feePerParcelMad || 10)
+                         : (lead.order?.totalAmountMad || 0);
                        
                        return (
                       <tr key={lead.id} className="hover:bg-gray-50/50 transition-colors group">
@@ -183,7 +200,7 @@ export default function AdminInvoices() {
                         <td className="py-4 px-4 align-top text-right">
                           <div className="inline-flex flex-col items-end">
                             <span className="text-sm font-black text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-100 shadow-sm">
-                              {amount.toLocaleString()} MAD
+                              {Number(amount).toLocaleString()} MAD
                             </span>
                           </div>
                         </td>
@@ -205,7 +222,7 @@ export default function AdminInvoices() {
               <div className="pt-6 border-t border-gray-100 space-y-4">
                 <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Détails du paiement</h2>
                 
-                {details.type === 'AGENT' || details.invoiceNumber?.startsWith('FAC-CC-') ? (
+                {isAgentDet ? (
                   <>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-500 font-medium">Type de compte</span>
@@ -217,14 +234,14 @@ export default function AdminInvoices() {
                       <span className="text-sm text-gray-500 font-medium">Colis livrés facturés</span>
                       <span className="text-sm font-bold text-gray-900">{details.leads?.length || 0} colis</span>
                     </div>
-                    {details.feePerParcelMad && (
-                      <div className="flex justify-between items-center pb-4 border-b border-gray-50">
-                        <span className="text-sm text-gray-500 font-medium">Tarif par colis</span>
-                        <span className="text-sm font-bold text-gray-900">{details.feePerParcelMad} MAD</span>
-                      </div>
-                    )}
+                    <div className="flex justify-between items-center pb-4 border-b border-gray-50">
+                      <span className="text-sm text-gray-500 font-medium">Commission par colis</span>
+                      <span className="text-sm font-bold text-gray-900">
+                        {details.feePerParcelMad || (details.leads?.length ? Math.round((details.totalAmountMad / details.leads.length) * 100) / 100 : 10)} MAD
+                      </span>
+                    </div>
                   </>
-                ) : !details.invoiceNumber?.startsWith('RET-') && (
+                ) : !String(details.invoiceNumber || '').startsWith('RET-') && (
                   <>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-500 font-medium">Sous-total brut</span>
