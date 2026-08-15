@@ -58,6 +58,7 @@ export default function AgentFacturation() {
 
   const [openInvoiceId, setOpenInvoiceId] = useState<number | null>(null);
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
+  const [isGenerateInvoiceOpen, setIsGenerateInvoiceOpen] = useState(false);
   const [selectedBankId, setSelectedBankId] = useState('');
   const [withdrawForm, setWithdrawForm] = useState({ amountMad: '', bankName: '', ribAccount: '', iceNumber: '' });
 
@@ -110,6 +111,7 @@ export default function AgentFacturation() {
     mutationFn: () => agentFacturationApi.generateInvoice(),
     onSuccess: res => {
       toast.success(res?.data?.message || 'Facture générée');
+      setIsGenerateInvoiceOpen(false);
       refreshAll();
     },
     onError: (err: any) => {
@@ -167,12 +169,12 @@ export default function AgentFacturation() {
 
   const handleGenerate = () => {
     if (billableCount === 0) return;
-    const ok = window.confirm(
-      `Générer une facture pour ${billableCount} colis livré(s) ?\n\n` +
-        `Montant : ${fmtMad(billableAmount)} — il sera crédité sur votre solde.\n` +
-        `Cette action est définitive : ces colis ne pourront plus être refacturés.`
-    );
-    if (ok) invoiceMutation.mutate();
+    setIsGenerateInvoiceOpen(true);
+  };
+
+  const handleConfirmGenerate = () => {
+    if (billableCount === 0) return;
+    invoiceMutation.mutate();
   };
 
   // ------------------------------------------------------------------ detail
@@ -749,6 +751,91 @@ export default function AgentFacturation() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* Generate Invoice confirmation modal */}
+      {isGenerateInvoiceOpen &&
+        createPortal(
+          <div
+            className="fixed inset-0 bg-slate-900/65 backdrop-blur-md z-[999999] flex items-center justify-center p-4 cursor-pointer"
+            onClick={() => setIsGenerateInvoiceOpen(false)}
+          >
+            <div
+              className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden cursor-default animate-in zoom-in-95 duration-200"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="p-6 border-b border-gray-50 flex justify-between items-start">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+                    <Receipt className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-gray-900 tracking-tight">Générer la facture</h3>
+                    <p className="text-xs text-gray-500 font-medium mt-0.5">Confirmation de facturation agent</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsGenerateInvoiceOpen(false)}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-xl transition-colors"
+                >
+                  <XCircle size={24} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-5">
+                <div className="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-4 space-y-3">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-600 font-medium">Colis livrés à facturer</span>
+                    <span className="font-black text-gray-900">{billableCount} colis</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-600 font-medium">Tarif par colis</span>
+                    <span className="font-bold text-gray-900">{fmtMad(billable?.feePerParcelMad)}</span>
+                  </div>
+                  <div className="pt-2 border-t border-indigo-100/60 flex justify-between items-center">
+                    <span className="text-xs font-black text-gray-700 uppercase tracking-wider">Montant total à créditer</span>
+                    <span className="text-xl font-black text-emerald-600">{fmtMad(billableAmount)}</span>
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-amber-50 border border-amber-200/70 rounded-xl flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-800 font-medium leading-relaxed">
+                    Le montant de <strong className="font-bold">{fmtMad(billableAmount)}</strong> sera immédiatement crédité sur votre solde disponible.
+                    Cette action est définitive.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsGenerateInvoiceOpen(false)}
+                    className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-bold transition-all"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmGenerate}
+                    disabled={invoiceMutation.isPending}
+                    className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold disabled:opacity-50 transition-all shadow-md flex items-center justify-center gap-2"
+                  >
+                    {invoiceMutation.isPending ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Génération…
+                      </>
+                    ) : (
+                      <>
+                        <Receipt size={16} /> Confirmer ({fmtMad(billableAmount)})
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>,
           document.body
