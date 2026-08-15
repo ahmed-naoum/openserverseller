@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { agentFacturationApi, payoutsApi } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
+import BankSelect from '../../components/common/BankSelect';
 import {
   Receipt, Package, Banknote, Wallet, ArrowUpRight, Clock, FileText, Eye, ArrowLeft,
   CheckCircle2, XCircle, Building2, CreditCard, RotateCcw, AlertCircle, TrendingUp, MapPin,
@@ -155,6 +156,10 @@ export default function AgentFacturation() {
     }
     if (amount > balance) {
       toast.error('Solde insuffisant');
+      return;
+    }
+    if (!withdrawForm.bankName) {
+      toast.error('Veuillez sélectionner votre banque');
       return;
     }
     withdrawMutation.mutate({ ...withdrawForm, amountMad: amount });
@@ -704,24 +709,10 @@ export default function AgentFacturation() {
 
                 {!selectedBankId && (
                   <>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
-                        Nom de la banque
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Building2 size={16} className="text-gray-400" />
-                        </div>
-                        <input
-                          type="text"
-                          required
-                          value={withdrawForm.bankName}
-                          onChange={e => setWithdrawForm({ ...withdrawForm, bankName: e.target.value })}
-                          className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
-                          placeholder="ex: CIH, Attijariwafa"
-                        />
-                      </div>
-                    </div>
+                    <BankSelect
+                      value={withdrawForm.bankName}
+                      onChange={bankName => setWithdrawForm({ ...withdrawForm, bankName })}
+                    />
                     <div>
                       <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
                         RIB (24 chiffres)
