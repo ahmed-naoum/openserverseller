@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { adminApi } from '../../lib/api';
-import { FileText, Search, ChevronRight, ArrowLeft, Download, Eye, Calendar, Package, User, Phone, MapPin, Tag, Truck, TrendingUp, Activity } from 'lucide-react';
+import { FileText, Search, ChevronRight, ArrowLeft, Download, Eye, Calendar, Package, User, Phone, MapPin, Tag, Truck, TrendingUp, Activity, Filter } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,13 +11,22 @@ import { generateInvoicePDF } from '../../utils/pdfGenerator';
 export default function AdminInvoices() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('ALL');
+  const [userFilter, setUserFilter] = useState('ALL');
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
 
+  const { data: financeUsersData } = useQuery({
+    queryKey: ['admin-finance-users'],
+    queryFn: () => adminApi.getFinanceUsers(),
+  });
+
+  const financeUsers = financeUsersData?.data?.data || [];
+
   const { data, isLoading } = useQuery({
-    queryKey: ['admin-invoices', page, search, startDate, endDate],
-    queryFn: () => adminApi.getInvoices({ page, limit: 20, search, startDate, endDate } as any),
+    queryKey: ['admin-invoices', page, search, roleFilter, userFilter, startDate, endDate],
+    queryFn: () => adminApi.getInvoices({ page, limit: 20, search, role: roleFilter, userId: userFilter, startDate, endDate } as any),
   });
 
   const { data: invoiceDetails, isLoading: isLoadingDetails } = useQuery({
@@ -328,40 +337,83 @@ export default function AdminInvoices() {
       <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gray-50/50">
         {/* Search & Filters */}
-        <div className="flex flex-col md:flex-row gap-4 mb-8">
-          <div className="relative flex-1">
+        <div className="flex flex-col xl:flex-row gap-4 mb-2 w-full">
+          <div className="relative flex-1 min-w-[240px]">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
               placeholder="Rechercher par numéro de facture ou utilisateur..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               className="w-full pl-10 pr-4 py-3 bg-white border border-gray-100 rounded-2xl text-sm focus:ring-2 focus:ring-violet-100 outline-none transition-all shadow-sm"
             />
           </div>
-          
-          <div className="flex flex-col sm:flex-row gap-3">
+
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Role Filter */}
             <div className="relative">
-              <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <select
+                value={roleFilter}
+                onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
+                className="pl-9 pr-8 py-3 bg-white border border-gray-100 rounded-2xl text-xs font-bold text-gray-600 focus:ring-2 focus:ring-violet-100 outline-none transition-all shadow-sm cursor-pointer appearance-none"
+              >
+                <option value="ALL">Tous les rôles</option>
+                <option value="CALL_CENTER_AGENT">🎧 Agent Call Center</option>
+                <option value="VENDOR">👤 Vendeur</option>
+                <option value="GROSSELLER">📦 Grossiste</option>
+                <option value="INFLUENCER">⭐ Influenceur</option>
+                <option value="HELPER">✨ Helper</option>
+              </select>
+            </div>
+
+            {/* Account / User Filter */}
+            <div className="relative">
+              <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <select
+                value={userFilter}
+                onChange={(e) => { setUserFilter(e.target.value); setPage(1); }}
+                className="pl-9 pr-8 py-3 bg-white border border-gray-100 rounded-2xl text-xs font-bold text-gray-600 focus:ring-2 focus:ring-violet-100 outline-none transition-all shadow-sm cursor-pointer appearance-none max-w-[200px] truncate"
+              >
+                <option value="ALL">Tous les comptes</option>
+                {financeUsers.map((u: any) => (
+                  <option key={u.id} value={u.id}>
+                    {u.fullName || u.email} ({u.role})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Date Filters */}
+            <div className="relative">
+              <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               <input
                 type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
                 className="pl-10 pr-4 py-3 bg-white border border-gray-100 rounded-2xl text-xs font-bold text-gray-600 focus:ring-2 focus:ring-violet-100 outline-none transition-all shadow-sm"
               />
             </div>
             <div className="relative">
-              <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               <input
                 type="date"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
                 className="pl-10 pr-4 py-3 bg-white border border-gray-100 rounded-2xl text-xs font-bold text-gray-600 focus:ring-2 focus:ring-violet-100 outline-none transition-all shadow-sm"
               />
             </div>
-            {(startDate || endDate) && (
+
+            {(startDate || endDate || search || roleFilter !== 'ALL' || userFilter !== 'ALL') && (
               <button
-                onClick={() => { setStartDate(''); setEndDate(''); }}
+                onClick={() => {
+                  setSearch('');
+                  setRoleFilter('ALL');
+                  setUserFilter('ALL');
+                  setStartDate('');
+                  setEndDate('');
+                  setPage(1);
+                }}
                 className="px-4 py-3 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-colors shadow-sm"
               >
                 Réinitialiser

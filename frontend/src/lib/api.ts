@@ -595,7 +595,7 @@ export const adminApi = {
     api.patch('/admin/payment-monitoring/bulk-update', data),
   updateLeadPaymentFees: (id: number, data: { customPlatformFeeRate?: number | null; customShippingFee?: number | null }) => 
     api.patch(`/admin/payment-monitoring/lead/${id}`, data),
-  getInvoices: (params?: { page?: number; limit?: number; search?: string }) =>
+  getInvoices: (params?: { page?: number; limit?: number; search?: string; role?: string; userId?: string | number; startDate?: string; endDate?: string }) =>
     api.get('/admin/invoices', { params }),
   getInvoice: (id: number) => api.get(`/admin/invoices/${id}`),
   updateInvoiceStatus: (id: number, status: string) => api.patch(`/admin/invoices/${id}/status`, { status }),

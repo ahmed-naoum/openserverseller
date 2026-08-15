@@ -2917,7 +2917,7 @@ router.get(
   authenticate,
   authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { page = 1, limit = 20, search } = req.query;
+    const { page = 1, limit = 20, search, role, userId, startDate, endDate } = req.query;
     
     const vendorWhere: any = {};
     const agentWhere: any = {};
@@ -2934,6 +2934,36 @@ router.get(
         { agent: { email: { contains: searchStr, mode: 'insensitive' } } },
         { agent: { profile: { fullName: { contains: searchStr, mode: 'insensitive' } } } }
       ];
+    }
+
+    if (userId && userId !== 'ALL') {
+      const uid = Number(userId);
+      if (!isNaN(uid)) {
+        vendorWhere.userId = uid;
+        agentWhere.agentId = uid;
+      }
+    }
+
+    if (role && role !== 'ALL') {
+      const roleStr = (role as string).toUpperCase();
+      if (roleStr === 'CALL_CENTER_AGENT') {
+        vendorWhere.id = -1;
+        agentWhere.agent = { role: { name: 'CALL_CENTER_AGENT' } };
+      } else if (roleStr === 'VENDOR') {
+        vendorWhere.user = { role: { name: { in: ['VENDOR', 'SELLER'] } } };
+        agentWhere.id = -1;
+      } else {
+        vendorWhere.user = { role: { name: roleStr } };
+        agentWhere.agent = { role: { name: roleStr } };
+      }
+    }
+
+    if (startDate || endDate) {
+      const dateCondition: any = {};
+      if (startDate) dateCondition.gte = new Date(startDate as string);
+      if (endDate) dateCondition.lte = new Date(`${endDate}T23:59:59.999Z`);
+      vendorWhere.createdAt = dateCondition;
+      agentWhere.createdAt = dateCondition;
     }
 
     const [vendorInvoices, agentInvoices] = await Promise.all([
