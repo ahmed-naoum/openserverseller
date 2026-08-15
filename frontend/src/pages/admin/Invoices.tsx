@@ -32,11 +32,14 @@ export default function AdminInvoices() {
 
   // Calculate overall stats from current invoices list
   const overallStats = invoices.reduce((acc: any, inv: any) => {
-    const delivery = (inv.leadsCount || 0) * 57;
-    const codFee = (inv.totalAmountMad / 0.95) * 0.05;
-    acc.totalDelivery += delivery;
-    acc.totalCodFee += codFee;
-    acc.totalAdminProfite += (delivery + codFee);
+    const isAgent = inv.type === 'AGENT' || inv.invoiceNumber?.startsWith('FAC-CC-');
+    if (!isAgent) {
+      const delivery = (inv.leadsCount || 0) * 57;
+      const codFee = (inv.totalAmountMad / 0.95) * 0.05;
+      acc.totalDelivery += delivery;
+      acc.totalCodFee += codFee;
+      acc.totalAdminProfite += (delivery + codFee);
+    }
     acc.totalFacture += (inv.totalAmountMad || 0);
     acc.totalColis += (inv.leadsCount || 0);
     return acc;
@@ -193,7 +196,26 @@ export default function AdminInvoices() {
               <div className="pt-6 border-t border-gray-100 space-y-4">
                 <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Détails du paiement</h2>
                 
-                {!details.invoiceNumber?.startsWith('RET-') && (
+                {details.type === 'AGENT' || details.invoiceNumber?.startsWith('FAC-CC-') ? (
+                  <>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500 font-medium">Type de compte</span>
+                      <span className="text-xs font-black px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-100">
+                        🎧 Agent Call Center
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500 font-medium">Colis livrés facturés</span>
+                      <span className="text-sm font-bold text-gray-900">{details.leads?.length || 0} colis</span>
+                    </div>
+                    {details.feePerParcelMad && (
+                      <div className="flex justify-between items-center pb-4 border-b border-gray-50">
+                        <span className="text-sm text-gray-500 font-medium">Tarif par colis</span>
+                        <span className="text-sm font-bold text-gray-900">{details.feePerParcelMad} MAD</span>
+                      </div>
+                    )}
+                  </>
+                ) : !details.invoiceNumber?.startsWith('RET-') && (
                   <>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-500 font-medium">Sous-total brut</span>
@@ -395,6 +417,15 @@ export default function AdminInvoices() {
                     </td>
                     <td className="py-4 px-6">
                       <p className="text-sm font-bold text-gray-900">{invoice.userFullName}</p>
+                      {invoice.type === 'AGENT' || invoice.invoiceNumber?.startsWith('FAC-CC-') ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-100 mt-1">
+                          🎧 Agent Call Center
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100 mt-1">
+                          👤 Vendeur
+                        </span>
+                      )}
                     </td>
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-2 text-gray-600">

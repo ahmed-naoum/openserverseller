@@ -2833,7 +2833,7 @@ router.get(
     const users = await prisma.user.findMany({
       where: {
         OR: [
-          { role: { name: { in: ['VENDOR', 'GROSSELLER', 'INFLUENCER'] } } },
+          { role: { name: { in: ['VENDOR', 'GROSSELLER', 'INFLUENCER', 'CALL_CENTER_AGENT', 'HELPER', 'SELLER'] } } },
           { isInfluencer: true }
         ],
         deletedAt: null
@@ -2919,46 +2919,97 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { page = 1, limit = 20, search } = req.query;
     
-    const where: any = {};
+    const vendorWhere: any = {};
+    const agentWhere: any = {};
+
     if (search) {
-      where.OR = [
-        { invoiceNumber: { contains: search as string, mode: 'insensitive' } },
-        { user: { email: { contains: search as string, mode: 'insensitive' } } },
-        { user: { profile: { fullName: { contains: search as string, mode: 'insensitive' } } } }
+      const searchStr = search as string;
+      vendorWhere.OR = [
+        { invoiceNumber: { contains: searchStr, mode: 'insensitive' } },
+        { user: { email: { contains: searchStr, mode: 'insensitive' } } },
+        { user: { profile: { fullName: { contains: searchStr, mode: 'insensitive' } } } }
+      ];
+      agentWhere.OR = [
+        { invoiceNumber: { contains: searchStr, mode: 'insensitive' } },
+        { agent: { email: { contains: searchStr, mode: 'insensitive' } } },
+        { agent: { profile: { fullName: { contains: searchStr, mode: 'insensitive' } } } }
       ];
     }
 
-    const [invoices, total] = await Promise.all([
+    const [vendorInvoices, agentInvoices] = await Promise.all([
       prisma.invoice.findMany({
-        where,
+        where: vendorWhere,
         include: {
           user: {
-            include: { profile: true }
+            include: { profile: true, role: true }
           },
           _count: {
             select: { leads: true }
           }
         },
         orderBy: { createdAt: 'desc' },
-        skip: (Number(page) - 1) * Number(limit),
-        take: Number(limit)
       }),
-      prisma.invoice.count({ where })
+      prisma.agentInvoice.findMany({
+        where: agentWhere,
+        include: {
+          agent: {
+            include: { profile: true, role: true }
+          },
+          _count: {
+            select: { items: true }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
     ]);
+
+    const formattedVendor = vendorInvoices.map(inv => ({
+      id: inv.id,
+      type: 'VENDOR',
+      invoiceNumber: inv.invoiceNumber,
+      userId: inv.userId,
+      userFullName: inv.user.profile?.fullName || inv.user.email,
+      userEmail: inv.user.email,
+      userRole: inv.user.role?.name || 'VENDOR',
+      totalAmountMad: inv.totalAmountMad,
+      status: inv.status,
+      leadsCount: inv._count.leads,
+      createdAt: inv.createdAt
+    }));
+
+    const formattedAgent = agentInvoices.map(inv => ({
+      id: `agent-${inv.id}`,
+      realId: inv.id,
+      type: 'AGENT',
+      invoiceNumber: inv.invoiceNumber,
+      userId: inv.agentId,
+      userFullName: inv.agent.profile?.fullName || inv.agent.email,
+      userEmail: inv.agent.email,
+      userRole: inv.agent.role?.name || 'CALL_CENTER_AGENT',
+      totalAmountMad: inv.totalAmountMad,
+      status: inv.status,
+      leadsCount: inv.parcelCount || inv._count.items,
+      createdAt: inv.createdAt
+    }));
+
+    const combined = [...formattedVendor, ...formattedAgent].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    const pageNum = Number(page) || 1;
+    const limitNum = Number(limit) || 20;
+    const total = combined.length;
+    const paginatedInvoices = combined.slice((pageNum - 1) * limitNum, pageNum * limitNum);
 
     res.json({
       status: 'success',
       data: {
-        invoices: invoices.map(inv => ({
-          ...inv,
-          userFullName: inv.user.profile?.fullName || inv.user.email,
-          leadsCount: inv._count.leads
-        })),
+        invoices: paginatedInvoices,
         pagination: {
-          page: Number(page),
-          limit: Number(limit),
+          page: pageNum,
+          limit: limitNum,
           total,
-          totalPages: Math.ceil(total / Number(limit)),
+          totalPages: Math.ceil(total / limitNum),
         }
       }
     });
@@ -2970,39 +3021,163 @@ router.get(
   authenticate,
   authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
-    const invoiceId = Number(req.params.id);
+    const rawId = String(req.params.id);
 
-    const invoice = await prisma.invoice.findUnique({
-      where: { id: invoiceId },
-      include: {
-        user: {
-          include: { profile: true }
-        },
-        leads: {
-          include: {
-            order: {
-              include: { items: { include: { product: true } } }
-            },
-            referralLink: {
-              include: { product: true }
+    if (rawId.startsWith('agent-')) {
+      const agentInvoiceId = Number(rawId.replace('agent-', ''));
+      const agentInvoice = await prisma.agentInvoice.findUnique({
+        where: { id: agentInvoiceId },
+        include: {
+          agent: {
+            include: { profile: true, role: true }
+          },
+          items: {
+            include: {
+              lead: {
+                include: {
+                  order: {
+                    include: { items: { include: { product: true } } }
+                  }
+                }
+              }
             }
           }
         }
-      }
-    });
+      });
 
-    if (!invoice) {
-      res.status(404).json({ status: 'error', message: 'Invoice not found' });
+      if (!agentInvoice) {
+        res.status(404).json({ status: 'error', message: 'Facture agent introuvable' });
+        return;
+      }
+
+      res.json({
+        status: 'success',
+        data: {
+          id: `agent-${agentInvoice.id}`,
+          realId: agentInvoice.id,
+          type: 'AGENT',
+          invoiceNumber: agentInvoice.invoiceNumber,
+          feePerParcelMad: agentInvoice.feePerParcelMad,
+          totalAmountMad: agentInvoice.totalAmountMad,
+          status: agentInvoice.status,
+          createdAt: agentInvoice.createdAt,
+          userFullName: agentInvoice.agent.profile?.fullName || agentInvoice.agent.email,
+          user: {
+            email: agentInvoice.agent.email,
+            role: agentInvoice.agent.role?.name || 'CALL_CENTER_AGENT'
+          },
+          leads: agentInvoice.items.map(it => ({
+            id: it.leadId,
+            fullName: it.lead?.fullName,
+            createdAt: it.lead?.order?.createdAt || agentInvoice.createdAt,
+            order: {
+              orderNumber: it.lead?.order?.orderNumber,
+              coliatyPackageCode: it.lead?.order?.coliatyPackageCode,
+              customerName: it.lead?.order?.customerName || it.lead?.fullName,
+              customerPhone: it.lead?.order?.customerPhone,
+              customerCity: it.lead?.order?.customerCity,
+              customerAddress: it.lead?.order?.customerAddress,
+              totalAmountMad: it.amountMad,
+              items: it.lead?.order?.items || []
+            }
+          }))
+        }
+      });
       return;
     }
 
-    res.json({
-      status: 'success',
-      data: {
-        ...invoice,
-        userFullName: invoice.user.profile?.fullName || invoice.user.email,
+    const numericId = Number(rawId);
+    if (!isNaN(numericId)) {
+      const vendorInvoice = await prisma.invoice.findUnique({
+        where: { id: numericId },
+        include: {
+          user: {
+            include: { profile: true, role: true }
+          },
+          leads: {
+            include: {
+              order: {
+                include: { items: { include: { product: true } } }
+              },
+              referralLink: {
+                include: { product: true }
+              }
+            }
+          }
+        }
+      });
+
+      if (vendorInvoice) {
+        res.json({
+          status: 'success',
+          data: {
+            ...vendorInvoice,
+            type: 'VENDOR',
+            userFullName: vendorInvoice.user.profile?.fullName || vendorInvoice.user.email,
+          }
+        });
+        return;
       }
-    });
+
+      const agentInvoice = await prisma.agentInvoice.findUnique({
+        where: { id: numericId },
+        include: {
+          agent: {
+            include: { profile: true, role: true }
+          },
+          items: {
+            include: {
+              lead: {
+                include: {
+                  order: {
+                    include: { items: { include: { product: true } } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (agentInvoice) {
+        res.json({
+          status: 'success',
+          data: {
+            id: `agent-${agentInvoice.id}`,
+            realId: agentInvoice.id,
+            type: 'AGENT',
+            invoiceNumber: agentInvoice.invoiceNumber,
+            feePerParcelMad: agentInvoice.feePerParcelMad,
+            totalAmountMad: agentInvoice.totalAmountMad,
+            status: agentInvoice.status,
+            createdAt: agentInvoice.createdAt,
+            userFullName: agentInvoice.agent.profile?.fullName || agentInvoice.agent.email,
+            user: {
+              email: agentInvoice.agent.email,
+              role: agentInvoice.agent.role?.name || 'CALL_CENTER_AGENT'
+            },
+            leads: agentInvoice.items.map(it => ({
+              id: it.leadId,
+              fullName: it.lead?.fullName,
+              createdAt: it.lead?.order?.createdAt || agentInvoice.createdAt,
+              order: {
+                orderNumber: it.lead?.order?.orderNumber,
+                coliatyPackageCode: it.lead?.order?.coliatyPackageCode,
+                customerName: it.lead?.order?.customerName || it.lead?.fullName,
+                customerPhone: it.lead?.order?.customerPhone,
+                customerCity: it.lead?.order?.customerCity,
+                customerAddress: it.lead?.order?.customerAddress,
+                totalAmountMad: it.amountMad,
+                items: it.lead?.order?.items || []
+              }
+            }))
+          }
+        });
+        return;
+      }
+    }
+
+    res.status(404).json({ status: 'error', message: 'Facture introuvable' });
   })
 );
 

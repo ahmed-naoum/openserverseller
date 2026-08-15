@@ -591,6 +591,7 @@ export default function AdminFinance() {
                 className="bg-gray-50 border border-gray-200 text-gray-700 text-xs font-bold rounded-2xl px-3 py-2 focus:outline-none focus:border-violet-500 cursor-pointer"
               >
                 <option value="ALL">Tous les types de compte</option>
+                <option value="CALL_CENTER_AGENT">🎧 Agent Call Center</option>
                 <option value="HELPER">✨ Helper / Affilié</option>
                 <option value="VENDOR">👤 Vendeur</option>
                 <option value="GROSSELLER">📦 Grossiste</option>
@@ -692,6 +693,13 @@ export default function AdminFinance() {
                     <td className="py-4 px-6">
                       {(() => {
                         const role = (payout.vendor?.role?.name || payout.vendor?.role || 'VENDOR').toUpperCase();
+                        if (role === 'CALL_CENTER_AGENT') {
+                          return (
+                            <span className="whitespace-nowrap inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-purple-50 text-purple-700 border border-purple-200">
+                              🎧 Agent Call Center
+                            </span>
+                          );
+                        }
                         if (role === 'HELPER') {
                           return (
                             <span className="whitespace-nowrap inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
