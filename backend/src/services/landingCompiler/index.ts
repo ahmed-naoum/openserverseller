@@ -19,7 +19,14 @@ const prisma = new PrismaClient();
 // 5: audio renderer added — the WhatsApp voice-note player.
 // 6: audio data-au hook update; pack selection moved to class; video-delayed buttons fall back to timer.
 // 7: spacer and hero renderers added.
-export const COMPILER_VERSION = 7;
+// 8: invalidates the 6 and 7 rows built BEFORE the pack-selection change landed.
+//    That change altered checkout markup without a bump of its own, so a stored
+//    6 or 7 could be either shape — and the old shape puts an inline border on
+//    the first pack that no class can override, leaving a customer looking at a
+//    highlighted pack while the runtime has selected another. A version has to
+//    identify one output exactly; when it stops doing that, the only repair is
+//    the next number.
+export const COMPILER_VERSION = 8;
 
 /**
  * Block types the compiler can render, derived from the renderer registry.
