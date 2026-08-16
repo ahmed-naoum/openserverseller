@@ -13,7 +13,8 @@ const prisma = new PrismaClient();
  * visit — the fix propagates itself, busiest pages first, with no backfill and
  * no migration.
  */
-export const COMPILER_VERSION = 1;
+// 2: checkout now redirects to /thank-you instead of revealing an inline panel.
+export const COMPILER_VERSION = 2;
 
 /**
  * Block types the compiler can render, derived from the renderer registry.

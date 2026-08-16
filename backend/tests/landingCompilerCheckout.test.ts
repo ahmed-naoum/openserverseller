@@ -127,6 +127,31 @@ describe('express_checkout', () => {
     ]);
   });
 
+  it('redirects to the thank-you page after a successful order', async () => {
+    const html = (await withCheckout({}))!;
+    const cfg = JSON.parse(
+      html.match(/<script type="application\/json">(.*?)<\/script>/s)![1]
+    );
+    expect(cfg.thankYouUrl).toBe('/thank-you');
+    // A delay is required, not cosmetic: the conversion pixels fire immediately
+    // before this and a real navigation cancels requests still in flight.
+    expect(cfg.thankYouDelayMs).toBeGreaterThan(0);
+    // replace(), so Back does not land on a form that would resubmit — matching
+    // navigate('/thank-you', { replace: true }).
+    expect(html).toContain('location.replace(');
+    expect(html).not.toContain('location.assign(');
+  });
+
+  it('fires the conversion before navigating away', async () => {
+    const { CHECKOUT_RUNTIME } = await import(
+      '../src/services/landingCompiler/runtime/checkout.js'
+    );
+    // Order matters — a redirect scheduled before track() would race the beacon.
+    expect(CHECKOUT_RUNTIME.indexOf('track();')).toBeLessThan(
+      CHECKOUT_RUNTIME.indexOf('location.replace(')
+    );
+  });
+
   it('posts to the real public endpoint', async () => {
     const html = (await withCheckout({}))!;
     expect(html).toContain('/api/v1/public/leads');

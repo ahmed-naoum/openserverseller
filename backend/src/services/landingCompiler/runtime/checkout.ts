@@ -203,12 +203,25 @@ export const CHECKOUT_RUNTIME = `
           throw e2;
         }
         track();
+
+        // Confirm immediately, then navigate. The panel is only on screen for a
+        // moment, but without it the button sits in its "sending" state for the
+        // whole delay below and looks stuck.
         form.style.display = 'none';
         var packs = root.querySelector('[data-ck="packs"]');
         if (packs) packs.style.display = 'none';
         if (panel) { panel.style.display = 'block'; panel.scrollIntoView({ block: 'center' }); }
-        // Replaces navigate('/thank-you'): a refresh must not look like a resubmit.
-        try { history.replaceState(null, '', location.pathname + '?ok=1'); } catch (e) {}
+
+        // A short delay before unloading, because the conversion pixels fired
+        // just above are in flight. React could navigate instantly — its router
+        // never unloaded the document, so those requests always completed. A
+        // real navigation cancels them, which would lose the Purchase/Lead event
+        // this whole page exists to record.
+        setTimeout(function(){
+          // replace(), not assign(): matches navigate(..., { replace: true }), so
+          // Back does not return to a form that would resubmit.
+          location.replace(cfg.thankYouUrl || '/thank-you');
+        }, cfg.thankYouDelayMs);
       }).catch(function(err){
         // Only a message the server actually sent is safe to show; anything else
         // is a browser-internal string the customer cannot act on.

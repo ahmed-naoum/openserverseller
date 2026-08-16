@@ -138,6 +138,28 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      /**
+       * Compiled landing pages, opt-in via VITE_SSG_PROXY=1.
+       *
+       * In production nginx sends /r/ to the API; in dev nothing does, so the
+       * Express route is unreachable and the React page answers instead. This
+       * mirrors the nginx block so a compiled page can be checked locally.
+       *
+       * Off by default so `npm run dev` keeps exercising the React page, which
+       * is still what most links fall back to.
+       *
+       * changeOrigin MUST stay false: validateInfluencerHost reads the Host
+       * header, and rewriting it to localhost:3001 would fail the subdomain
+       * check on every request.
+       */
+      ...(process.env.VITE_SSG_PROXY
+        ? {
+            '/r': {
+              target: 'http://localhost:3001',
+              changeOrigin: false,
+            },
+          }
+        : {}),
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,

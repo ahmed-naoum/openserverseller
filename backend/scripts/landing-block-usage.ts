@@ -11,20 +11,38 @@
  * The checkout is at /var/www/openseller. Older scripts say
  * /var/www/silacod, which does not exist on the server — if the path
  * above is wrong, `pm2 describe silacod-api` reports the real one.
+ *
+ * Options:
+ *   --min-clicks=N   Treat links below N recorded clicks as test pages. Default 1.
+ *   --exclude=a,b    Additionally exclude these referral codes.
+ *   --all            Report only the unfiltered numbers.
  */
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+const arg = (name: string): string | null => {
+  const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
+  return hit ? hit.slice(name.length + 3) : null;
+};
+const MIN_CLICKS = Number(arg('min-clicks') ?? 1);
+const EXCLUDED = new Set(
+  (arg('exclude') || '').split(',').map((s) => s.trim()).filter(Boolean)
+);
+const SHOW_ALL_ONLY = process.argv.includes('--all');
+
 /** Ordered by how much each addition buys, cheapest first. */
 const CANDIDATE_SCOPES: Array<[string, string[]]> = [
   ['express_checkout only', ['express_checkout']],
   ['+ button + image', ['express_checkout', 'button', 'image']],
-  ['+ video', ['express_checkout', 'button', 'image', 'video']],
+  ['+ video  (SHIPPED)', ['express_checkout', 'button', 'image', 'video']],
   ['+ whatsapp', ['express_checkout', 'button', 'image', 'video', 'whatsapp']],
   ['+ audio', ['express_checkout', 'button', 'image', 'video', 'whatsapp', 'audio']],
-  ['+ countdown + text', ['express_checkout', 'button', 'image', 'video', 'whatsapp',
-    'audio', 'countdown', 'text']],
+  ['+ slider', ['express_checkout', 'button', 'image', 'video', 'whatsapp', 'audio', 'slider']],
+  ['+ hero + spacer', ['express_checkout', 'button', 'image', 'video', 'whatsapp', 'audio',
+    'slider', 'hero', 'spacer']],
+  ['+ products (everything)', ['express_checkout', 'button', 'image', 'video', 'whatsapp',
+    'audio', 'slider', 'hero', 'spacer', 'products']],
 ];
 
 function blocksOf(customStructure: any): any[] {
@@ -33,65 +51,165 @@ function blocksOf(customStructure: any): any[] {
   return customStructure?.blocks || [];
 }
 
+/**
+ * Does this code look like someone testing the builder?
+ *
+ * Reported only, never decisive. Traffic is the real signal — a page nobody has
+ * ever visited is a test page whatever it is called, and a legitimate short code
+ * like "MTN" or "NRJ" would trip every name heuristic ever written.
+ */
+function looksLikeJunk(code: string): string | null {
+  const c = code.toLowerCase();
+  if (/^(.)\1+$/.test(c)) return 'one repeated character';
+  if (new Set(c).size <= 3 && c.length >= 4) return 'fewer than 4 distinct characters';
+  if (!/[aeiouy0-9]/.test(c) && c.length >= 3) return 'no vowels or digits';
+  if (/(.)\1{2,}/.test(c)) return 'a character repeated 3+ times';
+  if (/^(asdf|qwer|zxcv|sdfg|dfgh|fghj|ghjk)/.test(c)) return 'keyboard run';
+  // Catches mashes that happen to contain one vowel, e.g. "uzgftftzf". No word
+  // in French, Arabic transliteration or English runs five consonants together.
+  if (/[^aeiouy0-9_-]{5,}/.test(c)) return 'five or more consonants in a row';
+  return null;
+}
+
+interface Page {
+  code: string;
+  clicks: number;
+  conversions: number;
+  leads: number;
+  types: string[];
+  placements: number;
+}
+
+function report(label: string, pages: Page[], total: number): void {
+  console.log(`\n${'='.repeat(64)}`);
+  console.log(`${label} — ${pages.length} page(s)`);
+  console.log('='.repeat(64));
+
+  if (!pages.length) {
+    console.log('(none)');
+    return;
+  }
+
+  const placed: Record<string, number> = {};
+  const onPages: Record<string, number> = {};
+  for (const page of pages) {
+    for (const type of page.types) onPages[type] = (onPages[type] || 0) + 1;
+  }
+  for (const page of pages) {
+    for (const type of page.types) placed[type] = placed[type] || 0;
+  }
+
+  console.log('\nblock type            on pages    % of set');
+  for (const [type, n] of Object.entries(onPages).sort((a, b) => b[1] - a[1])) {
+    const pct = Math.round((n / pages.length) * 100);
+    console.log(`${type.padEnd(20)} ${String(n).padStart(8)} ${String(pct).padStart(10)}%`);
+  }
+
+  console.log('\ncandidate compiler scope        pages covered      Δ');
+  let previous = 0;
+  for (const [name, scope] of CANDIDATE_SCOPES) {
+    const allowed = new Set(scope);
+    const covered = pages.filter(
+      (p) => p.types.length && p.types.every((t) => allowed.has(t))
+    ).length;
+    const pct = Math.round((covered / pages.length) * 100);
+    const delta = covered - previous;
+    previous = covered;
+    console.log(
+      `${name.padEnd(31)} ${String(covered).padStart(3)}/${String(pages.length).padEnd(3)} ` +
+        `(${String(pct).padStart(3)}%)  ${delta > 0 ? '+' + delta : '—'}`
+    );
+  }
+
+  if (pages.length !== total) {
+    console.log(`\n(${total - pages.length} page(s) excluded from this view)`);
+  }
+}
+
 (async () => {
   const rows: any[] = await (prisma as any).referralLinkLandingPage.findMany({
     select: {
       referralLinkId: true,
       customStructure: true,
-      referralLink: { select: { code: true, isActive: true } },
+      referralLink: {
+        select: {
+          code: true,
+          clicks: true,
+          conversions: true,
+          isActive: true,
+          _count: { select: { leads: true } },
+        },
+      },
     },
   });
 
-  const totalLinks = await (prisma as any).referralLink.count();
-  const activeLinks = await (prisma as any).referralLink.count({ where: { isActive: true } });
+  const pages: Page[] = rows.map((r) => {
+    const blocks = blocksOf(r.customStructure);
+    return {
+      code: r.referralLink?.code || `#${r.referralLinkId}`,
+      clicks: r.referralLink?.clicks ?? 0,
+      conversions: r.referralLink?.conversions ?? 0,
+      leads: r.referralLink?._count?.leads ?? 0,
+      types: [...new Set(blocks.map((b: any) => b?.type).filter(Boolean))] as string[],
+      placements: blocks.length,
+    };
+  });
 
-  console.log(`referral links: ${totalLinks} (${activeLinks} active)`);
-  console.log(`landing pages : ${rows.length}\n`);
+  console.log(`${pages.length} landing page(s) total`);
 
-  if (!rows.length) {
-    console.log('No landing pages. Nothing to scope from.');
+  // Which pages the compiler handles right now, read from the live registry
+  // rather than a hardcoded list, so this cannot drift as renderers land.
+  const { supportedTypes } = await import('../src/services/landingCompiler/blocks/index.js');
+  const supported = supportedTypes();
+  const compilable = pages.filter(
+    (p) => p.types.length && p.types.every((t) => supported.has(t))
+  );
+
+  console.log(`\nrenderers registered: ${[...supported].sort().join(', ')}`);
+  console.log(`pages that compile today: ${compilable.length}/${pages.length}`);
+  if (compilable.length) {
+    console.log('\ncode                      clicks  blocks');
+    for (const p of compilable.sort((a, b) => b.clicks - a.clicks)) {
+      console.log(
+        `${p.code.slice(0, 24).padEnd(24)} ${String(p.clicks).padStart(6)}  ${p.types.join(', ')}`
+      );
+    }
+    console.log('\nThose are the pages to open when testing — everything else falls back.');
+  }
+
+  report('ALL PAGES', pages, pages.length);
+  if (SHOW_ALL_ONLY) {
     await prisma.$disconnect();
     return;
   }
 
-  const pages = rows.map((r) => ({
-    code: r.referralLink?.code ?? `#${r.referralLinkId}`,
-    active: r.referralLink?.isActive ?? false,
-    types: [...new Set(blocksOf(r.customStructure).map((b: any) => b?.type).filter(Boolean))] as string[],
-  }));
+  // A page with no clicks, no conversions and no leads has never been used.
+  // That is a far more reliable test-page signal than the shape of its code.
+  const real = pages.filter(
+    (p) =>
+      !EXCLUDED.has(p.code) &&
+      (p.clicks >= MIN_CLICKS || p.conversions > 0 || p.leads > 0)
+  );
 
-  const placements: Record<string, number> = {};
-  const pageCount: Record<string, number> = {};
-  for (const pg of pages) {
-    for (const t of pg.types) pageCount[t] = (pageCount[t] || 0) + 1;
-    for (const b of blocksOf(rows.find((r) => (r.referralLink?.code ?? `#${r.referralLinkId}`) === pg.code)!.customStructure)) {
-      if (b?.type) placements[b.type] = (placements[b.type] || 0) + 1;
+  report(`PAGES WITH REAL TRAFFIC (>= ${MIN_CLICKS} click, or any lead/conversion)`,
+    real, pages.length);
+
+  const dropped = pages.filter((p) => !real.includes(p));
+  if (dropped.length) {
+    console.log('\nexcluded, and why:');
+    console.log('code                      clicks  leads  name looks like');
+    for (const p of dropped.sort((a, b) => b.clicks - a.clicks)) {
+      const hint = looksLikeJunk(p.code);
+      console.log(
+        `${p.code.slice(0, 24).padEnd(24)} ${String(p.clicks).padStart(6)} ` +
+          `${String(p.leads).padStart(6)}  ${hint || '(plausible name)'}`
+      );
     }
+    console.log(
+      '\nA page with no traffic may be genuinely new rather than a test — check any\n' +
+        'row above whose name looks plausible before treating it as junk.'
+    );
   }
-
-  console.log('block type            placed   on pages');
-  for (const [t, n] of Object.entries(pageCount).sort((a, b) => b[1] - a[1])) {
-    console.log(`${t.padEnd(20)} ${String(placements[t] ?? 0).padStart(6)} ${String(n).padStart(10)}`);
-  }
-
-  console.log('\nper page:');
-  for (const pg of pages) {
-    console.log(`  ${pg.active ? ' ' : '(inactive) '}${pg.code.padEnd(22)} ${pg.types.join(', ') || '(empty)'}`);
-  }
-
-  console.log('\ncandidate compiler scope           pages covered');
-  for (const [name, scope] of CANDIDATE_SCOPES) {
-    const allowed = new Set(scope);
-    const covered = pages.filter((pg) => pg.types.length && pg.types.every((t) => allowed.has(t)));
-    const pct = Math.round((covered.length / pages.length) * 100);
-    console.log(`${name.padEnd(34)} ${String(covered.length).padStart(3)}/${pages.length}  (${pct}%)`);
-  }
-
-  const everUsed = new Set(pages.flatMap((pg) => pg.types));
-  console.log(`\nblock types never placed on any page: ${
-    ['header', 'hero', 'text', 'image', 'button', 'express_checkout', 'spacer', 'countdown',
-     'whatsapp', 'slider', 'products', 'audio', 'video']
-      .filter((t) => !everUsed.has(t)).join(', ') || '(none)'}`);
 
   await prisma.$disconnect();
 })().catch((e) => {
