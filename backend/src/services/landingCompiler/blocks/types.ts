@@ -23,6 +23,15 @@ export interface BlockContext {
   /** landingPage.buttonText — the middle tier of the submit-button label chain. */
   landingButtonText: string | null;
   /**
+   * Index of the first express_checkout block, or -1.
+   *
+   * Only that one carries `id="express-checkout-block"` — the anchor a button
+   * scrolls to. React emits the id on every checkout block and relies on
+   * getElementById picking the first; duplicating it here would be invalid HTML
+   * for no gain.
+   */
+  firstCheckoutIndex: number;
+  /**
    * Intrinsic dimensions for a local upload, or null.
    *
    * Synchronous and cheap: sharp reads the header only, and results are memoised

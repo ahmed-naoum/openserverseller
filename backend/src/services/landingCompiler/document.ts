@@ -98,6 +98,7 @@ export async function renderDocument(input: RenderInput): Promise<RenderedPage |
     productPriceMad: Number.isFinite(retail) ? retail : null,
     pixels,
     landingButtonText: input.landingPage?.buttonText || null,
+    firstCheckoutIndex: input.blocks.findIndex((b) => b?.type === 'express_checkout'),
     probeImage,
   };
 

@@ -140,9 +140,11 @@ export const checkoutBlock: BlockRenderer = {
       `${num(c.borderRadiusTL, 16, 0, 80)}px ${num(c.borderRadiusTR, 16, 0, 80)}px ` +
       `${num(c.borderRadiusBR, 16, 0, 80)}px ${num(c.borderRadiusBL, 16, 0, 80)}px`;
 
+    // 32px, not 0: express_checkout is the one block whose vertical padding
+    // defaults high (BlockRenderer.tsx:268).
     const wrapStyle =
-      `padding-top:${num(c.paddingTop, 0, 0, 400)}px;` +
-      `padding-bottom:${num(c.paddingBottom, 0, 0, 400)}px;` +
+      `padding-top:${num(c.paddingTop, 32, 0, 400)}px;` +
+      `padding-bottom:${num(c.paddingBottom, 32, 0, 400)}px;` +
       `margin-top:${num(c.marginTop, 0, -200, 400)}px;` +
       `margin-bottom:${num(c.marginBottom, 0, -200, 400)}px;` +
       `background:${containerBg}`;
@@ -153,9 +155,15 @@ export const checkoutBlock: BlockRenderer = {
 
     const uid = String(ctx.index);
     const parts: string[] = [];
+    // `express-checkout-block` is the anchor a button block scrolls to and the
+    // element its sticky-hide observer watches. React emits it on every checkout
+    // block and relies on getElementById returning the first; only the first one
+    // gets it here so the document stays valid HTML.
+    const anchor = ctx.index === ctx.firstCheckoutIndex ? ' id="express-checkout-block"' : '';
+
     parts.push(
       `<div class="bk" style="${wrapStyle}">` +
-        `<div class="ck" data-ck-root style="${cardStyle}">`
+        `<div class="ck" data-ck-root${anchor} style="${cardStyle}">`
     );
 
     parts.push(`<h2 class="ck-t">${esc(c.title || DEFAULTS.title)}</h2>`);
