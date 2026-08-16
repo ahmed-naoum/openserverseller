@@ -12,7 +12,12 @@ import type { Response } from 'express';
 
 const DIST_DIR =
   process.env.FRONTEND_DIST_DIR ||
-  // pm2 runs the API with cwd = /var/www/silacod/backend (ecosystem.config.cjs).
+  // Relative to the process cwd, which pm2 sets to the backend root
+  // (ecosystem.config.cjs). Deliberately not an absolute path: the checkout
+  // lives at /var/www/openseller on the current server but /var/www/silacod
+  // appears in older scripts, and hardcoding either one is how that
+  // disagreement keeps causing bugs. Override with FRONTEND_DIST_DIR if the
+  // frontend is ever deployed somewhere else entirely.
   path.resolve(process.cwd(), '..', 'frontend', 'dist');
 
 /**

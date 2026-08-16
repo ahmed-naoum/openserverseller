@@ -7,7 +7,11 @@
  * would start failing to save, and the influencer would see only a 400.
  *
  * Run this BEFORE deploying, on the machine with the production DATABASE_URL:
- *   cd /var/www/silacod/backend && npx tsx scripts/landing-validation-dryrun.ts
+ *   cd /var/www/openseller/backend && npx tsx scripts/landing-validation-dryrun.ts
+ *
+ * The checkout is at /var/www/openseller. Older scripts say
+ * /var/www/silacod, which does not exist on the server — if the path
+ * above is wrong, `pm2 describe silacod-api` reports the real one.
  *
  * Exit code is 0 either way — this reports, it does not gate.
  */

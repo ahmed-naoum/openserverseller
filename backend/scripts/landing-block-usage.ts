@@ -6,7 +6,11 @@
  * and how many pages each candidate compiler scope would cover.
  *
  * Run it where the production DATABASE_URL is set — on the VPS, not locally:
- *   cd /var/www/silacod/backend && npx tsx scripts/landing-block-usage.ts
+ *   cd /var/www/openseller/backend && npx tsx scripts/landing-block-usage.ts
+ *
+ * The checkout is at /var/www/openseller. Older scripts say
+ * /var/www/silacod, which does not exist on the server — if the path
+ * above is wrong, `pm2 describe silacod-api` reports the real one.
  */
 import { PrismaClient } from '@prisma/client';
 
