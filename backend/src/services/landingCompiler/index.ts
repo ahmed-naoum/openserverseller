@@ -18,7 +18,8 @@ const prisma = new PrismaClient();
 // 4: whatsapp widget also honours settings.whatsappWidget, and hides on desktop
 //    when both viewport toggles are off. Any page stored at 3 has the bug baked
 //    into its HTML, so it has to recompile.
-export const COMPILER_VERSION = 4;
+// 5: audio renderer added — the WhatsApp voice-note player.
+export const COMPILER_VERSION = 5;
 
 /**
  * Block types the compiler can render, derived from the renderer registry.
