@@ -7,10 +7,32 @@ import { serveSpaFallback } from '../services/landingCompiler/spaFallback.js';
 
 const router = Router();
 
-/** off = always serve the SPA (kill switch), shadow = compile but do not serve, on = serve compiled HTML. */
-function mode(): 'off' | 'shadow' | 'on' {
-  const value = (process.env.SSG_LANDING || 'on').toLowerCase();
-  return value === 'off' || value === 'shadow' ? value : 'on';
+/**
+ * off = always serve the SPA (kill switch), shadow = compile but do not serve,
+ * on = serve compiled HTML.
+ *
+ * Anything other than an explicit, recognised `on` resolves to shadow. This flag
+ * gates what real visitors receive, so the ambiguous cases — unset, empty, or a
+ * typo — are exactly the ones where the safe answer is "compile, but keep serving
+ * React". It previously defaulted to `on`, which meant a deploy that never got the
+ * variable set was live to visitors while looking dormant: nothing had compiled,
+ * so the health check read 0 errors out of 0 rows and passed.
+ */
+let warnedFor: string | null = null;
+
+export function mode(): 'off' | 'shadow' | 'on' {
+  const raw = process.env.SSG_LANDING;
+  if (raw === undefined || raw.trim() === '') return 'shadow';
+
+  const value = raw.trim().toLowerCase();
+  if (value === 'off' || value === 'shadow' || value === 'on') return value;
+
+  // Once per distinct bad value, not once per request — this runs on every /r/ hit.
+  if (warnedFor !== value) {
+    warnedFor = value;
+    console.warn(`[SSG] unrecognised SSG_LANDING=${JSON.stringify(raw)} — falling back to shadow`);
+  }
+  return 'shadow';
 }
 
 router.get('/:code', async (req: Request, res: Response) => {
