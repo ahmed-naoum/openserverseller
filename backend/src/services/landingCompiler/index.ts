@@ -18,7 +18,8 @@ const prisma = new PrismaClient();
 // 4: whatsapp widget honours settings.whatsappWidget & hides on desktop when both viewport toggles off.
 // 5: audio renderer added — the WhatsApp voice-note player.
 // 6: audio data-au hook update; pack selection moved to class; video-delayed buttons fall back to timer.
-export const COMPILER_VERSION = 6;
+// 7: spacer and hero renderers added.
+export const COMPILER_VERSION = 7;
 
 /**
  * Block types the compiler can render, derived from the renderer registry.
