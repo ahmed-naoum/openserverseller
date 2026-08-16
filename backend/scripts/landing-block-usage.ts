@@ -13,9 +13,15 @@
  * above is wrong, `pm2 describe silacod-api` reports the real one.
  *
  * Options:
- *   --min-clicks=N   Treat links below N recorded clicks as test pages. Default 1.
- *   --exclude=a,b    Additionally exclude these referral codes.
- *   --all            Report only the unfiltered numbers.
+ *   --min-clicks=N          Treat links below N recorded clicks as test pages. Default 1.
+ *   --exclude=a,b           Additionally exclude these referral codes.
+ *   --all                   Report only the unfiltered numbers.
+ *   --include-unreachable   Keep pages whose influencer has no subdomain or custom
+ *                           domain. Off by default: validateInfluencerHost cannot
+ *                           admit such a request, so those pages can never compile
+ *                           and only distort the denominator that picks the next
+ *                           renderer. Excluding them is what made the model agree
+ *                           with production — 16/32 predicted, 16 compiled.
  */
 import { PrismaClient } from '@prisma/client';
 
@@ -30,6 +36,7 @@ const EXCLUDED = new Set(
   (arg('exclude') || '').split(',').map((s) => s.trim()).filter(Boolean)
 );
 const SHOW_ALL_ONLY = process.argv.includes('--all');
+const INCLUDE_UNREACHABLE = process.argv.includes('--include-unreachable');
 
 /** Ordered by how much each addition buys, cheapest first. */
 const CANDIDATE_SCOPES: Array<[string, string[]]> = [
@@ -78,6 +85,8 @@ interface Page {
   leads: number;
   types: string[];
   placements: number;
+  /** customDomain, else "<subdomain>.silacod.com", else null when neither is set. */
+  host: string | null;
 }
 
 function report(label: string, pages: Page[], total: number): void {
@@ -138,6 +147,7 @@ function report(label: string, pages: Page[], total: number): void {
           conversions: true,
           isActive: true,
           _count: { select: { leads: true } },
+          influencer: { select: { subdomain: true, customDomain: true } },
         },
       },
     },
@@ -145,6 +155,7 @@ function report(label: string, pages: Page[], total: number): void {
 
   const pages: Page[] = rows.map((r) => {
     const blocks = blocksOf(r.customStructure);
+    const inf = r.referralLink?.influencer;
     return {
       code: r.referralLink?.code || `#${r.referralLinkId}`,
       clicks: r.referralLink?.clicks ?? 0,
@@ -152,6 +163,7 @@ function report(label: string, pages: Page[], total: number): void {
       leads: r.referralLink?._count?.leads ?? 0,
       types: [...new Set(blocks.map((b: any) => b?.type).filter(Boolean))] as string[],
       placements: blocks.length,
+      host: inf?.customDomain || (inf?.subdomain ? `${inf.subdomain}.silacod.com` : null),
     };
   });
 
@@ -183,32 +195,60 @@ function report(label: string, pages: Page[], total: number): void {
     return;
   }
 
+  /**
+   * Why this page is not in the decision set, or null to keep it.
+   *
+   * Order matters: unreachable is reported ahead of no-traffic, because a page
+   * with no host cannot receive traffic in the first place — blaming its click
+   * count would describe a symptom as the cause.
+   */
+  const dropReason = (p: Page): string | null => {
+    if (EXCLUDED.has(p.code)) return 'excluded by --exclude';
+    if (!INCLUDE_UNREACHABLE && !p.host) return 'no subdomain or custom domain';
+    if (p.clicks >= MIN_CLICKS || p.conversions > 0 || p.leads > 0) return null;
+    return 'no clicks, leads or conversions';
+  };
+
   // A page with no clicks, no conversions and no leads has never been used.
   // That is a far more reliable test-page signal than the shape of its code.
-  const real = pages.filter(
-    (p) =>
-      !EXCLUDED.has(p.code) &&
-      (p.clicks >= MIN_CLICKS || p.conversions > 0 || p.leads > 0)
-  );
+  const real = pages.filter((p) => dropReason(p) === null);
 
-  report(`PAGES WITH REAL TRAFFIC (>= ${MIN_CLICKS} click, or any lead/conversion)`,
-    real, pages.length);
+  const label = INCLUDE_UNREACHABLE
+    ? `PAGES WITH REAL TRAFFIC (>= ${MIN_CLICKS} click, or any lead/conversion)`
+    : `REACHABLE PAGES WITH REAL TRAFFIC (>= ${MIN_CLICKS} click, or any lead/conversion)`;
+  report(label, real, pages.length);
 
-  const dropped = pages.filter((p) => !real.includes(p));
+  const dropped = pages.filter((p) => dropReason(p) !== null);
   if (dropped.length) {
     console.log('\nexcluded, and why:');
-    console.log('code                      clicks  leads  name looks like');
+    console.log('code                      clicks  leads  reason');
     for (const p of dropped.sort((a, b) => b.clicks - a.clicks)) {
-      const hint = looksLikeJunk(p.code);
       console.log(
         `${p.code.slice(0, 24).padEnd(24)} ${String(p.clicks).padStart(6)} ` +
-          `${String(p.leads).padStart(6)}  ${hint || '(plausible name)'}`
+          `${String(p.leads).padStart(6)}  ${dropReason(p)}`
       );
     }
-    console.log(
-      '\nA page with no traffic may be genuinely new rather than a test — check any\n' +
-        'row above whose name looks plausible before treating it as junk.'
-    );
+
+    const unreachable = dropped.filter((p) => dropReason(p) === 'no subdomain or custom domain');
+    if (unreachable.length) {
+      console.log(
+        `\n${unreachable.length} page(s) have no host to be served on, yet several have real\n` +
+          'traffic — so they are reached by some route this script does not model.\n' +
+          'Re-run with --include-unreachable to see what they would add.'
+      );
+    }
+
+    const quiet = dropped.filter((p) => dropReason(p) === 'no clicks, leads or conversions');
+    if (quiet.length) {
+      console.log('\nof the untrafficked ones, whether the name looks like a test:');
+      for (const p of quiet.sort((a, b) => a.code.localeCompare(b.code))) {
+        console.log(`${p.code.slice(0, 24).padEnd(24)}  ${looksLikeJunk(p.code) || '(plausible name)'}`);
+      }
+      console.log(
+        '\nA page with no traffic may be genuinely new rather than a test — check any\n' +
+          'row above whose name looks plausible before treating it as junk.'
+      );
+    }
   }
 
   await prisma.$disconnect();

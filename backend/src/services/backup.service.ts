@@ -97,6 +97,31 @@ export function planEviction(
   return { evict, reason, bytesAfter: bytes };
 }
 
+/**
+ * stat() each dump, dropping any that no longer exists.
+ *
+ * A dump can vanish between readdir() and stat() — a concurrent cleanup, a manual
+ * rm, a restore swapping files. cleanup() now stats on every call rather than only
+ * when the count cap trips, so it meets that race far more often, and a bare
+ * Promise.all would reject on the first ENOENT and abort the entire run. A file
+ * that is already gone needs no eviction; anything other than ENOENT is a real
+ * fault and still throws.
+ */
+export async function statBackups(dir: string, filenames: string[]): Promise<BackupFileInfo[]> {
+  const settled = await Promise.all(
+    filenames.map(async (f): Promise<BackupFileInfo | null> => {
+      try {
+        const s = await stat(path.join(dir, f));
+        return { filename: f, time: s.mtime.getTime(), size: s.size };
+      } catch (err: any) {
+        if (err?.code === 'ENOENT') return null;
+        throw err;
+      }
+    })
+  );
+  return settled.filter((f): f is BackupFileInfo => f !== null);
+}
+
 export class BackupService {
   static activeInterval: NodeJS.Timeout | null = null;
 
@@ -260,12 +285,15 @@ export class BackupService {
       // stat() every dump, not just when the count cap is tripped: the byte
       // ceiling can bind while the count is still comfortably under its limit,
       // which is the whole failure this guards against.
-      const fileStats: BackupFileInfo[] = await Promise.all(
-        backupFiles.map(async (f) => {
-          const s = await stat(path.join(finalBackupDir, f));
-          return { filename: f, time: s.mtime.getTime(), size: s.size };
-        })
-      );
+      //
+      // A dump can vanish between readdir() and stat() — a concurrent cleanup, a
+      // manual rm, a restore swapping files. Because this now stats on every call
+      // rather than only when the count cap trips, it meets that race far more
+      // often, and a bare Promise.all would reject on the first ENOENT and abort
+      // the whole run. A file that no longer exists is already evicted, so skip it
+      // and carry on; anything else is a real fault and still throws.
+      const fileStats = await statBackups(finalBackupDir, backupFiles);
+      if (fileStats.length === 0) return;
 
       const { evict, reason, bytesAfter } = planEviction(fileStats, {
         maxBackups: config.maxBackups,
@@ -286,8 +314,15 @@ export class BackupService {
       }
 
       for (const filename of evict) {
-        await unlink(path.join(finalBackupDir, filename));
-        console.log(`Deleted old backup: ${filename} (FIFO, reason=${reason})`);
+        try {
+          await unlink(path.join(finalBackupDir, filename));
+          console.log(`Deleted old backup: ${filename} (FIFO, reason=${reason})`);
+        } catch (err: any) {
+          // Same race, one step later: the file can go between planning and
+          // unlinking. Losing the rest of the eviction list to an already-deleted
+          // file is how a directory stays over budget indefinitely.
+          if (err?.code !== 'ENOENT') throw err;
+        }
       }
     } catch (error) {
       console.error('Cleanup failed:', error);

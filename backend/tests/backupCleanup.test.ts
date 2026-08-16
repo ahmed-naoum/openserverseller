@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import { planEviction, type BackupFileInfo } from '../src/services/backup.service';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtemp, writeFile, rm } from 'fs/promises';
+import { tmpdir } from 'os';
+import path from 'path';
+import { planEviction, statBackups, type BackupFileInfo } from '../src/services/backup.service';
 
 const GB = 1024 * 1024 * 1024;
 const MB = 1024 * 1024;
@@ -105,5 +108,63 @@ describe('planEviction — floors and edges', () => {
     // Guards the deploy-day promise: shipping the ceiling must not delete backups.
     const plan = planEviction(dumps(100, 256 * MB), { maxBackups: 1000, maxBytes: 40 * GB });
     expect(plan.evict).toEqual([]);
+  });
+});
+
+describe('statBackups — survives files vanishing mid-run', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), 'backup-stat-'));
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('reads size and mtime for files that exist', async () => {
+    await writeFile(path.join(dir, 'backup-a.dump'), 'x'.repeat(128));
+    const stats = await statBackups(dir, ['backup-a.dump']);
+    expect(stats).toHaveLength(1);
+    expect(stats[0].filename).toBe('backup-a.dump');
+    expect(stats[0].size).toBe(128);
+    expect(stats[0].time).toBeGreaterThan(0);
+  });
+
+  it('skips a file deleted between readdir and stat rather than throwing', async () => {
+    // The exact race seen on the server:
+    //   Error stating file backup-2026-08-06T08-04-02-087Z.dump: ENOENT
+    // A bare Promise.all rejects here and aborts the whole cleanup run.
+    await writeFile(path.join(dir, 'backup-a.dump'), 'aa');
+    await writeFile(path.join(dir, 'backup-c.dump'), 'cccc');
+
+    const stats = await statBackups(dir, [
+      'backup-a.dump',
+      'backup-b.dump', // never existed — stands in for one deleted mid-run
+      'backup-c.dump',
+    ]);
+
+    expect(stats.map((s) => s.filename)).toEqual(['backup-a.dump', 'backup-c.dump']);
+  });
+
+  it('returns empty rather than throwing when every file has vanished', async () => {
+    const stats = await statBackups(dir, ['gone-1.dump', 'gone-2.dump']);
+    expect(stats).toEqual([]);
+  });
+
+  it('still surfaces non-ENOENT failures', async () => {
+    // Traversing through a regular file fails ENOTDIR, not ENOENT. Only "the file
+    // is already gone" is safe to swallow; a malformed path or a permissions fault
+    // is a real problem and must not be mistaken for "already evicted".
+    await writeFile(path.join(dir, 'not-a-dir'), 'x');
+    await expect(statBackups(dir, ['not-a-dir/backup-a.dump'])).rejects.toThrow(/ENOTDIR/);
+  });
+
+  it('feeds planEviction directly, so a vanished file cannot skew the byte total', async () => {
+    await writeFile(path.join(dir, 'backup-a.dump'), 'x'.repeat(1000));
+    await writeFile(path.join(dir, 'backup-b.dump'), 'x'.repeat(1000));
+    const stats = await statBackups(dir, ['backup-a.dump', 'backup-gone.dump', 'backup-b.dump']);
+    const plan = planEviction(stats, { maxBackups: 100, maxBytes: 10_000 });
+    expect(plan.evict).toEqual([]);
+    expect(plan.bytesAfter).toBe(2000); // not 3000 — the missing file contributes nothing
   });
 });
