@@ -35,6 +35,51 @@ export function mode(): 'off' | 'shadow' | 'on' {
   return 'shadow';
 }
 
+/**
+ * Codes that serve compiled HTML while the global flag is still `shadow`.
+ *
+ * The rollout unit is one link. A page can be proven in a real browser, on its
+ * real domain, without moving every other page's ad traffic onto the compiler
+ * in the same change — and rolling back is emptying a variable, not a deploy.
+ *
+ * Matching is case-SENSITIVE, deliberately. `Miel` and `miel` are both live
+ * codes on this instance, so folding case would quietly switch on a page nobody
+ * named.
+ *
+ * Re-read whenever the variable changes rather than cached at import, so the
+ * list can be widened with a pm2 restart and no rebuild. The parse is memoised
+ * on the raw string because this runs on every /r/ hit.
+ */
+let allowRaw: string | undefined;
+let allowSet = new Set<string>();
+
+function allowedCodes(): Set<string> {
+  const raw = process.env.SSG_LANDING_CODES;
+  if (raw !== allowRaw) {
+    allowRaw = raw;
+    allowSet = new Set(
+      String(raw || '')
+        .split(/[\s,]+/)
+        .filter(Boolean)
+    );
+  }
+  return allowSet;
+}
+
+/**
+ * The mode this one code is served under.
+ *
+ * The allow-list only ever upgrades shadow -> on. `off` is the kill switch and
+ * stays absolute: the one thing it must guarantee is that nothing anywhere is
+ * serving compiled HTML, and an allow-list that could override it would make it
+ * useless in the incident it exists for.
+ */
+export function modeFor(code: string): 'off' | 'shadow' | 'on' {
+  const global = mode();
+  if (global === 'shadow' && allowedCodes().has(code)) return 'on';
+  return global;
+}
+
 router.get('/:code', async (req: Request, res: Response) => {
   const code = String(req.params.code || '');
 
@@ -48,9 +93,13 @@ router.get('/:code', async (req: Request, res: Response) => {
   // hints in the SPA shell.
   res.setHeader('X-DNS-Prefetch-Control', 'on');
 
+  // Resolved once and reused below, so a variable edited mid-request cannot make
+  // one hit take the compiled branch on one line and the SPA branch on the next.
+  const ssg = modeFor(code);
+
   // `?__ssg=0` forces the React page for one request, so a compiled page and the
   // original can be compared side by side in a browser.
-  if (mode() === 'off' || req.query.__ssg === '0') {
+  if (ssg === 'off' || req.query.__ssg === '0') {
     return serveSpaFallback(res, 200);
   }
 
@@ -96,7 +145,7 @@ router.get('/:code', async (req: Request, res: Response) => {
     }
   }
 
-  if (mode() === 'shadow' || !page.ssgEnabled || !page.html) {
+  if (ssg === 'shadow' || !page.ssgEnabled || !page.html) {
     return serveSpaFallback(res, 200);
   }
 
