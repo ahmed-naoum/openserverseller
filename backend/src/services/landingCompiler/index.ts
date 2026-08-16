@@ -19,7 +19,9 @@ const prisma = new PrismaClient();
 //    when both viewport toggles are off. Any page stored at 3 has the bug baked
 //    into its HTML, so it has to recompile.
 // 5: audio renderer added — the WhatsApp voice-note player.
-export const COMPILER_VERSION = 5;
+// 6: audio's data-au hook moved off the bubble onto the wrapper. Every page
+//    stored at 5 has markup whose play button cannot bind, so it must recompile.
+export const COMPILER_VERSION = 6;
 
 /**
  * Block types the compiler can render, derived from the renderer registry.

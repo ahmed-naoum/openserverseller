@@ -137,10 +137,17 @@ function voiceNote(track: any, idx: number, c: any): string {
       `></audio>`
     : '';
 
+  // data-au goes on the WRAPPER, not the bubble. React keeps the <audio> as a
+  // sibling of the bubble, and the runtime scopes every lookup to this element —
+  // so hooking the bubble would put the <audio> outside its own controls' scope
+  // and `root.querySelector('audio')` would find nothing. Only emitted when
+  // there is a track to drive; a fileless bubble has nothing to wire.
+  const hook = src ? ` data-au data-au-active="${esc(activeWave)}"` : '';
+
   return (
-    `<div class="bk-au-w">${audioEl}` +
-    `<div class="bk-au-b" data-au data-au-active="${esc(activeWave)}" ` +
-    `style="background:${bubble}"><div class="bk-au-tail" style="background:${bubble}"></div>` +
+    `<div class="bk-au-w"${hook}>${audioEl}` +
+    `<div class="bk-au-b" style="background:${bubble}">` +
+    `<div class="bk-au-tail" style="background:${bubble}"></div>` +
     `${head}${body}${foot}</div></div>`
   );
 }

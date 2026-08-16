@@ -13,6 +13,35 @@ function markup(html: string): string {
   return html.replace(/<script>[\s\S]*?<\/script>/g, '').replace(/<style>[\s\S]*?<\/style>/g, '');
 }
 
+/**
+ * The subtree of the first <div> carrying `attr`, i.e. exactly what
+ * `root.querySelector(...)` can reach from that element.
+ *
+ * Counting <div> depth is enough here because the hook always lands on a div and
+ * nothing nested inside it (svg, span, button, audio) opens one.
+ */
+function scopeOf(html: string, attr: string): string {
+  const start = html.indexOf(`<div class="bk-au-w" ${attr}`);
+  if (start === -1) throw new Error(`no <div> carrying ${attr}`);
+
+  let depth = 0;
+  let i = start;
+  while (i < html.length) {
+    const open = html.indexOf('<div', i);
+    const close = html.indexOf('</div>', i);
+    if (close === -1) break;
+    if (open !== -1 && open < close) {
+      depth++;
+      i = open + 4;
+    } else {
+      depth--;
+      if (depth === 0) return html.slice(start, close + 6);
+      i = close + 6;
+    }
+  }
+  throw new Error(`unbalanced markup for ${attr}`);
+}
+
 function withAudio(content: any) {
   return render({
     code: 'CODE1',
@@ -137,7 +166,9 @@ describe('audio block — whatsapp voice note', () => {
     expect(markup(html)).not.toContain('<audio');
     expect(html).toContain('bk-au-none');
     // Still a bubble, so the layout does not collapse.
-    expect(html).toContain('data-au');
+    expect(html).toContain('bk-au-b');
+    // ...but nothing for the runtime to bind: no track, no hook.
+    expect(markup(html)).not.toContain('data-au ');
   });
 
   it('names the sender from the track, falling back to Client N', async () => {
@@ -271,6 +302,22 @@ describe('audio runtime', () => {
     expect(hooks.length).toBeGreaterThan(0);
     for (const hook of new Set(hooks)) {
       expect(html, `runtime queries ${hook}`).toContain(hook.slice(1, -1));
+    }
+  });
+
+  it('scopes every lookup inside the element it binds to', async () => {
+    // The bug this exists for: data-au sat on the bubble while the <audio> was
+    // its sibling, so `root.querySelector('audio')` found nothing and init()
+    // bailed before wiring a single listener. Every play button on every page
+    // was dead, and presence-only assertions could not see it — the hooks were
+    // all in the document, just not in the runtime's scope.
+    const html = (await withAudio({ audios: [TRACK] }))!;
+    const scope = scopeOf(html, 'data-au ');
+
+    expect(scope, 'the <audio> the runtime drives').toContain('<audio');
+    const hooks = [...AUDIO_RUNTIME.matchAll(/\[data-au[a-z-]*\]/g)].map((m) => m[0]);
+    for (const hook of new Set(hooks)) {
+      expect(scope, `root.querySelector(${hook}) must resolve`).toContain(hook.slice(1, -1));
     }
   });
 
