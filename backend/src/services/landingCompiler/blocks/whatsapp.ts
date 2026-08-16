@@ -3,19 +3,18 @@ import { WHATSAPP_RUNTIME } from '../runtime/whatsapp.js';
 import type { BlockRenderer, BlockContext } from './types.js';
 
 /**
- * Ported from components/public/WhatsAppWidget.tsx, driven by the `whatsapp`
- * block's content.
+ * Ported from components/public/WhatsAppWidget.tsx.
  *
  * Unlike every other block this one renders NOTHING in the page flow —
  * BlockRenderer returns null for `whatsapp` outside the editor. The widget is a
  * fixed-position overlay that ReferralForm mounts separately
- * (ReferralForm.tsx:740). So the block contributes a floating element and no
- * layout, which is why it emits its markup as a sibling of the page container.
+ * (ReferralForm.tsx:740), so document.ts emits this markup as a sibling of the
+ * page container rather than inside it.
  *
- * Settings come from the block when `enableWidget !== false`, falling back to
- * `settings.whatsappWidget` (ReferralForm.tsx:722-731). Only the block form is
- * handled here; a page whose widget lives in page settings has no `whatsapp`
- * block, so nothing reaches this renderer.
+ * `render` takes whatever content the caller resolved and draws it. Which
+ * source wins — the block, or `settings.whatsappWidget` — is document.ts's
+ * decision (`whatsappContent`), because a page can carry the widget in settings
+ * with no `whatsapp` block at all and there would then be nothing here to ask.
  */
 
 const ICON_TYPES = ['whatsapp', 'message-circle', 'message-square', 'headset', 'bot'] as const;
@@ -51,8 +50,12 @@ export const whatsappBlock: BlockRenderer = {
     `.wa.l{align-items:flex-start}` +
     `.wa.r{align-items:flex-end}` +
     // Visibility is per-viewport, matching the md: breakpoint the React classes use.
+    // Restore before hide, never the other way round: the two desktop rules have
+    // equal specificity, so on an element carrying BOTH classes the last one
+    // wins. Hidden-everywhere has to stay hidden on desktop, which means
+    // `.wa.no-d` must come after `.wa.no-m`.
     `.wa.no-m{display:none}` +
-    `@media(min-width:768px){.wa.no-d{display:none}.wa.no-m{display:flex}}` +
+    `@media(min-width:768px){.wa.no-m{display:flex}.wa.no-d{display:none}}` +
     `.wa-panel{display:none;width:340px;max-width:calc(100vw - 32px);background:#fff;` +
     `border-radius:24px;box-shadow:0 25px 50px -12px rgba(0,0,0,.25);border:1px solid #f3f4f6;` +
     `flex-direction:column;overflow:hidden}` +
@@ -123,8 +126,9 @@ export const whatsappBlock: BlockRenderer = {
   render(block: any, ctx: BlockContext): string {
     const c = block?.content || {};
 
-    // enableWidget is opt-OUT: only an explicit false disables it
-    // (ReferralForm.tsx:722).
+    // Belt and braces. `whatsappContent` already refuses to hand over a block
+    // that opted out, but this renderer is reachable from the registry like any
+    // other and must not draw a widget the page switched off.
     if (c.enableWidget === false) return '';
 
     const phone = String(c.phoneNumber || '').replace(/\D/g, '');

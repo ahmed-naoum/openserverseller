@@ -91,6 +91,26 @@ describe('whatsapp widget', () => {
     expect((await withWa({ phoneNumber: '212600112233', showOnDesktop: false }))!).toContain('wa b r no-d');
   });
 
+  it('stays hidden on desktop when both viewport toggles are off', async () => {
+    const html = (await withWa({
+      phoneNumber: '212600112233',
+      showOnDesktop: false,
+      showOnMobile: false,
+    }))!;
+    expect(html).toContain('wa b r no-d no-m');
+
+    // Both desktop rules match this element at equal specificity, so source
+    // order decides the winner. Each string occurs once, inside the 768px media
+    // query, so comparing offsets in the document compares their order there.
+    // `.wa.no-m{display:flex}` re-showing after `.wa.no-d` had hidden it is the
+    // whole bug: a widget the page asked to hide everywhere reappears above
+    // 768px.
+    const restore = html.indexOf('.wa.no-m{display:flex}');
+    const hide = html.indexOf('.wa.no-d{display:none}');
+    expect(restore).toBeGreaterThan(-1);
+    expect(hide).toBeGreaterThan(restore);
+  });
+
   it('accepts only known animations, icons and styles', async () => {
     const good = (await withWa({ phoneNumber: '212600112233', animation: 'bounce', iconStyle: 'pill' }))!;
     expect(good).toContain('animation:wa-bounce 2s');
@@ -158,6 +178,82 @@ describe('whatsapp widget', () => {
     // submit, so navigation is not blocked. The tracking call is same-origin.
     expect(out!.csp).toContain("connect-src 'self'");
     expect(out!.csp).toContain("form-action 'none'");
+  });
+});
+
+/**
+ * The precedence ReferralForm.tsx:721-731 applies: block first, page settings
+ * second, nothing third. Every v2 site-builder template ships the widget in
+ * settings and no block, so reading the block alone silently drops the widget
+ * from pages that already compile.
+ */
+describe('whatsapp widget source', () => {
+  const IMAGE = { id: 'i1', type: 'image', content: { url: '/uploads/a.webp' } };
+
+  const withSettings = async (whatsappWidget: any, blocks: any[] = [IMAGE]) =>
+    page(blocks, { settings: { whatsappWidget } });
+
+  it('renders from page settings when the page has no whatsapp block', async () => {
+    const out = (await withSettings({ enabled: true, phoneNumber: '+212 600 112233' }))!;
+    expect(out.html).toContain('data-wa');
+    const cfg = JSON.parse(out.html.match(/data-wa-cfg>(.*?)<\/script>/s)![1]);
+    expect(cfg.phone).toBe('212600112233');
+    // The sheet and the runtime have to come along, or the widget is inert markup.
+    expect(out.html).toContain('.wa{position:fixed');
+    expect(out.html).toContain('data-wa-toggle');
+  });
+
+  it('ignores page settings that are not enabled', async () => {
+    const out = (await withSettings({ phoneNumber: '212600112233' }))!;
+    expect(markup(out.html)).not.toContain('data-wa');
+    expect(out.html).not.toContain('.wa{position:fixed');
+  });
+
+  it('prefers the block over page settings', async () => {
+    const out = (await withSettings({ enabled: true, phoneNumber: '212611111111' }, [
+      IMAGE,
+      { id: 'w1', type: 'whatsapp', content: { phoneNumber: '212622222222' } },
+    ]))!;
+    const cfg = JSON.parse(out.html.match(/data-wa-cfg>(.*?)<\/script>/s)![1]);
+    expect(cfg.phone).toBe('212622222222');
+  });
+
+  it('falls back to page settings when the block opts out', async () => {
+    // enableWidget:false means "not from this block", not "no widget" — React
+    // drops straight through to settings, and a page compiled without this
+    // would lose a widget the SPA still shows.
+    const out = (await withSettings({ enabled: true, phoneNumber: '212611111111' }, [
+      IMAGE,
+      { id: 'w1', type: 'whatsapp', content: { enableWidget: false, phoneNumber: '212622222222' } },
+    ]))!;
+    const cfg = JSON.parse(out.html.match(/data-wa-cfg>(.*?)<\/script>/s)![1]);
+    expect(cfg.phone).toBe('212611111111');
+  });
+
+  it('renders nothing when the block opts out and settings carry no widget', async () => {
+    const out = (await page([
+      IMAGE,
+      { id: 'w1', type: 'whatsapp', content: { enableWidget: false, phoneNumber: '212600112233' } },
+    ]))!;
+    expect(markup(out.html)).not.toContain('data-wa');
+  });
+
+  it('ships no widget stylesheet or runtime when nothing renders', async () => {
+    const out = (await page([
+      IMAGE,
+      { id: 'w1', type: 'whatsapp', content: { phoneNumber: '' } },
+    ]))!;
+    expect(out.html).not.toContain('.wa{position:fixed');
+    expect(out.html).not.toContain('data-wa-toggle');
+  });
+
+  it('places the overlay outside the page container', async () => {
+    // `.pg` is a max-width column; a position:fixed child of it breaks the day
+    // that column gains a transform.
+    const out = (await withSettings({ enabled: true, phoneNumber: '212600112233' }))!;
+    const container = out.html.match(/<div class="pg">([\s\S]*?)<\/div>(?=<div class="wa)/);
+    expect(container).toBeTruthy();
+    expect(container![1]).not.toContain('data-wa');
   });
 });
 

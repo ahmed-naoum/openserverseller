@@ -15,7 +15,10 @@ const prisma = new PrismaClient();
  */
 // 2: checkout redirects to /thank-you instead of revealing an inline panel.
 // 3: whatsapp widget renderer added.
-export const COMPILER_VERSION = 3;
+// 4: whatsapp widget also honours settings.whatsappWidget, and hides on desktop
+//    when both viewport toggles are off. Any page stored at 3 has the bug baked
+//    into its HTML, so it has to recompile.
+export const COMPILER_VERSION = 4;
 
 /**
  * Block types the compiler can render, derived from the renderer registry.
