@@ -26,6 +26,77 @@ const PG_RESTORE_PATH = process.env.PG_RESTORE_PATH || (isWindows ? 'C:\\Program
 // and signup_attempts (Inscriptions) — are plain text rows and stay in the backup.
 const SESSION_DATA_TABLES = ['public.session_recordings'];
 
+// A count cap alone cannot bound disk use, because it says nothing about how big
+// each dump is. At ~285 MB/dump a maxBackups of 1000 authorises 285 GB on a 96 GB
+// filesystem — the cap can never bind before the disk fills, so FIFO runs happily
+// while the volume goes to 100%. That is not hypothetical: it is exactly how this
+// directory reached 53 GB / 261 files.
+//
+// 40 GB sits deliberately above the current ~25 GB footprint, so introducing this
+// ceiling evicts nothing on the deploy that ships it, while still binding long
+// before a 96 GB disk is in trouble. Raise it in the admin UI if the DB outgrows it.
+const DEFAULT_MAX_BYTES = 40 * 1024 * 1024 * 1024;
+
+export interface BackupFileInfo {
+  filename: string;
+  /** mtime in ms — oldest is evicted first. */
+  time: number;
+  size: number;
+}
+
+export interface EvictionPlan {
+  evict: string[];
+  /** Which ceiling actually forced the eviction, for the log line. */
+  reason: 'none' | 'count' | 'size' | 'both';
+  bytesAfter: number;
+}
+
+/**
+ * Decide which dumps to drop so that, once `incomingBytes` is written, BOTH the
+ * count ceiling and the byte ceiling hold. Pure: no fs, no prisma, no clock.
+ *
+ * Both loops reserve room for the incoming dump — cleanup() runs before the new
+ * backup is written, so "fits" means "fits with the next one included".
+ *
+ * The newest dump is never evicted. Without that floor a single dump larger than
+ * maxBytes would empty the directory on every run and leave no restore point at
+ * all — strictly worse than being over budget.
+ */
+export function planEviction(
+  files: BackupFileInfo[],
+  opts: { maxBackups: number; maxBytes: number; incomingBytes?: number }
+): EvictionPlan {
+  const { maxBackups, maxBytes } = opts;
+  // Dumps grow monotonically, so the newest is the best estimate of the next one.
+  const sorted = [...files].sort((a, b) => a.time - b.time);
+  const incomingBytes = opts.incomingBytes ?? (sorted.length ? sorted[sorted.length - 1].size : 0);
+
+  const keep = [...sorted];
+  const evict: string[] = [];
+  let byCount = false;
+  let bySize = false;
+
+  // Count ceiling: keep at most maxBackups - 1, leaving a slot for the incoming dump.
+  while (keep.length > 0 && keep.length + 1 > maxBackups) {
+    evict.push(keep.shift()!.filename);
+    byCount = true;
+  }
+
+  // Byte ceiling: same idea, but stop before emptying the directory.
+  let bytes = keep.reduce((sum, f) => sum + f.size, 0);
+  while (keep.length > 1 && bytes + incomingBytes > maxBytes) {
+    const dropped = keep.shift()!;
+    bytes -= dropped.size;
+    evict.push(dropped.filename);
+    bySize = true;
+  }
+
+  const reason: EvictionPlan['reason'] =
+    byCount && bySize ? 'both' : byCount ? 'count' : bySize ? 'size' : 'none';
+
+  return { evict, reason, bytesAfter: bytes };
+}
+
 export class BackupService {
   static activeInterval: NodeJS.Timeout | null = null;
 
@@ -45,6 +116,10 @@ export class BackupService {
         return {
           interval: val.interval || '24h',
           maxBackups: typeof val.maxBackups === 'number' ? val.maxBackups : 100,
+          // Configs written before the byte ceiling existed have no maxBytes key,
+          // and those are precisely the ones that ran unbounded — so an absent
+          // value must fall back to the default ceiling, never to "no limit".
+          maxBytes: typeof val.maxBytes === 'number' && val.maxBytes > 0 ? val.maxBytes : DEFAULT_MAX_BYTES,
           enabled: val.enabled !== false,
           // Opt-out flag: configs saved before this option existed skip session data too.
           excludeSessionData: val.excludeSessionData !== false
@@ -53,7 +128,7 @@ export class BackupService {
     } catch (err) {
       console.error('Failed to load backup config:', err);
     }
-    return { interval: '24h', maxBackups: 100, enabled: true, excludeSessionData: true };
+    return { interval: '24h', maxBackups: 100, maxBytes: DEFAULT_MAX_BYTES, enabled: true, excludeSessionData: true };
   }
 
   static async startScheduler() {
@@ -99,7 +174,7 @@ export class BackupService {
     }, intervalMs);
   }
 
-  static async updateConfig(newConfig: { interval: string; maxBackups: number; enabled: boolean; excludeSessionData: boolean }) {
+  static async updateConfig(newConfig: { interval: string; maxBackups: number; maxBytes?: number; enabled: boolean; excludeSessionData: boolean }) {
     await prisma.platformSettings.upsert({
       where: { key: 'backup_config' },
       update: { value: newConfig },
@@ -178,30 +253,41 @@ export class BackupService {
   static async cleanup() {
     try {
       const config = await this.loadConfig();
-      const maxBackups = config.maxBackups;
       const files = await readdir(finalBackupDir);
       const backupFiles = files.filter(f => (f.startsWith('backup-')) && (f.endsWith('.sql') || f.endsWith('.dump')));
+      if (backupFiles.length === 0) return;
 
-      if (backupFiles.length >= maxBackups) {
-        // Get file stats to sort by creation time
-        const fileStats = await Promise.all(
-          backupFiles.map(async (f) => {
-            const fullPath = path.join(finalBackupDir, f);
-            const s = await stat(fullPath);
-            return { filename: f, time: s.mtime.getTime() };
-          })
+      // stat() every dump, not just when the count cap is tripped: the byte
+      // ceiling can bind while the count is still comfortably under its limit,
+      // which is the whole failure this guards against.
+      const fileStats: BackupFileInfo[] = await Promise.all(
+        backupFiles.map(async (f) => {
+          const s = await stat(path.join(finalBackupDir, f));
+          return { filename: f, time: s.mtime.getTime(), size: s.size };
+        })
+      );
+
+      const { evict, reason, bytesAfter } = planEviction(fileStats, {
+        maxBackups: config.maxBackups,
+        maxBytes: config.maxBytes
+      });
+
+      if (evict.length === 0) return;
+
+      // Size-driven eviction means the count cap was never going to save this
+      // directory — worth saying out loud rather than burying it in FIFO noise.
+      if (reason === 'size' || reason === 'both') {
+        const gb = (n: number) => (n / 1024 / 1024 / 1024).toFixed(2);
+        console.warn(
+          `Backup cleanup evicting for SIZE (reason=${reason}): ${evict.length} file(s), ` +
+          `${gb(bytesAfter)} GB retained against a ${gb(config.maxBytes)} GB ceiling. ` +
+          `maxBackups=${config.maxBackups} did not bind — dumps have outgrown the count cap.`
         );
+      }
 
-        // Sort by time (oldest first)
-        fileStats.sort((a, b) => a.time - b.time);
-
-        // Delete enough old backups to make room for 1 new backup
-        const filesToDelete = fileStats.slice(0, backupFiles.length - maxBackups + 1);
-        
-        for (const file of filesToDelete) {
-          await unlink(path.join(finalBackupDir, file.filename));
-          console.log(`Deleted old backup: ${file.filename} (FIFO)`);
-        }
+      for (const filename of evict) {
+        await unlink(path.join(finalBackupDir, filename));
+        console.log(`Deleted old backup: ${filename} (FIFO, reason=${reason})`);
       }
     } catch (error) {
       console.error('Cleanup failed:', error);

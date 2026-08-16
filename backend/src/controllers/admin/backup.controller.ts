@@ -60,13 +60,20 @@ export const getBackupConfig = asyncHandler(async (req: Request, res: Response) 
 });
 
 export const updateBackupConfig = asyncHandler(async (req: Request, res: Response) => {
-  const { interval, maxBackups, enabled, excludeSessionData } = req.body;
+  const { interval, maxBackups, maxBytes, enabled, excludeSessionData } = req.body;
   if (typeof interval !== 'string' || typeof maxBackups !== 'number' || typeof enabled !== 'boolean') {
     return res.status(400).json({ status: 'error', message: 'Invalid payload' });
+  }
+  // Optional: older clients omit it, and loadConfig() then supplies the default
+  // ceiling. Reject a present-but-nonsensical value rather than storing a 0 or a
+  // negative that would evict down to the single-file floor on the next run.
+  if (maxBytes !== undefined && (typeof maxBytes !== 'number' || !Number.isFinite(maxBytes) || maxBytes <= 0)) {
+    return res.status(400).json({ status: 'error', message: 'maxBytes must be a positive number of bytes' });
   }
   await BackupService.updateConfig({
     interval,
     maxBackups,
+    ...(maxBytes !== undefined ? { maxBytes } : {}),
     enabled,
     // Omitted by older clients — keep skipping session data rather than silently
     // reverting to multi-GB snapshots.
