@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { DELIVERY_STATUSES, isConfirmedStatus, isConfirmedRow, isDeliveredRow, getDisplayStatus, getLeadDate, getStatusChangedAt, getRowDateFor, DateBasis } from '../../lib/leadStatus';
+import { PAYMENT_SITUATION_OPTIONS, PAYMENT_SITUATION_CODES, normalizePaymentSituation } from '../../lib/paymentSituation';
 import {
   Users, MousePointerClick, UserCheck, ShoppingCart,
   Filter, Search, Calendar,
@@ -136,15 +137,11 @@ const STATUS_COLORS: Record<string, string> = {
   'CANCEL_ORDER': '#ef4444',       // Red
 };
 
-const PAYMENT_SITUATION_BADGES: Record<string, { label: string; color: string }> = {
-  PAID: { label: 'Payé', color: 'bg-emerald-50 text-emerald-600 border border-emerald-100' },
-  'Payé': { label: 'Payé', color: 'bg-emerald-50 text-emerald-600 border border-emerald-100' },
-  NOT_PAID: { label: 'Non Payé', color: 'bg-rose-50 text-rose-600 border border-rose-100' },
-  'no Payé': { label: 'Non Payé', color: 'bg-rose-50 text-rose-600 border border-rose-100' },
-  FACTURED: { label: 'Facturé', color: 'bg-blue-50 text-blue-600 border border-blue-100' },
-};
+const PAYMENT_SITUATION_BADGES: Record<string, { label: string; color: string }> = Object.fromEntries(
+  PAYMENT_SITUATION_OPTIONS.map(o => [o.value, { label: o.label, color: `${o.badge} border` }])
+);
 
-const PAYMENT_SITUATIONS = ['NOT_PAID', 'PAID', 'FACTURED'] as const;
+const PAYMENT_SITUATIONS = PAYMENT_SITUATION_CODES;
 
 // Which date the range filter, the sort and the trend chart read. Beyond the
 // two dates every row has (creation, last status change), a parcel can be asked
@@ -166,12 +163,8 @@ const DATE_BASIS_OPTIONS: Array<{ value: DateBasis; key: string; label: string; 
 // labels rows written before the codes still carry, and nothing at all (a lead
 // nobody has invoiced yet). Normalising here keeps the filter, the counts and
 // the badge in the table agreeing on what a row is.
-const getPaymentSituation = (c: InfluencerCommission): string => {
-  const sit = (c.order as any)?.lead?.paymentSituation;
-  if (sit === 'PAID' || sit === 'Payé') return 'PAID';
-  if (sit === 'FACTURED') return 'FACTURED';
-  return 'NOT_PAID';
-};
+const getPaymentSituation = (c: InfluencerCommission): string =>
+  normalizePaymentSituation((c.order as any)?.lead?.paymentSituation);
 
 export default function VendorLeads() {
   const { t } = useLanguage();

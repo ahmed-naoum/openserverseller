@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { DELIVERY_STATUSES, isConfirmedStatus, isConfirmedRow, isDeliveredRow, getDisplayStatus, getLeadDate } from '../../lib/leadStatus';
+import { PAYMENT_SITUATION_OPTIONS, normalizePaymentSituation, isFactured } from '../../lib/paymentSituation';
 import {
   Users, MousePointerClick, UserCheck, ShoppingCart,
   Filter, Search, Calendar,
@@ -133,13 +134,9 @@ const STATUS_COLORS: Record<string, string> = {
   'CANCEL_ORDER': '#ef4444',       // Red
 };
 
-const PAYMENT_SITUATION_BADGES: Record<string, { label: string; color: string }> = {
-  PAID: { label: 'Payé', color: 'bg-emerald-50 text-emerald-600 border border-emerald-100' },
-  'Payé': { label: 'Payé', color: 'bg-emerald-50 text-emerald-600 border border-emerald-100' },
-  NOT_PAID: { label: 'Non Payé', color: 'bg-rose-50 text-rose-600 border border-rose-100' },
-  'no Payé': { label: 'Non Payé', color: 'bg-rose-50 text-rose-600 border border-rose-100' },
-  FACTURED: { label: 'Facturé', color: 'bg-blue-50 text-blue-600 border border-blue-100' },
-};
+const PAYMENT_SITUATION_BADGES: Record<string, { label: string; color: string }> = Object.fromEntries(
+  PAYMENT_SITUATION_OPTIONS.map(o => [o.value, { label: o.label, color: `${o.badge} border` }])
+);
 
 export default function InfluencerLeads() {
   const { t } = useLanguage();
@@ -292,21 +289,16 @@ export default function InfluencerLeads() {
   const confirmationRate = totalLeads > 0 ? (confirmedLeads / totalLeads) * 100 : 0;
   const deliveryRate = confirmedLeads > 0 ? (deliveredLeads / confirmedLeads) * 100 : 0;
 
-  // Payment situation totals
-  const paidLeads = dateFilteredCommissions.filter(c => {
-    const sit = (c.order as any)?.lead?.paymentSituation;
-    return sit === 'PAID' || sit === 'Payé';
-  }).length;
-  
-  const nonPaidLeads = dateFilteredCommissions.filter(c => {
-    const sit = (c.order as any)?.lead?.paymentSituation;
-    return sit === 'NOT_PAID' || sit === 'no Payé' || !sit;
-  }).length;
-  
-  const facturedLeads = dateFilteredCommissions.filter(c => {
-    const sit = (c.order as any)?.lead?.paymentSituation;
-    return sit === 'FACTURED';
-  }).length;
+  // Payment situation totals. FACTURED-CC counts as facturé: it is the same
+  // parcel, one step further — the call-center agent has billed it too.
+  const situationOf = (c: InfluencerCommission) =>
+    normalizePaymentSituation((c.order as any)?.lead?.paymentSituation);
+
+  const paidLeads = dateFilteredCommissions.filter(c => situationOf(c) === 'PAID').length;
+
+  const nonPaidLeads = dateFilteredCommissions.filter(c => situationOf(c) === 'NOT_PAID').length;
+
+  const facturedLeads = dateFilteredCommissions.filter(c => isFactured(situationOf(c))).length;
 
   // Build status counts for filter chips
   const statusCounts: Record<string, number> = {};
@@ -1265,7 +1257,7 @@ export default function InfluencerLeads() {
                         {/* Situation */}
                         <td className="px-5 py-4">
                           {(() => {
-                            const sit = (commission.order as any)?.lead?.paymentSituation || 'NOT_PAID';
+                            const sit = normalizePaymentSituation((commission.order as any)?.lead?.paymentSituation);
                             const badge = PAYMENT_SITUATION_BADGES[sit] || PAYMENT_SITUATION_BADGES.NOT_PAID;
                             return (
                               <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest ${badge.color}`}>

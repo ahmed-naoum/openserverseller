@@ -2,6 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { leadsApi, ordersApi } from '../../lib/api';
+import {
+  PAYMENT_SITUATION_OPTIONS,
+  normalizePaymentSituation,
+  paymentSituationLabel,
+  paymentSituationMeta,
+  isFactured,
+} from '../../lib/paymentSituation';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -101,11 +108,10 @@ const statusConfig: Record<string, { label: string; color: string; bg: string; i
   'CALL_LATER': { label: 'Rappel', color: 'text-orange-600', bg: 'bg-orange-50 border-orange-100', icon: Clock },
 };
 
-const paymentConfig: Record<string, { label: string; color: string; bg: string }> = {
-  NOT_PAID: { label: 'Non payé', color: 'text-red-600', bg: 'bg-rose-50 border-rose-100' },
-  PAID: { label: 'Payé', color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-100' },
-  FACTURED: { label: 'Facturée', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-100' },
-};
+const paymentConfig: Record<string, { label: string; color: string; bg: string; hint: string }> =
+  Object.fromEntries(
+    PAYMENT_SITUATION_OPTIONS.map(o => [o.value, { label: o.label, color: o.text, bg: o.bg, hint: o.hint }])
+  );
 
 const historyStatusLabels: Record<string, string> = {
   'NEW_PARCEL': 'Nouveau Colis',
@@ -345,11 +351,13 @@ export default function HelperRetours() {
   const returnedParcels = parcels.filter(p => p.status === 'RETURNED' || p.status === 'REFUSE');
 
   const filtered = returnedParcels.filter(p => {
+    // "Facturé" here means the parcel carries a facture of any kind — the return
+    // invoice (FACTURED) or the agent's (FACTURED-CC).
     if (activeTab === 'unvoiced') {
-      if (p.paymentSituation === 'FACTURED') return false;
+      if (isFactured(p.paymentSituation)) return false;
     }
     if (activeTab === 'voiced') {
-      if (p.paymentSituation !== 'FACTURED') return false;
+      if (!isFactured(p.paymentSituation)) return false;
     }
     return (
       !search ||
@@ -363,8 +371,8 @@ export default function HelperRetours() {
 
   const stats = {
     total: returnedParcels.length,
-    unvoiced: returnedParcels.filter(p => p.paymentSituation !== 'FACTURED').length,
-    voiced: returnedParcels.filter(p => p.paymentSituation === 'FACTURED').length,
+    unvoiced: returnedParcels.filter(p => !isFactured(p.paymentSituation)).length,
+    voiced: returnedParcels.filter(p => isFactured(p.paymentSituation)).length,
     totalAmount: returnedParcels.reduce((acc, p) => acc + Number(p.totalAmountMad || 0), 0)
   };
 
@@ -603,19 +611,24 @@ export default function HelperRetours() {
                       </div>
 
                       <div className="flex flex-col items-end gap-2">
-                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border ${paymentConfig[parcel.paymentSituation]?.bg || 'bg-gray-50 border-gray-200'} ${paymentConfig[parcel.paymentSituation]?.color || 'text-gray-400'}`}>
-                          💳 {paymentConfig[parcel.paymentSituation]?.label || parcel.paymentSituation}
+                        <span
+                          title={paymentSituationMeta(parcel.paymentSituation).hint}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border ${paymentSituationMeta(parcel.paymentSituation).bg} ${paymentSituationMeta(parcel.paymentSituation).text}`}
+                        >
+                          💳 {paymentSituationLabel(parcel.paymentSituation)}
                         </span>
                         
                         <div className="relative group">
                           <select
                             disabled={updatingPaymentId === parcel.id}
-                            value={parcel.paymentSituation}
+                            value={normalizePaymentSituation(parcel.paymentSituation)}
                             onChange={(e) => handlePaymentUpdate(parcel.id, parcel.leadId, e.target.value)}
                             className="appearance-none pl-3 pr-8 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border border-gray-100 bg-gray-50 text-gray-400 hover:border-blue-200 hover:text-blue-600 transition-all cursor-pointer outline-none"
                           >
                             {Object.entries(paymentConfig).map(([val, cfg]) => {
-                              if (val === 'FACTURED' && parcel.paymentSituation !== 'FACTURED') return null;
+                              // Both facture states come from invoicing, never from
+                              // this select — shown only when already on the parcel.
+                              if (val.startsWith('FACTURED') && normalizePaymentSituation(parcel.paymentSituation) !== val) return null;
                               return <option key={val} value={val}>{cfg.label}</option>;
                             })}
                           </select>

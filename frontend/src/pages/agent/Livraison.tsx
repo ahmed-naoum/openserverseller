@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { leadsApi, ordersApi } from '../../lib/api';
 import { CitySelect } from '../../components/ui/CitySelect';
+import { PAYMENT_SITUATION_OPTIONS, normalizePaymentSituation } from '../../lib/paymentSituation';
 import toast from 'react-hot-toast';
 import { format, isValid } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -237,11 +238,12 @@ const STATUS_GROUPS: { key: string; label: string; emoji: string; statuses: stri
   },
 ];
 
-const paymentConfig: Record<string, { label: string; color: string; bg: string }> = {
-  NOT_PAID: { label: 'Non payé', color: 'text-rose-600', bg: 'bg-rose-50 border-rose-100' },
-  PAID: { label: 'Payé', color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-100' },
-  FACTURED: { label: 'Facturée', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-100' },
-};
+// Every situation the column can hold, FACTURED-CC included — a parcel the agent
+// has already billed on /agent/facturation must not read as "Non payé" here.
+const paymentConfig: Record<string, { label: string; color: string; bg: string; hint: string }> =
+  Object.fromEntries(
+    PAYMENT_SITUATION_OPTIONS.map(o => [o.value, { label: o.label, color: o.text, bg: o.bg, hint: o.hint }])
+  );
 
 const historyStatusLabels: Record<string, string> = {
   'NEW_PARCEL': 'Nouveau Colis',
@@ -1440,7 +1442,9 @@ export default function AgentLivraison() {
             };
             const StatusIcon = status.icon;
             const isExpanded = expandedId === parcel.id;
-            const payment = paymentConfig[parcel.paymentSituation || ''];
+            const payment = parcel.paymentSituation
+              ? paymentConfig[normalizePaymentSituation(parcel.paymentSituation)]
+              : undefined;
             const age = daysSince(parcel.createdAt);
             const isStale = age !== null && age >= 7 && !CLOSED_STATUSES.has(parcel.status);
             // The parcel's product is what an agent scans the row for; the

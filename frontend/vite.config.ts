@@ -17,7 +17,18 @@ export default defineConfig({
        */
       injectRegister: 'script-defer',
       workbox: {
-        maximumFileSizeToCacheInBytes: 8000000
+        maximumFileSizeToCacheInBytes: 8000000,
+        /**
+         * Landing pages are served as compiled HTML by the API, not from dist/.
+         *
+         * generateSW defaults navigateFallback to index.html and registers a
+         * NavigationRoute that answers every navigation from the precache — so
+         * without this, a returning visitor gets the cached SPA shell for
+         * /r/:code and the request never reaches nginx. It fails only for people
+         * who have visited before, which makes it look like it works in a
+         * private window and nowhere else.
+         */
+        navigateFallbackDenylist: [/^\/r\//]
       },
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {

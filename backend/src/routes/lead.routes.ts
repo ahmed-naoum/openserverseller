@@ -10,6 +10,7 @@ import { getIO, emitLeadUnassigned } from '../lib/realtime.js';
 import { emitNewTickets } from '../lib/ticketEvents.js';
 import { getAgentLeadScope, getAgentProductRestrictions } from '../utils/agentScope.js';
 import { isCompletePhone } from '../lib/phoneCompleteness.js';
+import { FACTURED_SITUATIONS, WRITABLE_PAYMENT_SITUATIONS, isFactured } from '../lib/paymentSituation.js';
 import { SAFE_USER_SELECT } from '../lib/safeUserSelect.js';
 import { parseDateRange } from '../lib/dateRange.js';
 import { DEAD_NO_REPLY, SYSTEM_NOTE_PREFIX, releaseAtFor } from '../lib/leadRelease.js';
@@ -1267,10 +1268,11 @@ router.get(
       else if (!Number.isNaN(Number(agentId))) where.assignedAgentId = Number(agentId);
     }
 
-    // "Retours non facturés" tab
+    // "Retours non facturés" tab. A return the call-center agent has since billed
+    // carries FACTURED-CC, and is just as invoiced as one still on FACTURED.
     if (tab === 'uninvoiced_returns') {
       orderFilter.status = { in: ['RETURNED'] };
-      where.paymentSituation = { not: 'FACTURED' };
+      where.paymentSituation = { notIn: [...FACTURED_SITUATIONS] };
     }
 
     if (Object.keys(orderFilter).length > 0) {
@@ -1519,7 +1521,7 @@ router.get(
       scopeTotal++;
       statusCounts[st] = (statusCounts[st] || 0) + 1;
       if (row.order?.coliatyPackageCode) withColiaty++;
-      if (st === 'RETURNED' && row.paymentSituation !== 'FACTURED') uninvoicedReturns++;
+      if (st === 'RETURNED' && !isFactured(row.paymentSituation)) uninvoicedReturns++;
 
       revenueTotal += amount;
       if (st === 'DELIVERED') {
@@ -3218,9 +3220,11 @@ router.patch(
     const { id } = req.params;
     const { paymentSituation } = req.body;
 
-    const valid = ['NOT_PAID', 'PAID', 'FACTURED', 'Payé', 'no Payé'];
-    if (!valid.includes(paymentSituation)) {
-      throw new AppException(400, `Invalid paymentSituation. Must be one of: ${valid.join(', ')}`);
+    if (!WRITABLE_PAYMENT_SITUATIONS.includes(paymentSituation)) {
+      throw new AppException(
+        400,
+        `Invalid paymentSituation. Must be one of: ${WRITABLE_PAYMENT_SITUATIONS.join(', ')}`
+      );
     }
 
     const lead = await prisma.lead.findUnique({ where: { id: Number(id) } });
@@ -3880,7 +3884,7 @@ router.post(
       throw new AppException(400, "Le statut du colis doit être RETOURNÉ pour être traité.");
     }
 
-    if (order.lead?.paymentSituation === 'FACTURED') {
+    if (isFactured(order.lead?.paymentSituation)) {
       throw new AppException(400, "Ce colis a déjà été retourné et facturé.");
     }
 
@@ -3933,7 +3937,7 @@ router.post(
           errors.push({ orderId: order.id, message: "Le statut du colis doit être RETOURNÉ" });
           continue;
         }
-        if (order.lead.paymentSituation === 'FACTURED') {
+        if (isFactured(order.lead.paymentSituation)) {
           errors.push({ orderId: order.id, message: 'Déjà retourné et facturé' });
           continue;
         }
@@ -4060,7 +4064,7 @@ router.post(
     if (order.status !== 'RETURNED') {
       throw new AppException(400, "Le statut du colis doit être RETOURNÉ pour être traité.");
     }
-    if (order.lead.paymentSituation === 'FACTURED') {
+    if (isFactured(order.lead.paymentSituation)) {
       throw new AppException(400, 'Ce colis a déjà été retourné et facturé.');
     }
 

@@ -71,6 +71,38 @@ npm run cities:audit         # console + data/hub-audit.json
 npm run cities:audit-pdf     # 14-page report at data/hub-audit.pdf (needs reportlab)
 ```
 
+## The report we send Coliaty
+
+The audit above is internal — it asks whether *our* coordinates are right. The
+carrier-facing one asks the questions Coliaty cares about: is every destination
+they publish matched, does their own spelling survive a round trip, and where
+should the network grow.
+
+```bash
+npm run cities:coliaty-audit      # console + data/coliaty-audit.json
+npm run cities:coliaty-audit-pdf  # 18-page report at repo root (needs reportlab)
+```
+
+It is graded against `data/coliaty-cities.json` — the carrier's list exactly as
+their API returned it — rather than against our copy of it, since an audit that
+grades our data using our data agrees with itself no matter what is wrong. Three
+things it measures that the internal audit does not:
+
+- **Round trip.** Every carrier `city_name` is pushed back through the same
+  resolver a live order uses and checked to land on the row carrying that
+  `city_id`. Currently 451/451.
+- **Variant stress.** Each name re-tested uppercased, lowercased, accent-stripped,
+  with `, Maroc` appended, hyphenated, and with spaces removed. The one deliberate
+  shortfall is single-letter typos, because `matchCity` gives short names no
+  tolerance at all.
+- **Coverage proposals.** Non-deliverable settlements ranked by distance to the
+  nearest hub centre, and a greedy set cover over the ones beyond reach, which is
+  where the proposed hub sites come from.
+
+The carrier list holds a few places twice under two `city_id`s. The collector
+groups those before grading, and checks both ids sit in the same hub rather than
+assuming it — two ids for one name in two hubs would be a real ambiguity.
+
 Distance is a prompt, not a verdict. Dakhla genuinely is 650km from the Laayoune
 hub; `Inzegane` genuinely is wrong, sitting on Casablanca's coordinates when
 Inezgane borders Agadir. Each flag needs a human call.

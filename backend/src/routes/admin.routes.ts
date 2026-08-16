@@ -9,6 +9,7 @@ import { checkAndActivateUser } from '../utils/verification.js';
 import { fetchMaintenanceSettings } from '../middleware/maintenance.js';
 import { decrypt, encrypt } from '../utils/crypto.js';
 import { getBlockedIPsList, unblockIP } from '../middleware/security.js';
+import { WRITABLE_PAYMENT_SITUATIONS } from '../lib/paymentSituation.js';
 import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
@@ -2720,7 +2721,7 @@ router.patch(
   asyncHandler(async (req: Request, res: Response) => {
     const { leadIds, situation } = req.body;
 
-    if (!Array.isArray(leadIds) || !['PAID', 'NOT_PAID', 'FACTURED', 'FACTURED-CC', 'Payé', 'no Payé'].includes(situation)) {
+    if (!Array.isArray(leadIds) || !WRITABLE_PAYMENT_SITUATIONS.includes(situation)) {
       res.status(400).json({ status: 'error', message: 'Invalid request' });
       return;
     }

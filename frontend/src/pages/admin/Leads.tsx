@@ -16,6 +16,12 @@ import {
   Store, Megaphone, MonitorPlay, Globe, Wifi, PlayCircle, ExternalLink,
 } from 'lucide-react';
 import { buildReferralUrl } from '../../utils/referral';
+import {
+  PAYMENT_SITUATION_OPTIONS,
+  paymentSituationLabel,
+  paymentSituationMeta,
+  normalizePaymentSituation,
+} from '../../lib/paymentSituation';
 
 const STATUS_BADGES: Record<string, { label: string; color: string; icon: any }> = {
   NEW: { label: 'Nouveau', color: 'bg-slate-50 text-slate-600 border-slate-200', icon: Clock },
@@ -130,11 +136,8 @@ const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
   IMPORT: { label: 'Import', color: 'bg-blue-50 text-blue-600 border-blue-200' },
 };
 
-const PAYMENT_LABELS: Record<string, { label: string; color: string }> = {
-  NOT_PAID: { label: 'Non payé', color: 'bg-rose-50 text-rose-600 border-rose-200' },
-  PAID: { label: 'Payé', color: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
-  FACTURED: { label: 'Facturé', color: 'bg-blue-50 text-blue-600 border-blue-200' },
-};
+// Labels, colours and the filter list all come from lib/paymentSituation so the
+// admin sees the same vocabulary as the agent — FACTURED-CC included.
 
 interface Filters {
   search: string;
@@ -512,7 +515,7 @@ export default function AdminLeads() {
     if (filters.city) chips.push({ key: 'c', label: `Ville : ${filters.city}`, clear: set({ city: '' }) });
     if (filters.source) chips.push({ key: 's', label: `Source : ${SOURCE_LABELS[filters.source]?.label || filters.source}`, clear: set({ source: '' }) });
     if (filters.sourceMode) chips.push({ key: 'sm', label: `Canal : ${filters.sourceMode}`, clear: set({ sourceMode: '' }) });
-    if (filters.paymentSituation) chips.push({ key: 'ps', label: `Paiement : ${PAYMENT_LABELS[filters.paymentSituation]?.label || filters.paymentSituation}`, clear: set({ paymentSituation: '' }) });
+    if (filters.paymentSituation) chips.push({ key: 'ps', label: `Paiement : ${paymentSituationLabel(filters.paymentSituation)}`, clear: set({ paymentSituation: '' }) });
     if (filters.hasOrder) chips.push({ key: 'ho', label: filters.hasOrder === 'yes' ? 'Avec commande' : 'Sans commande', clear: set({ hasOrder: '' }) });
     if (filters.dateFrom) chips.push({ key: 'df', label: `Du ${filters.dateFrom}`, clear: set({ dateFrom: '' }) });
     if (filters.dateTo) chips.push({ key: 'dt', label: `Au ${filters.dateTo}`, clear: set({ dateTo: '' }) });
@@ -614,7 +617,7 @@ export default function AdminLeads() {
         { key: 'orderStatus', label: 'Statut Commande', get: l => l.order?.status || '' },
         { key: 'orderTotal', label: 'Total Commande (MAD)', get: l => l.order?.totalAmountMad ?? '' },
         { key: 'tracking', label: 'Code Coliaty', get: l => l.coliatyPackageCode || '' },
-        { key: 'payment', label: 'Situation Paiement', get: l => PAYMENT_LABELS[l.paymentSituation]?.label || l.paymentSituation || '' },
+        { key: 'payment', label: 'Situation Paiement', get: l => (l.paymentSituation ? paymentSituationLabel(l.paymentSituation) : '') },
         { key: 'agent', label: 'Agent', get: l => l.assignedAgent?.fullName || '' },
         { key: 'vendor', label: 'Propriétaire', get: l => l.vendor?.fullName || '' },
         { key: 'source', label: 'Source', get: l => l.source || '' },
@@ -976,8 +979,8 @@ export default function AdminLeads() {
                 className="mt-1 w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/30 cursor-pointer"
               >
                 <option value="">Toutes</option>
-                {Object.entries(PAYMENT_LABELS).map(([k, v]) => (
-                  <option key={k} value={k}>{v.label}</option>
+                {PAYMENT_SITUATION_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value} title={opt.hint}>{opt.label}</option>
                 ))}
               </select>
             </div>
@@ -1246,9 +1249,12 @@ export default function AdminLeads() {
                                 {lead.coliatyPackageCode}
                               </span>
                             )}
-                            {lead.paymentSituation && lead.paymentSituation !== 'NOT_PAID' && (
-                              <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded border ${PAYMENT_LABELS[lead.paymentSituation]?.color || 'bg-gray-50 text-gray-500 border-gray-200'}`}>
-                                {PAYMENT_LABELS[lead.paymentSituation]?.label || lead.paymentSituation}
+                            {lead.paymentSituation && normalizePaymentSituation(lead.paymentSituation) !== 'NOT_PAID' && (
+                              <span
+                                title={paymentSituationMeta(lead.paymentSituation).hint}
+                                className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded border ${paymentSituationMeta(lead.paymentSituation).badge}`}
+                              >
+                                {paymentSituationLabel(lead.paymentSituation)}
                               </span>
                             )}
                           </div>

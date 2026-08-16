@@ -74,6 +74,54 @@ export function getSubdomainFromRequest(req: Request): string | null {
   return null;
 }
 
+/**
+ * The Host header alone, normalised the same way `getRequestHost` normalises.
+ *
+ * `getRequestHost` prefers Origin, then Referer, then Host. That is right for an
+ * XHR from our own page, but wrong for a top-level document request: a visitor
+ * arriving from a Facebook ad sends no Origin and a Referer of
+ * `https://www.facebook.com/`, so the referer branch wins and the host resolves
+ * to `facebook.com`. Binding a document route on that would 404 every paid
+ * click while direct visits and manual testing worked perfectly.
+ */
+export function getDocumentHost(req: Request): string | null {
+  const hostHeader = req.headers.host as string | undefined;
+  if (!hostHeader) return null;
+  return hostHeader.replace(/^www\./i, '').toLowerCase();
+}
+
+/**
+ * Host-only variant of `validateInfluencerSubdomain`, for document requests.
+ *
+ * Same rules — custom domain exact match, else subdomain match — but resolved
+ * from the Host header only. Use this for anything a browser navigates to;
+ * keep `validateInfluencerSubdomain` for API calls.
+ */
+export function validateInfluencerHost(
+  req: Request,
+  influencerSubdomain: string | null | undefined,
+  customDomain?: string | null | undefined
+): boolean {
+  const requestHost = getDocumentHost(req);
+  if (!requestHost) return false;
+
+  if (customDomain && requestHost === customDomain.trim().toLowerCase()) {
+    return true;
+  }
+  if (!influencerSubdomain) return false;
+
+  // Reuse the base-host logic by handing getSubdomainFromRequest a request whose
+  // headers resolve to the Host value, so dev (`sub.localhost:5173`) and
+  // production (`sub.silacod.com`) stay in step with a single implementation.
+  const hostOnly = { headers: { host: req.headers.host } } as Request;
+  const requestSubdomain = getSubdomainFromRequest(hostOnly);
+
+  return (
+    requestSubdomain !== null &&
+    requestSubdomain.toLowerCase() === influencerSubdomain.toLowerCase()
+  );
+}
+
 export function validateInfluencerSubdomain(
   req: Request, 
   influencerSubdomain: string | null | undefined,

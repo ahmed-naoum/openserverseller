@@ -17,9 +17,12 @@ import {
   OUT_OF_SCOPE,
 } from '../lib/subAccountProductScope.js';
 
+import { recordReferralClick } from '../services/referralClicks.js';
+import { validateLandingPageUpdate } from '../validations/landingPage.validation.js';
+import { invalidate } from '../services/landingCompiler/index.js';
+
 const router = Router();
 const prisma = new PrismaClient();
-const recentClicks = new Map<string, number>();
 
 /**
  * Refuse a per-link action when a scoped sub-account was not handed the link's
@@ -440,58 +443,16 @@ router.get(
       throw new AppException(404, 'Referral link not found');
     }
 
-    // Increment clicks with IP deduplication
-    const ip = req.ip || req.socket.remoteAddress || 'unknown';
-    const userAgent = req.headers['user-agent'];
-    const clickKey = `${link.id}-${ip}-${userAgent || 'unknown'}`;
-    const now = Date.now();
-
-    const isDuplicate = recentClicks.has(clickKey) && (now - recentClicks.get(clickKey)!) < 10000;
-
-    if (!isDuplicate) {
-      recentClicks.set(clickKey, now);
-      setTimeout(() => {
-        recentClicks.delete(clickKey);
-      }, 10000);
-
-      // Check if this IP + UserAgent has already clicked this link
-      const existingClick = await (prisma as any).referralLinkClick.findFirst({
-        where: {
-          referralLinkId: link.id,
-          ipAddress: ip,
-          userAgent: typeof userAgent === 'string' ? userAgent : null
-        }
-      });
-
-      await (prisma as any).referralLinkClick.create({
-        data: {
-          referralLinkId: link.id,
-          ipAddress: ip,
-          userAgent: typeof userAgent === 'string' ? userAgent : null
-        }
-      });
-
-      // Only increment the counter if it's a new IP
-      if (!existingClick) {
-        const updatedLink = await (prisma as any).referralLink.update({
-          where: { id: link.id },
-          data: { clicks: { increment: 1 } }
-        });
-        if (updatedLink.clicks === 100) {
-          try {
-            const { createNotification } = await import('../utils/notification.js');
-            await createNotification(
-              link.influencerId,
-              'REFERRAL_LINK_CLICKS',
-              '🎉 Objectif 100 visiteurs atteint !',
-              `Félicitations ! Votre lien de parrainage (${link.code}) a généré 100 visiteurs uniques !`
-            );
-          } catch (err) {
-            console.error('Failed to trigger clicks milestone notification:', err);
-          }
-        }
-      }
-    }
+    // Shared with the compiled-HTML route at /r/:code, which records the same
+    // visit. One implementation means one dedupe map, so a visitor served the
+    // static page whose browser also reaches this endpoint is counted once.
+    await recordReferralClick({
+      linkId: link.id,
+      influencerId: link.influencerId,
+      code: link.code,
+      ip: req.ip || req.socket.remoteAddress || 'unknown',
+      userAgent: req.headers['user-agent'] as string | undefined,
+    });
 
     res.json(link);
   })
@@ -519,57 +480,16 @@ router.get(
       throw new AppException(404, 'Referral link or product not found or inactive');
     }
 
-    // Increment clicks (Unique - per IP)
-    const ip = req.ip || req.socket.remoteAddress || 'unknown';
-    const userAgent = req.headers['user-agent'];
-    const clickKey = `${link.id}-${ip}-${userAgent || 'unknown'}`;
-    const now = Date.now();
-
-    const isDuplicate = recentClicks.has(clickKey) && (now - recentClicks.get(clickKey)!) < 10000;
-
-    if (!isDuplicate) {
-      recentClicks.set(clickKey, now);
-      setTimeout(() => {
-        recentClicks.delete(clickKey);
-      }, 10000);
-
-      const existingClick = await (prisma as any).referralLinkClick.findFirst({
-        where: {
-          referralLinkId: link.id,
-          ipAddress: ip,
-          userAgent: typeof userAgent === 'string' ? userAgent : null
-        }
-      });
-
-      await (prisma as any).referralLinkClick.create({
-        data: {
-          referralLinkId: link.id,
-          ipAddress: ip,
-          userAgent: typeof userAgent === 'string' ? userAgent : null
-        }
-      });
-
-      // Only increment the click counter if it's a new IP
-      if (!existingClick) {
-        const updatedLink = await (prisma as any).referralLink.update({
-          where: { id: link.id },
-          data: { clicks: { increment: 1 } }
-        });
-        if (updatedLink.clicks === 100) {
-          try {
-            const { createNotification } = await import('../utils/notification.js');
-            await createNotification(
-              link.influencerId,
-              'REFERRAL_LINK_CLICKS',
-              '🎉 Objectif 100 visiteurs atteint !',
-              `Félicitations ! Votre lien de parrainage (${link.code}) a généré 100 visiteurs uniques !`
-            );
-          } catch (err) {
-            console.error('Failed to trigger clicks milestone notification:', err);
-          }
-        }
-      }
-    }
+    // Shared with the compiled-HTML route at /r/:code, which records the same
+    // visit. One implementation means one dedupe map, so a visitor served the
+    // static page whose browser also reaches this endpoint is counted once.
+    await recordReferralClick({
+      linkId: link.id,
+      influencerId: link.influencerId,
+      code: link.code,
+      ip: req.ip || req.socket.remoteAddress || 'unknown',
+      userAgent: req.headers['user-agent'] as string | undefined,
+    });
 
 // We only return public-safe data
     res.json({
@@ -1944,7 +1864,20 @@ router.get(
 
     const landingPage = await (prisma as any).referralLinkLandingPage.findUnique({
       where: { referralLinkId: linkId },
-      include: {
+      // An explicit select, not an include: `include` returns every scalar, which
+      // would ship compiledHtml and compiledBrotli — tens of KB per page — back
+      // to the builder on every open, for data it never reads.
+      select: {
+        id: true,
+        referralLinkId: true,
+        themeColor: true,
+        title: true,
+        description: true,
+        buttonText: true,
+        customStructure: true,
+        ssgEnabled: true,
+        createdAt: true,
+        updatedAt: true,
         referralLink: {
           include: {
             influencer: {
@@ -2032,11 +1965,31 @@ router.put(
       throw new AppException(403, 'You do not have permission to perform this action');
     }
 
+    // After the authorisation checks on purpose: someone who may not touch this
+    // link should get 403, not a schema error confirming the link exists.
+    const problem = validateLandingPageUpdate(req.body);
+    if (problem) {
+      throw new AppException(400, problem);
+    }
+
     const landingPage = await (prisma as any).referralLinkLandingPage.upsert({
       where: { referralLinkId: linkId },
       update: { themeColor, title, description, buttonText, customStructure },
       create: { referralLinkId: linkId, themeColor, title, description, buttonText, customStructure }
     });
+
+    // The stored HTML now describes the previous version of this page. Clearing
+    // compiledAt marks it stale for every process, not just this one; the local
+    // memory cache is dropped separately.
+    try {
+      await (prisma as any).referralLinkCompiledPage.updateMany({
+        where: { landingPageId: landingPage.id },
+        data: { compiledAt: null, compilerVersion: null }
+      });
+    } catch (err) {
+      console.error('[SSG] failed to mark compiled page stale for link', linkId, err);
+    }
+    invalidate(link.code);
 
     res.json(landingPage);
   })

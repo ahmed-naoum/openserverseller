@@ -3,6 +3,12 @@ import { createPortal } from 'react-dom';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { leadsApi, ordersApi, getFileUrl } from '../../lib/api';
+import {
+  PAYMENT_SITUATION_OPTIONS,
+  normalizePaymentSituation,
+  paymentSituationLabel,
+  paymentSituationMeta,
+} from '../../lib/paymentSituation';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -171,11 +177,10 @@ const STATUS_GROUPS: { label: string; statuses: string[] }[] = [
   { label: 'Annulations', statuses: ['CANCELED_BY_SELLER', 'CANCELED_BY_SYSTEM', 'CANCELED', 'CANCELLED', 'REFUSE'] },
 ];
 
-const paymentConfig: Record<string, { label: string; color: string; bg: string }> = {
-  NOT_PAID: { label: 'Non payé', color: 'text-red-600', bg: 'bg-rose-50 border-rose-100' },
-  PAID: { label: 'Payé', color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-100' },
-  FACTURED: { label: 'Facturée', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-100' },
-};
+const paymentConfig: Record<string, { label: string; color: string; bg: string; hint: string }> =
+  Object.fromEntries(
+    PAYMENT_SITUATION_OPTIONS.map(o => [o.value, { label: o.label, color: o.text, bg: o.bg, hint: o.hint }])
+  );
 
 const historyStatusLabels: Record<string, string> = {
   'NEW_PARCEL': 'Nouveau Colis',
@@ -1164,15 +1169,18 @@ export default function HelperColis() {
                       </div>
 
                       <div className="flex flex-col items-end gap-2">
-                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border ${paymentConfig[parcel.paymentSituation]?.bg || 'bg-gray-50 border-gray-200'} ${paymentConfig[parcel.paymentSituation]?.color || 'text-gray-400'}`}>
-                          💳 {paymentConfig[parcel.paymentSituation]?.label || parcel.paymentSituation}
+                        <span
+                          title={paymentSituationMeta(parcel.paymentSituation).hint}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border ${paymentSituationMeta(parcel.paymentSituation).bg} ${paymentSituationMeta(parcel.paymentSituation).text}`}
+                        >
+                          💳 {paymentSituationLabel(parcel.paymentSituation)}
                         </span>
 
                         {/* Payment Situation Changer */}
                         <div className="relative group">
                           <select
                             disabled={updatingPaymentId === parcel.id}
-                            value={parcel.paymentSituation}
+                            value={normalizePaymentSituation(parcel.paymentSituation)}
                             onChange={(e) => handlePaymentUpdate(parcel.id, parcel.leadId, e.target.value)}
                             className={`
                               appearance-none pl-3 pr-8 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider
@@ -1181,7 +1189,11 @@ export default function HelperColis() {
                             `}
                           >
                             {Object.entries(paymentConfig).map(([val, cfg]) => {
-                              if (val === 'FACTURED' && parcel.paymentSituation !== 'FACTURED') return null;
+                              // The two facture states are produced by invoicing —
+                              // the admin's for FACTURED, the agent's for FACTURED-CC.
+                              // Neither is settable here; they only appear so the
+                              // select has a value matching the parcel it shows.
+                              if (val.startsWith('FACTURED') && normalizePaymentSituation(parcel.paymentSituation) !== val) return null;
                               return <option key={val} value={val}>{cfg.label}</option>;
                             })}
                           </select>

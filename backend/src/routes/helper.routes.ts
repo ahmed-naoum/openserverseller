@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { encrypt, decrypt } from '../utils/crypto.js';
+import { isFactured } from '../lib/paymentSituation.js';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
@@ -410,7 +411,7 @@ router.get(
       if (order.coliatyPackageCode) withCode++;
       else notSynced++;
       if (st === 'PENDING' && order.coliatyPackageCode && !order.coliatyPickupRef) readyForPickup++;
-      if (isReturned && row.paymentSituation !== 'FACTURED') uninvoicedReturns++;
+      if (isReturned && !isFactured(row.paymentSituation)) uninvoicedReturns++;
       if (isOpen && now - order.createdAt.getTime() > STALE_AFTER_DAYS * DAY_MS) staleParcels++;
 
       const orderBucket = series.get(dayKey(order.createdAt));

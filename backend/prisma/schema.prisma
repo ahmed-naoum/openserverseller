@@ -1192,11 +1192,50 @@ model ReferralLinkLandingPage {
   description    String?
   buttonText     String       @default("Commander Maintenant")
   customStructure Json?       // For flexible sitebuilder blocks (features, faqs, etc.)
-  
+
+  // Whether /r/:code may serve pre-compiled HTML for this link. Small enough to
+  // live here; the compiled bytes themselves are in ReferralLinkCompiledPage.
+  ssgEnabled     Boolean      @default(true)
+
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
+  compiledPage   ReferralLinkCompiledPage?
+
   @@map("referral_link_landing_pages")
+}
+
+// Rendered output for a landing page — derived data, never a source of truth.
+//
+// Deliberately its own table. Eight existing queries pull the landing page with
+// `include: { landingPage: true }`, and one of them is a paginated lead list;
+// putting tens of KB of HTML on that model would silently inflate every one of
+// those responses. Only the compiler joins this table.
+//
+// Safe to TRUNCATE at any time: the next visitor to each page recompiles it.
+model ReferralLinkCompiledPage {
+  id             Int          @id @default(autoincrement())
+  landingPageId  Int          @unique
+  landingPage    ReferralLinkLandingPage @relation(fields: [landingPageId], references: [id], onDelete: Cascade)
+
+  html           String?      @db.Text
+  // Per-page Content-Security-Policy. Stored rather than recomputed because it
+  // depends on hashes of this page's inline scripts — deriving it on read would
+  // mean re-hashing the HTML on every cold serve.
+  csp            String?      @db.Text
+  // Quality-11 brotli of `html`, served as-is. The `compression` package has no
+  // brotli and would gzip per request on the main thread instead.
+  brotli         Bytes?
+  compiledAt     DateTime?
+  // Bump COMPILER_VERSION and every row here fails the equality check, so each
+  // page recompiles on its next visit. No backfill, no migration.
+  compilerVersion Int?
+  // Non-null means a real bug. An unsupported block is a decline, not an error.
+  compileError   String?      @db.Text
+
+  updatedAt      DateTime     @updatedAt
+
+  @@map("referral_link_compiled_pages")
 }
 
 model InfluencerCampaign {

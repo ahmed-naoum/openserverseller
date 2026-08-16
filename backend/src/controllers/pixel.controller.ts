@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { invalidateByInfluencer } from '../services/landingCompiler/index.js';
 import axios from 'axios';
 
 const prisma = new PrismaClient();
@@ -64,6 +65,11 @@ export const createPixel = async (req: Request, res: Response) => {
       }
     });
 
+    // Pixels are injected into compiled landing pages, but they live on the
+    // User rather than the landing page, so nothing else marks those pages
+    // stale. Drop them now instead of waiting out the freshness window.
+    invalidateByInfluencer(userId);
+
     res.status(201).json({ status: 'success', data: newPixel });
   } catch (error) {
     console.error('createPixel error:', error);
@@ -87,6 +93,10 @@ export const deletePixel = async (req: Request, res: Response) => {
     }
 
     await prisma.userPixel.delete({ where: { id: pixelIdParam } });
+
+    // Same reasoning as createPixel: a removed pixel must stop firing on
+    // compiled pages immediately, not whenever the freshness window expires.
+    invalidateByInfluencer(userId);
 
     res.json({ status: 'success', message: 'Pixel supprimé' });
   } catch (error) {

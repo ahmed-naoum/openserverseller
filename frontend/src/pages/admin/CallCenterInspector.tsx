@@ -15,6 +15,7 @@ import {
   GROUP_META, GROUP_ORDER, GROUPS_BY_PHASE, PHASE_META, PHASE_ORDER,
   type StatusGroup, type Phase,
 } from '../../lib/leadStatusCatalog';
+import { paymentSituationLabel } from '../../lib/paymentSituation';
 
 const LIMIT = 20;
 
@@ -1222,7 +1223,7 @@ export default function CallCenterInspector() {
                                   {[
                                     [tc('history.address'), lead.address || '—'],
                                     [tc('history.source'), lead.source || '—'],
-                                    [tc('history.payment'), lead.paymentSituation || '—'],
+                                    [tc('history.payment'), lead.paymentSituation ? paymentSituationLabel(lead.paymentSituation) : '—'],
                                     [tc('history.order'), lead.order?.orderNumber || '—'],
                                     [tc('history.callback'), lead.callbackAt ? fmtDateTime(lead.callbackAt) : '—'],
                                     [tc('history.firstClaim'), fmtDateTime(lead.firstClaimedAt)],

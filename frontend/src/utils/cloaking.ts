@@ -13,7 +13,47 @@
  */
 import { SOURCE_PARAM, isAllowedSource, parseDomainList, parseSourceSpecs, parseSourceToken, readMaxUses, readSourceRef, registerTokenUse } from './referral';
 
-const DEFAULT_BOT_PATTERN = /bot|crawler|spider|crawling|scraper|snippet|curl|wget|python|postman|axios|node-fetch|httpclient|headless|puppeteer|phantomjs|selenium|cypress|facebookexternalhit|facebookplatform|facebookcatalog|facebookbot|googlebot|bingbot|slurp|yahoo|adbot|lighthouse|duckduckbot|baiduspider|yandexbot|sogou|exabot|facebot|ia_archiver|linkedinbot|twitterbot|slackbot|telegrambot|applebot|whatsapp|skypeuripreview|ahrefsbot|semrushbot|mj12bot|dotbot|rogerbot|moz|majestics12|seznambot|pingdom|archive\.org_bot|discordbot|pinterest|vkshare|redditbot|tumblr|flipboardproxy|feedfetcher|amazonbot|bytespider|ccbot|chatgpt-user|claudebot|coccocbot|dataminr|go-http-client|grapeshot|java|libwww|lwp-trivial|mail\.ru|megaindex|petalsearch|qwantify|screaming\sfrog|soso|tencenttraveler|zite|zoominfo|ahrefs|alexa|appinsights|archive|ask\sjeeves|bubing|catchpoint|cloudflare|criteo|datadog|duckduckgo|fastly|feedburner|flipboard|hubspot|incapsula|instagram|linkedin|majestic|monitor|msn|naver|nuzzel|outbrain|pagespeed|quora|reddit|semrush|skype|slack|snapchat|statuscake|telegram|updown|uptimerobot|vkontakte|yelp|youtube|zillow|zmeu/i;
+/**
+ * User agents that are genuinely automated.
+ *
+ * Every entry here must be absent from real browsers. The previous version of
+ * this pattern contained a bare `moz` alternative — and every mainstream browser
+ * sends "Mozilla/5.0" — so enabling filterBots without an explicit
+ * selectedUserAgents list redirected 100% of human traffic to wikipedia.org.
+ * Verified against real user agents: Chrome on Android, Safari on iOS, and the
+ * Instagram and Facebook in-app browsers all matched.
+ *
+ * Bare `instagram`, `linkedin`, `snapchat`, `duckduckgo`, `reddit`, `pinterest`,
+ * `skype`, `telegram` and `youtube` were removed for the same reason: those
+ * strings appear in the user agent of an app's built-in browser, which is how a
+ * large share of social traffic arrives. Only the explicit crawler forms
+ * (`linkedinbot`, `redditbot`, …) belong here.
+ *
+ * Kept in step by hand with CRAWLER_PATTERN in
+ * backend/src/services/landingCompiler/cloak.ts, which is the canonical copy and
+ * carries the test suite.
+ */
+const DEFAULT_BOT_PATTERN = new RegExp([
+  'bot\\b', 'bot/', 'crawler', 'spider', 'crawling', 'scraper', 'headless',
+  'curl/', 'wget', 'python-requests', 'python-urllib', 'postman', 'axios/',
+  'node-fetch', 'httpclient', 'go-http-client', 'libwww', 'lwp-trivial',
+  'java/', 'okhttp', 'apache-httpclient',
+  'puppeteer', 'phantomjs', 'selenium', 'cypress', 'playwright', 'lighthouse',
+  'googlebot', 'google-inspectiontool', 'bingbot', 'slurp', 'duckduckbot',
+  'baiduspider', 'yandexbot', 'sogou', 'exabot', 'seznambot', 'petalsearch',
+  'qwantify', 'coccocbot',
+  'facebookexternalhit', 'facebookcatalog', 'facebookbot', 'facebot',
+  'twitterbot', 'linkedinbot', 'slackbot', 'telegrambot', 'discordbot',
+  'redditbot', 'pinterestbot', 'whatsapp/', 'skypeuripreview', 'vkshare',
+  'flipboardproxy', 'applebot',
+  'ahrefs', 'semrushbot', 'mj12bot', 'dotbot', 'rogerbot', 'majestic12',
+  'screaming\\sfrog', 'zoominfo', 'megaindex', 'grapeshot', 'dataminr',
+  'pingdom', 'statuscake', 'updown', 'uptimerobot', 'catchpoint', 'datadog',
+  'appinsights', 'incapsula', 'bubing', 'zmeu',
+  'ia_archiver', 'archive\\.org_bot', 'ccbot', 'amazonbot', 'bytespider',
+  'gptbot', 'chatgpt-user', 'claudebot', 'perplexitybot', 'feedfetcher',
+  'feedburner',
+].join('|'), 'i');
 
 const DEFAULT_BLOCKED_DNS = ['facebook.com', 'fb.com', 'facebook.net', 'fbcdn.net', 'fbcdn.com', 'tfbnw.net', 'fbsbx.com', 'akamaihd.net', 'facebook.fr', 'facebook.de', 'whatsapp.net', 'messenger.com', 'foursquare.com', 'energized.pro', 'addtoany.com', 'whatsapp.com', 'instagram.com', 'hootsuite.com', 'edgesuite.net', 'internet.org', 'appspot.com', 'wechat.com', 'fb.me', 'freebasics.com', 'fburl.com'];
 

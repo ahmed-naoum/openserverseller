@@ -17,6 +17,7 @@ import { Server as SocketServer } from 'socket.io';
 import path from 'path';
 
 import routes from './routes/index.js';
+import landingRoutes from './routes/landing.routes.js';
 import { loadSecrets } from './lib/secretStore.js';
 import { reconcileInterruptedDeploys } from './services/deploy.service.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -241,6 +242,25 @@ app.use((req, res, next) => {
   next();
 });
 app.use(ipFilter);
+
+// Compiled influencer landing pages. nginx proxies /r/ here; without that
+// location block this route is never reached (see setup.sh).
+//
+// The position is load-bearing:
+//   AFTER  compression()          - gzip path for clients that will not take brotli
+//   AFTER  helmet/securityHeaders - so the handler can override CSP and X-Frame-Options,
+//                                   which it must: helmet's default script-src 'self'
+//                                   blocks every pixel on the page
+//   AFTER  ipFilter               - a blocked IP should not be served a page
+//   BEFORE sanitizeInput          - it awaits a settings lookup and xss-scrubs body,
+//                                   query and params, all empty here. Pure TTFB tax
+//                                   on ad traffic.
+//   BEFORE maintenanceMiddleware  - ads keep running during maintenance and a JSON 503
+//                                   is not a page, so landing pages stay up
+//   BEFORE the API mount          - globalRateLimiter is scoped to /api/v1 and stays
+//                                   there; bursty ad traffic is the point of this route
+app.use('/r', landingRoutes);
+
 app.use(sanitizeInput);
 app.use(validateRequestSize(5 * 1024 * 1024));
 

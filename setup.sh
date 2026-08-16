@@ -156,6 +156,27 @@ server {
     listen 80;
     server_name ${DOMAIN};
 
+    # Influencer landing pages are rendered by the API as pre-compiled HTML,
+    # not served from dist/. Without this block the Express route at /r/ is
+    # never reached and try_files below hands back index.html instead.
+    #
+    # Prefix locations are matched longest-first, not in file order, so this
+    # wins over "location /" wherever it sits. ^~ additionally stops nginx
+    # evaluating regex locations once this prefix has matched.
+    location ^~ /r/ {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        # \$host, not \$http_host: lowercased and port-stripped, which is what
+        # getSubdomainFromRequest() compares against.
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        # The body is already brotli-compressed upstream.
+        gzip off;
+        proxy_read_timeout 15s;
+    }
+
     # Frontend (static files)
     location / {
         root /var/www/silacod/frontend/dist;

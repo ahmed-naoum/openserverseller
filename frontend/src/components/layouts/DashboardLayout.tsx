@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -1845,7 +1845,19 @@ export default function DashboardLayout() {
           <div className="relative max-w-[1600px] mx-auto min-w-0 overflow-x-clip">
             <AnnouncementBanner position="TOP" />
             <ProfileProgressBanner />
-            <Outlet />
+            {/* Some pages behind this outlet are `lazy()` (product detail, the
+                marketplace). Without a boundary here React 18 treats a click
+                that lands on a not-yet-downloaded chunk as suspending on
+                synchronous input and throws, and since nothing in the app
+                catches it the whole root unmounts — a blank screen that only a
+                reload fixes. One boundary covers every dashboard tree. */}
+            <Suspense fallback={
+              <div className="min-h-[400px] flex items-center justify-center p-8">
+                <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            }>
+              <Outlet />
+            </Suspense>
             <AnnouncementBanner position="BOTTOM" />
           </div>
         </div>
