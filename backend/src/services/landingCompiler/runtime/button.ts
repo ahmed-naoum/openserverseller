@@ -37,13 +37,27 @@ export const BUTTON_RUNTIME = `
     // event, which the video runtime dispatches on timeupdate.
     var after = parseFloat(wrap.getAttribute('data-btn-after') || '0');
     if (after > 0) {
+      var revealed = false;
+      var reveal = function(){
+        if (revealed) return;
+        revealed = true;
+        wrap.classList.remove('pending');
+        window.removeEventListener('video-time-update', onTime);
+      };
       var onTime = function(e){
-        if (e && e.detail && e.detail.currentTime >= after) {
-          wrap.classList.remove('pending');
-          window.removeEventListener('video-time-update', onTime);
-        }
+        if (e && e.detail && e.detail.currentTime >= after) reveal();
       };
       window.addEventListener('video-time-update', onTime);
+
+      // Only a <video> element reports progress. YouTube and Vimeo render an
+      // iframe, which cannot, and a page may carry a delayed button with no
+      // video at all — in both cases the event never arrives and React leaves
+      // the button permanently invisible. A configured call-to-action that no
+      // customer can ever see is lost orders, so fall back to a timer from page
+      // load. Pages that do have a real <video> keep the original behaviour.
+      if (!document.querySelector('video')) {
+        setTimeout(reveal, after * 1000);
+      }
     }
   }
 

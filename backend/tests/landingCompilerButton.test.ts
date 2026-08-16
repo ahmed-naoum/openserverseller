@@ -108,6 +108,21 @@ describe('button block', () => {
     expect(html).toContain('.bk-btn.pending{display:none}');
   });
 
+  it('falls back to a timer when no <video> can report progress', async () => {
+    // Only a <video> element fires video-time-update. A YouTube or Vimeo block
+    // renders an iframe, and a page may have a delayed button and no video at
+    // all — without this the button would stay hidden forever, which is a CTA
+    // the merchant configured and no customer can reach.
+    expect(BUTTON_RUNTIME).toContain("document.querySelector('video')");
+    expect(BUTTON_RUNTIME).toContain('setTimeout(reveal, after * 1000)');
+  });
+
+  it('reveals a delayed button only once', async () => {
+    // Both the event and the timer can fire; the second must be a no-op or the
+    // listener would be removed twice and the class toggled after teardown.
+    expect(BUTTON_RUNTIME).toContain('if (revealed) return;');
+  });
+
   it('does not gate a button whose delay is zero or missing', async () => {
     const html = (await withButton({ showAfterVideoSeconds: 0 }))!;
     expect(markup(html)).not.toContain('data-btn-after');

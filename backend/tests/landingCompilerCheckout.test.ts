@@ -100,6 +100,63 @@ describe('express_checkout', () => {
     expect(html).toMatch(/data-ck="price"[^>]*>249 MAD/);
   });
 
+  it('drives the selected pack from a class, never an inline style', async () => {
+    const html = (await withCheckout({
+      options: [
+        { id: 'p1', name: 'Un', price: 319 },
+        { id: 'p2', name: 'Deux', price: 479 },
+      ],
+    }))!;
+
+    const packs = [...markup(html).matchAll(/<div class="(ck-pack[^"]*)"[^>]*style="([^"]*)"/g)]
+      .map((m) => ({ cls: m[1], style: m[2] }));
+    expect(packs).toHaveLength(2);
+
+    // The bug this pins: the selected look used to be an inline style on pack 1
+    // while the runtime toggled a class. Inline wins, so clicking pack 2 moved
+    // the DATA but left pack 1 looking selected — the customer saw one price
+    // and would have been charged the other.
+    for (const p of packs) {
+      expect(p.style).not.toMatch(/(^|;)\s*border-width:/);
+      expect(p.style).not.toMatch(/(^|;)\s*background:/);
+      expect(p.style).toContain('--pk:');
+    }
+    expect(packs[0].cls).toContain('is-on');
+    expect(packs[1].cls).not.toContain('is-on');
+  });
+
+  it('renders the selected badge on every pack so it can move', async () => {
+    const html = (await withCheckout({
+      options: [
+        { id: 'p1', name: 'Un', price: 319 },
+        { id: 'p2', name: 'Deux', price: 479 },
+      ],
+    }))!;
+    expect((markup(html).match(/class="ck-badge"/g) || []).length).toBe(2);
+    // Hidden unless the pack is selected, so only one is ever visible.
+    expect(html).toContain('.ck-pack .ck-badge{display:none}');
+    expect(html).toContain('.ck-pack.is-on .ck-badge{display:block}');
+  });
+
+  it('falls back to no fill when the pack colour is not 6-digit hex', async () => {
+    const html = (await withCheckout({
+      options: [{ id: 'p1', name: 'Un', price: 1, color: 'rgba(1,2,3,0.5)' }],
+    }))!;
+    // `${tint}08` is only valid on 6-digit hex; a malformed value would drop
+    // the whole declaration.
+    expect(html).toContain('--pkbg:transparent');
+    expect(html).not.toContain('rgba(1,2,3,0.5)08');
+  });
+
+  it('lets a keyboard user choose a pack', async () => {
+    const { CHECKOUT_RUNTIME } = await import(
+      '../src/services/landingCompiler/runtime/checkout.js'
+    );
+    // They carry role="radio" and tabindex="0", which promises keyboard support.
+    expect(CHECKOUT_RUNTIME).toContain("'keydown'");
+    expect(CHECKOUT_RUNTIME).toContain("e.key === 'Enter'");
+  });
+
   it('sends the bare pack name as productVariant, which is what getPackPrice matches', async () => {
     const html = (await withCheckout({
       options: [{ id: 'p1', name: 'Pack 2 pièces', price: 399 }],

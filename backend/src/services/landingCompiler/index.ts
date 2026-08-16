@@ -15,12 +15,9 @@ const prisma = new PrismaClient();
  */
 // 2: checkout redirects to /thank-you instead of revealing an inline panel.
 // 3: whatsapp widget renderer added.
-// 4: whatsapp widget also honours settings.whatsappWidget, and hides on desktop
-//    when both viewport toggles are off. Any page stored at 3 has the bug baked
-//    into its HTML, so it has to recompile.
+// 4: whatsapp widget honours settings.whatsappWidget & hides on desktop when both viewport toggles off.
 // 5: audio renderer added — the WhatsApp voice-note player.
-// 6: audio's data-au hook moved off the bubble onto the wrapper. Every page
-//    stored at 5 has markup whose play button cannot bind, so it must recompile.
+// 6: audio data-au hook update; pack selection moved to class; video-delayed buttons fall back to timer.
 export const COMPILER_VERSION = 6;
 
 /**
@@ -193,6 +190,137 @@ function originFor(link: any): string | null {
     return `${base.protocol}//${subdomain}.${base.host.replace(/^www\./i, '')}`;
   } catch {
     return null;
+  }
+}
+
+export interface CompileReport {
+  status: 'compiled' | 'declined' | 'error';
+  /** Wall-clock time of the compile itself, for the builder to show. */
+  durationMs: number;
+  blocks: number;
+  /** Block types on this page that a renderer handles. */
+  supported: string[];
+  /** Block types with no renderer — the reason a page declines. */
+  unsupported: string[];
+  rawBytes: number | null;
+  brotliBytes: number | null;
+  error: string | null;
+  /** Whether a visitor would actually receive the compiled page right now. */
+  servedToVisitors: boolean;
+  reason: string;
+}
+
+/**
+ * Compiles one page immediately and reports what happened.
+ *
+ * Called from the save route so the person editing the page finds out whether it
+ * will be fast — and if not, which block is holding it back. The lazy path is
+ * still what serves traffic; this only makes the outcome visible at the moment
+ * someone can act on it.
+ *
+ * Never throws: a failed compile is a report, not a failed save.
+ */
+export async function compileNow(code: string, serveMode: string): Promise<CompileReport> {
+  const started = Date.now();
+  const base: CompileReport = {
+    status: 'declined',
+    durationMs: 0,
+    blocks: 0,
+    supported: [],
+    unsupported: [],
+    rawBytes: null,
+    brotliBytes: null,
+    error: null,
+    servedToVisitors: false,
+    reason: '',
+  };
+
+  try {
+    const link = await loadLink(code);
+    if (!link) {
+      return { ...base, durationMs: Date.now() - started, reason: 'Lien introuvable.' };
+    }
+
+    const structure = link.landingPage?.customStructure;
+    const types = blocksOf(structure).map((b: any) => b?.type).filter(Boolean) as string[];
+    const unsupported = unsupportedBlocks(structure);
+    const supported = [...new Set(types)].filter((t) => !unsupported.includes(t));
+
+    base.blocks = types.length;
+    base.supported = supported;
+    base.unsupported = unsupported;
+
+    if (!types.length) {
+      return { ...base, durationMs: Date.now() - started, reason: 'La page ne contient aucun bloc.' };
+    }
+
+    if (unsupported.length) {
+      return {
+        ...base,
+        durationMs: Date.now() - started,
+        reason:
+          `Bloc(s) pas encore pris en charge : ${unsupported.join(', ')}. ` +
+          `La page reste servie par l'ancienne version (React).`,
+      };
+    }
+
+    const compiled = await compileLanding(link);
+    if (!compiled) {
+      return { ...base, durationMs: Date.now() - started, reason: 'Compilation refusée.' };
+    }
+
+    const brotli = zlib.brotliCompressSync(compiled.html, {
+      params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 },
+    });
+
+    // Persist so the next visitor serves this build rather than recompiling.
+    if (link.landingPage) {
+      try {
+        const record = {
+          html: compiled.html.toString('utf8'),
+          csp: compiled.csp,
+          brotli,
+          compiledAt: new Date(),
+          compilerVersion: COMPILER_VERSION,
+          compileError: null,
+        };
+        await (prisma as any).referralLinkCompiledPage.upsert({
+          where: { landingPageId: link.landingPage.id },
+          update: record,
+          create: { landingPageId: link.landingPage.id, ...record },
+        });
+      } catch (err) {
+        console.error('[SSG] compileNow could not persist', code, err);
+      }
+    }
+    invalidate(code);
+
+    const enabled = link.landingPage?.ssgEnabled ?? true;
+    const served = serveMode === 'on' && enabled;
+
+    return {
+      ...base,
+      status: 'compiled',
+      durationMs: Date.now() - started,
+      rawBytes: compiled.html.length,
+      brotliBytes: brotli.length,
+      servedToVisitors: served,
+      reason: served
+        ? 'Page compilée et servie aux visiteurs.'
+        : serveMode !== 'on'
+          ? `Page compilée, mais le mode serveur est "${serveMode}" — les visiteurs reçoivent encore React.`
+          : 'Page compilée, mais désactivée pour ce lien.',
+    };
+  } catch (err: any) {
+    const message = String(err?.message || err).slice(0, 500);
+    console.error('[SSG] compileNow threw for', code, err);
+    return {
+      ...base,
+      status: 'error',
+      durationMs: Date.now() - started,
+      error: message,
+      reason: 'La compilation a échoué. La page reste servie par React.',
+    };
   }
 }
 

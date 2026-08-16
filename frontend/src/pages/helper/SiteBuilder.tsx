@@ -6,6 +6,7 @@ import { helperApi, publicApi, uploadApi, adminApi } from '../../lib/api';
 import BlockRenderer, { EditorBlock, BlockType } from '../../components/helper/sitebuilder/BlockRenderer';
 import WhatsAppWidget, { IconRenderer } from '../../components/public/WhatsAppWidget';
 import SiteBuilderV2 from '../../components/helper/sitebuilder/v2/SiteBuilderV2';
+import CompileReportModal, { CompileReport } from '../../components/helper/sitebuilder/CompileReportModal';
 import { DEMO_SHOWCASE_TEMPLATE } from '../../components/helper/sitebuilder/v2/templates';
 import { 
   Type, Image as ImageIcon, Heading, LayoutTemplate, Link as LinkIcon, 
@@ -33,6 +34,7 @@ export default function SiteBuilder() {
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [compileReport, setCompileReport] = useState<CompileReport | null>(null);
   const [blocks, setBlocks] = useState<EditorBlock[]>([]);
   const [pageSettings, setPageSettings] = useState<any>({ 
     backgroundColor: '#ffffff',
@@ -345,13 +347,22 @@ export default function SiteBuilder() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await helperApi.updateLandingPage(Number(id), {
+      const res: any = await helperApi.updateLandingPage(Number(id), {
         customStructure: {
           blocks,
           settings: pageSettings
         }
       });
-      toast.success('Paramètres sauvegardés avec succès !');
+
+      // The save route compiles the page and reports what happened. Older
+      // backends do not send this, so fall back to the toast rather than
+      // opening an empty dialog.
+      const report = res?.data?.compile ?? res?.compile ?? null;
+      if (report) {
+        setCompileReport(report);
+      } else {
+        toast.success('Paramètres sauvegardés avec succès !');
+      }
     } catch (err) {
       toast.error('Erreur lors de la sauvegarde');
     } finally {
@@ -619,19 +630,24 @@ export default function SiteBuilder() {
 
   if (isV2DemoOpen) {
     return (
-      <SiteBuilderV2
-        initialBlocks={blocks.length > 1 ? blocks : DEMO_SHOWCASE_TEMPLATE.blocks}
-        initialSettings={pageSettings?.backgroundColor ? pageSettings : DEMO_SHOWCASE_TEMPLATE.settings}
-        onCloseDemo={() => setIsV2DemoOpen(false)}
-        referralCode={referralCode}
-        ownerSubdomain={ownerSubdomain}
-        ownerCustomDomain={ownerCustomDomain}
-        ownerCustomDomainStatus={ownerCustomDomainStatus}
-        accounts={accounts}
-        ownerId={ownerId}
-        productData={productData}
-        onSave={handleSave}
-      />
+      <>
+        <SiteBuilderV2
+          initialBlocks={blocks.length > 1 ? blocks : DEMO_SHOWCASE_TEMPLATE.blocks}
+          initialSettings={pageSettings?.backgroundColor ? pageSettings : DEMO_SHOWCASE_TEMPLATE.settings}
+          onCloseDemo={() => setIsV2DemoOpen(false)}
+          referralCode={referralCode}
+          ownerSubdomain={ownerSubdomain}
+          ownerCustomDomain={ownerCustomDomain}
+          ownerCustomDomainStatus={ownerCustomDomainStatus}
+          accounts={accounts}
+          ownerId={ownerId}
+          productData={productData}
+          onSave={handleSave}
+        />
+        {compileReport && (
+          <CompileReportModal report={compileReport} onClose={() => setCompileReport(null)} />
+        )}
+      </>
     );
   }
 
@@ -3334,6 +3350,10 @@ export default function SiteBuilder() {
         </div>
 
       </div>
+
+      {compileReport && (
+        <CompileReportModal report={compileReport} onClose={() => setCompileReport(null)} />
+      )}
     </div>
   );
 }

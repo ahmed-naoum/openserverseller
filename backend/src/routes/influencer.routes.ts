@@ -19,7 +19,8 @@ import {
 
 import { recordReferralClick } from '../services/referralClicks.js';
 import { validateLandingPageUpdate } from '../validations/landingPage.validation.js';
-import { invalidate } from '../services/landingCompiler/index.js';
+import { invalidate, compileNow } from '../services/landingCompiler/index.js';
+import { mode } from './landing.routes.js';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -1991,7 +1992,18 @@ router.put(
     }
     invalidate(link.code);
 
-    res.json(landingPage);
+    // Compile now rather than waiting for the next visitor, so the person who
+    // just clicked Sauvegarder finds out whether their page will actually be
+    // fast — and which block is holding it back if not. Never allowed to fail
+    // the save: the structure is already stored by this point.
+    let compile = null;
+    try {
+      compile = await compileNow(link.code, mode());
+    } catch (err) {
+      console.error('[SSG] compile-on-save failed for', link.code, err);
+    }
+
+    res.json({ ...landingPage, compile });
   })
 );
 

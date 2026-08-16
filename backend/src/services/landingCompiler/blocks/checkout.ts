@@ -99,10 +99,18 @@ export const checkoutBlock: BlockRenderer = {
     `.ck-old{font-weight:700;text-decoration:line-through;opacity:.6;margin-inline-end:8px}` +
     `.ck-now{font-weight:900}` +
     `.ck-packs{margin:0 0 20px}` +
+    // The selected look is driven entirely by `.is-on`, never by an inline
+    // style. An inline style would win over the class, so the runtime could
+    // move `.is-on` while the first pack kept its border and badge — the
+    // customer would see one pack highlighted and be charged for another.
+    // Per-pack colours travel as custom properties instead.
     `.ck-pack{position:relative;display:flex;align-items:center;justify-content:space-between;` +
     `gap:10px;padding:12px 14px;cursor:pointer;border-style:solid;border-width:0;` +
     `border-bottom:1px solid #f3f4f6;background:transparent}` +
-    `.ck-pack.is-on{border-bottom-color:transparent}` +
+    `.ck-pack.is-on{border-width:var(--pkw,2px);border-color:var(--pk,#f97316);` +
+    `border-radius:var(--pkr,16px);background:var(--pkbg,transparent)}` +
+    `.ck-pack .ck-badge{display:none}` +
+    `.ck-pack.is-on .ck-badge{display:block}` +
     `.ck-pack-n{font-weight:700}` +
     `.ck-pack-p{font-weight:800;white-space:nowrap}` +
     `.ck-pack-o{text-decoration:line-through;opacity:.6;font-weight:600;margin-inline-end:6px}` +
@@ -209,17 +217,24 @@ export const checkoutBlock: BlockRenderer = {
       packs.forEach((opt: any, i: number) => {
         const tint = safeColor(opt?.color || c.packColor, accent);
         const on = i === 0;
-        // `${accent}08` in the original: 8-digit hex alpha, about a 3% tint.
-        const style = on
-          ? `border-width:${packBorder}px;border-color:${tint};border-radius:${packRadius}px;` +
-            `background:${tint}08`
-          : '';
         const priceColor = safeColor(opt?.priceColor, '#111827');
+
+        // `${tint}08` in the original: 8-digit hex alpha, about a 3% tint. Only
+        // valid on 6-digit hex, so anything else gets no fill rather than a
+        // malformed colour that would drop the declaration entirely.
+        const tintBg = /^#[0-9a-f]{6}$/i.test(tint) ? `${tint}08` : 'transparent';
+
+        // Custom properties, not a conditional inline style: these describe how
+        // the pack looks WHEN selected, and the class decides whether it is.
+        const vars =
+          `--pk:${tint};--pkw:${packBorder}px;--pkr:${packRadius}px;--pkbg:${tintBg}`;
 
         parts.push(
           `<div class="ck-pack${on ? ' is-on' : ''}" data-pack="${esc(opt?.id ?? i)}"` +
-            ` role="radio" tabindex="0" aria-checked="${on ? 'true' : 'false'}" style="${style}">` +
-            (on ? `<span class="ck-badge" style="background:${tint}">محدد</span>` : '') +
+            ` role="radio" tabindex="0" aria-checked="${on ? 'true' : 'false'}" style="${vars}">` +
+            // Rendered on every pack; CSS shows it only on the selected one, so
+            // the runtime can move the selection without rebuilding markup.
+            `<span class="ck-badge" style="background:${tint}">محدد</span>` +
             `<span class="ck-pack-n">${esc(opt?.name || `Pack ${i + 1}`)}</span>` +
             `<span class="ck-pack-p">` +
             (opt?.oldPrice

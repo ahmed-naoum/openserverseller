@@ -102,6 +102,14 @@ export const CHECKOUT_RUNTIME = `
     // would be priced at whichever pack happened to be first.
     var packEls = root.querySelectorAll('[data-pack]');
     Array.prototype.forEach.call(packEls, function(el){
+      // They carry role="radio" and tabindex="0", so a keyboard user expects
+      // Enter and Space to choose one.
+      el.addEventListener('keydown', function(e){
+        if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+          e.preventDefault();
+          el.click();
+        }
+      });
       el.addEventListener('click', function(){
         var id = el.getAttribute('data-pack');
         for (var i = 0; i < cfg.packs.length; i++) {
