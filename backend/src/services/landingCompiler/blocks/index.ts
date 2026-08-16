@@ -1,6 +1,7 @@
 import type { BlockRenderer } from './types.js';
 import { imageBlock } from './image.js';
 import { checkoutBlock } from './checkout.js';
+import { videoBlock } from './video.js';
 
 /**
  * The renderer registry.
@@ -14,7 +15,7 @@ import { checkoutBlock } from './checkout.js';
  * chose seven types from the builder's palette, four of which no page had ever
  * used.
  */
-const RENDERERS: BlockRenderer[] = [imageBlock, checkoutBlock];
+const RENDERERS: BlockRenderer[] = [imageBlock, checkoutBlock, videoBlock];
 
 export const registry = new Map<string, BlockRenderer>(
   RENDERERS.map((renderer) => [renderer.type, renderer])
