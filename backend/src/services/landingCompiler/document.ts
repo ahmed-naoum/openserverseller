@@ -13,6 +13,9 @@ export interface RenderInput {
   landingPage: any;
   product: any;
   influencerPixels: any[];
+  /** Used as the WhatsApp widget's default nickname and avatar. */
+  influencerName?: string | null;
+  influencerAvatar?: string | null;
   /** Host the page is served from, for canonical/OG URLs. Null when unknown. */
   origin: string | null;
 }
@@ -99,6 +102,8 @@ export async function renderDocument(input: RenderInput): Promise<RenderedPage |
     pixels,
     landingButtonText: input.landingPage?.buttonText || null,
     firstCheckoutIndex: input.blocks.findIndex((b) => b?.type === 'express_checkout'),
+    influencerName: input.influencerName || null,
+    influencerAvatar: input.influencerAvatar || null,
     probeImage,
   };
 

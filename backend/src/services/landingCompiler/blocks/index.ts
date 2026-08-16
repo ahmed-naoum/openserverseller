@@ -3,6 +3,7 @@ import { imageBlock } from './image.js';
 import { checkoutBlock } from './checkout.js';
 import { videoBlock } from './video.js';
 import { buttonBlock } from './button.js';
+import { whatsappBlock } from './whatsapp.js';
 
 /**
  * The renderer registry.
@@ -16,7 +17,7 @@ import { buttonBlock } from './button.js';
  * chose seven types from the builder's palette, four of which no page had ever
  * used.
  */
-const RENDERERS: BlockRenderer[] = [imageBlock, checkoutBlock, videoBlock, buttonBlock];
+const RENDERERS: BlockRenderer[] = [imageBlock, checkoutBlock, videoBlock, buttonBlock, whatsappBlock];
 
 export const registry = new Map<string, BlockRenderer>(
   RENDERERS.map((renderer) => [renderer.type, renderer])

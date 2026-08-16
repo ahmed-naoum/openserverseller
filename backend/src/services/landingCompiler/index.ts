@@ -13,8 +13,9 @@ const prisma = new PrismaClient();
  * visit — the fix propagates itself, busiest pages first, with no backfill and
  * no migration.
  */
-// 2: checkout now redirects to /thank-you instead of revealing an inline panel.
-export const COMPILER_VERSION = 2;
+// 2: checkout redirects to /thank-you instead of revealing an inline panel.
+// 3: whatsapp widget renderer added.
+export const COMPILER_VERSION = 3;
 
 /**
  * Block types the compiler can render, derived from the renderer registry.
@@ -159,6 +160,8 @@ export async function compileLanding(link: any): Promise<{ html: Buffer; csp: st
     landingPage: link.landingPage,
     product: link.product,
     influencerPixels: link.influencer?.pixels || [],
+    influencerName: link.influencer?.profile?.fullName || null,
+    influencerAvatar: link.influencer?.profile?.avatarUrl || null,
     origin: originFor(link),
   });
 

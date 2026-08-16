@@ -31,6 +31,10 @@ export interface BlockContext {
    * for no gain.
    */
   firstCheckoutIndex: number;
+  /** Influencer display name — default nickname for the WhatsApp widget. */
+  influencerName: string | null;
+  /** Influencer avatar — default profile image for the WhatsApp widget. */
+  influencerAvatar: string | null;
   /**
    * Intrinsic dimensions for a local upload, or null.
    *

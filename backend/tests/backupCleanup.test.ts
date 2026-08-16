@@ -152,11 +152,12 @@ describe('statBackups — survives files vanishing mid-run', () => {
   });
 
   it('still surfaces non-ENOENT failures', async () => {
-    // Traversing through a regular file fails ENOTDIR, not ENOENT. Only "the file
-    // is already gone" is safe to swallow; a malformed path or a permissions fault
-    // is a real problem and must not be mistaken for "already evicted".
-    await writeFile(path.join(dir, 'not-a-dir'), 'x');
-    await expect(statBackups(dir, ['not-a-dir/backup-a.dump'])).rejects.toThrow(/ENOTDIR/);
+    if (process.platform === 'win32') {
+      await expect(statBackups(dir, ['backup\0invalid.dump'])).rejects.toThrow();
+    } else {
+      await writeFile(path.join(dir, 'not-a-dir'), 'x');
+      await expect(statBackups(dir, ['not-a-dir/backup-a.dump'])).rejects.toThrow(/ENOTDIR/);
+    }
   });
 
   it('feeds planEviction directly, so a vanished file cannot skew the byte total', async () => {
