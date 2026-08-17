@@ -4,6 +4,7 @@ import { recordReferralClick } from '../services/referralClicks.js';
 import { getCompiledLanding } from '../services/landingCompiler/index.js';
 import { resolveServerCloak } from '../services/landingCompiler/cloak.js';
 import { serveSpaFallback } from '../services/landingCompiler/spaFallback.js';
+import { serveLinkUnavailable } from '../services/landingCompiler/unavailable.js';
 
 const router = Router();
 
@@ -170,6 +171,16 @@ router.get('/:code', async (req: Request, res: Response) => {
     const target = canonicalUrl(req, page.subdomain);
     if (target) return res.redirect(302, target);
 
+    // Nowhere to send them and nowhere the page can be served: no subdomain and
+    // no custom domain means no host validateInfluencerHost will ever admit.
+    // The SPA shell would boot, ask /public for this link, be refused for the
+    // same reason, and leave the visitor on a broken page — so say it plainly.
+    if (!page.subdomain && !page.customDomain) {
+      return serveLinkUnavailable(res);
+    }
+
+    // A page that does have a home, opened on the wrong host — the custom-domain
+    // case this deliberately will not redirect to. Unchanged behaviour.
     return serveSpaFallback(res, 404);
   }
 
