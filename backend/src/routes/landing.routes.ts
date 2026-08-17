@@ -80,6 +80,50 @@ export function modeFor(code: string): 'off' | 'shadow' | 'on' {
   return global;
 }
 
+/**
+ * Where a link should have been opened, when it was opened somewhere else.
+ *
+ * An influencer with no subdomain is handed `https://silacod.com/r/<code>` by
+ * the dashboard — `buildReferralUrl` falls back to the host the dashboard is
+ * served from (frontend/src/utils/referral.ts). That URL can never validate,
+ * because `validateInfluencerHost` returns false the moment the influencer has
+ * no subdomain, so the app has been generating links its own backend refuses.
+ * Facebook ads point at those URLs today and cannot be edited retroactively,
+ * which is why this redirects rather than just fixing new links.
+ *
+ * Only a subdomain is a valid target. `customDomain` is deliberately not used:
+ * `CompiledPage` does not carry `customDomainStatus`, and sending paid traffic
+ * to a domain still PENDING or FAILED would turn a page that half-works into
+ * one that does not resolve at all.
+ *
+ * Returns null when there is nowhere better to send the visitor, and the caller
+ * falls back to the SPA exactly as before.
+ */
+export function canonicalUrl(req: Request, subdomain: string | null): string | null {
+  if (!subdomain) return null;
+
+  // Same source of truth as getSubdomainFromRequest, so the two cannot disagree
+  // about what the base domain is.
+  let baseHost = 'silacod.com';
+  try {
+    baseHost = new URL(process.env.FRONTEND_URL || 'https://silacod.com').host;
+  } catch {
+    // keep the default
+  }
+  baseHost = baseHost.replace(/^www\./i, '').toLowerCase();
+
+  const target = `${subdomain.toLowerCase()}.${baseHost}`;
+  const current = String(req.headers.host || '').replace(/^www\./i, '').toLowerCase();
+  // Belt and braces: validation already failed, so these should differ. If they
+  // ever don't, redirecting would loop until the browser gives up.
+  if (!target || target === current) return null;
+
+  // originalUrl rather than a rebuilt path: it carries the query string as sent,
+  // and fbclid/utm are what the ad platform and the cloaking rules read. Rebuilding
+  // it would also risk double-encoding a code that arrived percent-encoded.
+  return `${req.protocol}://${target}${req.originalUrl}`;
+}
+
 router.get('/:code', async (req: Request, res: Response) => {
   const code = String(req.params.code || '');
 
@@ -118,6 +162,14 @@ router.get('/:code', async (req: Request, res: Response) => {
   // carries no Origin and a Referer of the ad network, which that helper would
   // read as the request host and reject.
   if (!validateInfluencerHost(req, page.subdomain, page.customDomain)) {
+    // 302, not 301. The mapping is mutable — an admin can clear or reassign a
+    // subdomain (admin.routes.ts) and the influencer can change it themselves
+    // through the OTP flow — and a 301 cached by Cloudflare and every visitor's
+    // browser would keep pointing at a host that no longer serves the page,
+    // with no way to recall it. The response already carries `no-store`.
+    const target = canonicalUrl(req, page.subdomain);
+    if (target) return res.redirect(302, target);
+
     return serveSpaFallback(res, 404);
   }
 
