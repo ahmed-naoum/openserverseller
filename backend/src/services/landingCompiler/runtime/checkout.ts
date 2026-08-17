@@ -43,6 +43,28 @@ export const CHECKOUT_RUNTIME = `
     var panel = root.querySelector('[data-ck="success"]');
     var priceEl = root.querySelector('[data-ck="price"]');
     var selected = cfg.packs && cfg.packs.length ? cfg.packs[0] : null;
+    // selectedProductFromBlock (ReferralForm.tsx:47): the product a card in a
+    // products block was clicked for. Null on every page without one.
+    var fromBlock = null;
+
+    // The price chain, ReferralForm.tsx:500. The pack wins, then the clicked
+    // product's two price fields, then the product this link sells. Each step
+    // is a plain OR in the original, so a pack priced 0 falls through it.
+    function priceNow() {
+      return (selected && selected.price) ||
+        (fromBlock && fromBlock.retailPriceMad) ||
+        (fromBlock && fromBlock.priceMad) ||
+        cfg.retailPrice;
+    }
+    function paintPrice() {
+      if (!priceEl) return;
+      var shown = priceNow();
+      // Skipping the write would leave a stale number on screen that disagrees
+      // with what the server will charge.
+      if (shown !== null && shown !== undefined && shown !== '') {
+        priceEl.textContent = shown + ' MAD';
+      }
+    }
 
     // Eastern Arabic digits only. React maps this range and no other, then
     // strips everything outside [0-9+ -], so Persian digits are removed rather
@@ -120,16 +142,19 @@ export const CHECKOUT_RUNTIME = `
           other.classList.toggle('is-on', on);
           other.setAttribute('aria-checked', on ? 'true' : 'false');
         });
-        // Mirrors the React precedence chain: the pack price, else the product
-        // retail price. Skipping the write would leave a stale number on screen
-        // that disagrees with what the server will charge.
-        if (priceEl && selected) {
-          var shown = selected.price || cfg.retailPrice;
-          if (shown !== null && shown !== undefined && shown !== '') {
-            priceEl.textContent = shown + ' MAD';
-          }
-        }
+        paintPrice();
       });
+    });
+
+    // A products block dispatches this when a card's button points at the
+    // checkout anchor (BlockRenderer.tsx:422). React answers it by re-pricing
+    // the header and relabelling the order; without this the compiled page
+    // would scroll here and then sell the link's own product instead.
+    window.addEventListener('select-product', function(e){
+      var picked = e && e.detail ? e.detail.product : null;
+      if (!picked) return;
+      fromBlock = picked;
+      paintPrice();
     });
 
     function track() {
@@ -149,6 +174,15 @@ export const CHECKOUT_RUNTIME = `
           }
         } catch (e) {}
       }
+    }
+
+    // What the order is recorded as, ReferralForm.tsx:350-352. A card click
+    // makes it "Product (Pack)"; with no card it is the pack name alone, and
+    // absent entirely when the block has no packs.
+    function variant() {
+      if (!fromBlock) return selected ? selected.name : undefined;
+      var name = fromBlock.nameFr || fromBlock.nameEn || fromBlock.nameAr;
+      return name + ' (' + ((selected && selected.name) || 'Standard') + ')';
     }
 
     form.addEventListener('submit', function(e){
@@ -196,7 +230,7 @@ export const CHECKOUT_RUNTIME = `
           phone: phoneRaw.trim(),
           city: city,
           address: address,
-          productVariant: selected ? selected.name : undefined
+          productVariant: variant()
         })
       }).then(function(res){
         // A 502 from nginx or an offline network yields a non-JSON body; without

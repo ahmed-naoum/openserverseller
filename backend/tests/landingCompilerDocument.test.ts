@@ -30,8 +30,11 @@ function page(blocks: any[], overrides: any = {}) {
 
 describe('renderDocument', () => {
   it('declines a page containing a block with no renderer', async () => {
+    // countdown, since slider and products gained renderers. Of the builder's
+    // palette only header, text and countdown are left, and no live page has
+    // ever carried one.
     const html = await render(
-      page([{ id: 'a', type: 'slider', content: {} }])
+      page([{ id: 'a', type: 'countdown', content: {} }])
     );
     expect(html).toBeNull();
   });

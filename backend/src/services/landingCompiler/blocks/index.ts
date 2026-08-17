@@ -7,6 +7,8 @@ import { whatsappBlock } from './whatsapp.js';
 import { audioBlock } from './audio.js';
 import { spacerBlock } from './spacer.js';
 import { heroBlock } from './hero.js';
+import { sliderBlock } from './slider.js';
+import { productsBlock } from './products.js';
 
 /**
  * The renderer registry.
@@ -29,6 +31,8 @@ const RENDERERS: BlockRenderer[] = [
   audioBlock,
   spacerBlock,
   heroBlock,
+  sliderBlock,
+  productsBlock,
 ];
 
 export const registry = new Map<string, BlockRenderer>(

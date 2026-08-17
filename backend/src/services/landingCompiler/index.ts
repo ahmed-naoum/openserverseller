@@ -26,7 +26,10 @@ const prisma = new PrismaClient();
 //    highlighted pack while the runtime has selected another. A version has to
 //    identify one output exactly; when it stops doing that, the only repair is
 //    the next number.
-export const COMPILER_VERSION = 8;
+// 9: slider and products renderers added; the checkout runtime now answers the
+//    select-product event a products card fires, so an order placed from one of
+//    those cards records the product the visitor clicked.
+export const COMPILER_VERSION = 9;
 
 /**
  * Block types the compiler can render, derived from the renderer registry.
