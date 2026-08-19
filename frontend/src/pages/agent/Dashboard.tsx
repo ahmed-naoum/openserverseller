@@ -8,6 +8,14 @@ import {
   CalendarClock, X, Filter, History,
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip } from 'recharts';
+import {
+  PERIOD_PRESETS, DATE_MODES, COUNT_MODES, startOfDaysAgo,
+  fmtDateTimeInput, pct, fmtPct, type DateMode, type CountMode,
+} from '../../lib/agentPeriod';
+import {
+  CONFIRMATION_OUTCOMES, IN_PROGRESS_ROW,
+  DELIVERY_GROUPS, DELIVERY_STATUSES, type DeliveryGroup,
+} from '../../lib/agentStatusMeta';
 
 type ThemeKey = 'classic' | 'girly' | 'princess';
 
@@ -88,162 +96,6 @@ const THEME: Record<ThemeKey, {
   },
 };
 
-/**
- * Phase 1 shows exactly the six outcomes an agent can pick under
- * "✅ Résultat de la confirmation" on the lead page — same order, same wording.
- */
-const CONFIRMATION_OUTCOMES = [
-  { key: 'CALL_LATER', emoji: '📞', label: 'CALL LATER', hint: 'Rappel programmé', color: '#3b82f6', tile: 'bg-blue-50/70 border-blue-100 text-blue-700', bar: 'bg-blue-500' },
-  { key: 'NO_REPLY', emoji: '📵', label: 'NO REPLY', hint: 'Injoignable', color: '#64748b', tile: 'bg-slate-50 border-slate-200 text-slate-700', bar: 'bg-slate-500' },
-  { key: 'CONFIRMED', emoji: '✅', label: 'CONFIRMED', hint: 'Commande confirmée', color: '#10b981', tile: 'bg-emerald-50/70 border-emerald-100 text-emerald-700', bar: 'bg-emerald-500' },
-  { key: 'WRONG_ORDER', emoji: '⚠️', label: 'WRONG ORDER', hint: 'Mauvaise commande', color: '#f59e0b', tile: 'bg-amber-50/70 border-amber-100 text-amber-700', bar: 'bg-amber-500' },
-  { key: 'CANCEL_REASON_PRICE', emoji: '💰', label: 'CANCEL REASON PRICE', hint: 'Refus sur le prix', color: '#a855f7', tile: 'bg-purple-50/70 border-purple-100 text-purple-700', bar: 'bg-purple-500' },
-  { key: 'CANCEL_ORDER', emoji: '❌', label: 'CANCEL ORDER', hint: 'Commande annulée', color: '#ef4444', tile: 'bg-red-50/70 border-red-100 text-red-700', bar: 'bg-red-500' },
-] as const;
-
-/**
- * Claimed but not yet called — a state, not a result. It's listed with the six
- * outcomes so the whole pipeline is visible at a glance, but it stays out of the
- * confirmation-rate denominator: counting un-called leads as failures would drag
- * the rate down for work the agent hasn't had a chance to do yet.
- */
-const IN_PROGRESS_ROW = {
-  key: 'ASSIGNED',
-  emoji: '👤',
-  label: 'ASSIGNED',
-  hint: 'Réclamé, appel à passer',
-  color: '#06b6d4',
-  tile: 'bg-cyan-50/70 border-cyan-100 text-cyan-700',
-  bar: 'bg-cyan-500',
-} as const;
-
-type DeliveryGroup = 'pipeline' | 'transit' | 'issue' | 'done' | 'return';
-
-const DELIVERY_GROUPS: Record<DeliveryGroup, { label: string; order: number; dot: string }> = {
-  pipeline: { label: 'Préparation', order: 0, dot: 'bg-slate-400' },
-  transit: { label: 'En transit', order: 1, dot: 'bg-blue-500' },
-  issue: { label: 'Incidents', order: 2, dot: 'bg-orange-500' },
-  done: { label: 'Livré', order: 3, dot: 'bg-emerald-500' },
-  return: { label: 'Retours & annulations', order: 4, dot: 'bg-red-500' },
-};
-
-/** Every Coliaty parcel status, labelled and grouped. Keys mirror Livraison.tsx. */
-const DELIVERY_STATUSES: Record<string, { label: string; emoji: string; group: DeliveryGroup; color: string }> = {
-  PENDING: { label: 'En attente', emoji: '⏳', group: 'pipeline', color: '#f59e0b' },
-  PUSHED_TO_DELIVERY: { label: 'Envoyé en livraison', emoji: '📤', group: 'pipeline', color: '#818cf8' },
-  NEW_PARCEL: { label: 'Nouveau colis', emoji: '📦', group: 'pipeline', color: '#94a3b8' },
-  WAITING_PREPARATION: { label: 'Attente préparation', emoji: '🧾', group: 'pipeline', color: '#fb923c' },
-  ENCORE_PREPARED: { label: 'En préparation', emoji: '🔧', group: 'pipeline', color: '#60a5fa' },
-  PREPARED: { label: 'Préparé', emoji: '✔️', group: 'pipeline', color: '#34d399' },
-  WAITING_PICKUP: { label: 'Attente collecte', emoji: '🕒', group: 'pipeline', color: '#fbbf24' },
-
-  PICKED_UP: { label: 'Collecté', emoji: '🚚', group: 'transit', color: '#3b82f6' },
-  SENT: { label: 'Expédié', emoji: '✈️', group: 'transit', color: '#8b5cf6' },
-  RECEIVED: { label: 'Reçu (destination)', emoji: '📍', group: 'transit', color: '#6366f1' },
-  DISTRIBUTION: { label: 'En livraison', emoji: '🛵', group: 'transit', color: '#06b6d4' },
-  PROGRAMMER: { label: 'Programmé', emoji: '📅', group: 'transit', color: '#0ea5e9' },
-  PROGRAMMER_AUTO: { label: 'Programmé (auto)', emoji: '🤖', group: 'transit', color: '#a855f7' },
-
-  POSTPONED: { label: 'Reporté', emoji: '⏭️', group: 'issue', color: '#f97316' },
-  NOANSWER: { label: 'Pas de réponse', emoji: '📵', group: 'issue', color: '#fb7185' },
-  ERR: { label: 'Tél. erroné', emoji: '☎️', group: 'issue', color: '#f43f5e' },
-  INCORRECT_ADDRESS: { label: 'Adresse erronée', emoji: '🗺️', group: 'issue', color: '#e11d48' },
-
-  DELIVERED: { label: 'Livré', emoji: '🎉', group: 'done', color: '#10b981' },
-
-  RETURNED: { label: 'Retourné', emoji: '↩️', group: 'return', color: '#f97316' },
-  REFUSE: { label: 'Refusé', emoji: '🚫', group: 'return', color: '#dc2626' },
-  CANCELED: { label: 'Annulé (livreur)', emoji: '❌', group: 'return', color: '#ef4444' },
-  CANCELED_BY_SELLER: { label: 'Annulé (vendeur)', emoji: '❌', group: 'return', color: '#b91c1c' },
-  CANCELED_BY_SYSTEM: { label: 'Annulé (système)', emoji: '❌', group: 'return', color: '#991b1b' },
-};
-
-const pct = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
-const fmtPct = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1));
-
-/**
- * The period filter scopes every figure on this page by *arrival* time — when
- * the lead came in, when the parcel was created, when the cart was abandoned.
- * Not by when it was last touched: an agent asking "what did I do today" means
- * today's leads, and a status that moved this morning on a lead from last week
- * would otherwise pull the whole week into the count.
- *
- * An empty bound means unbounded on that side, so most presets are "since X"
- * and stay correct as the day goes on. "Hier" is the exception: it needs a
- * closing bound, otherwise it would mean yesterday *and* today.
- */
-const PERIOD_PRESETS: { key: string; label: string; range: () => { from: string; to: string } }[] = [
-  { key: 'today', label: "Aujourd'hui", range: () => ({ from: startOfDaysAgo(0), to: '' }) },
-  { key: 'yesterday', label: 'Hier', range: () => ({ from: startOfDaysAgo(1), to: endOfDaysAgo(1) }) },
-  { key: '7d', label: '7 jours', range: () => ({ from: startOfDaysAgo(6), to: '' }) },
-  { key: '30d', label: '30 jours', range: () => ({ from: startOfDaysAgo(29), to: '' }) },
-  { key: 'all', label: 'Tout', range: () => ({ from: '', to: '' }) },
-];
-
-/**
- * Which timestamp the period is read against. Two different questions, and an
- * agent needs both: "what did I get through today" is the work, "how are
- * today's arrivals doing" is the intake. A status moved this morning on a lead
- * from last week belongs to the first and not to the second.
- */
-const DATE_MODES = [
-  { key: 'updatedAt', label: 'Mise à jour', hint: 'Compté à la date du changement de statut' },
-  { key: 'createdAt', label: 'Création', hint: "Compté à la date d'arrivée du lead" },
-] as const;
-
-type DateMode = (typeof DATE_MODES)[number]['key'];
-
-/**
- * How Phase 1 counts. Both readings are true and neither replaces the other: an
- * agent who rings the same number three times before giving up did three
- * NO_REPLY calls on one lead. "Par lead" files each lead once, under the last
- * thing the agent did to it, so the slices add up to the leads worked; "par
- * action" counts every status change, so they add up to the work done.
- */
-const COUNT_MODES = [
-  { key: 'leads', label: 'Par lead', hint: 'Chaque lead compté une fois, sous sa dernière action' },
-  { key: 'actions', label: 'Par action', hint: 'Chaque changement de statut compté' },
-] as const;
-
-type CountMode = (typeof COUNT_MODES)[number]['key'];
-
-/** `datetime-local` speaks local wall-clock; `toISOString` would shift the hour. */
-const toDateTimeInput = (d: Date) => {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
-
-/** Midnight, `days` days back — the start bound of a "derniers N jours" preset. */
-const startOfDaysAgo = (days: number) => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - days);
-  return toDateTimeInput(d);
-};
-
-/**
- * 23:59 on the day `days` days back — the closing bound of a single-day preset.
- * Deliberately not the next day's 00:00: the server treats a bound given to the
- * minute as covering that whole minute, so midnight would leak the first sixty
- * seconds of the following day into the count.
- */
-const endOfDaysAgo = (days: number) => {
-  const d = new Date();
-  d.setHours(23, 59, 0, 0);
-  d.setDate(d.getDate() - days);
-  return toDateTimeInput(d);
-};
-
-/**
- * `2026-08-09T14:30` → `09/08 à 14:30`. Read straight off the string: it is
- * already the wall-clock the agent typed, and a round-trip through `Date` would
- * only add a timezone to take back out.
- */
-const fmtDateTimeInput = (value: string) => {
-  const [date, time] = value.split('T');
-  const [, month, day] = date.split('-');
-  return time ? `${day}/${month} à ${time}` : `${day}/${month}`;
-};
 
 export default function AgentDashboard() {
   const [theme, setTheme] = useState<ThemeKey>(

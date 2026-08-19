@@ -90,10 +90,25 @@ describe('video block', () => {
   it('mutes an autoplaying video and withholds controls behind the overlay', async () => {
     const html = (await withVideo({ url: '/uploads/v.mp4', autoplay: true }))!;
     expect(html).toMatch(/<video[^>]*\smuted/);
-    expect(html).toMatch(/<video[^>]*\sautoplay/);
+    // Autoplay is requested via a data attribute, not the HTML attribute: the
+    // real one overrides preload and makes the browser fetch the entire file
+    // during load. The runtime starts playback on intersection instead.
+    expect(html).toMatch(/<video[^>]*\sdata-vid-auto="1"/);
+    expect(html).not.toMatch(/<video[^>]*\sautoplay/);
     // React hides the native controls while the unmute prompt is up.
     expect(html).not.toMatch(/<video[^>]*\scontrols/);
     expect(html).toContain('data-vid-unmute');
+  });
+
+  it('never preloads the full file', async () => {
+    // The regression this guards is expensive: preload="auto" on a 2.4 MB webm
+    // was 65% of a measured page's weight and delayed LCP to 4.9 s.
+    const auto = (await withVideo({ url: '/uploads/v.mp4', autoplay: true }))!;
+    const manual = (await withVideo({ url: '/uploads/v.mp4' }))!;
+    for (const html of [auto, manual]) {
+      expect(html).toMatch(/<video[^>]*\spreload="metadata"/);
+      expect(html).not.toMatch(/<video[^>]*\spreload="auto"/);
+    }
   });
 
   it('shows controls and no overlay when autoplay is off', async () => {

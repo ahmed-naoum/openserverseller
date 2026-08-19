@@ -117,6 +117,15 @@ describe('button block', () => {
     expect(BUTTON_RUNTIME).toContain('setTimeout(reveal, after * 1000)');
   });
 
+  it('keeps the page-load timer for autoplay videos, which no longer start at load', async () => {
+    // Autoplay videos used to carry the HTML autoplay attribute and so began
+    // immediately, making this reveal a page-load timer in all but name. They
+    // now wait for the visitor to scroll near them (blocks/video.ts emits
+    // data-vid-auto instead), so a delayed CTA above a far-down video would
+    // never appear without this second arm.
+    expect(BUTTON_RUNTIME).toContain("document.querySelector('video[data-vid-auto]')");
+  });
+
   it('reveals a delayed button only once', async () => {
     // Both the event and the timer can fire; the second must be a no-op or the
     // listener would be removed twice and the class toggled after teardown.

@@ -132,7 +132,14 @@ router.get('/:code', async (req: Request, res: Response) => {
     return serveSpaFallback(res, 404);
   }
 
-  res.setHeader('Cache-Control', 'no-store');
+  // `no-cache`, not `no-store`, and the difference is worth the sentence:
+  // `no-store` was the sole reason Lighthouse reported the back/forward cache
+  // as disabled, so every back-navigation from an ad paid a full reload. Both
+  // headers revalidate with the origin on each navigation — cloaking still
+  // decides afresh — but `no-cache` permits bfcache. `private` keeps Cloudflare
+  // and every other shared cache out, which is what a per-visitor cloaking
+  // decision actually requires.
+  res.setHeader('Cache-Control', 'private, no-cache, max-age=0, must-revalidate');
   res.setHeader('Vary', 'Accept-Encoding');
   // helmet sets this to `off` globally, which would negate the dns-prefetch
   // hints in the SPA shell.

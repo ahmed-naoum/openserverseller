@@ -62,6 +62,96 @@ const resolveRowLimit = (limit: unknown): number => {
   return Math.min(MAX_ROWS_PER_REQUEST, Math.max(1, parsed));
 };
 
+/**
+ * The `where` that selects one agent's own actions out of `lead_status_history`.
+ *
+ * Shared by the dashboard aggregate (`/?withStats=true`) and the statistics page
+ * (`/agent-statistics`) so the two can never disagree about what counts as an
+ * action. The `Système :` exclusion is the important half — see SYSTEM_NOTE_PREFIX
+ * for why the cron's own rows carry the agent's id and must still be dropped.
+ *
+ * `byLeadArrival` picks which timestamp the window narrows: the action itself
+ * (false — "what did I get through today") or the lead's arrival (true — "how are
+ * today's arrivals doing").
+ */
+const agentHistoryWhere = (
+  agentId: number,
+  range: { gte?: Date; lte?: Date } | null,
+  byLeadArrival: boolean,
+): any => {
+  const where: any = {
+    changedBy: agentId,
+    OR: [{ notes: null }, { notes: { not: { startsWith: SYSTEM_NOTE_PREFIX } } }],
+  };
+  if (range) {
+    if (byLeadArrival) where.lead = { is: { createdAt: range } };
+    else where.createdAt = range;
+  }
+  return where;
+};
+
+type AgentHistoryRow = {
+  leadId: number;
+  newStatus: string;
+  lead?: { status: string } | null;
+};
+
+/**
+ * The three honest readings of a pile of history rows, built in one pass.
+ *
+ * `byAction` counts the work (a number rung twice is two NO_REPLY), `byLead`
+ * counts the customers, and `byLastAction` files each lead once under the agent's
+ * final word on it — the only one of the three that sums to `leadsWorked`, which
+ * is why the donut and every percentage are built on it.
+ *
+ * ROWS MUST BE ORDERED NEWEST FIRST: the first row seen for a lead is taken as
+ * its last action.
+ */
+const tallyAgentHistory = (rows: AgentHistoryRow[]) => {
+  const byAction: Record<string, number> = {};
+  const leadsPerAction: Record<string, Set<number>> = {};
+  const lastActionPerLead = new Map<number, string>();
+
+  for (const row of rows) {
+    byAction[row.newStatus] = (byAction[row.newStatus] || 0) + 1;
+    (leadsPerAction[row.newStatus] ||= new Set()).add(row.leadId);
+    if (lastActionPerLead.has(row.leadId)) continue;
+    // A lead already handed to Coliaty is booked as pushed whatever the last row
+    // says. The hand-off only started writing its own history row recently, so
+    // without this the leads pushed before that would still read as CONFIRMED.
+    lastActionPerLead.set(
+      row.leadId,
+      row.lead?.status === 'PUSHED_TO_DELIVERY' ? 'PUSHED_TO_DELIVERY' : row.newStatus
+    );
+  }
+
+  const byLastAction: Record<string, number> = {};
+  for (const action of lastActionPerLead.values()) {
+    byLastAction[action] = (byLastAction[action] || 0) + 1;
+  }
+
+  const byLead: Record<string, number> = {};
+  for (const [action, leadIds] of Object.entries(leadsPerAction)) {
+    byLead[action] = leadIds.size;
+  }
+
+  // Zero-fill so a tile the agent never lit renders as 0 instead of vanishing.
+  for (const action of AGENT_TRACKED_ACTIONS) {
+    byAction[action] ??= 0;
+    byLead[action] ??= 0;
+    byLastAction[action] ??= 0;
+  }
+
+  return {
+    byAction,
+    byLead,
+    byLastAction,
+    totalActions: rows.length,
+    leadsWorked: lastActionPerLead.size,
+    claimed: byLead.ASSIGNED,
+  };
+};
+
 // Lives in `lib/` so the vendor dashboard reads the same window from the same
 // pair of inputs — see the note there on why there is only one copy.
 
@@ -547,85 +637,34 @@ router.get(
         // back at AVAILABLE and a lead someone else took is theirs, yet both
         // still carry work this agent did. So the agent's own figures are
         // rebuilt from scratch out of the history rows they wrote.
-        const historyWhere: any = {
-          changedBy: req.user!.id,
-          // The reassignment cron stamps its release rows with the agent's id so
-          // the lead's timeline reads as one story. They are not agent actions,
-          // and letting them through would both credit the agent for every lead
-          // that timed out on them and — being the newest row — make the release
-          // their "last action", pulling the lead out of the outcome they really
-          // recorded. See SYSTEM_NOTE_PREFIX.
-          OR: [{ notes: null }, { notes: { not: { startsWith: SYSTEM_NOTE_PREFIX } } }],
-        };
-        const historyRange = parseDateRange(dateFrom, dateTo);
-        if (historyRange) {
-          // Two readings of "période", picked by `dateField`:
-          //   updatedAt  → when the agent did it — the action's own timestamp
-          //   createdAt  → when the lead came in, whenever it was worked
-          if (targetDateField === 'createdAt') historyWhere.lead = { is: { createdAt: historyRange } };
-          else historyWhere.createdAt = historyRange;
-        }
-
+        // Both the filter and the arithmetic are shared with /agent-statistics,
+        // so the dashboard and the statistics page can never drift apart on what
+        // counts as an action or on where a lead is filed.
         const actionRows = await prisma.leadStatusHistory.findMany({
-          where: historyWhere,
+          where: agentHistoryWhere(
+            req.user!.id,
+            parseDateRange(dateFrom, dateTo),
+            targetDateField === 'createdAt',
+          ),
           // Newest first, so the first row seen for a lead is the agent's last
-          // word on it.
+          // word on it — `tallyAgentHistory` depends on this ordering.
           orderBy: { createdAt: 'desc' },
           select: { leadId: true, newStatus: true, lead: { select: { status: true } } },
         });
 
-        // "How many NO_REPLY?" has two honest answers and the dashboard shows
-        // both: `byAction` counts the calls (a lead rung twice counts twice),
-        // `byStatus` counts the leads sitting on that outcome. Only the second
-        // sums to `leadsWorked`, so it is what the donut and the percentages
-        // are built on — the first would have one lead in several slices.
-        const byAction: Record<string, number> = {};
-        const leadsPerAction: Record<string, Set<number>> = {};
-        const lastActionPerLead = new Map<number, string>();
+        const tally = tallyAgentHistory(actionRows);
 
-        for (const row of actionRows) {
-          byAction[row.newStatus] = (byAction[row.newStatus] || 0) + 1;
-          (leadsPerAction[row.newStatus] ||= new Set()).add(row.leadId);
-          if (lastActionPerLead.has(row.leadId)) continue;
-          // A lead already handed to Coliaty is booked as pushed whatever the
-          // last row says. The hand-off only started writing its own history
-          // row recently, so without this the leads pushed before that would
-          // still read as merely CONFIRMED.
-          lastActionPerLead.set(
-            row.leadId,
-            row.lead?.status === 'PUSHED_TO_DELIVERY' ? 'PUSHED_TO_DELIVERY' : row.newStatus
-          );
-        }
-
-        const agentByStatus: Record<string, number> = {};
-        for (const action of lastActionPerLead.values()) {
-          agentByStatus[action] = (agentByStatus[action] || 0) + 1;
-        }
-
-        const byLead: Record<string, number> = {};
-        for (const [action, leadIds] of Object.entries(leadsPerAction)) {
-          byLead[action] = leadIds.size;
-        }
-
-        // Zero-fill so a tile the agent never lit still renders as 0 instead of
-        // vanishing from the grid.
-        for (const action of AGENT_TRACKED_ACTIONS) {
-          byAction[action] ??= 0;
-          byLead[action] ??= 0;
-          agentByStatus[action] ??= 0;
-        }
-
-        byStatus = agentByStatus;
-        scopeTotal = lastActionPerLead.size;
+        byStatus = tally.byLastAction;
+        scopeTotal = tally.leadsWorked;
 
         agentActivity = {
-          totalActions: actionRows.length,
-          leadsWorked: lastActionPerLead.size,
+          totalActions: tally.totalActions,
+          leadsWorked: tally.leadsWorked,
           // Leads this agent pulled out of the pool — the true "Réclamé", which
           // survives the claim being handed back.
-          claimed: byLead.ASSIGNED,
-          byAction,
-          byLead,
+          claimed: tally.claimed,
+          byAction: tally.byAction,
+          byLead: tally.byLead,
         };
       }
 
@@ -980,6 +1019,175 @@ router.get(
     });
   })
 );
+
+/**
+ * Everything the agent statistics page shows that no other endpoint can answer.
+ *
+ * The dashboard already serves the totals (`/?withStats=true`), the parcels
+ * (`/livraison`), the pool (`/available`) and the carts (`/abandoned-carts`), and
+ * the statistics page keeps calling those rather than growing a second
+ * implementation of each. What is genuinely missing there is *shape over time*:
+ * how the work was spread across the days of the window, which hours of the day
+ * it was done in, and what the last few actions actually were.
+ *
+ * Same history rows, same `Système :` exclusion, same date semantics as the
+ * dashboard — all three come from `agentHistoryWhere` / `tallyAgentHistory`, so a
+ * figure here and the same figure on the dashboard are the same query.
+ */
+router.get(
+  '/agent-statistics',
+  authenticate,
+  authorize('CALL_CENTER_AGENT'),
+  asyncHandler(async (req, res) => {
+    const agentId = req.user!.id;
+    const { dateFrom, dateTo, dateField, dateType, recentLimit } = req.query as Record<string, string | undefined>;
+
+    const byLeadArrival = (dateField || dateType) === 'createdAt';
+    const range = parseDateRange(dateFrom, dateTo);
+    const feedSize = Math.min(100, Math.max(1, Number(recentLimit) || 40));
+
+    const where = agentHistoryWhere(agentId, range, byLeadArrival);
+
+    // One read, three products: the tallies, the two time series, and the feed.
+    // Capped like every other list on this router — `MAX_ROWS_PER_REQUEST` is a
+    // memory ceiling, and `truncated` below says plainly when it bit, rather than
+    // letting a silently short window read as a quiet week.
+    const rows = await prisma.leadStatusHistory.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: MAX_ROWS_PER_REQUEST,
+      select: {
+        id: true,
+        leadId: true,
+        oldStatus: true,
+        newStatus: true,
+        createdAt: true,
+        notes: true,
+        lead: { select: { status: true, fullName: true, city: true } },
+      },
+    });
+
+    const tally = tallyAgentHistory(rows);
+
+    // Local wall-clock on purpose: `parseDateRange` builds its bounds from local
+    // midnight, so bucketing in UTC would put the first hours of a day in the
+    // previous bucket and make "Aujourd'hui" straddle two columns.
+    const dayKey = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+    // Every status this agent actually wrote, not just the eight the tiles score.
+    // Legacy and intermediate statuses (ORDERED, CONTACTED, …) are real work, and
+    // a chart that silently drops them shows a shorter bar than the day's total.
+    const presentStatuses = new Set<string>(AGENT_TRACKED_ACTIONS);
+    for (const row of rows) presentStatuses.add(row.newStatus);
+
+    const blankDay = () => {
+      const o: Record<string, number> = { total: 0, leads: 0 };
+      for (const a of presentStatuses) o[a] = 0;
+      return o;
+    };
+
+    const days = new Map<string, ReturnType<typeof blankDay>>();
+    const leadsPerDay = new Map<string, Set<number>>();
+    const hours = Array.from({ length: 24 }, () => 0);
+
+    for (const row of rows) {
+      const key = dayKey(row.createdAt);
+      const bucket = days.get(key) || blankDay();
+      bucket.total += 1;
+      bucket[row.newStatus] = (bucket[row.newStatus] || 0) + 1;
+      days.set(key, bucket);
+      (leadsPerDay.get(key) || leadsPerDay.set(key, new Set()).get(key)!).add(row.leadId);
+      hours[row.createdAt.getHours()] += 1;
+    }
+    for (const [key, set] of leadsPerDay) days.get(key)!.leads = set.size;
+
+    // Ascending, and gap-filled across the whole window so a day with no work
+    // draws as a zero rather than closing the gap and flattering the trend.
+    // Without an explicit start bound there is nothing to fill towards, so the
+    // series is then just the days that actually have rows.
+    const daily: any[] = [];
+    if (rows.length > 0) {
+      const stamps = rows.map(r => r.createdAt.getTime());
+      const first = new Date(range?.gte ? Math.min(range.gte.getTime(), ...stamps) : Math.min(...stamps));
+      const last = new Date(range?.lte ? Math.min(range.lte.getTime(), Date.now()) : Math.max(...stamps));
+      first.setHours(0, 0, 0, 0);
+      // A window wider than this is a chart nobody can read; fall back to the
+      // days that carry work instead of drawing 400 empty columns.
+      const spanDays = Math.floor((last.getTime() - first.getTime()) / 86400000) + 1;
+      if (spanDays > 0 && spanDays <= 180) {
+        for (const cursor = new Date(first); cursor <= last; cursor.setDate(cursor.getDate() + 1)) {
+          const key = dayKey(cursor);
+          daily.push({ date: key, ...(days.get(key) || blankDay()) });
+        }
+      } else {
+        for (const key of Array.from(days.keys()).sort()) {
+          daily.push({ date: key, ...days.get(key)! });
+        }
+      }
+    }
+
+    const busiestDay = daily.reduce(
+      (best, d) => (best === null || d.total > best.total ? d : best),
+      null as any,
+    );
+    const workedDays = daily.filter(d => d.total > 0).length;
+    const busiestHour = hours.reduce((best, n, h) => (n > hours[best] ? h : best), 0);
+
+    // Newest first — the feed reads top-down like a timeline.
+    const recent = rows.slice(0, feedSize).map(r => ({
+      id: r.id,
+      at: r.createdAt,
+      leadId: r.leadId,
+      leadName: r.lead?.fullName || null,
+      city: r.lead?.city || null,
+      oldStatus: r.oldStatus,
+      newStatus: r.newStatus,
+      leadStatus: r.lead?.status || null,
+      notes: r.notes,
+    }));
+
+    res.json({
+      status: 'success',
+      data: {
+        range: {
+          from: range?.gte ?? null,
+          to: range?.lte ?? null,
+          field: byLeadArrival ? 'createdAt' : 'updatedAt',
+        },
+        summary: {
+          totalActions: tally.totalActions,
+          leadsWorked: tally.leadsWorked,
+          claimed: tally.claimed,
+          workedDays,
+          actionsPerWorkedDay: workedDays > 0 ? tally.totalActions / workedDays : 0,
+          actionsPerLead: tally.leadsWorked > 0 ? tally.totalActions / tally.leadsWorked : 0,
+          busiestDay: busiestDay && busiestDay.total > 0 ? busiestDay.date : null,
+          busiestDayCount: busiestDay?.total ?? 0,
+          busiestHour: hours[busiestHour] > 0 ? busiestHour : null,
+          firstActionAt: rows.length ? rows[rows.length - 1].createdAt : null,
+          lastActionAt: rows.length ? rows[0].createdAt : null,
+        },
+        byAction: tally.byAction,
+        byLead: tally.byLead,
+        byLastAction: tally.byLastAction,
+        daily,
+        // Tracked actions first, in tile order, then anything else the agent
+        // wrote — so the client can stack the series without guessing the keys.
+        statuses: [
+          ...AGENT_TRACKED_ACTIONS,
+          ...[...presentStatuses].filter(a => !AGENT_TRACKED_ACTIONS.includes(a as any)).sort(),
+        ],
+        hourly: hours.map((total, hour) => ({ hour, total })),
+        recent,
+        // Says so out loud rather than letting a clipped window read as a quiet
+        // week. Only reachable on a very wide "Tout" on a busy account.
+        truncated: rows.length >= MAX_ROWS_PER_REQUEST,
+      },
+    });
+  })
+);
+
 
 // Statuses where a lead is still "in the hands of" an agent and therefore worth
 // taking over. Anything past the confirmation call (CONFIRMED, WRONG_ORDER,

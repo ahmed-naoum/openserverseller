@@ -1,4 +1,5 @@
-import { esc, safeColor, safeUrl } from './escape.js';
+import { esc, safeColor, safeUrl, num } from './escape.js';
+import { buildSrcset, sizesFor } from './blocks/image.js';
 import { buildCss } from './styles.js';
 import { renderHead, renderNoscriptPixels, selectActivePixels, buildCsp, ActivePixel } from './head.js';
 import crypto from 'crypto';
@@ -37,11 +38,11 @@ function blockUrls(blocks: any[]): string[] {
  * mirrors the heuristic the inline script in frontend/index.html already uses,
  * except we can resolve it at compile time rather than during parse.
  */
-function findLcpImage(blocks: any[]): string | null {
+function findLcpImage(blocks: any[]): { url: string; content: any } | null {
   for (const block of blocks.slice(0, 3)) {
     if (block?.type !== 'image') continue;
     const url = safeUrl(block?.content?.url, { allowDataImage: true });
-    if (url) return url;
+    if (url) return { url, content: block?.content || {} };
   }
   return null;
 }
@@ -115,8 +116,10 @@ export async function renderDocument(input: RenderInput): Promise<RenderedPage |
   const pixels: ActivePixel[] = selectActivePixels(input.influencerPixels, input.code);
 
   const retail = Number(input.product?.retailPriceMad);
+  const pageMaxWidth = num(input.settings?.maxWidth, 640, 280, 1600);
   const ctx: Omit<BlockContext, 'index'> = {
     total: input.blocks.length,
+    pageMaxWidth,
     code: input.code,
     productPriceMad: Number.isFinite(retail) ? retail : null,
     pixels,
@@ -174,10 +177,17 @@ export async function renderDocument(input: RenderInput): Promise<RenderedPage |
 
   const canonical = input.origin ? `${input.origin}/r/${encodeURIComponent(input.code)}` : null;
 
+  // The preload must advertise exactly the candidates the <img> will, or the
+  // browser resolves the two independently and fetches two different files.
+  const lcp = findLcpImage(input.blocks);
+  const lcpSrcset = lcp ? buildSrcset(lcp.url, probeImage(lcp.url)) : '';
+
   const head = renderHead({
     title: pageTitle(input),
     description: pageDescription(input),
-    lcpImage: findLcpImage(input.blocks),
+    lcpImage: lcp?.url ?? null,
+    lcpImageSrcset: lcpSrcset || null,
+    lcpImageSizes: lcpSrcset ? sizesFor({ ...ctx, index: 0 }, lcp!.content) : null,
     pixels,
     themeColor,
     css,

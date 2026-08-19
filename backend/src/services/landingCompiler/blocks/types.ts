@@ -1,6 +1,20 @@
+export interface ImageVariant {
+  /** Intrinsic width of the variant file, and its `w` descriptor in srcset. */
+  width: number;
+  url: string;
+}
+
 export interface ImageDimensions {
   width: number;
   height: number;
+  /**
+   * Narrower re-encodes of the same image that already exist on disk.
+   *
+   * Empty on the first compile after an upload — generation is deliberately not
+   * awaited, so nobody's save waits on sharp. `warmImageCache` re-checks the
+   * disk on every later compile, so the next one picks them up.
+   */
+  variants?: ImageVariant[];
 }
 
 export interface ConversionPixel {
@@ -35,6 +49,13 @@ export interface BlockContext {
   influencerName: string | null;
   /** Influencer avatar — default profile image for the WhatsApp widget. */
   influencerAvatar: string | null;
+  /**
+   * `.pg`'s max-width in px — the widest an image is ever displayed.
+   *
+   * Needed for a truthful `sizes`: without it the browser assumes full-viewport
+   * and picks a candidate far larger than the column can show.
+   */
+  pageMaxWidth: number;
   /**
    * Intrinsic dimensions for a local upload, or null.
    *

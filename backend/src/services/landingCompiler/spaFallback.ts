@@ -85,7 +85,9 @@ export function serveSpaFallback(res: Response, status = 200): void {
   res.removeHeader('Content-Security-Policy-Report-Only');
   res.setHeader('X-DNS-Prefetch-Control', 'on');
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store');
+  // See landing.routes.ts: `no-store` blocks the back/forward cache outright,
+  // `private, no-cache` revalidates just as strictly and allows it.
+  res.setHeader('Cache-Control', 'private, no-cache, max-age=0, must-revalidate');
   res.status(status).send(shell.html);
 }
 

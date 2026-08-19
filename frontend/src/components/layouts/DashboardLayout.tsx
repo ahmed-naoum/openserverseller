@@ -73,7 +73,8 @@ import {
   Music,
   Ghost,
   FileSpreadsheet,
-  UserCog
+  UserCog,
+  BarChart3
 } from 'lucide-react';
 
 /**
@@ -241,6 +242,7 @@ const navigation = {
   ],
   agent: [
     { name: 'Tableau de bord', href: '/agent', icon: Home },
+    { name: 'Mes Statistiques', href: '/agent/statistics', icon: BarChart3 },
     { name: 'Réclamer Leads', href: '/agent/leads', icon: Zap },
     { name: 'Leads Assignés', href: '/agent/assigned-leads', icon: Users },
     { name: 'WhatsApp Leads', href: '/agent/insert-lead', icon: Plus },

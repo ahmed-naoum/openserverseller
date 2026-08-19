@@ -158,6 +158,51 @@ describe('renderDocument', () => {
     expect(html).toMatch(/third\.webp[^>]*loading="lazy"/);
   });
 
+  it('never lets the LCP preload disagree with the <img> it preloads', async () => {
+    // The failure this guards is counter-intuitive: a preload whose imagesrcset
+    // differs from the img's srcset makes the browser resolve the two candidate
+    // lists independently and download BOTH files. Responsive images would then
+    // cost bytes rather than save them, which is worse than shipping no srcset.
+    const html = (await render(
+      page([
+        { id: 'a', type: 'image', content: { url: '/uploads/first.webp' } },
+        { id: 'b', type: 'image', content: { url: '/uploads/second.webp' } },
+      ])
+    ))!;
+
+    const preload = html.match(/<link rel="preload" as="image"[^>]*>/)?.[0] ?? '';
+    const img = html.match(/<img src="\/uploads\/first\.webp"[^>]*>/)?.[0] ?? '';
+    expect(preload).not.toBe('');
+    expect(img).not.toBe('');
+
+    const attr = (source: string, name: string) =>
+      source.match(new RegExp(`\\s${name}="([^"]*)"`))?.[1] ?? null;
+
+    // Either both carry a candidate list and they are identical, or neither does.
+    expect(attr(preload, 'imagesrcset')).toBe(attr(img, 'srcset'));
+    expect(attr(preload, 'imagesizes')).toBe(attr(img, 'sizes'));
+  });
+
+  it('reports PageView on a terminal navigation, and only once', async () => {
+    // Deferring fbevents.js means the queued PageView is transmitted by an SDK
+    // that has not loaded yet. A visitor who hits back before it does would take
+    // that PageView with them — inserting a <script> during pagehide does not
+    // help, because the fetch is cancelled when the navigation commits. So the
+    // pagehide path reports through the pixel endpoint directly instead.
+    const html = (await render(
+      page([{ id: 'a', type: 'image', content: { url: '/uploads/x.webp' } }], {
+        influencerPixels: [{ type: 'GLOBAL', platform: 'META', pixelId: '999' }],
+      })
+    ))!;
+
+    expect(html).toContain("w.addEventListener('pagehide',bail)");
+    expect(html).toContain('facebook.com/tr?id=999\\u0026ev=PageView');
+    // Having beaconed it, the drain must remove the queued copy, or a page
+    // restored from the back/forward cache would report the same view twice.
+    expect(html).toContain('if(sent)strip()');
+    expect(html).toMatch(/a\[1\]==='PageView'/);
+  });
+
   it('emits no webfont request', async () => {
     const html = await render(
       page([{ id: 'a', type: 'image', content: { url: '/uploads/x.webp' } }])

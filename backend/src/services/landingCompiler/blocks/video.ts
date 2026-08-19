@@ -128,13 +128,25 @@ export const videoBlock: BlockRenderer = {
     // the unmute overlay is what lets the visitor turn sound on afterwards.
     const muted = autoplay || !!c.muted;
 
+    const poster = safeUrl(c.poster || c.posterUrl || c.thumbnail || '');
+
     return (
       `<div class="bk bk-vid" style="${wrapStyle}">` +
       `<div class="bk-vid-i" data-vid style="${boxStyle}">` +
-      `<video src="${esc(src)}" preload="auto" playsinline` +
+      // `metadata`, never `auto`: `auto` pulled the whole file during load — a
+      // 2.4 MB webm was 65% of a measured page's weight and finished 3.4 s in,
+      // starving the LCP image of bandwidth. `metadata` costs a few KB, still
+      // yields intrinsic dimensions (so the box reserves the right height and
+      // CLS stays 0), and the runtime upgrades it to `auto` on approach.
+      `<video src="${esc(src)}" preload="metadata" playsinline` +
+      (poster ? ` poster="${esc(poster)}"` : '') +
       // controls are withheld while the unmute overlay is up, matching React.
       (controls && !autoplay ? ' controls' : '') +
-      (autoplay ? ' autoplay' : '') +
+      // NOT the `autoplay` attribute: it overrides `preload` and makes the
+      // browser download the whole file regardless. The runtime plays it on
+      // intersection instead, which is the same behaviour for anyone who
+      // actually scrolls to the video and free for everyone who does not.
+      (autoplay ? ' data-vid-auto="1"' : '') +
       (loop ? ' loop' : '') +
       (muted ? ' muted' : '') +
       (maxHeight ? ` style="${maxHeight}"` : '') +

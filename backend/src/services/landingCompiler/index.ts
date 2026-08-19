@@ -20,16 +20,12 @@ const prisma = new PrismaClient();
 // 6: audio data-au hook update; pack selection moved to class; video-delayed buttons fall back to timer.
 // 7: spacer and hero renderers added.
 // 8: invalidates the 6 and 7 rows built BEFORE the pack-selection change landed.
-//    That change altered checkout markup without a bump of its own, so a stored
-//    6 or 7 could be either shape — and the old shape puts an inline border on
-//    the first pack that no class can override, leaving a customer looking at a
-//    highlighted pack while the runtime has selected another. A version has to
-//    identify one output exactly; when it stops doing that, the only repair is
-//    the next number.
 // 9: slider and products renderers added; the checkout runtime now answers the
 //    select-product event a products card fires, so an order placed from one of
 //    those cards records the product the visitor clicked.
-export const COMPILER_VERSION = 9;
+// 10: performance pass — video preloads metadata and loads on approach, images
+//     carry srcset, preconnect drops crossorigin, pixel SDKs load on idle.
+export const COMPILER_VERSION = 10;
 
 /**
  * Block types the compiler can render, derived from the renderer registry.

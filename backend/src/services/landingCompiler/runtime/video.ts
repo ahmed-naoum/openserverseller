@@ -72,12 +72,42 @@ export const VIDEO_RUNTIME = `
       });
     }
 
-    // autoplay on the element covers most cases, but Safari rejects the attribute
-    // in some states and only honours an explicit call.
-    if (v.autoplay) {
-      var p = v.play();
-      if (p && p.catch) p.catch(function(){});
+    // The element ships with preload="metadata" and no autoplay attribute, so
+    // nothing beyond the header is fetched until the visitor is near the video.
+    // Buffering starts one viewport early, which is far enough ahead that the
+    // video is ready by the time it is actually on screen.
+    var wanted = v.getAttribute('data-vid-auto') === '1';
+    var armed = false;
+
+    // fetch is false when playback has already begun by other means: load()
+    // would restart the media element and cut that playback off.
+    function activate(fetch) {
+      if (armed) return;
+      armed = true;
+      v.preload = 'auto';
+      // preload alone does not commit the browser to fetching; load() does.
+      if (fetch) { try { v.load(); } catch (e) {} }
+      if (fetch && wanted) {
+        var p = v.play();
+        if (p && p.catch) p.catch(function(){});
+      }
     }
+
+    if (typeof IntersectionObserver === 'function') {
+      var io = new IntersectionObserver(function(entries){
+        for (var j = 0; j < entries.length; j++) {
+          if (entries[j].isIntersecting) { io.disconnect(); activate(true); return; }
+        }
+      }, { rootMargin: '100% 0px' });
+      io.observe(box);
+    } else {
+      // No observer: behave as the page did before, rather than never playing.
+      activate(true);
+    }
+
+    // Pressing play (or the unmute overlay) beats the observer to it. Fetching
+    // is already under way in that case, so only the preload hint is raised.
+    v.addEventListener('play', function(){ activate(false); });
   }
 })();
 `;

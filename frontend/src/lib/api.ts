@@ -272,6 +272,21 @@ export const leadsApi = {
     productId?: number | string;
   }) => api.get('/leads/available', { params }),
   claim: (id: number) => api.post(`/leads/${id}/claim`),
+  /**
+   * Shape-over-time for the agent statistics page: the daily and hourly spread of
+   * the agent's own actions plus a live feed of the last few. The totals it sits
+   * next to still come from `list({ withStats: 'true' })` — same history rows,
+   * same server-side tally, so the two panels can never disagree.
+   */
+  agentStatistics: (params?: {
+    dateFrom?: string;
+    dateTo?: string;
+    /** 'updatedAt' scopes on the action's own time, 'createdAt' on the lead's arrival. */
+    dateField?: 'updatedAt' | 'createdAt';
+    dateType?: 'updatedAt' | 'createdAt';
+    /** How many rows the activity feed carries. Server caps at 100. */
+    recentLimit?: number;
+  }) => api.get('/leads/agent-statistics', { params }),
   // Leads already held by an agent (any agent) within this agent's own scope.
   // The response never carries phone numbers — see /leads/assigned-all.
   assignedAll: (params?: {

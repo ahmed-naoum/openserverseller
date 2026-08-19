@@ -18,6 +18,7 @@ import VendorLeads from './pages/vendor/Leads';
 import VendorInventory from './pages/vendor/Inventory';
 import VendorSubAccounts from './pages/vendor/SubAccounts';
 import AgentDashboard from './pages/agent/Dashboard';
+import AgentStatistics from './pages/agent/Statistics';
 import AgentLeads from './pages/agent/Leads';
 import AgentMyLeads from './pages/agent/MyLeads';
 import AgentAssignedLeads from './pages/agent/AssignedLeads';
@@ -503,6 +504,7 @@ function App() {
           </RoleGuard>
         }>
           <Route index element={<AgentDashboard />} />
+          <Route path="statistics" element={<AgentStatistics />} />
           <Route path="leads" element={<AgentLeads />} />
           <Route path="assigned-leads" element={<AgentAssignedLeads />} />
           <Route path="insert-lead" element={<InsertLead />} />

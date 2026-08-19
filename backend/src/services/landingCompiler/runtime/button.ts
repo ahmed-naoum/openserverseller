@@ -55,7 +55,14 @@ export const BUTTON_RUNTIME = `
       // the button permanently invisible. A configured call-to-action that no
       // customer can ever see is lost orders, so fall back to a timer from page
       // load. Pages that do have a real <video> keep the original behaviour.
-      if (!document.querySelector('video')) {
+      //
+      // The second arm covers autoplay videos specifically. They used to carry
+      // the HTML autoplay attribute and so began at page load, which made this
+      // reveal a page-load timer in all but name. They now wait until the
+      // visitor scrolls near them, so without this a delayed CTA placed above a
+      // far-down video would never appear at all. Manually played videos are
+      // untouched: there the delay is meant to track watch time.
+      if (!document.querySelector('video') || document.querySelector('video[data-vid-auto]')) {
         setTimeout(reveal, after * 1000);
       }
     }

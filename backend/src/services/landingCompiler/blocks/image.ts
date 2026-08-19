@@ -1,5 +1,37 @@
 import { esc, safeUrl, num } from '../escape.js';
-import type { BlockRenderer, BlockContext } from './types.js';
+import type { BlockRenderer, BlockContext, ImageDimensions } from './types.js';
+
+/**
+ * The candidate list, widest-last, with the original as the top candidate.
+ *
+ * Exported because head.ts must preload the LCP image with an `imagesrcset`
+ * identical to this one. A mismatch is worse than no srcset at all: the preload
+ * fetches the full-size file and the <img> then fetches a variant, so the page
+ * downloads both.
+ */
+export function buildSrcset(url: string, dims: ImageDimensions | null): string {
+  if (!dims?.variants?.length) return '';
+  return [
+    ...dims.variants.map((v) => `${v.url} ${v.width}w`),
+    `${url} ${dims.width}w`,
+  ].join(', ');
+}
+
+/**
+ * What the browser needs to know to pick from that list before layout exists.
+ *
+ * The image sits in `.pg`, a centred column capped at `settings.maxWidth`
+ * (default 640), so it is viewport-wide only until that cap. A bare `100vw`
+ * would overstate the requirement on every desktop and hand back the savings.
+ */
+export function sizesFor(ctx: BlockContext, content: any): string {
+  const pct = content?.width ? num(content.width, 100, 1, 100) : 100;
+  const column = ctx.pageMaxWidth || 640;
+  const capped = Math.round((column * pct) / 100);
+  return pct === 100
+    ? `(max-width:${column}px) 100vw, ${capped}px`
+    : `(max-width:${column}px) ${pct}vw, ${capped}px`;
+}
 
 /**
  * Ported from BlockRenderer.tsx `case 'image'` (lines 123-155).
@@ -55,9 +87,14 @@ export const imageBlock: BlockRenderer = {
 
     const imgStyle = `width:${widthPct};${maxHeight}${ratio}`;
 
+    const srcset = buildSrcset(url, dims);
+    const responsive = srcset
+      ? ` srcset="${esc(srcset)}" sizes="${esc(sizesFor(ctx, content))}"`
+      : '';
+
     return (
       `<div class="bk bk-img" style="${style}">` +
-      `<img src="${esc(url)}" alt="${esc(content.alt || '')}"${sizeAttrs}` +
+      `<img src="${esc(url)}" alt="${esc(content.alt || '')}"${sizeAttrs}${responsive}` +
       ` loading="${eager ? 'eager' : 'lazy'}"` +
       ` fetchpriority="${isFirst ? 'high' : 'auto'}"` +
       ` decoding="${isFirst ? 'sync' : 'async'}"` +

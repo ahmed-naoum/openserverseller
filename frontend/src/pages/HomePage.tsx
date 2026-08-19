@@ -214,6 +214,7 @@ export default function HomePage() {
               <Link to="/contact" className="hover:text-[#ff5722] transition-colors">{t('contact_us')}</Link>
               <a href="#marketplace" className="hover:text-[#ff5722] transition-colors">{t('products_label')}</a>
               <Link to="/influencer/register" className="hover:text-[#ff5722] transition-colors">{t('influencers_label')}</Link>
+              <Link to="/register" className="hover:text-[#ff5722] transition-colors">{t('sellers_label')}</Link>
             </div>
 
             {/* Left side actions (Login, Register / Dashboard) */}
@@ -295,6 +296,17 @@ export default function HomePage() {
                     }`}
                   >
                     <span>{t('influencers_label')}</span>
+                    <ChevronRight className={`w-4 h-4 text-slate-300 ${language === 'ar' ? 'rotate-180' : ''}`} />
+                  </Link>
+
+                  <Link
+                    to="/register"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center justify-between px-4 py-3 rounded-xl font-bold text-[15px] text-[#2e315e] hover:bg-slate-50 active:bg-slate-100 transition-colors ${
+                      language === 'ar' ? 'text-right flex-row-reverse' : 'text-left flex-row'
+                    }`}
+                  >
+                    <span>{t('sellers_label')}</span>
                     <ChevronRight className={`w-4 h-4 text-slate-300 ${language === 'ar' ? 'rotate-180' : ''}`} />
                   </Link>
 
