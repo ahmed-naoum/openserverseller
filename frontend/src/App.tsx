@@ -144,6 +144,8 @@ import { LanguageProvider } from './contexts/LanguageContext';
 // Guards
 import RoleGuard from './components/auth/RoleGuard';
 import UnauthGuard from './components/auth/UnauthGuard';
+import SubAccountGuard from './components/auth/SubAccountGuard';
+import { VENDOR_HELPER_BASE } from './lib/dashboardBase';
 import { settingsApi } from './lib/api';
 
 function PageTracker() {
@@ -497,6 +499,60 @@ function App() {
           <Route path="notifications" element={<Notifications />} />
         </Route>
 
+        {/* Vendor Sub-Account Dashboard
+
+            The same page components as `/dashboard`, mounted under their own
+            prefix: a sub-account and its vendor share every screen, and only the
+            URL says which of the two trees the user is in (see lib/dashboardBase).
+
+            Pages the vendor keeps to itself are absent rather than guarded:
+            sub-account management, the integration OAuth callbacks (connecting a
+            store stays with the owner) and profile verification (the KYC, bank
+            and contract are the vendor's). Everything else is a grant, and
+            SubAccountGuard turns an ungranted URL into a clean refusal instead of
+            a page shell firing requests the API rejects. */}
+        <Route path={VENDOR_HELPER_BASE} element={
+          <RoleGuard allowedRoles={['VENDOR_HELPER']}>
+            <DashboardLayout />
+          </RoleGuard>
+        }>
+          <Route element={<SubAccountGuard />}>
+            <Route index element={<VendorDashboard />} />
+            <Route path="products" element={<VendorProducts />} />
+            <Route path="leads" element={<VendorLeads />} />
+            <Route path="leads/new" element={<VendorInsertLead />} />
+            <Route path="youcan-leads" element={<YouCanLeads />} />
+            <Route path="shopify-leads" element={<ShopifyLeads />} />
+            <Route path="woocommerce-leads" element={<WooCommerceLeads />} />
+            <Route path="google-sheets-leads" element={<GoogleSheetsLeads />} />
+            <Route path="wallet" element={<UserWallet />} />
+            <Route path="inventory" element={<VendorInventory />} />
+            <Route path="marketplace" element={
+              <Suspense fallback={
+                <div className="min-h-[400px] flex items-center justify-center p-8">
+                  <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                </div>
+              }>
+                <InfluencerMarketplace />
+              </Suspense>
+            } />
+            <Route path="product/:id" element={<ProductDetail />} />
+            <Route path="chat" element={<Chat />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path="pixels" element={<UserPixels platform="META" />} />
+            <Route path="pixels/meta" element={<UserPixels platform="META" />} />
+            <Route path="pixels/google" element={<UserPixels platform="GOOGLE" />} />
+            <Route path="pixels/tiktok" element={<UserPixels platform="TIKTOK" />} />
+            <Route path="pixels/snapchat" element={<UserPixels platform="SNAPCHAT" />} />
+            <Route path="domains" element={<VendorDomains />} />
+            <Route path="links" element={<InfluencerLinks />} />
+            <Route path="integrations" element={<IntegrationsPage />} />
+            <Route path="invoices" element={<UserInvoices />} />
+            <Route path="support" element={<SupportTickets />} />
+            <Route path="notifications" element={<Notifications />} />
+          </Route>
+        </Route>
+
         {/* Agent Dashboard */}
         <Route path="/agent" element={
           <RoleGuard allowedRoles={['CALL_CENTER_AGENT']}>
@@ -535,6 +591,17 @@ function App() {
             <SiteBuilder />
           </RoleGuard>
         } />
+
+        {/* The builder is full-screen, so it sits outside the layout like the
+            others. SubAccountGuard still runs: opening a landing page is its own
+            grant (`subCanUseLinkBuilder`), separate from seeing the links list. */}
+        <Route path={`${VENDOR_HELPER_BASE}/links/:id/builder`} element={
+          <RoleGuard allowedRoles={['VENDOR_HELPER']}>
+            <SubAccountGuard />
+          </RoleGuard>
+        }>
+          <Route index element={<SiteBuilder />} />
+        </Route>
 
         <Route path="/influencer/links/:id/builder" element={
           <RoleGuard allowedRoles={['SUPER_ADMIN', 'INFLUENCER', 'HELPER', 'VENDOR']}>
