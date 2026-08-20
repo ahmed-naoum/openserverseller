@@ -20,6 +20,7 @@ import { randomUUID } from 'crypto';
 import { prisma } from '../lib/prisma.js';
 import { getIO } from '../lib/realtime.js';
 import { createNotification } from '../utils/notification.js';
+import { getLockedLeadIds } from './leadCredits.service.js';
 import {
   appendRows,
   buildLeadRow,
@@ -394,6 +395,33 @@ async function drainVendorLocked(vendorId: number, jobIds?: number[]): Promise<D
     select: { id: true, leadId: true, attempts: true },
   });
   if (!candidates.length) return stats;
+
+  // Never write a lead the seller cannot even see.
+  //
+  // A locked lead is one the reservation does not cover, so it has no credit behind
+  // it. Gating only on the raw balance let auto-send spend a credit reserved for an
+  // older, visible lead on a newer locked one — putting the customer's number in the
+  // sheet while the dashboard still masked it in the table. The rule is simply: you
+  // can only send what you can see.
+  const candidateLeads = await prisma.lead.findMany({
+    where: { id: { in: candidates.map((c) => c.leadId) } },
+    select: { id: true, createdAt: true },
+  });
+  const lockedLeadIds = await getLockedLeadIds(vendorId, candidateLeads);
+  if (lockedLeadIds.size) {
+    const lockedJobIds = candidates.filter((c) => lockedLeadIds.has(c.leadId)).map((c) => c.id);
+    const { count } = await prisma.sheetPushJob.updateMany({
+      where: { id: { in: lockedJobIds }, status: { in: ['PENDING', 'BLOCKED_NO_CREDITS'] } },
+      // `attempts` deliberately untouched: waiting for credit must not burn the
+      // retry budget, exactly as in the empty-balance branch below.
+      data: { status: 'BLOCKED_NO_CREDITS', lastError: 'Crédits insuffisants — lead verrouillé.' },
+    });
+    stats.blocked += count;
+    for (let i = candidates.length - 1; i >= 0; i--) {
+      if (lockedLeadIds.has(candidates[i].leadId)) candidates.splice(i, 1);
+    }
+    if (!candidates.length) return stats;
+  }
 
   const balance = await getCreditBalance(vendorId);
   if (balance < 1) {
