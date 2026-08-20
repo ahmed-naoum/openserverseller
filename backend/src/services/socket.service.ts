@@ -115,20 +115,31 @@ export const setupSocketHandlers = (io: SocketServer) => {
         const order = await prisma.order.update({
           where: { id: Number(data.orderId) },
           data: { status: data.status as any },
-          include: {
-            vendor: true,
-          },
         });
+
+        // Which order moved, and where to — everything the screens listening for
+        // this event read off it. The whole Order row used to be emitted
+        // instead, which sent the customer's phone and address to the seller's
+        // tab whether or not their credits had paid for that lead; the
+        // `vendor: true` include also put the seller's own User row — password
+        // hash and all — in the same payload, and in the admin broadcast below.
+        const summary = {
+          id: order.id,
+          orderNumber: order.orderNumber,
+          status: order.status,
+          vendorId: order.vendorId,
+          updatedAt: order.updatedAt,
+        };
 
         // Notify the vendor
         io.to(`user:${order.vendorId}`).emit('notification', {
           type: 'ORDER_STATUS_CHANGED',
           message: `Commande ${order.orderNumber} - ${data.status}`,
-          data: order,
+          data: summary,
         });
 
         // Broadcast to admins
-        io.to('role:SUPER_ADMIN').emit('order:updated', order);
+        io.to('role:SUPER_ADMIN').emit('order:updated', summary);
       } catch (error) {
         socket.emit('error', { message: 'Failed to update order status' });
       }

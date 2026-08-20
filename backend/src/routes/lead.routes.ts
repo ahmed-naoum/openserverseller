@@ -886,6 +886,15 @@ router.get(
 
     const extraConditions: any[] = [];
 
+    // A seller browsing the pool is still a seller: this page lists whole lead
+    // rows, so both number lookups below are narrowed to the leads they may
+    // actually read (otherwise the pool answers the digit-by-digit question the
+    // leads table refuses), and the rows are masked before they ship. An agent
+    // gets neither — a null gate id costs no query and changes no predicate.
+    const gateVendorId = maskingVendorId(req);
+    const phoneFilter = (search || phone) ? await phoneSearchableLeadFilter(gateVendorId) : null;
+    const phoneMatch = (match: any) => (phoneFilter ? { AND: [match, phoneFilter] } : match);
+
     if (search) {
       const term = (search as string).trim();
       // Phone hunting: match on digits only so "0667…", "+212667…" and "212667…" all hit
@@ -901,8 +910,8 @@ router.get(
       ];
       if (digits.length >= 3) {
         const tail = digits.slice(-9);
-        or.push({ phone: { contains: tail } });
-        or.push({ whatsapp: { contains: tail } });
+        or.push(phoneMatch({ phone: { contains: tail } }));
+        or.push(phoneMatch({ whatsapp: { contains: tail } }));
       }
       extraConditions.push({ OR: or });
     }
@@ -920,7 +929,10 @@ router.get(
     if (phoneDigits.length >= 3) {
       const tail = phoneDigits.slice(-9);
       extraConditions.push({
-        OR: [{ phone: { contains: tail } }, { whatsapp: { contains: tail } }],
+        OR: [
+          phoneMatch({ phone: { contains: tail } }),
+          phoneMatch({ whatsapp: { contains: tail } }),
+        ],
       });
     }
 
@@ -996,6 +1008,11 @@ router.get(
         name: (nameCounts.get(name) || 0) > 1 && sku ? `${name} · ${sku}` : name,
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
+
+    // The pool page ships whole lead rows, so the same lock the seller's own
+    // table obeys applies here too — masked in place before the spread below
+    // copies them, `isLocked` included.
+    await maskLockedLeads(gateVendorId, leads, LEAD_ROW_MASK);
 
     res.json({
       status: 'success',
@@ -4744,6 +4761,10 @@ router.post(
       });
     });
 
+    // Answering the price request is a write, but the row that comes back is a
+    // read — same rule as PATCH /:id.
+    await maskLockedLeads(maskingVendorId(req), [updatedLead], LEAD_ROW_MASK);
+
     res.json({
       status: 'success',
       message: `Demande de prix ${action === 'APPROVE' ? 'approuvée' : 'rejetée'}`,
@@ -4892,10 +4913,10 @@ router.post(
               } : null
             };
 
-            // Addressed to the call centre, not broadcast. `io.emit` put the
-            // customer's number on every open socket — every other seller's tab,
-            // and the token-less visitor sockets the handshake also admits — for
-            // an event only the agent screens listen to.
+            // Role broadcast, like the one bulk-status sends. A plain `io.emit`
+            // put the customer's number on every open socket — every other
+            // seller's tab, and the token-less visitor sockets the handshake
+            // also admits — for an event only the agent screens listen to.
             io.to('role:CALL_CENTER_AGENT').emit('new-available-lead', payload);
           }
         } catch (e) {

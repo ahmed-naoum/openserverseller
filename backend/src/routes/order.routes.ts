@@ -372,6 +372,9 @@ router.get(
 
     // Group by product
     const productGroups: Record<number, any> = {};
+    // The same parcel objects, flat, so the credit gate can be applied to the
+    // whole page in one pass instead of walking the groups again.
+    const parcels: any[] = [];
 
     rawData.forEach(row => {
       const productId = Number(row.productId);
@@ -387,7 +390,7 @@ router.get(
       
       const orderId = Number(row.orderId);
       if (!productGroups[productId].pendingParcels.find((p: any) => p.id === orderId)) {
-          productGroups[productId].pendingParcels.push({
+          const parcel = {
             id: orderId,
             orderNumber: row.orderNumber,
             customerName: row.customerName,
@@ -397,9 +400,31 @@ router.get(
             coliatyPickupRef: row.coliatyPickupRef,
             totalAmountMad: Number(row.totalAmountMad),
             createdAt: row.createdAt
-          });
+          };
+          productGroups[productId].pendingParcels.push(parcel);
+          parcels.push(parcel);
       }
     });
+
+    // The query above selects no lead columns — it joins products, not leads —
+    // so the leads behind this page's orders are fetched once and attached by
+    // order id. Same rule as GET /: a parcel whose lead no credit has paid for
+    // still lists, without the number. The parcels are masked in place, so the
+    // groups built above carry the result.
+    const gateVendorId = maskingVendorId(req);
+    if (gateVendorId && parcels.length > 0) {
+      const withLead = await prisma.order.findMany({
+        where: { id: { in: parcels.map((p) => p.id) } },
+        select: { id: true, lead: { select: { id: true, createdAt: true, vendorId: true } } },
+      });
+      const leadByOrderId = new Map(withLead.map((o) => [o.id, o.lead]));
+      await maskLockedLeads(gateVendorId, parcels, {
+        lead: (parcel) => leadByOrderId.get(parcel.id) ?? null,
+        hide: (parcel, mask) => {
+          if (parcel.customerPhone) parcel.customerPhone = mask(parcel.customerPhone);
+        },
+      });
+    }
 
     res.json({
       status: 'success',
