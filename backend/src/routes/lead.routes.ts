@@ -4892,7 +4892,11 @@ router.post(
               } : null
             };
 
-            io.emit('new-available-lead', payload);
+            // Addressed to the call centre, not broadcast. `io.emit` put the
+            // customer's number on every open socket — every other seller's tab,
+            // and the token-less visitor sockets the handshake also admits — for
+            // an event only the agent screens listen to.
+            io.to('role:CALL_CENTER_AGENT').emit('new-available-lead', payload);
           }
         } catch (e) {
           console.error('[Socket push-integration-leads error]', e);
@@ -5180,6 +5184,28 @@ router.get(
       : [];
     const activeCores = new Set(activeLeads.map((l) => normalizePhone(l.phone)).filter(Boolean));
 
+    // A cart is not a Lead, so the credit gate does not reach it directly — but
+    // the same customer usually is one. A cart this page converted keeps its raw
+    // number while the Lead it created is masked in the seller's own table, and
+    // that is a way straight around the mask. So the numbers of this page's
+    // carts are matched against the seller's own locked leads, once, keyed by
+    // the normalised form the two tables store differently.
+    const gateVendorId = maskingVendorId(req);
+    let lockedCores = new Set<string>();
+    if (gateVendorId && pageCores.length > 0) {
+      const ownLeads = await prisma.lead.findMany({
+        where: { vendorId: gateVendorId, phone: { in: pageCores.flatMap(phoneVariants) } },
+        select: { id: true, createdAt: true, phone: true },
+      });
+      const lockedIds = await getLockedLeadIds(gateVendorId, ownLeads);
+      lockedCores = new Set(
+        ownLeads
+          .filter((l) => lockedIds.has(l.id))
+          .map((l) => normalizePhone(l.phone))
+          .filter(Boolean),
+      );
+    }
+
     // Attach a recordingId where a session replay exists for the same socket or IP.
     const sessionIds = attempts.map((a) => a.sessionId).filter(Boolean) as string[];
     const ips = attempts.map((a) => a.ip).filter(Boolean) as string[];
@@ -5218,8 +5244,11 @@ router.get(
     const enriched = attempts.map((a) => {
       const link = a.referralCode ? codeMap.get(a.referralCode) : null;
       const recId = recBySession.get(a.sessionId) || nearestRecordingForIp(a.ip, a.updatedAt) || null;
+      const locked = lockedCores.has(normalizePhone(a.phone));
       return {
         ...a,
+        phone: locked ? maskPhone(a.phone) : a.phone,
+        isLocked: locked,
         recordingId: recId,
         productName: a.productName || link?.product?.nameFr || link?.product?.nameAr || null,
         productImage: link?.product?.images?.[0]?.imageUrl || null,

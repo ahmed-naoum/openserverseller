@@ -21,8 +21,27 @@ import {
 } from '../services/coliaty.service.js';
 import { emitNewTickets, type NewTicketPayload } from '../lib/ticketEvents.js';
 import { SAFE_USER_SELECT } from '../lib/safeUserSelect.js';
+import { maskingVendorId, maskLockedLeads, type LeadMaskAccessors } from '../lib/leadMasking.js';
 
 const router = Router();
+
+/**
+ * An order as this file loads it: `customerPhone` sits on the row itself and the
+ * lead it was raised from is included beside it. The lead is what the credit
+ * gate is about — an order whose lead the seller has not paid for must not hand
+ * the number back through the orders screens either.
+ *
+ * (`ORDER_ROW_MASK` in lib/leadMasking is for rows that WRAP an order — the
+ * customers list — so it looks one level deeper than these do.)
+ */
+const ORDER_SELF_MASK: LeadMaskAccessors<any> = {
+  lead: (row) => row?.lead ?? null,
+  hide: (row, mask) => {
+    if (row.customerPhone) row.customerPhone = mask(row.customerPhone);
+    if (row.lead?.phone) row.lead.phone = mask(row.lead.phone);
+    if (row.lead?.whatsapp) row.lead.whatsapp = mask(row.lead.whatsapp);
+  },
+};
 
 const generateOrderNumber = (): string => {
   const date = new Date();
@@ -156,6 +175,11 @@ router.get(
       prisma.order.count({ where }),
     ]);
 
+    // One lock lookup for the page, before the rows are copied into the
+    // response. Only a seller is gated — the call centre and the admins have to
+    // keep the real number.
+    await maskLockedLeads(maskingVendorId(req), orders, ORDER_SELF_MASK);
+
     res.json({
       status: 'success',
       data: {
@@ -164,6 +188,7 @@ router.get(
           orderNumber: o.orderNumber,
           customerName: o.customerName,
           customerPhone: o.customerPhone,
+          isLocked: (o as any).isLocked === true,
           customerCity: o.customerCity,
           totalAmountMad: o.totalAmountMad,
           vendorEarningMad: o.vendorEarningMad,
@@ -419,6 +444,10 @@ router.get(
     if (!order) {
       throw new AppException(404, 'Order not found');
     }
+
+    // Same rule one row at a time: the detail screen is just another read of the
+    // number the list masks.
+    await maskLockedLeads(maskingVendorId(req), [order], ORDER_SELF_MASK);
 
     res.json({
       status: 'success',
