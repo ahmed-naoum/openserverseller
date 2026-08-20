@@ -34,6 +34,7 @@ import { promisify } from 'util';
 const gzipAsync = promisify(zlib.gzip);
 import { startSessionCleanupCron } from './jobs/sessionCleanup.js';
 import { startLogRetentionCron } from './jobs/logRetention.js';
+import { startSheetPushCron } from './jobs/sheetPush.js';
 import { setIO } from './lib/realtime.js';
 import { isSessionRecordingEnabled } from './lib/sessionRecording.js';
 import { startSampler, stopSampler, peekSnapshot, warmupServerMetrics } from './services/serverMetrics.service.js';
@@ -880,6 +881,9 @@ startSessionCleanupCron();
 // Purge aged-out traffic / activity / audit log rows. These three tables have no
 // natural ceiling and were the bulk of the database before this ran.
 startLogRetentionCron();
+
+// Drain the outbound Google Sheets outbox: leads queued for a seller's own sheet.
+startSheetPushCron();
 
 // Cache immutable hardware facts (CPU model, GPU, OS) so the first SOC request is fast.
 // Starts no polling loop — an unwatched server costs nothing after this.

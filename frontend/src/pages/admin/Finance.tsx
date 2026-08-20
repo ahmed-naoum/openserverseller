@@ -28,7 +28,9 @@ import {
   Banknote,
   PlusCircle,
   MinusCircle,
-  UserPlus
+  UserPlus,
+  FileSpreadsheet,
+  Coins
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -48,7 +50,15 @@ export default function AdminFinance() {
   const [adjustDescription, setAdjustDescription] = useState('');
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [showUserDropdown, setShowUserDropdown] = useState(false);
-  const [activeTab, setActiveTab] = useState<'PAYOUTS' | 'ADJUSTMENTS'>('PAYOUTS');
+  const [activeTab, setActiveTab] = useState<'PAYOUTS' | 'ADJUSTMENTS' | 'CREDITS'>('PAYOUTS');
+
+  // Sheet Credits State (Google Sheets — vente de crédits)
+  const [creditTargetUser, setCreditTargetUser] = useState<any>(null);
+  const [creditAmount, setCreditAmount] = useState('');
+  const [creditType, setCreditType] = useState<'CREDIT' | 'DEBIT'>('CREDIT');
+  const [creditDescription, setCreditDescription] = useState('');
+  const [creditSearchTerm, setCreditSearchTerm] = useState('');
+  const [showCreditDropdown, setShowCreditDropdown] = useState(false);
 
   const { data: financeUsersData } = useQuery({
     queryKey: ['admin-finance-users'],
@@ -59,11 +69,28 @@ export default function AdminFinance() {
 
   const filteredFinanceUsers = useMemo(() => {
     if (!userSearchTerm) return [];
-    return financeUsers.filter((u: any) => 
+    return financeUsers.filter((u: any) =>
       u.fullName?.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
       u.email?.toLowerCase().includes(userSearchTerm.toLowerCase())
     ).slice(0, 8);
   }, [financeUsers, userSearchTerm]);
+
+  // Seuls les comptes dont l'entitlement Google Sheets est activé sont éligibles aux crédits
+  const { data: creditsUsersData, isLoading: isCreditsUsersLoading } = useQuery({
+    queryKey: ['admin-sheet-credits-users'],
+    queryFn: () => adminApi.getSheetCreditsUsers(),
+  });
+
+  const creditsUsers = creditsUsersData?.data?.data || [];
+
+  const filteredCreditsUsers = useMemo(() => {
+    // La liste est déjà restreinte aux comptes éligibles : on l'affiche même sans recherche
+    if (!creditSearchTerm) return creditsUsers.slice(0, 8);
+    return creditsUsers.filter((u: any) =>
+      u.fullName?.toLowerCase().includes(creditSearchTerm.toLowerCase()) ||
+      u.email?.toLowerCase().includes(creditSearchTerm.toLowerCase())
+    ).slice(0, 8);
+  }, [creditsUsers, creditSearchTerm]);
 
   const { data: payoutsData, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['admin-payouts'],
@@ -83,6 +110,22 @@ export default function AdminFinance() {
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.message || 'Erreur lors de l\'ajustement');
+    }
+  });
+
+  const creditMutation = useMutation({
+    mutationFn: (data: any) => adminApi.adjustSheetCredits(data),
+    onSuccess: (res) => {
+      toast.success(res.data.message);
+      setCreditAmount('');
+      setCreditDescription('');
+      setCreditTargetUser(null);
+      setCreditSearchTerm('');
+      queryClient.invalidateQueries({ queryKey: ['admin-sheet-credits-users'] });
+      queryClient.invalidateQueries({ queryKey: ['sheet-credits'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Erreur lors de l\'attribution des crédits');
     }
   });
 
@@ -342,6 +385,12 @@ export default function AdminFinance() {
         >
           Ajustements Manuels
         </button>
+        <button
+          onClick={() => setActiveTab('CREDITS')}
+          className={`pb-4 px-2 text-sm font-black transition-all relative ${activeTab === 'CREDITS' ? 'text-violet-600 border-b-2 border-violet-600' : 'text-gray-400 hover:text-gray-600'}`}
+        >
+          Crédits Google Sheets
+        </button>
       </div>
 
       {activeTab === 'ADJUSTMENTS' && (
@@ -497,6 +546,169 @@ export default function AdminFinance() {
         </div>
       </div>
       </div>
+      )}
+
+      {activeTab === 'CREDITS' && (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+            <div className="md:col-span-12 lg:col-span-12">
+              <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-[32px] p-8 text-white shadow-xl shadow-emerald-200 relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-8 opacity-10">
+                  <FileSpreadsheet size={120} />
+                </div>
+                <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
+                  <div className="max-w-md">
+                    <h2 className="text-2xl font-black tracking-tight">Crédits Google Sheets</h2>
+                    <p className="text-emerald-100 font-medium mt-2">
+                      Vendez des crédits aux comptes ayant la fonctionnalité activée. 1 crédit = 1 lead écrit dans la feuille du vendeur.
+                    </p>
+                    <div className="mt-6 flex items-center gap-3">
+                      <div className="p-2.5 bg-white/10 rounded-xl border border-white/20">
+                        <Coins size={18} className="text-emerald-200" />
+                      </div>
+                      <p className="text-xs font-bold text-emerald-200 uppercase tracking-widest">
+                        {creditsUsers.length} compte(s) éligible(s)
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Aucun compte éligible : le correctif est le toggle de la fiche utilisateur,
+                      pas un formulaire vide dans lequel l'admin ne pourrait rien sélectionner. */}
+                  {!isCreditsUsersLoading && creditsUsers.length === 0 ? (
+                    <div className="flex-1 w-full max-w-lg bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 text-center">
+                      <p className="text-sm font-black text-white">Aucun compte éligible</p>
+                      <p className="text-xs font-medium text-emerald-100 mt-2">
+                        Activez « Google Sheets — Envoi des leads » sur la fiche d'un vendeur (Utilisateurs → Modifier → Accès) avant de lui vendre des crédits.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex-1 w-full max-w-lg bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
+                      <div className="grid grid-cols-2 gap-4 mb-4">
+                        <button
+                          onClick={() => setCreditType('CREDIT')}
+                          className={`flex items-center justify-center gap-2 py-3 rounded-xl font-black text-xs transition-all ${creditType === 'CREDIT' ? 'bg-emerald-400 text-emerald-900 shadow-lg' : 'bg-white/5 text-emerald-100 hover:bg-white/10'}`}
+                        >
+                          <PlusCircle size={16} />
+                          CRÉDIT (+)
+                        </button>
+                        <button
+                          onClick={() => setCreditType('DEBIT')}
+                          className={`flex items-center justify-center gap-2 py-3 rounded-xl font-black text-xs transition-all ${creditType === 'DEBIT' ? 'bg-rose-500 text-white shadow-lg' : 'bg-white/5 text-emerald-100 hover:bg-white/10'}`}
+                        >
+                          <MinusCircle size={16} />
+                          DÉBIT (-)
+                        </button>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="relative">
+                          <UserPlus className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-300" size={18} />
+                          <input
+                            type="text"
+                            placeholder={creditTargetUser ? (creditTargetUser.fullName || creditTargetUser.email) : 'Chercher un compte éligible...'}
+                            value={creditSearchTerm}
+                            onFocus={() => setShowCreditDropdown(true)}
+                            onChange={(e) => {
+                              setCreditSearchTerm(e.target.value);
+                              setShowCreditDropdown(true);
+                            }}
+                            className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white placeholder-emerald-300 focus:bg-white/10 focus:border-white/30 outline-none transition-all"
+                          />
+
+                          {showCreditDropdown && filteredCreditsUsers.length > 0 && (
+                            <div className="absolute top-full left-0 right-0 mt-2 bg-emerald-800 border border-emerald-700 rounded-xl shadow-2xl overflow-hidden z-[100] animate-in slide-in-from-top-2">
+                              {filteredCreditsUsers.map((u: any) => (
+                                <button
+                                  key={u.id}
+                                  onClick={() => {
+                                    setCreditTargetUser(u);
+                                    setCreditSearchTerm('');
+                                    setShowCreditDropdown(false);
+                                  }}
+                                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-emerald-700 transition-colors text-left border-b border-emerald-700/50 last:border-0"
+                                >
+                                  <div>
+                                    <p className="text-xs font-black text-white">{u.fullName}</p>
+                                    <p className="text-[10px] text-emerald-300">{u.email}</p>
+                                  </div>
+                                  {/* Le solde actuel, pour que l'admin voie ce qu'il recharge */}
+                                  <span className="text-[9px] font-black px-2 py-0.5 rounded text-emerald-900 bg-emerald-300 uppercase tracking-tighter">
+                                    $ {u.balance ?? 0} crédits
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          {creditTargetUser && !creditSearchTerm && (
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                              <span className="text-[10px] font-black bg-emerald-400/20 text-emerald-200 px-2 py-0.5 rounded uppercase border border-emerald-400/30">
+                                $ {creditTargetUser.balance ?? 0} crédits
+                              </span>
+                              <button
+                                onClick={() => setCreditTargetUser(null)}
+                                className="text-emerald-300 hover:text-white"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="relative">
+                            <Coins className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-300" size={18} />
+                            {/* Un crédit est une quantité entière, pas une somme : ni décimales, ni MAD. */}
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              placeholder="Nombre de crédits"
+                              value={creditAmount}
+                              onChange={(e) => setCreditAmount(e.target.value)}
+                              className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white placeholder-emerald-300 focus:bg-white/10 focus:border-white/30 outline-none transition-all"
+                            />
+                          </div>
+                          <input
+                            type="text"
+                            placeholder="Description (ex: Pack 1000)"
+                            value={creditDescription}
+                            onChange={(e) => setCreditDescription(e.target.value)}
+                            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white placeholder-emerald-300 focus:bg-white/10 focus:border-white/30 outline-none transition-all"
+                          />
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            const amount = Number(creditAmount);
+                            if (!creditTargetUser || !creditAmount) {
+                              toast.error('Veuillez remplir tous les champs');
+                              return;
+                            }
+                            if (!Number.isInteger(amount) || amount <= 0) {
+                              toast.error('Le nombre de crédits doit être un entier positif');
+                              return;
+                            }
+                            creditMutation.mutate({
+                              userId: creditTargetUser.id,
+                              amount,
+                              type: creditType,
+                              description: creditDescription
+                            });
+                          }}
+                          disabled={creditMutation.isPending}
+                          className="w-full py-4 bg-white text-emerald-700 rounded-xl font-black text-sm hover:bg-emerald-50 transition-all shadow-xl disabled:opacity-50"
+                        >
+                          {creditMutation.isPending ? 'Traitement...' : 'Attribuer les crédits'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {activeTab === 'PAYOUTS' && (

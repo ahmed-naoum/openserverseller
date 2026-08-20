@@ -4,6 +4,7 @@ import axios from 'axios';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { authenticate } from '../middleware/auth.js';
 import { getSecret } from '../lib/secretStore.js';
+import { enqueueSheetPush, enqueueSheetPushMany } from '../services/sheetPush.service.js';
 
 const router = Router();
 
@@ -354,6 +355,7 @@ router.post(
 
       const orders = (response.data?.orders || []).filter((o: any) => new Date(o.created_at) >= connectedAt);
       let importedCount = 0;
+      const createdLeadIds: number[] = [];
 
       for (const order of orders) {
         const phoneRaw = order.customer?.phone || order.shipping_address?.phone || order.billing_address?.phone || order.phone || '';
@@ -373,7 +375,7 @@ router.post(
         });
 
         if (!existingLead) {
-          await prisma.lead.create({
+          const createdLead = await prisma.lead.create({
             data: {
               vendorId,
               fullName,
@@ -386,8 +388,16 @@ router.post(
               notes: `Commande Shopify #${order.order_number || order.name || order.id} (${order.total_price || 0} ${order.currency || 'MAD'})`,
             },
           });
+          createdLeadIds.push(createdLead.id);
           importedCount++;
         }
+      }
+
+      // One queue write for the whole sync rather than one per order.
+      try {
+        await enqueueSheetPushMany(vendorId, createdLeadIds, 'SHOPIFY');
+      } catch (err) {
+        console.error('[SheetPush] enqueue failed:', err);
       }
 
       res.json({
@@ -457,7 +467,7 @@ router.post(
     });
 
     if (!existingLead) {
-      await prisma.lead.create({
+      const createdLead = await prisma.lead.create({
         data: {
           vendorId: vendor.id,
           fullName,
@@ -471,6 +481,12 @@ router.post(
         },
       });
       console.log(`Lead automatically created for vendor ${vendor.id} from Shopify webhook`);
+
+      try {
+        await enqueueSheetPush(createdLead.id, vendor.id, createdLead.source);
+      } catch (err) {
+        console.error('[SheetPush] enqueue failed:', err);
+      }
     }
 
     res.json({ success: true });

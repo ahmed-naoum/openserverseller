@@ -79,6 +79,73 @@ export const CHECKOUT_RUNTIME = `
     // the "must not contain digits" error is unreachable in the original.
     function stripDigits(s) { return s.replace(/[0-9\\u0660-\\u0669]/g, ''); }
 
+    // The caps the block rendered its maxlength attributes from. Defaults match
+    // that object so an older cached page still validates rather than treating
+    // every limit as zero.
+    var lim = cfg.lim || {};
+    function cap(k, d) { var n = Number(lim[k]); return n > 0 ? n : d; }
+    var NAME_MIN = cap('nameMin', 2), NAME_MAX = cap('nameMax', 60);
+    var CITY_MIN = cap('cityMin', 2), CITY_MAX = cap('cityMax', 40);
+    var PHONE_MIN = cap('phoneMinDigits', 9), PHONE_MAX = cap('phoneMaxDigits', 14);
+    var ADDR_MIN = cap('addressMin', 5), ADDR_MAX = cap('addressMax', 200);
+
+    // Arabic (incl. the Supplement and Extended-A ranges Moroccan names use) and
+    // Latin letters. Counting letters, not characters, is what separates a real
+    // name from "..." or "-- --": the digit stripper already removes numbers, so
+    // punctuation is the only thing that can reach a length check intact.
+    function letters(s) { return (s.match(/[A-Za-z\\u0600-\\u06FF\\u0750-\\u077F\\u08A0-\\u08FF\\u00C0-\\u024F]/g) || []).length; }
+
+    /**
+     * One validator per field, returning a message or null. Blur, live
+     * correction and submit all call these, so a field can never pass one path
+     * and fail another.
+     */
+    var checks = {
+      fullName: function(v) {
+        var s = v.trim();
+        if (!s) return cfg.msg.nameRequired;
+        if (s.length < NAME_MIN) return cfg.msg.nameShort;
+        if (letters(s) < 2) return cfg.msg.nameLetters || cfg.msg.nameShort;
+        if (s.length > NAME_MAX) return cfg.msg.nameLong || cfg.msg.nameShort;
+        return null;
+      },
+      phone: function(v) {
+        if (!v.trim()) return cfg.msg.phoneRequired;
+        // The effective rule in ReferralForm is 9-14 ASCII digits anywhere: the
+        // Moroccan pattern is OR-ed with it, and every string it accepts already
+        // has 10-12 digits. Tightening this would start rejecting leads that
+        // convert today.
+        var digits = toAscii(v).replace(/\\D/g, '');
+        if (digits.length < PHONE_MIN || digits.length > PHONE_MAX) return cfg.msg.phoneInvalid;
+        return null;
+      },
+      city: function(v) {
+        var s = v.trim();
+        if (!s) return cfg.msg.cityRequired;
+        if (s.length < CITY_MIN) return cfg.msg.cityShort;
+        if (letters(s) < 2) return cfg.msg.cityLetters || cfg.msg.cityShort;
+        if (s.length > CITY_MAX) return cfg.msg.cityLong || cfg.msg.cityShort;
+        return null;
+      },
+      // Optional stays optional: an empty address is valid, and only a filled
+      // one is held to a shape. Call-centre agents collect it on the
+      // confirmation call, so requiring it would reject orders both the form
+      // and POST /public/leads accept.
+      address: function(v) {
+        var s = v.trim();
+        if (!s) return null;
+        if (s.length < ADDR_MIN) return cfg.msg.addressShort;
+        if (s.length > ADDR_MAX) return cfg.msg.addressLong;
+        return null;
+      }
+    };
+
+    function validate(key) {
+      var el = f[key];
+      if (!el) return null;
+      return checks[key](el.value || '');
+    }
+
     function onInput(el, fn) {
       if (!el) return;
       el.addEventListener('input', function(){
@@ -92,6 +159,20 @@ export const CHECKOUT_RUNTIME = `
     // digit would be stripped before it could become ASCII.
     onInput(f.phone, function(v){ return toAscii(v).replace(/[^0-9+\\s-]/g, ''); });
     onInput(f.address, null);
+
+    // Checked on the way out of a field, so a mistake is caught next to the
+    // field that caused it rather than at the bottom of the form. An empty
+    // field that has not been touched yet stays silent — nagging a customer
+    // who is still filling the form in costs orders.
+    ['fullName','phone','city','address'].forEach(function(k){
+      var el = f[k];
+      if (!el) return;
+      el.addEventListener('blur', function(){
+        if (!(el.value || '').trim()) { clearError(el); return; }
+        var msg = validate(k);
+        if (msg) fieldError(el, msg); else clearError(el);
+      });
+    });
 
     function slotFor(el) {
       return el && el.parentNode ? el.parentNode.querySelector('[data-ck-err]') : null;
@@ -192,30 +273,30 @@ export const CHECKOUT_RUNTIME = `
       var name = (f.fullName ? f.fullName.value : '').trim();
       var city = (f.city ? f.city.value : '').trim();
       var phoneRaw = f.phone ? f.phone.value : '';
-      // Address is NOT validated. React renders it as an optional textarea and
-      // the server requires only referralCode, fullName and phone — blocking on
-      // it here would reject orders both sides accept.
-      var address = f.address ? f.address.value : '';
+      // Sent trimmed: a trailing space is invisible to the customer but reaches
+      // the call-centre agent as part of the address.
+      var address = (f.address ? f.address.value : '').trim();
 
+      // Every field, in the order they appear on screen, so the message in the
+      // strip belongs to the first problem the customer would see. Each field
+      // is marked, not just the first — one round trip, not four.
       var first = null;
+      var firstEl = null;
+      ['fullName','phone','city','address'].forEach(function(k){
+        var msg = validate(k);
+        if (!msg) { clearError(f[k]); return; }
+        fieldError(f[k], msg);
+        if (!first) { first = msg; firstEl = f[k]; }
+      });
 
-      if (!name) { fieldError(f.fullName, cfg.msg.nameRequired); first = first || cfg.msg.nameRequired; }
-      else if (name.length < 2) { fieldError(f.fullName, cfg.msg.nameShort); first = first || cfg.msg.nameShort; }
-
-      if (!city) { fieldError(f.city, cfg.msg.cityRequired); first = first || cfg.msg.cityRequired; }
-      else if (city.length < 2) { fieldError(f.city, cfg.msg.cityShort); first = first || cfg.msg.cityShort; }
-
-      // The effective rule in ReferralForm is 9-14 ASCII digits anywhere: the
-      // Moroccan pattern is OR-ed with it, and every string it accepts already
-      // has 10-12 digits. Tightening this would start rejecting leads that
-      // convert today.
-      var digits = phoneRaw.replace(/\\D/g, '');
-      if (!phoneRaw.trim()) { fieldError(f.phone, cfg.msg.phoneRequired); first = first || cfg.msg.phoneRequired; }
-      else if (digits.length < 9 || digits.length > 14) {
-        fieldError(f.phone, cfg.msg.phoneInvalid); first = first || cfg.msg.phoneInvalid;
+      if (first) {
+        topError(first);
+        // Focus the field, not just the message: on a phone the strip and the
+        // offending field are rarely on screen together.
+        if (firstEl && firstEl.focus) { try { firstEl.focus({ preventScroll: true }); } catch (e) { firstEl.focus(); } }
+        if (firstEl && firstEl.scrollIntoView) firstEl.scrollIntoView({ block: 'center' });
+        return;
       }
-
-      if (first) { topError(first); return; }
 
       btn.disabled = true;
       var label = btn.textContent;

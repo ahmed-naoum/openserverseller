@@ -4,6 +4,7 @@ import axios from 'axios';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { authenticate } from '../middleware/auth.js';
 import { getSecret } from '../lib/secretStore.js';
+import { enqueueSheetPush, enqueueSheetPushMany } from '../services/sheetPush.service.js';
 
 const router = Router();
 
@@ -310,6 +311,7 @@ router.post(
       const youcanCustomers = allYoucanCustomers.filter((c: any) => new Date(c.created_at || c.createdAt) >= connectedAt);
 
       let importedCount = 0;
+      const createdLeadIds: number[] = [];
 
       // Import each customer into Silacod Leads
       for (const customer of youcanCustomers) {
@@ -331,7 +333,7 @@ router.post(
         });
 
         if (!existingLead) {
-          await prisma.lead.create({
+          const createdLead = await prisma.lead.create({
             data: {
               vendorId,
               fullName,
@@ -344,8 +346,16 @@ router.post(
               notes: 'Imported from YouCan API',
             },
           });
+          createdLeadIds.push(createdLead.id);
           importedCount++;
         }
+      }
+
+      // One queue write for the whole sync rather than one per customer.
+      try {
+        await enqueueSheetPushMany(vendorId, createdLeadIds, 'YOUCAN');
+      } catch (err) {
+        console.error('[SheetPush] enqueue failed:', err);
       }
 
       res.json({
@@ -523,7 +533,7 @@ router.post(
     });
 
     if (!existingLead) {
-      await prisma.lead.create({
+      const createdLead = await prisma.lead.create({
         data: {
           vendorId: vendor.id,
           fullName,
@@ -537,6 +547,12 @@ router.post(
         },
       });
       console.log(`Lead automatically created for vendor ${vendor.id} from YouCan`);
+
+      try {
+        await enqueueSheetPush(createdLead.id, vendor.id, createdLead.source);
+      } catch (err) {
+        console.error('[SheetPush] enqueue failed:', err);
+      }
     }
 
     res.json({ success: true });

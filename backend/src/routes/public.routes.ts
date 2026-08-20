@@ -8,6 +8,7 @@ import path from 'path';
 import { validateInfluencerSubdomain } from '../utils/subdomain.js';
 import { getIO } from '../lib/realtime.js';
 import { getNotifiableAgentIds } from '../utils/agentScope.js';
+import { enqueueSheetPush } from '../services/sheetPush.service.js';
 
 const router = Router();
 
@@ -299,6 +300,18 @@ router.post(
         notes: null
       }
     });
+
+    // Queue the lead for the seller's own Google Sheet. This is the hottest path
+    // in the system — a customer is sitting on the landing-page form — so the
+    // enqueue only writes an outbox row and never touches Google; the cron drains
+    // it. `enqueueSheetPush` already swallows everything it can throw, and this
+    // try/catch is belt-and-braces on top: no failure of this feature may ever
+    // cost us a lead capture. Every other hook below follows the same shape.
+    try {
+      await enqueueSheetPush(lead.id, vendorId, lead.source);
+    } catch (err) {
+      console.error('[SheetPush] enqueue failed:', err);
+    }
 
     // Increment conversions (Ventes) when the lead is successfully created
     await prisma.referralLink.update({

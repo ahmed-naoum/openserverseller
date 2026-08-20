@@ -82,6 +82,7 @@ router.get('/', async (_req, res) => {
         categoryLabel: SECRET_CATEGORY_LABELS[def.category],
         secret: def.secret,
         bootstrap: !!def.bootstrap,
+        multiline: !!def.multiline,
         description: def.description ?? null,
         source,
         // Non-secret values are shown in full so admins can actually read config.

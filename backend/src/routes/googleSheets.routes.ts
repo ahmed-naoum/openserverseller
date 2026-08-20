@@ -5,6 +5,17 @@ import crypto from 'crypto';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { authenticate } from '../middleware/auth.js';
 import { getSecret } from '../lib/secretStore.js';
+import {
+  DEFAULT_TAB,
+  OUTBOUND_COLUMNS,
+  appendRows,
+  applyHeaderTemplate,
+  buildLeadRow,
+  ensureSheetReady,
+  getServiceAccountEmail,
+  isWriterConfigured,
+} from '../services/googleSheetsWriter.js';
+import { getCreditBalance, pushLeadsNow, reconcileVendorSheet } from '../services/sheetPush.service.js';
 
 const router = Router();
 
@@ -169,6 +180,26 @@ router.post(
       res.status(400).json({
         success: false,
         message: 'L\'URL du Google Sheet ou l\'ID du document est invalide',
+      });
+      return;
+    }
+
+    // The mirror of the guard on /outbound/connect. Without it the same loop is
+    // still reachable simply by connecting in the other order: point outbound at a
+    // document first, then point this inbound sync at it. The sync below would
+    // then import our own pushed rows back as fresh leads, and the next pass would
+    // delete them again when they stopped matching.
+    const existing = await prisma.user.findUnique({
+      where: { id: vendorId },
+      select: { googleSheetOutId: true },
+    });
+    if (existing?.googleSheetOutId && existing.googleSheetOutId === extractedId) {
+      res.status(400).json({
+        success: false,
+        message:
+          "Ce document reçoit déjà vos prospects (envoi vers Google Sheets). " +
+          "L'utiliser aussi pour l'import créerait une boucle et des doublons. " +
+          'Choisissez un autre document pour l\'import.',
       });
       return;
     }
@@ -760,12 +791,315 @@ function parseCSVLine(line: string): string[] {
   return result;
 }
 
+/* ───────────────────────────────────────────────────────────────────────────
+ * OUTBOUND — pushing leads INTO the seller's own Google Sheet.
+ *
+ * The routes above are INBOUND: they read a sheet and treat it as the source of
+ * truth, deleting leads whose row disappeared (see parseAndInsertLeadRows). The
+ * ones below only ever append. The two directions must never share a spreadsheet
+ * — POST /outbound/connect refuses that explicitly.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+const OUTBOUND_NOT_ENABLED = "Fonctionnalité non activée sur votre compte. Contactez l'administrateur.";
+
 /**
- * POST /api/v1/google-sheets/sync-now
- * Direct Google Sheet sync without requiring Apps Script
+ * The single payload shape both GET /outbound/status and POST /outbound/connect
+ * answer with, so the panel parses one thing.
+ */
+async function buildOutboundStatus(vendorId: number) {
+  const vendor = await prisma.user.findUnique({
+    where: { id: vendorId },
+    select: {
+      googleSheetsOutboundEnabled: true,
+      googleSheetOutUrl: true,
+      googleSheetOutId: true,
+      googleSheetOutTab: true,
+      googleSheetOutActive: true,
+      googleSheetOutAuto: true,
+      googleSheetOutConnectedAt: true,
+      googleSheetOutLastError: true,
+      googleSheetOutLastErrorAt: true,
+    },
+  });
+
+  const grouped = await prisma.sheetPushJob.groupBy({
+    by: ['status'],
+    where: { vendorId },
+    _count: { _all: true },
+  });
+
+  const counts = { pending: 0, blocked: 0, failed: 0, sent: 0, removed: 0 };
+  for (const row of grouped) {
+    const n = row._count?._all || 0;
+    // SENDING is a claimed-but-not-yet-written job: from the seller's point of
+    // view it is still waiting, so it reads as pending rather than a fifth bucket.
+    if (row.status === 'PENDING' || row.status === 'SENDING') counts.pending += n;
+    else if (row.status === 'BLOCKED_NO_CREDITS') counts.blocked += n;
+    else if (row.status === 'FAILED') counts.failed += n;
+    else if (row.status === 'SENT') counts.sent += n;
+    // Written once and gone since — the seller deleted the row. Its own counter
+    // rather than staying inside `sent`, which is what made the deletion invisible
+    // in the first place.
+    else if (row.status === 'REMOVED') counts.removed += n;
+  }
+
+  return {
+    enabled: !!vendor?.googleSheetsOutboundEnabled,
+    configured: isWriterConfigured(),
+    isConnected: !!vendor?.googleSheetOutId,
+    sheetUrl: vendor?.googleSheetOutUrl || null,
+    sheetId: vendor?.googleSheetOutId || null,
+    tab: vendor?.googleSheetOutTab || DEFAULT_TAB,
+    active: vendor?.googleSheetOutActive ?? false,
+    auto: vendor?.googleSheetOutAuto ?? false,
+    connectedAt: vendor?.googleSheetOutConnectedAt || null,
+    lastError: vendor?.googleSheetOutLastError || null,
+    lastErrorAt: vendor?.googleSheetOutLastErrorAt || null,
+    // The share instructions in the UI name this address verbatim.
+    serviceAccountEmail: getServiceAccountEmail(),
+    // The column contract, so the panel can preview the template without keeping
+    // its own copy of the 11 names — they would drift the day one is renamed.
+    columns: OUTBOUND_COLUMNS,
+    credits: { balance: await getCreditBalance(vendorId) },
+    counts,
+  };
+}
+
+/**
+ * GET /api/v1/google-sheets/outbound/status
+ * Connection, entitlement, credit balance and queue counters for the panel.
+ */
+router.get(
+  '/outbound/status',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const vendorId = req.user?.id;
+    if (!vendorId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    // Always 200, even when nothing is enabled or connected — the panel renders
+    // the "not enabled" and "not connected" states from this same payload.
+    res.json({ success: true, data: await buildOutboundStatus(vendorId) });
+  })
+);
+
+/**
+ * POST /api/v1/google-sheets/outbound/connect
+ * Body: { sheetUrl, tab? }
  */
 router.post(
-  '/sync-now',
+  '/outbound/connect',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const vendorId = req.user?.id;
+    if (!vendorId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const { sheetUrl, tab } = req.body || {};
+
+    const vendor = await prisma.user.findUnique({
+      where: { id: vendorId },
+      select: {
+        googleSheetsOutboundEnabled: true,
+        googleSheetId: true,
+        googleSheetSyncActive: true,
+      },
+    });
+
+    if (!vendor?.googleSheetsOutboundEnabled) {
+      res.status(403).json({ success: false, message: OUTBOUND_NOT_ENABLED });
+      return;
+    }
+
+    if (!isWriterConfigured()) {
+      res.status(400).json({
+        success: false,
+        message: "L'envoi vers Google Sheets n'est pas configuré sur la plateforme. Contactez l'administrateur.",
+        reason: 'NOT_CONFIGURED',
+        serviceAccountEmail: getServiceAccountEmail(),
+      });
+      return;
+    }
+
+    if (!sheetUrl || !isValidGoogleSheetUrl(String(sheetUrl))) {
+      res.status(400).json({ success: false, message: 'Lien Google Sheets invalide.' });
+      return;
+    }
+
+    const { sheetId } = extractSheetInfo(String(sheetUrl));
+    const resolvedId = sheetId || extractSpreadsheetId(String(sheetUrl));
+    if (!resolvedId) {
+      res.status(400).json({ success: false, message: 'Lien Google Sheets invalide.' });
+      return;
+    }
+
+    // The two directions must not meet. The inbound sync deletes any lead whose
+    // row vanished from the sheet and re-imports whatever it reads, so aiming both
+    // at one spreadsheet would import our own pushed rows back as new leads and
+    // then delete them on the next pass.
+    // Deliberately NOT conditioned on googleSheetSyncActive: the importer
+    // (syncDirectSheetForVendor) never reads that flag, so it keeps importing on
+    // GET /orders, POST /sync-now and POST /connect even with "auto-sync" off.
+    // Gating on it would let a seller defeat this guard just by toggling a switch
+    // that does not do what its name suggests.
+    if (resolvedId === vendor.googleSheetId) {
+      res.status(400).json({
+        success: false,
+        message:
+          "Ce document est déjà utilisé pour l'import automatique de vos prospects. " +
+          "Utiliser le même document dans les deux sens provoque une boucle d'import et la perte de prospects. " +
+          'Choisissez un autre document Google Sheets pour l\'envoi.',
+      });
+      return;
+    }
+
+    const cleanTab = tab ? String(tab).trim() : '';
+    if (cleanTab.length > 100) {
+      res.status(400).json({
+        success: false,
+        message: "Le nom de l'onglet ne peut pas dépasser 100 caractères.",
+      });
+      return;
+    }
+    const finalTab = cleanTab || DEFAULT_TAB;
+
+    // A real write probe: it creates the tab and the header row, so a sheet that
+    // is only shared read-only fails here rather than silently later.
+    const result = await ensureSheetReady(resolvedId, finalTab);
+    if (!result.ok) {
+      res.status(400).json({
+        success: false,
+        message: result.error,
+        reason: result.reason,
+        // Load-bearing on reason 'NOT_SHARED': the panel tells the seller exactly
+        // which address to share the document with.
+        serviceAccountEmail: getServiceAccountEmail(),
+      });
+      return;
+    }
+
+    const fullSheetUrl = String(sheetUrl).startsWith('http')
+      ? String(sheetUrl).trim()
+      : `https://docs.google.com/spreadsheets/d/${resolvedId}/edit`;
+
+    await prisma.user.update({
+      where: { id: vendorId },
+      data: {
+        googleSheetOutUrl: fullSheetUrl,
+        googleSheetOutId: resolvedId,
+        googleSheetOutTab: finalTab,
+        googleSheetOutActive: true,
+        googleSheetOutConnectedAt: new Date(),
+        googleSheetOutLastError: null,
+        googleSheetOutLastErrorAt: null,
+        // googleSheetOutAuto is deliberately untouched: the admin may have
+        // pre-seeded it, and connecting a sheet is not consent to auto-push.
+      },
+    });
+
+    res.json({
+      success: true,
+      message: 'Google Sheets connecté pour l\'envoi des prospects !',
+      data: await buildOutboundStatus(vendorId),
+    });
+  })
+);
+
+/**
+ * POST /api/v1/google-sheets/outbound/disconnect
+ */
+router.post(
+  '/outbound/disconnect',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const vendorId = req.user?.id;
+    if (!vendorId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: vendorId },
+      data: {
+        googleSheetOutUrl: null,
+        googleSheetOutId: null,
+        googleSheetOutActive: false,
+        googleSheetOutAuto: false,
+        googleSheetOutConnectedAt: null,
+        googleSheetOutLastError: null,
+        googleSheetOutLastErrorAt: null,
+      },
+    });
+
+    // Retire the backlog too, otherwise reconnecting months later would flush a
+    // pile of stale leads into the new sheet on the very first drain.
+    await prisma.sheetPushJob.updateMany({
+      where: { vendorId, status: { in: ['PENDING', 'BLOCKED_NO_CREDITS'] } },
+      data: { status: 'SKIPPED', lastError: 'Annulé : Google Sheets déconnecté.' },
+    });
+
+    res.json({
+      success: true,
+      message: 'Envoi vers Google Sheets déconnecté.',
+    });
+  })
+);
+
+/**
+ * POST /api/v1/google-sheets/outbound/toggle
+ * Body: { active?: boolean, auto?: boolean } — only the keys present are changed.
+ */
+router.post(
+  '/outbound/toggle',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const vendorId = req.user?.id;
+    if (!vendorId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const { active, auto } = req.body || {};
+
+    const vendor = await prisma.user.findUnique({
+      where: { id: vendorId },
+      select: { googleSheetsOutboundEnabled: true },
+    });
+
+    if (!vendor?.googleSheetsOutboundEnabled) {
+      res.status(403).json({ success: false, message: OUTBOUND_NOT_ENABLED });
+      return;
+    }
+
+    // Prisma skips `undefined` keys, so an absent flag keeps its stored value
+    // instead of being reset to false.
+    const updated = await prisma.user.update({
+      where: { id: vendorId },
+      data: {
+        googleSheetOutActive: typeof active === 'boolean' ? active : undefined,
+        googleSheetOutAuto: typeof auto === 'boolean' ? auto : undefined,
+      },
+      select: { googleSheetOutActive: true, googleSheetOutAuto: true },
+    });
+
+    res.json({
+      success: true,
+      message: 'Paramètres d\'envoi mis à jour.',
+      data: { active: updated.googleSheetOutActive, auto: updated.googleSheetOutAuto },
+    });
+  })
+);
+
+/**
+ * POST /api/v1/google-sheets/outbound/test
+ * Appends a single dummy row so the seller can confirm the wiring end to end.
+ */
+router.post(
+  '/outbound/test',
   authenticate,
   asyncHandler(async (req, res) => {
     const vendorId = req.user?.id;
@@ -776,127 +1110,404 @@ router.post(
 
     const vendor = await prisma.user.findUnique({
       where: { id: vendorId },
-      select: { googleSheetId: true, googleSheetUrl: true },
+      select: {
+        googleSheetsOutboundEnabled: true,
+        googleSheetOutId: true,
+        googleSheetOutTab: true,
+      },
     });
 
-    if (!vendor?.googleSheetId && !vendor?.googleSheetUrl) {
+    if (!vendor?.googleSheetsOutboundEnabled) {
+      res.status(403).json({ success: false, message: OUTBOUND_NOT_ENABLED });
+      return;
+    }
+
+    if (!vendor.googleSheetOutId) {
       res.status(400).json({
         success: false,
-        message: 'Aucun Google Sheet connecté. Veuillez enregistrer le lien de votre document.',
+        message: 'Aucun document Google Sheets connecté pour l\'envoi.',
       });
       return;
     }
 
-    const sheetId = vendor.googleSheetId || extractSpreadsheetId(vendor.googleSheetUrl || '');
-    if (!sheetId) {
-      res.status(400).json({ success: false, message: 'ID Google Sheet invalide' });
-      return;
-    }
-
-    const csvUrls = [
-      `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`,
-      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`,
-      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=Leads`,
-    ];
-
-    let csvData = '';
-    let fetchError = '';
-
-    for (const url of csvUrls) {
-      try {
-        const response = await axios.get(url, { timeout: 10000 });
-        if (response.data && typeof response.data === 'string' && response.data.includes(',')) {
-          csvData = response.data;
-          break;
-        }
-      } catch (err: any) {
-        fetchError = err.message || 'Impossible d\'accéder au fichier';
-      }
-    }
-
-    if (!csvData) {
-      res.json({
-        success: true,
-        message: 'Feuille synchronisée via Webhook / Apps Script. Pour une lecture directe sans Apps Script, assurez-vous que le lien est partageable (Tous les utilisateurs avec le lien - Lecteur).',
-        importedCount: 0,
-      });
-      return;
-    }
-
-    const lines = csvData.split(/\r?\n/).filter(line => line.trim().length > 0);
-    if (lines.length <= 1) {
-      res.json({ success: true, message: 'Aucun prospect dans le document', importedCount: 0 });
-      return;
-    }
-
-    const headerLine = parseCSVLine(lines[0]);
-    let customerIdx = 0;
-    let phoneIdx = 1;
-    let cityIdx = 2;
-    let addressIdx = 3;
-    let priceIdx = 4;
-    let qtyIdx = 5;
-    let skuIdx = 6;
-    let noteIdx = 7;
-
-    // Detect column indexes dynamically from headers if present
-    headerLine.forEach((colName, index) => {
-      const lower = colName.toLowerCase();
-      if (lower.includes('customer') || lower.includes('client') || lower.includes('nom')) customerIdx = index;
-      else if (lower.includes('phone') || lower.includes('téléphone') || lower.includes('tel')) phoneIdx = index;
-      else if (lower.includes('city') || lower.includes('ville')) cityIdx = index;
-      else if (lower.includes('address') || lower.includes('adresse')) addressIdx = index;
-      else if (lower.includes('price') || lower.includes('prix')) priceIdx = index;
-      else if (lower.includes('qty') || lower.includes('quantité')) qtyIdx = index;
-      else if (lower.includes('sku') || lower.includes('produit')) skuIdx = index;
-      else if (lower.includes('note') || lower.includes('remarque')) noteIdx = index;
+    // A test row costs ZERO credits: it is not a lead, no SheetPushJob is created
+    // and chargeCredits is never reached. Sellers must be able to verify the
+    // connection as often as they like without paying for it.
+    const row = buildLeadRow({
+      id: 0,
+      fullName: 'SILACOD — Test',
+      phone: '+212600000000',
+      city: 'Test',
+      address: '-',
+      source: 'TEST',
+      status: 'TEST',
     });
 
-    let importedCount = 0;
-    for (let i = 1; i < lines.length; i++) {
-      const row = parseCSVLine(lines[i]);
-      if (!row || row.length === 0) continue;
+    const result = await appendRows(vendor.googleSheetOutId, vendor.googleSheetOutTab || DEFAULT_TAB, [row]);
 
-      const custName = row[customerIdx] ? row[customerIdx].trim() : '';
-      const rawPhone = row[phoneIdx] ? row[phoneIdx].trim() : '';
-      let cleanPhone = rawPhone.replace(/\s+/g, '').replace(/[-().]/g, '');
-      if (cleanPhone.startsWith('+212')) cleanPhone = '0' + cleanPhone.slice(4);
-      else if (cleanPhone.startsWith('212')) cleanPhone = '0' + cleanPhone.slice(3);
-
-      if (!custName || !cleanPhone || cleanPhone.length < 8) continue;
-
-      // Check if lead already exists for vendor by phone and vendorId
-      const existing = await prisma.lead.findFirst({
-        where: { vendorId, phone: cleanPhone },
+    if (!result.ok) {
+      res.status(400).json({
+        success: false,
+        message: result.error,
+        reason: result.reason,
+        serviceAccountEmail: getServiceAccountEmail(),
       });
-
-      if (!existing) {
-        const rawPrice = row[priceIdx] ? Number(row[priceIdx].replace(/[^0-9.]/g, '')) : null;
-        const rawQty = row[qtyIdx] ? Number(row[qtyIdx]) || 1 : 1;
-
-        await prisma.lead.create({
-          data: {
-            vendorId,
-            fullName: custName,
-            phone: cleanPhone,
-            city: row[cityIdx] ? row[cityIdx].trim() : 'Non spécifiée',
-            address: row[addressIdx] ? row[addressIdx].trim() : null,
-            status: 'NEW',
-            source: 'GOOGLE_SHEETS',
-            sourceId: `GS-DIRECT-${Date.now().toString().slice(-6)}-${i}`,
-            requestedPriceMad: rawPrice,
-            productVariant: row[skuIdx] ? row[skuIdx].trim() : null,
-            notes: row[noteIdx] ? `${row[noteIdx].trim()} (Qté: ${rawQty})` : `Google Sheets Sync Direct (Qté: ${rawQty})`,
-          },
-        });
-        importedCount++;
-      }
+      return;
     }
+
+    await prisma.user.update({
+      where: { id: vendorId },
+      data: { googleSheetOutLastError: null, googleSheetOutLastErrorAt: null },
+    });
 
     res.json({
       success: true,
-      message: `${importedCount} nouveau(x) prospect(s) importé(s) directement depuis Google Sheets !`,
-      importedCount,
+      message: 'Ligne de test ajoutée à votre feuille. Aucun crédit n\'a été utilisé.',
+      data: { updatedRange: result.updatedRange || null },
+    });
+  })
+);
+
+/**
+ * POST /api/v1/google-sheets/outbound/setup-header
+ * Applies the formatted header template at the TOP of the seller's tab, and
+ * repairs a header that drifted down (a stray row above it, or none at all).
+ */
+router.post(
+  '/outbound/setup-header',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const vendorId = req.user?.id;
+    if (!vendorId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const vendor = await prisma.user.findUnique({
+      where: { id: vendorId },
+      select: {
+        googleSheetsOutboundEnabled: true,
+        googleSheetOutId: true,
+        googleSheetOutTab: true,
+      },
+    });
+
+    if (!vendor?.googleSheetsOutboundEnabled) {
+      res.status(403).json({ success: false, message: OUTBOUND_NOT_ENABLED });
+      return;
+    }
+
+    if (!vendor.googleSheetOutId) {
+      res.status(400).json({
+        success: false,
+        message: 'Aucun document Google Sheets connecté pour l\'envoi.',
+      });
+      return;
+    }
+
+    // Formatting costs ZERO credits, exactly like the test row above: no lead row
+    // is written, no SheetPushJob is created and chargeCredits is never reached.
+    // Sellers must be able to tidy their sheet as often as they like for free.
+    const result = await applyHeaderTemplate(vendor.googleSheetOutId, vendor.googleSheetOutTab || DEFAULT_TAB);
+
+    if (!result.ok) {
+      res.status(400).json({
+        success: false,
+        message: result.error,
+        reason: result.reason,
+        // Same shape as /outbound/connect: if access was revoked in the meantime,
+        // the panel shows the sharing instructions again.
+        serviceAccountEmail: getServiceAccountEmail(),
+      });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: vendorId },
+      data: { googleSheetOutLastError: null, googleSheetOutLastErrorAt: null },
+    });
+
+    res.json({
+      success: true,
+      message: result.headerInserted
+        ? 'En-tête ajouté et mis en forme en haut de votre feuille. Aucun crédit n\'a été utilisé.'
+        : 'Mise en forme actualisée : en-tête figé, filtre et colonnes ajustées. Aucun crédit n\'a été utilisé.',
+      data: { headerInserted: !!result.headerInserted },
+    });
+  })
+);
+
+/**
+ * POST /api/v1/google-sheets/outbound/reconcile
+ * The manual "re-check my sheet" action.
+ *
+ * Reads the Lead ID column back and re-aligns the stored statuses with it: rows the
+ * seller deleted by hand become REMOVED and can be sent again, rows that reappeared
+ * go back to SENT. Forced past the throttle, unlike the automatic pass on
+ * /outbound/sent-status, because the seller asked for it in so many words.
+ */
+router.post(
+  '/outbound/reconcile',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const vendorId = req.user?.id;
+    if (!vendorId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const vendor = await prisma.user.findUnique({
+      where: { id: vendorId },
+      select: {
+        googleSheetsOutboundEnabled: true,
+        googleSheetOutId: true,
+      },
+    });
+
+    if (!vendor?.googleSheetsOutboundEnabled) {
+      res.status(403).json({ success: false, message: OUTBOUND_NOT_ENABLED });
+      return;
+    }
+
+    if (!vendor.googleSheetOutId) {
+      res.status(400).json({
+        success: false,
+        message: 'Aucun document Google Sheets connecté pour l\'envoi.',
+      });
+      return;
+    }
+
+    // Re-reading costs ZERO credits, exactly like /outbound/test and
+    // /outbound/setup-header: nothing is written, no SheetPushJob is created and
+    // chargeCredits is never reached. Nor does anything get refunded here — a lead
+    // whose row the seller deleted was still delivered and paid for once, and
+    // sending it again is free because the ledger already holds its CONSUME row.
+    const result = await reconcileVendorSheet(vendorId, { force: true });
+
+    // `skipped` with force set means the read itself did not happen — usually
+    // because sharing was revoked. Saying "aucun changement" there would be a lie.
+    if (result.skipped) {
+      res.status(400).json({
+        success: false,
+        message:
+          "Impossible de relire votre feuille pour le moment. Vérifiez qu'elle est toujours partagée avec le compte de service, puis réessayez.",
+        reason: result.skipped,
+        serviceAccountEmail: getServiceAccountEmail(),
+      });
+      return;
+    }
+
+    const parts: string[] = [];
+    if (result.removed > 0) {
+      parts.push(
+        `${result.removed} ligne(s) ne sont plus dans votre feuille : vous pouvez les renvoyer depuis la liste des prospects.`
+      );
+    }
+    if (result.restored > 0) parts.push(`${result.restored} ligne(s) retrouvée(s) et remises en « envoyé ».`);
+    if (!parts.length) {
+      parts.push(
+        result.checked > 0
+          ? `Aucun changement : les ${result.checked} ligne(s) envoyées sont toujours dans votre feuille.`
+          : 'Aucun changement : aucune ligne envoyée à vérifier pour le moment.'
+      );
+    }
+    parts.push('Aucun crédit n\'a été utilisé.');
+
+    res.json({
+      success: true,
+      data: { checked: result.checked, removed: result.removed, restored: result.restored },
+      message: parts.join(' '),
+    });
+  })
+);
+
+/**
+ * GET /api/v1/google-sheets/outbound/jobs?page=&limit=&status=
+ * The push history shown in the panel, newest first.
+ */
+router.get(
+  '/outbound/jobs',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const vendorId = req.user?.id;
+    if (!vendorId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
+    const status = req.query.status ? String(req.query.status).trim().toUpperCase() : '';
+
+    const where = { vendorId, ...(status ? { status } : {}) };
+
+    const [jobs, total] = await Promise.all([
+      prisma.sheetPushJob.findMany({
+        where,
+        // `id` breaks ties: several rows in one batch share a createdAt to the
+        // millisecond, and without a total order they can swap between pages.
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          // The panel names each row after its lead rather than showing a bare id.
+          lead: { select: { id: true, fullName: true, phone: true } },
+        },
+      }),
+      prisma.sheetPushJob.count({ where }),
+    ]);
+
+    res.json({
+      success: true,
+      data: jobs,
+      pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+    });
+  })
+);
+
+/**
+ * POST /api/v1/google-sheets/outbound/sent-status
+ * Body: { leadIds: number[] }
+ *
+ * Which of these leads are already in the seller's sheet. The leads table asks
+ * about the rows it is currently showing and puts a small sheet badge on the
+ * matches, the way it badges a WhatsApp lead.
+ *
+ * A POST rather than a GET because a page of ids is far too long for a query
+ * string. It touches nothing but this vendor's own jobs and costs no credits — but
+ * it is not purely a read any more: it re-checks the seller's sheet first (see
+ * reconcileVendorSheet), so rows they deleted by hand answer as `removed` here
+ * instead of going on claiming to be sent.
+ */
+router.post(
+  '/outbound/sent-status',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const vendorId = req.user?.id;
+    if (!vendorId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const { leadIds } = req.body ?? {};
+    if (!Array.isArray(leadIds) || leadIds.length === 0) {
+      res.json({ success: true, data: { sent: [], pending: [], failed: [], removed: [] } });
+      return;
+    }
+
+    // One page of leads at most; anything larger is a caller bug, not a request.
+    const ids = leadIds
+      .map((id: any) => Number(id))
+      .filter((id: number) => Number.isInteger(id) && id > 0)
+      .slice(0, 500);
+    if (!ids.length) {
+      res.json({ success: true, data: { sent: [], pending: [], failed: [], removed: [] } });
+      return;
+    }
+
+    // Re-read the sheet first, so a row the seller deleted by hand stops being
+    // reported as sent and gets its send icon back. Throttled, NOT forced: this
+    // fires on every render of the leads table and Google's read quota is per
+    // minute — the seller's explicit re-check is /outbound/reconcile.
+    //
+    // reconcileVendorSheet never throws and leaves the stored state untouched when
+    // the read fails, so the buckets below are answered either way; the catch is
+    // there only so a future change cannot turn this endpoint into a 500.
+    await reconcileVendorSheet(vendorId).catch(() => undefined);
+
+    // Scoped to req.user.id: a seller can only ever learn about their own leads.
+    const jobs = await prisma.sheetPushJob.findMany({
+      where: { vendorId, leadId: { in: ids } },
+      select: { leadId: true, status: true },
+    });
+
+    const bucket = (match: (s: string) => boolean) =>
+      jobs.filter((j) => match(j.status)).map((j) => j.leadId);
+
+    res.json({
+      success: true,
+      data: {
+        sent: bucket((s) => s === 'SENT'),
+        // SENDING is folded in with PENDING: to the seller both mean "on its way".
+        pending: bucket((s) => s === 'PENDING' || s === 'SENDING' || s === 'BLOCKED_NO_CREDITS'),
+        failed: bucket((s) => s === 'FAILED'),
+        // Written once, then deleted from the sheet by the seller. Its own bucket
+        // and not folded into `failed`: nothing went wrong on our side, and the
+        // table needs to offer these a re-send rather than an error badge.
+        removed: bucket((s) => s === 'REMOVED'),
+      },
+    });
+  })
+);
+
+/**
+ * POST /api/v1/google-sheets/outbound/push
+ * Body: { leadIds: number[] }
+ *
+ * The manual send behind the per-row icon and the bulk button in the leads table.
+ */
+router.post(
+  '/outbound/push',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const vendorId = req.user?.id;
+    if (!vendorId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const { leadIds } = req.body || {};
+
+    const vendor = await prisma.user.findUnique({
+      where: { id: vendorId },
+      select: { googleSheetsOutboundEnabled: true },
+    });
+
+    if (!vendor?.googleSheetsOutboundEnabled) {
+      res.status(403).json({ success: false, message: OUTBOUND_NOT_ENABLED });
+      return;
+    }
+
+    if (!Array.isArray(leadIds) || leadIds.length === 0) {
+      res.status(400).json({ success: false, message: 'Aucun prospect sélectionné.' });
+      return;
+    }
+
+    if (leadIds.length > 200) {
+      res.status(400).json({
+        success: false,
+        message: 'Maximum 200 prospects par envoi. Réduisez votre sélection.',
+      });
+      return;
+    }
+
+    // pushLeadsNow already scopes the ids to this vendor, skips leads that came
+    // FROM a sheet, batches the append and charges the credits.
+    const stats = await pushLeadsNow(vendorId, leadIds.map((id: any) => Number(id)));
+
+    const parts: string[] = [];
+    if (stats.sent > 0) parts.push(`${stats.sent} lead(s) envoyés vers Google Sheets.`);
+    if (stats.blocked > 0) {
+      parts.push(
+        `Crédits épuisés : ${stats.blocked} lead(s) restent en file d'attente et partiront dès le rechargement.`
+      );
+    }
+    if (stats.alreadySent > 0) parts.push(`${stats.alreadySent} lead(s) déjà envoyés précédemment.`);
+    if (stats.skipped > 0) parts.push(`${stats.skipped} lead(s) ignorés (importés depuis Google Sheets).`);
+    if (stats.failed > 0) parts.push(`${stats.failed} lead(s) en échec.`);
+    if (!parts.length) parts.push('Aucun lead à envoyer.');
+
+    res.json({
+      success: true,
+      message: parts.join(' '),
+      data: {
+        sent: stats.sent,
+        blocked: stats.blocked,
+        failed: stats.failed,
+        skipped: stats.skipped,
+        alreadySent: stats.alreadySent,
+        balance: stats.balance,
+      },
     });
   })
 );

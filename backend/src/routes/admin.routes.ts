@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { isSessionRecordingEnabled, setSessionRecordingEnabled } from '../lib/sessionRecording.js';
-import { broadcastRecordingState } from '../lib/realtime.js';
+import { broadcastRecordingState, getIO } from '../lib/realtime.js';
 import { runSessionCleanup } from '../jobs/sessionCleanup.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { checkAndActivateUser } from '../utils/verification.js';
@@ -2908,6 +2908,160 @@ router.post(
       status: 'success',
       message: 'Portefeuille mis à jour avec succès',
       data: result
+    });
+  })
+);
+
+// Sell (or claw back) Google Sheets push credits. One credit = one row written.
+router.post(
+  '/sheet-credits/adjust',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { userId, amount, type, description } = req.body;
+
+    // Credits are whole rows — fractions and zero/negative amounts are meaningless here.
+    if (!userId || !Number.isInteger(Number(amount)) || Number(amount) <= 0 || !['CREDIT', 'DEBIT'].includes(type)) {
+      throw new AppException(400, 'Données invalides');
+    }
+
+    const targetId = Number(userId);
+    const target = await prisma.user.findUnique({
+      where: { id: targetId },
+      select: { id: true, googleSheetsOutboundEnabled: true }
+    });
+
+    if (!target) {
+      throw new AppException(404, 'Utilisateur introuvable');
+    }
+
+    // Selling credits to an account that cannot push is selling something unusable —
+    // the entitlement has to be switched on first.
+    if (!target.googleSheetsOutboundEnabled) {
+      throw new AppException(400, "La fonctionnalité Google Sheets doit d'abord être activée sur ce compte");
+    }
+
+    const amountNum = Number(amount);
+    const adjustment = type === 'CREDIT' ? amountNum : -amountNum;
+
+    const result = await prisma.$transaction(async (tx) => {
+      // The ledger account is created on the very first grant.
+      const account = await tx.sheetCreditAccount.upsert({
+        where: { userId: targetId },
+        create: { userId: targetId },
+        update: {}
+      });
+
+      // A debit larger than the balance would leave the seller owing credits: the
+      // drain refuses to run below 1, so the account silently stops pushing until
+      // someone grants back more than was clawed back. Refuse instead, and say by
+      // how much — the admin can then debit the real balance.
+      if (type === 'DEBIT' && amountNum > account.balance) {
+        throw new AppException(
+          400,
+          `Solde insuffisant : ce compte ne dispose que de ${account.balance} crédit(s).`
+        );
+      }
+
+      const updatedAccount = await tx.sheetCreditAccount.update({
+        where: { id: account.id },
+        data: {
+          balance: { increment: adjustment },
+          totalGranted: type === 'CREDIT' ? { increment: amountNum } : undefined
+        }
+      });
+
+      await tx.sheetCreditTransaction.create({
+        data: {
+          accountId: account.id,
+          type: type === 'CREDIT' ? 'GRANT' : 'ADMIN_DEBIT',
+          amount: adjustment,
+          balanceAfter: updatedAccount.balance,
+          description: description || (type === 'CREDIT' ? 'Crédits Google Sheets accordés' : 'Crédits Google Sheets retirés'),
+          createdBy: req.user!.id
+        }
+      });
+
+      // Un-park whatever stopped for lack of credits so the backlog leaves on the
+      // next cron tick, instead of waiting for a new lead to nudge the queue.
+      if (type === 'CREDIT') {
+        await tx.sheetPushJob.updateMany({
+          where: { vendorId: targetId, status: 'BLOCKED_NO_CREDITS' },
+          data: { status: 'PENDING', nextAttemptAt: new Date() }
+        });
+      }
+
+      return updatedAccount;
+    });
+
+    // Both side-effects sit outside the transaction and swallow their own errors:
+    // a socket or notification hiccup must never undo credits that were just sold.
+    try {
+      getIO()?.to(`user:${targetId}`).emit('sheet-credits', { balance: result.balance });
+    } catch (err) {
+      console.error('Failed to emit sheet credits balance:', err);
+    }
+
+    try {
+      const { createNotification } = await import('../utils/notification.js');
+      await createNotification(
+        targetId,
+        'SHEET_CREDITS_GRANTED',
+        type === 'CREDIT' ? '✅ Crédits Google Sheets ajoutés' : '⚠️ Crédits Google Sheets retirés',
+        type === 'CREDIT'
+          ? `${amountNum} crédit(s) Google Sheets ont été ajoutés à votre compte. Nouveau solde : ${result.balance}.`
+          : `${amountNum} crédit(s) Google Sheets ont été retirés de votre compte. Nouveau solde : ${result.balance}.`
+      );
+    } catch (err) {
+      console.error('Failed to trigger sheet credits notification:', err);
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Crédits Google Sheets mis à jour avec succès',
+      data: { balance: result.balance, account: result }
+    });
+  })
+);
+
+// Accounts an admin may sell Google Sheets credits to — entitlement is the filter,
+// and the current balance rides along so the picker shows what is being topped up.
+router.get(
+  '/sheet-credits/users',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const users = await prisma.user.findMany({
+      where: {
+        googleSheetsOutboundEnabled: true,
+        deletedAt: null
+      },
+      select: {
+        id: true,
+        uuid: true,
+        email: true,
+        role: true,
+        profile: {
+          select: { fullName: true }
+        },
+        sheetCreditAccount: {
+          select: { balance: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({
+      status: 'success',
+      data: users.map(u => ({
+        id: u.id,
+        uuid: u.uuid,
+        email: u.email,
+        fullName: u.profile?.fullName || u.email,
+        role: u.role.name,
+        // No account until the first grant — those read as zero, not as missing.
+        balance: u.sheetCreditAccount?.balance ?? 0
+      }))
     });
   })
 );

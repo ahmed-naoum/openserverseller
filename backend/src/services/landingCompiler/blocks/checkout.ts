@@ -40,14 +40,45 @@ const DEFAULTS = {
 const MESSAGES = {
   nameRequired: 'الاسم الكامل مطلوب *',
   nameShort: 'يرجى كتابة الاسم الكامل بشكل صحيح',
+  nameLetters: 'يرجى كتابة الاسم بالحروف',
+  nameLong: 'الاسم طويل جدا',
   cityRequired: 'اسم المدينة مطلوب *',
   cityShort: 'يرجى كتابة اسم المدينة بشكل صحيح',
+  cityLetters: 'يرجى كتابة اسم المدينة بالحروف',
+  cityLong: 'اسم المدينة طويل جدا',
   phoneRequired: 'رقم الهاتف مطلوب *',
   phoneInvalid: 'رقم هاتف غير صحيح (مثال: 0612345678)',
+  // Only reachable when the address is filled in; an empty one stays valid.
+  addressShort: 'العنوان قصير جدا، يرجى كتابته كاملا',
+  addressLong: 'العنوان طويل جدا',
   sending: 'جاري المعالجة...',
   failed: 'حدث خطأ، يرجى المحاولة مرة أخرى',
   success: 'تم استلام طلبك بنجاح!',
   successBody: 'سنتصل بك قريبا لتأكيد الطلب.',
+};
+
+/**
+ * The one place the field rules live: the `maxlength` attributes below and the
+ * runtime's checks both read these, so the browser's own cap and the message
+ * the customer sees can never disagree.
+ *
+ * The lower bounds stay where the React form had them (2 characters for a name
+ * or a city, 9 digits for a phone) — this is the money path, and a stricter
+ * floor would start rejecting leads that convert today. The upper bounds are
+ * new, and set far above any real Moroccan name, city or address, so they only
+ * ever catch a paste or a bot.
+ */
+const LIMITS = {
+  nameMin: 2,
+  nameMax: 60,
+  cityMin: 2,
+  cityMax: 40,
+  phoneMinDigits: 9,
+  phoneMaxDigits: 14,
+  phoneMax: 20,
+  /** Applies only once something has been typed — the field stays optional. */
+  addressMin: 5,
+  addressMax: 200,
 };
 
 interface FieldOptions {
@@ -59,6 +90,11 @@ interface FieldOptions {
   required?: boolean;
   /** Renders a textarea instead of an input, matching the address field. */
   rows?: number;
+  /** Hard cap the browser enforces before the runtime ever sees the value. */
+  maxLength?: number;
+  /** Keyboard hint on mobile, where most of this traffic is. */
+  inputMode?: string;
+  autoComplete?: string;
 }
 
 /**
@@ -72,12 +108,18 @@ function field(o: FieldOptions): string {
   // field follows the page direction.
   const dir = o.key === 'phone' ? 'ltr' : 'rtl';
   const required = o.required === false ? '' : ' required';
+  // `maxlength` stops the value at the cap while typing; the runtime still
+  // checks the length, because a paste on some mobile browsers lands over it.
+  const max = o.maxLength ? ` maxlength="${o.maxLength}"` : '';
+  const mode = o.inputMode ? ` inputmode="${o.inputMode}"` : '';
+  const auto = o.autoComplete ? ` autocomplete="${o.autoComplete}"` : '';
+  const attrs = `${max}${mode}${auto}`;
 
   const control = o.rows
     ? `<textarea class="ck-i" id="${id}" data-ck="${o.key}" dir="${dir}" rows="${o.rows}"` +
-      `${required} placeholder="${esc(o.placeholder)}"></textarea>`
+      `${required}${attrs} placeholder="${esc(o.placeholder)}"></textarea>`
     : `<input class="ck-i" id="${id}" data-ck="${o.key}" type="${o.type || 'text'}" dir="${dir}"` +
-      `${required} placeholder="${esc(o.placeholder)}">`;
+      `${required}${attrs} placeholder="${esc(o.placeholder)}">`;
 
   return (
     `<div class="ck-f">` +
@@ -252,15 +294,22 @@ export const checkoutBlock: BlockRenderer = {
     parts.push('<div class="ck-strip" data-ck="strip" role="alert"></div>');
     parts.push('<form novalidate>');
     parts.push(field({ key: 'name', uid, label: c.nameLabel || DEFAULTS.nameLabel,
-      placeholder: c.namePlaceholder || DEFAULTS.namePlaceholder }));
+      placeholder: c.namePlaceholder || DEFAULTS.namePlaceholder,
+      maxLength: LIMITS.nameMax, autoComplete: 'name' }));
     parts.push(field({ key: 'phone', uid, type: 'tel', label: c.phoneLabel || DEFAULTS.phoneLabel,
-      placeholder: c.phonePlaceholder || DEFAULTS.phonePlaceholder }));
+      placeholder: c.phonePlaceholder || DEFAULTS.phonePlaceholder,
+      // Not inputmode="numeric": the field accepts a leading + and separators,
+      // and the numeric keypad on iOS offers neither.
+      maxLength: LIMITS.phoneMax, inputMode: 'tel', autoComplete: 'tel' }));
     parts.push(field({ key: 'city', uid, label: c.cityLabel || DEFAULTS.cityLabel,
-      placeholder: c.cityPlaceholder || DEFAULTS.cityPlaceholder }));
-    // Optional, and a textarea: matches ReferralForm.tsx:666-681.
+      placeholder: c.cityPlaceholder || DEFAULTS.cityPlaceholder,
+      maxLength: LIMITS.cityMax, autoComplete: 'address-level2' }));
+    // Optional, and a textarea: matches ReferralForm.tsx:666-681. `maxlength`
+    // is a cap, not a requirement — an empty address still submits.
     parts.push(field({ key: 'address', uid, required: false, rows: 2,
       label: c.addressLabel || DEFAULTS.addressLabel,
-      placeholder: c.addressPlaceholder || DEFAULTS.addressPlaceholder }));
+      placeholder: c.addressPlaceholder || DEFAULTS.addressPlaceholder,
+      maxLength: LIMITS.addressMax, autoComplete: 'street-address' }));
 
     const btnRadius = num(c.buttonBorderRadius, 12, 0, 60);
     const btnSize = num(c.buttonSize, 17, 10, 40);
@@ -303,6 +352,9 @@ export const checkoutBlock: BlockRenderer = {
       // still updates the header to something truthful.
       retailPrice: ctx.productPriceMad,
       msg: MESSAGES,
+      // Same object the maxlength attributes above were built from, so the
+      // browser's cap and the message the customer reads always agree.
+      lim: LIMITS,
     };
     parts.push(`<script type="application/json">${jsonForScript(cfg)}</script>`);
 

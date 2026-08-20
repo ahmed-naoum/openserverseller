@@ -48,6 +48,7 @@ import {
   Sparkles,
   Headphones,
   TrendingUp,
+  FileSpreadsheet,
   Plus
 } from 'lucide-react';
 
@@ -1317,6 +1318,8 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
     helperCommissionPerDeliveredLead: 5,
     canDisplayOnDashboard: true,
     autoSendLeadsToCallCenter: false,
+    googleSheetsOutboundEnabled: false,
+    googleSheetOutAuto: false,
     city: '',
     address: '',
     cinNumber: '',
@@ -1371,6 +1374,8 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
         helperCommissionPerDeliveredLead: fullUser.helperCommissionPerDeliveredLead ?? 5,
         canDisplayOnDashboard: fullUser.canDisplayOnDashboard ?? true,
         autoSendLeadsToCallCenter: fullUser.autoSendLeadsToCallCenter || false,
+        googleSheetsOutboundEnabled: fullUser.googleSheetsOutboundEnabled || false,
+        googleSheetOutAuto: fullUser.googleSheetOutAuto || false,
         city: fullUser.city || '',
         address: fullUser.address || '',
         cinNumber: fullUser.cinNumber || '',
@@ -1880,6 +1885,48 @@ function EditUserModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: ()
                           className={`w-10 h-5 rounded-full transition-all relative ${formData.autoSendLeadsToCallCenter ? 'bg-cyan-500' : 'bg-slate-200'}`}
                         >
                           <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.autoSendLeadsToCallCenter ? 'left-[22px]' : 'left-0.5'}`} />
+                        </button>
+                      </div>
+                    )}
+
+                    {(formData.role === 'VENDOR' || formData.role === 'INFLUENCER') && (
+                      <div className="mt-4 flex items-center justify-between p-3 bg-emerald-50/50 rounded-2xl border border-emerald-100/50">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 bg-white rounded-xl text-emerald-600 shadow-sm">
+                            <FileSpreadsheet size={16} />
+                          </div>
+                          <div>
+                            <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Google Sheets — Envoi des leads</h4>
+                            <p className="text-[8px] font-bold text-emerald-500 uppercase tracking-tighter">Active la fonctionnalité et rend le compte éligible à l'achat de crédits</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, googleSheetsOutboundEnabled: !formData.googleSheetsOutboundEnabled })}
+                          className={`w-10 h-5 rounded-full transition-all relative ${formData.googleSheetsOutboundEnabled ? 'bg-emerald-500' : 'bg-slate-200'}`}
+                        >
+                          <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.googleSheetsOutboundEnabled ? 'left-[22px]' : 'left-0.5'}`} />
+                        </button>
+                      </div>
+                    )}
+
+                    {(formData.role === 'VENDOR' || formData.role === 'INFLUENCER') && formData.googleSheetsOutboundEnabled && (
+                      <div className="mt-2 ml-6 flex items-center justify-between p-3 bg-emerald-50/30 rounded-2xl border border-emerald-100/50">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 bg-white rounded-xl text-emerald-500 shadow-sm">
+                            <Sparkles size={16} />
+                          </div>
+                          <div>
+                            <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Envoi automatique par défaut</h4>
+                            <p className="text-[8px] font-bold text-emerald-500 uppercase tracking-tighter">Valeur de départ : le vendeur pourra la modifier lui-même depuis son tableau de bord</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, googleSheetOutAuto: !formData.googleSheetOutAuto })}
+                          className={`w-10 h-5 rounded-full transition-all relative ${formData.googleSheetOutAuto ? 'bg-emerald-500' : 'bg-slate-200'}`}
+                        >
+                          <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.googleSheetOutAuto ? 'left-[22px]' : 'left-0.5'}`} />
                         </button>
                       </div>
                     )}

@@ -25,6 +25,8 @@ interface SecretItem {
   categoryLabel: string;
   secret: boolean;
   bootstrap: boolean;
+  /** Needs a textarea: the value contains real newlines (e.g. a PEM key). */
+  multiline?: boolean;
   description: string | null;
   source: SecretSource;
   /** Masked for secrets, full value for non-secrets, null when unset. */
@@ -286,27 +288,55 @@ export default function AdminSecrets() {
                       <div className="flex shrink-0 items-center gap-2 lg:w-[420px]">
                         {isEditing ? (
                           <>
-                            <input
-                              autoFocus
-                              type={item.secret ? 'password' : 'text'}
-                              value={drafts[item.key]}
-                              onChange={(e) =>
-                                setDrafts((d) => ({ ...d, [item.key]: e.target.value }))
-                              }
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleSave(item);
-                                if (e.key === 'Escape') {
-                                  setDrafts((d) => {
-                                    const next = { ...d };
-                                    delete next[item.key];
-                                    return next;
-                                  });
+                            {/* A multi-line value pasted into an <input> loses its
+                                newlines, which turns a PEM into something OpenSSL
+                                rejects with an opaque DECODER error long after the
+                                save appeared to succeed. Those keys get a textarea. */}
+                            {item.multiline ? (
+                              <textarea
+                                autoFocus
+                                rows={6}
+                                value={drafts[item.key]}
+                                onChange={(e) =>
+                                  setDrafts((d) => ({ ...d, [item.key]: e.target.value }))
                                 }
-                              }}
-                              placeholder="Nouvelle valeur"
-                              autoComplete="new-password"
-                              className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                            />
+                                onKeyDown={(e) => {
+                                  // Enter inserts a newline here; only Escape is a shortcut.
+                                  if (e.key === 'Escape') {
+                                    setDrafts((d) => {
+                                      const next = { ...d };
+                                      delete next[item.key];
+                                      return next;
+                                    });
+                                  }
+                                }}
+                                placeholder={"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"}
+                                spellCheck={false}
+                                className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-1.5 font-mono text-xs focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                              />
+                            ) : (
+                              <input
+                                autoFocus
+                                type={item.secret ? 'password' : 'text'}
+                                value={drafts[item.key]}
+                                onChange={(e) =>
+                                  setDrafts((d) => ({ ...d, [item.key]: e.target.value }))
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSave(item);
+                                  if (e.key === 'Escape') {
+                                    setDrafts((d) => {
+                                      const next = { ...d };
+                                      delete next[item.key];
+                                      return next;
+                                    });
+                                  }
+                                }}
+                                placeholder="Nouvelle valeur"
+                                autoComplete="new-password"
+                                className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                              />
+                            )}
                             <button
                               onClick={() => handleSave(item)}
                               disabled={isBusy || !encryptionKeyConfigured}

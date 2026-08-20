@@ -37,6 +37,13 @@ export interface SecretDefinition {
   secret: boolean;
   /** Cannot be stored in the database — .env only. */
   bootstrap?: boolean;
+  /**
+   * Render a textarea instead of a single-line input. Required for any value with
+   * real newlines: a browser strips them when a multi-line string is pasted into
+   * an <input>, which silently corrupts a PEM and only surfaces much later as an
+   * opaque `DECODER routines::unsupported` from OpenSSL.
+   */
+  multiline?: boolean;
   description?: string;
 }
 
@@ -135,6 +142,22 @@ export const SECRET_REGISTRY: SecretDefinition[] = [
     label: 'Google Sheets — URL du lecteur',
     category: 'ecommerce',
     secret: false,
+  },
+  // Not marked secret on purpose: the vendor-facing "partagez votre feuille avec
+  // cette adresse" error has to display the address verbatim, and a masked value
+  // would leave the seller nothing to copy.
+  {
+    key: 'GOOGLE_SA_CLIENT_EMAIL',
+    label: 'Google Sheets — Compte de service (email)',
+    category: 'ecommerce',
+    secret: false,
+  },
+  {
+    key: 'GOOGLE_SA_PRIVATE_KEY',
+    label: 'Google Sheets — Compte de service (clé privée)',
+    category: 'ecommerce',
+    secret: true,
+    multiline: true,
   },
 
   // ── Médias ────────────────────────────────────────────────────────────────

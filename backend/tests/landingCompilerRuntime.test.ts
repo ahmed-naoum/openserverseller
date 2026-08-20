@@ -100,4 +100,21 @@ describe('checkout runtime', () => {
     expect(CHECKOUT_RUNTIME).toContain('[data-ck-root]');
     expect(html).toContain('data-ck-root');
   });
+
+  it('has a validator for every field it submits', () => {
+    // The submit handler walks this list; a field missing from `checks` would
+    // throw there and take the whole order with it.
+    const walked = CHECKOUT_RUNTIME.match(/\['fullName','phone','city','address'\]/g) || [];
+    // Once to clear, once to validate on blur, once on submit.
+    expect(walked.length).toBeGreaterThanOrEqual(3);
+    for (const key of ['fullName', 'phone', 'city', 'address']) {
+      expect(CHECKOUT_RUNTIME, `checks.${key}`).toMatch(
+        new RegExp(`${key}: function\\(v\\)`)
+      );
+    }
+  });
+
+  it('checks fields on the way out, not only on submit', () => {
+    expect(CHECKOUT_RUNTIME).toContain("addEventListener('blur'");
+  });
 });

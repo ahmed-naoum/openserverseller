@@ -14,6 +14,8 @@ import { FACTURED_SITUATIONS, WRITABLE_PAYMENT_SITUATIONS, isFactured } from '..
 import { SAFE_USER_SELECT } from '../lib/safeUserSelect.js';
 import { parseDateRange } from '../lib/dateRange.js';
 import { DEAD_NO_REPLY, SYSTEM_NOTE_PREFIX, releaseAtFor } from '../lib/leadRelease.js';
+import { enqueueSheetPush, enqueueSheetPushMany } from '../services/sheetPush.service.js';
+import { getPackPrice } from '../lib/leadPricing.js';
 import {
   productScopeOf,
   applyProductScope,
@@ -221,37 +223,6 @@ const callColiatyCreateParcel = async (parcelData: {
   }
 };
 
-const getPackPrice = (lead: any) => {
-  if (lead.order?.totalAmountMad !== undefined && lead.order?.totalAmountMad !== null) {
-    return Number(lead.order.totalAmountMad);
-  }
-  // What the agent agreed with the customer on the confirmation call wins over
-  // the pack's listed price — that is the amount the courier must collect.
-  if (lead.confirmedPriceMad !== undefined && lead.confirmedPriceMad !== null) {
-    return Number(lead.confirmedPriceMad);
-  }
-  if (lead.productVariant && lead.referralLink?.landingPage?.customStructure) {
-    try {
-      let structure = lead.referralLink.landingPage.customStructure;
-      if (typeof structure === 'string') {
-        structure = JSON.parse(structure);
-      }
-      const blocks = Array.isArray(structure) ? structure : (structure.blocks || []);
-      const checkoutBlock = blocks.find((b: any) => b.type === 'express_checkout');
-      if (checkoutBlock?.content?.options) {
-        const variant = lead.productVariant?.toLowerCase().trim();
-        const option = checkoutBlock.content.options.find((o: any) => 
-          o.name?.toLowerCase().trim() === variant || 
-          o.id?.toLowerCase().trim() === variant
-        );
-        if (option && option.price) {
-          return Number(option.price);
-        }
-      }
-    } catch (e) {}
-  }
-  return lead.referralLink?.product?.retailPriceMad || 0;
-};
 
 const router = Router();
 
@@ -2520,6 +2491,11 @@ router.post(
     let validRows = 0;
     let duplicateRows = 0;
     const errors: string[] = [];
+    // Collected here and queued in one call after the loop: an import is routinely
+    // 500 rows, and 500 individual enqueues would be 1000 extra round trips held
+    // open on the request thread for no gain.
+    const createdLeadIds: number[] = [];
+    let importedSource: string | null = null;
 
     // Normalize and validate Moroccan phone numbers
     // Accepts: 0612345678, 612345678, +212612345678, 00212612345678, with optional spaces/dashes
@@ -2577,7 +2553,7 @@ router.post(
         }
         */
 
-        await prisma.lead.create({
+        const createdLead = await prisma.lead.create({
           data: {
             vendorId: req.user!.id,
             importBatchId: batch.id,
@@ -2591,6 +2567,8 @@ router.post(
             sourceMode: sourceMode || 'VENDOR',
           },
         });
+        createdLeadIds.push(createdLead.id);
+        importedSource = createdLead.source;
 
         validRows++;
       } catch (error) {
@@ -2606,6 +2584,12 @@ router.post(
         status: 'COMPLETED',
       },
     });
+
+    try {
+      await enqueueSheetPushMany(req.user!.id, createdLeadIds, importedSource);
+    } catch (err) {
+      console.error('[SheetPush] enqueue failed:', err);
+    }
 
     // Log import results for debugging
     if (errors.length > 0) {
@@ -3003,6 +2987,12 @@ router.post(
 
       return { lead, order };
     });
+
+    try {
+      await enqueueSheetPush(result.lead.id, effectiveVendorId, result.lead.source);
+    } catch (err) {
+      console.error('[SheetPush] enqueue failed:', err);
+    }
 
     // A parcel with a Coliaty code is a ticket waiting on the packaging desk.
     if (result.order?.coliatyPackageCode) {
@@ -4788,6 +4778,12 @@ router.post(
         } catch (e) {
           console.error('[Socket push-integration-leads error]', e);
         }
+
+        try {
+          await enqueueSheetPush(createdLead.id, userId, createdLead.source);
+        } catch (err) {
+          console.error('[SheetPush] enqueue failed:', err);
+        }
       }
     }
 
@@ -5197,6 +5193,12 @@ router.post(
 
       return lead;
     });
+
+    try {
+      await enqueueSheetPush(result.id, vendorId, result.source);
+    } catch (err) {
+      console.error('[SheetPush] enqueue failed:', err);
+    }
 
     res.status(201).json({ status: 'success', message: 'Panier converti en lead avec succès', data: { leadId: result.id } });
   })

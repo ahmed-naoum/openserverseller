@@ -634,6 +634,9 @@ export const adminApi = {
   getFinanceUsers: () => api.get('/admin/finance/users'),
   adjustWallet: (data: { userId: number; amount: number; type: 'CREDIT' | 'DEBIT'; description?: string }) => 
     api.post('/admin/wallet/adjust', data),
+  getSheetCreditsUsers: () => api.get('/admin/sheet-credits/users'),
+  adjustSheetCredits: (data: { userId: number; amount: number; type: 'CREDIT' | 'DEBIT'; description?: string }) =>
+    api.post('/admin/sheet-credits/adjust', data),
   // Influencer Inspector
   getInfluencerInspector: () => api.get('/admin/influencer-inspector'),
   getSupportInspector: () => api.get('/admin/support-inspector'),
@@ -1043,6 +1046,35 @@ export const googleSheetsApi = {
   getOrders: (params?: any) => api.get('/google-sheets/orders', { params }),
   syncNow: () => api.post('/google-sheets/sync-now'),
   rotateToken: () => api.post('/google-sheets/rotate-token'),
+
+  // ── Outbound: leads pushed INTO the seller's own sheet ───────────────────
+  // Distinct from everything above, which pulls orders OUT of a sheet.
+  getOutboundStatus: () => api.get('/google-sheets/outbound/status'),
+  connectOutbound: (data: { sheetUrl: string; tab?: string }) =>
+    api.post('/google-sheets/outbound/connect', data),
+  disconnectOutbound: () => api.post('/google-sheets/outbound/disconnect'),
+  toggleOutbound: (data: { active?: boolean; auto?: boolean }) =>
+    api.post('/google-sheets/outbound/toggle', data),
+  testOutbound: () => api.post('/google-sheets/outbound/test'),
+  // Writes the formatted header template at the top of the seller's tab. Free.
+  setupSheetHeader: () => api.post('/google-sheets/outbound/setup-header'),
+  getOutboundJobs: (params?: { page?: number; limit?: number; status?: string }) =>
+    api.get('/google-sheets/outbound/jobs', { params }),
+  pushLeadsToSheet: (leadIds: number[]) =>
+    api.post('/google-sheets/outbound/push', { leadIds }),
+  // Which of these leads already have a row in the seller's sheet — drives the
+  // little sheet badge in the leads table.
+  getSheetSentStatus: (leadIds: number[]) =>
+    api.post('/google-sheets/outbound/sent-status', { leadIds }),
+  // Re-reads the sheet itself and reconciles it with what we think we sent: a
+  // seller deleting rows by hand is invisible to us until we look again.
+  recheckSheet: () => api.post('/google-sheets/outbound/reconcile'),
+};
+
+export const sheetCreditsApi = {
+  me: () => api.get('/sheet-credits/me'),
+  transactions: (params?: { page?: number; limit?: number }) =>
+    api.get('/sheet-credits/transactions', { params }),
 };
 
 export const eventApi = {

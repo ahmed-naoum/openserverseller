@@ -287,6 +287,25 @@ const ACCESS_RULES: AccessRule[] = [
   { methods: READ, test: /^\/(youcan|shopify|woocommerce|google-sheets)\/(orders|customers)$/, perm: 'subCanViewIntegrations', scope: 'vendor' },
   { methods: ['POST'], test: /^\/(youcan|shopify|woocommerce|google-sheets)\/sync(-now)?$/, perm: 'subCanViewIntegrations', scope: 'vendor' },
 
+  // --- outbound Google Sheets (leads pushed INTO the seller's own sheet) ---
+  // The credit balance behind the "$" chip in the header. Without a rule the
+  // deny-by-default fall-through 403s it on every page a helper opens.
+  { methods: READ, test: /^\/sheet-credits(\/|$)/, perm: 'subCanViewIntegrations', scope: 'vendor' },
+  // Connection state and the outbox history, read-only. The optional
+  // /integrations prefix is there because routes/index.ts mounts the same
+  // router under both '/google-sheets' and '/integrations/google-sheets'.
+  //
+  // /outbound/connect, /disconnect, /toggle, /test and /push are absent for the
+  // same reason as the credential-bearing endpoints above: attaching, detaching
+  // or arming a destination is connection management, and spending the vendor's
+  // credits is spending their money. Both stay with the account owner.
+  {
+    methods: READ,
+    test: /^(\/integrations)?\/google-sheets\/outbound\/(status|jobs)$/,
+    perm: 'subCanViewIntegrations',
+    scope: 'vendor',
+  },
+
   // ============================================================= marketplace
   // Note this grant is a visibility control, not a security boundary: the
   // marketplace screen reads /public/marketplace/*, which serves the same

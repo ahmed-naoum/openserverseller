@@ -56,20 +56,20 @@ model User {
 
   // Per-page grants for a sub-account. All default to false: a freshly created
   // helper can see nothing until its vendor explicitly hands over a page.
-  subCanViewDashboard      Boolean @default(true)
-  subCanViewLeads          Boolean @default(false)
-  subCanEditLeads          Boolean @default(false)
-  subCanCreateLeads        Boolean @default(false)
-  subCanViewInventory      Boolean @default(false)
-  subCanManageLinks        Boolean @default(false)
-  subCanViewWallet         Boolean @default(false)
-  subCanViewInvoices       Boolean @default(false)
-  subCanViewIntegrations   Boolean @default(false)
-  subCanViewMarketplace    Boolean @default(false)
-  subCanManageSupport      Boolean @default(false)
-  subCanUseChat            Boolean @default(false)
-  subCanManagePixels       Boolean @default(false)
-  subCanManageDomains      Boolean @default(false)
+  subCanViewDashboard    Boolean @default(true)
+  subCanViewLeads        Boolean @default(false)
+  subCanEditLeads        Boolean @default(false)
+  subCanCreateLeads      Boolean @default(false)
+  subCanViewInventory    Boolean @default(false)
+  subCanManageLinks      Boolean @default(false)
+  subCanViewWallet       Boolean @default(false)
+  subCanViewInvoices     Boolean @default(false)
+  subCanViewIntegrations Boolean @default(false)
+  subCanViewMarketplace  Boolean @default(false)
+  subCanManageSupport    Boolean @default(false)
+  subCanUseChat          Boolean @default(false)
+  subCanManagePixels     Boolean @default(false)
+  subCanManageDomains    Boolean @default(false)
 
   // Finer grants, each carved out of a broader one above because it is
   // destructive, costs money, or is visible to the customer.
@@ -99,19 +99,19 @@ model User {
   subAccountProducts VendorSubAccountProduct[] @relation("SubAccountProducts")
 
   // Which of the two vendor modes this helper may sit in. SELLER | AFFILIATE | BOTH
-  subAllowedModes          String  @default("BOTH")
+  subAllowedModes    String    @default("BOTH")
   // Master switch: when true the helper can look at everything it was granted
   // but change nothing of the vendor's, whatever the grants above say.
-  subReadOnly              Boolean  @default(false)
+  subReadOnly        Boolean   @default(false)
   // Optional end of access, for a temporary helper. Null means no expiry.
-  subAccessExpiresAt       DateTime?
+  subAccessExpiresAt DateTime?
 
   // Influencer fields
-  referralCode  String? @unique
-  subdomain     String? @unique
-  isInfluencer  Boolean @default(false)
-  totalEarnings Float   @default(0)
-  platformFeeRate Float @default(0.05)
+  referralCode    String? @unique
+  subdomain       String? @unique
+  isInfluencer    Boolean @default(false)
+  totalEarnings   Float   @default(0)
+  platformFeeRate Float   @default(0.05)
 
   // Custom Domain Integration
   customDomain       String? @unique
@@ -127,33 +127,33 @@ model User {
   lastLoginAt     DateTime?
 
   // 2FA and SSO
-  twoFactorSecret    String?
-  isTwoFactorEnabled Boolean @default(false)
-  googleId           String? @unique
-  canImpersonate     Boolean @default(false)
-  mustChangePassword Boolean @default(false)
-  requiresPasswordChange Boolean @default(false)
-  autoAssignInfluencers Boolean @default(false)
-  autoAssignHelperUsers Boolean @default(false)
-  autoAssignHelperVendors Boolean @default(false)
-  autoAssignHelperInfluencers Boolean @default(false)
-  saisieFeeMad          Float   @default(8.0)
+  twoFactorSecret                  String?
+  isTwoFactorEnabled               Boolean @default(false)
+  googleId                         String? @unique
+  canImpersonate                   Boolean @default(false)
+  mustChangePassword               Boolean @default(false)
+  requiresPasswordChange           Boolean @default(false)
+  autoAssignInfluencers            Boolean @default(false)
+  autoAssignHelperUsers            Boolean @default(false)
+  autoAssignHelperVendors          Boolean @default(false)
+  autoAssignHelperInfluencers      Boolean @default(false)
+  saisieFeeMad                     Float   @default(8.0)
   // What a call-center agent nets per parcel they saisi that reached the
   // customer. Distinct from `saisieFeeMad`, which is what the vendor is billed
   // per lead entered — the two rates are set independently by an admin.
-  netProfitPerDeliveredParcelMad Float @default(10.0)
-  canManageProducts     Boolean @default(false)
-  canManageLeads        Boolean @default(false)
-  canManageOrders       Boolean @default(false)
-  canManageInfluencerLinks Boolean @default(false)
-  canManageTickets       Boolean @default(false)
-  canScanReturns         Boolean @default(false)
-  canManageAffiliateInvites Boolean @default(false)
-  helperCommissionPerDeliveredLead Float @default(5.0)
-  canDisplayOnDashboard  Boolean @default(true)
+  netProfitPerDeliveredParcelMad   Float   @default(10.0)
+  canManageProducts                Boolean @default(false)
+  canManageLeads                   Boolean @default(false)
+  canManageOrders                  Boolean @default(false)
+  canManageInfluencerLinks         Boolean @default(false)
+  canManageTickets                 Boolean @default(false)
+  canScanReturns                   Boolean @default(false)
+  canManageAffiliateInvites        Boolean @default(false)
+  helperCommissionPerDeliveredLead Float   @default(5.0)
+  canDisplayOnDashboard            Boolean @default(true)
   // When true, a lead created from this seller/influencer's Express Checkout is
   // automatically forwarded to the call center (status AVAILABLE) on arrival.
-  autoSendLeadsToCallCenter Boolean @default(false)
+  autoSendLeadsToCallCenter        Boolean @default(false)
 
   // Tracking
   registrationIp String?
@@ -164,14 +164,14 @@ model User {
   deletedAt DateTime?
 
   // Contract Status
-  contractAccepted Boolean   @default(false)
-  contractSignedAt DateTime?
-  cguAccepted      Boolean   @default(false)
-  cguAcceptedAt    DateTime?
+  contractAccepted        Boolean   @default(false)
+  contractSignedAt        DateTime?
+  cguAccepted             Boolean   @default(false)
+  cguAcceptedAt           DateTime?
   damanesignTransactionId String?
   damanesignMemberId      String?
-  damanesignFileId         String?
-  damanesignSignedFileUrl  String?
+  damanesignFileId        String?
+  damanesignSignedFileUrl String?
 
   // YouCan Integration
   youcanAccessToken String?
@@ -193,37 +193,58 @@ model User {
   wooCommerceConnectedAt    DateTime?
 
   // Google Sheets Integration
-  googleSheetUrl        String?
-  googleSheetId         String?
-  googleSheetSyncActive Boolean   @default(true)
-  googleSheetConnectedAt DateTime?
-  googleSheetWebhookToken String? @unique
+  googleSheetUrl          String?
+  googleSheetId           String?
+  googleSheetSyncActive   Boolean   @default(true)
+  googleSheetConnectedAt  DateTime?
+  googleSheetWebhookToken String?   @unique
 
-  language       String            @default("ar") @db.VarChar(5)
+  // Google Sheets — OUTBOUND (leads pushed INTO the seller's own sheet).
+  // Deliberately separate from the googleSheet* fields above: that connection is
+  // INBOUND and its sync DELETES rows it no longer sees (googleSheets.routes.ts,
+  // parseAndInsertLeadRows). Pointing both directions at one spreadsheet would
+  // re-import our own rows as leads and then wipe them, so connect refuses it.
+  // `googleSheetsOutboundEnabled` is the admin-set entitlement that credits are
+  // sold against; `googleSheetOutAuto` is the auto-push switch, which the admin
+  // seeds and the seller can override — unlike autoSendLeadsToCallCenter, the
+  // seller holds this one because the credits being spent are theirs.
+  googleSheetsOutboundEnabled Boolean   @default(false)
+  googleSheetOutUrl           String?
+  googleSheetOutId            String?
+  googleSheetOutTab           String?   @default("SILACOD Leads")
+  googleSheetOutActive        Boolean   @default(true)
+  googleSheetOutAuto          Boolean   @default(false)
+  googleSheetOutConnectedAt   DateTime?
+  googleSheetOutLastError     String?
+  googleSheetOutLastErrorAt   DateTime?
 
-  profile        UserProfile?
-  questionnaire  SellerQuestionnaire?
+  language String @default("ar") @db.VarChar(5)
+
+  profile                 UserProfile?
+  questionnaire           SellerQuestionnaire?
   influencerQuestionnaire InfluencerQuestionnaire?
-  kycDocuments   KycDocument[]
-  leadImports    LeadImportBatch[]
-  leads          Lead[]
-  assignedLeads  Lead[]            @relation("AgentLeads")
-  leadContactClicks LeadContactClick[]
-  orders         Order[]
-  wallet         Wallet?
-  payoutRequests PayoutRequest[]   @relation("VendorPayouts")
-  notifications  Notification[]
+  kycDocuments            KycDocument[]
+  leadImports             LeadImportBatch[]
+  leads                   Lead[]
+  assignedLeads           Lead[]                   @relation("AgentLeads")
+  leadContactClicks       LeadContactClick[]
+  orders                  Order[]
+  wallet                  Wallet?
+  sheetCreditAccount      SheetCreditAccount?
+  sheetPushJobs           SheetPushJob[]
+  payoutRequests          PayoutRequest[]          @relation("VendorPayouts")
+  notifications           Notification[]
 
-  ownedProducts   Product[]          @relation("ProductOwner")
-  inventory       ProductInventory[]
-  claims          AffiliateClaim[]
-  supportRequests SupportRequest[]
+  ownedProducts         Product[]              @relation("ProductOwner")
+  inventory             ProductInventory[]
+  claims                AffiliateClaim[]
+  supportRequests       SupportRequest[]
   customProductRequests CustomProductRequest[]
 
-  conversations ConversationParticipant[]
-  claimedConversations Conversation[] @relation("ClaimedConversations")
-  messages      Message[]
-  activityLogs  ActivityLog[]
+  conversations        ConversationParticipant[]
+  claimedConversations Conversation[]            @relation("ClaimedConversations")
+  messages             Message[]
+  activityLogs         ActivityLog[]
 
   // Agent/Lead management relations
   leadStatusHistories LeadStatusHistory[]
@@ -243,48 +264,48 @@ model User {
   influencerProductAssignments AgentProductAssignment[] @relation("InfluencerProductAssignments")
 
   // Helper-User assignment relations
-  helperAssignments      HelperUserAssignment[] @relation("HelperAssignments")
-  targetUserAssignments  HelperUserAssignment[] @relation("TargetUserAssignments")
+  helperAssignments     HelperUserAssignment[] @relation("HelperAssignments")
+  targetUserAssignments HelperUserAssignment[] @relation("TargetUserAssignments")
 
-  orderStatusHistories OrderStatusHistory[]
-  productionJobs       ProductionJob[]
-  favorites            Favorite[]
-  targetedAnnouncements Announcement[]     @relation("TargetedAnnouncements")
-  bankAccounts         UserBankAccount[]
-  invoices             Invoice[]
-  agentInvoices        AgentInvoice[]     @relation("AgentInvoices")
-  conversationLogs     ConversationLog[]  @relation("UserLogs")
-  pixels               UserPixel[]
+  orderStatusHistories  OrderStatusHistory[]
+  productionJobs        ProductionJob[]
+  favorites             Favorite[]
+  targetedAnnouncements Announcement[]       @relation("TargetedAnnouncements")
+  bankAccounts          UserBankAccount[]
+  invoices              Invoice[]
+  agentInvoices         AgentInvoice[]       @relation("AgentInvoices")
+  conversationLogs      ConversationLog[]    @relation("UserLogs")
+  pixels                UserPixel[]
 
   @@index([parentVendorId])
   @@map("users")
 }
 
 model UserBankAccount {
-  id           Int      @id @default(autoincrement())
-  userId       Int
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bankName     String
-  ribAccount   String
-  iceNumber    String?
-  status       String   @default("PENDING") // PENDING, APPROVED, REJECTED
-  isDefault    Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bankName   String
+  ribAccount String
+  iceNumber  String?
+  status     String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@map("user_bank_accounts")
 }
 
 model UserProfile {
-  userId    Int     @id
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int       @id
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   fullName  String?
   avatarUrl String?
   city      String?
   address   String?
   cinNumber String?
   birthDate DateTime?
-  language  String  @default("fr")
+  language  String    @default("fr")
   metadata  Json?
 
   // Influencer Specific
@@ -311,8 +332,6 @@ model KycDocument {
 
   @@map("kyc_documents")
 }
-
-
 
 model Category {
   id       Int        @id @default(autoincrement())
@@ -351,35 +370,35 @@ model Product {
   stockStatus        String  @default("available") // "available", "out_of_stock", "pre_order"
 
   // Downloads and Links
-  ficheTechniqueUrl  String?
+  ficheTechniqueUrl String?
   canvaLink         String?
   mockupLink        String?
 
   // Arch modifications
-  ownerId         Int?
-  owner           User?    @relation("ProductOwner", fields: [ownerId], references: [id])
-  visibility      String[] @default(["REGULAR"]) // REGULAR, AFFILIATE, INFLUENCER, NONE
-  status          String   @default("APPROVED") // PENDING, APPROVED, REJECTED
-  videoUrls       String[] @default([])
-  landingPageUrls String[] @default([])
+  ownerId                 Int?
+  owner                   User?    @relation("ProductOwner", fields: [ownerId], references: [id])
+  visibility              String[] @default(["REGULAR"]) // REGULAR, AFFILIATE, INFLUENCER, NONE
+  status                  String   @default("APPROVED") // PENDING, APPROVED, REJECTED
+  videoUrls               String[] @default([])
+  landingPageUrls         String[] @default([])
   commissionMad           Float    @default(0) // Affiliate commission per sale in MAD
   influencerCommissionMad Float    @default(0) // Influencer commission per sale in MAD
 
-  isActive  Boolean  @default(true)
-  showInHomepage Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive       Boolean  @default(true)
+  showInHomepage Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  images               ProductImage[]
-  orderItems           OrderItem[]
-  inventories          ProductInventory[]
-  warehouseInventories Inventory[]
-  claims               AffiliateClaim[]
-  referralLinks        ReferralLink[]
-  supportRequests      SupportRequest[]
-  wholesalePrices      WholesalePriceTier[]
-  favorites            Favorite[]
-  agentAssignments     AgentProductAssignment[]
+  images                ProductImage[]
+  orderItems            OrderItem[]
+  inventories           ProductInventory[]
+  warehouseInventories  Inventory[]
+  claims                AffiliateClaim[]
+  referralLinks         ReferralLink[]
+  supportRequests       SupportRequest[]
+  wholesalePrices       WholesalePriceTier[]
+  favorites             Favorite[]
+  agentAssignments      AgentProductAssignment[]
   subAccountAssignments VendorSubAccountProduct[]
 
   @@map("products")
@@ -465,32 +484,32 @@ model LeadImportBatch {
 }
 
 model Lead {
-  id              Int              @id @default(autoincrement())
-  vendorId        Int
-  vendor          User             @relation(fields: [vendorId], references: [id])
-  importBatchId   Int?
-  importBatch     LeadImportBatch? @relation(fields: [importBatchId], references: [id])
-  fullName        String
-  phone           String
-  whatsapp        String?
-  city            String?
-  address         String?
-  status          String           @default("NEW")
-  paymentSituation String          @default("NOT_PAID") // NOT_PAID, PAID, FACTURED
-  source          String           @default("MANUAL") // MANUAL, YOUCAN, etc.
-  sourceId        String? // External ID from YouCan or other systems
-  sourceMode      String           @default("VENDOR") // VENDOR, AFFILIATE
-  assignedAgentId Int?
-  assignedAgent   User?            @relation("AgentLeads", fields: [assignedAgentId], references: [id])
-  productVariant  String?
-  notes           String?
-  callbackAt      DateTime?
+  id                    Int              @id @default(autoincrement())
+  vendorId              Int
+  vendor                User             @relation(fields: [vendorId], references: [id])
+  importBatchId         Int?
+  importBatch           LeadImportBatch? @relation(fields: [importBatchId], references: [id])
+  fullName              String
+  phone                 String
+  whatsapp              String?
+  city                  String?
+  address               String?
+  status                String           @default("NEW")
+  paymentSituation      String           @default("NOT_PAID") // NOT_PAID, PAID, FACTURED
+  source                String           @default("MANUAL") // MANUAL, YOUCAN, etc.
+  sourceId              String? // External ID from YouCan or other systems
+  sourceMode            String           @default("VENDOR") // VENDOR, AFFILIATE
+  assignedAgentId       Int?
+  assignedAgent         User?            @relation("AgentLeads", fields: [assignedAgentId], references: [id])
+  productVariant        String?
+  notes                 String?
+  callbackAt            DateTime?
   // Amount the agent settled on during the confirmation call. Overrides the pack
   // price everywhere (see getPackPrice) and is what the courier collects. Null
   // means "no override — bill the pack".
-  confirmedPriceMad Float?
-  requestedPriceMad Float?
-  requestedPriceStatus String? @default("PENDING") // PENDING, APPROVED, REJECTED
+  confirmedPriceMad     Float?
+  requestedPriceMad     Float?
+  requestedPriceStatus  String?          @default("PENDING") // PENDING, APPROVED, REJECTED
   customPlatformFeeRate Float?
   customShippingFee     Float?
   // Auto-release bookkeeping for the reassignment cron (jobs/leadReassignment).
@@ -500,23 +519,25 @@ model Lead {
   // `noReplyReleases` counts how many times NO_REPLY has actually sent this
   // lead back to the pool — at MAX_NO_REPLY_RELEASES it stops being recycled
   // and parks at DEAD_NO_REPLY. See lib/leadRelease.ts for both policies.
-  releaseAt       DateTime?
-  noReplyReleases Int              @default(0)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  releaseAt             DateTime?
+  noReplyReleases       Int              @default(0)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
 
-  order          Order?
-  referralLinkId Int?
-  referralLink   ReferralLink?       @relation(fields: [referralLinkId], references: [id])
-  invoiceId      Int?
-  invoice        Invoice?            @relation(fields: [invoiceId], references: [id])
+  order             Order?
+  referralLinkId    Int?
+  referralLink      ReferralLink?           @relation(fields: [referralLinkId], references: [id])
+  invoiceId         Int?
+  invoice           Invoice?                @relation(fields: [invoiceId], references: [id])
   // The call-center side of the same parcel. Separate from `invoice` above,
   // which is the vendor's — see AgentInvoice for why the two cannot share it.
-  agentInvoiceItem AgentInvoiceItem? @relation("AgentInvoiceItems")
-  statusHistory  LeadStatusHistory[]
-  callLogs       CallLog[]
-  assignments    LeadAssignment[]
-  contactClicks  LeadContactClick[]
+  agentInvoiceItem  AgentInvoiceItem?       @relation("AgentInvoiceItems")
+  sheetPushJob      SheetPushJob?           @relation("SheetPushJobLead")
+  sheetCreditCharge SheetCreditTransaction? @relation("SheetCreditCharge")
+  statusHistory     LeadStatusHistory[]
+  callLogs          CallLog[]
+  assignments       LeadAssignment[]
+  contactClicks     LeadContactClick[]
 
   // The reassignment cron re-runs this exact predicate every 10 seconds.
   @@index([status, releaseAt])
@@ -594,36 +615,36 @@ model LeadAssignment {
 }
 
 model Order {
-  id               Int      @id @default(autoincrement())
-  orderNumber      String   @unique
-  vendorId         Int
-  vendor           User     @relation(fields: [vendorId], references: [id])
-  leadId           Int?     @unique
-  lead             Lead?    @relation(fields: [leadId], references: [id])
-  customerName     String
-  customerPhone    String
-  customerCity     String
-  customerAddress  String
-  totalAmountMad   Float
-  vendorEarningMad Float
-  platformFeeMad   Float
-  status              String   @default("PENDING")
-  paymentMethod       String   @default("COD")
-  coliatyPackageCode  String?
-  coliatyPackageId    Int?
-  coliatyPickupRef    String?
-  packageContent      String?
-  packageNoOpen       Boolean  @default(false)
+  id                 Int      @id @default(autoincrement())
+  orderNumber        String   @unique
+  vendorId           Int
+  vendor             User     @relation(fields: [vendorId], references: [id])
+  leadId             Int?     @unique
+  lead               Lead?    @relation(fields: [leadId], references: [id])
+  customerName       String
+  customerPhone      String
+  customerCity       String
+  customerAddress    String
+  totalAmountMad     Float
+  vendorEarningMad   Float
+  platformFeeMad     Float
+  status             String   @default("PENDING")
+  paymentMethod      String   @default("COD")
+  coliatyPackageCode String?
+  coliatyPackageId   Int?
+  coliatyPickupRef   String?
+  packageContent     String?
+  packageNoOpen      Boolean  @default(false)
   // Carried from the insert form all the way to Coliaty's parcel payload. They
   // used to live only inside the lead's free-text notes, so bulk-dispatch had
   // nothing to read and shipped every replacement as an ordinary new parcel.
   // Coliaty rejects a replacement whose old tracking number is missing, so the
   // two always travel together.
-  packageReplacement  Boolean  @default(false)
-  packageOldTracking  String?
-  productVariant      String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  packageReplacement Boolean  @default(false)
+  packageOldTracking String?
+  productVariant     String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   items                 OrderItem[]
   walletTransactions    WalletTransaction[]
@@ -640,14 +661,14 @@ model Order {
 }
 
 model OrderItem {
-  id              Int                        @id @default(autoincrement())
-  orderId         Int
-  order           Order                      @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId       Int
-  product         Product                    @relation(fields: [productId], references: [id])
-  quantity        Int
-  unitPriceMad    Float
-  totalPriceMad   Float
+  id            Int     @id @default(autoincrement())
+  orderId       Int
+  order         Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId     Int
+  product       Product @relation(fields: [productId], references: [id])
+  quantity      Int
+  unitPriceMad  Float
+  totalPriceMad Float
 
   @@index([orderId])
   @@index([productId])
@@ -668,8 +689,6 @@ model OrderStatusHistory {
   @@index([orderId])
   @@map("order_status_history")
 }
-
-
 
 model Warehouse {
   id        Int               @id @default(autoincrement())
@@ -840,6 +859,87 @@ model PayoutRequest {
   @@map("payout_requests")
 }
 
+// Google Sheets push credits. Mirrors Wallet field-for-field but Int, not Float,
+// and with no `Mad` suffix: a credit is a whole-unit quantity (1 credit = 1 lead
+// written into the seller's sheet), NOT money. Folding it into Wallet.balanceMad —
+// every field of which is MAD-denominated — would read as a currency bug.
+model SheetCreditAccount {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance       Int      @default(0)
+  totalGranted  Int      @default(0)
+  totalConsumed Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  transactions SheetCreditTransaction[]
+
+  @@map("sheet_credit_accounts")
+}
+
+model SheetCreditTransaction {
+  id           Int                @id @default(autoincrement())
+  accountId    Int
+  account      SheetCreditAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  type         String // GRANT, CONSUME, ADMIN_DEBIT, REFUND
+  amount       Int // signed: +n on a grant, -1 on a consume
+  balanceAfter Int
+  description  String?
+  // THE double-charge guard, and the whole reason this column exists: one CONSUME
+  // row per lead, enforced by Postgres rather than by application logic — the same
+  // device as AgentInvoiceItem.leadId. Grants carry NULL here, and Postgres allows
+  // many NULLs under a unique index, so they are unaffected.
+  leadId       Int?               @unique
+  lead         Lead?              @relation("SheetCreditCharge", fields: [leadId], references: [id], onDelete: SetNull)
+  createdBy    Int?
+  createdAt    DateTime           @default(now())
+
+  // `balanceAfter` is a running snapshot rather than just a delta because panels
+  // read closing balances off the column instead of replaying the ledger — the
+  // same reason WalletTransaction.balanceAfterMad exists.
+  @@index([accountId, createdAt])
+  @@map("sheet_credit_transactions")
+}
+
+// The outbox. A lead is enqueued here on the request thread (one indexed SELECT
+// plus one INSERT, no network) and a cron drains it, so Google being slow or down
+// can never slow down or fail lead capture.
+model SheetPushJob {
+  id            Int       @id @default(autoincrement())
+  vendorId      Int
+  vendor        User      @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  // Makes enqueue idempotent: a retried landing-page POST or a double-clicked
+  // agent insert cannot put the same lead in the seller's sheet twice.
+  leadId        Int       @unique
+  lead          Lead      @relation("SheetPushJobLead", fields: [leadId], references: [id], onDelete: Cascade)
+  status        String    @default("PENDING") // PENDING, SENDING, SENT, BLOCKED_NO_CREDITS, FAILED, SKIPPED, REMOVED
+  // REMOVED is the only value that is not about our own delivery: the row WAS
+  // written, and it is no longer in the sheet because the seller deleted it by
+  // hand. Nothing else in the outbound pipeline ever looks at the sheet again
+  // after an append, so it is set by reconcileVendorSheet (services/sheetPush)
+  // re-reading the Lead ID column, and flipped back to SENT if the row reappears.
+  // Identifies WHICH drain run owns this row. The claim updateMany stamps it and
+  // the follow-up read filters on it, so a runner can only ever append the rows it
+  // actually won. Without it two overlapping drains re-read by status alone and
+  // both append the same leads into the seller sheet.
+  claimToken    String?
+  origin        String    @default("AUTO") // AUTO, MANUAL
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now())
+  lastError     String?
+  sentAt        DateTime?
+  sheetId       String?
+  rowRange      String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // The drain predicate, re-run every few seconds.
+  @@index([status, nextAttemptAt])
+  @@index([vendorId, createdAt])
+  @@map("sheet_push_jobs")
+}
+
 model Notification {
   id        Int      @id @default(autoincrement())
   userId    Int
@@ -855,12 +955,12 @@ model Notification {
 
 model Announcement {
   id           Int      @id @default(autoincrement())
-  type         String   // GLOBAL, ROLE, USER
+  type         String // GLOBAL, ROLE, USER
   severity     String   @default("INFO") // INFO, WARNING, IMPORTANT
   priority     Int      @default(0)
-  placement    String   @default("TOP")  // TOP, BOTTOM
-  targetRole   String?  // e.g., 'VENDOR', 'INFLUENCER', 'AGENT'
-  targetUserId Int?     
+  placement    String   @default("TOP") // TOP, BOTTOM
+  targetRole   String? // e.g., 'VENDOR', 'INFLUENCER', 'AGENT'
+  targetUserId Int?
   targetUser   User?    @relation("TargetedAnnouncements", fields: [targetUserId], references: [id], onDelete: Cascade)
   title        String
   content      String   @db.Text
@@ -887,21 +987,19 @@ model MoroccanCity {
 /**
  * The single catalogue of places we deliver to, replacing the eight hand-seeded
  * rows in moroccan_cities.
- *
  * It is a superset of Coliaty's list on purpose: Coliaty carries ~451 cities but
  * customers order from localities it does not list, and those leads still have
  * to be recorded, mapped, and handed to a courier some other way. `isDeliverable`
  * is what separates the two — never assume a row here can be pushed to Coliaty.
- *
  * `slug` is the accent- and punctuation-stripped key every lookup goes through,
  * so "Témara", "temara" and "TEMARA" all resolve to one row.
  */
 model City {
-  id Int @id @default(autoincrement())
+  id     Int     @id @default(autoincrement())
   /// Display name. Not unique: two real localities in different provinces do
   /// share a name ("Sidi Moussa"). `slug` is the identity of a row.
-  name String
-  slug String @unique
+  name   String
+  slug   String  @unique
   nameAr String?
   nameFr String?
   nameEn String?
@@ -919,7 +1017,7 @@ model City {
   placeType String?
   /// Provenance only — indexed but not unique, since the slug is what identifies
   /// a row and a re-import may re-point an OSM node at a differently-slugged city.
-  osmId BigInt?
+  osmId     BigInt?
 
   // Coliaty linkage. city_id/city_name must be sent back verbatim on dispatch,
   // so they are stored exactly as the carrier returns them.
@@ -951,7 +1049,6 @@ model City {
 
 /**
  * Alternate spellings that must resolve to a canonical city.
- *
  * Leads arrive from Shopify, WooCommerce, YouCan and CSV imports where the city
  * is free text — "Tangier", "Casa-anfa", "Agadir, Morocco". Without this table
  * each variant shows up as an unrecognised city and blocks dispatch.
@@ -987,34 +1084,34 @@ model ActivityLog {
 }
 
 model ProductInventory {
-  id         Int      @id @default(autoincrement())
-  userId     Int
-  user       User     @relation(fields: [userId], references: [id])
-  productId  Int
-  product    Product  @relation(fields: [productId], references: [id])
-  quantity   Int      @default(0)
-  acquiredAt DateTime @default(now())
+  id                     Int      @id @default(autoincrement())
+  userId                 Int
+  user                   User     @relation(fields: [userId], references: [id])
+  productId              Int
+  product                Product  @relation(fields: [productId], references: [id])
+  quantity               Int      @default(0)
+  acquiredAt             DateTime @default(now())
   brandingLabelMockupUrl String?
   brandingLabelPrintUrl  String?
 
-  updatedAt  DateTime @updatedAt
+  updatedAt DateTime @updatedAt
 
   @@map("product_inventory")
 }
 
 model AffiliateClaim {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  user      User     @relation(fields: [userId], references: [id])
-  productId Int
-  product   Product  @relation(fields: [productId], references: [id])
-  status    String   @default("PENDING") // PENDING, APPROVED, REJECTED, REVOKED
-  claimedAt DateTime @default(now())
-  userMode  String   @default("AFFILIATE") // VENDOR or AFFILIATE
-  brandingLabelMockupUrl String?
-  brandingLabelPrintUrl  String?
-  brandName              String?
-  requestedQty           Int?
+  id                      Int      @id @default(autoincrement())
+  userId                  Int
+  user                    User     @relation(fields: [userId], references: [id])
+  productId               Int
+  product                 Product  @relation(fields: [productId], references: [id])
+  status                  String   @default("PENDING") // PENDING, APPROVED, REJECTED, REVOKED
+  claimedAt               DateTime @default(now())
+  userMode                String   @default("AFFILIATE") // VENDOR or AFFILIATE
+  brandingLabelMockupUrl  String?
+  brandingLabelPrintUrl   String?
+  brandName               String?
+  requestedQty            Int?
   requestedLandingPageUrl String?
 
   updatedAt DateTime @updatedAt
@@ -1024,22 +1121,22 @@ model AffiliateClaim {
 }
 
 model SupportRequest {
-  id          Int      @id @default(autoincrement())
-  userId      Int
-  user        User     @relation(fields: [userId], references: [id])
-  type        String // DELIVERY_FULFILLMENT, PRODUCT_CLAIM, senior_SUPPORT, etc.
-  subject     String
-  description String
-  status      String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
-  productId   Int?
-  product     Product? @relation(fields: [productId], references: [id])
-  brandingLabelMockupUrl String?
-  brandingLabelPrintUrl  String?
-  brandName              String?
-  requestedQty           Int?
+  id                      Int      @id @default(autoincrement())
+  userId                  Int
+  user                    User     @relation(fields: [userId], references: [id])
+  type                    String // DELIVERY_FULFILLMENT, PRODUCT_CLAIM, senior_SUPPORT, etc.
+  subject                 String
+  description             String
+  status                  String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  productId               Int?
+  product                 Product? @relation(fields: [productId], references: [id])
+  brandingLabelMockupUrl  String?
+  brandingLabelPrintUrl   String?
+  brandName               String?
+  requestedQty            Int?
   requestedLandingPageUrl String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   conversations Conversation[]
 
@@ -1058,12 +1155,12 @@ model Conversation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  claimedByUserId Int?
-  claimedBy       User?           @relation("ClaimedConversations", fields: [claimedByUserId], references: [id])
-  claimedAt       DateTime?
-  metadata        Json?
+  claimedByUserId  Int?
+  claimedBy        User?           @relation("ClaimedConversations", fields: [claimedByUserId], references: [id])
+  claimedAt        DateTime?
+  metadata         Json?
   supportRequestId Int?
-  supportRequest  SupportRequest? @relation(fields: [supportRequestId], references: [id])
+  supportRequest   SupportRequest? @relation(fields: [supportRequestId], references: [id])
 
   participants ConversationParticipant[]
   messages     Message[]
@@ -1078,7 +1175,7 @@ model ConversationLog {
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   userId         Int?
   user           User?        @relation("UserLogs", fields: [userId], references: [id])
-  action         String       // CREATED, CLAIMED, CLOSED, etc.
+  action         String // CREATED, CLAIMED, CLOSED, etc.
   details        String?
   createdAt      DateTime     @default(now())
 
@@ -1086,23 +1183,22 @@ model ConversationLog {
 }
 
 model UserPixel {
-  id              Int      @id @default(autoincrement())
-  userId          Int
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  name            String
-  type            String   @default("GLOBAL") // "GLOBAL" or "SINGLE"
-  pixelId         String
-  platform        String   @default("META")   // "META", "GOOGLE", "TIKTOK", "SNAPCHAT"
-  targetIds       Json?    // Array of string (e.g., ReferralLink codes)
-  conversionEvent String   @default("Lead")   // e.g., "Lead" or "Purchase"
+  id     Int  @id @default(autoincrement())
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  name            String
+  type            String @default("GLOBAL") // "GLOBAL" or "SINGLE"
+  pixelId         String
+  platform        String @default("META") // "META", "GOOGLE", "TIKTOK", "SNAPCHAT"
+  targetIds       Json? // Array of string (e.g., ReferralLink codes)
+  conversionEvent String @default("Lead") // e.g., "Lead" or "Purchase"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("user_pixels")
 }
-
 
 model ConversationParticipant {
   id             Int          @id @default(autoincrement())
@@ -1139,20 +1235,20 @@ model Message {
 // ==========================================
 
 model ReferralLink {
-  id           Int      @id @default(autoincrement())
-  influencerId Int
-  influencer   User     @relation(fields: [influencerId], references: [id], onDelete: Cascade)
-  productId    Int
-  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  code         String   @unique
-  clicks       Int      @default(0)
-  whatsappClicks Int    @default(0)
-  conversions  Int      @default(0)
-  earnings     Float    @default(0)
-  isActive     Boolean  @default(true)
-  status       String   @default("BUILDING")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             Int      @id @default(autoincrement())
+  influencerId   Int
+  influencer     User     @relation(fields: [influencerId], references: [id], onDelete: Cascade)
+  productId      Int
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  code           String   @unique
+  clicks         Int      @default(0)
+  whatsappClicks Int      @default(0)
+  conversions    Int      @default(0)
+  earnings       Float    @default(0)
+  isActive       Boolean  @default(true)
+  status         String   @default("BUILDING")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   commissions   InfluencerCommission[]
   leads         Lead[]
@@ -1186,21 +1282,21 @@ model ReferralLinkLandingPage {
   id             Int          @id @default(autoincrement())
   referralLinkId Int          @unique
   referralLink   ReferralLink @relation(fields: [referralLinkId], references: [id], onDelete: Cascade)
-  
-  themeColor     String       @default("#f97316") // Default to brand orange
-  title          String?
-  description    String?
-  buttonText     String       @default("Commander Maintenant")
-  customStructure Json?       // For flexible sitebuilder blocks (features, faqs, etc.)
+
+  themeColor      String  @default("#f97316") // Default to brand orange
+  title           String?
+  description     String?
+  buttonText      String  @default("Commander Maintenant")
+  customStructure Json? // For flexible sitebuilder blocks (features, faqs, etc.)
 
   // Whether /r/:code may serve pre-compiled HTML for this link. Small enough to
   // live here; the compiled bytes themselves are in ReferralLinkCompiledPage.
-  ssgEnabled     Boolean      @default(true)
+  ssgEnabled Boolean @default(true)
 
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  compiledPage   ReferralLinkCompiledPage?
+  compiledPage ReferralLinkCompiledPage?
 
   @@map("referral_link_landing_pages")
 }
@@ -1214,26 +1310,26 @@ model ReferralLinkLandingPage {
 //
 // Safe to TRUNCATE at any time: the next visitor to each page recompiles it.
 model ReferralLinkCompiledPage {
-  id             Int          @id @default(autoincrement())
-  landingPageId  Int          @unique
-  landingPage    ReferralLinkLandingPage @relation(fields: [landingPageId], references: [id], onDelete: Cascade)
+  id            Int                     @id @default(autoincrement())
+  landingPageId Int                     @unique
+  landingPage   ReferralLinkLandingPage @relation(fields: [landingPageId], references: [id], onDelete: Cascade)
 
-  html           String?      @db.Text
+  html            String?   @db.Text
   // Per-page Content-Security-Policy. Stored rather than recomputed because it
   // depends on hashes of this page's inline scripts — deriving it on read would
   // mean re-hashing the HTML on every cold serve.
-  csp            String?      @db.Text
+  csp             String?   @db.Text
   // Quality-11 brotli of `html`, served as-is. The `compression` package has no
   // brotli and would gzip per request on the main thread instead.
-  brotli         Bytes?
-  compiledAt     DateTime?
+  brotli          Bytes?
+  compiledAt      DateTime?
   // Bump COMPILER_VERSION and every row here fails the equality check, so each
   // page recompiles on its next visit. No backfill, no migration.
   compilerVersion Int?
   // Non-null means a real bug. An unsupported block is a decline, not an error.
-  compileError   String?      @db.Text
+  compileError    String?   @db.Text
 
-  updatedAt      DateTime     @updatedAt
+  updatedAt DateTime @updatedAt
 
   @@map("referral_link_compiled_pages")
 }
@@ -1315,7 +1411,6 @@ model AgentProductAssignment {
 
 /**
  * Narrows one of a vendor's sub-accounts to part of the vendor's catalogue.
- *
  * Same convention as AgentProductAssignment above: NO rows for a sub-account
  * means it works the whole catalogue — the behaviour that existed before this
  * table, so every helper already configured keeps the reach it had. Rows mean
@@ -1341,13 +1436,13 @@ model VendorSubAccountProduct {
 // ==========================================
 
 model HelperUserAssignment {
-  id           Int      @id @default(autoincrement())
-  helperId     Int
-  helper       User     @relation("HelperAssignments", fields: [helperId], references: [id], onDelete: Cascade)
-  targetUserId Int
-  targetUser   User     @relation("TargetUserAssignments", fields: [targetUserId], references: [id], onDelete: Cascade)
-  isAffiliateInvite Boolean @default(false)
-  assignedAt   DateTime @default(now())
+  id                Int      @id @default(autoincrement())
+  helperId          Int
+  helper            User     @relation("HelperAssignments", fields: [helperId], references: [id], onDelete: Cascade)
+  targetUserId      Int
+  targetUser        User     @relation("TargetUserAssignments", fields: [targetUserId], references: [id], onDelete: Cascade)
+  isAffiliateInvite Boolean  @default(false)
+  assignedAt        DateTime @default(now())
 
   @@unique([helperId, targetUserId])
   @@map("helper_user_assignments")
@@ -1359,10 +1454,10 @@ model HelperUserAssignment {
 
 model WebhookLog {
   id        Int      @id @default(autoincrement())
-  provider  String   // e.g., "COLIATY"
-  payload   Json     // Raw request body
+  provider  String // e.g., "COLIATY"
+  payload   Json // Raw request body
   processed Boolean  @default(false)
-  status    String?  // Processing status or error state
+  status    String? // Processing status or error state
   errorMsg  String?
   createdAt DateTime @default(now())
 
@@ -1378,7 +1473,7 @@ model Invoice {
   status         String   @default("PAID")
   createdAt      DateTime @default(now())
 
-  leads          Lead[]
+  leads Lead[]
 
   @@map("invoices")
 }
@@ -1460,13 +1555,13 @@ model ContactMessage {
 model SecurityEvent {
   id        String   @id @default(uuid())
   timestamp DateTime @default(now())
-  eventType String   // BOT, INJECTION, BRUTE_FORCE, DDOS, RECONNAISSANCE, CSP_VIOLATION, etc.
-  severity  String   // INFO, WARNING, CRITICAL
+  eventType String // BOT, INJECTION, BRUTE_FORCE, DDOS, RECONNAISSANCE, CSP_VIOLATION, etc.
+  severity  String // INFO, WARNING, CRITICAL
   sourceIp  String
   country   String?
   endpoint  String?
   payload   String?
-  action    String   // BLOCKED, FLAGGED, ALLOWED
+  action    String // BLOCKED, FLAGGED, ALLOWED
   userId    Int?
   userEmail String?
   details   String?
@@ -1482,9 +1577,9 @@ model ImmutableAuditLog {
   action    String
   ip        String
   changes   String?
-  prevHash  String   // Previous record's SHA-256 hash
-  hash      String   // Current record's SHA-256 hash (fields + prevHash)
-  signature String?  // Optional private-key signature
+  prevHash  String // Previous record's SHA-256 hash
+  hash      String // Current record's SHA-256 hash (fields + prevHash)
+  signature String? // Optional private-key signature
 
   // The chain walks this table in timestamp order — head lookup on write,
   // ascending pages on verify, and the retention cutoff. Without it every one
@@ -1494,116 +1589,116 @@ model ImmutableAuditLog {
 }
 
 model SecurityIncident {
-  id          String   @id @default(uuid())
-  title       String
-  severity    String   // LOW, MEDIUM, HIGH, CRITICAL
-  status      String   @default("OPEN") // OPEN, INVESTIGATING, RESOLVED
-  eventDetails Json?
-  affectedIps String[]
+  id               String   @id @default(uuid())
+  title            String
+  severity         String // LOW, MEDIUM, HIGH, CRITICAL
+  status           String   @default("OPEN") // OPEN, INVESTIGATING, RESOLVED
+  eventDetails     Json?
+  affectedIps      String[]
   recommendedSteps String?
-  assignedAdminId Int?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  assignedAdminId  Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@map("security_incidents")
 }
 
 model SecurityAlertRule {
-  id         String   @id @default(uuid())
-  name       String
-  eventType  String
-  condition  String   // e.g. "GREATER_THAN"
-  threshold  Int
-  action     String   // EMAIL, SLACK, DISCORD, BLOCK_IP, LOCK_ACCOUNT
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
+  id        String   @id @default(uuid())
+  name      String
+  eventType String
+  condition String // e.g. "GREATER_THAN"
+  threshold Int
+  action    String // EMAIL, SLACK, DISCORD, BLOCK_IP, LOCK_ACCOUNT
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
 
   @@map("security_alert_rules")
 }
 
 model PlaybookTemplate {
-  id          String   @id @default(uuid())
-  scenario    String   // DDOS, ACCOUNT_TAKEOVER, DATA_BREACH, RANSOMWARE
-  steps       Json     // Array of checklist items: { id: string, label: string, completed: boolean }
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(uuid())
+  scenario  String // DDOS, ACCOUNT_TAKEOVER, DATA_BREACH, RANSOMWARE
+  steps     Json // Array of checklist items: { id: string, label: string, completed: boolean }
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("playbook_templates")
 }
 
 model ComplianceItem {
-  id          String   @id @default(uuid())
-  standard    String   // GDPR, PCI_DSS, ISO27001
-  requirement String
-  status      String   @default("COMPLIANT") // COMPLIANT, AT_RISK, NON_COMPLIANT
+  id           String   @id @default(uuid())
+  standard     String // GDPR, PCI_DSS, ISO27001
+  requirement  String
+  status       String   @default("COMPLIANT") // COMPLIANT, AT_RISK, NON_COMPLIANT
   evidenceLink String?
-  verifiedAt  DateTime @default(now())
+  verifiedAt   DateTime @default(now())
 
   @@map("compliance_items")
 }
 
 model GdprRequest {
-  id            String   @id @default(uuid())
-  requesterEmail String
-  requestType   String   // ERASURE, ACCESS, PORTABILITY
-  status        String   @default("PENDING") // PENDING, PROCESSING, COMPLETED
-  deadline      DateTime
+  id              String   @id @default(uuid())
+  requesterEmail  String
+  requestType     String // ERASURE, ACCESS, PORTABILITY
+  status          String   @default("PENDING") // PENDING, PROCESSING, COMPLETED
+  deadline        DateTime
   assignedAdminId Int?
-  createdAt     DateTime @default(now())
+  createdAt       DateTime @default(now())
 
   @@map("gdpr_requests")
 }
 
 model PenTestFinding {
-  id          String   @id @default(uuid())
-  title       String
-  severity    String   // LOW, MEDIUM, HIGH, CRITICAL
-  status      String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED
-  owner       String?
-  createdAt   DateTime @default(now())
+  id        String   @id @default(uuid())
+  title     String
+  severity  String // LOW, MEDIUM, HIGH, CRITICAL
+  status    String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED
+  owner     String?
+  createdAt DateTime @default(now())
 
   @@map("pentest_findings")
 }
 
 model VulnerabilityCheck {
-  id             String   @id @default(uuid())
-  packageName    String
-  cveId          String
-  severity       String
-  cvssScore      Float
+  id              String   @id @default(uuid())
+  packageName     String
+  cveId           String
+  severity        String
+  cvssScore       Float
   affectedVersion String
-  fixedVersion   String
-  patchNotes     String?
-  createdAt      DateTime @default(now())
+  fixedVersion    String
+  patchNotes      String?
+  createdAt       DateTime @default(now())
 
   @@map("vulnerability_checks")
 }
 
 model TrafficLog {
-  id            Int      @id @default(autoincrement())
-  timestamp     DateTime @default(now())
-  method        String   @db.VarChar(10)
-  path          String
-  status        Int
-  ip            String   @db.VarChar(45)
-  userAgent     String
-  host          String   @db.VarChar(255)
-  httpVersion   String   @db.VarChar(10)
-  cached        Boolean  @default(false)
-  encrypted     Boolean  @default(false)
-  ssl           String   @db.VarChar(10)
-  country       String   @db.VarChar(10)
-  city          String?  @db.VarChar(100)
-  latitude      Float?
-  longitude     Float?
-  bandwidth     Int      @default(0)
-  referer       String   @default("Direct")
-  browser       String   @db.VarChar(50)
-  os            String   @db.VarChar(50)
-  contentType   String   @db.VarChar(100)
-  deviceType    String?  @db.VarChar(20)
-  platform      String?  @db.VarChar(50)
-  browserVersion String? @db.VarChar(30)
+  id             Int      @id @default(autoincrement())
+  timestamp      DateTime @default(now())
+  method         String   @db.VarChar(10)
+  path           String
+  status         Int
+  ip             String   @db.VarChar(45)
+  userAgent      String
+  host           String   @db.VarChar(255)
+  httpVersion    String   @db.VarChar(10)
+  cached         Boolean  @default(false)
+  encrypted      Boolean  @default(false)
+  ssl            String   @db.VarChar(10)
+  country        String   @db.VarChar(10)
+  city           String?  @db.VarChar(100)
+  latitude       Float?
+  longitude      Float?
+  bandwidth      Int      @default(0)
+  referer        String   @default("Direct")
+  browser        String   @db.VarChar(50)
+  os             String   @db.VarChar(50)
+  contentType    String   @db.VarChar(100)
+  deviceType     String?  @db.VarChar(20)
+  platform       String?  @db.VarChar(50)
+  browserVersion String?  @db.VarChar(30)
 
   @@index([timestamp])
   @@index([status])
@@ -1623,7 +1718,7 @@ model CustomProductRequest {
   description String
   imageUrl    String?
   status      String   @default("PENDING") // PENDING, APPROVED, REJECTED
-  userType    String?  // INFLUENCER, SELLER
+  userType    String? // INFLUENCER, SELLER
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -1634,18 +1729,18 @@ model SellerQuestionnaire {
   id                    Int      @id @default(autoincrement())
   userId                Int      @unique
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sellingOnline         String   // "Yes" or "No"
-  budget                String   // allocated budget option
-  ordersPerDay          String   // shipping orders per day option
-  experienceYears       String   // experience option
-  markets               Json     // array of selected markets
-  totalSpend            String   // total eCommerce/ads spend option
-  niches                Json     // array of selected niches
-  biggestAchievement    String   // achievement option
-  biggestChallenge      String   // challenge option
-  partnerPriorities     Json     // array of selected priorities
-  interviewAvailability String   // "YES" or "NO"
-  additionalNotes       String?  // textarea notes
+  sellingOnline         String // "Yes" or "No"
+  budget                String // allocated budget option
+  ordersPerDay          String // shipping orders per day option
+  experienceYears       String // experience option
+  markets               Json // array of selected markets
+  totalSpend            String // total eCommerce/ads spend option
+  niches                Json // array of selected niches
+  biggestAchievement    String // achievement option
+  biggestChallenge      String // challenge option
+  partnerPriorities     Json // array of selected priorities
+  interviewAvailability String // "YES" or "NO"
+  additionalNotes       String? // textarea notes
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
@@ -1653,17 +1748,17 @@ model SellerQuestionnaire {
 }
 
 model InfluencerQuestionnaire {
-  id                    Int      @id @default(autoincrement())
-  userId                Int      @unique
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  followersCount        String   // "5,000 - 50,000", "50,000 - 100,000", "100,000 - 500,000", "1,000,000+"
-  contentType           Json     // array of selected content types
-  hasPriorExperience    String   // "YES" or "NO"
-  desiredProductTypes   String   // "cosmetics" or "other"
-  initialBudget         String   // "1,500 - 3,000 DH", "3,000 - 5,000 DH", etc.
-  motivation            String   // text block describing motivation
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                  Int      @id @default(autoincrement())
+  userId              Int      @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  followersCount      String // "5,000 - 50,000", "50,000 - 100,000", "100,000 - 500,000", "1,000,000+"
+  contentType         Json // array of selected content types
+  hasPriorExperience  String // "YES" or "NO"
+  desiredProductTypes String // "cosmetics" or "other"
+  initialBudget       String // "1,500 - 3,000 DH", "3,000 - 5,000 DH", etc.
+  motivation          String // text block describing motivation
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   @@map("influencer_questionnaires")
 }
@@ -1695,16 +1790,16 @@ model EventRegistration {
 }
 
 model SessionRecording {
-  id           String   @id @default(uuid())
-  sessionId    String
-  userUuid     String?
-  ip           String
-  userAgent    String?
-  path         String?
-  durationSec  Int      @default(0)
-  eventDataGzip Bytes   // Gzip compressed JSON string
-  hasLead      Boolean  @default(false)
-  createdAt    DateTime @default(now())
+  id            String   @id @default(uuid())
+  sessionId     String
+  userUuid      String?
+  ip            String
+  userAgent     String?
+  path          String?
+  durationSec   Int      @default(0)
+  eventDataGzip Bytes // Gzip compressed JSON string
+  hasLead       Boolean  @default(false)
+  createdAt     DateTime @default(now())
 
   @@index([userUuid])
   @@index([createdAt])
@@ -1715,25 +1810,25 @@ model SessionRecording {
 /// updates this row; if the visitor never submits, `completed` stays false and
 /// we keep the phone/name they typed so an agent can follow up on the lost lead.
 model CheckoutAttempt {
-  id           String   @id @default(uuid())
-  sessionId    String   @unique // = socket.id, correlates with SessionRecording.sessionId
-  referralCode String?
-  productName  String?
-  ip           String
-  userAgent    String?
-  path         String?
-  fullName     String?
-  phone        String?
-  city         String?
-  address      String?
-  fieldsFilled Int      @default(0)
-  completed    Boolean  @default(false)
+  id              String    @id @default(uuid())
+  sessionId       String    @unique // = socket.id, correlates with SessionRecording.sessionId
+  referralCode    String?
+  productName     String?
+  ip              String
+  userAgent       String?
+  path            String?
+  fullName        String?
+  phone           String?
+  city            String?
+  address         String?
+  fieldsFilled    Int       @default(0)
+  completed       Boolean   @default(false)
   // Set when a call-center agent recovers this abandoned cart into a real Lead,
   // so it disappears from the agent's actionable list and can't be double-converted.
   convertedLeadId Int?
   convertedAt     DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([completed])
   @@index([ip])
@@ -1750,7 +1845,7 @@ model CheckoutAttempt {
 model SignupAttempt {
   id           String   @id @default(uuid())
   sessionId    String   @unique // = socket.id
-  role         String?  // VENDOR | INFLUENCER
+  role         String? // VENDOR | INFLUENCER
   fullName     String?
   email        String?
   phone        String?
@@ -1772,35 +1867,32 @@ model SignupAttempt {
   @@map("signup_attempts")
 }
 
-
-
-
 /// Audit trail for every deployment triggered from the admin dashboard.
 ///
 /// One row per attempt, including failures — a deploy that broke the site is
 /// exactly the record you need afterwards. `logPath` points at the file the
 /// detached runner streams into; the log survives the API process restarting.
 model Deployment {
-  id             String    @id @default(uuid())
+  id            String    @id @default(uuid())
   /// Commit the deploy moved the checkout to. Null when it failed before pulling.
-  commitSha      String?
-  commitMessage  String?
-  commitAuthor   String?
-  branch         String    @default("master")
+  commitSha     String?
+  commitMessage String?
+  commitAuthor  String?
+  branch        String    @default("master")
   /// PENDING | RUNNING | SUCCESS | FAILED | TIMEOUT
-  status         String    @default("PENDING")
+  status        String    @default("PENDING")
   /// WEBHOOK | MANUAL — how the deploy was started.
-  trigger        String    @default("MANUAL")
-  triggeredById  Int?
-  triggeredBy    String?
-  exitCode       Int?
-  errorMessage   String?
-  logPath        String?
-  startedAt      DateTime?
-  finishedAt     DateTime?
-  durationMs     Int?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  trigger       String    @default("MANUAL")
+  triggeredById Int?
+  triggeredBy   String?
+  exitCode      Int?
+  errorMessage  String?
+  logPath       String?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  durationMs    Int?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([status])
   @@index([createdAt])
@@ -1814,16 +1906,16 @@ model Deployment {
 /// without calling the GitHub API on every page load. Rows are marked deployed
 /// once a deployment that includes them succeeds.
 model PendingCommit {
-  id            String   @id @default(uuid())
-  sha           String   @unique
-  message       String
-  author        String?
-  branch        String
-  url           String?
-  committedAt   DateTime?
-  deployed      Boolean  @default(false)
-  deploymentId  String?
-  createdAt     DateTime @default(now())
+  id           String    @id @default(uuid())
+  sha          String    @unique
+  message      String
+  author       String?
+  branch       String
+  url          String?
+  committedAt  DateTime?
+  deployed     Boolean   @default(false)
+  deploymentId String?
+  createdAt    DateTime  @default(now())
 
   @@index([deployed])
   @@index([branch])

@@ -146,6 +146,7 @@ import RoleGuard from './components/auth/RoleGuard';
 import UnauthGuard from './components/auth/UnauthGuard';
 import SubAccountGuard from './components/auth/SubAccountGuard';
 import { VENDOR_HELPER_BASE } from './lib/dashboardBase';
+import SheetCreditsHistory from './pages/vendor/SheetCreditsHistory';
 import { settingsApi } from './lib/api';
 
 function PageTracker() {
@@ -466,6 +467,7 @@ function App() {
           <Route path="shopify-leads" element={<ShopifyLeads />} />
           <Route path="woocommerce-leads" element={<WooCommerceLeads />} />
           <Route path="google-sheets-leads" element={<GoogleSheetsLeads />} />
+          <Route path="sheet-credits" element={<SheetCreditsHistory />} />
           <Route path="woocommerce-callback" element={<WooCommerceCallback />} />
 
           <Route path="wallet" element={<UserWallet />} />
@@ -525,6 +527,7 @@ function App() {
             <Route path="shopify-leads" element={<ShopifyLeads />} />
             <Route path="woocommerce-leads" element={<WooCommerceLeads />} />
             <Route path="google-sheets-leads" element={<GoogleSheetsLeads />} />
+            <Route path="sheet-credits" element={<SheetCreditsHistory />} />
             <Route path="wallet" element={<UserWallet />} />
             <Route path="inventory" element={<VendorInventory />} />
             <Route path="marketplace" element={

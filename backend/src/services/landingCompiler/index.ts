@@ -25,7 +25,11 @@ const prisma = new PrismaClient();
 //    those cards records the product the visitor clicked.
 // 10: performance pass — video preloads metadata and loads on approach, images
 //     carry srcset, preconnect drops crossorigin, pixel SDKs load on idle.
-export const COMPILER_VERSION = 10;
+// 11: checkout validates every field — name, phone, city and the address once it
+//     is filled in — on blur as well as on submit, and the inputs carry
+//     maxlength/inputmode/autocomplete. Stored rows must recompile or they keep
+//     the old uncapped markup with no config for the new runtime to read.
+export const COMPILER_VERSION = 11;
 
 /**
  * Block types the compiler can render, derived from the renderer registry.

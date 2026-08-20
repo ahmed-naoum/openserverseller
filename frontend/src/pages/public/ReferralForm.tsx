@@ -26,6 +26,34 @@ const getNoScriptUrl = (pixel: any) => {
   return '';
 };
 
+/**
+ * Field limits for the express checkout, kept in step with the compiled version
+ * of the same form (backend/src/services/landingCompiler/blocks/checkout.ts).
+ * A visitor sees one renderer or the other depending on whether the page
+ * compiled, and the two refusing different values would be impossible to debug
+ * from a screenshot.
+ *
+ * The floors are the ones this form already had. Only the ceilings are new, and
+ * they sit far above any real Moroccan name, city or address.
+ */
+const FIELD_LIMITS = {
+  nameMin: 2,
+  nameMax: 60,
+  cityMin: 2,
+  cityMax: 40,
+  phoneMax: 20,
+  addressMin: 5,
+  addressMax: 200,
+};
+
+/**
+ * Letters, not characters: the digit strippers on the name and city fields
+ * already remove numbers, so punctuation is the only thing that can satisfy a
+ * bare length check. Covers Arabic and accented Latin.
+ */
+const countLetters = (s: string) =>
+  (s.match(/[A-Za-z؀-ۿݐ-ݿࢠ-ࣿÀ-ɏ]/g) || []).length;
+
 export default function ReferralForm() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
@@ -273,7 +301,7 @@ export default function ReferralForm() {
     setLoading(false);
   };
 
-  const [errors, setErrors] = useState<{ fullName?: string; phone?: string; city?: string }>({});
+  const [errors, setErrors] = useState<{ fullName?: string; phone?: string; city?: string; address?: string }>({});
 
   const handleNameChange = (val: string) => {
     // Strip numbers (0-9 and Eastern Arabic numerals ٠-٩)
@@ -304,15 +332,19 @@ export default function ReferralForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newErrors: { fullName?: string; phone?: string; city?: string } = {};
+    const newErrors: { fullName?: string; phone?: string; city?: string; address?: string } = {};
 
     const trimmedName = form.fullName.trim();
     if (!trimmedName) {
       newErrors.fullName = 'الاسم الكامل مطلوب *';
     } else if (/[0-9٠-٩]/.test(trimmedName)) {
       newErrors.fullName = 'الاسم الكامل يجب ألا يحتوي على أرقام';
-    } else if (trimmedName.length < 2) {
+    } else if (trimmedName.length < FIELD_LIMITS.nameMin) {
       newErrors.fullName = 'يرجى كتابة الاسم الكامل بشكل صحيح';
+    } else if (countLetters(trimmedName) < 2) {
+      newErrors.fullName = 'يرجى كتابة الاسم بالحروف';
+    } else if (trimmedName.length > FIELD_LIMITS.nameMax) {
+      newErrors.fullName = 'الاسم طويل جدا';
     }
 
     const trimmedCity = form.city.trim();
@@ -320,8 +352,22 @@ export default function ReferralForm() {
       newErrors.city = 'اسم المدينة مطلوب *';
     } else if (/[0-9٠-٩]/.test(trimmedCity)) {
       newErrors.city = 'اسم المدينة يجب ألا يحتوي على أرقام';
-    } else if (trimmedCity.length < 2) {
+    } else if (trimmedCity.length < FIELD_LIMITS.cityMin) {
       newErrors.city = 'يرجى كتابة اسم المدينة بشكل صحيح';
+    } else if (countLetters(trimmedCity) < 2) {
+      newErrors.city = 'يرجى كتابة اسم المدينة بالحروف';
+    } else if (trimmedCity.length > FIELD_LIMITS.cityMax) {
+      newErrors.city = 'اسم المدينة طويل جدا';
+    }
+
+    // The address stays optional — only a filled-in one is held to a shape.
+    // Call-centre agents collect it on the confirmation call, so requiring it
+    // would reject orders both this form and POST /public/leads accept.
+    const trimmedAddress = form.address.trim();
+    if (trimmedAddress && trimmedAddress.length < FIELD_LIMITS.addressMin) {
+      newErrors.address = 'العنوان قصير جدا، يرجى كتابته كاملا';
+    } else if (trimmedAddress.length > FIELD_LIMITS.addressMax) {
+      newErrors.address = 'العنوان طويل جدا';
     }
 
     const cleanPhone = form.phone.replace(/\s+|-/g, '');
@@ -584,6 +630,8 @@ export default function ReferralForm() {
                   <input
                     type="text"
                     required
+                    maxLength={FIELD_LIMITS.nameMax}
+                    autoComplete="name"
                     dir={isRtl ? "rtl" : "ltr"}
                     value={form.fullName}
                     onChange={(e) => handleNameChange(e.target.value)}
@@ -614,6 +662,9 @@ export default function ReferralForm() {
                   <input
                     type="tel"
                     required
+                    maxLength={FIELD_LIMITS.phoneMax}
+                    inputMode="tel"
+                    autoComplete="tel"
                     dir="ltr"
                     value={form.phone}
                     onChange={(e) => handlePhoneChange(e.target.value)}
@@ -640,6 +691,8 @@ export default function ReferralForm() {
                   <input
                     type="text"
                     required
+                    maxLength={FIELD_LIMITS.cityMax}
+                    autoComplete="address-level2"
                     dir={isRtl ? "rtl" : "ltr"}
                     value={form.city}
                     onChange={(e) => handleCityChange(e.target.value)}
@@ -665,8 +718,13 @@ export default function ReferralForm() {
                   <label className="block text-sm font-bold text-gray-700 mb-1.5">{blockContent.addressLabel || 'العنوان (اختياري)'}</label>
                   <textarea
                     dir={isRtl ? "rtl" : "ltr"}
+                    maxLength={FIELD_LIMITS.addressMax}
+                    autoComplete="street-address"
                     value={form.address}
-                    onChange={(e) => setForm({ ...form, address: e.target.value })}
+                    onChange={(e) => {
+                      setForm({ ...form, address: e.target.value });
+                      if (errors.address) setErrors(prev => ({ ...prev, address: undefined }));
+                    }}
                     rows={2}
                     className={`w-full px-4 py-3.5 bg-gray-50 rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all font-medium resize-none ${isRtl ? 'text-right' : 'text-left'}`}
                     onFocus={(e) => {
@@ -679,6 +737,7 @@ export default function ReferralForm() {
                     }}
                     placeholder={blockContent.addressPlaceholder || "عنوانك الكامل لترهين التوصيل"}
                   />
+                  {errors.address && <p className="text-xs text-red-500 font-bold mt-1.5">{errors.address}</p>}
                 </div>
 
               <button

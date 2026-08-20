@@ -322,4 +322,76 @@ describe('express_checkout', () => {
     // productVariant, or getPackPrice would stop matching.
     expect(cfg.packs[0].name).toBe('');
   });
+
+  it('caps every field in the browser, with the same numbers the runtime checks', async () => {
+    const html = (await withCheckout({}))!;
+    const cfg = JSON.parse(
+      html.match(/<script type="application\/json"[^>]*>(.*?)<\/script>/s)![1]
+    );
+    // Two sources of truth for a limit means the browser silently truncating at
+    // one number while the message quotes another.
+    for (const [key, limit] of [
+      ['name', cfg.lim.nameMax],
+      ['phone', cfg.lim.phoneMax],
+      ['city', cfg.lim.cityMax],
+      ['address', cfg.lim.addressMax],
+    ] as const) {
+      expect(html).toMatch(new RegExp(`data-ck="${key}"[^>]*maxlength="${limit}"`));
+    }
+  });
+
+  it('keeps the floors where the React form had them', async () => {
+    const html = (await withCheckout({}))!;
+    const cfg = JSON.parse(
+      html.match(/<script type="application\/json"[^>]*>(.*?)<\/script>/s)![1]
+    );
+    // Raising any of these starts rejecting leads that convert today, which is
+    // the one failure mode this block cannot have.
+    expect(cfg.lim.nameMin).toBe(2);
+    expect(cfg.lim.cityMin).toBe(2);
+    expect(cfg.lim.phoneMinDigits).toBe(9);
+    expect(cfg.lim.phoneMaxDigits).toBe(14);
+  });
+
+  it('caps the address without making it required', async () => {
+    const html = (await withCheckout({}))!;
+    expect(html).toMatch(/data-ck="address"[^>]*maxlength="200"/);
+    // A cap is not a requirement: an empty address must still submit.
+    expect(html).not.toMatch(/data-ck="address"[^>]*\srequired/);
+  });
+
+  it('validates the address too, but only once it has been filled in', async () => {
+    const html = (await withCheckout({}))!;
+    const cfg = JSON.parse(
+      html.match(/<script type="application\/json"[^>]*>(.*?)<\/script>/s)![1]
+    );
+    expect(cfg.msg.addressShort).toBeTruthy();
+    expect(cfg.msg.addressLong).toBeTruthy();
+  });
+
+  it('carries a message for every rule the runtime can fail', async () => {
+    const html = (await withCheckout({}))!;
+    const cfg = JSON.parse(
+      html.match(/<script type="application\/json"[^>]*>(.*?)<\/script>/s)![1]
+    );
+    // A missing message would surface as an empty red slot under the field —
+    // the customer sees the form refuse and cannot tell why.
+    for (const key of [
+      'nameRequired', 'nameShort', 'nameLetters', 'nameLong',
+      'cityRequired', 'cityShort', 'cityLetters', 'cityLong',
+      'phoneRequired', 'phoneInvalid',
+      'addressShort', 'addressLong',
+    ]) {
+      expect(cfg.msg[key], key).toBeTruthy();
+    }
+  });
+
+  it('hints the right keyboard and autofill on each field', async () => {
+    const html = (await withCheckout({}))!;
+    expect(html).toMatch(/data-ck="phone"[^>]*inputmode="tel"/);
+    expect(html).toMatch(/data-ck="name"[^>]*autocomplete="name"/);
+    expect(html).toMatch(/data-ck="phone"[^>]*autocomplete="tel"/);
+    expect(html).toMatch(/data-ck="city"[^>]*autocomplete="address-level2"/);
+    expect(html).toMatch(/data-ck="address"[^>]*autocomplete="street-address"/);
+  });
 });

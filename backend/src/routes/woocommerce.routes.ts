@@ -3,6 +3,7 @@ import { Router } from 'express';
 import axios from 'axios';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { authenticate } from '../middleware/auth.js';
+import { enqueueSheetPush, enqueueSheetPushMany } from '../services/sheetPush.service.js';
 
 const router = Router();
 
@@ -421,6 +422,7 @@ router.post(
         }
       }
       let importedCount = 0;
+      const createdLeadIds: number[] = [];
 
       for (const order of orders) {
         const phoneRaw = order.billing?.phone || order.shipping?.phone || '';
@@ -440,7 +442,7 @@ router.post(
         });
 
         if (!existingLead) {
-          await prisma.lead.create({
+          const createdLead = await prisma.lead.create({
             data: {
               vendorId,
               fullName,
@@ -454,8 +456,16 @@ router.post(
               notes: `Commande WooCommerce #${order.number || order.id} (${order.total || 0} ${order.currency || 'MAD'})`,
             },
           });
+          createdLeadIds.push(createdLead.id);
           importedCount++;
         }
+      }
+
+      // One queue write for the whole sync rather than one per order.
+      try {
+        await enqueueSheetPushMany(vendorId, createdLeadIds, 'WOOCOMMERCE');
+      } catch (err) {
+        console.error('[SheetPush] enqueue failed:', err);
       }
 
       res.json({
@@ -529,7 +539,7 @@ router.post(
     });
 
     if (!existingLead) {
-      await prisma.lead.create({
+      const createdLead = await prisma.lead.create({
         data: {
           vendorId: matchedVendor.id,
           fullName,
@@ -543,6 +553,12 @@ router.post(
         },
       });
       console.log(`Lead created for vendor ${matchedVendor.id} from WooCommerce webhook`);
+
+      try {
+        await enqueueSheetPush(createdLead.id, matchedVendor.id, createdLead.source);
+      } catch (err) {
+        console.error('[SheetPush] enqueue failed:', err);
+      }
     }
 
     res.json({ success: true });

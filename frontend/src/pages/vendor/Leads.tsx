@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { influencerApi, leadsApi } from '../../lib/api';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { googleSheetsApi, influencerApi, leadsApi } from '../../lib/api';
 import { ReferralLink, InfluencerCommission, CustomerLinkMeta } from '../../types';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -13,10 +14,39 @@ import {
   Users, MousePointerClick, UserCheck, ShoppingCart,
   Filter, Search, Calendar,
   MapPin, Phone, Package, Clock, Trash2, Headphones, RefreshCw,
-  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Truck, CheckCircle, CheckCircle2, XCircle, Box, AlertCircle, X, BarChart3, Activity, PieChart as PieIcon, Zap, TrendingUp, History, MessageSquare, Plus, Wallet
+  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Truck, CheckCircle, CheckCircle2, XCircle, Box, AlertCircle, X, BarChart3, Activity, PieChart as PieIcon, Zap, TrendingUp, History, MessageSquare, Plus, Wallet, FileSpreadsheet
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { currentBasePath } from '../../lib/dashboardBase';
+import GoogleSheetOutboundPanel, { useOutboundStatus } from '../../components/vendor/GoogleSheetOutboundPanel';
+
+/**
+ * The numeric lead id behind a table row.
+ *
+ * Rows arrive in two shapes — a synthetic `lead-<id>` for a lead with no order
+ * yet, and an order row carrying the lead nested underneath — so every caller
+ * that needs the real id has to handle both.
+ */
+const rowLeadId = (row: any): number | null => {
+  const raw = String(row?.id ?? '');
+  if (raw.startsWith('lead-')) {
+    const n = Number(raw.slice('lead-'.length));
+    return Number.isInteger(n) && n > 0 ? n : null;
+  }
+  const nested = Number(row?.order?.lead?.id);
+  return Number.isInteger(nested) && nested > 0 ? nested : null;
+};
+
+// How many ids one sheet-status request may carry. The status is asked for the
+// whole filtered list rather than the visible page — the filter below has to
+// answer for rows the seller has not paged to yet — so this is what keeps an
+// account with tens of thousands of leads from posting all of them at once.
+const SHEET_STATUS_ID_LIMIT = 2000;
+
+// Where a row stands in the seller's own sheet. REMOVED is the case this filter
+// exists for: we wrote the line, the seller deleted it by hand, and nothing on
+// the platform noticed until the status endpoint re-read the sheet.
+type SheetFilter = 'ALL' | 'SENT' | 'REMOVED' | 'NOT_SENT';
 
 const ALL_STATUS_BADGES: Record<string, { label: string; color: string; icon: React.ComponentType<any> }> = {
   // --- Cycle de vie / Stock ---
@@ -171,7 +201,25 @@ export default function VendorLeads() {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  // This page stays on plain useState + loadData(); the client is here only to
+  // invalidate the two Google-Sheets keys the outbound panel and the header
+  // credit chip read from.
+  const queryClient = useQueryClient();
   const currentMode = searchParams.get('mode')?.toUpperCase() || user?.mode || 'AFFILIATE';
+
+  // The SAME hook the panel uses, deliberately: both read one react-query key, and
+  // defining a second queryFn for it here meant whichever mounted first decided
+  // the cached shape — leaving the other reading `undefined`.
+  const { data: sheetOutbound } = useOutboundStatus(currentMode === 'SELLER');
+  // The send-to-sheet controls stay hidden unless the account can actually use
+  // them: the feature has to be enabled by an admin, a sheet has to be connected,
+  // and the connection has to be active. Showing a button that can only ever
+  // answer "not enabled" is worse than showing nothing.
+  const canPushToSheet =
+    currentMode === 'SELLER' &&
+    !!sheetOutbound?.enabled &&
+    !!sheetOutbound?.isConnected &&
+    sheetOutbound?.active !== false;
 
   const getStatusLabel = (status: string) => {
     return t(`all_status_badges.${status}`, 'leads', ALL_STATUS_BADGES[status]?.label || status);
@@ -188,11 +236,15 @@ export default function VendorLeads() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [situationFilter, setSituationFilter] = useState<string>('ALL');
+  const [sheetFilter, setSheetFilter] = useState<SheetFilter>('ALL');
   const [showStats, setShowStats] = useState(true);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [isPushingBulk, setIsPushingBulk] = useState(false);
+  // Separate from isPushingBulk: the two destinations are independent, and a
+  // Call Center push must not grey out the Google Sheets button or vice versa.
+  const [isPushingSheet, setIsPushingSheet] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
   // No "Tous" option: the page opens on the last 30 days. Loading every lead an
@@ -249,7 +301,26 @@ export default function VendorLeads() {
     setCurrentPage(1);
     // tableDateRange/tableSelectedProductId shrink the result set too — without them
     // the table stays on a page that no longer exists and renders blank.
-  }, [statusFilter, situationFilter, searchTerm, startDate, endDate, itemsPerPage, tableDateRange, tableSelectedProductId, dateBasis]);
+  }, [statusFilter, situationFilter, sheetFilter, searchTerm, startDate, endDate, itemsPerPage, tableDateRange, tableSelectedProductId, dateBasis]);
+
+  /**
+   * The page's Refresh button.
+   *
+   * `loadData` alone only reloads the leads. The sheet status lives in react-query
+   * (so it would answer from cache), and the server-side reconcile is throttled to
+   * once a minute — which means a seller who deleted rows in their sheet and hit
+   * Refresh could still be shown stale "sent" badges. An explicit click is a direct
+   * instruction, so it forces the re-read past that throttle before reloading.
+   */
+  const handleRefresh = async () => {
+    if (canPushToSheet) {
+      // Never let a sheet problem block the lead reload the seller actually asked for.
+      await googleSheetsApi.recheckSheet().catch(() => null);
+      queryClient.invalidateQueries({ queryKey: ['gs-sent-status'] });
+      queryClient.invalidateQueries({ queryKey: ['gs-outbound-status'] });
+    }
+    await loadData();
+  };
 
   const loadData = async () => {
     try {
@@ -406,25 +477,88 @@ export default function VendorLeads() {
     // Search filter
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
+    // The lead id is now shown on every row, so it has to be searchable too.
+    // Matched as a string so a partial id ("77" finding #771) behaves like every
+    // other field here, and with the leading "#" tolerated since that is how the
+    // row displays it.
+    const leadId = rowLeadId(c);
+    const idTerm = term.startsWith('#') ? term.slice(1) : term;
     return (
+      (leadId !== null && idTerm !== '' && String(leadId).includes(idTerm)) ||
       (c.order?.customerName?.toLowerCase().includes(term)) ||
       (c.order?.customerPhone?.includes(searchTerm)) ||
       (c.order?.customerCity?.toLowerCase().includes(term))
     );
   }), [dateFilteredCommissions, statusFilter, situationFilter, searchTerm]);
 
+  // Which rows already have a line in the seller's sheet, and which ones the
+  // seller has since deleted from it by hand.
+  //
+  // Asked for the WHOLE filtered list, not just the page on screen: the sheet
+  // filter below has to be able to keep a row the seller has not paged to yet,
+  // and a page-scoped answer would leave every other row unclassified. Capped at
+  // SHEET_STATUS_ID_LIMIT so the body stays bounded. The query key is the joined
+  // id string, NOT the array — `filteredCommissions` is rebuilt on every render,
+  // so keying on the array itself would refetch forever.
+  const sheetStatusLeadIds = useMemo(
+    () => filteredCommissions
+      .map(rowLeadId)
+      .filter((id): id is number => id !== null)
+      .slice(0, SHEET_STATUS_ID_LIMIT),
+    [filteredCommissions]
+  );
+  const sheetStatusLeadIdsKey = sheetStatusLeadIds.join(',');
+
+  const { data: sheetSentRes } = useQuery({
+    queryKey: ['gs-sent-status', sheetStatusLeadIdsKey],
+    queryFn: () => googleSheetsApi.getSheetSentStatus(sheetStatusLeadIds),
+    enabled: canPushToSheet && sheetStatusLeadIds.length > 0,
+    // Kept in step with the 5s drain: a badge that lags 30s behind the row
+    // landing in the sheet reads as broken.
+    staleTime: 12_000,
+    retry: false,
+  });
+
+  const sheetSentIds = useMemo(
+    () => new Set<number>(sheetSentRes?.data?.data?.sent ?? []),
+    [sheetSentRes]
+  );
+  // Written once, gone from the sheet since. Not the same thing as "sent": the
+  // line is not there any more, so the row keeps a send button — an amber one.
+  const sheetRemovedIds = useMemo(
+    () => new Set<number>(sheetSentRes?.data?.data?.removed ?? []),
+    [sheetSentRes]
+  );
+
+  // Sheet status gets a filtering stage of its own instead of a clause inside
+  // `filteredCommissions`: the id list above is built from that array, so
+  // narrowing it by the very answer it asks for would feed the query its own
+  // output and never settle.
+  const sheetFilteredCommissions = useMemo(() => {
+    if (!canPushToSheet || sheetFilter === 'ALL') return filteredCommissions;
+    return filteredCommissions.filter(c => {
+      const leadId = rowLeadId(c);
+      // A row with no lead id behind it was never sendable, so it can only ever
+      // belong to "pas encore envoyés".
+      if (leadId === null) return sheetFilter === 'NOT_SENT';
+      if (sheetFilter === 'SENT') return sheetSentIds.has(leadId);
+      if (sheetFilter === 'REMOVED') return sheetRemovedIds.has(leadId);
+      return !sheetSentIds.has(leadId) && !sheetRemovedIds.has(leadId);
+    });
+  }, [filteredCommissions, canPushToSheet, sheetFilter, sheetSentIds, sheetRemovedIds]);
+
   // Sort by date descending (newest first) — same date field the filters use.
   // The date key is read once per row instead of twice per comparison: the
   // comparator runs ~n·log(n) times, so on a few thousand leads that was tens of
   // thousands of Date objects built on every render.
   const sortedCommissions = useMemo(() => {
-    return filteredCommissions
+    return sheetFilteredCommissions
       // Rows with no date on the chosen step (kept only when no range is
       // active) sort to the bottom instead of scattering through the list.
       .map(c => ({ c, key: getRowDate(c)?.getTime() ?? -Infinity }))
       .sort((a, b) => b.key - a.key)
       .map(x => x.c);
-  }, [filteredCommissions, dateBasis]);
+  }, [sheetFilteredCommissions, dateBasis]);
 
   const totalPages = Math.ceil(sortedCommissions.length / itemsPerPage);
   const paginatedCommissions = sortedCommissions.slice(
@@ -640,6 +774,45 @@ export default function VendorLeads() {
     });
   };
 
+  /**
+   * The one path into the seller's own Google Sheet, shared by the per-row icon
+   * and the toolbar's bulk button. Every row written costs a credit, so the
+   * confirmation states the price before anything is spent — a mis-click on a
+   * 200-row selection is otherwise 200 credits gone.
+   */
+  const handlePushToSheet = (ids: number[]) => {
+    if (!ids || ids.length === 0) return;
+
+    setConfirmModal({
+      isOpen: true,
+      title: t('confirm_push_sheet_title', 'leads', 'Envoyer vers Google Sheets ?'),
+      message: t('confirm_push_sheet_msg', 'leads', 'Envoyer {count} lead(s) vers Google Sheets ? Coût : {count} crédit(s).')
+        .replace(/\{count\}/g, String(ids.length)),
+      variant: 'primary',
+      onConfirm: async () => {
+        try {
+          setIsPushingSheet(true);
+          const res = await googleSheetsApi.pushLeadsToSheet(ids);
+          // The server counts what it actually wrote (already-sent rows are not
+          // recharged), so its sentence is more accurate than any count we hold.
+          toast.success(res?.data?.message || t('push_sheet_success', 'leads', 'Leads envoyés vers Google Sheets'));
+          setSelectedIds([]);
+          loadData();
+          // Balance and job counts both moved: repaint the header chip and the panel.
+          queryClient.invalidateQueries({ queryKey: ['sheet-credits'] });
+          queryClient.invalidateQueries({ queryKey: ['gs-outbound-status'] });
+          // Repaints the per-row sheet badge for the rows that just went out.
+          queryClient.invalidateQueries({ queryKey: ['gs-sent-status'] });
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        } catch (err: any) {
+          toast.error(err?.response?.data?.message || t('error_push_sheet', 'leads', 'Erreur lors de l\'envoi vers Google Sheets'));
+        } finally {
+          setIsPushingSheet(false);
+        }
+      }
+    });
+  };
+
   // Merge the two histories the way the modal has always shown them: one
   // timeline, order entries' changedByUser normalised to `changer`, consecutive
   // repeats of the same status collapsed.
@@ -758,7 +931,7 @@ export default function VendorLeads() {
             {t('new_lead', 'leads', 'Nouveau Lead')}
           </button>
           <button
-            onClick={loadData}
+            onClick={handleRefresh}
             disabled={loading}
             className="flex items-center gap-1.5 px-4 py-2 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:text-influencer-600 hover:border-influencer-100 hover:bg-influencer-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
@@ -775,6 +948,13 @@ export default function VendorLeads() {
 
         </div>
       </div>
+
+      {/* Outbound Google Sheet — sellers only, and above the collapsible stats so
+          it is on screen the moment the page loads. */}
+      {/* Only for accounts an admin has actually granted the feature to — an
+          account without it should see no Google Sheets surface at all, not a
+          card explaining that it is unavailable. */}
+      {currentMode === 'SELLER' && sheetOutbound?.enabled && <GoogleSheetOutboundPanel />}
 
       {/* Collapsible Stats & Analytics */}
       {showStats && (
@@ -1146,13 +1326,40 @@ export default function VendorLeads() {
             </div>
           </div>
 
+          {/* Sheet Filter — only where there is a live sheet to be in. Carries a
+              label of its own: on its own an option reading "Tous" next to "Tous
+              les statuts" says nothing about which "tous" it means. */}
+          {canPushToSheet && (
+            <div className="relative min-w-[210px]">
+              <span className="absolute -top-2 left-3 px-1 bg-white text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                {t('sheet_filter_label', 'leads', 'Statut feuille')}
+              </span>
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                <FileSpreadsheet className="w-4 h-4 text-gray-400" />
+              </div>
+              <select
+                value={sheetFilter}
+                onChange={(e) => setSheetFilter(e.target.value as SheetFilter)}
+                className="w-full pl-10 pr-10 py-2.5 text-xs font-bold text-gray-700 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-influencer-500 transition-all appearance-none cursor-pointer hover:bg-gray-100/50"
+              >
+                <option value="ALL">{t('sheet_filter_all', 'leads', 'Tous')}</option>
+                <option value="SENT">{t('sheet_filter_sent', 'leads', 'Envoyés vers la feuille')}</option>
+                <option value="REMOVED">{t('sheet_filter_removed', 'leads', 'Supprimés de la feuille')}</option>
+                <option value="NOT_SENT">{t('sheet_filter_not_sent', 'leads', 'Pas encore envoyés')}</option>
+              </select>
+              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+              </div>
+            </div>
+          )}
+
           {/* Search Bar Only */}
           <div className="flex flex-col xl:flex-row items-start xl:items-center gap-4 w-full">
             <div className="relative flex-1 w-full">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder={t('search_placeholder', 'leads', 'Rechercher par nom, téléphone ou ville...')}
+                placeholder={t('search_placeholder', 'leads', 'Rechercher par ID, nom, téléphone ou ville...')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-11 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-influencer-500 transition-all font-medium placeholder:text-gray-400"
@@ -1194,6 +1401,17 @@ export default function VendorLeads() {
                 >
                   <Headphones className="w-3.5 h-3.5" />
                   {t('push_selected', 'leads', 'Pousser la sélection ({count})').replace('{count}', String(selectedIds.length))}
+                </button>
+              )}
+              {canPushToSheet && selectedIds.length > 0 && (
+                <button
+                  onClick={() => handlePushToSheet(selectedIds)}
+                  disabled={isPushingSheet}
+                  title={t('push_sheet_selected_tooltip', 'leads', 'Envoyer la sélection vers votre feuille Google — 1 crédit par lead')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-bold hover:bg-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  {t('push_sheet_selected', 'leads', 'Google Sheets ({count})').replace('{count}', String(selectedIds.length))}
                 </button>
               )}
               {selectedIds.length > 0 && (
@@ -1294,6 +1512,13 @@ export default function VendorLeads() {
                       }
                     }
 
+                    // Where this row stands in the seller's sheet. The two are
+                    // exclusive on the server: a line we wrote is either still
+                    // there (sent) or the seller deleted it (removed).
+                    const sheetLeadId = rowLeadId(commission);
+                    const isInSheet = sheetLeadId !== null && sheetSentIds.has(sheetLeadId);
+                    const isRemovedFromSheet = sheetLeadId !== null && sheetRemovedIds.has(sheetLeadId);
+
                     return (
                       <tr key={commission.id} className={`hover:bg-gray-50/50 transition-colors group ${selectedIds.includes(Number(String(commission.id).replace('lead-', ''))) ? 'bg-influencer-50/30' : ''}`}>
                         {/* Checkbox */}
@@ -1333,6 +1558,43 @@ export default function VendorLeads() {
                                   <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24" fill="currentColor">
                                     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
                                   </svg>
+                                </span>
+                              )}
+                              {/* The lead id, sitting with the sheet badges on
+                                  purpose: it is the same number written into the
+                                  sheet's "Lead ID" column, so a row here can be
+                                  matched to a row there. Also searchable. */}
+                              {sheetLeadId !== null && (
+                                <span
+                                  className="px-1.5 py-0.5 rounded-md bg-slate-50 border border-slate-100 text-[9px] font-black text-slate-400 tabular-nums"
+                                  title={t('lead_id', 'leads', 'Identifiant du lead')}
+                                >
+                                  #{sheetLeadId}
+                                </span>
+                              )}
+                              {/* Already written into the seller's Google Sheet.
+                                  Same chrome as the WhatsApp badge next to it.
+                                  This badge is the ONLY sheet control such a row
+                                  gets — the send icon is dropped from its actions
+                                  below, since the line is already in there. */}
+                              {canPushToSheet && isInSheet && (
+                                <span
+                                  className="inline-flex items-center justify-center p-0.5 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100 hover:scale-110 transition-transform"
+                                  title={t('sent_to_sheet', 'leads', 'Envoyé vers Google Sheets')}
+                                >
+                                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                                </span>
+                              )}
+                              {/* Sent once and no longer in the sheet: the seller
+                                  deleted the line by hand. Amber where the sent
+                                  badge is emerald, so the two never read alike. */}
+                              {canPushToSheet && isRemovedFromSheet && (
+                                <span
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full border border-amber-100 text-[9px] font-black uppercase tracking-wider"
+                                  title={t('removed_from_sheet_tooltip', 'leads', 'Cette ligne a été supprimée de votre feuille — cliquez pour la renvoyer (1 crédit)')}
+                                >
+                                  <FileSpreadsheet className="w-2.5 h-2.5" />
+                                  {t('removed_from_sheet_short', 'leads', 'Retiré de la feuille')}
                                 </span>
                               )}
                             </div>
@@ -1514,6 +1776,33 @@ export default function VendorLeads() {
                                 >
                                   <Headphones className="w-4 h-4" />
                                 </button>
+                                {/* Nothing to send for a row that is already in
+                                    the sheet — it gets the emerald badge next to
+                                    the client name and no button at all. Never
+                                    sent, failed, or deleted from the sheet by the
+                                    seller all keep it; the deleted case turns
+                                    amber, because clicking it re-sends a line
+                                    that used to be there rather than sending a
+                                    new one. */}
+                                {canPushToSheet && !isInSheet && (
+                                  <button
+                                    onClick={() => {
+                                      const realId = String(commission.id).replace('lead-', '');
+                                      handlePushToSheet([Number(realId)]);
+                                    }}
+                                    disabled={isPushingSheet}
+                                    className={`p-1.5 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all ${
+                                      isRemovedFromSheet
+                                        ? 'text-amber-600 hover:bg-amber-50'
+                                        : 'text-emerald-600 hover:bg-emerald-50'
+                                    }`}
+                                    title={isRemovedFromSheet
+                                      ? t('removed_from_sheet_tooltip', 'leads', 'Cette ligne a été supprimée de votre feuille — cliquez pour la renvoyer (1 crédit)')
+                                      : t('send_to_sheet', 'leads', 'Envoyer vers Google Sheets — 1 crédit')}
+                                  >
+                                    <FileSpreadsheet className="w-4 h-4" />
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => {
                                     const realId = String(commission.id).replace('lead-', '');
@@ -2061,14 +2350,14 @@ export default function VendorLeads() {
               </button>
               <button
                 onClick={confirmModal.onConfirm}
-                disabled={isPushingBulk}
+                disabled={isPushingBulk || isPushingSheet}
                 className={`flex-1 px-6 py-3 text-xs font-black uppercase tracking-widest text-white rounded-2xl shadow-lg transition-all ${
                   confirmModal.variant === 'danger' 
                     ? 'bg-red-500 hover:bg-red-600 shadow-red-200' 
                     : 'bg-influencer-600 hover:bg-influencer-700 shadow-influencer-200'
                 }`}
               >
-                {isPushingBulk ? t('loading_generic', 'leads', 'En cours...') : t('confirm_btn', 'leads', 'Confirmer')}
+                {(isPushingBulk || isPushingSheet) ? t('loading_generic', 'leads', 'En cours...') : t('confirm_btn', 'leads', 'Confirmer')}
               </button>
             </div>
           </div>

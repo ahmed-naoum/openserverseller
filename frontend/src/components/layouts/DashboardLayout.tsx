@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { createPortal } from 'react-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -12,6 +13,7 @@ import { useSocket } from '../../contexts/SocketContext';
 import AnnouncementBanner from '../common/AnnouncementBanner';
 import ProfileProgressBanner from '../common/ProfileProgressBanner';
 import LanguageSwitcherWidget from '../common/LanguageSwitcherWidget';
+import SheetCreditsIndicator from '../SheetCreditsIndicator';
 import ConfirmationModal from '../ui/ConfirmationModal';
 import { 
   Home, 
@@ -388,6 +390,7 @@ export default function DashboardLayout() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
   const { socket } = useSocket();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
@@ -774,10 +777,18 @@ export default function DashboardLayout() {
       }, 6000);
     };
 
+    // The backend emits this after a push charge and after an admin grant. The
+    // 60s poll in SheetCreditsIndicator is only the floor — this is what makes
+    // the "$" chip move the instant a credit is spent or sold.
+    const handleSheetCredits = () => {
+      queryClient.invalidateQueries({ queryKey: ['sheet-credits'] });
+    };
+
     socket.on('new-message', handleNewMessage);
     socket.on('new-support-ticket', handleNewTicket);
     socket.on('conversation-claimed', handleClaimed);
     socket.on('new-notification', handleNewNotification);
+    socket.on('sheet-credits', handleSheetCredits);
 
     // Join support queue room if agent
     const isAgent = ['SUPER_ADMIN', 'SYSTEM_SUPPORT'].includes(user?.role || '');
@@ -790,6 +801,7 @@ export default function DashboardLayout() {
       socket.off('new-support-ticket', handleNewTicket);
       socket.off('conversation-claimed', handleClaimed);
       socket.off('new-notification', handleNewNotification);
+      socket.off('sheet-credits', handleSheetCredits);
       if (isAgent) {
         socket.emit('leave-room', 'support-queue');
       }
@@ -1598,6 +1610,10 @@ export default function DashboardLayout() {
               >
                 {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
               </button>
+
+              {/* Google Sheets push credits — renders nothing unless the account
+                  actually has the feature enabled. */}
+              <SheetCreditsIndicator />
 
               {/* Language Switcher */}
               <LanguageSwitcherWidget variant="dashboard-header" />

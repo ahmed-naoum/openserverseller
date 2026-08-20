@@ -282,6 +282,7 @@ router.patch(
     const {
       fullName, email, phone, role, isActive, kycStatus,
       canImpersonate, canManageProducts, canManageLeads, canManageOrders, canManageInfluencerLinks, canManageTickets, canScanReturns, canManageAffiliateInvites, helperCommissionPerDeliveredLead, canDisplayOnDashboard, autoSendLeadsToCallCenter,
+      googleSheetsOutboundEnabled, googleSheetOutAuto,
       city, address, cinNumber, birthDate, language, avatarUrl,
       instagramUsername, tiktokUsername, facebookUsername, xUsername, youtubeUsername, snapchatUsername,
       instagramUrl, tiktokUrl, facebookUrl, youtubeUrl, snapchatUrl,
@@ -395,6 +396,10 @@ router.patch(
         helperCommissionPerDeliveredLead: helperCommissionPerDeliveredLead !== undefined ? Number(helperCommissionPerDeliveredLead) : undefined,
         canDisplayOnDashboard: typeof canDisplayOnDashboard === 'boolean' ? canDisplayOnDashboard : undefined,
         autoSendLeadsToCallCenter: typeof autoSendLeadsToCallCenter === 'boolean' ? autoSendLeadsToCallCenter : undefined,
+        // The entitlement credits are sold against, plus the auto-push default the
+        // admin seeds — the seller can flip the latter from their own panel later.
+        googleSheetsOutboundEnabled: typeof googleSheetsOutboundEnabled === 'boolean' ? googleSheetsOutboundEnabled : undefined,
+        googleSheetOutAuto: typeof googleSheetOutAuto === 'boolean' ? googleSheetOutAuto : undefined,
         platformFeeRate: platformFeeRate !== undefined ? Number(platformFeeRate) : undefined,
         saisieFeeMad: saisieFeeMad !== undefined ? Number(saisieFeeMad) : undefined,
         netProfitPerDeliveredParcelMad:
@@ -501,6 +506,8 @@ router.get(
           referralCode: user.referralCode,
           canDisplayOnDashboard: user.canDisplayOnDashboard,
           autoSendLeadsToCallCenter: user.autoSendLeadsToCallCenter,
+          googleSheetsOutboundEnabled: user.googleSheetsOutboundEnabled,
+          googleSheetOutAuto: user.googleSheetOutAuto,
           platformFeeRate: user.platformFeeRate,
           saisieFeeMad: user.saisieFeeMad,
           netProfitPerDeliveredParcelMad: user.netProfitPerDeliveredParcelMad,
@@ -841,6 +848,11 @@ router.delete(
       // Delete wallet transactions then wallet
       await tx.$executeRawUnsafe(`DELETE FROM wallet_transactions WHERE "walletId" IN (SELECT id FROM wallets WHERE "userId" = $1)`, userId);
       await tx.$executeRawUnsafe(`DELETE FROM wallets WHERE "userId" = $1`, userId);
+
+      // Delete Google Sheets credit ledger then the account, and the push queue
+      await tx.$executeRawUnsafe(`DELETE FROM sheet_credit_transactions WHERE "accountId" IN (SELECT id FROM sheet_credit_accounts WHERE "userId" = $1)`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM sheet_credit_accounts WHERE "userId" = $1`, userId);
+      await tx.$executeRawUnsafe(`DELETE FROM sheet_push_jobs WHERE "vendorId" = $1`, userId);
 
       // Nullify lead invoice references, then delete orders
       await tx.$executeRawUnsafe(`UPDATE leads SET "invoiceId" = NULL WHERE "vendorId" = $1`, userId);
