@@ -19,6 +19,7 @@ import {
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { currentBasePath } from '../../lib/dashboardBase';
 import GoogleSheetOutboundPanel, { useOutboundStatus } from '../../components/vendor/GoogleSheetOutboundPanel';
+import { formatMoney } from '../../lib/sheetMoney';
 
 /**
  * The numeric lead id behind a table row.
@@ -233,6 +234,11 @@ export default function VendorLeads() {
   // them: the feature has to be enabled by an admin, a sheet has to be connected,
   // and the connection has to be active. Showing a button that can only ever
   // answer "not enabled" is worse than showing nothing.
+  // The tariff comes from the server so the table can never quote a price the
+  // backend no longer charges. `sheetMoney` owns the formatting.
+  const sheetPriceCents = Number(sheetOutbound?.gate?.priceCents ?? 0);
+  const sheetPriceLabel = sheetPriceCents > 0 ? formatMoney(sheetPriceCents) : '';
+
   const canPushToSheet =
     currentMode === 'SELLER' &&
     !!sheetOutbound?.enabled &&
@@ -822,7 +828,8 @@ export default function VendorLeads() {
     setConfirmModal({
       isOpen: true,
       title: t('confirm_push_sheet_title', 'leads', 'Envoyer vers Google Sheets ?'),
-      message: t('confirm_push_sheet_msg', 'leads', 'Envoyer {count} lead(s) vers Google Sheets ? Coût : {count} crédit(s).')
+      message: t('confirm_push_sheet_msg', 'leads', 'Envoyer {count} lead(s) vers Google Sheets ? Coût : {cost}.')
+        .replace('{cost}', sheetPriceCents > 0 ? formatMoney(ids.length * sheetPriceCents) : '—')
         .replace(/\{count\}/g, String(ids.length)),
       variant: 'primary',
       onConfirm: async () => {
@@ -1464,7 +1471,7 @@ export default function VendorLeads() {
                 <button
                   onClick={() => handlePushToSheet(selectedIds)}
                   disabled={isPushingSheet}
-                  title={t('push_sheet_selected_tooltip', 'leads', 'Envoyer la sélection vers votre feuille Google — 1 crédit par lead')}
+                  title={t('push_sheet_selected_tooltip', 'leads', 'Envoyer la sélection vers votre feuille Google — {price} par lead').replace('{price}', sheetPriceLabel)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-bold hover:bg-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5" />
@@ -1671,7 +1678,7 @@ export default function VendorLeads() {
                               {canPushToSheet && isRemovedFromSheet && (
                                 <span
                                   className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full border border-amber-100 text-[9px] font-black uppercase tracking-wider"
-                                  title={t('removed_from_sheet_tooltip', 'leads', 'Cette ligne a été supprimée de votre feuille — cliquez pour la renvoyer (1 crédit)')}
+                                  title={t('removed_from_sheet_tooltip', 'leads', 'Cette ligne a été supprimée de votre feuille — cliquez pour la renvoyer ({price})').replace('{price}', sheetPriceLabel)}
                                 >
                                   <FileSpreadsheet className="w-2.5 h-2.5" />
                                   {t('removed_from_sheet_short', 'leads', 'Retiré de la feuille')}
@@ -1896,8 +1903,8 @@ export default function VendorLeads() {
                                     title={isLocked
                                       ? lockedActionTooltip
                                       : isRemovedFromSheet
-                                        ? t('removed_from_sheet_tooltip', 'leads', 'Cette ligne a été supprimée de votre feuille — cliquez pour la renvoyer (1 crédit)')
-                                        : t('send_to_sheet', 'leads', 'Envoyer vers Google Sheets — 1 crédit')}
+                                        ? t('removed_from_sheet_tooltip', 'leads', 'Cette ligne a été supprimée de votre feuille — cliquez pour la renvoyer ({price})').replace('{price}', sheetPriceLabel)
+                                        : t('send_to_sheet', 'leads', 'Envoyer vers Google Sheets — {price}').replace('{price}', sheetPriceLabel)}
                                   >
                                     <FileSpreadsheet className="w-4 h-4" />
                                   </button>
