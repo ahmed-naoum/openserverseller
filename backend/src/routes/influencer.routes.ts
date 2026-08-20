@@ -17,6 +17,15 @@ import {
   OUT_OF_SCOPE,
 } from '../lib/subAccountProductScope.js';
 
+import {
+  maskingVendorId,
+  maskLockedLeads,
+  phoneSearchableLeadFilter,
+  LEAD_ROW_MASK,
+  ORDER_ROW_MASK,
+} from '../lib/leadMasking.js';
+import { getLockedLeadIds } from '../services/leadCredits.service.js';
+
 import { recordReferralClick } from '../services/referralClicks.js';
 import { validateLandingPageUpdate } from '../validations/landingPage.validation.js';
 import { invalidate, compileNow } from '../services/landingCompiler/index.js';
@@ -922,6 +931,20 @@ router.post(
       throw new AppException(404, 'Lead not found or not yours');
     }
 
+    // A lead the seller has not paid for must not be actionable at all. Masking the
+    // number alone would not hold: dispatching it to the call centre hands the lead
+    // to an agent and surfaces the number again through the resulting order.
+    const gateVendorId = maskingVendorId(req);
+    if (gateVendorId) {
+      const locked = await getLockedLeadIds(gateVendorId, [{ id: lead.id, createdAt: lead.createdAt }]);
+      if (locked.has(lead.id)) {
+        throw new AppException(
+          400,
+          'Lead verrouillé : rechargez vos crédits Google Sheets pour afficher le numéro et l\'envoyer au Call Center.'
+        );
+      }
+    }
+
     let wallet = await prisma.wallet.findUnique({ where: { userId } });
     if (!wallet) {
       wallet = await prisma.wallet.create({ data: { userId } });
@@ -983,6 +1006,11 @@ router.post(
       io.to(`user:${id}`).emit('new-available-lead', leadData);
     });
 
+    // The agents' copy above is built and emitted first and keeps the real
+    // number — they are the ones who have to call. What goes back to the seller
+    // is the same row they would see in their list, so it obeys the same lock.
+    await maskLockedLeads(maskingVendorId(req), [updatedLead], LEAD_ROW_MASK);
+
     res.json({
       status: 'success',
       message: 'Lead pushed to call center',
@@ -1024,6 +1052,30 @@ router.post(
 
     if (leads.length === 0) {
       throw new AppException(404, 'No eligible leads found for pushing');
+    }
+
+    // Unpaid leads are dropped from the batch before anything else runs — including
+    // the duplicate-phone check below, which would otherwise compare numbers the
+    // seller is not entitled to see. An all-locked batch is refused outright.
+    const gateVendorId = maskingVendorId(req);
+    let lockedCount = 0;
+    if (gateVendorId) {
+      const locked = await getLockedLeadIds(
+        gateVendorId,
+        leads.map((l) => ({ id: l.id, createdAt: l.createdAt }))
+      );
+      if (locked.size) {
+        lockedCount = locked.size;
+        for (let i = leads.length - 1; i >= 0; i--) {
+          if (locked.has(leads[i].id)) leads.splice(i, 1);
+        }
+        if (leads.length === 0) {
+          throw new AppException(
+            400,
+            `${lockedCount} lead(s) verrouillés : rechargez vos crédits Google Sheets pour les envoyer au Call Center.`
+          );
+        }
+      }
     }
 
     // NEW: Validation for duplicate phone numbers
@@ -1227,12 +1279,24 @@ function extractPackOptions(landingPage: any): { name: string; price: any }[] | 
  * account see this row" drift, and the way that shows up is a row rendering a
  * History button that answers 404 when it is clicked.
  */
-function buildCustomerCommissionWhere(userId: number, mode: unknown, search?: string) {
+function buildCustomerCommissionWhere(userId: number, mode: unknown, search?: string, phoneFilter?: any) {
+  // A gated seller may not search by a number they are not allowed to read —
+  // see phoneSearchableLeadFilter. The filter is about the LEAD, so an order
+  // raised without one is admitted as it always was.
+  const customerPhoneMatches: any = phoneFilter
+    ? {
+        AND: [
+          { customerPhone: { contains: search, mode: 'insensitive' } },
+          { OR: [{ leadId: null }, { lead: phoneFilter }] },
+        ]
+      }
+    : { customerPhone: { contains: search, mode: 'insensitive' } };
+
   const where: any = {
     order: search ? {
       OR: [
         { customerName: { contains: search, mode: 'insensitive' } },
-        { customerPhone: { contains: search, mode: 'insensitive' } },
+        customerPhoneMatches,
         { customerCity: { contains: search, mode: 'insensitive' } },
       ]
     } : { isNot: null }
@@ -1260,7 +1324,15 @@ function buildCustomerCommissionWhere(userId: number, mode: unknown, search?: st
   return where;
 }
 
-async function buildCustomerLeadWhere(req: Request, userId: number, mode: unknown, search?: string) {
+async function buildCustomerLeadWhere(req: Request, userId: number, mode: unknown, search?: string, phoneFilter?: any) {
+  // A gated seller may not search by a number they are not allowed to read: the
+  // phone half of the search is narrowed to the leads they may read, so it
+  // cannot be walked digit by digit into a masked number. Everyone else keeps
+  // the plain predicate — see phoneSearchableLeadFilter.
+  const phoneMatches: any = phoneFilter
+    ? { AND: [{ phone: { contains: search, mode: 'insensitive' } }, phoneFilter] }
+    : { phone: { contains: search, mode: 'insensitive' } };
+
   // The search predicate lives under AND, not OR — every mode branch below assigns
   // `.OR = [...]`, which would otherwise overwrite it and silently return the
   // vendor's whole lead list for any search term.
@@ -1269,7 +1341,7 @@ async function buildCustomerLeadWhere(req: Request, userId: number, mode: unknow
       AND: [{
         OR: [
           { fullName: { contains: search, mode: 'insensitive' } },
-          { phone: { contains: search, mode: 'insensitive' } },
+          phoneMatches,
           { city: { contains: search, mode: 'insensitive' } },
         ]
       }]
@@ -1341,7 +1413,14 @@ router.get(
     const skip = fetchAll ? 0 : (safePage - 1) * safeLimit;
     const take = fetchAll ? ALL_HARD_CAP : safeLimit;
 
-    const commissionWhereClause = buildCustomerCommissionWhere(userId, mode, search as string | undefined);
+    // Both halves of this page can hide a phone, so both are built against the
+    // same account and the same one lock lookup: `gateVendorId` is null for
+    // anyone who must keep seeing real numbers, and then nothing below costs a
+    // query. The search guard is only fetched when there is a search to guard.
+    const gateVendorId = maskingVendorId(req);
+    const phoneFilter = search ? await phoneSearchableLeadFilter(gateVendorId) : null;
+
+    const commissionWhereClause = buildCustomerCommissionWhere(userId, mode, search as string | undefined, phoneFilter);
 
     // The slim branch keeps every field the leads pages read per row and nothing
     // else. The two history arrays collapse into their newest entry (`take: 1`
@@ -1377,6 +1456,10 @@ router.get(
                   select: {
                     id: true,
                     createdAt: true,
+                    // Who owns the lead decides whose credits gate it: a row for
+                    // a product this account only affiliates for is not theirs
+                    // to unlock. The heavy branch below gets it from `include`.
+                    vendorId: true,
                     paymentSituation: true,
                     callbackAt: true,
                     notes: true,
@@ -1422,7 +1505,7 @@ router.get(
     });
 
     // New Leads (not yet orders).
-    const leadWhereClause = await buildCustomerLeadWhere(req, userId, mode, search as string | undefined);
+    const leadWhereClause = await buildCustomerLeadWhere(req, userId, mode, search as string | undefined, phoneFilter);
 
     const leads = await prisma.lead.findMany({
       where: leadWhereClause,
@@ -1603,6 +1686,9 @@ router.get(
         lead: {
           id: lead.id,
           createdAt: lead.createdAt,
+          // Same field the commission branch selects, for the same reason: the
+          // masking pass reads the lead's owner off this object.
+          vendorId: lead.vendorId,
           paymentSituation: lead.paymentSituation,
           callbackDate: lead.callbackAt,
           notes: lead.notes,
@@ -1660,6 +1746,12 @@ router.get(
     const combined = [...leadCommissions, ...dedupedCommissions].sort((a, b) =>
       new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime()
     );
+
+    // Both row shapes hang their lead off `order.lead` and their number off
+    // `order.customerPhone`, so the whole page masks in one pass and one lock
+    // lookup. Done here rather than in the two mappers above: a number that is
+    // still real anywhere in this handler is a number that can be shipped.
+    await maskLockedLeads(gateVendorId, combined as any[], ORDER_ROW_MASK);
 
     // When we fetched everything, the array itself is the exact answer (already deduped).
     const total = fetchAll ? combined.length : totalCommissions + totalLeads;

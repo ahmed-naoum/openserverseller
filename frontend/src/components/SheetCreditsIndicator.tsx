@@ -74,6 +74,35 @@ export default function SheetCreditsIndicator() {
   const isEmpty = balance <= 0;
   const isLow = !isEmpty && balance <= LOW_BALANCE_THRESHOLD;
 
+  /**
+   * The reservation behind the balance. Each lead captured under the gate holds a
+   * credit until its row reaches the sheet, so the number that decides whether the
+   * NEXT lead arrives with a readable phone is `capacity`, not the balance: 20
+   * credits behind 21 un-sent leads is already one masked lead, and painting that
+   * chip in the calm neutral would be a lie.
+   *
+   * With no gate on the account nothing is reserved, so the balance is the only
+   * signal there is and the old thresholds still apply.
+   */
+  const gate: any = data?.gate || {};
+  const gateActive = !!gate.active;
+  const gateBalance = Number(gate.balance ?? balance);
+  const gateUnsent = Number(gate.unsent ?? 0);
+  const gateCapacity = Number(gate.capacity ?? 0);
+  const gateLocked = Number(gate.locked ?? 0);
+
+  const level = gateActive
+    ? gateCapacity < 0
+      ? 'danger'
+      : gateCapacity === 0
+      ? 'warn'
+      : 'ok'
+    : isEmpty
+    ? 'danger'
+    : isLow
+    ? 'warn'
+    : 'ok';
+
   const rows: any[] = Array.isArray(ledger)
     ? ledger
     : ledger?.transactions || ledger?.items || [];
@@ -87,9 +116,9 @@ export default function SheetCreditsIndicator() {
   };
 
   // Same chrome as the search / fullscreen buttons, only wider to fit the number.
-  const tone = isEmpty
+  const tone = level === 'danger'
     ? 'bg-rose-50 border-rose-200 text-rose-600 hover:border-rose-300'
-    : isLow
+    : level === 'warn'
     ? 'bg-amber-50 border-amber-200 text-amber-600 hover:border-amber-300'
     : `bg-white text-slate-400 ${open ? 'border-primary-200 text-primary-600' : 'border-slate-100 hover:text-primary-600 hover:border-primary-200'}`;
 
@@ -98,7 +127,11 @@ export default function SheetCreditsIndicator() {
       <button
         onClick={() => setOpen(!open)}
         className={`relative flex items-center gap-1 py-2 px-2 rounded-lg border transition-all shadow-sm hover:shadow-md active:scale-95 ${tone}`}
-        title={t('sheet_credits_tooltip', 'dashboard', "Crédits d'envoi vers Google Sheets · 1 crédit par ligne écrite")}
+        title={
+          gateActive
+            ? t('sheet_credits_gate_tooltip', 'dashboard', "Chaque lead reçu réserve un crédit jusqu'à son envoi. Disponibles = crédits − non envoyés.")
+            : t('sheet_credits_tooltip', 'dashboard', "Crédits d'envoi vers Google Sheets · 1 crédit par ligne écrite")
+        }
         id="sheet-credits-toggle"
       >
         <DollarSign size={16} />
@@ -109,14 +142,23 @@ export default function SheetCreditsIndicator() {
         <>
           <div data-dropdown-backdrop className="fixed inset-0 z-[99]" onClick={() => setOpen(false)}></div>
           <div className={`absolute ${isRtl ? 'left-0 origin-top-left' : 'right-0 origin-top-right'} mt-3 w-72 sm:w-80 bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.12)] border border-slate-100 z-[100] overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300`}>
-            {/* Header: the balance itself, plus the low / empty warning */}
+            {/* Header: the balance itself, plus whichever warning applies — the
+                reservation under the gate, the low / empty balance without it */}
             <div className="px-5 py-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-xs font-black text-slate-900 uppercase tracking-wider">
                   {t('sheet_credits_label', 'dashboard', 'Crédits Sheets')}
                 </p>
                 <p className="text-[10px] font-bold text-slate-400 mt-0.5 leading-relaxed">
-                  {isEmpty
+                  {/* Under the gate the balance no longer explains itself: it is the
+                      reservation, not the balance, that the seller feels. */}
+                  {gateActive
+                    ? gateLocked > 0
+                      ? t('sheet_credits_gate_locked', 'dashboard', "{count} lead(s) ont leur numéro masqué en attendant l'ajout de crédits.").replace('{count}', String(gateLocked))
+                      : gateCapacity === 0
+                      ? t('sheet_credits_gate_full', 'dashboard', 'Tous vos crédits sont réservés : le prochain lead arrivera masqué.')
+                      : t('sheet_credits_gate_tooltip', 'dashboard', "Chaque lead reçu réserve un crédit jusqu'à son envoi. Disponibles = crédits − non envoyés.")
+                    : isEmpty
                     ? t('sheet_credits_empty', 'dashboard', 'Solde épuisé : les envois vers votre feuille sont bloqués.')
                     : isLow
                     ? t('sheet_credits_low', 'dashboard', 'Solde bas : pensez à recharger vos crédits.')
@@ -124,12 +166,42 @@ export default function SheetCreditsIndicator() {
                 </p>
               </div>
               <div className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl flex-shrink-0 ${
-                isEmpty ? 'bg-rose-50 text-rose-600' : isLow ? 'bg-amber-50 text-amber-600' : 'bg-white text-slate-700 border border-slate-100'
+                level === 'danger' ? 'bg-rose-50 text-rose-600' : level === 'warn' ? 'bg-amber-50 text-amber-600' : 'bg-white text-slate-700 border border-slate-100'
               }`}>
                 <DollarSign size={12} />
                 <span className="text-xs font-black leading-none tabular-nums">{balance}</span>
               </div>
             </div>
+
+            {/* The same three numbers the leads page shows, laid out as columns
+                rather than a sentence — the popover is 288px wide and the inline
+                form would wrap into three lines anyway. */}
+            {gateActive && (
+              <div className="grid grid-cols-3 gap-2 px-5 py-3 border-b border-slate-50 text-center">
+                <div className="min-w-0">
+                  <p className="text-sm font-black text-slate-900 leading-none tabular-nums">{gateBalance}</p>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mt-1 leading-tight">
+                    {t('sheet_credits_gate_credits', 'dashboard', 'Crédits')}
+                  </p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-black text-slate-900 leading-none tabular-nums">{gateUnsent}</p>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mt-1 leading-tight">
+                    {t('sheet_credits_gate_unsent', 'dashboard', 'Non envoyés')}
+                  </p>
+                </div>
+                <div className="min-w-0">
+                  <p className={`text-sm font-black leading-none tabular-nums ${
+                    level === 'danger' ? 'text-rose-600' : level === 'warn' ? 'text-amber-600' : 'text-slate-900'
+                  }`}>
+                    {gateCapacity}
+                  </p>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mt-1 leading-tight">
+                    {t('sheet_credits_gate_capacity', 'dashboard', 'Disponibles')}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Ledger: the last ten movements */}
             <div className="px-5 pt-3 pb-1">

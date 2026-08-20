@@ -423,6 +423,9 @@ router.post(
       }
       let importedCount = 0;
       const createdLeadIds: number[] = [];
+      // Same rows with their creation date, so the credit charge below does not
+      // re-read `createdAt` once per synced order.
+      const createdLeadRows: { id: number; createdAt: Date }[] = [];
 
       for (const order of orders) {
         const phoneRaw = order.billing?.phone || order.shipping?.phone || '';
@@ -457,9 +460,11 @@ router.post(
             },
           });
           createdLeadIds.push(createdLead.id);
+          createdLeadRows.push({ id: createdLead.id, createdAt: createdLead.createdAt });
           importedCount++;
         }
       }
+
 
       // One queue write for the whole sync rather than one per order.
       try {
@@ -553,6 +558,7 @@ router.post(
         },
       });
       console.log(`Lead created for vendor ${matchedVendor.id} from WooCommerce webhook`);
+
 
       try {
         await enqueueSheetPush(createdLead.id, matchedVendor.id, createdLead.source);

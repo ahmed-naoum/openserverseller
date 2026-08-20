@@ -16,6 +16,7 @@ import {
   LayoutTemplate,
   Link2Off,
   Loader2,
+  Lock,
   MinusCircle,
   Send,
   Settings2,
@@ -465,6 +466,30 @@ export default function GoogleSheetOutboundPanel() {
   const balance = Number(data?.balance ?? data?.credits?.balance ?? 0);
   const blocked = Number(data?.counts?.blocked ?? 0);
 
+  /**
+   * The reservation the seller actually lives under. Every lead captured under the
+   * gate holds a credit until its row reaches the sheet, so what decides whether the
+   * NEXT lead arrives readable is `capacity` — not the balance. A comfortable-looking
+   * 20 credits with 21 leads waiting is one masked number, which is exactly why the
+   * balance alone is not enough to show here.
+   *
+   * The block is absent until an admin switches the gate on, and nothing
+   * gate-related is drawn in that case.
+   */
+  const gate: any = data?.gate || {};
+  const gateActive = !!gate.active;
+  const gateBalance = Number(gate.balance ?? balance);
+  const gateUnsent = Number(gate.unsent ?? 0);
+  const gateCapacity = Number(gate.capacity ?? 0);
+  const gateLocked = Number(gate.locked ?? 0);
+  // Same three tones the chip already used, re-keyed from the balance to the capacity.
+  const gateTone =
+    gateCapacity > 0
+      ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+      : gateCapacity === 0
+      ? 'bg-amber-50 text-amber-700 border-amber-200'
+      : 'bg-rose-50 text-rose-600 border-rose-100';
+
   // (c) Entitled and configured, but no sheet yet: the one-field form.
   if (!isConnected) {
     return (
@@ -657,18 +682,52 @@ export default function GoogleSheetOutboundPanel() {
                     document.body
                   )}
                 </div>
-                <span
-                  className={`px-2 py-0.5 rounded-lg text-[10px] font-black border ${
-                    balance > 0
-                      ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
-                      : 'bg-rose-50 text-rose-600 border-rose-100'
-                  }`}
-                >
-                  {balance > 0
-                    ? t('gso_credits_left', 'leads', '{count} crédit(s) restant(s)').replace('{count}', String(balance))
-                    : t('gso_credits_empty', 'leads', 'Solde épuisé — ajoutez des crédits pour reprendre les envois.')}
-                </span>
+                {/* Under the gate the balance on its own is misleading, so the chip
+                    carries all three numbers: what is held, what is already spoken
+                    for, and what is left to cover the next lead. `flex-wrap` keeps
+                    it one line on desktop and lets it break on a phone. */}
+                {gateActive ? (
+                  <span
+                    className={`inline-flex items-center gap-1.5 flex-wrap px-2 py-0.5 rounded-lg text-[10px] font-black border tabular-nums ${gateTone}`}
+                    title={t('gso_gate_tooltip', 'leads', "Chaque lead reçu réserve un crédit jusqu'à son envoi vers la feuille. Disponibles = crédits − non envoyés.")}
+                  >
+                    <DollarSign className="w-3 h-3 shrink-0" />
+                    <span>
+                      {t('gso_gate_credits', 'leads', '{count} crédits').replace('{count}', String(gateBalance))}
+                    </span>
+                    <span className="opacity-40">·</span>
+                    <span>
+                      {t('gso_gate_unsent', 'leads', '{count} non envoyés').replace('{count}', String(gateUnsent))}
+                    </span>
+                    <span className="opacity-40">·</span>
+                    <span>
+                      {t('gso_gate_capacity', 'leads', '{count} disponibles').replace('{count}', String(gateCapacity))}
+                    </span>
+                  </span>
+                ) : (
+                  <span
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-black border ${
+                      balance > 0
+                        ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                        : 'bg-rose-50 text-rose-600 border-rose-100'
+                    }`}
+                  >
+                    {balance > 0
+                      ? t('gso_credits_left', 'leads', '{count} crédit(s) restant(s)').replace('{count}', String(balance))
+                      : t('gso_credits_empty', 'leads', 'Solde épuisé — ajoutez des crédits pour reprendre les envois.')}
+                  </span>
+                )}
               </div>
+
+              {/* Only the newest leads lock, and only until credits land — the rows
+                  themselves stay on the page, so this says what is hidden rather
+                  than warning about something lost. */}
+              {gateActive && gateLocked > 0 && (
+                <p className="mt-1.5 flex items-start gap-1.5 text-[10px] font-black text-amber-700 leading-relaxed">
+                  <Lock className="w-3 h-3 shrink-0 mt-0.5" />
+                  {t('gso_gate_locked', 'leads', "{count} lead(s) ont leur numéro masqué en attendant l'ajout de crédits.").replace('{count}', String(gateLocked))}
+                </p>
+              )}
 
               <div className="flex items-center gap-4 mt-2 flex-wrap">
                 <label className="flex items-center gap-2 cursor-pointer">

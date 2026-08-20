@@ -372,6 +372,18 @@ router.patch(
       });
     }
 
+    // Turning the Google Sheets entitlement ON starts the credit clock: only
+    // leads captured from this instant on are gated, everything already in the
+    // seller's list stays untouched. The stamp is written once and then left
+    // alone — if the admin switches the flag off and later back on, moving the
+    // line forward would re-gate (and re-lock) every lead captured in between,
+    // leads the seller has already been working. So we only set it while it is
+    // still null.
+    const startsGateNow =
+      googleSheetsOutboundEnabled === true &&
+      !user.googleSheetsOutboundEnabled &&
+      !user.googleSheetsGateFrom;
+
     // Update User
     const updatedUser = await prisma.user.update({
       where: { uuid },
@@ -399,6 +411,7 @@ router.patch(
         // The entitlement credits are sold against, plus the auto-push default the
         // admin seeds — the seller can flip the latter from their own panel later.
         googleSheetsOutboundEnabled: typeof googleSheetsOutboundEnabled === 'boolean' ? googleSheetsOutboundEnabled : undefined,
+        googleSheetsGateFrom: startsGateNow ? new Date() : undefined,
         googleSheetOutAuto: typeof googleSheetOutAuto === 'boolean' ? googleSheetOutAuto : undefined,
         platformFeeRate: platformFeeRate !== undefined ? Number(platformFeeRate) : undefined,
         saisieFeeMad: saisieFeeMad !== undefined ? Number(saisieFeeMad) : undefined,

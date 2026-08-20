@@ -14,6 +14,7 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 import { SAFE_USER_SELECT } from '../lib/safeUserSelect.js';
+import { getGateStats } from '../services/leadCredits.service.js';
 
 const router = Router();
 
@@ -2994,10 +2995,31 @@ router.post(
       return updatedAccount;
     });
 
+    // The same fresh balance also pays for the leads that were captured while it
+    // was empty, oldest first — a top-up should visibly clear the backlog it was
+    // bought for instead of waiting for the next lead to nudge it. Outside the
+    // transaction and swallowing its own errors, like the two hooks below: the
+    // credits are already sold, and a failure here only delays the unlocking.
+    // Nothing is spent here. Under the reservation model a lead is charged only
+    // when its row reaches the sheet, so raising the balance simply raises capacity
+    // and the newest locked leads become visible on the next read. `unlockedLeads`
+    // is therefore how many the grant COVERS, not how many were paid for.
+    let unlockedLeads = 0;
+    const finalBalance = result.balance;
+    if (type === 'CREDIT') {
+      try {
+        const before = await getGateStats(targetId);
+        unlockedLeads = Math.min(amountNum, before.locked);
+      } catch (err) {
+        console.error('Failed to compute unlocked lead count:', err);
+      }
+    }
+
     // Both side-effects sit outside the transaction and swallow their own errors:
     // a socket or notification hiccup must never undo credits that were just sold.
+    // The balance they carry is the one left after the backlog was paid for.
     try {
-      getIO()?.to(`user:${targetId}`).emit('sheet-credits', { balance: result.balance });
+      getIO()?.to(`user:${targetId}`).emit('sheet-credits', { balance: finalBalance });
     } catch (err) {
       console.error('Failed to emit sheet credits balance:', err);
     }
@@ -3009,8 +3031,8 @@ router.post(
         'SHEET_CREDITS_GRANTED',
         type === 'CREDIT' ? '✅ Crédits Google Sheets ajoutés' : '⚠️ Crédits Google Sheets retirés',
         type === 'CREDIT'
-          ? `${amountNum} crédit(s) Google Sheets ont été ajoutés à votre compte. Nouveau solde : ${result.balance}.`
-          : `${amountNum} crédit(s) Google Sheets ont été retirés de votre compte. Nouveau solde : ${result.balance}.`
+          ? `${amountNum} crédit(s) Google Sheets ont été ajoutés à votre compte. Nouveau solde : ${finalBalance}.${unlockedLeads > 0 ? ` ${unlockedLeads} lead(s) ont été débloqués.` : ''}`
+          : `${amountNum} crédit(s) Google Sheets ont été retirés de votre compte. Nouveau solde : ${finalBalance}.`
       );
     } catch (err) {
       console.error('Failed to trigger sheet credits notification:', err);
@@ -3018,8 +3040,10 @@ router.post(
 
     res.json({
       status: 'success',
-      message: 'Crédits Google Sheets mis à jour avec succès',
-      data: { balance: result.balance, account: result }
+      message: unlockedLeads > 0
+        ? `Crédits Google Sheets mis à jour avec succès — ${unlockedLeads} lead(s) débloqué(s).`
+        : 'Crédits Google Sheets mis à jour avec succès',
+      data: { balance: finalBalance, unlockedLeads, account: result }
     });
   })
 );

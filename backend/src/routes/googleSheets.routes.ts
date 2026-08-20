@@ -16,6 +16,8 @@ import {
   isWriterConfigured,
 } from '../services/googleSheetsWriter.js';
 import { getCreditBalance, pushLeadsNow, reconcileVendorSheet } from '../services/sheetPush.service.js';
+import { maskingVendorId } from '../lib/leadMasking.js';
+import { getGateStats, getLockedLeadIds, maskPhone } from '../services/leadCredits.service.js';
 
 const router = Router();
 
@@ -843,6 +845,13 @@ async function buildOutboundStatus(vendorId: number) {
     else if (row.status === 'REMOVED') counts.removed += n;
   }
 
+  // The reservation counters behind the lock (see services/leadCredits.service.ts).
+  // The balance on its own cannot answer the only question the seller actually
+  // asks — "how many more leads can I take before they lock?" — because a credit
+  // is reserved by every un-sent lead long before it is spent. Never throws: an
+  // account with no gate reads back active:false and zeros.
+  const gate = await getGateStats(vendorId);
+
   return {
     enabled: !!vendor?.googleSheetsOutboundEnabled,
     configured: isWriterConfigured(),
@@ -860,7 +869,10 @@ async function buildOutboundStatus(vendorId: number) {
     // The column contract, so the panel can preview the template without keeping
     // its own copy of the 11 names — they would drift the day one is renamed.
     columns: OUTBOUND_COLUMNS,
+    // Left exactly as it was: the panel and the admin screens already read it, and
+    // `gate` is added beside it rather than folded into it.
     credits: { balance: await getCreditBalance(vendorId) },
+    gate,
     counts,
   };
 }
@@ -1351,11 +1363,35 @@ router.get(
         take: limit,
         include: {
           // The panel names each row after its lead rather than showing a bare id.
-          lead: { select: { id: true, fullName: true, phone: true } },
+          // `createdAt` is not displayed: it is what the lock lookup below ranks the
+          // lead by, and re-reading it per page would be a second query for a column
+          // this join already has.
+          lead: { select: { id: true, fullName: true, phone: true, createdAt: true } },
         },
       }),
       prisma.sheetPushJob.count({ where }),
     ]);
+
+    // A job in BLOCKED_NO_CREDITS is, by definition, a lead no credit has paid for —
+    // so this history hands back precisely the numbers the gate hides everywhere
+    // else. Masked here on the way out, once for the whole page, using the same
+    // lock lookup as the leads table so the two can never disagree. Platform staff
+    // still read the real number: maskingVendorId answers null for them.
+    const gateVendorId = maskingVendorId(req);
+    if (gateVendorId) {
+      const withLead = jobs.filter((j) => j.lead?.id && j.lead?.createdAt);
+      const locked = await getLockedLeadIds(
+        gateVendorId,
+        withLead.map((j) => ({ id: j.lead.id, createdAt: j.lead.createdAt }))
+      );
+      for (const job of withLead) {
+        if (!locked.has(job.lead.id)) continue;
+        job.lead.phone = maskPhone(job.lead.phone);
+        // The flag, not the bullets, is what the panel renders the lock from — a
+        // client that matched on '•' would break the day the mask changes.
+        (job as any).isLocked = true;
+      }
+    }
 
     res.json({
       success: true,

@@ -15,6 +15,14 @@ import { SAFE_USER_SELECT } from '../lib/safeUserSelect.js';
 import { parseDateRange } from '../lib/dateRange.js';
 import { DEAD_NO_REPLY, SYSTEM_NOTE_PREFIX, releaseAtFor } from '../lib/leadRelease.js';
 import { enqueueSheetPush, enqueueSheetPushMany } from '../services/sheetPush.service.js';
+import { getLockedLeadIds, maskPhone } from '../services/leadCredits.service.js';
+import {
+  maskingVendorId,
+  maskLockedLeads,
+  phoneSearchableLeadFilter,
+  LEAD_ROW_MASK,
+  type LeadMaskAccessors,
+} from '../lib/leadMasking.js';
 import { getPackPrice } from '../lib/leadPricing.js';
 import {
   productScopeOf,
@@ -55,6 +63,21 @@ const AGENT_TRACKED_ACTIONS = [
   'CANCEL_ORDER',
   'PUSHED_TO_DELIVERY',
 ] as const;
+
+/**
+ * A lead row that ships its order inline — what `/:id/detail` and the create
+ * routes return. The order carries its own copy of the number under
+ * `customerPhone`, so hiding only `phone` would leave the mask decorative.
+ * (`ORDER_ROW_MASK` in lib/leadMasking is for rows that WRAP an order, and
+ * looks one level further down than these.)
+ */
+const LEAD_WITH_ORDER_MASK: LeadMaskAccessors<any> = {
+  lead: (row) => row ?? null,
+  hide: (row, mask) => {
+    LEAD_ROW_MASK.hide(row, mask);
+    if (row?.order?.customerPhone) row.order.customerPhone = mask(row.order.customerPhone);
+  },
+};
 
 const resolveRowLimit = (limit: unknown): number => {
   if (!limit) return DEFAULT_ROWS_PER_REQUEST;
@@ -455,11 +478,17 @@ router.get(
     }
 
     if (search) {
+      // A gated seller must not be able to walk a masked number out of this box
+      // one digit at a time, so the phone halves of the search are narrowed to
+      // the leads they may actually read. Everyone else keeps the plain
+      // predicate — see phoneSearchableLeadFilter.
+      const phoneFilter = await phoneSearchableLeadFilter(maskingVendorId(req));
+      const phoneMatch = (match: any) => (phoneFilter ? { AND: [match, phoneFilter] } : match);
       conditions.push({
         OR: [
           { fullName: { contains: search as string, mode: 'insensitive' } },
-          { phone: { contains: search as string } },
-          { whatsapp: { contains: search as string } },
+          phoneMatch({ phone: { contains: search as string } }),
+          phoneMatch({ whatsapp: { contains: search as string } }),
           { city: { contains: search as string, mode: 'insensitive' } },
           { address: { contains: search as string, mode: 'insensitive' } },
           { order: { coliatyPackageCode: { contains: search as string, mode: 'insensitive' } } },
@@ -656,6 +685,12 @@ router.get(
       };
     }
 
+    // The seller keeps every row they captured; the number on a row no credit
+    // has paid for is rewritten here, on the way out, before it is copied into
+    // the response below. One lock lookup for the whole page, and nothing at all
+    // for an admin, a helper or an agent — they have to be able to call.
+    await maskLockedLeads(maskingVendorId(req), leads, LEAD_ROW_MASK);
+
     res.json({
       status: 'success',
       data: {
@@ -664,6 +699,9 @@ router.get(
           fullName: l.fullName,
           phone: l.phone,
           whatsapp: l.whatsapp,
+          // Set by the masking pass above: the table renders a lock rather than
+          // guessing from the bullet characters.
+          isLocked: (l as any).isLocked === true,
           city: l.city,
           address: l.address,
           status: l.status,
@@ -1877,6 +1915,32 @@ router.get(
       throw new AppException(400, 'Numéro de téléphone invalide pour la recherche');
     }
 
+    // The number is in the URL, so masking the answer would protect nothing: a
+    // gated seller could read a locked lead's number by guessing the middle
+    // digits and watching which guess comes back with a history. The lookup is
+    // refused outright instead, whenever the number they asked about is one of
+    // their own leads that no credit has paid for.
+    const gateVendorId = maskingVendorId(req);
+    if (gateVendorId) {
+      const own = await prisma.lead.findMany({
+        where: {
+          vendorId: gateVendorId,
+          OR: [
+            { phone: { contains: corePhone } },
+            { whatsapp: { contains: corePhone } },
+          ],
+        },
+        select: { id: true, createdAt: true },
+      });
+      const locked = await getLockedLeadIds(gateVendorId, own);
+      if (locked.size > 0) {
+        throw new AppException(
+          400,
+          'Lead verrouillé : rechargez vos crédits Google Sheets pour consulter l\'historique de ce numéro.'
+        );
+      }
+    }
+
     // Find all leads with this phone number
     const leads = await prisma.lead.findMany({
       where: {
@@ -2211,6 +2275,11 @@ router.get(
       }
     }
 
+    // Same rule as the list: a seller reading the detail panel of a lead no
+    // credit has paid for gets the row, not the number — including the copy the
+    // order carries. `isLocked` rides along on the spread below.
+    await maskLockedLeads(maskingVendorId(req), [lead], LEAD_WITH_ORDER_MASK);
+
     const { vendor, referralLink, ...leadData } = lead;
     const influencer = referralLink?.influencer
       ? {
@@ -2495,6 +2564,9 @@ router.post(
     // 500 rows, and 500 individual enqueues would be 1000 extra round trips held
     // open on the request thread for no gain.
     const createdLeadIds: number[] = [];
+    // The same rows with their creation date, so the credit charge below does not
+    // re-read `createdAt` once per imported line.
+    const createdLeadRows: { id: number; createdAt: Date }[] = [];
     let importedSource: string | null = null;
 
     // Normalize and validate Moroccan phone numbers
@@ -2568,6 +2640,7 @@ router.post(
           },
         });
         createdLeadIds.push(createdLead.id);
+        createdLeadRows.push({ id: createdLead.id, createdAt: createdLead.createdAt });
         importedSource = createdLead.source;
 
         validRows++;
@@ -2584,6 +2657,7 @@ router.post(
         status: 'COMPLETED',
       },
     });
+
 
     try {
       await enqueueSheetPushMany(req.user!.id, createdLeadIds, importedSource);
@@ -2988,6 +3062,7 @@ router.post(
       return { lead, order };
     });
 
+
     try {
       await enqueueSheetPush(result.lead.id, effectiveVendorId, result.lead.source);
     } catch (err) {
@@ -3012,10 +3087,20 @@ router.post(
       );
     }
 
+    // A lead created under a short balance locks the moment it exists, so the
+    // echo obeys the same rule as the list rather than handing back a row the
+    // seller's own table will show masked a second later. The order's copy of
+    // the number goes with it — both are the same customer.
+    await maskLockedLeads(maskingVendorId(req), [result.lead], LEAD_ROW_MASK);
+    if ((result.lead as any).isLocked && result.order?.customerPhone) {
+      result.order.customerPhone = maskPhone(result.order.customerPhone);
+      (result.order as any).isLocked = true;
+    }
+
     res.status(201).json({
       status: 'success',
       message: skipColiaty ? 'Lead created and queued for dispatch' : 'Lead created and pushed to Coliaty delivery successfully',
-      data: { 
+      data: {
         lead: result.lead,
         order: result.order
       },
@@ -3092,10 +3177,35 @@ router.patch(
       }
     }
 
+    // A lead the seller has not paid for must not be actionable either: pushing
+    // it to the call center would hand the number back through the confirmation
+    // call and the order, and the mask on the list would be decorative. Only the
+    // seller is gated — a HELPER or SUPER_ADMIN working the lead on the platform's
+    // side is not, so the check is scoped to callers acting as the vendor (which
+    // includes a sub-account, whose `req.user.id` is already the parent's).
+    let lockedCount = 0;
+    let workableLeads = leads;
+    if (status === 'AVAILABLE' && req.user!.roleName === 'VENDOR') {
+      const lockedIds = await getLockedLeadIds(req.user!.id, leads);
+      if (lockedIds.size > 0) {
+        lockedCount = lockedIds.size;
+        workableLeads = leads.filter((l) => !lockedIds.has(l.id));
+        // A batch that is only partly locked still goes through for the rest —
+        // failing all of it would punish the seller for the leads they did pay
+        // for. Nothing left to send is a plain refusal.
+        if (workableLeads.length === 0) {
+          throw new AppException(
+            400,
+            `${lockedCount} lead(s) verrouillés : rechargez vos crédits Google Sheets pour les utiliser.`
+          );
+        }
+      }
+    }
+
     const updatedLeads = await prisma.$transaction(async (tx) => {
       // Create status history for each lead
       await tx.leadStatusHistory.createMany({
-        data: leads.map(lead => ({
+        data: workableLeads.map(lead => ({
           leadId: lead.id,
           oldStatus: lead.status,
           newStatus: status,
@@ -3105,7 +3215,7 @@ router.patch(
 
       // Update leads
       return tx.lead.updateMany({
-        where: { id: { in: leads.map(l => l.id) } },
+        where: { id: { in: workableLeads.map(l => l.id) } },
         data: { status },
       });
     });
@@ -3120,7 +3230,7 @@ router.patch(
         const io = getIO();
         if (io) {
           const fresh = await prisma.lead.findMany({
-            where: { id: { in: leads.map((l) => l.id) } },
+            where: { id: { in: workableLeads.map((l) => l.id) } },
             include: {
               referralLink: { include: { product: { include: { images: true } }, influencer: true } },
             },
@@ -3166,8 +3276,12 @@ router.patch(
 
     res.json({
       status: 'success',
-      message: `${updatedLeads.count} leads updated successfully`,
-      data: { count: updatedLeads.count },
+      // The locked ones are reported rather than silently dropped, so the seller
+      // knows why the count does not match their selection.
+      message: lockedCount > 0
+        ? `${updatedLeads.count} lead(s) mis à jour — ${lockedCount} lead(s) verrouillés : rechargez vos crédits Google Sheets pour les utiliser.`
+        : `${updatedLeads.count} leads updated successfully`,
+      data: { count: updatedLeads.count, lockedCount },
     });
   })
 );
@@ -3404,6 +3518,11 @@ router.patch(
         }
       }
     }
+
+    // The echo is a read of the row, so it obeys the lock like any other: a
+    // seller must not be able to touch an unrelated field on a locked lead and
+    // read the number out of the reply.
+    await maskLockedLeads(maskingVendorId(req), [updated], LEAD_ROW_MASK);
 
     res.json({ status: 'success', message: 'Lead updated', data: { lead: updated } });
   })
@@ -4779,6 +4898,7 @@ router.post(
           console.error('[Socket push-integration-leads error]', e);
         }
 
+
         try {
           await enqueueSheetPush(createdLead.id, userId, createdLead.source);
         } catch (err) {
@@ -5193,6 +5313,7 @@ router.post(
 
       return lead;
     });
+
 
     try {
       await enqueueSheetPush(result.id, vendorId, result.source);

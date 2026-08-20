@@ -230,6 +230,11 @@
   "gso_credits_left": "{count} رصيد متبقٍ",
   "gso_credits_empty": "الرصيد منتهٍ — أضف أرصدة لاستئناف الإرسال.",
   "gso_blocked_count": "{count} طلب في الانتظار — الرصيد غير كافٍ. ستُرسل تلقائياً بمجرد إضافة أرصدة.",
+  "gso_gate_credits": "{count} رصيد",
+  "gso_gate_unsent": "{count} غير مُرسلة",
+  "gso_gate_capacity": "{count} متاح",
+  "gso_gate_tooltip": "كل طلب يصلك يحجز رصيداً حتى كتابته في الجدول. المتاحة = الأرصدة − غير المُرسلة.",
+  "gso_gate_locked": "{count} طلب أرقام هواتفها مخفية في انتظار إضافة أرصدة.",
   "send_to_sheet": "الإرسال إلى Google Sheets — رصيد واحد",
   "push_sheet_selected": "Google Sheets ({count})",
   "push_sheet_selected_tooltip": "إرسال المحدد إلى جدول Google الخاص بك — رصيد واحد لكل طلب",
@@ -243,5 +248,9 @@
   "sheet_filter_removed": "المحذوفة من الجدول",
   "sheet_filter_not_sent": "لم تُرسل بعد",
   "removed_from_sheet_short": "أُزيل من الجدول",
-  "removed_from_sheet_tooltip": "تم حذف هذا السطر من جدولك — انقر لإعادة إرساله (رصيد واحد)"
+  "removed_from_sheet_tooltip": "تم حذف هذا السطر من جدولك — انقر لإعادة إرساله (رصيد واحد)",
+  "locked_lead_short": "مقفل",
+  "locked_lead_tooltip": "الرقم مخفي — لم يتم دفع هذا الطلب بعد. أضف أرصدة لعرض الرقم كاملاً.",
+  "locked_action_tooltip": "غير متاح ما دام هذا الطلب مقفلاً — أضف أرصدة لفتحه.",
+  "locked_leads_banner": "{count} طلب مقفل — أضف أرصدة لعرض الأرقام."
 }

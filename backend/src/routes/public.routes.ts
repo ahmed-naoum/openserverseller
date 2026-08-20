@@ -301,6 +301,7 @@ router.post(
       }
     });
 
+
     // Queue the lead for the seller's own Google Sheet. This is the hottest path
     // in the system — a customer is sitting on the landing-page form — so the
     // enqueue only writes an outbox row and never touches Google; the cron drains

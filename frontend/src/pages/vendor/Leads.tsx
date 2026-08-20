@@ -14,7 +14,7 @@ import {
   Users, MousePointerClick, UserCheck, ShoppingCart,
   Filter, Search, Calendar,
   MapPin, Phone, Package, Clock, Trash2, Headphones, RefreshCw,
-  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Truck, CheckCircle, CheckCircle2, XCircle, Box, AlertCircle, X, BarChart3, Activity, PieChart as PieIcon, Zap, TrendingUp, History, MessageSquare, Plus, Wallet, FileSpreadsheet
+  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Truck, CheckCircle, CheckCircle2, XCircle, Box, AlertCircle, X, BarChart3, Activity, PieChart as PieIcon, Zap, TrendingUp, History, MessageSquare, Plus, Wallet, FileSpreadsheet, Lock
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { currentBasePath } from '../../lib/dashboardBase';
@@ -36,6 +36,24 @@ const rowLeadId = (row: any): number | null => {
   const nested = Number(row?.order?.lead?.id);
   return Number.isInteger(nested) && nested > 0 ? nested : null;
 };
+
+/**
+ * Whether the server withheld this row's contact details.
+ *
+ * On an account the admin put behind the per-lead credit gate, a lead captured
+ * with an empty balance is still created — it just comes back flagged, with the
+ * phone already masked ("06••••••78"). The real number is NOT in the payload,
+ * so there is nothing here to reveal: the row only has to read as deliberately
+ * withheld rather than as broken data.
+ *
+ * Read from the three shapes a row arrives in, for the same reason `rowLeadId`
+ * handles two: a lead with no order yet, an order carrying the lead nested
+ * underneath, and the flag hoisted onto the row itself.
+ */
+const isRowLocked = (row: any): boolean =>
+  row?.isLocked === true ||
+  row?.order?.isLocked === true ||
+  row?.order?.lead?.isLocked === true;
 
 // How many ids one sheet-status request may carry. The status is asked for the
 // whole filtered list rather than the visible page — the filter below has to
@@ -241,6 +259,9 @@ export default function VendorLeads() {
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  // The locked-leads notice above the table is a reminder, not an error: once
+  // the seller has read it, it stays closed for the rest of the visit.
+  const [lockedNoticeDismissed, setLockedNoticeDismissed] = useState(false);
   const [isPushingBulk, setIsPushingBulk] = useState(false);
   // Separate from isPushingBulk: the two destinations are independent, and a
   // Call Center push must not grey out the Google Sheets button or vice versa.
@@ -566,6 +587,11 @@ export default function VendorLeads() {
     currentPage * itemsPerPage
   );
 
+  // Rows on screen whose numbers the server withheld. Counted on the page, not
+  // on the whole filtered list: the banner sits directly above the table and
+  // has to answer for the rows the seller is actually looking at.
+  const lockedOnPageCount = paginatedCommissions.filter(isRowLocked).length;
+
   const getStatusColorHex = (status: string) => {
     const upper = status.toUpperCase();
     if (STATUS_COLORS[upper]) return STATUS_COLORS[upper];
@@ -670,8 +696,12 @@ export default function VendorLeads() {
     return { totalPushedLeads: pushedLeadsForCity.length, cityDistData: cityDist };
   }, [dateFilteredCommissions]);
 
+  // What "tout sélectionner" is allowed to reach, and what the header checkbox
+  // compares its own state against. Locked rows are out: the server refuses a
+  // push for a lead that has not been paid for, so letting one into the
+  // selection only builds a bulk request that comes back rejected.
   const pushableLeads = useMemo(
-    () => sortedCommissions.filter(c => (c.order?.status || 'PENDING') === 'LEAD'),
+    () => sortedCommissions.filter(c => (c.order?.status || 'PENDING') === 'LEAD' && !isRowLocked(c)),
     [sortedCommissions]
   );
 
@@ -684,8 +714,11 @@ export default function VendorLeads() {
     }
   };
 
-  const handleSelectOne = (id: number) => {
-    setSelectedIds(prev => 
+  const handleSelectOne = (id: number, locked?: boolean) => {
+    // The row's checkbox is already disabled when the lead is locked; this is
+    // the backstop, so no path at all puts an unpaid id into the selection.
+    if (locked) return;
+    setSelectedIds(prev =>
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
   };
@@ -703,9 +736,12 @@ export default function VendorLeads() {
     // Extract unique phone numbers from these leads
     const phones = new Set(baseLeads.map(l => l.order?.customerPhone).filter(Boolean));
 
-    // Find ALL leads in the system with these phone numbers that are still in 'LEAD' status
-    const allRelatedLeads = commissions.filter(c => 
-      c.order?.status === 'LEAD' && phones.has(c.order?.customerPhone)
+    // Find ALL leads in the system with these phone numbers that are still in 'LEAD' status.
+    // Locked rows are skipped: the duplicate pass below can promote a row the
+    // seller never ticked into the batch, and an unpaid lead reaching the
+    // server that way would only come back refused.
+    const allRelatedLeads = commissions.filter(c =>
+      c.order?.status === 'LEAD' && phones.has(c.order?.customerPhone) && !isRowLocked(c)
     );
 
     // Group by phone
@@ -1369,6 +1405,27 @@ export default function VendorLeads() {
         </div>
       </div>
 
+      {/* Locked leads on this page. Same chrome as the outbound panel's
+          "crédits insuffisants" notice, because it is the same problem seen
+          from the other side: there the leads are waiting to go out, here the
+          numbers are waiting to come back. */}
+      {lockedOnPageCount > 0 && !lockedNoticeDismissed && (
+        <div className="flex items-start gap-2 text-[11px] font-black text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 leading-relaxed">
+          <Lock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          <span className="flex-1">
+            {t('locked_leads_banner', 'leads', '{count} lead(s) verrouillés — rechargez vos crédits pour afficher les numéros.')
+              .replace('{count}', String(lockedOnPageCount))}
+          </span>
+          <button
+            onClick={() => setLockedNoticeDismissed(true)}
+            className="p-0.5 rounded-md text-amber-500 hover:text-amber-800 hover:bg-amber-100 transition-all shrink-0"
+            title={t('close', 'leads', 'Fermer')}
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Unified Table */}
       <div className="card overflow-hidden">
         <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1519,6 +1576,13 @@ export default function VendorLeads() {
                     const isInSheet = sheetLeadId !== null && sheetSentIds.has(sheetLeadId);
                     const isRemovedFromSheet = sheetLeadId !== null && sheetRemovedIds.has(sheetLeadId);
 
+                    // Withheld by the server: the phone in the cell below is the
+                    // masked one it sent, and every action the server would now
+                    // refuse for this row is disabled rather than hidden — the
+                    // seller has to be able to see WHY it is unavailable.
+                    const isLocked = isRowLocked(commission);
+                    const lockedActionTooltip = t('locked_action_tooltip', 'leads', 'Indisponible tant que ce lead est verrouillé — rechargez vos crédits pour le débloquer.');
+
                     return (
                       <tr key={commission.id} className={`hover:bg-gray-50/50 transition-colors group ${selectedIds.includes(Number(String(commission.id).replace('lead-', ''))) ? 'bg-influencer-50/30' : ''}`}>
                         {/* Checkbox */}
@@ -1526,9 +1590,11 @@ export default function VendorLeads() {
                           {status === 'LEAD' && (
                             <input
                               type="checkbox"
-                              className="w-4 h-4 text-influencer-600 border-gray-300 rounded focus:ring-influencer-500"
-                              checked={selectedIds.includes(Number(String(commission.id).replace('lead-', '')))}
-                              onChange={() => handleSelectOne(Number(String(commission.id).replace('lead-', '')))}
+                              className="w-4 h-4 text-influencer-600 border-gray-300 rounded focus:ring-influencer-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                              checked={!isLocked && selectedIds.includes(Number(String(commission.id).replace('lead-', '')))}
+                              disabled={isLocked}
+                              title={isLocked ? lockedActionTooltip : undefined}
+                              onChange={() => handleSelectOne(Number(String(commission.id).replace('lead-', '')), isLocked)}
                             />
                           )}
                         </td>
@@ -1572,6 +1638,20 @@ export default function VendorLeads() {
                                   #{sheetLeadId}
                                 </span>
                               )}
+                              {/* Not an error state: the lead is here, only its
+                                  number is being held back until a credit pays
+                                  for it. Amber, like the removed-from-sheet chip
+                                  it sits beside — both mean "something is owed
+                                  on this row", neither means the row is broken. */}
+                              {isLocked && (
+                                <span
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full border border-amber-100 text-[9px] font-black uppercase tracking-wider"
+                                  title={t('locked_lead_tooltip', 'leads', 'Numéro masqué — ce lead n\'a pas encore été payé. Rechargez vos crédits pour afficher le numéro complet.')}
+                                >
+                                  <Lock className="w-2.5 h-2.5" />
+                                  {t('locked_lead_short', 'leads', 'Verrouillé')}
+                                </span>
+                              )}
                               {/* Already written into the seller's Google Sheet.
                                   Same chrome as the WhatsApp badge next to it.
                                   This badge is the ONLY sheet control such a row
@@ -1599,7 +1679,18 @@ export default function VendorLeads() {
                               )}
                             </div>
                             <div className="flex items-center gap-3 mt-1 text-[10px] text-gray-500 font-medium uppercase tracking-wider">
-                              <span className="flex items-center gap-1"><Phone className="w-2.5 h-2.5" /> {commission.order?.customerPhone}</span>
+                              {/* Masked server-side, so the muted tone and the
+                                  padlock are the only honest thing to show: the
+                                  full number is not in this payload at all. */}
+                              <span
+                                className={`flex items-center gap-1 ${isLocked ? 'text-gray-400' : ''}`}
+                                title={isLocked
+                                  ? t('locked_lead_tooltip', 'leads', 'Numéro masqué — ce lead n\'a pas encore été payé. Rechargez vos crédits pour afficher le numéro complet.')
+                                  : undefined}
+                              >
+                                <Phone className="w-2.5 h-2.5" /> {commission.order?.customerPhone}
+                                {isLocked && <Lock className="w-2.5 h-2.5 text-amber-500" />}
+                              </span>
                               <span className="flex items-center gap-1"><MapPin className="w-2.5 h-2.5" /> {commission.order?.customerCity || '-'}</span>
                             </div>
                             {commission.order?.customerAddress && (
@@ -1767,12 +1858,18 @@ export default function VendorLeads() {
                           <div className="flex items-center gap-1">
                             {commission.order?.status === 'LEAD' && (
                               <>
+                                {/* Left in place and greyed rather than dropped:
+                                    a button that vanishes reads as a bug, while
+                                    a disabled one carrying the reason tells the
+                                    seller what to do about it. */}
                                 <button
                                   onClick={() => {
                                     const realId = String(commission.id).replace('lead-', '');
                                     handleBulkPush([Number(realId)]);
                                   }}
-                                  className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-all" title={t('send_to_call_center', 'leads', 'Envoyer au Call Center')}
+                                  disabled={isLocked}
+                                  className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-all"
+                                  title={isLocked ? lockedActionTooltip : t('send_to_call_center', 'leads', 'Envoyer au Call Center')}
                                 >
                                   <Headphones className="w-4 h-4" />
                                 </button>
@@ -1790,15 +1887,17 @@ export default function VendorLeads() {
                                       const realId = String(commission.id).replace('lead-', '');
                                       handlePushToSheet([Number(realId)]);
                                     }}
-                                    disabled={isPushingSheet}
+                                    disabled={isPushingSheet || isLocked}
                                     className={`p-1.5 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all ${
                                       isRemovedFromSheet
                                         ? 'text-amber-600 hover:bg-amber-50'
                                         : 'text-emerald-600 hover:bg-emerald-50'
                                     }`}
-                                    title={isRemovedFromSheet
-                                      ? t('removed_from_sheet_tooltip', 'leads', 'Cette ligne a été supprimée de votre feuille — cliquez pour la renvoyer (1 crédit)')
-                                      : t('send_to_sheet', 'leads', 'Envoyer vers Google Sheets — 1 crédit')}
+                                    title={isLocked
+                                      ? lockedActionTooltip
+                                      : isRemovedFromSheet
+                                        ? t('removed_from_sheet_tooltip', 'leads', 'Cette ligne a été supprimée de votre feuille — cliquez pour la renvoyer (1 crédit)')
+                                        : t('send_to_sheet', 'leads', 'Envoyer vers Google Sheets — 1 crédit')}
                                   >
                                     <FileSpreadsheet className="w-4 h-4" />
                                   </button>

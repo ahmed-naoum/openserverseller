@@ -230,6 +230,11 @@
   "gso_credits_left": "{count} crédit(s) restant(s)",
   "gso_credits_empty": "Solde épuisé — ajoutez des crédits pour reprendre les envois.",
   "gso_blocked_count": "{count} lead(s) en attente — crédits insuffisants. Ils partiront automatiquement dès que des crédits seront ajoutés.",
+  "gso_gate_credits": "{count} crédits",
+  "gso_gate_unsent": "{count} non envoyés",
+  "gso_gate_capacity": "{count} disponibles",
+  "gso_gate_tooltip": "Chaque lead reçu réserve un crédit jusqu'à son envoi vers la feuille. Disponibles = crédits − non envoyés.",
+  "gso_gate_locked": "{count} lead(s) ont leur numéro masqué en attendant l'ajout de crédits.",
   "send_to_sheet": "Envoyer vers Google Sheets — 1 crédit",
   "push_sheet_selected": "Google Sheets ({count})",
   "push_sheet_selected_tooltip": "Envoyer la sélection vers votre feuille Google — 1 crédit par lead",
@@ -243,5 +248,9 @@
   "sheet_filter_removed": "Supprimés de la feuille",
   "sheet_filter_not_sent": "Pas encore envoyés",
   "removed_from_sheet_short": "Retiré de la feuille",
-  "removed_from_sheet_tooltip": "Cette ligne a été supprimée de votre feuille — cliquez pour la renvoyer (1 crédit)"
+  "removed_from_sheet_tooltip": "Cette ligne a été supprimée de votre feuille — cliquez pour la renvoyer (1 crédit)",
+  "locked_lead_short": "Verrouillé",
+  "locked_lead_tooltip": "Numéro masqué — ce lead n'a pas encore été payé. Rechargez vos crédits pour afficher le numéro complet.",
+  "locked_action_tooltip": "Indisponible tant que ce lead est verrouillé — rechargez vos crédits pour le débloquer.",
+  "locked_leads_banner": "{count} lead(s) verrouillés — rechargez vos crédits pour afficher les numéros."
 }

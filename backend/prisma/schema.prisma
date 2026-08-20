@@ -209,6 +209,11 @@ model User {
   // seeds and the seller can override — unlike autoSendLeadsToCallCenter, the
   // seller holds this one because the credits being spent are theirs.
   googleSheetsOutboundEnabled Boolean   @default(false)
+  // When the admin switched the feature ON. Leads created BEFORE this instant are
+  // never gated — turning the feature on must not retroactively lock leads the
+  // seller has already been working. Set on the false->true transition only, so
+  // toggling off and on again does not move the line and re-gate older leads.
+  googleSheetsGateFrom        DateTime?
   googleSheetOutUrl           String?
   googleSheetOutId            String?
   googleSheetOutTab           String?   @default("SILACOD Leads")

@@ -312,6 +312,9 @@ router.post(
 
       let importedCount = 0;
       const createdLeadIds: number[] = [];
+      // Same rows with their creation date, so the credit charge below does not
+      // re-read `createdAt` once per imported customer.
+      const createdLeadRows: { id: number; createdAt: Date }[] = [];
 
       // Import each customer into Silacod Leads
       for (const customer of youcanCustomers) {
@@ -347,9 +350,11 @@ router.post(
             },
           });
           createdLeadIds.push(createdLead.id);
+          createdLeadRows.push({ id: createdLead.id, createdAt: createdLead.createdAt });
           importedCount++;
         }
       }
+
 
       // One queue write for the whole sync rather than one per customer.
       try {
@@ -547,6 +552,7 @@ router.post(
         },
       });
       console.log(`Lead automatically created for vendor ${vendor.id} from YouCan`);
+
 
       try {
         await enqueueSheetPush(createdLead.id, vendor.id, createdLead.source);

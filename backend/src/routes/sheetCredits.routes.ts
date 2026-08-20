@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { getGateStats } from '../services/leadCredits.service.js';
 
 const router = Router();
 
@@ -21,7 +22,7 @@ router.get(
   '/me',
   authenticate,
   asyncHandler(async (req, res) => {
-    const [user, account] = await Promise.all([
+    const [user, account, gate] = await Promise.all([
       prisma.user.findUnique({
         where: { id: req.user!.id },
         select: { googleSheetsOutboundEnabled: true },
@@ -30,6 +31,12 @@ router.get(
         where: { userId: req.user!.id },
         select: { balance: true, totalGranted: true, totalConsumed: true },
       }),
+      // The reservation counters, so the chip can show how much room is left
+      // without a second round trip to /google-sheets/outbound/status. Held to the
+      // same contract as the rest of this handler: getGateStats swallows its own
+      // errors and an account with no gate returns active:false and zeros, so it
+      // cannot turn this endpoint into a 403, a 404 or a 500 for anybody.
+      getGateStats(req.user!.id),
     ]);
 
     res.json({
@@ -40,6 +47,7 @@ router.get(
         currencyLabel: '$',
         totalGranted: account?.totalGranted ?? 0,
         totalConsumed: account?.totalConsumed ?? 0,
+        gate,
       },
     });
   })

@@ -356,6 +356,9 @@ router.post(
       const orders = (response.data?.orders || []).filter((o: any) => new Date(o.created_at) >= connectedAt);
       let importedCount = 0;
       const createdLeadIds: number[] = [];
+      // Same rows with their creation date, so the credit charge below does not
+      // re-read `createdAt` once per synced order.
+      const createdLeadRows: { id: number; createdAt: Date }[] = [];
 
       for (const order of orders) {
         const phoneRaw = order.customer?.phone || order.shipping_address?.phone || order.billing_address?.phone || order.phone || '';
@@ -389,9 +392,11 @@ router.post(
             },
           });
           createdLeadIds.push(createdLead.id);
+          createdLeadRows.push({ id: createdLead.id, createdAt: createdLead.createdAt });
           importedCount++;
         }
       }
+
 
       // One queue write for the whole sync rather than one per order.
       try {
@@ -481,6 +486,7 @@ router.post(
         },
       });
       console.log(`Lead automatically created for vendor ${vendor.id} from Shopify webhook`);
+
 
       try {
         await enqueueSheetPush(createdLead.id, vendor.id, createdLead.source);
