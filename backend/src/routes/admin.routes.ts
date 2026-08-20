@@ -15,6 +15,7 @@ import path from 'path';
 import zlib from 'zlib';
 import { SAFE_USER_SELECT } from '../lib/safeUserSelect.js';
 import { getGateStats } from '../services/leadCredits.service.js';
+import { amountToCents, formatMoney, centsToLeads } from '../lib/sheetPricing.js';
 
 const router = Router();
 
@@ -2921,8 +2922,12 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const { userId, amount, type, description } = req.body;
 
-    // Credits are whole rows — fractions and zero/negative amounts are meaningless here.
-    if (!userId || !Number.isInteger(Number(amount)) || Number(amount) <= 0 || !['CREDIT', 'DEBIT'].includes(type)) {
+    // `amount` now arrives as a MONEY amount in dollars (e.g. 10 or 9.99), not as a
+    // count of credits — the tariff is per lead, so a whole-number rule would stop an
+    // admin selling anything under a dollar. It is converted to cents immediately and
+    // everything downstream is integer arithmetic.
+    const amountCents = amountToCents(amount);
+    if (!userId || !Number.isFinite(Number(amount)) || amountCents <= 0 || !['CREDIT', 'DEBIT'].includes(type)) {
       throw new AppException(400, 'Données invalides');
     }
 
@@ -2942,7 +2947,7 @@ router.post(
       throw new AppException(400, "La fonctionnalité Google Sheets doit d'abord être activée sur ce compte");
     }
 
-    const amountNum = Number(amount);
+    const amountNum = amountCents;
     const adjustment = type === 'CREDIT' ? amountNum : -amountNum;
 
     const result = await prisma.$transaction(async (tx) => {
@@ -2960,7 +2965,7 @@ router.post(
       if (type === 'DEBIT' && amountNum > account.balance) {
         throw new AppException(
           400,
-          `Solde insuffisant : ce compte ne dispose que de ${account.balance} crédit(s).`
+          `Solde insuffisant : ce compte ne dispose que de ${formatMoney(account.balance)}.`
         );
       }
 
@@ -3031,8 +3036,8 @@ router.post(
         'SHEET_CREDITS_GRANTED',
         type === 'CREDIT' ? '✅ Crédits Google Sheets ajoutés' : '⚠️ Crédits Google Sheets retirés',
         type === 'CREDIT'
-          ? `${amountNum} crédit(s) Google Sheets ont été ajoutés à votre compte. Nouveau solde : ${finalBalance}.${unlockedLeads > 0 ? ` ${unlockedLeads} lead(s) ont été débloqués.` : ''}`
-          : `${amountNum} crédit(s) Google Sheets ont été retirés de votre compte. Nouveau solde : ${finalBalance}.`
+          ? `${formatMoney(amountNum)} de crédits Google Sheets ont été ajoutés à votre compte (${centsToLeads(amountNum)} lead(s)). Nouveau solde : ${formatMoney(finalBalance)}.${unlockedLeads > 0 ? ` ${unlockedLeads} lead(s) ont été débloqués.` : ''}`
+          : `${formatMoney(amountNum)} de crédits Google Sheets ont été retirés de votre compte. Nouveau solde : ${formatMoney(finalBalance)}.`
       );
     } catch (err) {
       console.error('Failed to trigger sheet credits notification:', err);

@@ -21,6 +21,7 @@ import { prisma } from '../lib/prisma.js';
 import { getIO } from '../lib/realtime.js';
 import { createNotification } from '../utils/notification.js';
 import { getLockedLeadIds } from './leadCredits.service.js';
+import { LEAD_PRICE_CENTS, centsToLeads } from '../lib/sheetPricing.js';
 import {
   appendRows,
   buildLeadRow,
@@ -63,6 +64,8 @@ let lastStaleSweepAt = 0;
 const EMPTY_NOTICE_COOLDOWN_MS = num('SHEET_PUSH_EMPTY_NOTICE_MS', 24 * 60 * 60 * 1000);
 /** How stale a sheet read may be before a request path pays for a fresh one. */
 const RECONCILE_TTL_MS = num('SHEET_RECONCILE_TTL_MS', 60 * 1000);
+/** Leads re-queued per tick by the auto backfill. */
+const BACKFILL_LIMIT = num('SHEET_PUSH_BACKFILL_LIMIT', 500);
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -246,6 +249,53 @@ export async function enqueueSheetPushMany(
   }
 }
 
+/**
+ * Queues leads that automatic sending should have taken but never did.
+ *
+ * `enqueueSheetPush` runs at capture time and returns early when the auto switch is
+ * off, so a lead captured while it was off has NO job — and turning the switch on
+ * later never went back for it. The result looked like a broken feature: a seller
+ * with credit, auto-send on, and leads sitting there that the drain could not see,
+ * because the drain only ever looks at jobs.
+ *
+ * The floor is the moment the sheet was connected, so this can never sweep up the
+ * seller's whole history. Anything it does queue is still subject to the reservation:
+ * only the leads the balance covers actually get written.
+ */
+export async function backfillAutoQueue(vendorId: number): Promise<number> {
+  try {
+    const config = await loadVendorConfig(vendorId);
+    if (!canPush(config, 'AUTO')) return 0;
+
+    const vendor = await prisma.user.findUnique({
+      where: { id: vendorId },
+      select: { googleSheetOutConnectedAt: true },
+    });
+    const since = vendor?.googleSheetOutConnectedAt;
+    if (!since) return 0;
+
+    const orphans = await prisma.lead.findMany({
+      where: {
+        vendorId,
+        createdAt: { gte: since },
+        sheetPushJob: null, // never queued by any path
+        source: { notIn: Array.from(SKIP_SOURCES) },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: BACKFILL_LIMIT,
+      select: { id: true },
+    });
+    if (!orphans.length) return 0;
+
+    const queued = await enqueueSheetPushMany(vendorId, orphans.map((o) => o.id), null, 'AUTO');
+    if (queued > 0) console.log(`[SheetPush] backfilled ${queued} un-queued lead(s) for vendor ${vendorId}`);
+    return queued;
+  } catch (err) {
+    console.error('[SheetPush] auto backfill failed for vendor', vendorId, err);
+    return 0;
+  }
+}
+
 // ─── Draining ────────────────────────────────────────────────────────────────
 
 export interface DrainStats {
@@ -317,8 +367,9 @@ async function chargeCredits(
     const account = await tx.sheetCreditAccount.update({
       where: { userId: vendorId },
       data: {
-        balance: { decrement: toCharge.length },
-        totalConsumed: { increment: toCharge.length },
+        // Cents, at the configured tariff — not one unit per lead.
+        balance: { decrement: toCharge.length * LEAD_PRICE_CENTS },
+        totalConsumed: { increment: toCharge.length * LEAD_PRICE_CENTS },
       },
     });
 
@@ -329,8 +380,8 @@ async function chargeCredits(
         data: {
           accountId: account.id,
           type: 'CONSUME',
-          amount: -1,
-          balanceAfter: account.balance + (toCharge.length - 1 - i),
+          amount: -LEAD_PRICE_CENTS,
+          balanceAfter: account.balance + (toCharge.length - 1 - i) * LEAD_PRICE_CENTS,
           leadId: toCharge[i],
           description: `Lead #${toCharge[i]} envoyé vers Google Sheets`,
         },
@@ -424,7 +475,9 @@ async function drainVendorLocked(vendorId: number, jobIds?: number[]): Promise<D
   }
 
   const balance = await getCreditBalance(vendorId);
-  if (balance < 1) {
+  // Affordability is in leads: below one lead's worth of cents there is nothing
+  // that can be sent, however many cents are left over.
+  if (centsToLeads(balance) < 1) {
     const { count } = await prisma.sheetPushJob.updateMany({
       where: { id: { in: candidates.map((c) => c.id) }, status: { in: ['PENDING', 'BLOCKED_NO_CREDITS'] } },
       // Deliberately does NOT touch `attempts`: an unfunded job must not burn its
@@ -438,7 +491,7 @@ async function drainVendorLocked(vendorId: number, jobIds?: number[]): Promise<D
   }
 
   // Never append more rows than the seller can pay for; the rest stay queued.
-  const affordable = candidates.slice(0, Math.min(candidates.length, balance));
+  const affordable = candidates.slice(0, Math.min(candidates.length, centsToLeads(balance)));
   if (affordable.length < candidates.length) {
     const remainder = candidates.slice(affordable.length).map((c) => c.id);
     const { count } = await prisma.sheetPushJob.updateMany({
@@ -602,6 +655,24 @@ export async function runSheetPushDrain(): Promise<DrainStats> {
   }
 
   if (!isWriterConfigured()) return totals;
+
+  // Sweep up leads auto-send never queued, BEFORE picking vendors to drain. The
+  // selection below is driven entirely by existing jobs, so a seller whose leads
+  // were all captured with the switch off would otherwise never be looked at.
+  try {
+    const autoVendors = await prisma.user.findMany({
+      where: {
+        googleSheetsOutboundEnabled: true,
+        googleSheetOutAuto: true,
+        googleSheetOutActive: true,
+        googleSheetOutId: { not: null },
+      },
+      select: { id: true },
+    });
+    for (const v of autoVendors) await backfillAutoQueue(v.id);
+  } catch (err) {
+    console.error('[SheetPush] auto backfill sweep failed:', err);
+  }
 
   const now = new Date();
   let vendorIds: number[] = [];

@@ -5,7 +5,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { sheetCreditsApi } from '../lib/api';
 import { basePathFor } from '../lib/dashboardBase';
-import { DollarSign, ChevronRight, ChevronLeft } from 'lucide-react';
+import { centsToLeads, formatMoney } from '../lib/sheetMoney';
+// Wallet, not DollarSign: the figure beside it now carries its own "$", and the two
+// glyphs side by side read as a typo.
+import { Wallet, ChevronRight, ChevronLeft } from 'lucide-react';
 
 /**
  * Only the vendor trees can own sheet credits — the vendor's own dashboard and
@@ -14,8 +17,12 @@ import { DollarSign, ChevronRight, ChevronLeft } from 'lucide-react';
  */
 const CREDIT_ROLES = ['VENDOR', 'VENDOR_HELPER'];
 
-/** Below this the chip turns amber; at zero it turns rose. */
-const LOW_BALANCE_THRESHOLD = 20;
+/**
+ * Below this many LEADS still affordable the chip turns amber; at an empty balance
+ * it turns rose. Counted in leads, not in money: the balance is cents now, and a
+ * threshold in cents would have to be rewritten every time the tariff moves.
+ */
+const LOW_BALANCE_LEADS = 20;
 
 /**
  * The dashboard routers do not agree on an envelope — `{ status: 'success', data }`
@@ -25,9 +32,14 @@ const LOW_BALANCE_THRESHOLD = 20;
 const unwrap = (res: any) => res?.data?.data ?? res?.data ?? null;
 
 /**
- * The "$" chip in the dashboard header: the seller's Google Sheets push credit
- * balance, one credit per row written into their sheet. Clicking it opens the
- * last ten ledger rows.
+ * The "$" chip in the dashboard header: the money the seller holds for Google
+ * Sheets pushes, charged at the server's tariff for every row written into their
+ * sheet. Clicking it opens the last ten ledger rows.
+ *
+ * Every figure the endpoint sends for this chip — the balance, each ledger amount,
+ * the tariff — is in integer CENTS and goes through `formatMoney` before it is
+ * shown. The gate's `unsent` / `capacity` / `locked` are counts of leads instead,
+ * and are printed raw.
  *
  * Three independent guards keep it invisible for everyone else:
  *   a) `enabled` below — the query never fires outside the vendor roles;
@@ -72,17 +84,16 @@ export default function SheetCreditsIndicator() {
 
   const balance = Number(data?.balance ?? 0);
   const isEmpty = balance <= 0;
-  const isLow = !isEmpty && balance <= LOW_BALANCE_THRESHOLD;
 
   /**
-   * The reservation behind the balance. Each lead captured under the gate holds a
-   * credit until its row reaches the sheet, so the number that decides whether the
-   * NEXT lead arrives with a readable phone is `capacity`, not the balance: 20
-   * credits behind 21 un-sent leads is already one masked lead, and painting that
+   * The reservation behind the balance. Each lead captured under the gate holds the
+   * price of a row until it reaches the sheet, so the number that decides whether
+   * the NEXT lead arrives with a readable phone is `capacity`, not the balance: a
+   * dollar behind 21 un-sent leads is already one masked lead, and painting that
    * chip in the calm neutral would be a lie.
    *
    * With no gate on the account nothing is reserved, so the balance is the only
-   * signal there is and the old thresholds still apply.
+   * signal there is — read as the number of leads it can still pay for.
    */
   const gate: any = data?.gate || {};
   const gateActive = !!gate.active;
@@ -90,6 +101,22 @@ export default function SheetCreditsIndicator() {
   const gateUnsent = Number(gate.unsent ?? 0);
   const gateCapacity = Number(gate.capacity ?? 0);
   const gateLocked = Number(gate.locked ?? 0);
+
+  /** Cents per lead, straight from the payload — the tariff is never assumed here. */
+  const priceCents = Number(gate.priceCents ?? 0);
+  const priceSentence =
+    priceCents > 0
+      ? t('sheet_credits_price_per_lead', 'dashboard', 'Chaque lead envoyé coûte {price}.').replace(
+          '{price}',
+          formatMoney(priceCents)
+        )
+      : '';
+
+  // The server already divides for us; the fallback covers a payload that predates
+  // `affordable`. With no tariff at all nothing can be divided, so the chip declines
+  // to call a balance "low" rather than guessing.
+  const affordable = Number(gate.affordable ?? centsToLeads(balance, priceCents));
+  const isLow = !isEmpty && (priceCents > 0 || gate.affordable != null) && affordable <= LOW_BALANCE_LEADS;
 
   const level = gateActive
     ? gateCapacity < 0
@@ -108,7 +135,7 @@ export default function SheetCreditsIndicator() {
     : ledger?.transactions || ledger?.items || [];
 
   const typeLabel = (type: string) => {
-    if (type === 'GRANT') return t('sheet_credits_type_grant', 'dashboard', 'Crédits ajoutés');
+    if (type === 'GRANT') return t('sheet_credits_type_grant', 'dashboard', 'Solde ajouté');
     if (type === 'CONSUME') return t('sheet_credits_type_consume', 'dashboard', 'Ligne envoyée');
     if (type === 'ADMIN_DEBIT') return t('sheet_credits_type_admin_debit', 'dashboard', 'Retrait administrateur');
     if (type === 'REFUND') return t('sheet_credits_type_refund', 'dashboard', 'Remboursement');
@@ -127,15 +154,19 @@ export default function SheetCreditsIndicator() {
       <button
         onClick={() => setOpen(!open)}
         className={`relative flex items-center gap-1 py-2 px-2 rounded-lg border transition-all shadow-sm hover:shadow-md active:scale-95 ${tone}`}
-        title={
+        title={[
           gateActive
-            ? t('sheet_credits_gate_tooltip', 'dashboard', "Chaque lead reçu réserve un crédit jusqu'à son envoi. Disponibles = crédits − non envoyés.")
-            : t('sheet_credits_tooltip', 'dashboard', "Crédits d'envoi vers Google Sheets · 1 crédit par ligne écrite")
-        }
+            ? t('sheet_credits_gate_tooltip', 'dashboard', 'Disponibles = solde ÷ tarif − non envoyés.')
+            : t('sheet_credits_tooltip', 'dashboard', "Solde d'envoi vers Google Sheets"),
+          priceSentence,
+        ]
+          .filter(Boolean)
+          .join(' · ')}
         id="sheet-credits-toggle"
       >
-        <DollarSign size={16} />
-        <span className="text-[11px] font-black leading-none tabular-nums">{balance}</span>
+        <Wallet size={16} />
+        {/* Cents, always through the formatter — printed raw this reads "15" for $0.15. */}
+        <span className="text-[11px] font-black leading-none tabular-nums">{formatMoney(balance)}</span>
       </button>
 
       {open && (
@@ -147,41 +178,44 @@ export default function SheetCreditsIndicator() {
             <div className="px-5 py-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                  {t('sheet_credits_label', 'dashboard', 'Crédits Sheets')}
+                  {t('sheet_credits_label', 'dashboard', 'Solde Sheets')}
                 </p>
                 <p className="text-[10px] font-bold text-slate-400 mt-0.5 leading-relaxed">
                   {/* Under the gate the balance no longer explains itself: it is the
-                      reservation, not the balance, that the seller feels. */}
+                      reservation, not the balance, that the seller feels. The calm
+                      line is the only one that has room for the tariff — the three
+                      warnings are already saying something more urgent. */}
                   {gateActive
                     ? gateLocked > 0
-                      ? t('sheet_credits_gate_locked', 'dashboard', "{count} lead(s) ont leur numéro masqué en attendant l'ajout de crédits.").replace('{count}', String(gateLocked))
+                      ? t('sheet_credits_gate_locked', 'dashboard', '{count} lead(s) ont leur numéro masqué en attendant une recharge de votre solde.').replace('{count}', String(gateLocked))
                       : gateCapacity === 0
-                      ? t('sheet_credits_gate_full', 'dashboard', 'Tous vos crédits sont réservés : le prochain lead arrivera masqué.')
-                      : t('sheet_credits_gate_tooltip', 'dashboard', "Chaque lead reçu réserve un crédit jusqu'à son envoi. Disponibles = crédits − non envoyés.")
+                      ? t('sheet_credits_gate_full', 'dashboard', 'Tout votre solde est réservé : le prochain lead arrivera masqué.')
+                      : [priceSentence, t('sheet_credits_gate_tooltip', 'dashboard', 'Disponibles = solde ÷ tarif − non envoyés.')].filter(Boolean).join(' ')
                     : isEmpty
                     ? t('sheet_credits_empty', 'dashboard', 'Solde épuisé : les envois vers votre feuille sont bloqués.')
                     : isLow
-                    ? t('sheet_credits_low', 'dashboard', 'Solde bas : pensez à recharger vos crédits.')
-                    : t('sheet_credits_tooltip', 'dashboard', "Crédits d'envoi vers Google Sheets · 1 crédit par ligne écrite")}
+                    ? t('sheet_credits_low', 'dashboard', 'Solde bas : pensez à recharger votre solde.')
+                    : [t('sheet_credits_tooltip', 'dashboard', "Solde d'envoi vers Google Sheets"), priceSentence].filter(Boolean).join(' · ')}
                 </p>
               </div>
               <div className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl flex-shrink-0 ${
                 level === 'danger' ? 'bg-rose-50 text-rose-600' : level === 'warn' ? 'bg-amber-50 text-amber-600' : 'bg-white text-slate-700 border border-slate-100'
               }`}>
-                <DollarSign size={12} />
-                <span className="text-xs font-black leading-none tabular-nums">{balance}</span>
+                <Wallet size={12} />
+                <span className="text-xs font-black leading-none tabular-nums">{formatMoney(balance)}</span>
               </div>
             </div>
 
             {/* The same three numbers the leads page shows, laid out as columns
                 rather than a sentence — the popover is 288px wide and the inline
-                form would wrap into three lines anyway. */}
+                form would wrap into three lines anyway. The first column is money,
+                the other two are leads; the labels carry that distinction. */}
             {gateActive && (
               <div className="grid grid-cols-3 gap-2 px-5 py-3 border-b border-slate-50 text-center">
                 <div className="min-w-0">
-                  <p className="text-sm font-black text-slate-900 leading-none tabular-nums">{gateBalance}</p>
+                  <p className="text-sm font-black text-slate-900 leading-none tabular-nums">{formatMoney(gateBalance)}</p>
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mt-1 leading-tight">
-                    {t('sheet_credits_gate_credits', 'dashboard', 'Crédits')}
+                    {t('sheet_credits_gate_credits', 'dashboard', 'Solde')}
                   </p>
                 </div>
                 <div className="min-w-0">
@@ -235,10 +269,13 @@ export default function SheetCreditsIndicator() {
                             : ''}
                         </p>
                       </div>
+                      {/* Ledger amounts are signed CENTS: a lead charge is -5, which
+                          must read "-$0.05". formatMoney already carries the minus, so
+                          only the credit side needs a sign glued on. */}
                       <span className={`text-[11px] font-black tabular-nums flex-shrink-0 ${
                         amount > 0 ? 'text-emerald-600' : 'text-rose-500'
                       }`}>
-                        {amount > 0 ? `+${amount}` : amount}
+                        {amount > 0 ? `+${formatMoney(amount)}` : formatMoney(amount)}
                       </span>
                     </div>
                   );

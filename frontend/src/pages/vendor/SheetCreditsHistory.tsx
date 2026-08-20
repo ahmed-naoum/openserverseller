@@ -18,6 +18,7 @@ import { sheetCreditsApi } from '../../lib/api';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { basePathFor } from '../../lib/dashboardBase';
+import { formatMoney, centsToLeads } from '../../lib/sheetMoney';
 
 /**
  * The full Google Sheets credit ledger.
@@ -26,9 +27,16 @@ import { basePathFor } from '../../lib/dashboardBase';
  * seller reconciles a balance they disagree with. Every row carries the balance
  * as it stood immediately after that operation, so the column reads as a running
  * statement rather than a list of deltas the seller has to add up themselves.
+ *
+ * Every figure on this page — balance, totals, amounts, balance-after — arrives
+ * as an integer number of CENTS. Nothing here divides by 100: formatMoney owns
+ * that, and centsToLeads turns a balance into the number of leads it still buys.
  */
 
 const PAGE_SIZE = 20;
+
+/** Only used until `gate.priceCents` has loaded — the API is the authority on the tariff. */
+const FALLBACK_PRICE_CENTS = 5;
 
 /** How each ledger type reads to the seller. */
 const TYPE_META: Record<string, { tone: string; icon: any; sign: string }> = {
@@ -65,10 +73,22 @@ export default function SheetCreditsHistory() {
     retry: false,
   });
 
-  const rows: any[] = Array.isArray(ledgerRes?.data) ? ledgerRes.data : [];
-  const pagination = ledgerRes?.pagination;
+  // The envelope nests both halves under `data` ({ data: { transactions, pagination } }),
+  // while older responses put the rows in `data` with `pagination` beside it. Accept
+  // either rather than betting the whole table on one shape.
+  const ledger = ledgerRes?.data ?? ledgerRes;
+  const rows: any[] = Array.isArray(ledger?.transactions)
+    ? ledger.transactions
+    : Array.isArray(ledger)
+      ? ledger
+      : [];
+  const pagination = ledger?.pagination ?? ledgerRes?.pagination;
   const totalPages = Math.max(1, Number(pagination?.totalPages) || 1);
   const total = Number(pagination?.total) || rows.length;
+
+  // Money, in cents. `balance` is the seller's own; the tariff rides on the gate block.
+  const balanceCents = Number(account?.balance) || 0;
+  const priceCents = Number(account?.gate?.priceCents) || FALLBACK_PRICE_CENTS;
 
   const base = basePathFor(user?.role, location.pathname);
 
@@ -94,7 +114,11 @@ export default function SheetCreditsHistory() {
             {t('sc_history_title', 'dashboard', 'Crédits Google Sheets')}
           </h1>
           <p className="text-xs font-medium text-gray-500 mt-1">
-            {t('sc_history_subtitle', 'dashboard', 'Historique complet des opérations · 1 crédit par ligne écrite')}
+            {/* The tariff is quoted, never assumed: a lead costs what the API says it costs. */}
+            {t('sc_history_subtitle', 'dashboard', 'Historique complet des opérations · {price} par lead écrit').replace(
+              '{price}',
+              formatMoney(priceCents)
+            )}
           </p>
         </div>
       </div>
@@ -108,13 +132,15 @@ export default function SheetCreditsHistory() {
           <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
             {t('sc_balance', 'dashboard', 'Solde actuel')}
           </p>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-lg font-black text-emerald-600">$</span>
-            <span className="text-3xl font-black text-gray-900 tabular-nums">{account?.balance ?? 0}</span>
-            <span className="text-[10px] font-black text-gray-400 uppercase">
-              {t('sc_credits_unit', 'dashboard', 'crédits')}
-            </span>
-          </div>
+          {/* formatMoney already carries the "$" — a glyph beside it would print it twice. */}
+          <div className="mt-2 text-3xl font-black text-gray-900 tabular-nums">{formatMoney(balanceCents)}</div>
+          {/* What that money still buys, so the seller reads a runway and not just a sum. */}
+          <p className="mt-1 text-[10px] font-black text-emerald-600 uppercase tracking-widest tabular-nums">
+            {t('sc_leads_unit', 'dashboard', '{count} lead(s)').replace(
+              '{count}',
+              String(centsToLeads(balanceCents, priceCents))
+            )}
+          </p>
         </div>
 
         <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden">
@@ -124,7 +150,9 @@ export default function SheetCreditsHistory() {
           <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
             {t('sc_total_granted', 'dashboard', 'Total accordé')}
           </p>
-          <div className="mt-2 text-3xl font-black text-gray-900 tabular-nums">{account?.totalGranted ?? 0}</div>
+          <div className="mt-2 text-3xl font-black text-gray-900 tabular-nums">
+            {formatMoney(Number(account?.totalGranted) || 0)}
+          </div>
         </div>
 
         <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden">
@@ -134,7 +162,9 @@ export default function SheetCreditsHistory() {
           <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
             {t('sc_total_consumed', 'dashboard', 'Total consommé')}
           </p>
-          <div className="mt-2 text-3xl font-black text-gray-900 tabular-nums">{account?.totalConsumed ?? 0}</div>
+          <div className="mt-2 text-3xl font-black text-gray-900 tabular-nums">
+            {formatMoney(Number(account?.totalConsumed) || 0)}
+          </div>
         </div>
       </div>
 
@@ -211,10 +241,13 @@ export default function SheetCreditsHistory() {
                           amount > 0 ? 'text-emerald-600' : 'text-rose-500'
                         }`}
                       >
-                        {amount > 0 ? `+${amount}` : String(amount)}
+                        {/* The sign is ours and the magnitude is formatMoney's, so a debit
+                            reads "-$0.05" whichever way the formatter treats a negative. */}
+                        {amount > 0 ? '+' : amount < 0 ? '-' : ''}
+                        {formatMoney(Math.abs(amount))}
                       </td>
                       <td className="px-5 py-3 text-right text-[11px] font-black text-gray-700 tabular-nums">
-                        {tx?.balanceAfter ?? '-'}
+                        {tx?.balanceAfter == null ? '-' : formatMoney(Number(tx.balanceAfter) || 0)}
                       </td>
                     </tr>
                   );

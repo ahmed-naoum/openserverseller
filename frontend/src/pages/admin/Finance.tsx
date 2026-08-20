@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { formatMoney, centsToLeads } from '../../lib/sheetMoney';
 
 export default function AdminFinance() {
   const queryClient = useQueryClient();
@@ -82,6 +83,16 @@ export default function AdminFinance() {
   });
 
   const creditsUsers = creditsUsersData?.data?.data || [];
+
+  // Tarif facturé par lead écrit, en cents. Le sélecteur le renverra un jour à côté
+  // de `data` ; tant qu'il ne le porte pas on retombe sur 5 cents, le tarif par
+  // défaut du backend — jamais sur une valeur écrite en dur dans le rendu.
+  const creditPriceCents = Number(creditsUsersData?.data?.priceCents) || 5;
+
+  // Le backend attend des dollars et convertit lui-même : on ne passe en cents que
+  // pour l'aperçu « ce que la somme achète », en arrondissant pour ne pas traîner
+  // les décimales flottantes de 9.99 * 100.
+  const creditAmountCents = Math.round((Number(creditAmount) || 0) * 100);
 
   const filteredCreditsUsers = useMemo(() => {
     // La liste est déjà restreinte aux comptes éligibles : on l'affiche même sans recherche
@@ -560,7 +571,7 @@ export default function AdminFinance() {
                   <div className="max-w-md">
                     <h2 className="text-2xl font-black tracking-tight">Crédits Google Sheets</h2>
                     <p className="text-emerald-100 font-medium mt-2">
-                      Vendez des crédits aux comptes ayant la fonctionnalité activée. 1 crédit = 1 lead écrit dans la feuille du vendeur.
+                      Vendez du crédit aux comptes ayant la fonctionnalité activée. Chaque lead écrit dans la feuille du vendeur coûte {formatMoney(creditPriceCents)}.
                     </p>
                     <div className="mt-6 flex items-center gap-3">
                       <div className="p-2.5 bg-white/10 rounded-xl border border-white/20">
@@ -631,9 +642,11 @@ export default function AdminFinance() {
                                     <p className="text-xs font-black text-white">{u.fullName}</p>
                                     <p className="text-[10px] text-emerald-300">{u.email}</p>
                                   </div>
-                                  {/* Le solde actuel, pour que l'admin voie ce qu'il recharge */}
-                                  <span className="text-[9px] font-black px-2 py-0.5 rounded text-emerald-900 bg-emerald-300 uppercase tracking-tighter">
-                                    $ {u.balance ?? 0} crédits
+                                  {/* Le solde actuel — une somme en cents, pas un nombre de
+                                      crédits — et ce qu'il achète encore, pour que l'admin
+                                      voie ce qu'il recharge. */}
+                                  <span className="shrink-0 text-[9px] font-black px-2 py-0.5 rounded text-emerald-900 bg-emerald-300 uppercase tracking-tighter whitespace-nowrap">
+                                    {formatMoney(u.balance ?? 0)} · {centsToLeads(u.balance ?? 0, creditPriceCents)} lead(s)
                                   </span>
                                 </button>
                               ))}
@@ -642,8 +655,8 @@ export default function AdminFinance() {
 
                           {creditTargetUser && !creditSearchTerm && (
                             <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                              <span className="text-[10px] font-black bg-emerald-400/20 text-emerald-200 px-2 py-0.5 rounded uppercase border border-emerald-400/30">
-                                $ {creditTargetUser.balance ?? 0} crédits
+                              <span className="text-[10px] font-black bg-emerald-400/20 text-emerald-200 px-2 py-0.5 rounded uppercase border border-emerald-400/30 whitespace-nowrap">
+                                {formatMoney(creditTargetUser.balance ?? 0)} · {centsToLeads(creditTargetUser.balance ?? 0, creditPriceCents)} lead(s)
                               </span>
                               <button
                                 onClick={() => setCreditTargetUser(null)}
@@ -655,23 +668,34 @@ export default function AdminFinance() {
                           )}
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="relative">
-                            <Coins className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-300" size={18} />
-                            {/* Un crédit est une quantité entière, pas une somme : ni décimales, ni MAD. */}
-                            <input
-                              type="number"
-                              min="1"
-                              step="1"
-                              placeholder="Nombre de crédits"
-                              value={creditAmount}
-                              onChange={(e) => setCreditAmount(e.target.value)}
-                              className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white placeholder-emerald-300 focus:bg-white/10 focus:border-white/30 outline-none transition-all"
-                            />
+                        {/* items-start : l'aperçu sous le montant ne doit pas étirer le champ description. */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                          <div>
+                            <div className="relative">
+                              <Coins className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-300" size={18} />
+                              {/* Un crédit est une somme, pas une quantité : l'admin saisit des
+                                  dollars (le backend les convertit en cents), donc décimales admises. */}
+                              <input
+                                type="number"
+                                min="0.05"
+                                step="0.01"
+                                placeholder="Montant en $ (ex: 10.00)"
+                                value={creditAmount}
+                                onChange={(e) => setCreditAmount(e.target.value)}
+                                className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white placeholder-emerald-300 focus:bg-white/10 focus:border-white/30 outline-none transition-all"
+                              />
+                            </div>
+                            {/* Ce que la somme saisie achète au tarif courant : l'admin vend des
+                                leads, il ne doit pas faire la division de tête. */}
+                            {creditAmountCents > 0 && (
+                              <p className="mt-2 px-1 text-[10px] font-black text-emerald-200 uppercase tracking-widest tabular-nums">
+                                {formatMoney(creditAmountCents)} = {centsToLeads(creditAmountCents, creditPriceCents)} lead(s)
+                              </p>
+                            )}
                           </div>
                           <input
                             type="text"
-                            placeholder="Description (ex: Pack 1000)"
+                            placeholder="Description (ex: Pack 10$)"
                             value={creditDescription}
                             onChange={(e) => setCreditDescription(e.target.value)}
                             className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white placeholder-emerald-300 focus:bg-white/10 focus:border-white/30 outline-none transition-all"
@@ -685,8 +709,9 @@ export default function AdminFinance() {
                               toast.error('Veuillez remplir tous les champs');
                               return;
                             }
-                            if (!Number.isInteger(amount) || amount <= 0) {
-                              toast.error('Le nombre de crédits doit être un entier positif');
+                            // Une somme, pas un compte : 9.99 est valide, 0 et le négatif non.
+                            if (!Number.isFinite(amount) || amount <= 0) {
+                              toast.error('Le montant doit être une somme positive');
                               return;
                             }
                             creditMutation.mutate({

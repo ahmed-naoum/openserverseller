@@ -22,12 +22,14 @@ import {
   Settings2,
   ShieldAlert,
   Sparkles,
+  Wallet,
   XCircle,
   Zap,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { googleSheetsApi } from '../../lib/api';
+import { formatMoney } from '../../lib/sheetMoney';
 import ConfirmationModal from '../ui/ConfirmationModal';
 import googleSheetsLogo from '../../assets/google-sheets-logo.svg';
 
@@ -176,7 +178,9 @@ function Heading({ t, muted }: { t: (k: string, ns?: any, f?: string) => string;
           {t('gso_title', 'leads', 'Envoi vers Google Sheets')}
         </h3>
         <p className="text-[11px] font-medium text-gray-500 mt-0.5 leading-relaxed">
-          {t('gso_description', 'leads', 'Poussez vos leads directement dans votre propre feuille Google. 1 crédit par ligne écrite.')}
+          {/* No tariff quoted here on purpose: the heading also renders before the
+              status payload has a price to quote. */}
+          {t('gso_description', 'leads', 'Poussez vos leads directement dans votre propre feuille Google. Chaque ligne écrite est débitée de votre solde.')}
         </p>
       </div>
     </div>
@@ -468,10 +472,13 @@ export default function GoogleSheetOutboundPanel() {
 
   /**
    * The reservation the seller actually lives under. Every lead captured under the
-   * gate holds a credit until its row reaches the sheet, so what decides whether the
-   * NEXT lead arrives readable is `capacity` — not the balance. A comfortable-looking
-   * 20 credits with 21 leads waiting is one masked number, which is exactly why the
-   * balance alone is not enough to show here.
+   * gate holds the price of a row until it reaches the sheet, so what decides whether
+   * the NEXT lead arrives readable is `capacity` — not the balance. A comfortable
+   * looking $1.00 with 21 leads waiting is one masked number, which is exactly why
+   * the balance alone is not enough to show here.
+   *
+   * `balance` is MONEY, in cents; `unsent`, `capacity` and `locked` are counts of
+   * LEADS the server already divided by the tariff — never divide them again.
    *
    * The block is absent until an admin switches the gate on, and nothing
    * gate-related is drawn in that case.
@@ -482,6 +489,18 @@ export default function GoogleSheetOutboundPanel() {
   const gateUnsent = Number(gate.unsent ?? 0);
   const gateCapacity = Number(gate.capacity ?? 0);
   const gateLocked = Number(gate.locked ?? 0);
+
+  /**
+   * The tariff, in cents per lead, exactly as the server priced it. It is never a
+   * constant on this side: the price is a server setting, and a copy baked into the
+   * bundle would keep quoting the old one long after it changed. A payload that
+   * predates the field simply drops the sentence rather than quoting "$0.00".
+   */
+  const priceCents = Number(gate.priceCents ?? 0);
+  const priceSentence =
+    priceCents > 0
+      ? t('gso_price_per_lead', 'leads', 'Chaque lead envoyé coûte {price}.').replace('{price}', formatMoney(priceCents))
+      : '';
   // Same three tones the chip already used, re-keyed from the balance to the capacity.
   const gateTone =
     gateCapacity > 0
@@ -658,7 +677,7 @@ export default function GoogleSheetOutboundPanel() {
 
                           <p className="flex items-center gap-1.5 text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2 leading-relaxed">
                             <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                            {t('gso_header_free', 'leads', 'Gratuit — cette opération ne coûte aucun crédit.')}
+                            {t('gso_header_free', 'leads', "Gratuit — cette opération n'entame pas votre solde.")}
                           </p>
 
                           <button
@@ -682,52 +701,54 @@ export default function GoogleSheetOutboundPanel() {
                     document.body
                   )}
                 </div>
-                {/* Under the gate the balance on its own is misleading, so the chip
-                    carries all three numbers: what is held, what is already spoken
-                    for, and what is left to cover the next lead. `flex-wrap` keeps
-                    it one line on desktop and lets it break on a phone. */}
+                {/* Two pills, not one run-on string: the first is neutral fact
+                    (the money held, the rows it is spoken for), the second is the
+                    state that actually matters. The two are in different units on
+                    purpose — money then leads — which is why the tooltip spells the
+                    tariff out. The state pill NEVER prints a negative —
+                    "-1 disponibles" reads as a broken counter rather than as one
+                    locked lead, so below zero it switches to counting what is
+                    locked instead. */}
                 {gateActive ? (
-                  <span
-                    className={`inline-flex items-center gap-1.5 flex-wrap px-2 py-0.5 rounded-lg text-[10px] font-black border tabular-nums ${gateTone}`}
-                    title={t('gso_gate_tooltip', 'leads', "Chaque lead reçu réserve un crédit jusqu'à son envoi vers la feuille. Disponibles = crédits − non envoyés.")}
-                  >
-                    <DollarSign className="w-3 h-3 shrink-0" />
-                    <span>
-                      {t('gso_gate_credits', 'leads', '{count} crédits').replace('{count}', String(gateBalance))}
+                  <>
+                    <span
+                      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[10px] font-black border bg-slate-50 border-slate-100 text-slate-500 tabular-nums"
+                      title={[priceSentence, t('gso_gate_tooltip', 'leads', 'Disponibles = solde ÷ tarif − en attente.')]
+                        .filter(Boolean)
+                        .join(' ')}
+                    >
+                      {/* A wallet rather than a "$" glyph: the amount beside it
+                          already starts with one. */}
+                      <Wallet className="w-3 h-3 shrink-0" />
+                      <span>{formatMoney(gateBalance)}</span>
+                      <span className="opacity-30">·</span>
+                      <span>
+                        {t('gso_gate_unsent', 'leads', '{count} en attente').replace('{count}', String(gateUnsent))}
+                      </span>
                     </span>
-                    <span className="opacity-40">·</span>
-                    <span>
-                      {t('gso_gate_unsent', 'leads', '{count} non envoyés').replace('{count}', String(gateUnsent))}
+                    <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black border tabular-nums ${gateTone}`}>
+                      {gateCapacity > 0
+                        ? t('gso_gate_capacity', 'leads', '{count} disponibles').replace('{count}', String(gateCapacity))
+                        : gateLocked > 0
+                        ? t('gso_gate_locked_pill', 'leads', '{count} verrouillé(s)').replace('{count}', String(gateLocked))
+                        : t('gso_gate_capacity_none', 'leads', '0 disponible')}
                     </span>
-                    <span className="opacity-40">·</span>
-                    <span>
-                      {t('gso_gate_capacity', 'leads', '{count} disponibles').replace('{count}', String(gateCapacity))}
-                    </span>
-                  </span>
+                  </>
                 ) : (
                   <span
-                    className={`px-2 py-0.5 rounded-lg text-[10px] font-black border ${
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-black border tabular-nums ${
                       balance > 0
                         ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
                         : 'bg-rose-50 text-rose-600 border-rose-100'
                     }`}
+                    title={priceSentence || undefined}
                   >
                     {balance > 0
-                      ? t('gso_credits_left', 'leads', '{count} crédit(s) restant(s)').replace('{count}', String(balance))
-                      : t('gso_credits_empty', 'leads', 'Solde épuisé — ajoutez des crédits pour reprendre les envois.')}
+                      ? t('gso_credits_left', 'leads', '{amount} restant').replace('{amount}', formatMoney(balance))
+                      : t('gso_credits_empty', 'leads', 'Solde épuisé — rechargez votre solde pour reprendre les envois.')}
                   </span>
                 )}
               </div>
-
-              {/* Only the newest leads lock, and only until credits land — the rows
-                  themselves stay on the page, so this says what is hidden rather
-                  than warning about something lost. */}
-              {gateActive && gateLocked > 0 && (
-                <p className="mt-1.5 flex items-start gap-1.5 text-[10px] font-black text-amber-700 leading-relaxed">
-                  <Lock className="w-3 h-3 shrink-0 mt-0.5" />
-                  {t('gso_gate_locked', 'leads', "{count} lead(s) ont leur numéro masqué en attendant l'ajout de crédits.").replace('{count}', String(gateLocked))}
-                </p>
-              )}
 
               <div className="flex items-center gap-4 mt-2 flex-wrap">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -750,7 +771,11 @@ export default function GoogleSheetOutboundPanel() {
                       {t('gso_auto', 'leads', 'Envoi automatique')}
                     </span>
                     <span className="block text-[10px] font-bold text-slate-400 leading-relaxed">
-                      {t('gso_auto_hint', 'leads', 'Chaque nouveau lead part vers votre feuille. 1 crédit par lead envoyé.')}
+                      {/* The tariff is quoted from the payload, so the hint cannot
+                          promise a price the server no longer charges. */}
+                      {[t('gso_auto_hint', 'leads', 'Chaque nouveau lead part vers votre feuille.'), priceSentence]
+                        .filter(Boolean)
+                        .join(' ')}
                     </span>
                   </span>
                 </label>
@@ -793,13 +818,26 @@ export default function GoogleSheetOutboundPanel() {
           </div>
         </div>
 
-        {/* Nothing is lost while the balance is empty — the jobs stay in the outbox
-            and the next drain tick picks them up as soon as credits land. */}
-        {blocked > 0 && (
-          <p className="mt-3 flex items-start gap-2 text-[11px] font-black text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 leading-relaxed">
-            <DollarSign className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-            {t('gso_blocked_count', 'leads', '{count} lead(s) en attente — crédits insuffisants. Ils partiront automatiquement dès que des crédits seront ajoutés.').replace('{count}', String(blocked))}
-          </p>
+        {/* ONE banner. A locked lead and a lead waiting on credits are the same
+            lead seen from two angles — its number is masked AND it has not been
+            written yet — so saying both separately just made the card look alarming
+            twice. Under the gate `locked` is the authoritative count; without it the
+            outbox count is all there is. Nothing is lost either way: the jobs sit in
+            the outbox and the next drain picks them up as soon as credits land. */}
+        {(gateActive ? gateLocked : blocked) > 0 && (
+          <div className="mt-3 flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+            <Lock className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-600" />
+            <div className="min-w-0">
+              <p className="text-[11px] font-black text-amber-800 leading-relaxed">
+                {gateActive
+                  ? t('gso_gate_waiting', 'leads', '{count} lead(s) verrouillés — numéro masqué.').replace('{count}', String(gateLocked))
+                  : t('gso_blocked_count', 'leads', '{count} lead(s) en attente — solde insuffisant.').replace('{count}', String(blocked))}
+              </p>
+              <p className="text-[10px] font-bold text-amber-600 leading-relaxed mt-0.5">
+                {t('gso_gate_waiting_hint', 'leads', 'Rechargez votre solde pour afficher les numéros et les envoyer automatiquement vers votre feuille.')}
+              </p>
+            </div>
+          </div>
         )}
 
         {data?.lastError && (
@@ -926,7 +964,7 @@ export default function GoogleSheetOutboundPanel() {
         onClose={() => setDisconnectOpen(false)}
         onConfirm={() => disconnectMutation.mutate()}
         title={t('gso_disconnect_confirm_title', 'leads', 'Déconnecter la feuille ?')}
-        message={t('gso_disconnect_confirm_msg', 'leads', 'Vos leads ne seront plus envoyés vers cette feuille. Vos crédits restent sur votre compte.')}
+        message={t('gso_disconnect_confirm_msg', 'leads', 'Vos leads ne seront plus envoyés vers cette feuille. Votre solde reste sur votre compte.')}
         confirmText={t('gso_disconnect', 'leads', 'Déconnecter')}
         cancelText={t('cancel', 'leads', 'Annuler')}
         type="danger"

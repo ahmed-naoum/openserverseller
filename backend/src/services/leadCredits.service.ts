@@ -26,6 +26,7 @@
  */
 
 import { prisma } from '../lib/prisma.js';
+import { LEAD_PRICE_CENTS, centsToLeads } from '../lib/sheetPricing.js';
 
 /** The vendor fields every gate decision needs. */
 export interface GateConfig {
@@ -41,14 +42,18 @@ export const GATE_SELECT = {
 /** What the seller is shown: the three numbers behind the reservation. */
 export interface GateStats {
   active: boolean;
-  /** Credits actually held. */
+  /** Money held, in CENTS. */
   balance: number;
+  /** How many leads that money could pay for, ignoring what is reserved. */
+  affordable: number;
   /** Captured under the gate and not yet written to the sheet. */
   unsent: number;
   /** balance − unsent. Negative means that many leads are locked. */
   capacity: number;
   /** How many leads are currently locked (0 when capacity >= 0). */
   locked: number;
+  /** Cents charged per lead, so the client never hardcodes the tariff. */
+  priceCents: number;
 }
 
 /**
@@ -98,18 +103,22 @@ function unsentWhere(vendorId: number, gateFrom: Date) {
 
 /** The three numbers the panel and the header chip display. */
 export async function getGateStats(vendorId: number): Promise<GateStats> {
-  const idle: GateStats = { active: false, balance: 0, unsent: 0, capacity: 0, locked: 0 };
+  const idle: GateStats = { active: false, balance: 0, affordable: 0, unsent: 0, capacity: 0, locked: 0, priceCents: LEAD_PRICE_CENTS };
   try {
     if (!vendorId) return idle;
     const gate = await loadGate(vendorId);
     const balance = await balanceOf(vendorId);
-    if (!isGateActive(gate)) return { ...idle, balance };
+    if (!isGateActive(gate)) return { ...idle, balance, affordable: centsToLeads(balance) };
 
     const unsent = await prisma.lead.count({
       where: unsentWhere(vendorId, gate!.googleSheetsGateFrom as Date),
     });
-    const capacity = balance - unsent;
-    return { active: true, balance, unsent, capacity, locked: Math.max(0, -capacity) };
+    // Capacity is counted in LEADS, not money: the balance is cents, so divide by
+    // the tariff first. Anything the balance cannot pay a whole lead for does not
+    // count as capacity.
+    const affordable = centsToLeads(balance);
+    const capacity = affordable - unsent;
+    return { active: true, balance, affordable, unsent, capacity, locked: Math.max(0, -capacity), priceCents: LEAD_PRICE_CENTS };
   } catch (err) {
     console.error('[LeadCredits] stats failed for vendor', vendorId, err);
     return idle;
@@ -150,7 +159,8 @@ export async function getLockedLeadIds(
     const boundary = await prisma.lead.findMany({
       where: unsentWhere(vendorId, gateFrom),
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      skip: Math.max(0, balance),
+      // Offset in LEADS the balance can pay for, not in cents.
+      skip: Math.max(0, centsToLeads(balance)),
       take: 1,
       select: { id: true, createdAt: true },
     });
