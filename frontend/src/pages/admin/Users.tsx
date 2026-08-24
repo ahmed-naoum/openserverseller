@@ -51,6 +51,7 @@ import {
   FileSpreadsheet,
   Plus
 } from 'lucide-react';
+import { fetchAllUsers } from '../../lib/apiPaging';
 
 export function parseSocialInput(val: string, platform: 'instagram' | 'tiktok' | 'facebook' | 'youtube' | 'x' | 'snapchat') {
   if (!val) return { username: '', url: '' };
@@ -791,10 +792,10 @@ function AssignHelperUsersModal({ isOpen, onClose, helper }: { isOpen: boolean; 
     setLoading(true);
 
     Promise.all([
-      adminApi.users({ limit: 1000 }), 
+      fetchAllUsers(),
       adminApi.getHelperUserAssignments(helper.id),
-    ]).then(([usersRes, assignRes]) => {
-      const list = (usersRes.data?.data?.users || []).filter(
+    ]).then(([allUsersList, assignRes]) => {
+      const list = allUsersList.filter(
         (u: any) => u.id !== helper.id && u.role !== 'SUPER_ADMIN'
       );
       setAllUsers(list);

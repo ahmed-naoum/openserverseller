@@ -13,6 +13,7 @@ import { isCompletePhone } from '../lib/phoneCompleteness.js';
 import { FACTURED_SITUATIONS, WRITABLE_PAYMENT_SITUATIONS, isFactured } from '../lib/paymentSituation.js';
 import { SAFE_USER_SELECT } from '../lib/safeUserSelect.js';
 import { parseDateRange } from '../lib/dateRange.js';
+import { fetchAllInBatches } from '../lib/pagination.js';
 import { DEAD_NO_REPLY, SYSTEM_NOTE_PREFIX, releaseAtFor } from '../lib/leadRelease.js';
 import { enqueueSheetPush, enqueueSheetPushMany } from '../services/sheetPush.service.js';
 import { getLockedLeadIds, maskPhone } from '../services/leadCredits.service.js';
@@ -40,6 +41,12 @@ import {
 // reads, only how many rows are rendered at once.
 const MAX_ROWS_PER_REQUEST = 5000;
 const DEFAULT_ROWS_PER_REQUEST = 200;
+
+// The agent-statistics window is aggregated, not rendered: its rows are four thin
+// columns that collapse into tallies and two time series, so it reads the whole
+// window in batches rather than a page of it. This is the OOM backstop for that
+// read, not a page size — the busiest agent on record sits around 22k actions.
+const HISTORY_HARD_CAP = 200000;
 
 /**
  * Everything an agent can do to a lead that the agent dashboard scores them on,
@@ -647,8 +654,10 @@ router.get(
             targetDateField === 'createdAt',
           ),
           // Newest first, so the first row seen for a lead is the agent's last
-          // word on it — `tallyAgentHistory` depends on this ordering.
-          orderBy: { createdAt: 'desc' },
+          // word on it — `tallyAgentHistory` depends on this ordering. The id
+          // tie-break settles rows written in the same millisecond, which is what
+          // keeps this and /agent-statistics filing a lead under the same action.
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           select: { leadId: true, newStatus: true, lead: { select: { status: true } } },
         });
 
@@ -1074,14 +1083,38 @@ router.get(
 
     const where = agentHistoryWhere(agentId, range, byLeadArrival);
 
-    // One read, three products: the tallies, the two time series, and the feed.
-    // Capped like every other list on this router — `MAX_ROWS_PER_REQUEST` is a
-    // memory ceiling, and `truncated` below says plainly when it bit, rather than
-    // letting a silently short window read as a quiet week.
-    const rows = await prisma.leadStatusHistory.findMany({
+    // This was one flat `take: MAX_ROWS_PER_REQUEST` over the full row — which is
+    // how a busy agent's tallies came to under-report: the dashboard computes the
+    // same figures from an uncapped read, so the two pages disagreed on the very
+    // numbers the comments here promise can never drift.
+    //
+    // Split in two instead. The tallies and both time series need only four thin
+    // columns, so they can afford to read the whole window in batches. The feed is
+    // the expensive select (names, cities, notes) and only ever shows `feedSize`
+    // rows, so it asks for exactly that many.
+    const rows = await fetchAllInBatches(
+      (skip, take) => prisma.leadStatusHistory.findMany({
+        where,
+        // Newest first, so the first row seen for a lead is the agent's last word
+        // on it — `tallyAgentHistory` depends on this ordering. The id tie-break
+        // makes the order total, without which batches could repeat or drop rows.
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take,
+        select: {
+          leadId: true,
+          newStatus: true,
+          createdAt: true,
+          lead: { select: { status: true } },
+        },
+      }),
+      HISTORY_HARD_CAP,
+    );
+
+    const recentRows = await prisma.leadStatusHistory.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
-      take: MAX_ROWS_PER_REQUEST,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: feedSize,
       select: {
         id: true,
         leadId: true,
@@ -1161,7 +1194,7 @@ router.get(
     const busiestHour = hours.reduce((best, n, h) => (n > hours[best] ? h : best), 0);
 
     // Newest first — the feed reads top-down like a timeline.
-    const recent = rows.slice(0, feedSize).map(r => ({
+    const recent = recentRows.map(r => ({
       id: r.id,
       at: r.createdAt,
       leadId: r.leadId,
@@ -1207,8 +1240,9 @@ router.get(
         hourly: hours.map((total, hour) => ({ hour, total })),
         recent,
         // Says so out loud rather than letting a clipped window read as a quiet
-        // week. Only reachable on a very wide "Tout" on a busy account.
-        truncated: rows.length >= MAX_ROWS_PER_REQUEST,
+        // week. Now only reachable at the OOM backstop, not at a page size — an
+        // agent would need HISTORY_HARD_CAP actions in one window to see it.
+        truncated: rows.length >= HISTORY_HARD_CAP,
       },
     });
   })

@@ -682,22 +682,26 @@ router.get(
         },
         _count: true
       }),
-      // New: Fetch all clicks for the period
-      (prisma as any).referralLinkClick.findMany({
-        where: {
-          referralLink: {
-            influencerId: userId
-          },
-          createdAt: dateLimitStart || dateLimitEnd ? {
-            ...(dateLimitStart ? { gte: dateLimitStart } : {}),
-            ...(dateLimitEnd ? { lte: dateLimitEnd } : {})
-          } : undefined
-        },
-        select: {
-          ipAddress: true,
-          userAgent: true
-        }
-      }),
+      // Three integers, so ask the database for three integers. This used to pull
+      // every click row for the window into Node — on a table past half a million
+      // — purely to count them and size a Set of ip+userAgent pairs.
+      prisma.$queryRaw<Array<{
+        totalViews: bigint; uniqueVisitors: bigint; whatsappClicks: bigint;
+      }>>`
+        SELECT
+          COUNT(*) FILTER (WHERE c."userAgent" IS DISTINCT FROM 'whatsapp_click')
+            AS "totalViews",
+          COUNT(DISTINCT (c."ipAddress", COALESCE(c."userAgent", 'unknown')))
+            FILTER (WHERE c."userAgent" IS DISTINCT FROM 'whatsapp_click')
+            AS "uniqueVisitors",
+          COUNT(*) FILTER (WHERE c."userAgent" = 'whatsapp_click')
+            AS "whatsappClicks"
+          FROM referral_link_clicks c
+          JOIN referral_links rl ON rl.id = c."referralLinkId"
+         WHERE rl."influencerId" = ${userId}
+           AND (${dateLimitStart ?? null}::timestamp IS NULL OR c."createdAt" >= ${dateLimitStart ?? null}::timestamp)
+           AND (${dateLimitEnd ?? null}::timestamp   IS NULL OR c."createdAt" <= ${dateLimitEnd ?? null}::timestamp)
+      `,
       (prisma as any).helperUserAssignment.findMany({
         where: {
           targetUserId: userId,
@@ -723,22 +727,13 @@ router.get(
     ]);
 
     const leadCountsByLink = periodLeadCounts || [];
-    const periodClicksData = periodClicks || [];
 
-    let totalViews = 0;
-    const uniqueIPUAs = new Set<string>();
-    let whatsappClicks = 0;
-
-    periodClicksData.forEach((c: any) => {
-      if (c.userAgent === 'whatsapp_click') {
-        whatsappClicks++;
-      } else {
-        totalViews++;
-        uniqueIPUAs.add(`${c.ipAddress}-${c.userAgent || 'unknown'}`);
-      }
-    });
-
-    const uniqueVisitors = uniqueIPUAs.size;
+    // One row, or none at all when the window holds no clicks. COUNT() arrives as
+    // bigint, which JSON.stringify refuses to serialise.
+    const clickTotals = (periodClicks as any[])?.[0];
+    const totalViews = Number(clickTotals?.totalViews ?? 0);
+    const uniqueVisitors = Number(clickTotals?.uniqueVisitors ?? 0);
+    const whatsappClicks = Number(clickTotals?.whatsappClicks ?? 0);
 
     // Calculate funnel counts from retrieved leads (sync with influencer/Leads.tsx logic)
     const deliveryStatuses = [
@@ -806,7 +801,9 @@ router.get(
       recentLeads,
       pendingProducts,
       pendingPayouts,
-      notifications
+      notifications,
+      pendingProductsTotal,
+      pendingPayoutsTotal
     ] = await Promise.all([
       prisma.user.count(),
       prisma.product.count(),
@@ -825,17 +822,24 @@ router.get(
       prisma.product.findMany({
         where: { status: 'PENDING' },
         include: { categories: true, owner: { include: { profile: true } } },
+        orderBy: { createdAt: 'desc' },
         take: 20
       }),
       prisma.payoutRequest.findMany({
         where: { status: 'PENDING' },
         include: { vendor: { select: SAFE_USER_SELECT } },
+        orderBy: { createdAt: 'desc' },
         take: 20
       }),
       prisma.notification.findMany({
         orderBy: { createdAt: 'desc' },
         take: 20
-      })
+      }),
+      // These two are work queues, not "recent" feeds: an admin reads them to
+      // find what still needs approving. Twenty rows with no total reads as
+      // "twenty left to do" whatever the real backlog is, so send the count.
+      prisma.product.count({ where: { status: 'PENDING' } }),
+      prisma.payoutRequest.count({ where: { status: 'PENDING' } })
     ]);
 
     res.json({
@@ -849,7 +853,12 @@ router.get(
       recentLeads,
       pendingProducts,
       pendingPayouts,
-      notifications
+      notifications,
+      queueTotals: {
+        pendingProducts: pendingProductsTotal,
+        pendingPayouts: pendingPayoutsTotal,
+        shown: 20
+      }
     });
   })
 );

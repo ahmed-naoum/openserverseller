@@ -896,7 +896,8 @@ export const securityApi = {
   getVulns: () => api.get('/admin/security/vulns'),
 
   // Immutable Audit Chain Logs
-  getAuditLogs: () => api.get('/admin/security/audit/logs'),
+  getAuditLogs: (params?: { page?: number; limit?: number }) =>
+    api.get('/admin/security/audit/logs', { params }),
   verifyAuditChain: () => api.get('/admin/security/audit/verify'),
 
   // Global Threat Heatmap & Advanced Analytics

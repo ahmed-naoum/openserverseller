@@ -9,6 +9,7 @@ import {
   isProductInScope,
   OUT_OF_SCOPE,
 } from '../lib/subAccountProductScope.js';
+import { resolvePage, resolvePageSize } from '../lib/pagination.js';
 
 const router = Router();
 
@@ -198,7 +199,10 @@ router.get(
   '/',
   optionalAuth,
   asyncHandler(async (req: Request, res: Response) => {
-    const { page = 1, limit = 20, category, search, status, myProducts, visibility, showInHomepage } = req.query;
+    const { category, search, status, myProducts, visibility, showInHomepage } = req.query;
+    // Clamped: `take: Number(limit)` trusted the query string outright.
+    const page = resolvePage(req.query.page);
+    const limit = resolvePageSize(req.query.limit, 20, 500);
 
     const where: any = { isActive: true };
 
@@ -267,8 +271,8 @@ router.get(
             select: { userId: true, userMode: true }
           }
         },
-        skip: (Number(page) - 1) * Number(limit),
-        take: Number(limit),
+        skip: (page - 1) * limit,
+        take: limit,
         orderBy: { createdAt: 'desc' },
       }),
       prisma.product.count({ where }),
@@ -300,10 +304,10 @@ router.get(
           createdAt: p.createdAt,
         })),
         pagination: {
-          page: Number(page),
-          limit: Number(limit),
+          page,
+          limit,
           total,
-          totalPages: Math.ceil(total / Number(limit)),
+          totalPages: Math.ceil(total / limit) || 1,
         },
       },
     });

@@ -14,6 +14,7 @@ import {
   X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { fetchAllUsers } from '../../lib/apiPaging';
 
 export default function AdminAnnouncements() {
   const [announcements, setAnnouncements] = useState<any[]>([]);
@@ -63,8 +64,7 @@ export default function AdminAnnouncements() {
   const fetchUsers = async () => {
     try {
       setIsLoadingUsers(true);
-      const res = await adminApi.users({ limit: 1000 });
-      setUsers(res.data.data.users);
+      setUsers(await fetchAllUsers());
     } catch (error) {
       toast.error('Erreur lors du chargement des utilisateurs');
     } finally {

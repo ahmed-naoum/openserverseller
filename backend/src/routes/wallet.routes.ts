@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
+import { resolvePage, resolvePageSize } from '../lib/pagination.js';
 
 const router = Router();
 
@@ -47,7 +48,11 @@ router.get(
   '/transactions',
   authenticate,
   asyncHandler(async (req, res) => {
-    const { page = 1, limit = 20, type, startDate, endDate } = req.query;
+    const { type, startDate, endDate } = req.query;
+    // Clamped rather than trusted: `take: Number(limit)` accepted anything the
+    // caller sent, NaN included.
+    const page = resolvePage(req.query.page);
+    const limit = resolvePageSize(req.query.limit, 20, 200);
 
     const wallet = await prisma.wallet.findUnique({
       where: { userId: req.user!.id },
@@ -79,9 +84,9 @@ router.get(
             },
           },
         },
-        skip: (Number(page) - 1) * Number(limit),
-        take: Number(limit),
-        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       }),
       prisma.walletTransaction.count({ where }),
     ]);
@@ -104,10 +109,10 @@ router.get(
           createdAt: t.createdAt,
         })),
         pagination: {
-          page: Number(page),
-          limit: Number(limit),
+          page,
+          limit,
           total,
-          totalPages: Math.ceil(total / Number(limit)),
+          totalPages: Math.ceil(total / limit) || 1,
         },
       },
     });

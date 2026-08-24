@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { walletApi, payoutsApi } from '../../lib/api';
 import toast from 'react-hot-toast';
+
+const TX_PAGE_SIZE = 20;
 
 export default function VendorWallet() {
   const [showPayoutModal, setShowPayoutModal] = useState(false);
@@ -18,9 +20,14 @@ export default function VendorWallet() {
     queryFn: () => walletApi.get(),
   });
 
-  const { data: transactionsData } = useQuery({
-    queryKey: ['transactions'],
-    queryFn: () => walletApi.transactions(),
+  // The list used to call this with no params, so it took the server default of
+  // 20 rows and offered no way to reach the rest — an account with four thousand
+  // transactions showed twenty and said nothing about the others.
+  const [txPage, setTxPage] = useState(1);
+  const { data: transactionsData, isFetching: txFetching } = useQuery({
+    queryKey: ['transactions', txPage],
+    queryFn: () => walletApi.transactions({ page: txPage, limit: TX_PAGE_SIZE }),
+    placeholderData: keepPreviousData,
   });
 
   const { data: payoutsData } = useQuery({
@@ -30,6 +37,9 @@ export default function VendorWallet() {
 
   const wallet = walletData?.data?.data;
   const transactions = transactionsData?.data?.data?.transactions || [];
+  const txPagination = transactionsData?.data?.data?.pagination;
+  const txTotal = txPagination?.total ?? transactions.length;
+  const txTotalPages = txPagination?.totalPages ?? 1;
   const payouts = payoutsData?.data?.data?.payouts || [];
 
   const payoutMutation = useMutation({
@@ -137,8 +147,13 @@ export default function VendorWallet() {
 
           {/* Transactions */}
           <div className="card">
-            <div className="p-5 border-b border-gray-100">
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between gap-3">
               <h3 className="font-semibold text-gray-900">Historique des transactions</h3>
+              {txTotal > 0 && (
+                <span className="text-xs text-gray-500 font-medium">
+                  {txTotal.toLocaleString('fr-FR')} au total
+                </span>
+              )}
             </div>
             <div className="divide-y divide-gray-100">
               {transactions.length === 0 ? (
@@ -171,6 +186,30 @@ export default function VendorWallet() {
                 ))
               )}
             </div>
+
+            {txTotalPages > 1 && (
+              <div className="p-4 border-t border-gray-100 flex items-center justify-between gap-3">
+                <span className="text-xs text-gray-500 font-medium">
+                  Page {txPage} sur {txTotalPages}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setTxPage((p) => Math.max(1, p - 1))}
+                    disabled={txPage <= 1 || txFetching}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+                  >
+                    Précédent
+                  </button>
+                  <button
+                    onClick={() => setTxPage((p) => Math.min(txTotalPages, p + 1))}
+                    disabled={txPage >= txTotalPages || txFetching}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+                  >
+                    Suivant
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}

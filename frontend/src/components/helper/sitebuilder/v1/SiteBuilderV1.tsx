@@ -14,6 +14,7 @@ import {
 import toast from 'react-hot-toast';
 import { buildReferralUrl } from '../../../../utils/referral';
 import { currentBasePath } from '../../../../lib/dashboardBase';
+import { fetchAllUsers } from '../../../../lib/apiPaging';
 
 interface SiteBuilderV1Props {
   builderVersion?: 'v1' | 'v2';
@@ -252,9 +253,7 @@ export default function SiteBuilderV1({ builderVersion = 'v1', onSwitchVersion }
       if (ownerCustomDomStatus) setOwnerCustomDomainStatus(ownerCustomDomStatus);
 
       try {
-        const uRes = await adminApi.users({ limit: 1000 });
-        const usersList = uRes.data?.status === 'success' ? uRes.data.data.users : uRes.data?.users || [];
-        setAccounts(usersList);
+        setAccounts(await fetchAllUsers());
       } catch (uErr) {
         console.error('Failed to load accounts in SiteBuilder:', uErr);
       }

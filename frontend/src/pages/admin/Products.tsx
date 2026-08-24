@@ -13,6 +13,7 @@ import {
   List as ListIcon, Calendar, DollarSign, Tag, Eye,
   Clock, CheckCircle, Sparkles
 } from 'lucide-react';
+import { fetchAllUsers } from '../../lib/apiPaging';
 
 export default function AdminProducts() {
   const { user } = useAuth();
@@ -56,17 +57,17 @@ export default function AdminProducts() {
 
   const { data: vendorsData } = useQuery({
     queryKey: ['vendors'],
-    queryFn: () => adminApi.users({ role: 'VENDOR', limit: 1000 }),
+    queryFn: () => fetchAllUsers({ role: 'VENDOR' }),
   });
 
   const { data: influencersData } = useQuery({
     queryKey: ['influencers'],
-    queryFn: () => adminApi.users({ role: 'INFLUENCER', limit: 1000 }),
+    queryFn: () => fetchAllUsers({ role: 'INFLUENCER' }),
   });
 
   const productOwners = [
-    ...(vendorsData?.data?.data?.users || []),
-    ...(influencersData?.data?.data?.users || []),
+    ...(vendorsData || []),
+    ...(influencersData || []),
   ];
 
   const { data, isLoading, refetch } = useQuery({

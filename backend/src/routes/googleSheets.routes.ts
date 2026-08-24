@@ -5,6 +5,11 @@ import crypto from 'crypto';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { authenticate } from '../middleware/auth.js';
 import { getSecret } from '../lib/secretStore.js';
+import { fetchAllInBatches } from '../lib/pagination.js';
+
+// OOM backstop for the sheet-leads list, which the page reads whole. Not a page
+// size — vendors sit in the low hundreds.
+const SHEET_LEADS_HARD_CAP = 20000;
 import {
   DEFAULT_TAB,
   OUTBOUND_COLUMNS,
@@ -600,14 +605,24 @@ router.get(
     // Trigger direct sheet sync automatically on fetch
     await syncDirectSheetForVendor(vendorId).catch(() => {});
 
-    const leads = await prisma.lead.findMany({
-      where: {
-        vendorId,
-        source: 'GOOGLE_SHEETS',
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-    });
+    const where = { vendorId, source: 'GOOGLE_SHEETS' as const };
+
+    // Was a bare `take: 200` with no total alongside it, so a vendor past 200
+    // sheet leads simply stopped seeing the older ones with nothing to say so.
+    // The page reads this list whole, so read it whole — in batches, under a
+    // backstop, and report the true count either way.
+    const [leads, total] = await Promise.all([
+      fetchAllInBatches(
+        (skip, take) => prisma.lead.findMany({
+          where,
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          skip,
+          take,
+        }),
+        SHEET_LEADS_HARD_CAP,
+      ),
+      prisma.lead.count({ where }),
+    ]);
 
     const orders = leads.map((lead) => ({
       id: lead.id,
@@ -640,6 +655,8 @@ router.get(
     res.json({
       success: true,
       data: orders,
+      total,
+      truncated: leads.length >= SHEET_LEADS_HARD_CAP,
     });
   })
 );

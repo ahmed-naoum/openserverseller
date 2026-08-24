@@ -21,8 +21,16 @@ import { translateNotification } from '../../utils/notificationTranslator';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentBasePath } from '../../lib/dashboardBase';
 
+const NOTIF_PAGE_SIZE = 100;
+
 export default function Notifications() {
   const [notifications, setNotifications] = useState<any[]>([]);
+  // This page used to fetch page 1 at limit 100 and stop there, so an account with
+  // eleven thousand notifications could reach a hundred of them. The endpoint
+  // reports the true total, so append pages instead of pretending the first is all.
+  const [notifTotal, setNotifTotal] = useState(0);
+  const [notifPage, setNotifPage] = useState(1);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -161,16 +169,27 @@ export default function Notifications() {
     }
   };
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = async (page = 1) => {
     try {
-      setIsLoading(true);
-      const res = await notificationsApi.list({ page: 1, limit: 100 });
-      setNotifications(res.data.data.notifications || []);
+      if (page === 1) setIsLoading(true); else setIsLoadingMore(true);
+      const res = await notificationsApi.list({ page, limit: NOTIF_PAGE_SIZE });
+      const batch = res.data.data.notifications || [];
+      // Append on "load more", replace on a fresh load, and de-duplicate: the
+      // socket prepends new rows as they arrive, so the same id can reappear in
+      // the next page once the list has shifted under us.
+      setNotifications(prev => {
+        const merged = page === 1 ? batch : [...prev, ...batch];
+        const seen = new Set<number>();
+        return merged.filter((n: any) => !seen.has(n.id) && seen.add(n.id));
+      });
+      setNotifTotal(res.data.data.pagination?.total ?? batch.length);
+      setNotifPage(page);
     } catch (error) {
       toast.error(t('toast_load_error', 'notifications', 'Impossible de charger les notifications'));
       console.error(error);
     } finally {
       setIsLoading(false);
+      setIsLoadingMore(false);
     }
   };
 
@@ -184,6 +203,7 @@ export default function Notifications() {
 
     const handleNewNotification = (notification: any) => {
       setNotifications(prev => [notification, ...prev]);
+      setNotifTotal(prev => prev + 1);
     };
 
     socket.on('new-notification', handleNewNotification);
@@ -222,6 +242,7 @@ export default function Notifications() {
     try {
       await notificationsApi.delete(id);
       setNotifications(prev => prev.filter(n => n.id !== id));
+      setNotifTotal(prev => Math.max(0, prev - 1));
       toast.success(t('toast_deleted', 'notifications', 'Notification supprimée'));
     } catch (err) {
       console.error('Failed to delete notification:', err);
@@ -246,6 +267,8 @@ export default function Notifications() {
         try {
           await notificationsApi.deleteAll();
           setNotifications([]);
+          setNotifTotal(0);
+          setNotifPage(1);
           toast.success(t('toast_all_deleted', 'notifications', 'Historique vidé avec succès'));
         } catch (err) {
           toast.error(t('toast_delete_error', 'notifications', 'Erreur lors de la suppression'));
@@ -464,6 +487,23 @@ export default function Notifications() {
               </div>
             );
           })
+        )}
+
+        {notifications.length < notifTotal && (
+          <div className="pt-4 flex flex-col items-center gap-2">
+            <button
+              onClick={() => fetchNotifications(notifPage + 1)}
+              disabled={isLoadingMore}
+              className="px-5 py-2.5 rounded-2xl bg-white border border-slate-200 hover:border-slate-300 text-sm font-bold text-slate-700 shadow-sm transition-all active:scale-95 disabled:opacity-50"
+            >
+              {isLoadingMore
+                ? t('loading', 'notifications', 'Chargement…')
+                : t('btn_load_more', 'notifications', 'Charger plus')}
+            </button>
+            <span className="text-[11px] font-medium text-slate-400">
+              {notifications.length} / {notifTotal.toLocaleString('fr-FR')}
+            </span>
+          </div>
         )}
       </div>
 

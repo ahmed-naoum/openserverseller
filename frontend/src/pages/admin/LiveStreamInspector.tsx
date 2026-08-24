@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { extractInputTimeline, type InputTimeline } from '../../lib/replayInputs';
+import { fetchAllPages } from '../../utils/paging';
 import {
   ReplayInputTimeline, ReplayInputTicks, type CapturedField,
 } from '../../components/common/ReplayInputTimeline';
@@ -38,6 +39,8 @@ interface PlaybackTarget {
    *  captured no keystrokes. */
   captured?: CapturedField[];
 }
+
+const SIGNUP_PAGE_SIZE = 50;
 
 /** The four checkout fields the server persists, in form order. */
 const capturedFieldsOf = (a: {
@@ -311,6 +314,12 @@ export default function LiveStreamInspector() {
   const [signupFilter, setSignupFilter] = useState<'abandoned' | 'completed' | 'all'>('abandoned');
   const [signupRole, setSignupRole] = useState<'ALL' | 'VENDOR' | 'INFLUENCER'>('ALL');
   const [signupSearch, setSignupSearch] = useState('');
+  // This tab used to fetch page 1 only and render whatever came back, so every
+  // sign-up past the first page was unreachable while the card above the table
+  // showed the true total — the two never agreed.
+  const [signupPage, setSignupPage] = useState(1);
+  const [signupTotalPages, setSignupTotalPages] = useState(1);
+  const [signupTotal, setSignupTotal] = useState(0);
   const [attemptPage, setAttemptPage] = useState(1);
   const [attemptTotalPages, setAttemptTotalPages] = useState(1);
   const [attemptTotal, setAttemptTotal] = useState(0);
@@ -515,19 +524,21 @@ export default function LiveStreamInspector() {
     setExportingAttempts(true);
     const loadToast = toast.loading('Préparation de l\'export...');
     try {
-      // Fetch up to 5000 records matching current search + filter to capture all items
-      const r = await api.get('/admin/checkout-attempts', {
-        params: {
-          page: 1,
-          limit: 5000,
-          filter: attemptFilter,
-          search: attemptSearch || undefined
+      // Every record matching the current search + filter, walked page by page.
+      const { rows: allAttempts, total, complete } = await fetchAllPages<any>(
+        async (page, limit) => {
+          const r = await api.get('/admin/checkout-attempts', {
+            params: { page, limit, filter: attemptFilter, search: attemptSearch || undefined }
+          });
+          return { rows: r.data.attempts || [], total: r.data.total || 0 };
         }
-      });
-      const allAttempts = r.data.attempts || [];
+      );
       if (allAttempts.length === 0) {
         toast.error('Aucun panier à exporter');
         return;
+      }
+      if (!complete) {
+        toast(`Export limité aux ${allAttempts.length} premiers paniers sur ${total}.`, { icon: '⚠️' });
       }
 
       const headers = ['IP', 'Nom Complet', 'Téléphone', 'Ville', 'Statut', 'Champs Remplis', 'Produit', 'Code Parrainage', 'Date'];
@@ -565,11 +576,14 @@ export default function LiveStreamInspector() {
     }
   };
 
-  const fetchSignups = async (filter = signupFilter, role = signupRole, search = signupSearch) => {
+  const fetchSignups = async (page = 1, filter = signupFilter, role = signupRole, search = signupSearch) => {
     setSignupsLoading(true);
     try {
-      const r = await api.get('/admin/signup-attempts', { params: { page: 1, limit: 50, filter, role, search: search || undefined } });
+      const r = await api.get('/admin/signup-attempts', { params: { page, limit: SIGNUP_PAGE_SIZE, filter, role, search: search || undefined } });
       setSignups(r.data.attempts || []);
+      setSignupPage(r.data.page || page);
+      setSignupTotal(r.data.total || 0);
+      setSignupTotalPages(r.data.totalPages || 1);
     } catch {
       toast.error('Impossible de charger les inscriptions');
     } finally {
@@ -1332,6 +1346,14 @@ export default function LiveStreamInspector() {
                   ))}
                 </tbody>
               </table>
+
+              <PaginationControls
+                currentPage={signupPage}
+                totalPages={signupTotalPages}
+                totalItems={signupTotal}
+                pageSize={SIGNUP_PAGE_SIZE}
+                onPageChange={(p) => fetchSignups(p)}
+              />
             </div>
           )}
         </div>

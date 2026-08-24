@@ -16,12 +16,14 @@ import {
   Store, Megaphone, MonitorPlay, Globe, Wifi, PlayCircle, ExternalLink,
 } from 'lucide-react';
 import { buildReferralUrl } from '../../utils/referral';
+import { fetchAllPages } from '../../utils/paging';
 import {
   PAYMENT_SITUATION_OPTIONS,
   paymentSituationLabel,
   paymentSituationMeta,
   normalizePaymentSituation,
 } from '../../lib/paymentSituation';
+import { fetchAllProducts } from '../../lib/apiPaging';
 
 const STATUS_BADGES: Record<string, { label: string; color: string; icon: any }> = {
   NEW: { label: 'Nouveau', color: 'bg-slate-50 text-slate-600 border-slate-200', icon: Clock },
@@ -465,9 +467,9 @@ export default function AdminLeads() {
 
   const { data: productsRes } = useQuery({
     queryKey: ['admin-all-products'],
-    queryFn: () => productsApi.list({ limit: 1000 }),
+    queryFn: () => fetchAllProducts(),
   });
-  const products = productsRes?.data?.data?.products || [];
+  const products = productsRes || [];
 
   const leads = leadsData?.data?.data?.leads || [];
   const pagination = leadsData?.data?.data?.pagination || { totalPages: 1, total: 0, page: 1 };
@@ -588,11 +590,16 @@ export default function AdminLeads() {
       if (onlySelected) {
         rows = Array.from(selected.values());
       } else {
-        const res = await leadsApi.list({ ...queryParams, page: 1, limit: 1000, withStats: 'false' } as any);
-        rows = res.data?.data?.leads || [];
-        const total = res.data?.data?.pagination?.total || rows.length;
-        if (total > rows.length) {
-          toast(`Export limité aux 1000 premiers leads sur ${total}.`, { icon: '⚠️' });
+        // One request capped at 1000 used to be the whole export, which meant an
+        // unfiltered export of a five-figure lead list handed over a thousand rows
+        // and a toast. Walk the pages instead, so the file is the filter set.
+        const res = await fetchAllPages<any>(async (page, limit) => {
+          const r = await leadsApi.list({ ...queryParams, page, limit, withStats: 'false' } as any);
+          return { rows: r.data?.data?.leads || [], total: r.data?.data?.pagination?.total || 0 };
+        });
+        rows = res.rows;
+        if (!res.complete) {
+          toast(`Export limité aux ${rows.length} premiers leads sur ${res.total}.`, { icon: '⚠️' });
         }
       }
 

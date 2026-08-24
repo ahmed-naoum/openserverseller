@@ -5,22 +5,38 @@ import { FileText, Download, Plus, Database } from 'lucide-react';
 import { useSocket } from '../../../contexts/SocketContext';
 
 const S = 'bg-slate-900 rounded-2xl border border-slate-800 p-5';
+const AUDIT_PAGE_SIZE = 50;
 
 export default function ModCompliance() {
   const [compliance, setCompliance] = useState<any[]>([]);
   const [pentest, setPentest] = useState<any[]>([]);
+  // The chain runs to millions of rows. This panel used to take the newest 100 and
+  // render 50 of them with no total and no way forward, so the audit trail was
+  // effectively write-only past the last page of activity.
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditTotalPages, setAuditTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [ptForm, setPtForm] = useState({ title: '', severity: 'MEDIUM', owner: '' });
   const { socket } = useSocket();
 
+  const loadAudit = useCallback(async (page: number) => {
+    const aR = await securityApi.getAuditLogs({ page, limit: AUDIT_PAGE_SIZE });
+    setAuditLogs(aR.data.data || []);
+    setAuditPage(aR.data.pagination?.page ?? page);
+    setAuditTotal(aR.data.pagination?.total ?? 0);
+    setAuditTotalPages(aR.data.pagination?.totalPages ?? 1);
+  }, []);
+
   const load = useCallback(async () => {
     try {
-      const [cR, pR, aR] = await Promise.all([securityApi.getCompliance(), securityApi.getPentest(), securityApi.getAuditLogs()]);
-      setCompliance(cR.data.data||[]); setPentest(pR.data.data||[]); setAuditLogs(aR.data.data||[]);
+      const [cR, pR] = await Promise.all([securityApi.getCompliance(), securityApi.getPentest()]);
+      setCompliance(cR.data.data||[]); setPentest(pR.data.data||[]);
+      await loadAudit(1);
     } catch { toast.error('Failed to load'); }
     finally { setLoading(false); }
-  }, []);
+  }, [loadAudit]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -145,7 +161,7 @@ export default function ModCompliance() {
             <tbody className="divide-y divide-slate-800/50 text-xs">
               {auditLogs.length === 0 ? (
                 <tr><td colSpan={4} className="py-8 text-center text-slate-500">No audit logs</td></tr>
-              ) : auditLogs.slice(0,50).map((log:any)=>(
+              ) : auditLogs.map((log:any)=>(
                 <tr key={log.id} className="hover:bg-slate-800/30 font-mono">
                   <td className="py-2 pr-4 text-slate-400">{new Date(log.timestamp).toLocaleString()}</td>
                   <td className="py-2 pr-4 text-white max-w-[200px] truncate">{log.action}</td>
@@ -156,6 +172,33 @@ export default function ModCompliance() {
             </tbody>
           </table>
         </div>
+
+        {auditTotal > 0 && (
+          <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-800 text-[11px] text-slate-400 font-medium">
+            <span>
+              Page <span className="text-white font-bold">{auditPage}</span> sur{' '}
+              <span className="text-white font-bold">{auditTotalPages.toLocaleString()}</span>
+              {' — '}
+              <span className="text-white font-bold">{auditTotal.toLocaleString()}</span> entrées
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => loadAudit(auditPage - 1)}
+                disabled={auditPage <= 1}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-200 font-bold hover:bg-slate-700 disabled:opacity-30"
+              >
+                Précédent
+              </button>
+              <button
+                onClick={() => loadAudit(auditPage + 1)}
+                disabled={auditPage >= auditTotalPages}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-200 font-bold hover:bg-slate-700 disabled:opacity-30"
+              >
+                Suivant
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

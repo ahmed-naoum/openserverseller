@@ -689,14 +689,39 @@ router.get(
     // matches nothing instead of charting it.
     applyProductScope(whereBase, productScopeOf(req));
 
+    // The clicks table is past half a million rows and a single popular link holds
+    // two hundred thousand of them. Pulling every row in the window into Node just
+    // to bucket it by day was the largest read on this endpoint by far, so the
+    // buckets are built in SQL. `whereBase` is a Prisma filter, so it is resolved
+    // to ids first rather than reimplemented in raw SQL.
+    const scopedLinkIds = (
+      await prisma.referralLink.findMany({ where: whereBase, select: { id: true } })
+    ).map(l => l.id);
+
+    // date_trunc buckets on the stored timestamp, which is the same wall clock
+    // `getKey` reads off the Date below — both this process and Postgres run UTC.
+    const bucketUnit = isHourly ? 'hour' : 'day';
+
     const [clicks, leads, commissions] = await Promise.all([
-      (prisma as any).referralLinkClick.findMany({
-        where: {
-          referralLink: whereBase,
-          createdAt: { gte: dateLimitStart, lte: dateLimitEnd }
-        },
-        select: { createdAt: true, ipAddress: true, userAgent: true }
-      }),
+      scopedLinkIds.length
+        ? prisma.$queryRaw<Array<{
+            bucket: Date; rawClicks: bigint; uniqueClicks: bigint; whatsappClicks: bigint;
+          }>>`
+            SELECT date_trunc(${bucketUnit}, c."createdAt") AS "bucket",
+                   COUNT(*) FILTER (WHERE c."userAgent" IS DISTINCT FROM 'whatsapp_click')
+                     AS "rawClicks",
+                   COUNT(DISTINCT (c."ipAddress", COALESCE(c."userAgent", 'unknown')))
+                     FILTER (WHERE c."userAgent" IS DISTINCT FROM 'whatsapp_click')
+                     AS "uniqueClicks",
+                   COUNT(*) FILTER (WHERE c."userAgent" = 'whatsapp_click')
+                     AS "whatsappClicks"
+              FROM referral_link_clicks c
+             WHERE c."referralLinkId" = ANY(${scopedLinkIds}::int[])
+               AND c."createdAt" >= ${dateLimitStart}::timestamp
+               AND c."createdAt" <= ${dateLimitEnd}::timestamp
+             GROUP BY 1
+          `
+        : Promise.resolve([]),
       prisma.lead.findMany({
         where: {
           referralLink: whereBase,
@@ -724,25 +749,16 @@ router.get(
       return `${y}-${m}-${d}`;
     };
 
-    const clicksByDate: Record<string, Set<string>> = {};
     const rawClicksByDate: Record<string, number> = {};
     const whatsappClicksByDate: Record<string, number> = {};
-    clicks.forEach((c: any) => {
-      const key = getKey(c.createdAt);
-      if (c.userAgent === 'whatsapp_click') {
-        whatsappClicksByDate[key] = (whatsappClicksByDate[key] || 0) + 1;
-      } else {
-        if (!clicksByDate[key]) clicksByDate[key] = new Set();
-        clicksByDate[key].add(`${c.ipAddress}-${c.userAgent || 'unknown'}`);
-        rawClicksByDate[key] = (rawClicksByDate[key] || 0) + 1;
-      }
-    });
-
     const uniqueClicksByDate: Record<string, number> = {};
-    Object.keys(clicksByDate).forEach(key => {
-      uniqueClicksByDate[key] = clicksByDate[key].size;
+    // One row per bucket now, not one per click. COUNT() arrives as bigint.
+    (clicks as any[]).forEach((c: any) => {
+      const key = getKey(c.bucket);
+      rawClicksByDate[key] = Number(c.rawClicks);
+      uniqueClicksByDate[key] = Number(c.uniqueClicks);
+      whatsappClicksByDate[key] = Number(c.whatsappClicks);
     });
-
     const salesByDate: Record<string, number> = {};
     leads.forEach(l => {
       const key = getKey(l.createdAt);
@@ -1401,17 +1417,39 @@ router.get(
     const { page = 1, limit = 20, search, mode, all, summary } = req.query;
 
     // The leads pages compute their stats/charts/pagination client-side, so they ask
-    // for the whole dataset with `all=true`. Cap it so a very large account can't OOM
-    // the response; `truncated` tells the client the numbers are incomplete.
+    // for the whole dataset with `all=true`. A single flat `take` of 5000 silently
+    // truncated every account past that point: the TOTAL LEADS counter froze on 5000
+    // and the leads beyond it were simply not there. Read the whole set in batches
+    // instead. ALL_HARD_CAP is now only an OOM backstop, well above any real account,
+    // and `truncated` tells the client when it was actually reached.
     const fetchAll = all === 'true' || all === '1' || (all as any) === true;
     const summaryOnly = summary === 'true' || summary === '1' || (summary as any) === true;
-    const ALL_HARD_CAP = 5000;
+    const ALL_HARD_CAP = 20000;
+    const ALL_BATCH_SIZE = 1000;
+
+    // Skip-paging is only stable under a total ordering — bulk-imported leads share a
+    // createdAt to the millisecond, so without the id tie-break rows could repeat in
+    // one batch and go missing from another.
+    const ALL_ORDER_BY = [{ createdAt: 'desc' as const }, { id: 'desc' as const }];
+
+    const fetchAllInBatches = async <T>(
+      query: (skip: number, take: number) => Promise<T[]>
+    ): Promise<T[]> => {
+      const rows: T[] = [];
+      while (rows.length < ALL_HARD_CAP) {
+        const batchSize = Math.min(ALL_BATCH_SIZE, ALL_HARD_CAP - rows.length);
+        const batch = await query(rows.length, batchSize);
+        rows.push(...batch);
+        if (batch.length < batchSize) break;
+      }
+      return rows;
+    };
 
     const safePage = Math.max(1, Number(page) || 1);
     const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 500);
 
     const skip = fetchAll ? 0 : (safePage - 1) * safeLimit;
-    const take = fetchAll ? ALL_HARD_CAP : safeLimit;
+    const take = safeLimit;
 
     // Both halves of this page can hide a phone, so both are built against the
     // same account and the same one lock lookup: `gateVendorId` is null for
@@ -1433,7 +1471,7 @@ router.get(
       take: 1,
     };
 
-    const commissions = await prisma.influencerCommission.findMany({
+    const commissionQuery = (skipRows: number, takeRows: number) => prisma.influencerCommission.findMany({
       where: commissionWhereClause,
       include: summaryOnly
         ? {
@@ -1499,15 +1537,19 @@ router.get(
             },
             referralLink: { select: CUSTOMER_LIST_LINK_SELECT }
           },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take
+      orderBy: ALL_ORDER_BY,
+      skip: skipRows,
+      take: takeRows
     });
+
+    const commissions = fetchAll
+      ? await fetchAllInBatches(commissionQuery)
+      : await commissionQuery(skip, take);
 
     // New Leads (not yet orders).
     const leadWhereClause = await buildCustomerLeadWhere(req, userId, mode, search as string | undefined, phoneFilter);
 
-    const leads = await prisma.lead.findMany({
+    const leadQuery = (skipRows: number, takeRows: number) => prisma.lead.findMany({
       where: leadWhereClause,
       include: summaryOnly
         ? {
@@ -1549,11 +1591,16 @@ router.get(
             },
             referralLink: { select: CUSTOMER_LIST_LINK_SELECT }
           },
-      orderBy: { createdAt: 'desc' },
+      orderBy: ALL_ORDER_BY,
+      skip: skipRows,
       // Was hardcoded to 100, which silently truncated every vendor with more leads
       // than that and made every client-side statistic wrong.
-      take: fetchAll ? ALL_HARD_CAP : Math.max(safeLimit, 100)
+      take: takeRows
     });
+
+    const leads = fetchAll
+      ? await fetchAllInBatches(leadQuery)
+      : await leadQuery(0, Math.max(safeLimit, 100));
 
     // The leads list can filter and sort on WHEN a parcel reached a given step
     // (ramassage, expédition, réception, livraison, reportation) rather than on

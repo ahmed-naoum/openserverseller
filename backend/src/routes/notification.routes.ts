@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { resolvePage, resolvePageSize } from '../lib/pagination.js';
 
 const router = Router();
 
@@ -9,7 +10,11 @@ router.get(
   '/',
   authenticate,
   asyncHandler(async (req, res) => {
-    const { page = 1, limit = 20, unreadOnly } = req.query;
+    const { unreadOnly } = req.query;
+    // Clamped: `take: Number(limit)` took whatever the caller sent, so `?limit=`
+    // with junk in it reached Prisma as NaN and a huge one scanned the table.
+    const page = resolvePage(req.query.page);
+    const limit = resolvePageSize(req.query.limit, 20, 200);
 
     const where: any = { userId: req.user!.id };
     if (unreadOnly === 'true') where.isRead = false;
@@ -18,8 +23,8 @@ router.get(
       prisma.notification.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        skip: (Number(page) - 1) * Number(limit),
-        take: Number(limit),
+        skip: (page - 1) * limit,
+        take: limit,
       }),
       prisma.notification.count({ where }),
     ]);
@@ -32,10 +37,10 @@ router.get(
           where: { userId: req.user!.id, isRead: false },
         }),
         pagination: {
-          page: Number(page),
-          limit: Number(limit),
+          page,
+          limit,
           total,
-          totalPages: Math.ceil(total / Number(limit)),
+          totalPages: Math.ceil(total / limit) || 1,
         },
       },
     });

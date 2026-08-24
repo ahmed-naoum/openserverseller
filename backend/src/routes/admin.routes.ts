@@ -10,6 +10,7 @@ import { fetchMaintenanceSettings } from '../middleware/maintenance.js';
 import { decrypt, encrypt } from '../utils/crypto.js';
 import { getBlockedIPsList, unblockIP } from '../middleware/security.js';
 import { WRITABLE_PAYMENT_SITUATIONS } from '../lib/paymentSituation.js';
+import { resolvePage, resolvePageSize } from '../lib/pagination.js';
 import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
@@ -48,8 +49,11 @@ router.get(
   authenticate,
   authorize('SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const page = resolvePage(req.query.page);
+    // Clamped: `?limit=999999` was an unbounded scan and `?limit=abc` reached
+    // Prisma's `take` as NaN. `total` below is a separate count, so a clamped page
+    // never makes a reported number wrong — callers that want everything page.
+    const limit = resolvePageSize(req.query.limit, 20, 500);
     const skip = (page - 1) * limit;
     const search = (req.query.search as string)?.trim();
 
@@ -147,8 +151,11 @@ router.get(
   authenticate,
   authorize('SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const page = resolvePage(req.query.page);
+    // Clamped: `?limit=999999` was an unbounded scan and `?limit=abc` reached
+    // Prisma's `take` as NaN. `total` below is a separate count, so a clamped page
+    // never makes a reported number wrong — callers that want everything page.
+    const limit = resolvePageSize(req.query.limit, 20, 500);
     const skip = (page - 1) * limit;
     const filter = (req.query.filter as string) || 'abandoned';
     const search = (req.query.search as string)?.trim();
@@ -197,8 +204,11 @@ router.get(
   authenticate,
   authorize('SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const page = resolvePage(req.query.page);
+    // Clamped: `?limit=999999` was an unbounded scan and `?limit=abc` reached
+    // Prisma's `take` as NaN. `total` below is a separate count, so a clamped page
+    // never makes a reported number wrong — callers that want everything page.
+    const limit = resolvePageSize(req.query.limit, 20, 500);
     const skip = (page - 1) * limit;
     const filter = (req.query.filter as string) || 'abandoned';
     const role = (req.query.role as string) || 'ALL';
@@ -437,7 +447,9 @@ router.get(
   authenticate,
   authorize('SUPER_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_SUPPORT'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { page = 1, limit = 50, userId, action } = req.query;
+    const { userId, action } = req.query;
+    const page = resolvePage(req.query.page);
+    const limit = resolvePageSize(req.query.limit, 50, 500);
 
     const where: any = {};
     if (userId) where.userId = Number(userId as string);
@@ -816,7 +828,9 @@ router.get(
   authenticate,
   authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { page = 1, limit = 20, search } = req.query;
+    const { search } = req.query;
+    const page = resolvePage(req.query.page);
+    const limit = resolvePageSize(req.query.limit, 20, 500);
 
     const skip = (Number(page) - 1) * Number(limit);
     const take = Number(limit);
@@ -1975,7 +1989,9 @@ router.get(
   authenticate,
   authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { agentId, status, search, page = 1, limit = 20, startDate, endDate } = req.query;
+    const { agentId, status, search, startDate, endDate } = req.query;
+    const page = resolvePage(req.query.page);
+    const limit = resolvePageSize(req.query.limit, 20, 500);
 
     // Build date range filter
     const dateFilter: any = {};
@@ -3101,7 +3117,9 @@ router.get(
   authenticate,
   authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { page = 1, limit = 20, search, role, userId, startDate, endDate } = req.query;
+    const { search, role, userId, startDate, endDate } = req.query;
+    const page = resolvePage(req.query.page);
+    const limit = resolvePageSize(req.query.limit, 20, 500);
     
     const vendorWhere: any = {};
     const agentWhere: any = {};
@@ -3826,20 +3844,46 @@ router.get(
 
     const linkIds = links.map(l => l.id);
 
-    const allClicks = await (prisma as any).referralLinkClick.findMany({
-      where: { referralLinkId: { in: linkIds } },
-      select: { referralLinkId: true, ipAddress: true }
-    });
+    // These figures used to be produced by pulling EVERY click row (that table is
+    // past half a million) and every lead into Node, then running
+    // `allClicks.filter(...)` once per link — hundreds of megabytes of objects and
+    // a links × clicks scan, to end up with five integers each. The database does
+    // the same work in one grouped pass and returns one row per link.
+    const [clickAgg, leadAgg] = linkIds.length
+      ? await Promise.all([
+          prisma.$queryRaw<Array<{ referralLinkId: number; rawClicks: bigint; uniqueClicks: bigint }>>`
+            SELECT "referralLinkId",
+                   COUNT(*)                    AS "rawClicks",
+                   COUNT(DISTINCT "ipAddress") AS "uniqueClicks"
+              FROM referral_link_clicks
+             WHERE "referralLinkId" = ANY(${linkIds}::int[])
+             GROUP BY "referralLinkId"
+          `,
+          prisma.$queryRaw<Array<{
+            referralLinkId: number; leadsCount: bigint; confirmed: bigint; delivered: bigint;
+          }>>`
+            SELECT l."referralLinkId",
+                   COUNT(*) AS "leadsCount",
+                   COUNT(*) FILTER (
+                     WHERE o.id IS NOT NULL OR l.status IN ('CONFIRMED', 'DELIVERED')
+                   ) AS "confirmed",
+                   COUNT(*) FILTER (WHERE l.status = 'DELIVERED') AS "delivered"
+              FROM leads l
+              LEFT JOIN orders o ON o."leadId" = l.id
+             WHERE l."referralLinkId" = ANY(${linkIds}::int[])
+             GROUP BY l."referralLinkId"
+          `,
+        ])
+      : [[], []];
 
-    const allLeads = await prisma.lead.findMany({
-      where: { referralLinkId: { in: linkIds } },
-      select: { id: true, referralLinkId: true, status: true, order: { select: { id: true } } }
-    });
+    const clicksByLink = new Map(clickAgg.map(r => [r.referralLinkId, r]));
+    const leadsByLink = new Map(leadAgg.map(r => [r.referralLinkId, r]));
+    // Postgres COUNT() arrives as bigint, which JSON.stringify refuses to serialise.
+    const num = (v: bigint | undefined) => Number(v ?? 0);
 
     const formatted = links.map(link => {
-      const linkClicks = allClicks.filter(c => c.referralLinkId === link.id);
-      const linkLeads = allLeads.filter(l => l.referralLinkId === link.id);
-      const uniqueIps = new Set(linkClicks.map(c => c.ipAddress));
+      const clickRow = clicksByLink.get(link.id);
+      const leadRow = leadsByLink.get(link.id);
 
       return {
         id: link.id,
@@ -3856,12 +3900,12 @@ router.get(
           fullName: link.influencer?.profile?.fullName || 'Inconnu'
         },
         landingPage: link.landingPage,
-        rawClicks: linkClicks.length,
-        clicks: uniqueIps.size,
+        rawClicks: num(clickRow?.rawClicks),
+        clicks: num(clickRow?.uniqueClicks),
         whatsappClicks: link.whatsappClicks || 0,
-        leadsCount: linkLeads.length,
-        confirmedCount: linkLeads.filter(l => l.order || l.status === 'CONFIRMED' || l.status === 'DELIVERED').length,
-        deliveredCount: linkLeads.filter(l => l.status === 'DELIVERED').length,
+        leadsCount: num(leadRow?.leadsCount),
+        confirmedCount: num(leadRow?.confirmed),
+        deliveredCount: num(leadRow?.delivered),
       };
     });
 
@@ -3916,7 +3960,9 @@ router.get(
   authenticate,
   authorize('SUPER_ADMIN', 'SYSTEM_SUPPORT'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { page = 1, limit = 20, search, status } = req.query;
+    const { search, status } = req.query;
+    const page = resolvePage(req.query.page);
+    const limit = resolvePageSize(req.query.limit, 20, 500);
 
     const where: any = {};
     if (status) {

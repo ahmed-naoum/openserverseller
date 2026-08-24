@@ -9,6 +9,11 @@ import toast from 'react-hot-toast';
 
 export default function InfluencerWallet() {
   const [commissions, setCommissions] = useState<InfluencerCommission[]>([]);
+  // The three amount cards used to be reduced out of `commissions` in the browser,
+  // so they only ever described the rows this page happened to be holding. The
+  // endpoint already returns a status group-by over the whole set — use that, and
+  // the cards stay right however the list is fetched.
+  const [totals, setTotals] = useState<Record<string, number>>({});
   const [totalEarnings, setTotalEarnings] = useState(0);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<'all' | 'PENDING' | 'APPROVED' | 'PAID'>('all');
@@ -25,6 +30,13 @@ export default function InfluencerWallet() {
       ]);
       setTotalEarnings(dashRes.data.totalEarnings || 0);
       setCommissions(comRes.data.commissions || []);
+      // [{ status, _sum: { amount }, _count }] — the server's group-by over every
+      // commission, not just the ones in the list above.
+      setTotals(
+        Object.fromEntries(
+          (comRes.data.totals || []).map((t: any) => [t.status, Number(t._sum?.amount ?? 0)])
+        )
+      );
     } catch (error) {
       console.error('Failed to load wallet:', error);
     } finally {
@@ -32,17 +44,9 @@ export default function InfluencerWallet() {
     }
   };
 
-  const pendingAmount = commissions
-    .filter(c => c.status === 'PENDING')
-    .reduce((sum, c) => sum + c.amount, 0);
-
-  const approvedAmount = commissions
-    .filter(c => c.status === 'APPROVED')
-    .reduce((sum, c) => sum + c.amount, 0);
-
-  const paidAmount = commissions
-    .filter(c => c.status === 'PAID')
-    .reduce((sum, c) => sum + c.amount, 0);
+  const pendingAmount = totals.PENDING ?? 0;
+  const approvedAmount = totals.APPROVED ?? 0;
+  const paidAmount = totals.PAID ?? 0;
 
   const filteredCommissions = activeFilter === 'all'
     ? commissions

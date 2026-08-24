@@ -13,6 +13,7 @@ import {
   logSecurityEvent
 } from '../middleware/security.js';
 import { verifyAuditChain, logImmutableAction } from '../utils/hashChain.js';
+import { resolvePage, resolvePageSize } from '../lib/pagination.js';
 import os from 'os';
 import { PDFDocument, rgb } from 'pdf-lib';
 
@@ -758,11 +759,26 @@ router.get(
   authenticate,
   authorize('SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
-    const logs = await prisma.immutableAuditLog.findMany({
-      orderBy: { timestamp: 'desc' },
-      take: 100
+    // Was a flat `take: 100` with no total, so the audit trail was only ever its
+    // newest hundred entries and nothing said how many more there were. The chain
+    // is millions of rows deep — it has to be walkable, not just peeked at.
+    const page = resolvePage(req.query.page);
+    const limit = resolvePageSize(req.query.limit, 50, 200);
+
+    const [logs, total] = await Promise.all([
+      prisma.immutableAuditLog.findMany({
+        orderBy: { timestamp: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit
+      }),
+      prisma.immutableAuditLog.count()
+    ]);
+
+    res.json({
+      status: 'success',
+      data: logs,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 }
     });
-    res.json({ status: 'success', data: logs });
   })
 );
 

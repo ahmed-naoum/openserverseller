@@ -17,6 +17,7 @@ import {
 import toast from 'react-hot-toast';
 import { buildReferralUrl } from '../../utils/referral';
 import { currentBasePath } from '../../lib/dashboardBase';
+import { fetchAllUsers } from '../../lib/apiPaging';
 
 export default function SiteBuilder() {
   const { id } = useParams<{ id: string }>();
@@ -331,9 +332,7 @@ export default function SiteBuilder() {
       
       // Fetch accounts for products block
       try {
-        const uRes = await adminApi.users({ limit: 1000 });
-        const usersList = uRes.data?.status === 'success' ? uRes.data.data.users : uRes.data?.users || [];
-        setAccounts(usersList);
+        setAccounts(await fetchAllUsers());
       } catch (uErr) {
         console.error('Failed to load accounts in SiteBuilder:', uErr);
       }

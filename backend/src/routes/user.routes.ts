@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { body, param, query, validationResult } from 'express-validator';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
+import { resolvePage, resolvePageSize } from '../lib/pagination.js';
 import { v4 as uuidv4 } from 'uuid';
 import { decrypt, encrypt } from '../utils/crypto.js';
 
@@ -17,7 +18,11 @@ router.get(
     if (req.user!.roleName === 'HELPER' && !req.user!.canImpersonate) {
         throw new AppException(403, "Vous n'avez pas la permission de consulter la liste des utilisateurs.");
     }
-    const { page = 1, limit = 20, role, status, search } = req.query;
+    const { role, status, search } = req.query;
+    // Clamped: `take: Number(limit)` took the caller's word for it. The pickers
+    // that used to ask for 1000 at once now walk pages instead.
+    const page = resolvePage(req.query.page);
+    const limit = resolvePageSize(req.query.limit, 20, 500);
 
     const where: any = {};
 
@@ -54,8 +59,8 @@ router.get(
           role: true,
           wallet: true,
         },
-        skip: (Number(page) - 1) * Number(limit),
-        take: Number(limit),
+        skip: (page - 1) * limit,
+        take: limit,
         orderBy: { createdAt: 'desc' },
       }),
       prisma.user.count({ where }),
@@ -99,10 +104,10 @@ router.get(
           customDomain: u.customDomain,
           customDomainStatus: u.customDomainStatus,
         })), pagination: {
-          page: Number(page),
-          limit: Number(limit),
+          page,
+          limit,
           total,
-          totalPages: Math.ceil(total / Number(limit)),
+          totalPages: Math.ceil(total / limit) || 1,
         },
       },
     });
