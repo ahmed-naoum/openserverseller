@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import fs from 'fs';
 import path from 'path';
 import { validateInfluencerSubdomain } from '../utils/subdomain.js';
+import { getClientIp, getClientCountry } from '../utils/clientIp.js';
 import { getIO } from '../lib/realtime.js';
 import { getNotifiableAgentIds } from '../utils/agentScope.js';
 import { enqueueSheetPush } from '../services/sheetPush.service.js';
@@ -287,6 +288,14 @@ router.post(
       throw new AppException(500, 'Product has no owner (vendor) assigned and no fallback admin found');
     }
 
+    // Network identity of the buyer at the moment they submitted the checkout
+    // form. Taken server-side: the landing page also resolves an IP client-side
+    // for cloaking, but that only runs when a filter is enabled and is trivially
+    // faked, so it is not something to bill or ban on.
+    const ipAddress = getClientIp(req);
+    const ipCountry = getClientCountry(req, ipAddress);
+    const userAgent = (req.headers['user-agent'] || '').toString().slice(0, 500) || null;
+
     // Create the lead for the vendor
     const lead = await prisma.lead.create({
       data: {
@@ -297,6 +306,9 @@ router.post(
         city,
         address,
         productVariant,
+        ipAddress,
+        ipCountry,
+        userAgent,
         notes: null
       }
     });

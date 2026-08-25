@@ -125,6 +125,10 @@ export interface Lead {
   notes?: string;
   brand?: { id: string; name: string };
   assignedAgent?: { uuid: string; fullName: string };
+  // Set only for leads captured through the public landing-page checkout form.
+  ipAddress?: string | null;
+  ipCountry?: string | null;
+  userAgent?: string | null;
   createdAt: string;
   callbackAt?: string | Date;
 }

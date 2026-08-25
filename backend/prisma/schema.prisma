@@ -526,6 +526,12 @@ model Lead {
   // and parks at DEAD_NO_REPLY. See lib/leadRelease.ts for both policies.
   releaseAt             DateTime?
   noReplyReleases       Int              @default(0)
+  // Network identity of the buyer, captured server-side when the landing-page
+  // checkout form is submitted. Only public/landing orders carry these; leads
+  // imported from CSV, YouCan, Shopify etc. leave them null.
+  ipAddress             String?
+  ipCountry             String? // ISO-3166 alpha-2, from the CDN header or geoip-lite
+  userAgent             String?
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
 
@@ -555,6 +561,8 @@ model Lead {
   @@index([referralLinkId])
   @@index([assignedAgentId])
   @@index([createdAt])
+  // Lets the fraud check "how many orders came from this IP" stay a lookup.
+  @@index([ipAddress])
   @@map("leads")
 }
 

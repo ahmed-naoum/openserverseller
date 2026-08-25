@@ -747,6 +747,8 @@ router.get(
           } : null,
           coliatyPackageCode: l.order?.coliatyPackageCode || null,
           source: l.source,
+          ipAddress: l.ipAddress,
+          ipCountry: l.ipCountry,
           createdAt: l.createdAt,
           // --- Additional detail (already loaded above, previously dropped) ---
           sourceMode: l.sourceMode,

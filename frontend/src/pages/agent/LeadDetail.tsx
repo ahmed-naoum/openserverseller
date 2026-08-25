@@ -1069,6 +1069,19 @@ export default function AgentLeadDetail() {
                 </div>
               )}
             </div>
+            {lead.ipAddress && (
+              <div>
+                <p className="text-xs text-gray-400 font-medium uppercase mb-1">Adresse IP</p>
+                <p className="text-gray-700 font-mono text-sm">
+                  {lead.ipAddress}
+                  {lead.ipCountry && (
+                    <span className="ml-2 px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[10px] font-sans font-bold align-middle">
+                      {lead.ipCountry}
+                    </span>
+                  )}
+                </p>
+              </div>
+            )}
             {lead.whatsapp && (
               <div>
                 <p className="text-xs text-gray-400 font-medium uppercase mb-1">WhatsApp</p>

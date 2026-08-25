@@ -1190,6 +1190,18 @@ export default function AdminLeads() {
                                 <MapPin className="w-2.5 h-2.5" /> {lead.city || '—'}
                               </span>
                             </div>
+                            {lead.ipAddress && (
+                              <div
+                                className="flex items-center gap-1 mt-1 text-[10px] text-gray-400 font-mono"
+                                title="Adresse IP du client au moment de la commande"
+                              >
+                                <Globe className="w-2.5 h-2.5 flex-shrink-0" />
+                                <span>{lead.ipAddress}</span>
+                                {lead.ipCountry && (
+                                  <span className="font-sans font-bold">({lead.ipCountry})</span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </td>
 
