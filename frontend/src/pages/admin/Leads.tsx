@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { leadsApi, productsApi } from '../../lib/api';
+import { leadsApi, productsApi, securityApi } from '../../lib/api';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -13,7 +13,7 @@ import {
   ChevronDown, ChevronUp, Package, X, Eye, RefreshCw,
   SlidersHorizontal, Wallet, TrendingUp, MessageCircle, Link2,
   FileSpreadsheet, PhoneCall, StickyNote, Home, Hash,
-  Store, Megaphone, MonitorPlay, Globe, Wifi, PlayCircle, ExternalLink,
+  Store, Megaphone, MonitorPlay, Globe, Wifi, PlayCircle, ExternalLink, Ban,
 } from 'lucide-react';
 import { buildReferralUrl } from '../../utils/referral';
 import { fetchAllPages } from '../../utils/paging';
@@ -417,6 +417,33 @@ export default function AdminLeads() {
   const [leadSessions, setLeadSessions] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [leadToDelete, setLeadToDelete] = useState<any | null>(null);
+  const [banTarget, setBanTarget] = useState<{ ip: string; leadId: number; fullName: string } | null>(null);
+  const [banReason, setBanReason] = useState('');
+  const [banning, setBanning] = useState(false);
+
+  const confirmBanIp = async () => {
+    if (!banTarget || banning) return;
+    setBanning(true);
+    try {
+      const res = await securityApi.blockIP(banTarget.ip, {
+        reason: banReason.trim() || `Commande frauduleuse — lead #${banTarget.leadId}`,
+        leadId: banTarget.leadId,
+      });
+      // The ban is stored either way, but it does nothing while the global
+      // IP-blocking switch is off — say so instead of reporting success.
+      if (res.data?.enforced === false) {
+        toast(`IP ${banTarget.ip} enregistrée, mais le blocage IP est désactivé dans Sécurité.`, { icon: '⚠️' });
+      } else {
+        toast.success(`IP ${banTarget.ip} bannie`);
+      }
+      setBanTarget(null);
+      setBanReason('');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Échec du bannissement');
+    } finally {
+      setBanning(false);
+    }
+  };
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(filters.search.trim()), 400);
@@ -1200,6 +1227,13 @@ export default function AdminLeads() {
                                 {lead.ipCountry && (
                                   <span className="font-sans font-bold">({lead.ipCountry})</span>
                                 )}
+                                <button
+                                  onClick={() => setBanTarget({ ip: lead.ipAddress!, leadId: lead.id, fullName: lead.fullName })}
+                                  className="ml-0.5 p-0.5 rounded text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                  title={`Bannir l'IP ${lead.ipAddress}`}
+                                >
+                                  <Ban className="w-2.5 h-2.5" />
+                                </button>
                               </div>
                             )}
                           </div>
@@ -2092,6 +2126,53 @@ export default function AdminLeads() {
               >
                 <Trash2 className="w-4 h-4" />
                 Supprimer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ban the IP behind an order. Confirmed rather than one-click: a ban
+          blocks the whole site for that address, and carrier NAT means one IP
+          can sit in front of a lot of real customers. */}
+      {banTarget && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-6 flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-4">
+                <Ban className="w-8 h-8 text-red-500" />
+              </div>
+              <h3 className="text-xl font-black text-gray-900 mb-2">Bannir cette adresse IP ?</h3>
+              <p className="text-sm text-gray-500 font-medium">
+                <strong className="font-mono text-gray-800">{banTarget.ip}</strong>
+                <br />
+                Commande de <strong className="text-gray-800">{banTarget.fullName}</strong>
+              </p>
+              <p className="text-xs text-gray-400 mt-3">
+                Cette IP ne pourra plus ouvrir le site ni passer commande. Plusieurs clients
+                peuvent partager une même IP (réseau mobile) — vérifiez avant de bannir.
+              </p>
+              <input
+                value={banReason}
+                onChange={(e) => setBanReason(e.target.value)}
+                placeholder="Motif (ex. fausses commandes répétées)"
+                className="mt-4 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-red-400"
+              />
+            </div>
+            <div className="bg-gray-50 px-6 py-4 flex gap-3">
+              <button
+                onClick={() => { setBanTarget(null); setBanReason(''); }}
+                className="flex-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all shadow-sm"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={confirmBanIp}
+                disabled={banning}
+                className="flex-1 px-4 py-2.5 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white rounded-xl text-sm font-bold transition-all shadow-md shadow-red-200 flex items-center justify-center gap-2"
+              >
+                <Ban className="w-4 h-4" />
+                {banning ? 'Blocage…' : 'Bannir'}
               </button>
             </div>
           </div>

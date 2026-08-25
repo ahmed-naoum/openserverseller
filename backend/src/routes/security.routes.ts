@@ -12,6 +12,7 @@ import {
   unblockIP,
   logSecurityEvent
 } from '../middleware/security.js';
+import { banIp, unbanIp, normalizeBanValue, isValidBanValue } from '../lib/ipBan.js';
 import { verifyAuditChain, logImmutableAction } from '../utils/hashChain.js';
 import { resolvePage, resolvePageSize } from '../lib/pagination.js';
 import os from 'os';
@@ -116,7 +117,16 @@ router.get(
 
     const score = Math.round(checks.filter(c => c.status === 'PASS').length / checks.length * 100);
 
-    const allBlocked = Array.from(new Set([...settings.blockedIPs, ...Array.from(blockedIPs.keys())]));
+    // The persisted bans are the source of truth; the in-memory map only holds
+    // whatever this process has blocked since it last started.
+    const persistedBans = await prisma.bannedIp.findMany({
+      where: { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+      select: { value: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    const allBlocked = Array.from(
+      new Set([...persistedBans.map((b) => b.value), ...Array.from(blockedIPs.keys())])
+    );
 
     res.json({
       status: 'success',
@@ -837,32 +847,96 @@ router.post(
       return res.status(400).json({ status: 'error', message: 'Valid IP required' });
     }
 
-    const cleanIp = ip.trim();
-    blockedIPs.set(cleanIp, new Date());
-    
-    const settings = await fetchSecuritySettings();
-    if (!settings.blockedIPs.includes(cleanIp)) {
-      settings.blockedIPs.push(cleanIp);
-      await prisma.platformSettings.upsert({
-        where: { key: 'security_settings' },
-        update: { value: settings as any },
-        create: { key: 'security_settings', value: settings as any }
+    const cleanIp = normalizeBanValue(ip);
+    if (!isValidBanValue(cleanIp)) {
+      return res.status(400).json({
+        status: 'error',
+        message: `"${ip}" is not a valid IP address or CIDR range (e.g. 41.248.3.9 or 105.66.0.0/16)`,
       });
-      clearSecurityCache();
     }
+
+    // Refuse to ban an address that would lock the platform out of itself. The
+    // whitelist is the escape hatch for exactly this, so honour it here rather
+    // than storing a ban the filter will then ignore.
+    const settings = await fetchSecuritySettings();
+    if (settings.whitelistedIPs.includes(cleanIp)) {
+      return res.status(400).json({
+        status: 'error',
+        message: `${cleanIp} is whitelisted; remove it from the whitelist first.`,
+      });
+    }
+
+    const { reason, expiresAt, leadId } = req.body as {
+      reason?: string;
+      expiresAt?: string;
+      leadId?: number;
+    };
+
+    let expires: Date | null = null;
+    if (expiresAt) {
+      const parsed = new Date(expiresAt);
+      if (Number.isNaN(parsed.getTime())) {
+        return res.status(400).json({ status: 'error', message: 'expiresAt is not a valid date' });
+      }
+      expires = parsed;
+    }
+
+    const ban = await banIp({
+      value: cleanIp,
+      reason: reason?.trim() || null,
+      source: 'MANUAL',
+      bannedById: req.user?.id ?? null,
+      bannedByEmail: req.user?.email ?? null,
+      leadId: typeof leadId === 'number' ? leadId : null,
+      expiresAt: expires,
+    });
+
+    blockedIPs.set(cleanIp, new Date());
 
     await logImmutableAction(
       req.user?.id || null,
       req.user?.email || null,
-      `BLOCKED_IP: ip=${cleanIp}`,
+      `BLOCKED_IP: ip=${cleanIp} reason=${ban.reason || 'none'}`,
       req.ip || 'unknown'
     );
 
     emitSecurityUpdate('blocklist');
     res.json({
       status: 'success',
-      message: `IP ${ip} blocked and persisted successfully`,
-      blockedIPs: settings.blockedIPs,
+      message: settings.enableIPBlocking
+        ? `IP ${cleanIp} blocked`
+        : `IP ${cleanIp} saved, but IP blocking is currently OFF so it is not being enforced`,
+      enforced: settings.enableIPBlocking,
+      ban,
+    });
+  })
+);
+
+// ─── GET /admin/security/banned-ips ──────────────────────────────────────────
+// The blocklist with its metadata: who banned each address, why, whether it has
+// expired, and how much traffic it has actually turned away.
+router.get(
+  '/banned-ips',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const [rows, settings] = await Promise.all([
+      prisma.bannedIp.findMany({ orderBy: { createdAt: 'desc' }, take: 500 }),
+      fetchSecuritySettings(),
+    ]);
+
+    const now = new Date();
+    res.json({
+      status: 'success',
+      data: {
+        // Surfaced so the UI can warn that the list is saved but dormant.
+        enforced: settings.enableIPBlocking,
+        bans: rows.map((b) => ({
+          ...b,
+          isExpired: b.expiresAt !== null && b.expiresAt <= now,
+          isRange: b.value.includes('/'),
+        })),
+      },
     });
   })
 );
@@ -1061,22 +1135,13 @@ router.delete(
     const { ip } = req.body;
     if (!ip) return res.status(400).json({ status: 'error', message: 'IP required' });
 
-    const cleanIp = ip.trim();
+    const cleanIp = normalizeBanValue(ip);
     blockedIPs.delete(cleanIp);
     loginFailures.delete(cleanIp);
     suspiciousRequests.delete(cleanIp);
     unblockIP(cleanIp);
 
-    const settings = await fetchSecuritySettings();
-    if (settings.blockedIPs.includes(cleanIp)) {
-      settings.blockedIPs = settings.blockedIPs.filter(x => x !== cleanIp);
-      await prisma.platformSettings.upsert({
-        where: { key: 'security_settings' },
-        update: { value: settings as any },
-        create: { key: 'security_settings', value: settings as any }
-      });
-      clearSecurityCache();
-    }
+    const removed = await unbanIp(cleanIp);
 
     await logImmutableAction(
       req.user?.id || null,
@@ -1088,8 +1153,13 @@ router.delete(
     emitSecurityUpdate('blocklist');
     res.json({
       status: 'success',
-      message: `IP ${ip} unblocked successfully`,
-      blockedIPs: settings.blockedIPs,
+      // Not an error: the rate limiter and the threat counters keep their own
+      // short-lived lists, and clearing those is a legitimate reason to call
+      // this for an address that was never in the ban table.
+      message: removed
+        ? `IP ${cleanIp} unblocked successfully`
+        : `IP ${cleanIp} was not banned; cleared its rate-limit and threat counters`,
+      removed,
     });
   })
 );
@@ -1142,6 +1212,8 @@ router.put(
       globalRateLimitMax,
       uploadRateLimitMax,
       payoutRateLimitMax,
+      autoBanOrderThreshold,
+      autoBanDurationHours,
     } = req.body;
 
     if (
@@ -1157,16 +1229,30 @@ router.put(
       return res.status(400).json({ status: 'error', message: 'Payload is invalid or has an incorrect structure' });
     }
 
+    // Fall back to what is stored rather than to a hardcoded default, so a
+    // client that predates a field cannot silently reset it by omitting it.
+    const current = await fetchSecuritySettings();
+
     const payload: DynamicSecuritySettings = {
       enableIPBlocking,
       enableAuditLog,
       enableRequestSanitization,
+      // Kept for backwards compatibility only. Bans live in the banned_ips
+      // table now; nothing reads this array to decide whether to block.
       blockedIPs: reqBlockedIPs.map((ip: any) => String(ip).trim()).filter(Boolean),
       whitelistedIPs: reqWhitelistedIPs.map((ip: any) => String(ip).trim()).filter(Boolean),
       globalRateLimitWindowMs: typeof globalRateLimitWindowMs === 'number' ? globalRateLimitWindowMs : 900000,
       globalRateLimitMax,
       uploadRateLimitMax,
       payoutRateLimitMax,
+      autoBanOrderThreshold:
+        typeof autoBanOrderThreshold === 'number' && autoBanOrderThreshold >= 0
+          ? Math.floor(autoBanOrderThreshold)
+          : current.autoBanOrderThreshold,
+      autoBanDurationHours:
+        typeof autoBanDurationHours === 'number' && autoBanDurationHours >= 0
+          ? Math.floor(autoBanDurationHours)
+          : current.autoBanDurationHours,
     };
 
     await prisma.platformSettings.upsert({

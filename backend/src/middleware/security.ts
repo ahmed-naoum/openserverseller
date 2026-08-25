@@ -5,6 +5,8 @@ import rateLimit from 'express-rate-limit';
 import xss from 'xss';
 import { streamLogToExternalTransport } from '../services/logger.service.js';
 import { logImmutableAction } from '../utils/hashChain.js';
+import { getClientIp } from '../utils/clientIp.js';
+import { findBan, recordBanHit, banIp } from '../lib/ipBan.js';
 
 export interface DynamicSecuritySettings {
   enableIPBlocking: boolean;
@@ -17,6 +19,14 @@ export interface DynamicSecuritySettings {
   globalRateLimitMax: number;
   uploadRateLimitMax: number;
   payoutRateLimitMax: number;
+  /**
+   * Ban an IP once it has placed this many landing-page orders in 24h.
+   * 0 disables it. Distinct from the checkout rate limiter, which only refuses
+   * the extra orders and lets the same visitor keep trying tomorrow.
+   */
+  autoBanOrderThreshold: number;
+  /** Hours an automatic ban lasts. 0 means permanent. */
+  autoBanDurationHours: number;
 }
 
 // In-memory cache for security settings
@@ -41,7 +51,11 @@ export const fetchSecuritySettings = async (): Promise<DynamicSecuritySettings> 
     globalRateLimitWindowMs: 900000, // 15 min
     globalRateLimitMax: 100,
     uploadRateLimitMax: 10,
-    payoutRateLimitMax: 5
+    payoutRateLimitMax: 5,
+    // Off by default: switching this on retroactively bans nobody, but a badly
+    // chosen threshold on a shared carrier NAT would ban real customers.
+    autoBanOrderThreshold: 0,
+    autoBanDurationHours: 24
   };
 
   try {
@@ -62,6 +76,8 @@ export const fetchSecuritySettings = async (): Promise<DynamicSecuritySettings> 
         globalRateLimitMax: typeof data.globalRateLimitMax === 'number' ? data.globalRateLimitMax : defaultSettings.globalRateLimitMax,
         uploadRateLimitMax: typeof data.uploadRateLimitMax === 'number' ? data.uploadRateLimitMax : defaultSettings.uploadRateLimitMax,
         payoutRateLimitMax: typeof data.payoutRateLimitMax === 'number' ? data.payoutRateLimitMax : defaultSettings.payoutRateLimitMax,
+        autoBanOrderThreshold: typeof data.autoBanOrderThreshold === 'number' ? data.autoBanOrderThreshold : defaultSettings.autoBanOrderThreshold,
+        autoBanDurationHours: typeof data.autoBanDurationHours === 'number' ? data.autoBanDurationHours : defaultSettings.autoBanDurationHours,
       };
       cacheExpiresAt = now + CACHE_TTL;
       return securityCache;
@@ -156,32 +172,47 @@ export const logSecurityEvent = async (data: {
   }
 };
 
+/**
+ * Refuse banned visitors before anything else looks at the request.
+ *
+ * Mounted globally in index.ts, ahead of the landing-page routes, so a ban costs
+ * a banned visitor the whole site rather than just the checkout endpoint.
+ *
+ * Two behaviours here are deliberate and were both bugs before:
+ *
+ *   * The address tested comes from getClientIp, not `req.ip`. With Cloudflare
+ *     in front and `trust proxy` on, `req.ip` is the leftmost X-Forwarded-For
+ *     entry — which the visitor writes. Banning on it meant a banned visitor
+ *     could return by sending one header, and it could differ from the IP
+ *     recorded on their order, so the address an admin banned was not the one
+ *     being compared.
+ *
+ *   * The whitelist EXEMPTS, it does not restrict. It used to mean "if this list
+ *     is non-empty, 403 everyone who is not on it" — one stray entry would have
+ *     locked every customer out of the entire platform, silently, the moment IP
+ *     blocking was switched on.
+ */
 export const ipFilter = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   const settings = await fetchSecuritySettings();
-  
+
   if (!settings.enableIPBlocking) {
     return next();
   }
 
-  const clientIP = req.ip || req.socket.remoteAddress || 'unknown';
+  const clientIP = getClientIp(req);
 
-  // Check whitelist first
-  if (settings.whitelistedIPs.length > 0) {
-    if (settings.whitelistedIPs.includes(clientIP)) {
-      return next();
-    }
-    return res.status(403).json({
-      status: 'error',
-      message: 'Access denied. IP not whitelisted.',
-    });
+  // Never ban ourselves out of our own platform.
+  if (clientIP && settings.whitelistedIPs.includes(clientIP)) {
+    return next();
   }
 
-  // Check blacklist
-  if (settings.blockedIPs.includes(clientIP)) {
+  const ban = await findBan(clientIP);
+  if (ban) {
+    recordBanHit(ban.id);
     return res.status(403).json({
       status: 'error',
       message: 'Access denied. Your IP has been blocked.',
@@ -448,27 +479,33 @@ export const csrfProtection = (req: Request, res: Response, next: NextFunction) 
 };
 
 export const honeypotTrap = async (req: Request, res: Response) => {
-  const ip = req.ip || req.socket.remoteAddress || 'unknown';
-  
+  const ip = getClientIp(req);
+
   await logSecurityEvent({
     eventType: 'RECONNAISSANCE',
     severity: 'CRITICAL',
-    sourceIp: ip,
+    sourceIp: ip || 'unknown',
     endpoint: req.originalUrl,
     action: 'BLOCKED',
     details: `Honeypot hit on path: ${req.originalUrl}`,
   });
 
-  // Auto-block the IP
-  const settings = await fetchSecuritySettings();
-  if (!settings.blockedIPs.includes(ip)) {
-    settings.blockedIPs.push(ip);
-    await prisma.platformSettings.upsert({
-      where: { key: 'security_settings' },
-      update: { value: settings as any },
-      create: { key: 'security_settings', value: settings as any }
-    });
-    clearSecurityCache();
+  // Auto-block the IP. Nothing but a scanner reaches a honeypot path, so this
+  // needs no threshold — but it still respects the whitelist, because the one
+  // way this bites is an internal scan run from our own address.
+  if (ip) {
+    const settings = await fetchSecuritySettings();
+    if (!settings.whitelistedIPs.includes(ip)) {
+      try {
+        await banIp({
+          value: ip,
+          reason: `Honeypot hit on ${req.originalUrl}`,
+          source: 'AUTO',
+        });
+      } catch (err) {
+        console.error('[honeypot] failed to ban IP:', err);
+      }
+    }
   }
 
   return res.status(403).json({

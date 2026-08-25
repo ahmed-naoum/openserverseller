@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { validateInfluencerSubdomain } from '../utils/subdomain.js';
 import { getClientIp, getClientCountry } from '../utils/clientIp.js';
+import { maybeAutoBanForOrders } from '../lib/ipBan.js';
 import { getIO } from '../lib/realtime.js';
 import { getNotifiableAgentIds } from '../utils/agentScope.js';
 import { enqueueSheetPush } from '../services/sheetPush.service.js';
@@ -313,6 +314,16 @@ router.post(
       }
     });
 
+    // Auto-ban an address that keeps placing orders. The rate limiter above
+    // already refuses the extra orders, but it forgets after 24h and the same
+    // person simply comes back; this makes the block stick. Runs after the lead
+    // is saved and never throws into the response — the order is already the
+    // customer's, and a failure to ban must not lose it.
+    try {
+      await maybeAutoBanForOrders(ipAddress, lead.id);
+    } catch (err) {
+      console.error('[AutoBan] check failed:', err);
+    }
 
     // Queue the lead for the seller's own Google Sheet. This is the hottest path
     // in the system — a customer is sitting on the landing-page form — so the

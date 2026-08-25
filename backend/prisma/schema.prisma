@@ -1582,6 +1582,50 @@ model SecurityEvent {
   @@map("security_events")
 }
 
+/// An IP address or CIDR range that is refused at the edge of the app.
+///
+/// This replaces the `blockedIPs` string array that used to live inside the
+/// `security_settings` JSON blob. That array could record only the address, so
+/// nobody could tell a fraud ban from a hand-typed mistake six months later, and
+/// there was nowhere to put an expiry. The old values are migrated in; the
+/// settings key is no longer read for blocking.
+///
+/// Enforcement is middleware/security.ts `ipFilter`, matching via lib/ipBan.ts.
+model BannedIp {
+  id    Int    @id @default(autoincrement())
+  /// An exact IPv4/IPv6 address, or a CIDR range ("105.66.0.0/16"). Stored
+  /// normalized (lowercased, ::ffff: prefix stripped) so a lookup is an equality
+  /// test against the same shape getClientIp produces.
+  value String @unique
+
+  reason String?
+  /// MANUAL when an admin banned it, AUTO when the checkout guard did.
+  source String  @default("MANUAL")
+
+  /// Denormalized like SecurityEvent.userEmail: who banned it stays readable
+  /// after the account is renamed or removed.
+  bannedById    Int?
+  bannedByEmail String?
+  /// The order that prompted the ban, when it was raised from the leads screen.
+  leadId        Int?
+
+  /// Null means permanent. A row past its expiry stops matching but is kept, so
+  /// the history of what was banned and why survives.
+  expiresAt DateTime?
+
+  /// Updated by the filter, throttled — see lib/ipBan.ts. Lets an admin see
+  /// which bans are actually catching traffic and which are dead weight.
+  hitCount  Int       @default(0)
+  lastHitAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([expiresAt])
+  @@index([createdAt])
+  @@map("banned_ips")
+}
+
 model ImmutableAuditLog {
   id        String   @id @default(uuid())
   timestamp DateTime @default(now())

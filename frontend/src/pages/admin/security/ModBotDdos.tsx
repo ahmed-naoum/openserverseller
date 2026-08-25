@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { securityApi } from '../../../lib/api';
 import toast from 'react-hot-toast';
-import { Ban, Plus, Trash2, Shield } from 'lucide-react';
+import { Ban, Plus, Trash2, Shield, AlertTriangle } from 'lucide-react';
 import { useSocket } from '../../../contexts/SocketContext';
 
 const S = 'bg-slate-900 rounded-2xl border border-slate-800 p-5';
@@ -11,15 +11,22 @@ export default function ModBotDdos() {
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [newIP, setNewIP] = useState('');
+  const [newReason, setNewReason] = useState('');
   const [newWhiteIP, setNewWhiteIP] = useState('');
   const [blocking, setBlocking] = useState(false);
+  const [bans, setBans] = useState<any[]>([]);
   const { socket } = useSocket();
 
   const load = useCallback(async () => {
     try {
-      const [ov, st] = await Promise.all([securityApi.overview(), securityApi.getSettings()]);
+      const [ov, st, bn] = await Promise.all([
+        securityApi.overview(),
+        securityApi.getSettings(),
+        securityApi.getBannedIPs(),
+      ]);
       setData(ov.data.data);
       setSettings(st.data.data);
+      setBans(bn.data.data.bans || []);
     } catch { toast.error('Failed to load'); }
     finally { setLoading(false); }
   }, []);
@@ -42,8 +49,14 @@ export default function ModBotDdos() {
   const blockIP = async () => {
     if (!newIP.trim()) return;
     setBlocking(true);
-    try { await securityApi.blockIP(newIP.trim()); toast.success(`IP ${newIP} blocked`); setNewIP(''); load(); }
-    catch { toast.error('Block failed'); }
+    try {
+      await securityApi.blockIP(newIP.trim(), { reason: newReason.trim() || undefined });
+      toast.success(`IP ${newIP} blocked`);
+      setNewIP(''); setNewReason(''); load();
+    }
+    // Surface the server's message: it explains a rejected CIDR or a
+    // whitelisted address, which "Block failed" never did.
+    catch (e: any) { toast.error(e?.response?.data?.message || 'Block failed'); }
     finally { setBlocking(false); }
   };
 
@@ -77,22 +90,55 @@ export default function ModBotDdos() {
         {/* IP Blocklist */}
         <div className={S + ' space-y-4'}>
           <h3 className="text-sm font-bold text-white flex items-center gap-2"><Ban size={16} className="text-red-500" /> IP Blocklist</h3>
-          <div className="flex gap-2">
-            <input value={newIP} onChange={e=>setNewIP(e.target.value)} placeholder="e.g. 192.168.1.1"
-              className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500"
+
+          {/* The list is stored whether or not blocking is switched on, so say
+              plainly when nothing is being enforced — that state looked exactly
+              like a working blocklist before, and silently let everyone in. */}
+          {settings && !settings.enableIPBlocking && (
+            <div className="flex items-start gap-2 bg-amber-950/40 border border-amber-800/50 rounded-lg px-3 py-2">
+              <AlertTriangle size={13} className="text-amber-500 mt-0.5 flex-shrink-0" />
+              <p className="text-[11px] text-amber-300 leading-relaxed">
+                IP blocking is <strong>off</strong> — these bans are saved but not enforced.
+                Turn on “IP Blocking” below to apply them.
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <input value={newIP} onChange={e=>setNewIP(e.target.value)} placeholder="41.248.3.9 or 105.66.0.0/16"
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-red-500"
+                onKeyDown={e=>e.key==='Enter'&&blockIP()} />
+              <button onClick={blockIP} disabled={blocking}
+                className="px-3 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-xs font-bold text-white disabled:opacity-50">
+                <Plus size={14} />
+              </button>
+            </div>
+            <input value={newReason} onChange={e=>setNewReason(e.target.value)} placeholder="Reason (optional)"
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-red-500"
               onKeyDown={e=>e.key==='Enter'&&blockIP()} />
-            <button onClick={blockIP} disabled={blocking}
-              className="px-3 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-xs font-bold text-white disabled:opacity-50">
-              <Plus size={14} />
-            </button>
           </div>
+
           <div className="max-h-[250px] overflow-y-auto divide-y divide-slate-800/50">
-            {(data?.threats?.blockedIPs || []).length === 0 ? (
+            {bans.length === 0 ? (
               <p className="text-slate-500 text-xs text-center py-6">No blocked IPs</p>
-            ) : (data?.threats?.blockedIPs || []).map((ip: string) => (
-              <div key={ip} className="py-2 flex items-center justify-between text-xs">
-                <span className="text-white font-mono">{ip}</span>
-                <button onClick={()=>unblockIP(ip)} className="text-slate-500 hover:text-red-400"><Trash2 size={13}/></button>
+            ) : bans.map((b: any) => (
+              <div key={b.id} className="py-2 flex items-start justify-between text-xs gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-white font-mono">{b.value}</span>
+                    {b.isRange && <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-400 text-[9px] font-bold">RANGE</span>}
+                    {b.source === 'AUTO' && <span className="px-1 py-0.5 rounded bg-cyan-950 text-cyan-400 text-[9px] font-bold">AUTO</span>}
+                    {b.isExpired && <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-500 text-[9px] font-bold">EXPIRED</span>}
+                  </div>
+                  {b.reason && <p className="text-slate-500 mt-0.5 truncate">{b.reason}</p>}
+                  <p className="text-slate-600 text-[10px] mt-0.5">
+                    {new Date(b.createdAt).toLocaleDateString()}
+                    {b.bannedByEmail ? ` · ${b.bannedByEmail}` : ''}
+                    {b.hitCount > 0 ? ` · ${b.hitCount} blocked` : ''}
+                  </p>
+                </div>
+                <button onClick={()=>unblockIP(b.value)} className="text-slate-500 hover:text-red-400 flex-shrink-0 mt-0.5"><Trash2 size={13}/></button>
               </div>
             ))}
           </div>
@@ -132,6 +178,8 @@ export default function ModBotDdos() {
               { key: 'globalRateLimitMax', label: 'Global Rate Limit (req/15min)' },
               { key: 'uploadRateLimitMax', label: 'Upload Rate Limit (req/15min)' },
               { key: 'payoutRateLimitMax', label: 'Payout Rate Limit (req/15min)' },
+              { key: 'autoBanOrderThreshold', label: 'Auto-ban after N orders / 24h (0 = off)' },
+              { key: 'autoBanDurationHours', label: 'Auto-ban duration in hours (0 = forever)' },
             ].map(f => (
               <div key={f.key} className="space-y-1">
                 <label className="text-[10px] text-slate-400 font-semibold uppercase">{f.label}</label>

@@ -822,8 +822,15 @@ export const announcementApi = {
 export const securityApi = {
   overview: () => api.get('/admin/security/overview'),
   getServerPerformance: () => api.get('/admin/security/server-performance'),
-  blockIP: (ip: string) => api.post('/admin/security/block-ip', { ip }),
+  /**
+   * `ip` may be a single address or a CIDR range ("105.66.0.0/16"). `leadId`
+   * records which order prompted the ban when it is raised from the leads
+   * screen; `expiresAt` is an ISO date, omitted for a permanent ban.
+   */
+  blockIP: (ip: string, opts?: { reason?: string; leadId?: number; expiresAt?: string }) =>
+    api.post('/admin/security/block-ip', { ip, ...opts }),
   unblockIP: (ip: string) => api.delete('/admin/security/block-ip', { data: { ip } }),
+  getBannedIPs: () => api.get('/admin/security/banned-ips'),
   clearThreat: (ip?: string) => api.delete('/admin/security/clear-threat', { data: { ip } }),
   getSettings: () => api.get('/admin/security/settings'),
   updateSettings: (data: any) => api.put('/admin/security/settings', data),
