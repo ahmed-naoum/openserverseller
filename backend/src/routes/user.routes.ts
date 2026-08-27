@@ -103,6 +103,7 @@ router.get(
           subdomain: u.subdomain,
           customDomain: u.customDomain,
           customDomainStatus: u.customDomainStatus,
+          customDomainEnabled: u.customDomainEnabled,
         })), pagination: {
           page,
           limit,
@@ -535,6 +536,7 @@ router.get(
           subdomain: user.subdomain,
           customDomain: user.customDomain,
           customDomainStatus: user.customDomainStatus,
+          customDomainEnabled: user.customDomainEnabled,
           questionnaire: user.questionnaire,
           influencerQuestionnaire: (user as any).influencerQuestionnaire,
         },

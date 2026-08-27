@@ -38,6 +38,10 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BRANCH="${DEPLOY_BRANCH:-master}"
 ALLOW_DATA_LOSS="${ALLOW_DATA_LOSS:-0}"
 PM2_APP="${PM2_APP:-silacod-api}"
+# The WhatsApp agent workers run as their own pm2 app (see
+# backend/ecosystem.config.cjs for why). Restarting only the API would
+# leave the worker running last deploy's code against this deploy's schema.
+PM2_WORKER="${PM2_WORKER:-silacod-wa}"
 
 log()  { echo "[$(date '+%H:%M:%S')] $*"; }
 fail() { echo ""; echo "❌ $*"; echo "DEPLOY_RESULT=FAILED"; exit 1; }
@@ -168,9 +172,20 @@ rm -rf "$PREVIOUS_DIR"
 log ">>> Restarting ${PM2_APP}..."
 pm2 restart "$PM2_APP" --update-env || fail "pm2 restart failed"
 
+# The worker is restarted second, and a missing one is NOT fatal: an
+# installation that has never enabled the WhatsApp agent has no such pm2 app,
+# and that must not fail an otherwise good deploy.
+if pm2 describe "$PM2_WORKER" >/dev/null 2>&1; then
+  log ">>> Restarting ${PM2_WORKER}..."
+  pm2 restart "$PM2_WORKER" --update-env || log "   WARNING: ${PM2_WORKER} restart failed - WhatsApp sessions are down"
+else
+  log ">>> ${PM2_WORKER} not registered, skipping (WhatsApp agent not deployed)"
+fi
+
 log ""
 log "✅ Deployment complete — ${DEPLOYED_SHA}"
 log "   pm2 logs ${PM2_APP}   # backend logs"
+log "   pm2 logs ${PM2_WORKER}  # WhatsApp agent logs"
 
 # Marker read by deploy.service.ts on boot, to settle deployments that were
 # still RUNNING when the pm2 restart above killed the API mid-stream.

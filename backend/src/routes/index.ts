@@ -10,6 +10,7 @@ import leadRoutes from './lead.routes.js';
 import orderRoutes from './order.routes.js';
 import walletRoutes from './wallet.routes.js';
 import sheetCreditsRoutes from './sheetCredits.routes.js';
+import sheetPlansRoutes from './sheetPlans.routes.js';
 import payoutRoutes from './payout.routes.js';
 import courierRoutes from './courier.routes.js';
 import warehouseRoutes from './warehouse.routes.js';
@@ -45,6 +46,13 @@ import googleSheetsRoutes from './googleSheets.routes.js';
 import helperRoutes from './helper.routes.js';
 import vendorSubAccountRoutes from './vendorSubAccount.routes.js';
 import agentFacturationRoutes from './agentFacturation.routes.js';
+import whatsappAgentRoutes from './whatsappAgent.routes.js';
+import whatsappInboxRoutes from './whatsappInbox.routes.js';
+import adminAiRoutes from './admin/ai.routes.js';
+import adminSheetsRoutes from './admin/sheets.routes.js';
+import adminSheetPlansRoutes from './admin/sheetPlans.routes.js';
+import adminWaLogsRoutes from './admin/waLogs.routes.js';
+import { waRequestLog } from '../middleware/waRequestLog.js';
 
 
 const router = Router();
@@ -74,6 +82,7 @@ router.use('/invoices', auditLog, invoiceRoutes);
 router.use('/orders', auditLog, orderRoutes);
 router.use('/wallet', auditLog, walletRoutes);
 router.use('/sheet-credits', auditLog, sheetCreditsRoutes);
+router.use('/sheet-plans', auditLog, sheetPlansRoutes);
 router.use('/payouts', auditLog, payoutRoutes);
 router.use('/couriers', courierRoutes);
 router.use('/warehouse', warehouseRoutes);
@@ -82,6 +91,10 @@ router.use('/notifications', notificationRoutes);
 // Register specific admin sub-routes BEFORE the general /admin route
 router.use('/admin/backups', backupRoutes);
 router.use('/admin/security', securityRoutes);
+router.use('/admin/ai', auditLog, adminAiRoutes);
+router.use('/admin/sheets', auditLog, adminSheetsRoutes);
+router.use('/admin/sheet-plans', auditLog, adminSheetPlansRoutes);
+router.use('/admin/wa-logs', adminWaLogsRoutes);
 // Secrets are deliberately NOT behind auditLog.
 //
 // The generic middleware records req.body, and sensitiveDataMasking() only
@@ -133,6 +146,24 @@ router.use('/event', eventRoutes);
 router.use('/helper', auditLog, helperRoutes);
 router.use('/vendor/sub-accounts', auditLog, vendorSubAccountRoutes);
 router.use('/agent-facturation', auditLog, agentFacturationRoutes);
+
+// The WhatsApp AI agent. Deliberately NOT behind auditLog: the inbox carries
+// customer message bodies, photos and voice-note transcripts, and the generic
+// middleware writes req.body verbatim into activity_logs, into the hash-chained
+// immutable audit log, and into the external log stream. That would copy every
+// customer conversation into three places it does not belong, one of which
+// cannot be deleted without breaking chain verification. The routers audit
+// their own state changes instead.
+//
+// It IS behind waRequestLog, which is the narrow replacement: one row per
+// state-changing call in whatsapp_agent_logs, next to what the worker did with
+// it. That table is SUPER_ADMIN-only at the route, expires on
+// WA_LOG_RETENTION_DAYS, and is deletable — none of which is true of the audit
+// chain. Mounted once for both routers, or a call that falls through the first
+// one would be logged twice.
+router.use('/whatsapp-agent', waRequestLog);
+router.use('/whatsapp-agent', whatsappAgentRoutes);
+router.use('/whatsapp-agent', whatsappInboxRoutes);
 
 
 export default router;

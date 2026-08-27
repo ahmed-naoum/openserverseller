@@ -27,6 +27,8 @@ export interface User {
   avatarUrl?: string;
   customDomain?: string | null;
   customDomainStatus?: string | null;
+  /** Admin-set entitlement. The custom-domain tab is hidden entirely when false. */
+  customDomainEnabled?: boolean;
   [key: string]: any;
 }
 
@@ -464,9 +466,12 @@ export const publicApi = {
   categories: () => api.get('/public/categories'),
   featuredProducts: () => api.get('/public/products/featured'),
   stats: () => api.get('/public/stats'),
-  getReferralLinkData: (code: string) => api.get(`/influencer/links/${code}/public`),
+  getReferralLinkData: (code: string) => {
+    const search = typeof window !== 'undefined' ? window.location.search : '';
+    return api.get(`/influencer/links/${code}/public${search}`);
+  },
   trackWhatsappClick: (code: string) => api.post(`/influencer/links/${code}/track-whatsapp`),
-  submitReferralLead: (data: { referralCode: string; fullName: string; phone: string; city: string; address: string; productVariant?: string }) => api.post('/public/leads', data),
+  submitReferralLead: (data: { referralCode: string; fullName: string; phone: string; city: string; address: string; productVariant?: string; variantOptionId?: string; variantName?: string; packQuantity?: number }) => api.post('/public/leads', data),
   submitContact: (data: { name: string; email: string; subject: string; message: string }) => api.post('/public/contact', data),
   checkBlock: (path: string) => api.get('/public/check-block', { params: { path } }),
   getProductsByAccounts: (accountIds: string) => api.get('/public/products-by-accounts', { params: { accountIds } }),
@@ -522,6 +527,15 @@ export const adminApi = {
   verifyContract: (uuid: string, accepted?: boolean) => api.patch(`/admin/users/${uuid}/verify-contract`, { accepted }),
   updateUserSubdomain: (uuid: string, subdomain: string) => api.patch(`/admin/users/${uuid}/subdomain`, { subdomain }),
   clearUserSubdomain: (uuid: string) => api.patch(`/admin/users/${uuid}/subdomain`, { subdomain: null }),
+  /**
+   * Grant or revoke the custom-domain entitlement.
+   *
+   * Revoking is a kill switch, not a UI toggle: the backend also releases the
+   * domain on Cloudflare, so an account cannot keep serving from a domain an
+   * admin has just taken away.
+   */
+  setUserCustomDomainEnabled: (uuid: string, enabled: boolean) =>
+    api.patch(`/admin/users/${uuid}/custom-domain`, { enabled }),
   users: (params?: { role?: string; status?: string; page?: number; limit?: number; search?: string }) =>
     api.get('/users', { params }),
   getRoleCounts: () => api.get('/users/role-counts'),
@@ -799,6 +813,8 @@ export const helperApi = {
   verifyRegenOtp: (id: number, otp: string) => api.post(`/influencer/links/${id}/verify-regen-otp`, { otp }),
   updateLinkStatus: (id: number, isActive: boolean, status?: string) => api.patch(`/influencer/links/${id}/status`, { isActive, status }),
   getLandingPage: (id: number) => api.get(`/influencer/links/${id}/landing-page`),
+  /** Other pages by the same influencer — options for a cloaking `render` rule. */
+  getSiblingPages: (id: number) => api.get(`/influencer/links/${id}/sibling-pages`),
   updateLandingPage: (id: number, data: any) => api.put(`/influencer/links/${id}/landing-page`, data),
   verifyReturnCode: (code: string) => api.post('/leads/verify-return', { code }),
   bulkScanReturns: (orderIds: number[]) => api.post('/leads/bulk-scan-returns', { orderIds }),
@@ -992,10 +1008,37 @@ export const userPixelApi = {
   verify: (pixelId: string) => api.post('/user-pixels/verify', { pixelId }),
 };
 
+/** One DNS record the seller has to create at their registrar. */
+export interface DomainDnsRecord {
+  type: string;
+  name: string;
+  value: string;
+}
+
+export interface DomainState {
+  enabled: boolean;
+  customDomain: string | null;
+  customDomainStatus: 'NONE' | 'PENDING' | 'ACTIVE' | 'FAILED' | string;
+  cloudflareLinked: boolean;
+  /** Domain awaiting TXT proof. Not claimed yet — see backend domain.routes.ts. */
+  pendingDomain: string | null;
+  error: string | null;
+  verifyRecord: DomainDnsRecord | null;
+  cnameRecord: DomainDnsRecord | null;
+  cnameTarget: string;
+}
+
+const unwrapDomain = (res: any): DomainState => res.data.data as DomainState;
+
 export const domainApi = {
-  connect: (domain: string) => api.post('/domain/connect', { domain }),
-  refresh: () => api.post('/domain/refresh'),
-  disconnect: () => api.delete('/domain/disconnect'),
+  get: () => api.get('/domain').then(unwrapDomain),
+  /** Step 1: ask for a domain, receive the TXT record to publish. */
+  request: (domain: string) => api.post('/domain/request', { domain }).then(unwrapDomain),
+  /** Step 2: prove ownership, claim the domain, register it with Cloudflare. */
+  verify: () => api.post('/domain/verify').then(unwrapDomain),
+  /** Step 3: re-read the certificate/routing status from Cloudflare. */
+  refresh: () => api.post('/domain/refresh').then(unwrapDomain),
+  disconnect: () => api.delete('/domain/disconnect').then(unwrapDomain),
 };
 
 export const customProductsApi = {

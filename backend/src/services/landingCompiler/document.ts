@@ -103,6 +103,103 @@ export interface RenderedPage {
   csp: string;
 }
 
+/**
+ * Content-protection runtime for the compiled page.
+ *
+ * The React page runs the equivalent from ReferralForm; the compiled page ships
+ * no React, so its guards are emitted here instead. Returns '' when neither flag
+ * is set. The output is appended to the single hashed <script>, so it is covered
+ * by the page CSP — an inline `oncontextmenu` attribute would not be.
+ *
+ * This raises the effort of casual copy/save; it is not real protection. A
+ * determined visitor disables JavaScript, opens DevTools before load, or screen-
+ * records, and none of that is stopped here.
+ */
+function cloakGuardScript(cloaking: any): string {
+  if (!cloaking) return '';
+  const parts: string[] = [];
+
+  if (cloaking.disableRightClick) {
+    parts.push(
+      // 1. Context Menu & Keyboard Protection
+      `d.addEventListener('contextmenu',function(e){e.preventDefault();},true);` +
+      `d.addEventListener('keydown',function(e){` +
+      `var k=(e.key||'').toLowerCase(),code=e.keyCode||e.which;` +
+      `if(code===123||k==='f12'){e.preventDefault();e.stopPropagation();return false;}` +
+      `if((e.ctrlKey||e.metaKey)&&(e.shiftKey||e.altKey)&&(k==='i'||k==='j'||k==='c')){e.preventDefault();e.stopPropagation();return false;}` +
+      `if((e.ctrlKey||e.metaKey)&&(k==='u'||k==='s')){e.preventDefault();e.stopPropagation();return false;}` +
+      `},true);` +
+
+      // 2. DevTools Redirect Trap (Console Getter + Debugger Timing + Resize Probe)
+      `var doRedirect=function(){try{window.location.replace('https://www.silacod.com');}catch(_){d.body.innerHTML='';}};` +
+      `var dtImg=new Image();` +
+      `Object.defineProperty(dtImg,'id',{get:function(){doRedirect();}});` +
+      `var dtCheck=function(){` +
+      `try{console.log('%c',dtImg);}catch(_){}` +
+      `var start=performance.now();` +
+      `(function(){}).constructor('debugger')();` +
+      `var diff=performance.now()-start;` +
+      `var devOpen=(diff>50)||(window.outerWidth-window.innerWidth>160)||(window.outerHeight-window.innerHeight>160);` +
+      `if(devOpen){doRedirect();}` +
+      `};` +
+      `setInterval(dtCheck,800);` +
+      `window.addEventListener('resize',dtCheck,true);`
+    );
+  }
+
+  if (cloaking.protectVideos) {
+    parts.push(
+      // 1. Convert raw video sources to Blob URLs so real URLs are completely hidden from HTML DOM
+      `var convertBlob=function(v){` +
+      `var raw=v.getAttribute('data-vsrc')||v.getAttribute('src');` +
+      `if(!raw||raw.indexOf('blob:')===0)return;` +
+      `v.removeAttribute('data-vsrc');` +
+      `fetch(raw).then(function(r){return r.blob();}).then(function(b){` +
+      `var bUrl=URL.createObjectURL(b);` +
+      `v.src=bUrl;` +
+      `}).catch(function(){});` +
+      `};` +
+
+      // 2. Anti-Screen Sharing & Anti-Stream Blackout Guard
+      `var handleStreamGuard=function(){` +
+      `var isHidden=d.hidden||!d.hasFocus();` +
+      `var vs=d.getElementsByTagName('video');` +
+      `for(var i=0;i<vs.length;i++){` +
+      `var v=vs[i];var p=v.parentElement;if(!p)continue;` +
+      `var ov=p.querySelector('.vid-stream-guard');` +
+      `if(!ov){` +
+      `ov=d.createElement('div');ov.className='vid-stream-guard';` +
+      `ov.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;background:#000;color:#fff;display:none;align-items:center;justify-content:center;font-family:sans-serif;font-size:14px;font-weight:bold;z-index:9999;pointer-events:none;text-align:center;padding:20px;box-sizing:border-box;';` +
+      `ov.innerHTML='🔒 Content Protected<br><span style="font-size:11px;opacity:0.75">Screen Capture & Streaming Blocked</span>';` +
+      `if(getComputedStyle(p).position==='static')p.style.position='relative';` +
+      `p.appendChild(ov);` +
+      `}` +
+      `if(isHidden){try{v.pause();}catch(_){}ov.style.display='flex';}else{ov.style.display='none';}` +
+      `}` +
+      `};` +
+      `window.addEventListener('blur',handleStreamGuard,true);` +
+      `window.addEventListener('focus',handleStreamGuard,true);` +
+      `d.addEventListener('visibilitychange',handleStreamGuard,true);` +
+
+      // 3. Apply Video Attributes & MutationObserver
+      `var pv=function(){` +
+      `var vs=d.getElementsByTagName('video');` +
+      `for(var i=0;i<vs.length;i++){` +
+      `var v=vs[i];` +
+      `try{v.setAttribute('controlsList','nodownload');v.disablePictureInPicture=true;v.setAttribute('ondragstart','return false;');}catch(_){}` +
+      `v.addEventListener('contextmenu',function(e){e.preventDefault();e.stopPropagation();},true);` +
+      `convertBlob(v);` +
+      `}` +
+      `handleStreamGuard();` +
+      `};` +
+      `pv();if(window.MutationObserver){new MutationObserver(pv).observe(d.documentElement,{childList:true,subtree:true});}`
+    );
+  }
+
+  if (!parts.length) return '';
+  return `(function(){var d=document;${parts.join('')}})();`;
+}
+
 export async function renderDocument(input: RenderInput): Promise<RenderedPage | null> {
   const supported = supportedTypes();
   const types = input.blocks.map((b) => b?.type).filter(Boolean) as string[];
@@ -128,6 +225,7 @@ export async function renderDocument(input: RenderInput): Promise<RenderedPage |
     influencerName: input.influencerName || null,
     influencerAvatar: input.influencerAvatar || null,
     probeImage,
+    protectVideos: Boolean(input.settings?.cloaking?.protectVideos),
   };
 
   const body = input.blocks
@@ -197,7 +295,10 @@ export async function renderDocument(input: RenderInput): Promise<RenderedPage |
   });
 
   const noscript = renderNoscriptPixels(pixels);
-  const runtimeScript = [...runtimes].join('\n');
+  // The content-protection guard rides in the same hashed <script> as the block
+  // runtimes, so it needs no separate CSP hash.
+  const guard = cloakGuardScript(settings?.cloaking);
+  const runtimeScript = [[...runtimes].join('\n'), guard].filter(Boolean).join('\n');
 
   const html =
     `<!doctype html>` +

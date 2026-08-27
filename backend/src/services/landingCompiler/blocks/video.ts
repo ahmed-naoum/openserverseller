@@ -138,14 +138,13 @@ export const videoBlock: BlockRenderer = {
       // starving the LCP image of bandwidth. `metadata` costs a few KB, still
       // yields intrinsic dimensions (so the box reserves the right height and
       // CLS stays 0), and the runtime upgrades it to `auto` on approach.
-      `<video src="${esc(src)}" preload="metadata" playsinline` +
+      `<video` +
+      (ctx.protectVideos
+        ? ` data-vsrc="${esc(src)}" controlsList="nodownload" disablepictureinpicture data-vid-protect ondragstart="return false;" oncontextmenu="return false;"`
+        : ` src="${esc(src)}"`) +
+      ` preload="metadata" playsinline` +
       (poster ? ` poster="${esc(poster)}"` : '') +
-      // controls are withheld while the unmute overlay is up, matching React.
       (controls && !autoplay ? ' controls' : '') +
-      // NOT the `autoplay` attribute: it overrides `preload` and makes the
-      // browser download the whole file regardless. The runtime plays it on
-      // intersection instead, which is the same behaviour for anyone who
-      // actually scrolls to the video and free for everyone who does not.
       (autoplay ? ' data-vid-auto="1"' : '') +
       (loop ? ' loop' : '') +
       (muted ? ' muted' : '') +

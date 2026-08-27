@@ -26,7 +26,8 @@ export type SecretCategory =
   | 'oauth'
   | 'signature'
   | 'business'
-  | 'ops';
+  | 'ops'
+  | 'ai';
 
 export interface SecretDefinition {
   key: string;
@@ -48,6 +49,7 @@ export interface SecretDefinition {
 }
 
 export const SECRET_CATEGORY_LABELS: Record<SecretCategory, string> = {
+  ai: 'Intelligence artificielle',
   core: 'Application',
   delivery: 'Livraison',
   ecommerce: 'Intégrations e-commerce',
@@ -328,6 +330,173 @@ export const SECRET_REGISTRY: SecretDefinition[] = [
     label: 'Flux de logs externe — Clé API',
     category: 'ops',
     secret: true,
+  },
+
+  // ── Intelligence artificielle & agent WhatsApp ────────────────────────────
+  //
+  // Les clés de modèle sont détenues par la plateforme, jamais par le compte :
+  // un vendeur choisit un modèle activé, il ne fournit pas d'identifiants. Le
+  // worker `silacod-wa` lit exactement les mêmes valeurs via getSecret().
+  {
+    key: 'ANTHROPIC_API_KEY',
+    label: 'Anthropic — Clé API',
+    category: 'ai',
+    secret: true,
+    description:
+      "Utilisée par le cerveau de l'agent WhatsApp (modèles Claude). Sans elle, aucun compte ne peut répondre.",
+  },
+  {
+    key: 'GEMINI_API_KEY',
+    label: 'Google Gemini — Clé API',
+    category: 'ai',
+    secret: true,
+    description:
+      'Transcription des notes vocales (Gemini natif audio) et voix de synthèse Gemini.',
+  },
+  {
+    key: 'OPENAI_API_KEY',
+    label: 'OpenAI — Clé API',
+    category: 'ai',
+    secret: true,
+    description: 'Optionnelle — uniquement si des voix OpenAI sont activées dans le catalogue.',
+  },
+  {
+    key: 'ELEVENLABS_API_KEY',
+    label: 'ElevenLabs — Clé API',
+    category: 'ai',
+    secret: true,
+    description: 'Optionnelle — uniquement si des voix ElevenLabs sont activées dans le catalogue.',
+  },
+  {
+    key: 'MUNSIT_API_KEY',
+    label: 'Munsit — Clé API',
+    category: 'ai',
+    secret: true,
+    description: 'ASR arabe (darija). Alternative à Gemini pour la transcription des notes vocales.',
+  },
+  {
+    key: 'COHERE_API_KEY',
+    label: 'Cohere — Clé API',
+    category: 'ai',
+    secret: true,
+    description:
+      "Cohere Transcribe Arabic : modèle ASR dédié, entraîné sur la variation dialectale arabe et l'alternance arabe-anglais — le seul moteur de la liste conçu pour ce problème. La clé d'essai est plafonnée en débit ; une Model Vault dédiée lève le plafond.",
+  },
+  {
+    key: 'OPENROUTER_API_KEY',
+    label: 'OpenRouter — Clé API',
+    category: 'ai',
+    secret: true,
+    description:
+      "Routeur multi-fournisseurs. Donne accès à tous les modèles de transcription d'OpenRouter avec une seule clé : l'identifiant du modèle (openai/whisper-1, openai/gpt-4o-mini-transcribe…) se saisit directement dans Modèles IA, sans déploiement. Pensez à fixer une limite de crédit sur la clé côté OpenRouter.",
+  },
+  {
+    key: 'GROQ_API_KEY',
+    label: 'Groq — Clé API',
+    category: 'ai',
+    secret: true,
+    description:
+      "Whisper large v3 hébergé sur Groq, pour la transcription des notes vocales. De loin le moteur le plus rapide et le moins cher, mais Whisper connaît mal la darija : à comparer sur de vraies notes avant de basculer un compte dessus.",
+  },
+  {
+    key: 'WA_WORKER_URL',
+    label: 'Agent WhatsApp — URL du worker',
+    category: 'ai',
+    secret: false,
+    description:
+      "Adresse de contrôle du process silacod-wa. DOIT rester en boucle locale (http://127.0.0.1:3101) : ce port n'est protégé que par WA_WORKER_TOKEN et ne doit jamais être exposé par nginx.",
+  },
+  {
+    key: 'WA_WORKER_TOKEN',
+    label: 'Agent WhatsApp — Jeton du worker',
+    category: 'ai',
+    secret: true,
+    description: "Jeton partagé entre l'API et le worker. Tant qu'il est vide, le worker refuse toutes les requêtes.",
+  },
+  {
+    key: 'WA_MEDIA_ROOT',
+    label: 'Agent WhatsApp — Dossier des médias',
+    category: 'ai',
+    secret: false,
+    description:
+      "Où sont stockées les photos et notes vocales des clients. DOIT être hors de uploads/, qui est servi en statique sans authentification.",
+  },
+  {
+    key: 'WA_REPLY_PRICE_CENTS',
+    label: 'Agent WhatsApp — Prix par réponse (cents)',
+    category: 'ai',
+    secret: false,
+    description: "Ce qu'une réponse de l'agent débite du solde de crédits IA du compte. 2 par défaut.",
+  },
+  {
+    key: 'WA_MAX_SESSIONS',
+    label: 'Agent WhatsApp — Sessions simultanées max',
+    category: 'ai',
+    secret: false,
+    description:
+      "Plafond global de numéros WhatsApp connectés en même temps, vérifié à la connexion et par le worker. Protège la RAM du worker.",
+  },
+  {
+    key: 'WA_LOG_LEVEL',
+    label: 'Agent WhatsApp — Niveau du journal',
+    category: 'ai',
+    secret: false,
+    description:
+      "DEBUG, INFO (défaut), WARN ou ERROR. DEBUG enregistre chaque aller-retour avec le modèle : très utile pour comprendre une réponse précise, mais c'est de loin ce qui remplit le journal. À remettre sur INFO une fois le diagnostic terminé.",
+  },
+  {
+    key: 'WA_LOG_PAYLOADS',
+    label: 'Agent WhatsApp — Enregistrer les requêtes/réponses',
+    category: 'ai',
+    secret: false,
+    description:
+      "true par défaut. Mettre false n'enregistre plus que l'événement et son erreur, sans le contenu envoyé au modèle ni sa réponse — la page Journal perd alors l'essentiel de son intérêt, mais plus aucun message client n'est stocké deux fois.",
+  },
+  {
+    key: 'WA_LOG_RETENTION_DAYS',
+    label: 'Agent WhatsApp — Conservation du journal (jours)',
+    category: 'ai',
+    secret: false,
+    description:
+      '30 par défaut. Le worker purge les lignes plus anciennes une fois par heure. 0 désactive la purge : le journal contient des messages clients, ne le laissez pas illimité sans raison.',
+  },
+  {
+    key: 'CLAUDE_CODE_OAUTH_TOKEN',
+    label: 'Claude CLI — Jeton d’abonnement',
+    category: 'ai',
+    secret: true,
+    description:
+      "Sortie de `claude setup-token`. Fait tourner l'agent sur UN abonnement Claude au lieu de la clé API. Réservé aux modèles marqués « admin uniquement » : un seul jeton pour plusieurs comptes clients partagerait une même limite de débit et ne permettrait d'attribuer aucun coût. Laissez vide pour utiliser la connexion déjà enregistrée par le binaire claude.",
+  },
+  {
+    key: 'CLAUDE_CLI_PATH',
+    label: 'Claude CLI — Chemin du binaire',
+    category: 'ai',
+    secret: false,
+    description:
+      "Vide = détection automatique. Sous Windows ce doit être claude.exe et JAMAIS claude.cmd : lancer un shim passe par un shell, qui découpe le schéma JSON et le prompt système sur les espaces.",
+  },
+  {
+    key: 'WA_CLI_MAX_CONCURRENT',
+    label: 'Claude CLI — Réponses simultanées',
+    category: 'ai',
+    secret: false,
+    description:
+      "Nombre de processus claude en parallèle, POUR TOUT LE WORKER et non par compte. 2 par défaut. Chaque réponse est un vrai processus ; au-delà, la machine finit par refuser d'en démarrer.",
+  },
+  {
+    key: 'WA_CLI_TIMEOUT_MS',
+    label: 'Claude CLI — Délai maximum (ms)',
+    category: 'ai',
+    secret: false,
+    description: '120000 par défaut. Le CLI met 5 à 20 secondes par réponse, bien plus que l’API.',
+  },
+  {
+    key: 'FFMPEG_PATH',
+    label: 'Chemin ffmpeg',
+    category: 'ai',
+    secret: false,
+    description: "Requis pour lire les vidéos et ré-encoder les notes vocales. Vide = détection automatique.",
   },
 ];
 

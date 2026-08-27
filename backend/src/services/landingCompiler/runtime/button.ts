@@ -20,7 +20,27 @@ export const BUTTON_RUNTIME = `
     var btn = wrap.querySelector('button');
     if (!btn) return;
 
+    var maxClicks = parseInt(wrap.getAttribute('data-btn-max-clicks') || '0', 10);
+    var btnId = wrap.getAttribute('data-btn-id') || 'btn';
+    var storageKey = 'sc_btn_clicks_' + btnId;
+
+    if (maxClicks > 0) {
+      var currentClicks = parseInt(localStorage.getItem(storageKey) || '0', 10);
+      if (currentClicks >= maxClicks) {
+        wrap.style.display = 'none';
+        return;
+      }
+    }
+
     btn.addEventListener('click', function(){
+      if (maxClicks > 0) {
+        var currentClicks = parseInt(localStorage.getItem(storageKey) || '0', 10) + 1;
+        try { localStorage.setItem(storageKey, String(currentClicks)); } catch (_) {}
+        if (currentClicks >= maxClicks) {
+          wrap.style.display = 'none';
+        }
+      }
+
       if (wrap.hasAttribute('data-btn-checkout')) {
         var target = document.getElementById('express-checkout-block');
         if (target) target.scrollIntoView({ behavior: 'smooth' });
@@ -30,7 +50,20 @@ export const BUTTON_RUNTIME = `
       // Anything not on the allow-list was dropped at compile time, so an empty
       // href means the configured link was unusable — do nothing rather than
       // navigate somewhere unexpected.
-      if (href) window.open(href, '_blank', 'noopener');
+      if (href) {
+        if (wrap.hasAttribute('data-btn-send-token')) {
+          try {
+            var raw = window.location.href + '|' + Date.now();
+            var bytes = new TextEncoder().encode(raw);
+            var binary = '';
+            for (var j = 0; j < bytes.length; j++) binary += String.fromCharCode(bytes[j]);
+            var token = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            var sep = href.indexOf('?') >= 0 ? '&' : '?';
+            href = href + sep + '_s=' + encodeURIComponent(token);
+          } catch (_) {}
+        }
+        window.open(href, '_blank', 'noopener');
+      }
     });
 
     // Reveal once a video has played far enough. React listens for the same

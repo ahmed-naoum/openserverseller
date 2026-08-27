@@ -124,7 +124,8 @@ export function parseSourceToken(token: string | null | undefined): SourceRef | 
     if (!Number.isFinite(issuedAt)) return null;
 
     const age = Date.now() - issuedAt;
-    if (age < 0 || age > SOURCE_TOKEN_MAX_AGE_MS) return null;
+    // Allow up to 24 hours of negative clock skew (instant tab opens / system clock differences)
+    if (age < -86400000 || age > SOURCE_TOKEN_MAX_AGE_MS) return null;
 
     return readSourceRef(decoded.slice(0, sep));
   } catch {

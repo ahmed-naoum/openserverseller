@@ -374,7 +374,18 @@ export default function PropertyInspector({
                   </select>
                 </div>
                 {content.behavior !== 'checkout' && (
-                  <FieldInput label="URL de redirection" type="text" value={content.link} onChange={(v) => onUpdateContent('link', v)} placeholder="https://..." />
+                  <div className="space-y-2">
+                    <FieldInput label="URL de redirection" type="text" value={content.link} onChange={(v) => onUpdateContent('link', v)} placeholder="https://..." />
+                    <label className="flex items-center gap-2 text-xs font-bold text-slate-700 bg-orange-50/70 p-2.5 rounded-xl border border-orange-100 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!content.attachSourceToken}
+                        onChange={(e) => onUpdateContent('attachSourceToken', e.target.checked)}
+                        className="rounded text-orange-500 accent-orange-500 w-4 h-4"
+                      />
+                      <span>Transmettre le jeton de provenance (<code className="text-orange-600 font-mono text-[10px]">?_s=...</code>) pour le Cloaking</span>
+                    </label>
+                  </div>
                 )}
                 <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
                   <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
@@ -412,7 +423,7 @@ export default function PropertyInspector({
                     <h5 className="text-[10px] font-extrabold uppercase text-slate-700">Options & Packs Multi-Unités</h5>
                     <button
                       onClick={() => {
-                        const newOpts = [...(content.options || []), { id: crypto.randomUUID(), name: '', price: 199, oldPrice: 350, color: '#ea580c' }];
+                        const newOpts = [...(content.options || []), { id: crypto.randomUUID(), name: '', quantity: 1, price: 199, oldPrice: 350, color: '#ea580c' }];
                         onUpdateContent('options', newOpts);
                       }}
                       className="flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-100 hover:bg-orange-200 px-2 py-1 rounded-lg transition-all"
@@ -433,11 +444,18 @@ export default function PropertyInspector({
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
-                        <FieldInput label={`Nom Option #${idx + 1}`} type="text" value={opt.name} onChange={(v) => {
+                        <FieldInput label={`Nom de la variante #${idx + 1}`} type="text" value={opt.name} onChange={(v) => {
                           const newOpts = [...content.options];
                           newOpts[idx] = { ...newOpts[idx], name: v };
                           onUpdateContent('options', newOpts);
                         }} placeholder="Ex: 2 Pièces + 1 Gratuite" />
+                        {/* Units shipped by the pack, deducted from stock on order creation.
+                            Independent of the price below, which is already the bundle total. */}
+                        <FieldInput label="Quantité (unités)" type="number" value={opt.quantity} onChange={(v) => {
+                          const newOpts = [...content.options];
+                          newOpts[idx] = { ...newOpts[idx], quantity: v };
+                          onUpdateContent('options', newOpts);
+                        }} placeholder="Ex: 3 (2 Pièces + 1 Gratuite)" />
                         <div className="grid grid-cols-2 gap-2">
                           <FieldInput label="Prix (MAD)" type="number" value={opt.price} onChange={(v) => {
                             const newOpts = [...content.options];
@@ -957,6 +975,19 @@ export default function PropertyInspector({
                   />
                   <p className="text-[10px] text-blue-600">
                     Idéal pour les pages VSL (Video Sales Letter) : le bouton d'achat n'apparaît qu'au moment opportun.
+                  </p>
+                </div>
+
+                <div className="p-3.5 bg-purple-50/70 border border-purple-100 rounded-2xl space-y-2">
+                  <h5 className="text-[10px] font-extrabold uppercase text-purple-800">Limite de Clics Visiteur (Disparition)</h5>
+                  <FieldInput 
+                    label="Nombre max de clics (0 = illimité)" 
+                    type="number" 
+                    value={content.maxClicks || 0} 
+                    onChange={(v) => onUpdateContent('maxClicks', Number(v))} 
+                  />
+                  <p className="text-[10px] text-purple-600">
+                    Le bouton disparaît définitivement de la page du visiteur une fois la limite de clics atteinte.
                   </p>
                 </div>
               </>

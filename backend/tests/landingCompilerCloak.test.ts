@@ -78,6 +78,27 @@ describe('resolveServerCloak', () => {
     ).toBeNull();
   });
 
+  it('lets AdsBot reach the page even with every filter on', () => {
+    const c = {
+      filterBots: true,
+      filterDirect: true,
+      redirectDesktop: true,
+      filterCountry: true,
+      allowedCountries: 'MA',
+    };
+    // No Referer, desktop UA, wrong country — every rule would fire — yet the ad
+    // reviewer must still see the real page, or the ad is disapproved.
+    for (const ua of [
+      'AdsBot-Google (+http://www.google.com/adsbot.html)',
+      'Mozilla/5.0 (Linux; Android 6.0.1) (compatible; AdsBot-Google-Mobile; +http://www.google.com/mobile/adsbot.html)',
+      'Mozilla/5.0 (compatible; Google-Ads-Quality; +http://www.google.com/adsbot.html)',
+    ]) {
+      const decision = resolveServerCloak(c, req({ 'user-agent': ua }));
+      expect(decision.redirect).toBeNull();
+      expect(decision.rule).toBe('allowlisted');
+    }
+  });
+
   it('honours an explicit user-agent list instead of the default pattern', () => {
     const c = { filterBots: true, selectedUserAgents: ['acmebot'] };
     expect(resolveServerCloak(c, req({ 'user-agent': 'AcmeBot/1.0' })).redirect).toBeTruthy();
@@ -144,6 +165,118 @@ describe('resolveServerCloak', () => {
     };
     // A crawler sends no Referer either; the bot destination must win.
     expect(resolveServerCloak(c, req({ 'user-agent': CRAWLERS.Googlebot })).rule).toBe('bots');
+  });
+});
+
+describe('render mode (serve another of the seller\'s pages, same URL)', () => {
+  const MA = '105.157.0.1'; // geoip-lite resolves this to MA
+  const FR = '90.80.0.1'; // and this to FR
+
+  it('renders the alternate page for a blocked country instead of redirecting', () => {
+    const c = {
+      filterCountry: true,
+      allowedCountries: 'MA',
+      countryMode: 'render',
+      countryAlternateCode: 'other-page',
+    };
+    const d = resolveServerCloak(c, req({ 'user-agent': HUMANS['Chrome on Android'] }, FR));
+    expect(d.redirect).toBeNull();
+    expect(d.renderCode).toBe('other-page');
+    expect(d.rule).toBe('country');
+  });
+
+  it('still redirects when mode is left at the default', () => {
+    const c = {
+      filterCountry: true,
+      allowedCountries: 'MA',
+      countryRedirectUrl: 'https://google.com',
+      countryAlternateCode: 'other-page', // present but mode is not 'render'
+    };
+    const d = resolveServerCloak(c, req({ 'user-agent': HUMANS['Chrome on Android'] }, FR));
+    expect(d.redirect).toBe('https://google.com');
+    expect(d.renderCode).toBeUndefined();
+  });
+
+  it('does not touch an allowed-country visitor', () => {
+    const c = { filterCountry: true, allowedCountries: 'MA', countryMode: 'render', countryAlternateCode: 'other-page' };
+    const d = resolveServerCloak(c, req({ 'user-agent': HUMANS['Chrome on Android'] }, MA));
+    expect(d.redirect).toBeNull();
+    expect(d.renderCode).toBeUndefined();
+  });
+
+  it('never renders for an ad reviewer — the allow-list wins first', () => {
+    const c = { filterCountry: true, allowedCountries: 'MA', countryMode: 'render', countryAlternateCode: 'other-page' };
+    const d = resolveServerCloak(c, req({ 'user-agent': 'AdsBot-Google (+http://www.google.com/adsbot.html)' }, FR));
+    expect(d.renderCode).toBeUndefined();
+    expect(d.rule).toBe('allowlisted');
+  });
+
+  it('falls back to redirect when render is enabled but no alternate code is set', () => {
+    const c = {
+      filterCountry: true,
+      allowedCountries: 'MA',
+      countryMode: 'render',
+      countryAlternateCode: '',
+      countryRedirectUrl: 'https://google.com',
+    };
+    const d = resolveServerCloak(c, req({ 'user-agent': HUMANS['Chrome on Android'] }, FR));
+    expect(d.redirect).toBe('https://google.com');
+    expect(d.renderCode).toBeUndefined();
+  });
+
+  it('renders for a desktop visitor in render mode (mobile-only page)', () => {
+    const c = { redirectDesktop: true, desktopMode: 'render', desktopAlternateCode: 'pc-page' };
+    const d = resolveServerCloak(c, req({ 'user-agent': HUMANS['Firefox desktop'] }));
+    expect(d.redirect).toBeNull();
+    expect(d.renderCode).toBe('pc-page');
+    expect(d.rule).toBe('desktop');
+  });
+
+  it('renders for a direct visit in render mode', () => {
+    const c = { filterDirect: true, directMode: 'render', directAlternateCode: 'direct-page' };
+    // no referer header => direct visit
+    const d = resolveServerCloak(c, req({ 'user-agent': HUMANS['Chrome on Android'] }));
+    expect(d.redirect).toBeNull();
+    expect(d.renderCode).toBe('direct-page');
+    expect(d.rule).toBe('direct');
+  });
+
+  it('renders for a crawler in render mode (bot alternate page at same URL)', () => {
+    const c = {
+      filterBots: true,
+      botRedirectUrl: 'https://wikipedia.org',
+      botsMode: 'render',
+      botsAlternateCode: 'bot-safe-page',
+    } as any;
+    const d = resolveServerCloak(c, req({ 'user-agent': CRAWLERS.curl }, FR));
+    expect(d.rule).toBe('bots');
+    expect(d.redirect).toBeNull();
+    expect(d.renderCode).toBe('bot-safe-page');
+  });
+
+  it('renders for a crawler when using botMode and botAlternateCode', () => {
+    const c = {
+      filterBots: true,
+      botMode: 'render',
+      botAlternateCode: 'bot-safe-page-2',
+    } as any;
+    const d = resolveServerCloak(c, req({ 'user-agent': CRAWLERS.Googlebot }, FR));
+    expect(d.rule).toBe('bots');
+    expect(d.redirect).toBeNull();
+    expect(d.renderCode).toBe('bot-safe-page-2');
+  });
+
+  it('falls back to redirect for crawlers when render is specified but alternate code is empty', () => {
+    const c = {
+      filterBots: true,
+      botRedirectUrl: 'https://wikipedia.org',
+      botMode: 'render',
+      botAlternateCode: '',
+    } as any;
+    const d = resolveServerCloak(c, req({ 'user-agent': CRAWLERS.curl }, FR));
+    expect(d.rule).toBe('bots');
+    expect(d.redirect).toBe('https://wikipedia.org');
+    expect(d.renderCode).toBeUndefined();
   });
 });
 

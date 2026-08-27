@@ -29,7 +29,14 @@ const prisma = new PrismaClient();
 //     is filled in — on blur as well as on submit, and the inputs carry
 //     maxlength/inputmode/autocomplete. Stored rows must recompile or they keep
 //     the old uncapped markup with no config for the new runtime to read.
-export const COMPILER_VERSION = 11;
+// 12: packs carry a unit count. Each option projects `qty` into the runtime
+//     config and renders a "xN" badge, and the submit posts variantOptionId,
+//     variantName and packQuantity alongside the legacy productVariant string.
+//     Stored rows MUST recompile: an 11 row posts none of the three, so its leads
+//     land with a null packQuantity and cost one unit of stock no matter which
+//     pack the customer picked, and they resolve their price by string-matching a
+//     name instead of by id.
+export const COMPILER_VERSION = 12;
 
 /**
  * Block types the compiler can render, derived from the renderer registry.

@@ -203,34 +203,51 @@ router.get('/:code', async (req: Request, res: Response) => {
   });
 
   // Cloaking, decided from headers before a byte is written. Faster than the
-  // client rules — no ipapi.co round trip — and harder to evade, since a
-  // visitor who blocks that lookup currently sails past every geo rule.
+  // client rules — no IP-lookup round trip — and harder to evade, since a
+  // visitor who blocks that lookup would otherwise sail past every geo rule.
+  // The page whose bytes are actually served. Normally the primary; an audience
+  // rule in `render` mode swaps it for one of the seller's other pages, served at
+  // this same URL. Host validation and click recording above always run against
+  // the primary — the alternate is content, not a different home.
+  let target = page;
+
   if (page.cloaking) {
     try {
       const decision = resolveServerCloak(page.cloaking, req);
       if (decision.redirect) return res.redirect(302, decision.redirect);
+      if (decision.renderCode) {
+        const alt = await getCompiledLanding(decision.renderCode);
+        // Only a servable page belonging to the SAME seller may be rendered here.
+        // Anything else (missing, uncompiled, or another influencer's page) falls
+        // back to the primary — a render rule must never 500 or leak a foreign page.
+        if (alt && alt.html && alt.influencerId === page.influencerId) {
+          target = alt;
+        } else {
+          console.warn('[SSG] render alternate unavailable for', code, '->', decision.renderCode);
+        }
+      }
     } catch (err) {
       // A broken cloaking config must not take the page down with it.
       console.error('[SSG] cloak evaluation failed for', code, err);
     }
   }
 
-  if (ssg === 'shadow' || !page.ssgEnabled || !page.html) {
+  if (ssg === 'shadow' || !target.ssgEnabled || !target.html) {
     return serveSpaFallback(res, 200);
   }
 
   const acceptsBrotli = /\bbr\b/.test(String(req.headers['accept-encoding'] || ''));
-  const body = acceptsBrotli && page.brotli ? page.brotli : page.html;
+  const body = acceptsBrotli && target.brotli ? target.brotli : target.html;
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Content-Length', String(body.length));
-  if (acceptsBrotli && page.brotli) res.setHeader('Content-Encoding', 'br');
+  if (acceptsBrotli && target.brotli) res.setHeader('Content-Encoding', 'br');
 
   // helmet's default policy blocks inline scripts and connect.facebook.net,
   // which would stop every pixel on the page from firing. Replaced with a
   // per-page policy that allow-lists this page's inline scripts by hash.
   res.removeHeader('Content-Security-Policy');
-  if (page.csp) {
+  if (target.csp) {
     // Report-only until a rollout has confirmed no pixel vendor is being
     // blocked: a CSP that silently drops a tracking script costs conversions
     // before anyone notices. SSG_CSP_ENFORCE=1 switches it to enforcing.
@@ -238,7 +255,7 @@ router.get('/:code', async (req: Request, res: Response) => {
       process.env.SSG_CSP_ENFORCE === '1'
         ? 'Content-Security-Policy'
         : 'Content-Security-Policy-Report-Only';
-    res.setHeader(header, page.csp);
+    res.setHeader(header, target.csp);
   }
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
 

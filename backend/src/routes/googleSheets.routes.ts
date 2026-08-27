@@ -1025,6 +1025,9 @@ router.post(
         googleSheetOutConnectedAt: new Date(),
         googleSheetOutLastError: null,
         googleSheetOutLastErrorAt: null,
+        // ensureSheetReady has just written (or verified) a full-width header, so
+        // record the width and spare the drain a widen it does not need.
+        googleSheetOutHeaderCols: OUTBOUND_COLUMNS.length,
         // googleSheetOutAuto is deliberately untouched: the admin may have
         // pre-seeded it, and connecting a sheet is not consent to auto-push.
       },
@@ -1253,7 +1256,12 @@ router.post(
 
     await prisma.user.update({
       where: { id: vendorId },
-      data: { googleSheetOutLastError: null, googleSheetOutLastErrorAt: null },
+      data: {
+        googleSheetOutLastError: null,
+        googleSheetOutLastErrorAt: null,
+        // Same reason as /outbound/connect: the header is now the current width.
+        googleSheetOutHeaderCols: OUTBOUND_COLUMNS.length,
+      },
     });
 
     res.json({

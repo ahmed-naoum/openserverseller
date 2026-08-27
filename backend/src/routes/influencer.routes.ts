@@ -27,6 +27,7 @@ import {
 import { getLockedLeadIds } from '../services/leadCredits.service.js';
 
 import { recordReferralClick } from '../services/referralClicks.js';
+import { resolveServerCloak, getCloakingConfig } from '../services/landingCompiler/cloak.js';
 import { validateLandingPageUpdate } from '../validations/landingPage.validation.js';
 import { invalidate, compileNow } from '../services/landingCompiler/index.js';
 import { mode } from './landing.routes.js';
@@ -501,24 +502,57 @@ router.get(
       userAgent: req.headers['user-agent'] as string | undefined,
     });
 
-// We only return public-safe data
+    let targetLink = link;
+
+    const cloaking = getCloakingConfig(link.landingPage?.customStructure);
+    if (cloaking) {
+      try {
+        const decision = resolveServerCloak({ ...cloaking, pageCode: link.code }, req);
+        if (decision.redirect) {
+          return res.json({
+            status: 'redirect',
+            redirectUrl: decision.redirect,
+          });
+        }
+        if (decision.renderCode) {
+          const altLink = await (prisma as any).referralLink.findUnique({
+            where: { code: decision.renderCode },
+            include: {
+              product: { include: { images: { orderBy: { sortOrder: 'asc' } }, categories: true } },
+              influencer: { include: { profile: true, pixels: true } },
+              landingPage: true
+            }
+          });
+
+          if (altLink && altLink.isActive && altLink.landingPage && altLink.influencerId === link.influencerId) {
+            targetLink = altLink;
+          } else {
+            console.warn('[Cloak API] render alternate unavailable for', code, '->', decision.renderCode);
+          }
+        }
+      } catch (err) {
+        console.error('[Cloak API] evaluation failed for', code, err);
+      }
+    }
+
+    // We only return public-safe data
     res.json({
       status: 'success',
       data: {
         code: link.code,
         product: {
-          id: link.product.id,
-          nameAr: link.product.nameAr,
-          nameFr: link.product.nameFr,
-          nameEn: link.product.nameEn,
-          description: link.product.description,
-          retailPriceMad: link.product.retailPriceMad,
-          images: link.product.images,
-          category: link.product.category
+          id: targetLink.product.id,
+          nameAr: targetLink.product.nameAr,
+          nameFr: targetLink.product.nameFr,
+          nameEn: targetLink.product.nameEn,
+          description: targetLink.product.description,
+          retailPriceMad: targetLink.product.retailPriceMad,
+          images: targetLink.product.images,
+          category: targetLink.product.category
         },
         influencerName: link.influencer.profile?.fullName,
         influencerAvatar: link.influencer.profile?.avatarUrl,
-        landingPage: link.landingPage,
+        landingPage: targetLink.landingPage,
         pixels: link.influencer.pixels || []
       }
     });
@@ -1267,11 +1301,19 @@ function trimLandingStructure(landingPage: any, cache: Map<number, any>) {
 }
 
 // The express_checkout block boiled down further: the list prices a row's pack
-// by matching order.productVariant against an option name, so per link only
-// [{ name, price }] survives. Prices are shipped raw, not coerced — the pages
-// keep their own truthiness check on `price` exactly as they applied it to the
-// block itself.
-function extractPackOptions(landingPage: any): { name: string; price: any }[] | null {
+// by matching it against an option, so per link only the fields that identify
+// and price one survive.
+//
+// `id` is the field that match now keys on (frontend lib/leadPack): a pack
+// label is free text a seller can rename, and `productVariant` may be a
+// composite display string that equals no option name at all — with only
+// [{ name, price }] on the wire every row on this list was stuck with the
+// comparison both of those defeat. `quantity` rides along because it is what
+// the pack stands for in stock terms; nothing here multiplies the price by it.
+//
+// Prices and quantities are shipped raw, not coerced — the pages keep their own
+// truthiness check on `price` exactly as they applied it to the block itself.
+function extractPackOptions(landingPage: any): { id: string | number | null; name: string; price: any; quantity: any }[] | null {
   if (!landingPage?.customStructure) return null;
   try {
     const structure = landingPage.customStructure;
@@ -1281,7 +1323,7 @@ function extractPackOptions(landingPage: any): { name: string; price: any }[] | 
     if (!Array.isArray(options)) return null;
     return options
       .filter((o: any) => o && typeof o.name === 'string')
-      .map((o: any) => ({ name: o.name, price: o.price }));
+      .map((o: any) => ({ id: o.id ?? null, name: o.name, price: o.price, quantity: o.quantity ?? null }));
   } catch {
     return null;
   }
@@ -1498,6 +1540,14 @@ router.get(
                     // a product this account only affiliates for is not theirs
                     // to unlock. The heavy branch below gets it from `include`.
                     vendorId: true,
+                    // The pack the customer picked. The order carries its own
+                    // `productVariant` copy, which an agent may have retyped on
+                    // the delivery form — these four are what the landing page
+                    // actually recorded, and the id is what the list matches on.
+                    productVariant: true,
+                    variantOptionId: true,
+                    variantName: true,
+                    packQuantity: true,
                     paymentSituation: true,
                     callbackAt: true,
                     notes: true,
@@ -1736,6 +1786,13 @@ router.get(
           // Same field the commission branch selects, for the same reason: the
           // masking pass reads the lead's owner off this object.
           vendorId: lead.vendorId,
+          // Both row shapes hang the pack on order.lead, so the list reads it
+          // in one place. `order.productVariant` above is this same string for
+          // a row that has no order yet.
+          productVariant: lead.productVariant,
+          variantOptionId: lead.variantOptionId,
+          variantName: lead.variantName,
+          packQuantity: lead.packQuantity,
           paymentSituation: lead.paymentSituation,
           callbackDate: lead.callbackAt,
           notes: lead.notes,
@@ -2068,6 +2125,74 @@ router.get(
           }
         }) : null
       }
+    });
+  })
+);
+
+/**
+ * The other pages belonging to the same influencer as this link.
+ *
+ * Populates the "page to display" picker for a cloaking rule in `render` mode.
+ * Deliberately scoped to the SAME influencer, because that is exactly the set
+ * landing.routes.ts will agree to render — it refuses an alternate whose
+ * influencerId differs. Listing anything wider would offer choices the server
+ * then silently rejects.
+ *
+ * Same authorisation as the landing-page routes above: owner, an assigned
+ * helper, or an admin.
+ */
+router.get(
+  '/links/:id/sibling-pages',
+  authenticate,
+  authorize('VENDOR', 'INFLUENCER', 'HELPER', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const linkId = parseInt(String(req.params.id));
+    await assertLinkInScope(req, linkId);
+
+    const link = await (prisma as any).referralLink.findUnique({ where: { id: linkId } });
+    if (!link) throw new AppException(404, 'Referral link not found');
+
+    const isAdmin = req.user!.roleName === 'SUPER_ADMIN';
+    const isOwner = link.influencerId === userId;
+    let isAuthorizedHelper = false;
+
+    if (req.user!.roleName === 'HELPER' && req.user!.canManageInfluencerLinks) {
+      const assignment = await (prisma as any).helperUserAssignment.findFirst({
+        where: { helperId: userId, targetUserId: link.influencerId }
+      });
+      if (assignment) isAuthorizedHelper = true;
+    }
+
+    if (!isAdmin && !isOwner && !isAuthorizedHelper) {
+      throw new AppException(403, 'You do not have permission to perform this action');
+    }
+
+    const siblings = await (prisma as any).referralLink.findMany({
+      where: {
+        influencerId: link.influencerId,
+        isActive: true,
+        // The page being edited is never an option: rendering itself would be a
+        // no-op at best and a confusing loop in the UI.
+        id: { not: linkId },
+      },
+      select: {
+        code: true,
+        product: { select: { nameFr: true } },
+        landingPage: { select: { title: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+
+    res.json({
+      status: 'success',
+      data: {
+        pages: siblings.map((s: any) => ({
+          code: s.code,
+          label: s.landingPage?.title?.trim() || s.product?.nameFr || s.code,
+        })),
+      },
     });
   })
 );

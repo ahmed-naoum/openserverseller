@@ -1,6 +1,13 @@
 /**
  * Lead visibility gated by Google Sheets credits — a RESERVATION model.
  *
+ * TWO FUNDING SOURCES. An account pays for rows either from a monthly pack
+ * (SheetSubscription, a lead quota) or from its cents balance at the per-lead
+ * tariff, and the gate is blind to which: everywhere below, what a lead needs is
+ * one unit of AFFORDABLE, and affordable is `plan quota left + balance / tariff`.
+ * Consumption draws from the pack first (services/sheetPlans.service.ts), so a
+ * seller on a pack sees their balance stop moving rather than drain in parallel.
+ *
  * When an admin enables `googleSheetsOutboundEnabled`, every lead the account
  * captures from then on needs a credit behind it. Crucially the credit is NOT spent
  * on arrival: each lead that has not yet been written to the sheet RESERVES one, and
@@ -27,6 +34,7 @@
 
 import { prisma } from '../lib/prisma.js';
 import { LEAD_PRICE_CENTS, centsToLeads } from '../lib/sheetPricing.js';
+import { getPlanRemaining, getPlanState, type PlanState } from './sheetPlans.service.js';
 
 /** The vendor fields every gate decision needs. */
 export interface GateConfig {
@@ -44,8 +52,15 @@ export interface GateStats {
   active: boolean;
   /** Money held, in CENTS. */
   balance: number;
-  /** How many leads that money could pay for, ignoring what is reserved. */
+  /**
+   * How many leads the account could send at all, ignoring what is reserved:
+   * the pack's remaining quota PLUS whatever the cents balance still buys.
+   */
   affordable: number;
+  /** Of `affordable`, the part covered by the monthly pack (0 without one). */
+  planRemaining: number;
+  /** The pack itself, for the panels that name it. Null on pay-as-you-go. */
+  plan: PlanState['subscription'];
   /** Captured under the gate and not yet written to the sheet. */
   unsent: number;
   /** balance − unsent. Negative means that many leads are locked. */
@@ -103,22 +118,51 @@ function unsentWhere(vendorId: number, gateFrom: Date) {
 
 /** The three numbers the panel and the header chip display. */
 export async function getGateStats(vendorId: number): Promise<GateStats> {
-  const idle: GateStats = { active: false, balance: 0, affordable: 0, unsent: 0, capacity: 0, locked: 0, priceCents: LEAD_PRICE_CENTS };
+  const idle: GateStats = {
+    active: false,
+    balance: 0,
+    affordable: 0,
+    planRemaining: 0,
+    plan: null,
+    unsent: 0,
+    capacity: 0,
+    locked: 0,
+    priceCents: LEAD_PRICE_CENTS,
+  };
   try {
     if (!vendorId) return idle;
     const gate = await loadGate(vendorId);
-    const balance = await balanceOf(vendorId);
-    if (!isGateActive(gate)) return { ...idle, balance, affordable: centsToLeads(balance) };
+    const [balance, planState] = await Promise.all([balanceOf(vendorId), getPlanState(vendorId)]);
+    const planRemaining = planState.remaining;
+    if (!isGateActive(gate)) {
+      return {
+        ...idle,
+        balance,
+        planRemaining,
+        plan: planState.subscription,
+        affordable: planRemaining + centsToLeads(balance),
+      };
+    }
 
     const unsent = await prisma.lead.count({
       where: unsentWhere(vendorId, gate!.googleSheetsGateFrom as Date),
     });
     // Capacity is counted in LEADS, not money: the balance is cents, so divide by
     // the tariff first. Anything the balance cannot pay a whole lead for does not
-    // count as capacity.
-    const affordable = centsToLeads(balance);
+    // count as capacity. The pack's quota is already in leads and adds on top.
+    const affordable = planRemaining + centsToLeads(balance);
     const capacity = affordable - unsent;
-    return { active: true, balance, affordable, unsent, capacity, locked: Math.max(0, -capacity), priceCents: LEAD_PRICE_CENTS };
+    return {
+      active: true,
+      balance,
+      affordable,
+      planRemaining,
+      plan: planState.subscription,
+      unsent,
+      capacity,
+      locked: Math.max(0, -capacity),
+      priceCents: LEAD_PRICE_CENTS,
+    };
   } catch (err) {
     console.error('[LeadCredits] stats failed for vendor', vendorId, err);
     return idle;
@@ -152,15 +196,18 @@ export async function getLockedLeadIds(
     const gated = leads.filter((l) => isLeadGated(gate, l.createdAt));
     if (!gated.length) return locked;
 
-    const balance = await balanceOf(vendorId);
+    // getPlanRemaining rather than getPlanState: this runs on every leads-page
+    // render and the plan's NAME is not part of the boundary maths.
+    const [balance, planRemaining] = await Promise.all([balanceOf(vendorId), getPlanRemaining(vendorId)]);
 
-    // The first un-sent lead the balance cannot cover. Nothing past `balance` rows
+    // The first un-sent lead the account cannot cover. Nothing past that many rows
     // exists -> every un-sent lead is covered -> nothing is locked.
     const boundary = await prisma.lead.findMany({
       where: unsentWhere(vendorId, gateFrom),
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      // Offset in LEADS the balance can pay for, not in cents.
-      skip: Math.max(0, centsToLeads(balance)),
+      // Offset in LEADS the account can pay for — pack quota first, then whatever
+      // the cents balance buys at the tariff. Never in cents.
+      skip: Math.max(0, planRemaining + centsToLeads(balance)),
       take: 1,
       select: { id: true, createdAt: true },
     });

@@ -20,6 +20,7 @@ import {
   TrendingUp, TrendingDown, User, Store, Check, MessageSquare, Copy, Pencil
 } from 'lucide-react';
 import { normalizeSearch } from '../../utils/search';
+import { PackSelection, findPackOption, packVariantLabel, readCheckoutOptions, rowPackSelection } from '../../lib/leadPack';
 
 const DEFAULT_UNASSIGN_MESSAGE = "Ce lead ne vous est plus assigné.";
 
@@ -77,20 +78,19 @@ const toColiatyPhone = (input: string): string => {
  * Price of the pack the customer picked on the landing page, or null when the
  * lead has no variant or the landing page carries no pack pricing. The courier
  * must collect the pack price, not the product's retail price.
+ *
+ * The option is looked up through lib/leadPack, which prefers the lead's
+ * `variantOptionId` over the label — this page used to compare names only, and
+ * a renamed pack or a composite `productVariant` matched nothing, which showed
+ * the agent retail price on a lead that had chosen a pack. The price itself is
+ * returned raw: a pack legitimately priced 0 is not the same as no pack.
+ *
+ * `selection` overrides what to match on, for the delivery form's live hint;
+ * the lead itself carries the right fields everywhere else.
  */
-const resolveVariantPrice = (lead: any): number | null => {
-  if (!lead?.productVariant || !lead?.referralLink?.landingPage?.customStructure) return null;
-  try {
-    const structure = typeof lead.referralLink.landingPage.customStructure === 'string'
-      ? JSON.parse(lead.referralLink.landingPage.customStructure)
-      : lead.referralLink.landingPage.customStructure;
-    const checkoutBlock = (structure.blocks || []).find((b: any) => b.type === 'express_checkout');
-    if (!checkoutBlock) return null;
-    const selected = (checkoutBlock.content?.options || []).find((o: any) => o.name === lead.productVariant);
-    return selected?.price ?? null;
-  } catch (e) {
-    return null;
-  }
+const resolveVariantPrice = (lead: any, selection: PackSelection = lead): number | null => {
+  const options = readCheckoutOptions(lead?.referralLink?.landingPage?.customStructure);
+  return findPackOption(options, selection)?.price ?? null;
 };
 
 /**
@@ -634,7 +634,11 @@ export default function AgentLeadDetail() {
    */
   const packPrice = useMemo(
     () => Number(
-      resolveVariantPrice({ ...data?.lead, productVariant: deliveryForm.productVariant })
+      // Matched on what is in the box right now: while it still holds the pack
+      // the landing page recorded, the lead's option id prices it exactly, and
+      // rowPackSelection drops that id as soon as the agent types something
+      // else — otherwise this hint would stop reacting to the field.
+      resolveVariantPrice(data?.lead, rowPackSelection(data?.lead, deliveryForm.productVariant))
         ?? data?.product?.retailPrice
         ?? 0
     ),
@@ -1209,6 +1213,10 @@ export default function AgentLeadDetail() {
                 
                 {(() => {
                   const variantPrice = resolveVariantPrice(lead);
+                  // The bare pack label when the landing page sent one — the
+                  // product name is already printed above this line, so the
+                  // composite `productVariant` would repeat it.
+                  const variantLabel = packVariantLabel(lead);
                   // What the courier will collect: the price agreed on the call
                   // beats the pack's listed price, which beats retail.
                   const agreedPrice = lead.confirmedPriceMad ?? null;
@@ -1237,9 +1245,9 @@ export default function AgentLeadDetail() {
                           </span>
                         )}
                       </div>
-                      {lead.productVariant && (
+                      {variantLabel && (
                         <p className="text-xs font-bold text-gray-500 mt-1 flex items-center gap-1">
-                          <span className={`font-black ${isPrincess ? 'text-amber-500' : isGirly ? 'text-pink-400' : 'text-purple-400'}`}>↳</span> Sélection: {lead.productVariant}
+                          <span className={`font-black ${isPrincess ? 'text-amber-500' : isGirly ? 'text-pink-400' : 'text-purple-400'}`}>↳</span> Sélection: {variantLabel}
                         </p>
                       )}
                     </div>

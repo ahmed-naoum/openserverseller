@@ -103,7 +103,9 @@ export default function PageSettingsModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200">
+    // Above the canvas content: the checkout preview carries z-[10001]
+    // (BlockRenderer.tsx) and would otherwise paint over a z-50 overlay.
+    <div className="fixed inset-0 z-[10010] flex items-center justify-center p-4 sm:p-6 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200">
       <div className="relative w-full max-w-3xl h-[85vh] bg-white rounded-3xl shadow-2xl border border-slate-100 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/70">
@@ -278,13 +280,42 @@ export default function PageSettingsModal({
                       />
                     </div>
                     {cloaking.filterBots && (
-                      <input
-                        type="text"
-                        placeholder="URL page neutre pour les bots (ex: https://wikipedia.org)"
-                        value={cloaking.botRedirectUrl || ''}
-                        onChange={(e) => updateCloaking('botRedirectUrl', e.target.value)}
-                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-orange-500"
-                      />
+                      <div className="space-y-2 pt-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-medium text-slate-600">Action pour les Bots</span>
+                          <select
+                            value={cloaking.botMode || cloaking.botsMode || 'redirect'}
+                            onChange={(e) => {
+                              updateCloaking('botMode', e.target.value);
+                              updateCloaking('botsMode', e.target.value);
+                            }}
+                            className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:border-orange-500 cursor-pointer"
+                          >
+                            <option value="redirect">Rediriger vers une URL</option>
+                            <option value="render">Afficher une autre page (même lien)</option>
+                          </select>
+                        </div>
+                        {(cloaking.botMode || cloaking.botsMode || 'redirect') === 'render' ? (
+                          <input
+                            type="text"
+                            placeholder="Code de la page safe à afficher aux bots (ex: page-bot-safe)"
+                            value={cloaking.botAlternateCode || cloaking.botsAlternateCode || ''}
+                            onChange={(e) => {
+                              updateCloaking('botAlternateCode', e.target.value.trim());
+                              updateCloaking('botsAlternateCode', e.target.value.trim());
+                            }}
+                            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-orange-500"
+                          />
+                        ) : (
+                          <input
+                            type="text"
+                            placeholder="URL page neutre pour les bots (ex: https://wikipedia.org)"
+                            value={cloaking.botRedirectUrl || ''}
+                            onChange={(e) => updateCloaking('botRedirectUrl', e.target.value)}
+                            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-orange-500"
+                          />
+                        )}
+                      </div>
                     )}
                   </div>
 
@@ -303,13 +334,36 @@ export default function PageSettingsModal({
                       />
                     </div>
                     {cloaking.filterDirect && (
-                      <input
-                        type="text"
-                        placeholder="URL de redirection pour visites directes (ex: https://google.com)"
-                        value={cloaking.directRedirectUrl || ''}
-                        onChange={(e) => updateCloaking('directRedirectUrl', e.target.value)}
-                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-orange-500"
-                      />
+                      <div className="space-y-2 pt-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-medium text-slate-600">Action pour Visites Directes</span>
+                          <select
+                            value={cloaking.directMode || 'redirect'}
+                            onChange={(e) => updateCloaking('directMode', e.target.value)}
+                            className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:border-orange-500 cursor-pointer"
+                          >
+                            <option value="redirect">Rediriger vers une URL</option>
+                            <option value="render">Afficher une autre page (même lien)</option>
+                          </select>
+                        </div>
+                        {(cloaking.directMode || 'redirect') === 'render' ? (
+                          <input
+                            type="text"
+                            placeholder="Code de la page à afficher (ex: page-direct-safe)"
+                            value={cloaking.directAlternateCode || ''}
+                            onChange={(e) => updateCloaking('directAlternateCode', e.target.value.trim())}
+                            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-orange-500"
+                          />
+                        ) : (
+                          <input
+                            type="text"
+                            placeholder="URL de redirection pour visites directes (ex: https://google.com)"
+                            value={cloaking.directRedirectUrl || ''}
+                            onChange={(e) => updateCloaking('directRedirectUrl', e.target.value)}
+                            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-orange-500"
+                          />
+                        )}
+                      </div>
                     )}
                   </div>
 
@@ -328,13 +382,36 @@ export default function PageSettingsModal({
                       />
                     </div>
                     {cloaking.filterVpn && (
-                      <input
-                        type="text"
-                        placeholder="URL de redirection VPN/Proxy"
-                        value={cloaking.vpnRedirectUrl || ''}
-                        onChange={(e) => updateCloaking('vpnRedirectUrl', e.target.value)}
-                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-orange-500"
-                      />
+                      <div className="space-y-2 pt-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-medium text-slate-600">Action pour VPN/Proxy</span>
+                          <select
+                            value={cloaking.vpnMode || 'redirect'}
+                            onChange={(e) => updateCloaking('vpnMode', e.target.value)}
+                            className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:border-orange-500 cursor-pointer"
+                          >
+                            <option value="redirect">Rediriger vers une URL</option>
+                            <option value="render">Afficher une autre page (même lien)</option>
+                          </select>
+                        </div>
+                        {(cloaking.vpnMode || 'redirect') === 'render' ? (
+                          <input
+                            type="text"
+                            placeholder="Code de la page à afficher pour VPN (ex: page-vpn-safe)"
+                            value={cloaking.vpnAlternateCode || ''}
+                            onChange={(e) => updateCloaking('vpnAlternateCode', e.target.value.trim())}
+                            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-orange-500"
+                          />
+                        ) : (
+                          <input
+                            type="text"
+                            placeholder="URL de redirection VPN/Proxy"
+                            value={cloaking.vpnRedirectUrl || ''}
+                            onChange={(e) => updateCloaking('vpnRedirectUrl', e.target.value)}
+                            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-orange-500"
+                          />
+                        )}
+                      </div>
                     )}
                   </div>
 
@@ -361,13 +438,34 @@ export default function PageSettingsModal({
                           onChange={(e) => updateCloaking('allowedCountries', e.target.value)}
                           className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-orange-500 font-mono"
                         />
-                        <input
-                          type="text"
-                          placeholder="URL de redirection pour les pays non-autorisés"
-                          value={cloaking.countryRedirectUrl || ''}
-                          onChange={(e) => updateCloaking('countryRedirectUrl', e.target.value)}
-                          className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-orange-500"
-                        />
+                        <div className="flex items-center justify-between gap-2 pt-1">
+                          <span className="text-[11px] font-medium text-slate-600">Action pour pays non-autorisé</span>
+                          <select
+                            value={cloaking.countryMode || 'redirect'}
+                            onChange={(e) => updateCloaking('countryMode', e.target.value)}
+                            className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:border-orange-500 cursor-pointer"
+                          >
+                            <option value="redirect">Rediriger vers une URL</option>
+                            <option value="render">Afficher une autre page (même lien)</option>
+                          </select>
+                        </div>
+                        {(cloaking.countryMode || 'redirect') === 'render' ? (
+                          <input
+                            type="text"
+                            placeholder="Code de la page à afficher (ex: page-country-safe)"
+                            value={cloaking.countryAlternateCode || ''}
+                            onChange={(e) => updateCloaking('countryAlternateCode', e.target.value.trim())}
+                            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-orange-500"
+                          />
+                        ) : (
+                          <input
+                            type="text"
+                            placeholder="URL de redirection pour les pays non-autorisés"
+                            value={cloaking.countryRedirectUrl || ''}
+                            onChange={(e) => updateCloaking('countryRedirectUrl', e.target.value)}
+                            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-orange-500"
+                          />
+                        )}
                       </div>
                     )}
                   </div>

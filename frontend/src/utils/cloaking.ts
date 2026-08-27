@@ -8,8 +8,8 @@
  * Rules split into two groups:
  *  - instant: decided from data already in the browser (user agent, referrer, URL,
  *    language). Free to evaluate, so the page waits on them.
- *  - geo: needs a third-party IP lookup. Evaluated after render so legitimate
- *    visitors are not held behind a network round-trip.
+ *  - geo: needs an IP lookup, served by our own /public/geo endpoint. Evaluated
+ *    after render so legitimate visitors are not held behind a round-trip.
  */
 import { SOURCE_PARAM, isAllowedSource, parseDomainList, parseSourceSpecs, parseSourceToken, readMaxUses, readSourceRef, registerTokenUse } from './referral';
 
@@ -70,7 +70,15 @@ export function getCloakingConfig(customStructure: any): any | null {
  * Order matters: bots are checked first so crawlers land on the configured safe page
  * rather than on a narrower rule's destination.
  */
+// Ad reviewers that must always reach the page — kept in step with MUST_REACH_PATTERN
+// in backend/src/services/landingCompiler/cloak.ts. Not the search indexers, only the
+// ad review fetchers: blocking AdsBot fails ad review, so it is exempt from every rule.
+const MUST_REACH_PATTERN = /adsbot-google|google-ads/i;
+
 export function resolveInstantCloakRedirect(c: any): string | null {
+  // 0. Reviewers and indexers always reach the page, ahead of every rule.
+  if (MUST_REACH_PATTERN.test(navigator.userAgent || '')) return null;
+
   // 1. Bot & crawler filtering
   if (c.filterBots) {
     const ua = (navigator.userAgent || '').toLowerCase();
@@ -82,11 +90,17 @@ export function resolveInstantCloakRedirect(c: any): string | null {
       ? targetAgents.some((agent: string) => ua.includes(agent))
       : DEFAULT_BOT_PATTERN.test(ua);
 
-    if (isBlockedBot) return c.botRedirectUrl || 'https://wikipedia.org';
+    if (isBlockedBot) {
+      if (c.botMode === 'render' || c.botsMode === 'render') return null;
+      return c.botRedirectUrl || 'https://wikipedia.org';
+    }
   }
 
   // 2. Direct visits (no referrer at all)
   if (c.filterDirect && !document.referrer) {
+    // 'render' mode is a server-compiled feature (SSG on); the SPA cannot swap
+    // the page without changing the URL, so show the primary instead of a decoy.
+    if (c.directMode === 'render') return null;
     return c.directRedirectUrl || 'https://google.com';
   }
 
@@ -122,14 +136,21 @@ export function resolveInstantCloakRedirect(c: any): string | null {
         cameFromAllowedSource = isAllowedSource(referrerRef, specs, allowedDomains, currentHostname);
       }
 
-      if (!cameFromAllowedSource) return c.sourceRedirectUrl || 'https://google.com';
+      if (!cameFromAllowedSource) {
+        if (c.sourceMode === 'render') return null;
+        return c.sourceRedirectUrl || 'https://google.com';
+      }
     }
   }
 
   // 4. Desktop redirection (mobile-only mode)
   if (c.redirectDesktop) {
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (!isMobile) return c.desktopRedirectUrl || 'https://www.silacod.com';
+    if (!isMobile) {
+      // See note above: render is server-side; degrade to the primary on the SPA.
+      if (c.desktopMode === 'render') return null;
+      return c.desktopRedirectUrl || 'https://www.silacod.com';
+    }
   }
 
   // 5. Browser language filtering
@@ -137,6 +158,7 @@ export function resolveInstantCloakRedirect(c: any): string | null {
     const userLang = (navigator.language || (navigator as any).userLanguage || '').toLowerCase();
     const allowedList = c.allowedLanguages.split(',').map((l: string) => l.trim().toLowerCase());
     if (!allowedList.some((lang: string) => userLang.includes(lang))) {
+      if (c.languageMode === 'render') return null;
       return c.languageRedirectUrl || 'https://google.com';
     }
   }
@@ -160,24 +182,145 @@ const countryTokens = (c: any): string[] =>
     .flatMap((item: string) => (typeof item === 'string' ? item : String(item)).split('-').map((part) => part.trim().toUpperCase()))
     .filter(Boolean);
 
+/** Normalised IP facts, whichever source answered. */
+interface GeoSnapshot {
+  ip: string;
+  countryCode: string;
+  countryName: string;
+  /** ISP / organisation / ASN text, matched against the DNS keyword list. */
+  org: string;
+  vpn: boolean;
+}
+
+const GEO_ENDPOINT = (() => {
+  const configured = (import.meta as any).env?.VITE_API_URL;
+  if (configured) return `${String(configured).replace(/\/$/, '')}/public/geo`;
+  if ((import.meta as any).env?.PROD && typeof window !== 'undefined') {
+    return `${window.location.origin}/api/v1/public/geo`;
+  }
+  return 'http://localhost:3001/api/v1/public/geo';
+})();
+
+const GEO_TIMEOUT_MS = 3000;
+
+async function getJson(url: string): Promise<any | null> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), GEO_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, { signal: controller.signal, credentials: 'omit' });
+      if (!res.ok) return null;
+      return await res.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolves the visitor's IP facts.
+ *
+ * Our own endpoint first: it reads the address off the request (Cloudflare's
+ * edge country, then geoip-lite) and caches the ISP/VPN lookup per address, so
+ * it has no per-visitor quota — unlike ipapi.co, whose free tier used to run
+ * out mid-campaign and quietly let every blocked visitor through.
+ *
+ * The two public fallbacks only matter if our own API is unreachable from the
+ * page. Both are free and keyless; neither is asked for anything the first one
+ * already answered.
+ */
+async function fetchGeoSnapshot(): Promise<GeoSnapshot | null> {
+  // Developer URL testing override (e.g. ?__test_country=US or ?__test_country=FR)
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    const testCountry = params.get('__test_country') || params.get('test_country');
+    if (testCountry) {
+      return {
+        ip: '127.0.0.1',
+        countryCode: testCountry.trim().toUpperCase(),
+        countryName: testCountry.trim().toUpperCase(),
+        org: 'test',
+        vpn: params.get('__test_vpn') === '1',
+      };
+    }
+  }
+
+  const own = await getJson(GEO_ENDPOINT);
+  const data = own?.data;
+  const ownCountry = String(data?.countryCode || '').trim();
+
+  // If local endpoint resolved a valid 2-letter country, use it
+  if (data && ownCountry && ownCountry.length === 2 && ownCountry !== 'XX') {
+    return {
+      ip: String(data.ip || ''),
+      countryCode: ownCountry.toUpperCase(),
+      countryName: String(data.countryName || '').toUpperCase(),
+      org: String(data.org || data.asn || data.hostname || '').toLowerCase(),
+      vpn: !!(data.vpn || data.proxy || data.tor || data.hosting),
+    };
+  }
+
+  // Fallback to public keyless GeoIP providers (routes through browser extension VPNs like Urban VPN)
+  const who = await getJson('https://ipwho.is/');
+  if (who && who.success !== false && who.ip) {
+    const connection = who.connection || {};
+    const security = who.security || {};
+    const orgStr = [connection.isp, connection.org, connection.domain].filter(Boolean).join(' ').toLowerCase();
+    const isVpnDetected = !!(
+      security.vpn || security.proxy || security.tor || security.hosting ||
+      /vpn|proxy|hosting|datacenter|m247|tzulo|leaseweb|choopa|vultr|digitalocean|linode|ovh|cloud/i.test(orgStr)
+    );
+    return {
+      ip: String(who.ip || ''),
+      countryCode: String(who.country_code || '').toUpperCase(),
+      countryName: String(who.country || '').toUpperCase(),
+      org: orgStr,
+      vpn: isVpnDetected,
+    };
+  }
+
+  const free = await getJson('https://freeipapi.com/api/json');
+  if (free && free.countryCode) {
+    return {
+      ip: String(free.ipAddress || ''),
+      countryCode: String(free.countryCode || '').toUpperCase(),
+      countryName: String(free.countryName || '').toUpperCase(),
+      org: '',
+      vpn: !!(free.isProxy),
+    };
+  }
+
+  return null;
+}
+
 /** Rules needing the IP lookup. Returns a redirect URL, or null to allow. */
 export async function resolveGeoCloakRedirect(c: any): Promise<string | null> {
   try {
-    const ipData = await fetch('https://ipapi.co/json/').then((res) => res.json());
+    const ipData = await fetchGeoSnapshot();
+    // No source answered. Letting the visitor through beats redirecting real
+    // traffic to google.com because a lookup was blocked or offline.
+    if (!ipData) return null;
 
-    const userIp = ipData.ip || '';
-    const countryCode = (ipData.country_code || '').toUpperCase();
-    const isVpn = ipData.security?.vpn || ipData.security?.proxy || ipData.security?.tor;
-    const orgDns = (ipData.org || ipData.asn || ipData.hostname || '').toLowerCase();
+    const userIp = ipData.ip;
+    const countryCode = ipData.countryCode;
+    const isVpn = ipData.vpn;
+    const orgDns = ipData.org;
 
     // 5a. IPv6 filter
     if (c.filterIpv6 && userIp.includes(':')) {
+      if (c.ipv6Mode === 'render') return null;
       return c.ipv6RedirectUrl || 'https://google.com';
     }
 
     // 5b. Country cloaking
     if (c.filterCountry && hasAnyCountryList(c)) {
-      const countryName = (ipData.country_name || '').toUpperCase();
+      const countryName = ipData.countryName;
+      // Fail open when the source could not resolve a country at all: an IP with
+      // no country is common on mobile carrier ranges, and redirecting that
+      // traffic would cost real buyers. Matches the server engine's policy.
+      if (!countryCode && !countryName) return null;
       const isCountryAllowed = countryTokens(c).some((token: string) => {
         if (!token) return false;
         if (countryCode && (countryCode === token || token.includes(countryCode))) return true;
@@ -185,20 +328,46 @@ export async function resolveGeoCloakRedirect(c: any): Promise<string | null> {
         return false;
       });
 
-      if (!isCountryAllowed) return c.countryRedirectUrl || 'https://google.com';
+      if (!isCountryAllowed) {
+        // In 'render' mode the seller wants a blocked-country visitor to see one
+        // of their other pages at the same URL. That is a server-compiled feature
+        // (SSG on). On this SPA fallback the browser cannot swap the page without
+        // changing the URL, so the safe degradation is to show the primary page
+        // rather than bounce a real visitor to a decoy. Full behaviour needs SSG on.
+        if (c.countryMode === 'render') return null;
+        return c.countryRedirectUrl || 'https://google.com';
+      }
     }
 
-    // 5c. VPN & proxy filter (GeoIP plus extension DOM/window probing)
+    // 5c. VPN & proxy filter (GeoIP plus extension DOM/window probing + Timezone disparity probe)
     const win = window as any;
+    const docHtml = document.documentElement?.outerHTML || '';
     const hasExtensionVpnInjected = !!(
-      win.urbanVpn || win.__URBAN_VPN__ || win.urban ||
-      win.browsec || win.veepn || win.__VEEPN__ ||
-      win.touchVpn || win.zenmate || win.setupVpn ||
-      document.querySelector('[id*="urban-vpn"], [class*="urban-vpn"], [id*="browsec"], [class*="browsec"], [id*="veepn"], [class*="veepn"], [id*="touchvpn"], [class*="touchvpn"], [id*="zenmate"], [class*="zenmate"]')
+      win.urbanVpn || win.__URBAN_VPN__ || win.urban || win.urbanVPN || win.__urbanVpn__ ||
+      win.browsec || win.veepn || win.__VEEPN__ || win.touchVpn || win.zenmate || win.setupVpn ||
+      document.querySelector('[id*="urban"], [class*="urban"], [id*="browsec"], [class*="browsec"], [id*="veepn"], [class*="veepn"], [id*="touchvpn"], [class*="touchvpn"], [id*="zenmate"], [class*="zenmate"]') ||
+      /urban-vpn|browsec|veepn|touchvpn|zenmate/i.test(docHtml)
     );
     const isExtensionVpn = (c.detectExtensionVpn !== false) && hasExtensionVpnInjected;
 
-    if (c.filterVpn && (isVpn || isExtensionVpn)) {
+    let isTimezoneDisparity = false;
+    try {
+      if (countryCode && countryCode.length === 2 && typeof Intl !== 'undefined') {
+        const sysTz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+        if (countryCode === 'US' || countryCode === 'CA') {
+          if (sysTz.startsWith('Africa/') || sysTz.startsWith('Europe/') || sysTz.startsWith('Asia/')) {
+            isTimezoneDisparity = true;
+          }
+        } else if (countryCode === 'MA') {
+          if (sysTz.startsWith('America/') || sysTz.startsWith('Asia/Tokyo') || sysTz.startsWith('Australia/')) {
+            isTimezoneDisparity = true;
+          }
+        }
+      }
+    } catch { /* ignore */ }
+
+    if (c.filterVpn && (isVpn || isExtensionVpn || isTimezoneDisparity)) {
+      if (c.vpnMode === 'render') return null;
       return c.vpnRedirectUrl || 'https://google.com';
     }
 
@@ -213,6 +382,7 @@ export async function resolveGeoCloakRedirect(c: any): Promise<string | null> {
         : [];
 
       if ([...selectedDnsList, ...customDnsList].some((kw: string) => orgDns.includes(kw))) {
+        if (c.dnsMode === 'render') return null;
         return c.dnsRedirectUrl || 'https://google.com';
       }
     }
@@ -243,16 +413,9 @@ export async function resolveGeoCloakRedirect(c: any): Promise<string | null> {
 
     return null;
   } catch {
-    // Fallback to a lightweight country check if the primary GeoIP lookup fails.
-    if (c.filterCountry && hasAnyCountryList(c)) {
-      try {
-        const resData = await fetch('https://api.country.is').then((res) => res.json());
-        const countryCode = (resData.country || '').toUpperCase();
-        const isAllowed = countryTokens(c).some((token: string) => countryCode === token || token.includes(countryCode));
-
-        if (countryCode && !isAllowed) return c.countryRedirectUrl || 'https://google.com';
-      } catch { /* give up and let the visitor through */ }
-    }
+    // fetchGeoSnapshot already failed over across every source, so there is
+    // nothing left to retry here. Let the visitor through rather than sending
+    // real traffic away on a rule we could not evaluate.
     return null;
   }
 }

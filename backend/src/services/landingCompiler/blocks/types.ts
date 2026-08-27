@@ -64,6 +64,14 @@ export interface BlockContext {
    * party host would otherwise block an influencer's save.
    */
   probeImage(url: string): ImageDimensions | null;
+  /**
+   * cloaking.protectVideos — when true, video elements are marked
+   * `controlsList="nodownload"` and `disablepictureinpicture` to hide the
+   * browser's download/PiP affordances. The right-click guard that pairs with
+   * it is emitted once as a runtime script (an inline oncontextmenu attribute
+   * would be blocked by the page's hash-based CSP).
+   */
+  protectVideos: boolean;
 }
 
 export interface BlockRenderer {

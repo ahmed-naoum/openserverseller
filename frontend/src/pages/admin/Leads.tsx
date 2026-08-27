@@ -141,6 +141,29 @@ const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
 // Labels, colours and the filter list all come from lib/paymentSituation so the
 // admin sees the same vocabulary as the agent — FACTURED-CC included.
 
+// Google Sheets outbound state of a lead, as reported by the API (`lead.sheetPush`,
+// the SheetPushJob outbox row). Only ever rendered for accounts the feature is
+// switched on for — see the row cell below.
+const SHEET_PUSH_BADGES: Record<string, { label: string; color: string; hint: string }> = {
+  SENT: { label: 'Sheet OK', color: 'text-emerald-700 bg-emerald-50 border-emerald-200', hint: 'Ligne écrite dans le Google Sheet du compte' },
+  PENDING: { label: 'Sheet en attente', color: 'text-blue-700 bg-blue-50 border-blue-200', hint: "En file d'envoi vers le Google Sheet" },
+  SENDING: { label: 'Sheet en cours', color: 'text-blue-700 bg-blue-50 border-blue-200', hint: 'Envoi vers le Google Sheet en cours' },
+  BLOCKED_NO_CREDITS: { label: 'Sheet bloqué', color: 'text-amber-700 bg-amber-50 border-amber-200', hint: 'Crédits Sheets insuffisants — envoi bloqué' },
+  FAILED: { label: 'Sheet échec', color: 'text-rose-700 bg-rose-50 border-rose-200', hint: "Échec de l'envoi vers le Google Sheet" },
+  REMOVED: { label: 'Sheet supprimé', color: 'text-orange-700 bg-orange-50 border-orange-200', hint: 'Ligne écrite puis supprimée du Sheet par le vendeur' },
+  SKIPPED: { label: 'Sheet ignoré', color: 'text-gray-500 bg-gray-50 border-gray-200', hint: 'Envoi ignoré' },
+};
+
+const SHEET_PUSH_FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: 'SENT', label: 'Envoyés au Sheet' },
+  { value: 'PENDING', label: "En attente d'envoi" },
+  { value: 'BLOCKED', label: 'Bloqués (crédits)' },
+  { value: 'FAILED', label: 'Échecs' },
+  { value: 'REMOVED', label: 'Supprimés du Sheet' },
+  { value: 'NOT_SENT', label: 'Jamais envoyés' },
+  { value: 'VENDOR_ENABLED', label: 'Comptes Sheets activés' },
+];
+
 interface Filters {
   search: string;
   status: string;
@@ -152,6 +175,7 @@ interface Filters {
   sourceMode: string;
   paymentSituation: string;
   hasOrder: '' | 'yes' | 'no';
+  sheetPush: string;
   dateFrom: string;
   dateTo: string;
   sort: string;
@@ -160,7 +184,7 @@ interface Filters {
 
 const DEFAULT_FILTERS: Filters = {
   search: '', status: 'ALL', vendorId: '', productId: '', agentId: '', city: '',
-  source: '', sourceMode: '', paymentSituation: '', hasOrder: '',
+  source: '', sourceMode: '', paymentSituation: '', hasOrder: '', sheetPush: '',
   dateFrom: '', dateTo: '', sort: 'recent', limit: 25,
 };
 
@@ -455,7 +479,7 @@ export default function AdminLeads() {
     setPage(1);
   }, [debouncedSearch, filters.status, filters.vendorId, filters.productId, filters.agentId,
       filters.city, filters.source, filters.sourceMode, filters.paymentSituation, filters.hasOrder,
-      filters.dateFrom, filters.dateTo, filters.sort, filters.limit]);
+      filters.sheetPush, filters.dateFrom, filters.dateTo, filters.sort, filters.limit]);
 
   const queryParams = useMemo(() => {
     const p: any = {
@@ -475,6 +499,7 @@ export default function AdminLeads() {
     if (filters.sourceMode) p.sourceMode = filters.sourceMode;
     if (filters.paymentSituation) p.paymentSituation = filters.paymentSituation;
     if (filters.hasOrder) p.hasOrder = filters.hasOrder;
+    if (filters.sheetPush) p.sheetPush = filters.sheetPush;
     if (filters.dateFrom) p.dateFrom = filters.dateFrom;
     if (filters.dateTo) p.dateTo = filters.dateTo;
     return p;
@@ -546,6 +571,10 @@ export default function AdminLeads() {
     if (filters.sourceMode) chips.push({ key: 'sm', label: `Canal : ${filters.sourceMode}`, clear: set({ sourceMode: '' }) });
     if (filters.paymentSituation) chips.push({ key: 'ps', label: `Paiement : ${paymentSituationLabel(filters.paymentSituation)}`, clear: set({ paymentSituation: '' }) });
     if (filters.hasOrder) chips.push({ key: 'ho', label: filters.hasOrder === 'yes' ? 'Avec commande' : 'Sans commande', clear: set({ hasOrder: '' }) });
+    if (filters.sheetPush) {
+      const opt = SHEET_PUSH_FILTER_OPTIONS.find(o => o.value === filters.sheetPush);
+      chips.push({ key: 'gs', label: `Google Sheets : ${opt?.label || filters.sheetPush}`, clear: set({ sheetPush: '' }) });
+    }
     if (filters.dateFrom) chips.push({ key: 'df', label: `Du ${filters.dateFrom}`, clear: set({ dateFrom: '' }) });
     if (filters.dateTo) chips.push({ key: 'dt', label: `Au ${filters.dateTo}`, clear: set({ dateTo: '' }) });
     return chips;
@@ -1031,6 +1060,19 @@ export default function AdminLeads() {
               </select>
             </div>
             <div>
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Google Sheets</label>
+              <select
+                value={filters.sheetPush}
+                onChange={e => setFilters(f => ({ ...f, sheetPush: e.target.value }))}
+                className="mt-1 w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/30 cursor-pointer"
+              >
+                <option value="">Tous</option>
+                {SHEET_PUSH_FILTER_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Période</label>
               <div className="mt-1 flex items-center gap-2">
                 <input
@@ -1180,6 +1222,16 @@ export default function AdminLeads() {
                   const isSelected = selected.has(lead.id);
                   const canPushToCallCenter = CALL_CENTER_READY_STATUSES.includes(lead.status);
                   const clicks = lead.contactClicks || { whatsapp: 0, call: 0, lastWhatsappAt: null, lastCallAt: null };
+                  // Google Sheets outbound. Shown only for accounts the entitlement
+                  // is on for: on every other account there is nothing to send, so a
+                  // badge there would only ever say "jamais envoyé" and mean nothing.
+                  const sheetsEnabled = lead.vendor?.sheetsEnabled === true;
+                  const sheetBadge = sheetsEnabled
+                    ? (lead.sheetPush
+                      ? SHEET_PUSH_BADGES[lead.sheetPush.status]
+                        || { label: lead.sheetPush.status, color: 'text-gray-600 bg-gray-50 border-gray-200', hint: lead.sheetPush.status }
+                      : { label: 'Sheet non envoyé', color: 'text-gray-400 bg-gray-50 border-gray-200', hint: "Aucun envoi vers le Google Sheet du compte" })
+                    : null;
 
                   return (
                     <Fragment key={lead.id}>
@@ -1370,6 +1422,24 @@ export default function AdminLeads() {
                         {/* Activité */}
                         <td className="px-4 py-3.5">
                           <div className="flex flex-col gap-1 text-[10px] font-semibold min-w-[120px]">
+                            {/* Google Sheets — état de l'envoi vers le Sheet du compte */}
+                            {sheetBadge && (
+                              <span
+                                className={`flex items-center gap-1 rounded px-1.5 py-0.5 border w-fit font-black ${sheetBadge.color}`}
+                                title={[
+                                  sheetBadge.hint,
+                                  lead.sheetPush?.sentAt
+                                    ? `Envoyé le ${format(new Date(lead.sheetPush.sentAt), "dd/MM/yyyy 'à' HH:mm")}`
+                                    : null,
+                                  lead.sheetPush?.origin === 'MANUAL' ? 'Envoi manuel' : null,
+                                  lead.sheetPush?.lastError || null,
+                                ].filter(Boolean).join(' — ')}
+                              >
+                                <FileSpreadsheet className="w-2.5 h-2.5" />
+                                {sheetBadge.label}
+                              </span>
+                            )}
+
                             {/* WhatsApp click tracking */}
                             {clicks.whatsapp > 0 ? (
                               <span

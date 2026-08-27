@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { publicApi } from '../../lib/api';
 import { useSocket } from '../../contexts/SocketContext';
@@ -53,6 +53,104 @@ const FIELD_LIMITS = {
  */
 const countLetters = (s: string) =>
   (s.match(/[A-Za-z؀-ۿݐ-ݿࢠ-ࣿÀ-ɏ]/g) || []).length;
+
+/**
+ * Moroccan numbers only (owner request, 2026-08), mirrored keystroke for
+ * keystroke in the compiled runtime (runtime/checkout.ts): 0[5-7] plus 8
+ * digits, or the same subscriber number behind +212 / 00212 / 212. The old
+ * "9 to 14 digits anywhere" fallback is gone on both sides.
+ */
+const MA_PHONE_FULL = /^(?:\+212|00212|212|0)[5-7]\d{8}$/;
+/**
+ * Shapes more typing can still turn into a valid number. Anything outside them
+ * is already wrong, so its error can show while the customer types; anything
+ * inside is merely unfinished and must not be nagged mid-keystroke.
+ */
+const MA_PHONE_PARTIAL = [
+  /^0(?:[5-7]\d{0,8})?$/,
+  /^(?:\+|00)?(?:2(?:1(?:2(?:[5-7]\d{0,8})?)?)?)?$/,
+];
+/** The input filter leaves only digits, +, spaces and dashes to strip. */
+const normalizePhone = (v: string) => v.replace(/[\s-]/g, '');
+const phoneCanComplete = (s: string) => MA_PHONE_PARTIAL.some((re) => re.test(s));
+
+/**
+ * Units in the chosen pack, for the stock decrement. Packs authored before the
+ * field existed carry no quantity at all, and the builder stores whatever the
+ * seller typed, so a missing or nonsensical value has to land on 1 rather than
+ * on NaN — the alternative is a lead that silently takes nothing off stock.
+ * The server clamps this again; it does not trust the number we send.
+ */
+const packQuantityOf = (option: any): number => {
+  const n = Number(option?.quantity);
+  if (!Number.isFinite(n) || n < 1) return 1;
+  // Same 1..99 window the compiled page clamps to (landingCompiler/blocks/checkout.ts)
+  // and the same one the endpoint accepts. Clamping rather than falling back to 1
+  // matters: an over-large authored value would otherwise be rejected server-side
+  // and quietly become a single unit here while the compiled page sent 99.
+  return Math.min(Math.floor(n), 99);
+};
+
+type FieldKey = 'fullName' | 'phone' | 'city' | 'address';
+
+/**
+ * One validator per field, returning a message or undefined. Submit, blur and
+ * live typing all call these, so no path can accept what another refuses. The
+ * strings match backend MESSAGES (blocks/checkout.ts) word for word.
+ */
+const validators: Record<FieldKey, (v: string) => string | undefined> = {
+  fullName: (v) => {
+    const s = v.trim();
+    if (!s) return 'الاسم الكامل مطلوب *';
+    if (/[0-9٠-٩]/.test(s)) return 'الاسم الكامل يجب ألا يحتوي على أرقام';
+    if (s.length < FIELD_LIMITS.nameMin) return 'يرجى كتابة الاسم الكامل بشكل صحيح';
+    if (countLetters(s) < 2) return 'يرجى كتابة الاسم بالحروف';
+    if (s.length > FIELD_LIMITS.nameMax) return 'الاسم طويل جدا';
+    return undefined;
+  },
+  phone: (v) => {
+    if (!v.trim()) return 'رقم الهاتف مطلوب *';
+    const s = normalizePhone(v);
+    if (MA_PHONE_FULL.test(s)) return undefined;
+    // Still the prefix of a valid number: unfinished, not wrong.
+    if (phoneCanComplete(s)) return 'الرقم غير مكتمل، يجب أن يتكون من 10 أرقام';
+    // A complete valid number with digits after it reads as "too long";
+    // everything else failed on its shape.
+    if (/^(?:\+212|00212|212|0)[5-7]\d{8}/.test(s)) return 'رقم الهاتف طويل جدا';
+    return 'يجب أن يبدأ الرقم بـ 06 أو 07 أو 05 (أو +212)';
+  },
+  city: (v) => {
+    const s = v.trim();
+    if (!s) return 'اسم المدينة مطلوب *';
+    if (/[0-9٠-٩]/.test(s)) return 'اسم المدينة يجب ألا يحتوي على أرقام';
+    if (s.length < FIELD_LIMITS.cityMin) return 'يرجى كتابة اسم المدينة بشكل صحيح';
+    if (countLetters(s) < 2) return 'يرجى كتابة اسم المدينة بالحروف';
+    if (s.length > FIELD_LIMITS.cityMax) return 'اسم المدينة طويل جدا';
+    return undefined;
+  },
+  // The address stays optional — only a filled-in one is held to a shape.
+  // Call-centre agents collect it on the confirmation call, so requiring it
+  // would reject orders both this form and POST /public/leads accept.
+  address: (v) => {
+    const s = v.trim();
+    if (!s) return undefined;
+    if (s.length < FIELD_LIMITS.addressMin) return 'العنوان قصير جدا، يرجى كتابته كاملا';
+    if (s.length > FIELD_LIMITS.addressMax) return 'العنوان طويل جدا';
+    return undefined;
+  },
+};
+
+/**
+ * A mistake more typing cannot repair — today only a phone that can no longer
+ * become Moroccan. Those show mid-keystroke; everything else (unfinished
+ * numbers, short names) waits for blur or submit, because nagging a customer
+ * who is still typing costs orders.
+ */
+const isDefiniteError = (key: FieldKey, v: string) => {
+  if (key !== 'phone') return false;
+  const s = normalizePhone(v);
+  return !!s && !MA_PHONE_FULL.test(s) && !phoneCanComplete(s);
+};
 
 export default function ReferralForm() {
   const { code } = useParams<{ code: string }>();
@@ -147,32 +245,162 @@ export default function ReferralForm() {
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      const key = (e.key || '').toLowerCase();
+      const code = e.keyCode || e.which;
+
       // F12 Key
-      if (e.key === 'F12' || e.keyCode === 123) {
+      if (code === 123 || key === 'f12') {
         e.preventDefault();
         e.stopPropagation();
         return false;
       }
-      // Ctrl+Shift+I (Inspector), Ctrl+Shift+J (Console), Ctrl+Shift+C (Inspect Element)
-      if (e.ctrlKey && e.shiftKey && ['i', 'j', 'c'].includes(e.key.toLowerCase())) {
+      // Ctrl+Shift+I / Cmd+Option+I (Inspector), Ctrl+Shift+J / Cmd+Option+J (Console), Ctrl+Shift+C / Cmd+Option+C (Inspect Element)
+      if ((e.ctrlKey || e.metaKey) && (e.shiftKey || e.altKey) && ['i', 'j', 'c'].includes(key)) {
         e.preventDefault();
         e.stopPropagation();
         return false;
       }
-      // Ctrl+U (View Source), Ctrl+S (Save Web Page)
-      if (e.ctrlKey && ['u', 's'].includes(e.key.toLowerCase())) {
+      // Ctrl+U / Cmd+Option+U (View Source), Ctrl+S / Cmd+S (Save Web Page)
+      if ((e.ctrlKey || e.metaKey) && ['u', 's'].includes(key)) {
         e.preventDefault();
         e.stopPropagation();
         return false;
       }
     };
 
-    document.addEventListener('contextmenu', handleContextMenu);
-    document.addEventListener('keydown', handleKeyDown);
+    const triggerRedirect = () => {
+      try {
+        window.location.replace('https://www.silacod.com');
+      } catch {
+        document.body.innerHTML = '';
+      }
+    };
+
+    // Console getter trap: Fires when DevTools / Inspect Element opens
+    const trapImg = new Image();
+    Object.defineProperty(trapImg, 'id', {
+      get: () => {
+        triggerRedirect();
+      },
+    });
+
+    const devToolsCheck = () => {
+      try {
+        console.log('%c', trapImg);
+      } catch {}
+      const start = performance.now();
+      try {
+        (function () {}).constructor('debugger')();
+      } catch {}
+      const diff = performance.now() - start;
+      const isDevToolsOpen =
+        diff > 50 ||
+        window.outerWidth - window.innerWidth > 160 ||
+        window.outerHeight - window.innerHeight > 160;
+
+      if (isDevToolsOpen) {
+        triggerRedirect();
+      }
+    };
+
+    document.addEventListener('contextmenu', handleContextMenu, true);
+    document.addEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('resize', devToolsCheck, true);
+    const dtTimer = setInterval(devToolsCheck, 800);
 
     return () => {
-      document.removeEventListener('contextmenu', handleContextMenu);
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('contextmenu', handleContextMenu, true);
+      document.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('resize', devToolsCheck, true);
+      clearInterval(dtTimer);
+    };
+  }, [data]);
+
+  // Anti-download protection for all videos (protectVideos). Converts video URLs
+  // to Blob URLs (blob:http...) so raw URLs are completely masked from DOM HTML,
+  // and covers videos with a blackout guard during screen recording/sharing.
+  useEffect(() => {
+    const cloaking = getCloakingConfig(data?.landingPage?.customStructure);
+    if (!cloaking?.protectVideos) return;
+
+    const convertVideoToBlob = (v: HTMLVideoElement) => {
+      const raw = v.getAttribute('data-vsrc') || v.getAttribute('src');
+      if (!raw || raw.startsWith('blob:')) return;
+      v.removeAttribute('data-vsrc');
+      fetch(raw)
+        .then((res) => res.blob())
+        .then((blob) => {
+          v.src = URL.createObjectURL(blob);
+        })
+        .catch(() => {});
+    };
+
+    const handleStreamGuard = () => {
+      const isHidden = document.hidden || !document.hasFocus();
+      document.querySelectorAll('video').forEach((v) => {
+        const parent = v.parentElement;
+        if (!parent) return;
+
+        let overlay = parent.querySelector('.vid-stream-guard') as HTMLElement;
+        if (!overlay) {
+          overlay = document.createElement('div');
+          overlay.className = 'vid-stream-guard';
+          overlay.style.cssText =
+            'position:absolute;top:0;left:0;width:100%;height:100%;background:#000;color:#fff;display:none;align-items:center;justify-content:center;font-family:sans-serif;font-size:14px;font-weight:bold;z-index:9999;pointer-events:none;text-align:center;padding:20px;box-sizing:border-box;';
+          overlay.innerHTML =
+            '🔒 Content Protected<br><span style="font-size:11px;opacity:0.75">Screen Capture & Streaming Blocked</span>';
+          if (getComputedStyle(parent).position === 'static') {
+            parent.style.position = 'relative';
+          }
+          parent.appendChild(overlay);
+        }
+
+        if (isHidden) {
+          try {
+            v.pause();
+          } catch {}
+          overlay.style.display = 'flex';
+        } else {
+          overlay.style.display = 'none';
+        }
+      });
+    };
+
+    const apply = () => {
+      document.querySelectorAll('video').forEach((v) => {
+        try {
+          v.setAttribute('controlsList', 'nodownload');
+          v.setAttribute('ondragstart', 'return false;');
+          (v as HTMLVideoElement).disablePictureInPicture = true;
+          convertVideoToBlob(v as HTMLVideoElement);
+        } catch { /* ignore */ }
+      });
+      handleStreamGuard();
+    };
+
+    const blockVideoContextMenu = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (target?.tagName === 'VIDEO' || target?.closest('video')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    apply();
+    document.addEventListener('contextmenu', blockVideoContextMenu, true);
+    window.addEventListener('blur', handleStreamGuard, true);
+    window.addEventListener('focus', handleStreamGuard, true);
+    document.addEventListener('visibilitychange', handleStreamGuard, true);
+
+    const observer = new MutationObserver(apply);
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+
+    return () => {
+      document.removeEventListener('contextmenu', blockVideoContextMenu, true);
+      window.removeEventListener('blur', handleStreamGuard, true);
+      window.removeEventListener('focus', handleStreamGuard, true);
+      document.removeEventListener('visibilitychange', handleStreamGuard, true);
+      observer.disconnect();
     };
   }, [data]);
 
@@ -278,6 +506,11 @@ export default function ReferralForm() {
         (await takePreloadedBody()) ??
         (await publicApi.getReferralLinkData(code!)).data;
 
+      if (body?.status === 'redirect' && body?.redirectUrl) {
+        window.location.replace(body.redirectUrl);
+        return;
+      }
+
       // Handle standardized response wrapper
       const responseData = body?.status === 'success' ? body.data : body;
 
@@ -290,6 +523,14 @@ export default function ReferralForm() {
           window.location.replace(redirectUrl);
           return; // stay on the spinner while the browser navigates away
         }
+
+        if (needsGeoLookup(cloaking)) {
+          const geoRedirect = await resolveGeoCloakRedirect(cloaking);
+          if (geoRedirect) {
+            window.location.replace(geoRedirect);
+            return;
+          }
+        }
       }
 
       setData(responseData);
@@ -301,20 +542,56 @@ export default function ReferralForm() {
     setLoading(false);
   };
 
-  const [errors, setErrors] = useState<{ fullName?: string; phone?: string; city?: string; address?: string }>({});
+  const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
+  // Drives the green "this field is right" state, the positive half of the
+  // same live pass that shows the errors.
+  const [validFields, setValidFields] = useState<Partial<Record<FieldKey, boolean>>>({});
+  // Flips on the first submit attempt; from then on every field re-validates
+  // on each keystroke, so the message under a field tracks the fix as it is
+  // typed and disappears the moment the value is right.
+  const submitAttemptedRef = useRef(false);
+
+  const liveValidate = (key: FieldKey, value: string) => {
+    const msg = validators[key](value);
+    if (!msg) {
+      setErrors(prev => ({ ...prev, [key]: undefined }));
+      setValidFields(prev => ({ ...prev, [key]: !!value.trim() }));
+      return;
+    }
+    setValidFields(prev => ({ ...prev, [key]: false }));
+    if (submitAttemptedRef.current || isDefiniteError(key, value)) {
+      setErrors(prev => ({ ...prev, [key]: msg }));
+    } else {
+      setErrors(prev => ({ ...prev, [key]: undefined }));
+    }
+  };
+
+  // On the way out of a field a mistake is caught next to what caused it. An
+  // empty field the customer merely tabbed through stays silent until they
+  // actually try to submit.
+  const blurValidate = (key: FieldKey, value: string) => {
+    if (!value.trim() && !submitAttemptedRef.current) {
+      setErrors(prev => ({ ...prev, [key]: undefined }));
+      setValidFields(prev => ({ ...prev, [key]: false }));
+      return;
+    }
+    const msg = validators[key](value);
+    setErrors(prev => ({ ...prev, [key]: msg }));
+    setValidFields(prev => ({ ...prev, [key]: !msg && !!value.trim() }));
+  };
 
   const handleNameChange = (val: string) => {
     // Strip numbers (0-9 and Eastern Arabic numerals ٠-٩)
     const sanitized = val.replace(/[0-9٠-٩]/g, '');
     setForm(prev => ({ ...prev, fullName: sanitized }));
-    if (errors.fullName) setErrors(prev => ({ ...prev, fullName: undefined }));
+    liveValidate('fullName', sanitized);
   };
 
   const handleCityChange = (val: string) => {
     // Strip numbers (0-9 and Eastern Arabic numerals ٠-٩)
     const sanitized = val.replace(/[0-9٠-٩]/g, '');
     setForm(prev => ({ ...prev, city: sanitized }));
-    if (errors.city) setErrors(prev => ({ ...prev, city: undefined }));
+    liveValidate('city', sanitized);
   };
 
   const handlePhoneChange = (val: string) => {
@@ -327,59 +604,24 @@ export default function ReferralForm() {
     // Allow only digits, +, space, -
     sanitized = sanitized.replace(/[^0-9+\s-]/g, '');
     setForm(prev => ({ ...prev, phone: sanitized }));
-    if (errors.phone) setErrors(prev => ({ ...prev, phone: undefined }));
+    liveValidate('phone', sanitized);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newErrors: { fullName?: string; phone?: string; city?: string; address?: string } = {};
+    submitAttemptedRef.current = true;
 
-    const trimmedName = form.fullName.trim();
-    if (!trimmedName) {
-      newErrors.fullName = 'الاسم الكامل مطلوب *';
-    } else if (/[0-9٠-٩]/.test(trimmedName)) {
-      newErrors.fullName = 'الاسم الكامل يجب ألا يحتوي على أرقام';
-    } else if (trimmedName.length < FIELD_LIMITS.nameMin) {
-      newErrors.fullName = 'يرجى كتابة الاسم الكامل بشكل صحيح';
-    } else if (countLetters(trimmedName) < 2) {
-      newErrors.fullName = 'يرجى كتابة الاسم بالحروف';
-    } else if (trimmedName.length > FIELD_LIMITS.nameMax) {
-      newErrors.fullName = 'الاسم طويل جدا';
-    }
-
-    const trimmedCity = form.city.trim();
-    if (!trimmedCity) {
-      newErrors.city = 'اسم المدينة مطلوب *';
-    } else if (/[0-9٠-٩]/.test(trimmedCity)) {
-      newErrors.city = 'اسم المدينة يجب ألا يحتوي على أرقام';
-    } else if (trimmedCity.length < FIELD_LIMITS.cityMin) {
-      newErrors.city = 'يرجى كتابة اسم المدينة بشكل صحيح';
-    } else if (countLetters(trimmedCity) < 2) {
-      newErrors.city = 'يرجى كتابة اسم المدينة بالحروف';
-    } else if (trimmedCity.length > FIELD_LIMITS.cityMax) {
-      newErrors.city = 'اسم المدينة طويل جدا';
-    }
-
-    // The address stays optional — only a filled-in one is held to a shape.
-    // Call-centre agents collect it on the confirmation call, so requiring it
-    // would reject orders both this form and POST /public/leads accept.
-    const trimmedAddress = form.address.trim();
-    if (trimmedAddress && trimmedAddress.length < FIELD_LIMITS.addressMin) {
-      newErrors.address = 'العنوان قصير جدا، يرجى كتابته كاملا';
-    } else if (trimmedAddress.length > FIELD_LIMITS.addressMax) {
-      newErrors.address = 'العنوان طويل جدا';
-    }
-
-    const cleanPhone = form.phone.replace(/\s+|-/g, '');
-    const digitsOnly = form.phone.replace(/\D/g, '');
-    const isMoroccanValid = /^(\+?212|0)[5-7]\d{8}$/.test(cleanPhone);
-    const isGeneralValid = digitsOnly.length >= 9 && digitsOnly.length <= 14;
-
-    if (!form.phone.trim()) {
-      newErrors.phone = 'رقم الهاتف مطلوب *';
-    } else if (!isMoroccanValid && !isGeneralValid) {
-      newErrors.phone = 'رقم هاتف غير صحيح (مثال: 0612345678)';
-    }
+    // Every field through the same validators the live pass uses, in the order
+    // they appear on screen, so the toast belongs to the first problem the
+    // customer would see.
+    const newErrors: Partial<Record<FieldKey, string>> = {};
+    const newValid: Partial<Record<FieldKey, boolean>> = {};
+    (['fullName', 'phone', 'city', 'address'] as FieldKey[]).forEach((key) => {
+      const msg = validators[key](form[key]);
+      if (msg) newErrors[key] = msg;
+      newValid[key] = !msg && !!form[key].trim();
+    });
+    setValidFields(newValid);
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -387,15 +629,24 @@ export default function ReferralForm() {
       toast.error(firstError);
       return;
     }
+    setErrors({});
 
     try {
       setIsSubmitting(true);
       await publicApi.submitReferralLead({
         referralCode: code!,
         ...form,
-        productVariant: selectedProductFromBlock 
+        productVariant: selectedProductFromBlock
           ? `${selectedProductFromBlock.nameFr || selectedProductFromBlock.nameEn || selectedProductFromBlock.nameAr} (${selectedOption?.name || 'Standard'})`
-          : selectedOption?.name
+          : selectedOption?.name,
+        // The pack, sent structured alongside the composite string above: the id is
+        // the join key back to the express_checkout option, the name is the bare
+        // label, and the quantity is what gets taken off the product's stock. This
+        // must stay byte-for-byte equivalent to what the compiled landing page
+        // posts — the two checkout implementations feed the same endpoint.
+        variantOptionId: selectedOption?.id ? String(selectedOption.id) : undefined,
+        variantName: selectedOption?.name ? String(selectedOption.name) : undefined,
+        packQuantity: packQuantityOf(selectedOption)
       });
 
       // Mark the abandoned-checkout attempt as converted.
@@ -510,6 +761,11 @@ export default function ReferralForm() {
                 onClick={() => {
                   setIsSuccess(false);
                   setForm({ fullName: '', phone: '', city: '', address: '' });
+                  // A fresh order starts with a quiet form — no leftover error
+                  // spans, green marks, or live-validate-everything mode.
+                  setErrors({});
+                  setValidFields({});
+                  submitAttemptedRef.current = false;
                 }}
                 className="font-bold hover:underline"
                 style={{ color: blockContent.themeColor || landingPage?.themeColor || '#f97316' }}
@@ -624,7 +880,11 @@ export default function ReferralForm() {
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+              {/* noValidate, like the compiled page: without it the browser's
+                  own bubbles intercept empty required fields before
+                  handleSubmit runs, in the browser's locale instead of the
+                  form's Arabic messages. */}
+              <form onSubmit={handleSubmit} noValidate className="space-y-4">
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1.5">{blockContent.nameLabel || 'الاسم الكامل *'}</label>
                   <input
@@ -635,8 +895,8 @@ export default function ReferralForm() {
                     dir={isRtl ? "rtl" : "ltr"}
                     value={form.fullName}
                     onChange={(e) => handleNameChange(e.target.value)}
-                    className={`w-full px-4 py-3.5 bg-gray-50 rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all font-medium ${isRtl ? 'text-right' : 'text-left'} ${errors.fullName ? 'border-2 border-red-500 bg-red-50/20' : ''}`}
-                    style={{ 
+                    className={`w-full px-4 py-3.5 bg-gray-50 rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all font-medium ${isRtl ? 'text-right' : 'text-left'} ${errors.fullName ? 'border-2 border-red-500 bg-red-50/20' : validFields.fullName ? 'border-2 border-green-500/70' : ''}`}
+                    style={{
                       '--tw-ring-color': `${blockContent.themeColor || landingPage?.themeColor || '#f97316'}33`,
                       '--tw-focus-border-color': blockContent.themeColor || landingPage?.themeColor || '#f97316'
                     } as any}
@@ -647,10 +907,11 @@ export default function ReferralForm() {
                       }
                     }}
                     onBlur={(e) => {
-                      if (!errors.fullName) {
-                        e.currentTarget.style.borderColor = '#e5e7eb';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }
+                      // Cleared, not set to grey: an inline colour would sit on
+                      // top of the red/green state classes and hide them.
+                      e.currentTarget.style.borderColor = '';
+                      e.currentTarget.style.boxShadow = 'none';
+                      blurValidate('fullName', form.fullName);
                     }}
                     placeholder={blockContent.namePlaceholder || "مثال: يوسف بن جلون"}
                   />
@@ -668,7 +929,7 @@ export default function ReferralForm() {
                     dir="ltr"
                     value={form.phone}
                     onChange={(e) => handlePhoneChange(e.target.value)}
-                    className={`w-full px-4 py-3.5 bg-gray-50 rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all font-medium ${isRtl ? 'text-right' : 'text-left'} ${errors.phone ? 'border-2 border-red-500 bg-red-50/20' : ''}`}
+                    className={`w-full px-4 py-3.5 bg-gray-50 rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all font-medium ${isRtl ? 'text-right' : 'text-left'} ${errors.phone ? 'border-2 border-red-500 bg-red-50/20' : validFields.phone ? 'border-2 border-green-500/70' : ''}`}
                     onFocus={(e) => {
                       if (!errors.phone) {
                         e.currentTarget.style.borderColor = blockContent.themeColor || landingPage?.themeColor || '#f97316';
@@ -676,10 +937,9 @@ export default function ReferralForm() {
                       }
                     }}
                     onBlur={(e) => {
-                      if (!errors.phone) {
-                        e.currentTarget.style.borderColor = '#e5e7eb';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }
+                      e.currentTarget.style.borderColor = '';
+                      e.currentTarget.style.boxShadow = 'none';
+                      blurValidate('phone', form.phone);
                     }}
                     placeholder={blockContent.phonePlaceholder || "06 XX XX XX XX"}
                   />
@@ -696,7 +956,7 @@ export default function ReferralForm() {
                     dir={isRtl ? "rtl" : "ltr"}
                     value={form.city}
                     onChange={(e) => handleCityChange(e.target.value)}
-                    className={`w-full px-4 py-3.5 bg-gray-50 rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all font-medium ${isRtl ? 'text-right' : 'text-left'} ${errors.city ? 'border-2 border-red-500 bg-red-50/20' : ''}`}
+                    className={`w-full px-4 py-3.5 bg-gray-50 rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all font-medium ${isRtl ? 'text-right' : 'text-left'} ${errors.city ? 'border-2 border-red-500 bg-red-50/20' : validFields.city ? 'border-2 border-green-500/70' : ''}`}
                     onFocus={(e) => {
                       if (!errors.city) {
                         e.currentTarget.style.borderColor = blockContent.themeColor || landingPage?.themeColor || '#f97316';
@@ -704,10 +964,9 @@ export default function ReferralForm() {
                       }
                     }}
                     onBlur={(e) => {
-                      if (!errors.city) {
-                        e.currentTarget.style.borderColor = '#e5e7eb';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }
+                      e.currentTarget.style.borderColor = '';
+                      e.currentTarget.style.boxShadow = 'none';
+                      blurValidate('city', form.city);
                     }}
                     placeholder={blockContent.cityPlaceholder || "مثال: الدار البيضاء"}
                   />
@@ -723,17 +982,20 @@ export default function ReferralForm() {
                     value={form.address}
                     onChange={(e) => {
                       setForm({ ...form, address: e.target.value });
-                      if (errors.address) setErrors(prev => ({ ...prev, address: undefined }));
+                      liveValidate('address', e.target.value);
                     }}
                     rows={2}
-                    className={`w-full px-4 py-3.5 bg-gray-50 rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all font-medium resize-none ${isRtl ? 'text-right' : 'text-left'}`}
+                    className={`w-full px-4 py-3.5 bg-gray-50 rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all font-medium resize-none ${isRtl ? 'text-right' : 'text-left'} ${errors.address ? 'border-2 border-red-500 bg-red-50/20' : validFields.address ? 'border-2 border-green-500/70' : ''}`}
                     onFocus={(e) => {
-                      e.currentTarget.style.borderColor = blockContent.themeColor || landingPage?.themeColor || '#f97316';
-                      e.currentTarget.style.boxShadow = `0 0 0 2px ${blockContent.themeColor || landingPage?.themeColor || '#f97316'}33`;
+                      if (!errors.address) {
+                        e.currentTarget.style.borderColor = blockContent.themeColor || landingPage?.themeColor || '#f97316';
+                        e.currentTarget.style.boxShadow = `0 0 0 2px ${blockContent.themeColor || landingPage?.themeColor || '#f97316'}33`;
+                      }
                     }}
                     onBlur={(e) => {
-                      e.currentTarget.style.borderColor = '#e5e7eb';
+                      e.currentTarget.style.borderColor = '';
                       e.currentTarget.style.boxShadow = 'none';
+                      blurValidate('address', form.address);
                     }}
                     placeholder={blockContent.addressPlaceholder || "عنوانك الكامل لترهين التوصيل"}
                   />

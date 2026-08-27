@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { renderDocument } from '../src/services/landingCompiler/document.js';
+import { CHECKOUT_RUNTIME } from '../src/services/landingCompiler/runtime/checkout.js';
 
 /**
  * The checkout block is the money path, so these tests pin the behaviours that
@@ -168,6 +169,86 @@ describe('express_checkout', () => {
     // Not "Product (Pack 2 pièces)" — a composite string can never match
     // option.name or option.id, so the lead would silently price at retail.
     expect(cfg.packs[0].name).not.toContain('(');
+    // A pack the seller never gave a unit count to reserves one unit, not zero.
+    expect(cfg.packs[0].qty).toBe(1);
+  });
+
+  /**
+   * `qty` is stock and only stock. The price on a pack is the BUNDLE total — a
+   * three-unit pack at 399 MAD is 399 MAD — so these pin that the number reaches
+   * the browser intact and that nothing on the way multiplies money by it.
+   */
+  describe('pack quantity', () => {
+    const cfgOf = (html: string) =>
+      JSON.parse(html.match(/<script type="application\/json"[^>]*>(.*?)<\/script>/s)![1]);
+
+    it('carries the seller-authored unit count through to the runtime config', async () => {
+      const html = (await withCheckout({
+        options: [
+          { id: 'p1', name: '1 Pièce', price: 199, quantity: 1 },
+          { id: 'p2', name: '2 Pièces + 1 Gratuite', price: 399, quantity: 3 },
+        ],
+      }))!;
+      const cfg = cfgOf(html);
+      expect(cfg.packs.map((p: any) => p.qty)).toEqual([1, 3]);
+      // The three-unit pack still costs what the seller typed. If this ever reads
+      // 1197 the stock quantity has leaked into the money path.
+      expect(cfg.packs[1].price).toBe(399);
+    });
+
+    it('clamps a nonsense quantity instead of shipping it to the stock decrement', async () => {
+      const html = (await withCheckout({
+        options: [
+          { id: 'p1', name: 'Énorme', price: 1, quantity: '500' },
+          { id: 'p2', name: 'Zéro', price: 1, quantity: 0 },
+          { id: 'p3', name: 'Texte', price: 1, quantity: 'trois' },
+        ],
+      }))!;
+      // This value ends up subtracted from Product.stockQuantity, so the block is
+      // the last place that can refuse an absurd one. A 0 in particular would let
+      // a pack sell for ever without the stock ever running out.
+      expect(cfgOf(html).packs.map((p: any) => p.qty)).toEqual([99, 1, 1]);
+    });
+
+    it('shows the multiplier on a multi-unit pack and stays silent on a single', async () => {
+      const html = (await withCheckout({
+        options: [
+          { id: 'p1', name: 'Un', price: 199, quantity: 1 },
+          { id: 'p2', name: 'Trois', price: 399, quantity: 3 },
+        ],
+      }))!;
+      // Whole pack divs rather than a non-greedy </span> match: the badge is a
+      // span nested inside another span, which such a match would cut in half.
+      // The `[ "]` is what excludes the `ck-packs` container wrapping them.
+      const packs = [...markup(html).matchAll(/<div class="ck-pack[ "][\s\S]*?<\/div>/g)].map((m) => m[0]);
+      expect(packs).toHaveLength(2);
+      // "×1" on every single-unit pack is noise, and most packs are single-unit.
+      expect(packs[0]).not.toContain('ck-pack-q');
+      // Nested inside the name, not beside it: .ck-pack is a space-between flex
+      // row, so a third child would land in the middle of the row.
+      expect(packs[1]).toContain('<span class="ck-pack-n">Trois<span class="ck-pack-q">×3</span></span>');
+    });
+
+    it('posts the pack alongside the legacy string, never instead of it', () => {
+      // The three new fields are what the stock decrement, the Variante column and
+      // the id-based pack lookup all join on. `productVariant` stays untouched
+      // beside them — 25+ screens and two Prisma `contains` filters read it.
+      expect(CHECKOUT_RUNTIME).toContain('variantOptionId:');
+      expect(CHECKOUT_RUNTIME).toContain('variantName:');
+      expect(CHECKOUT_RUNTIME).toContain('packQuantity: packQty()');
+      expect(CHECKOUT_RUNTIME).toContain('productVariant: variant()');
+      // Floored, not merely clamped: the column is an Int, and a page compiled
+      // before packs had a quantity has no `qty` in its frozen cfg at all.
+      expect(CHECKOUT_RUNTIME).toContain('Math.floor');
+    });
+
+    it('escapes a pack name even when the badge is rendered next to it', async () => {
+      const html = (await withCheckout({
+        options: [{ id: 'p1', name: '<script>alert(1)</script>', price: 1, quantity: 2 }],
+      }))!;
+      expect(markup(html)).toContain('&lt;script&gt;');
+      expect(markup(html)).not.toContain('<script>alert(1)</script>');
+    });
   });
 
   it('carries the pixels needed to fire a conversion on submit', async () => {
@@ -349,8 +430,10 @@ describe('express_checkout', () => {
     // the one failure mode this block cannot have.
     expect(cfg.lim.nameMin).toBe(2);
     expect(cfg.lim.cityMin).toBe(2);
-    expect(cfg.lim.phoneMinDigits).toBe(9);
-    expect(cfg.lim.phoneMaxDigits).toBe(14);
+    // The phone floor/ceiling pair is gone on purpose (owner request, 2026-08):
+    // the field is Moroccan-pattern-only now, which fixes the length by itself.
+    expect(cfg.lim.phoneMinDigits).toBeUndefined();
+    expect(cfg.lim.phoneMaxDigits).toBeUndefined();
   });
 
   it('caps the address without making it required', async () => {
@@ -380,10 +463,25 @@ describe('express_checkout', () => {
       'nameRequired', 'nameShort', 'nameLetters', 'nameLong',
       'cityRequired', 'cityShort', 'cityLetters', 'cityLong',
       'phoneRequired', 'phoneInvalid',
+      'phonePrefix', 'phoneIncomplete', 'phoneLong',
       'addressShort', 'addressLong',
     ]) {
       expect(cfg.msg[key], key).toBeTruthy();
     }
+  });
+
+  it('accepts Moroccan numbers only, in every spelling a customer types them', () => {
+    // The validator ships as text, so the shipped source is what gets pinned:
+    // the full pattern once for the verdict, and the prefix ladder that lets a
+    // wrong start fail while the customer is still typing.
+    expect(CHECKOUT_RUNTIME).toContain('[5-7][0-9]{8}$');
+    for (const prefix of ['\\+212', '00212', '212', '0']) {
+      expect(CHECKOUT_RUNTIME, prefix).toContain(prefix);
+    }
+    // The loose digit-count fallback is gone: nothing in the runtime counts
+    // phone digits against a floor and ceiling any more.
+    expect(CHECKOUT_RUNTIME).not.toContain('phoneMinDigits');
+    expect(CHECKOUT_RUNTIME).not.toContain('phoneMaxDigits');
   });
 
   it('hints the right keyboard and autofill on each field', async () => {

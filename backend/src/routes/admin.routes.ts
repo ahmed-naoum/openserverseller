@@ -17,6 +17,9 @@ import zlib from 'zlib';
 import { SAFE_USER_SELECT } from '../lib/safeUserSelect.js';
 import { getGateStats } from '../services/leadCredits.service.js';
 import { amountToCents, formatMoney, centsToLeads } from '../lib/sheetPricing.js';
+import { getPackPrice } from '../lib/leadPricing.js';
+import { CloudflareDomainService } from '../services/cloudflare-domain.service.js';
+import { invalidateCustomDomainCache } from '../lib/customDomainOrigins.js';
 
 const router = Router();
 
@@ -1671,6 +1674,73 @@ router.patch(
   })
 );
 
+/**
+ * Block or unblock custom domains for one account.
+ *
+ * The feature is open to everyone, so this is moderation rather than an
+ * entitlement — the only reason to call it is an account that abused it.
+ * Blocking is a kill switch, not just a UI toggle: a seller pointing their own
+ * domain at us is publishing under our infrastructure, so cutting them off has
+ * to actually stop serving them. The domain is released here — on Cloudflare and
+ * in the DB — rather than left connected behind a hidden tab.
+ */
+router.patch(
+  '/users/:uuid/custom-domain',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { uuid } = req.params;
+    const enabled = Boolean(req.body?.enabled);
+
+    const target = await prisma.user.findUnique({
+      where: { uuid: String(uuid) },
+      select: { id: true, customDomain: true, customDomainCfId: true },
+    });
+    if (!target) throw new AppException(404, 'User not found');
+
+    const data: Record<string, unknown> = { customDomainEnabled: enabled };
+
+    if (!enabled) {
+      if (target.customDomainCfId && target.customDomainCfId !== 'pending_cf_id') {
+        try {
+          await CloudflareDomainService.deleteCustomHostname(target.customDomainCfId);
+        } catch (err) {
+          // Orphaning the hostname is acceptable; leaving the account connected
+          // after an admin revoked it is not.
+          console.error('[admin] Cloudflare hostname deletion failed:', err);
+        }
+      }
+      data.customDomain = null;
+      data.customDomainStatus = 'NONE';
+      data.customDomainCfId = null;
+      data.customDomainPending = null;
+      data.customDomainVerifyToken = null;
+      data.customDomainError = null;
+    }
+
+    const updated = await prisma.user.update({
+      where: { uuid: String(uuid) },
+      data,
+      select: {
+        uuid: true,
+        customDomainEnabled: true,
+        customDomain: true,
+        customDomainStatus: true,
+      },
+    });
+
+    invalidateCustomDomainCache();
+
+    res.json({
+      status: 'success',
+      message: enabled
+        ? 'Domaines personnalisés réautorisés pour ce compte.'
+        : 'Domaines personnalisés bloqués et domaine libéré.',
+      data: updated,
+    });
+  })
+);
+
 // Update KYC status (supports APPROVED, REJECTED, PENDING)
 router.patch(
   '/users/:uuid/verify-kyc',
@@ -2248,31 +2318,11 @@ router.get(
           metrics: buildAgentMetrics(statusBreakdown),
           activity,
           leads: leads.map((l) => {
-            // Calculate price from variant or product
-            let productPrice = 0;
-            let hasPriceFromOrder = false;
-            if (l.order?.totalAmountMad !== undefined && l.order?.totalAmountMad !== null) {
-              productPrice = Number(l.order.totalAmountMad);
-              hasPriceFromOrder = true;
-            }
-            if (!hasPriceFromOrder && l.productVariant && l.referralLink?.landingPage?.customStructure) {
-              try {
-                let structure = l.referralLink.landingPage.customStructure;
-                if (typeof structure === 'string') structure = JSON.parse(structure as string);
-                const blocks = Array.isArray(structure) ? structure : ((structure as any).blocks || []);
-                const checkoutBlock = blocks.find((b: any) => b.type === 'express_checkout');
-                if (checkoutBlock?.content?.options) {
-                  const variant = l.productVariant?.toLowerCase().trim();
-                  const option = checkoutBlock.content.options.find((o: any) =>
-                    o.name?.toLowerCase().trim() === variant || o.id?.toLowerCase().trim() === variant
-                  );
-                  if (option?.price) productPrice = Number(option.price);
-                }
-              } catch (e) {}
-            }
-            if (!productPrice) {
-              productPrice = l.referralLink?.product?.retailPriceMad || 0;
-            }
+            // Was an inlined copy of the order → variant → retail chain that had
+            // drifted: it skipped the confirmed-call price, so this table showed
+            // the pack's list price for leads the agent had renegotiated. The
+            // include above carries everything getPackPrice reads.
+            const productPrice = getPackPrice(l);
 
             const claims = leadClaimMap.get(l.id) || { claims: 0, firstAt: null, lastAt: null };
             const clicks = leadClickMap.get(l.id) || { whatsapp: 0, call: 0 };

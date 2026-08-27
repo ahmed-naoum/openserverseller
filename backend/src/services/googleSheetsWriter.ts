@@ -40,6 +40,13 @@ export const DEFAULT_TAB = 'SILACOD Leads';
  * The outbound column contract. Sellers will build formulas against these, so the
  * order is a breaking change once shipped.
  *
+ * APPEND-ONLY. A new column goes at the END, never in the middle: `LEAD_ID_COLUMN`
+ * below is derived from a position in this array, and `readSheetLeadIds` reads that
+ * one column out of every row a seller's sheet has ever held. Insert anything above
+ * it and those historic rows answer text instead of an id, which `reconcileVendorSheet`
+ * reads as "the row is gone" — the seller's entire lead history flips to REMOVED.
+ * `applyHeaderTemplate` widens an already-connected sheet on the same assumption.
+ *
  * It intentionally does NOT match the 9-column inbound layout (Customer, Phone,
  * City, Address, Price (MAD), Qty, SKU, Note, SILACOD Status). If the two matched,
  * an inbound sync pointed at an outbound tab would read our own rows back in as
@@ -57,17 +64,29 @@ export const OUTBOUND_COLUMNS = [
   'Prix (MAD)',
   'Source',
   'Statut',
+  // The pack the customer picked on the landing page ("2 Pièces + 1 Gratuite"), on
+  // its own rather than glued into Produit — see buildLeadRow.
+  'Variante',
 ];
 
-/** Last column letter of OUTBOUND_COLUMNS — 11 columns → 'K'. */
-const LAST_COLUMN = String.fromCharCode('A'.charCodeAt(0) + OUTBOUND_COLUMNS.length - 1);
+/**
+ * A1 column letter for a zero-based index.
+ *
+ * SINGLE LETTER ONLY: at index 26 this arithmetic yields '[' rather than 'AA', so
+ * OUTBOUND_COLUMNS cannot pass 26 entries without teaching this the two-letter form
+ * first. Twelve is comfortably inside that ceiling.
+ */
+const columnLetter = (index: number): string => String.fromCharCode('A'.charCodeAt(0) + index);
+
+/** Last column letter of OUTBOUND_COLUMNS — 12 columns → 'L'. */
+const LAST_COLUMN = columnLetter(OUTBOUND_COLUMNS.length - 1);
 
 /**
  * Where the lead id lives — derived, never spelled 'B'. The column order above is
  * the single definition of the layout, so a reordering has to carry the readers
  * with it rather than silently making them read the wrong column.
  */
-const LEAD_ID_COLUMN = String.fromCharCode('A'.charCodeAt(0) + OUTBOUND_COLUMNS.indexOf('Lead ID'));
+const LEAD_ID_COLUMN = columnLetter(OUTBOUND_COLUMNS.indexOf('Lead ID'));
 
 // ─── Result shape ────────────────────────────────────────────────────────────
 
@@ -313,6 +332,10 @@ export interface PushableLead {
   city?: string | null;
   address?: string | null;
   productVariant?: string | null;
+  /** The pack label alone. `productVariant` stays the legacy composite string. */
+  variantName?: string | null;
+  /** Units in the chosen pack. Null on every lead captured before packs had one. */
+  packQuantity?: number | null;
   source?: string | null;
   status?: string | null;
   confirmedPriceMad?: number | null;
@@ -339,14 +362,19 @@ export interface PushableLead {
   } | null;
 }
 
-/** Formats one lead as the 11 cells of OUTBOUND_COLUMNS, in order. */
+/** Formats one lead as the cells of OUTBOUND_COLUMNS, in order. */
 export function buildLeadRow(lead: PushableLead): string[] {
   const items = lead.order?.items ?? [];
-  // Most specific first. The last two steps matter for prospects: a lead with no
-  // order and no pack chosen has nothing product-shaped of its own, so it falls
-  // back to the product behind the link it came through — SKU first, because that
-  // is the value a seller can match against their own catalogue, with the name as
-  // a safety net. Without these the column was simply blank for those rows.
+  // Most specific first, and deliberately WITHOUT a variant step. `order.productVariant`
+  // and `productVariant` used to sit in the middle of this chain, which is the whole
+  // reason a seller read "Pack 2 Pièces" in the Produit column instead of the product
+  // they were selling. The pack label has its own column now (Variante, below) — do
+  // not put either of them back here to fill a cell that came out blank.
+  //
+  // The linkedProduct steps stay: a lead with no order has nothing product-shaped of
+  // its own, so it falls back to the product behind the link it came through — SKU
+  // first, because that is the value a seller can match against their own catalogue,
+  // with the name as a safety net.
   const linkedProduct = lead.referralLink?.product;
   const productName =
     items
@@ -354,14 +382,22 @@ export function buildLeadRow(lead: PushableLead): string[] {
       .filter(Boolean)
       .join(', ') ||
     lead.order?.packageContent ||
-    lead.order?.productVariant ||
-    lead.productVariant ||
     linkedProduct?.sku ||
     linkedProduct?.nameFr ||
     linkedProduct?.nameAr ||
     linkedProduct?.nameEn ||
     '';
-  const quantity = items.length ? items.reduce((sum, i) => sum + (i.quantity || 0), 0) : 1;
+  // This column printed a hardcoded 1 for anything without an order — which is every
+  // landing prospect — so it stated the opposite of the truth on every multi-unit pack
+  // sold. The order items stay the authority whenever an order exists: that figure has
+  // already been reconciled against what will actually ship. Below it sits the pack's
+  // own unit count, and 1 only when genuinely nothing knows.
+  const packQuantity = Number(lead.packQuantity);
+  const quantity = items.length
+    ? items.reduce((sum, i) => sum + (i.quantity || 0), 0)
+    : Number.isFinite(packQuantity) && packQuantity > 0
+    ? packQuantity
+    : 1;
   // The SAME resolution the dashboard's Amount column uses. Reading only the order
   // total and the confirmed price — as this did originally — leaves the cell blank
   // for every prospect, because neither exists until a lead is confirmed; the pack
@@ -369,6 +405,23 @@ export function buildLeadRow(lead: PushableLead): string[] {
   // getPackPrice answers 0 both for "this really costs 0" and for "nothing known",
   // so check the two authoritative sources directly: an order total or a confirmed
   // price of 0 is a real 0 and gets printed, while a fall-through stays blank.
+  // `variantName` is only ever written when a real pack was chosen, so it needs no
+  // vetting. The two legacy strings do: they carry a pack for landing leads, but the
+  // marketplace importers write a PRODUCT NAME into productVariant (see the Woo /
+  // YouCan create in lead.routes.ts) and the sheet sync writes a SKU. Printing those
+  // here would reproduce, one column to the right, exactly the conflation this column
+  // exists to end — so a legacy string that merely repeats the product is dropped
+  // rather than shown, and the cell stays honestly blank.
+  const legacyVariant = lead.order?.productVariant || lead.productVariant || '';
+  const productAliases = [linkedProduct?.sku, linkedProduct?.nameFr, linkedProduct?.nameAr, linkedProduct?.nameEn]
+    .filter(Boolean)
+    .map((alias) => String(alias).trim().toLowerCase());
+  const variantLabel =
+    lead.variantName ||
+    (legacyVariant && !productAliases.includes(String(legacyVariant).trim().toLowerCase())
+      ? legacyVariant
+      : '');
+
   const explicitPrice = lead.order?.totalAmountMad ?? lead.confirmedPriceMad ?? null;
   const price = explicitPrice !== null && explicitPrice !== undefined ? Number(explicitPrice) : getPackPrice(lead);
   const priceKnown = (explicitPrice !== null && explicitPrice !== undefined) || price > 0;
@@ -388,6 +441,10 @@ export function buildLeadRow(lead: PushableLead): string[] {
     priceKnown ? String(price) : '',
     sanitizeCell(lead.source || 'MANUAL'),
     sanitizeCell(lead.status || 'NEW'),
+    // The pack label alone, and pointedly NOT the productName chain above: its
+    // packageContent and SKU steps are what muddied Produit in the first place, and
+    // repeating them here would only move the mess one column right.
+    sanitizeCell(variantLabel),
   ];
 }
 
@@ -505,8 +562,8 @@ export async function appendRows(sheetId: string, tab: string, rows: string[][])
   // Append to the whole column span, NOT a single cell. Given a one-cell range
   // like `A1`, Google has to guess which "table" that cell belongs to, and with
   // insertDataOption=INSERT_ROWS it can insert ABOVE the existing rows — which is
-  // how a test row ended up on row 1, pushing the header down to row 2. A full
-  // A:K range is unambiguous: append after the last row that has data.
+  // how a test row ended up on row 1, pushing the header down to row 2. The full
+  // column span is unambiguous: append after the last row that has data.
   const url =
     `${SHEETS_API}/${encodeURIComponent(sheetId)}/values/${encodeURIComponent(range(tab, `A:${LAST_COLUMN}`))}:append` +
     '?valueInputOption=RAW&insertDataOption=INSERT_ROWS';
@@ -533,9 +590,9 @@ export async function appendRows(sheetId: string, tab: string, rows: string[][])
  * else looks at the document again once an append succeeded, so without this the
  * platform keeps insisting those leads are in a sheet they left long ago.
  *
- * Note what this is NOT: it does not read the other ten columns and does not care
- * what they say. A seller editing a name or a price in their own copy is their
- * business; only presence is the platform's.
+ * Note what this is NOT: it does not read the other columns and does not care what
+ * they say. A seller editing a name or a price in their own copy is their business;
+ * only presence is the platform's.
  */
 export async function readSheetLeadIds(
   sheetId: string,
@@ -544,9 +601,9 @@ export async function readSheetLeadIds(
   if (!isWriterConfigured()) return notConfigured;
 
   // One column, from row 2 down — the header sits on row 1 and stays there (see
-  // applyHeaderTemplate), and pulling all 11 columns of a long sheet to look at
-  // one of them is read quota spent for nothing. `majorDimension=COLUMNS` makes
-  // the answer a single array of cells instead of one array per row.
+  // applyHeaderTemplate), and pulling every column of a long sheet to look at one
+  // of them is read quota spent for nothing. `majorDimension=COLUMNS` makes the
+  // answer a single array of cells instead of one array per row.
   //
   // UNFORMATTED_VALUE matters more than it looks: the default renders each cell as
   // the seller SEES it, so a number format on that column turns 1234 into "1 234"
@@ -602,6 +659,10 @@ const HEADER_BACKGROUND = { red: 0.06, green: 0.45, blue: 0.34 };
  * existing rows, leaving a stray test row on line 1 and the header on line 2 — see
  * the comment in `appendRows`. Re-inserting the header at the very top puts the
  * sheet back into the shape the append path expects.
+ *
+ * It also WIDENS: a sheet connected before a column was appended to OUTBOUND_COLUMNS
+ * carries a correct-but-shorter header, and that is not drift. See the two branches
+ * below — telling those two states apart is the whole point of them.
  */
 export async function applyHeaderTemplate(sheetId: string, tab: string): Promise<SheetWriteResult> {
   if (!isWriterConfigured()) return notConfigured;
@@ -662,17 +723,57 @@ export async function applyHeaderTemplate(sheetId: string, tab: string): Promise
     return classify(header.error, sheetId);
   }
 
-  const existing = header.data?.values?.[0] ?? [];
+  const existing = (header.data?.values?.[0] ?? []).map((cell) => String(cell ?? '').trim());
   const headerIsInPlace =
     existing.length === OUTBOUND_COLUMNS.length &&
-    OUTBOUND_COLUMNS.every((column, i) => String(existing[i] ?? '').trim() === column);
+    OUTBOUND_COLUMNS.every((column, i) => existing[i] === column);
+
+  /**
+   * The header of an EARLIER, narrower version of the contract: the same names in
+   * the same order, just fewer of them. Every seller who connected before a column
+   * was appended lands here, and they must NOT go down the repair path below — that
+   * one inserts a fresh row and writes the new header into it, which would strand
+   * their old header on line 2 as a junk data row, permanently, for the crime of
+   * clicking "appliquer le modèle".
+   *
+   * A prefix match is what makes this safe to distinguish: OUTBOUND_COLUMNS is
+   * append-only, so identical leading cells prove nothing moved and only the tail
+   * is missing. Anything else — a reordered, renamed or displaced header — is the
+   * genuinely broken case the insert branch was written for.
+   */
+  const headerNeedsWidening =
+    !headerIsInPlace &&
+    existing.length > 0 &&
+    existing.length < OUTBOUND_COLUMNS.length &&
+    existing.every((cell, i) => cell === OUTBOUND_COLUMNS[i]);
 
   let headerInserted = false;
 
-  // The guard is load-bearing, not an optimisation: the seller can click the tab
-  // chip as often as they like, and inserting unconditionally would push a fresh
-  // blank row into the sheet on every single click.
-  if (!headerIsInPlace) {
+  if (headerNeedsWidening) {
+    // Only the new cells, written exactly where they belong. No insertDimension, so
+    // every existing row stays on the line it is on and nothing shifts underneath
+    // the formulas the seller built against this layout.
+    const tailCells = encodeURIComponent(range(tab, `${columnLetter(existing.length)}1:${LAST_COLUMN}1`));
+    const widened = await call(
+      'PUT',
+      `${SHEETS_API}/${encodeURIComponent(sheetId)}/values/${tailCells}?valueInputOption=RAW`,
+      { values: [OUTBOUND_COLUMNS.slice(existing.length)] }
+    );
+    if (!widened.ok) {
+      if (widened.error?.__notConfigured) return notConfigured;
+      return classify(widened.error, sheetId);
+    }
+
+    // Header cells really were written, so the route's "en-tête ajouté" sentence is
+    // the honest one: the flag separates written from merely-reformatted, not which
+    // of the two write paths ran. Nothing extra is needed for the formatting — the
+    // pass in (c) already spans the full OUTBOUND_COLUMNS width, so the widened
+    // cells pick up the band, the auto-resize and the filter along with the rest.
+    headerInserted = true;
+  } else if (!headerIsInPlace) {
+    // The guard is load-bearing, not an optimisation: the seller can click the tab
+    // chip as often as they like, and inserting unconditionally would push a fresh
+    // blank row into the sheet on every single click.
     const inserted = await call('POST', batchUrl, {
       requests: [
         {
@@ -703,7 +804,8 @@ export async function applyHeaderTemplate(sheetId: string, tab: string): Promise
     headerInserted = true;
   }
 
-  // (c) Freeze, colour and widen in one round trip.
+  // (c) Freeze, colour and size the columns in one round trip. Spans the full
+  // OUTBOUND_COLUMNS width, so a header just widened above is formatted with it.
   const formatted = await call('POST', batchUrl, {
     requests: [
       {

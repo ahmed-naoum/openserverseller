@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { BACKEND_URL, publicApi } from '../../../lib/api';
 import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { buildSourceToken } from '../../../utils/referral';
 
 export type BlockType = 'header' | 'hero' | 'image' | 'text' | 'button' | 'express_checkout' | 'spacer' | 'countdown' | 'whatsapp' | 'slider' | 'products' | 'audio' | 'video';
 
@@ -180,7 +181,7 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
             );
 
           case 'button':
-            return <ButtonBlockComponent key={id} content={content} isEditor={isEditor} isCheckoutInView={isCheckoutInView} />;
+            return <ButtonBlockComponent key={id} blockId={id} content={content} isEditor={isEditor} isCheckoutInView={isCheckoutInView} />;
 
           case 'whatsapp':
             if (isEditor) {
@@ -1409,9 +1410,23 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
 }
 
 // --------------- Button Block Component ---------------
-function ButtonBlockComponent({ content, isEditor, isCheckoutInView }: { content: any, isEditor: boolean, isCheckoutInView: boolean }) {
+function ButtonBlockComponent({ content, blockId, isEditor, isCheckoutInView }: { content: any, blockId?: string, isEditor: boolean, isCheckoutInView: boolean }) {
   const isStickyMobile = !!content.stickyMobile;
   const isStickyDesktop = !!content.stickyDesktop;
+  const maxClicks = Number(content.maxClicks) || 0;
+
+  const clickStorageKey = blockId ? `sc_btn_clicks_${blockId}` : 'sc_btn_clicks_default';
+
+  const [clickCount, setClickCount] = useState<number>(() => {
+    if (isEditor || !maxClicks || maxClicks <= 0) return 0;
+    try {
+      return Number(localStorage.getItem(clickStorageKey) || '0');
+    } catch {
+      return 0;
+    }
+  });
+
+  const isMaxClicksReached = !isEditor && maxClicks > 0 && clickCount >= maxClicks;
 
   const [isVisible, setIsVisible] = useState(() => {
     if (isEditor || !content.showAfterVideoSeconds || content.showAfterVideoSeconds <= 0) return true;
@@ -1437,15 +1452,33 @@ function ButtonBlockComponent({ content, isEditor, isCheckoutInView }: { content
   }, [isEditor, content.showAfterVideoSeconds]);
 
   const handleClick = () => {
+    if (!isEditor && maxClicks > 0) {
+      const nextCount = clickCount + 1;
+      setClickCount(nextCount);
+      try {
+        localStorage.setItem(clickStorageKey, String(nextCount));
+      } catch {}
+    }
+
     if (content.behavior === 'checkout') {
       const checkout = document.getElementById('express-checkout-block');
       if (checkout) {
         checkout.scrollIntoView({ behavior: 'smooth' });
       }
     } else if (content.link) {
-      window.open(content.link, '_blank');
+      let targetUrl = content.link;
+      if (content.attachSourceToken) {
+        try {
+          const token = buildSourceToken(window.location.href);
+          const sep = targetUrl.includes('?') ? '&' : '?';
+          targetUrl = `${targetUrl}${sep}_s=${encodeURIComponent(token)}`;
+        } catch { /* fallback to original url */ }
+      }
+      window.open(targetUrl, '_blank');
     }
   };
+
+  if (!isEditor && isMaxClicksReached) return null;
 
   const animationProps = (() => {
     const timing = content.animationTiming || 'ease-in-out';

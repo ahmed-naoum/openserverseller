@@ -19,6 +19,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { basePathFor } from '../../lib/dashboardBase';
 import { formatMoney, centsToLeads } from '../../lib/sheetMoney';
+import SheetPlansPanel from '../../components/vendor/SheetPlansPanel';
 
 /**
  * The full Google Sheets credit ledger.
@@ -122,6 +123,12 @@ export default function SheetCreditsHistory() {
           </p>
         </div>
       </div>
+
+      {/* Packs. Above the balance deliberately: a running pack is what decides
+          whether the cents below it move at all this month, so reading them the
+          other way round makes the balance look frozen for no reason. Renders
+          nothing for an account without the entitlement. */}
+      <SheetPlansPanel />
 
       {/* Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

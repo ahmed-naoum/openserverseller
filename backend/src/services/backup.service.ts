@@ -262,7 +262,7 @@ export class BackupService {
             const { size } = await stat(filePath);
             sizeLabel = ` — ${(size / 1024 / 1024).toFixed(1)} MB`;
           } catch { /* size is only for the log line */ }
-          console.log(`Backup created successfully: ${filename}${sizeLabel}${skipped}`);
+
           resolve(filename);
         } else {
           reject(new Error(`pg_dump failed with code ${code}`));

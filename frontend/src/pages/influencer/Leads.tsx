@@ -8,6 +8,12 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { DELIVERY_STATUSES, isConfirmedStatus, isConfirmedRow, isDeliveredRow, getDisplayStatus, getLeadDate } from '../../lib/leadStatus';
 import { PAYMENT_SITUATION_OPTIONS, normalizePaymentSituation, isFactured } from '../../lib/paymentSituation';
 import {
+  packVariantLabel,
+  resolveRowPackPrice,
+  resolveRowPackQuantity,
+  rowPackSelection,
+} from '../../lib/leadPack';
+import {
   Users, MousePointerClick, UserCheck, ShoppingCart,
   Filter, Search, Calendar,
   MapPin, Phone, Package, Clock, Trash2, Headphones, RefreshCw,
@@ -1093,28 +1099,29 @@ export default function InfluencerLeads() {
                     const productSku = rowLink?.product?.sku ?? embeddedProduct?.sku;
                     const productRetailPriceMad = rowLink?.product?.retailPriceMad ?? embeddedProduct?.retailPriceMad;
 
-                    let packPriceMad: number | null = null;
-                    const productVariant = commission.order?.productVariant || (commission as any).order?.productVariant;
-                    if (productVariant) {
-                      const option = rowLink?.packOptions?.find(o => o.name === productVariant);
-                      if (option && option.price) {
-                        packPriceMad = Number(option.price);
-                      } else if (commission.referralLink?.landingPage?.customStructure) {
-                        try {
-                          const structure = commission.referralLink.landingPage.customStructure;
-                          const blocks = Array.isArray(structure) ? structure : (structure.blocks || []);
-                          const checkoutBlock = blocks.find((b: any) => b.type === 'express_checkout');
-                          if (checkoutBlock?.content?.options) {
-                            const opt = checkoutBlock.content.options.find((o: any) => o.name === productVariant);
-                            if (opt && opt.price) {
-                              packPriceMad = Number(opt.price);
-                            }
-                          }
-                        } catch (e) {
-                          // fallback
-                        }
-                      }
-                    }
+                    // Which pack the customer picked, and what it costs. The
+                    // lead's own fields ride on order.lead — matching on the
+                    // option id is the only thing that still works once a
+                    // seller renames a pack, and once productVariant became a
+                    // composite display string it is the only thing that works
+                    // at all. lib/leadPack holds the rule; the three lead
+                    // screens used to each keep their own copy of it.
+                    const rowLead = (commission.order as any)?.lead;
+                    const orderVariant = (commission.order as any)?.productVariant || null;
+                    const packSelection = rowPackSelection(rowLead, orderVariant);
+                    const variantLabel = packVariantLabel(rowLead, orderVariant);
+                    const packPriceMad = resolveRowPackPrice(
+                      packSelection,
+                      rowLink?.packOptions,
+                      commission.referralLink?.landingPage?.customStructure
+                    );
+                    // Units behind the label, for the PRODUCT cell's QTE.
+                    const packQty = resolveRowPackQuantity(
+                      packSelection,
+                      rowLink?.packOptions,
+                      commission.referralLink?.landingPage?.customStructure,
+                      (commission.order as any)?.items
+                    );
 
                     return (
                       <tr key={commission.id} className={`hover:bg-gray-50/50 transition-colors group ${selectedIds.includes(Number(String(commission.id).replace('lead-', ''))) ? 'bg-influencer-50/30' : ''}`}>
@@ -1181,7 +1188,7 @@ export default function InfluencerLeads() {
                             <div className="flex flex-col">
                               <span className="text-sm font-bold text-gray-900">{productName || '-'}</span>
                               <span className="text-[10px] text-gray-400 font-mono mt-0.5 uppercase">
-                                SKU: {productSku || '-'} | QTE: {commission.order?.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1}
+                                SKU: {productSku || '-'} | QTE: {packQty}
                               </span>
                             </div>
                           </div>
@@ -1192,7 +1199,7 @@ export default function InfluencerLeads() {
                           <div className="flex flex-col">
                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter mb-0.5">{t('selection', 'leads', 'Sélection')}</span>
                             <span className="text-xs font-black text-influencer-600 truncate max-w-[100px]">
-                              {(commission.order as any)?.productVariant || (commission as any).order?.productVariant || '-'}
+                              {variantLabel || '-'}
                             </span>
                           </div>
                         </td>

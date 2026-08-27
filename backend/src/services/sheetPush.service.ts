@@ -22,12 +22,15 @@ import { getIO } from '../lib/realtime.js';
 import { createNotification } from '../utils/notification.js';
 import { getLockedLeadIds } from './leadCredits.service.js';
 import { LEAD_PRICE_CENTS, centsToLeads } from '../lib/sheetPricing.js';
+import { claimPlanQuota, getActiveSubscriptionRow, getPlanRemaining } from './sheetPlans.service.js';
 import {
   appendRows,
+  applyHeaderTemplate,
   buildLeadRow,
   isWriterConfigured,
   readSheetLeadIds,
   DEFAULT_TAB,
+  OUTBOUND_COLUMNS,
   type SheetWriteResult,
 } from './googleSheetsWriter.js';
 
@@ -147,7 +150,7 @@ async function notifyEmptyBalance(vendorId: number, pending: number) {
     'SHEET_CREDITS_EMPTY',
     'Crédits Google Sheets épuisés',
     `${pending} lead(s) attendent d'être envoyés vers votre feuille Google Sheets. ` +
-      "Rechargez vos crédits pour reprendre l'envoi — aucun lead n'est perdu."
+      "Rechargez votre solde ou activez un pack mensuel pour reprendre l'envoi — aucun lead n'est perdu."
   );
 }
 
@@ -159,6 +162,7 @@ interface VendorPushConfig {
   googleSheetOutTab: string | null;
   googleSheetOutActive: boolean;
   googleSheetOutAuto: boolean;
+  googleSheetOutHeaderCols: number | null;
 }
 
 async function loadVendorConfig(vendorId: number): Promise<VendorPushConfig | null> {
@@ -170,6 +174,7 @@ async function loadVendorConfig(vendorId: number): Promise<VendorPushConfig | nu
       googleSheetOutTab: true,
       googleSheetOutActive: true,
       googleSheetOutAuto: true,
+      googleSheetOutHeaderCols: true,
     },
   });
 }
@@ -342,6 +347,17 @@ async function releaseStaleClaims(): Promise<number> {
 /**
  * Charges the seller for rows Google confirmed, in one transaction.
  *
+ * THE PACK PAYS FIRST. If the account is on a monthly pack with quota left, those
+ * leads are booked against the quota and their ledger rows carry `amount: 0` and a
+ * `subscriptionId` — the seller already paid for them once, at the start of the
+ * month, and taking the tariff out of the cents balance too would be charging
+ * twice. Only what the quota cannot cover falls through to the per-lead tariff.
+ *
+ * The ledger row is written EITHER WAY, still as type CONSUME: every predicate in
+ * the codebase that means "this lead has been paid for" — the reservation gate, the
+ * re-run filter just below — reads exactly that, so a pack-covered lead has to look
+ * paid to all of them. `subscriptionId` is what separates the two in a finance view.
+ *
  * `SheetCreditTransaction.leadId` is unique, so a second charge for the same lead
  * is impossible at the database level rather than by convention. `balanceAfter` is
  * read off the atomic decrement's return value — never a read-then-write, which is
@@ -363,27 +379,69 @@ async function chargeCredits(
   const toCharge = leadIds.filter((id) => !chargedSet.has(id));
   if (!toCharge.length) return { charged: 0, balance: await getCreditBalance(vendorId) };
 
+  const subscription = await getActiveSubscriptionRow(vendorId);
+
   return prisma.$transaction(async (tx) => {
-    const account = await tx.sheetCreditAccount.update({
-      where: { userId: vendorId },
-      data: {
-        // Cents, at the configured tariff — not one unit per lead.
-        balance: { decrement: toCharge.length * LEAD_PRICE_CENTS },
-        totalConsumed: { increment: toCharge.length * LEAD_PRICE_CENTS },
-      },
-    });
+    // Book as much as the pack will take. The claim is a guarded UPDATE inside this
+    // same transaction, so it commits with the ledger rows it pays for or not at all.
+    const fromPlan = subscription ? await claimPlanQuota(tx as any, subscription.id, toCharge.length) : 0;
+    const fromBalance = toCharge.length - fromPlan;
+
+    // A pack that covered the whole batch leaves the balance untouched — no write,
+    // so `updatedAt` on the account does not move for a month of covered rows. The
+    // upsert is only there to hand the ledger rows an accountId when the seller has
+    // never held a cents balance at all.
+    const account =
+      fromBalance > 0
+        ? await tx.sheetCreditAccount.update({
+            where: { userId: vendorId },
+            data: {
+              // Cents, at the configured tariff — not one unit per lead.
+              balance: { decrement: fromBalance * LEAD_PRICE_CENTS },
+              totalConsumed: { increment: fromBalance * LEAD_PRICE_CENTS },
+            },
+          })
+        : await tx.sheetCreditAccount.upsert({
+            where: { userId: vendorId },
+            create: { userId: vendorId },
+            update: {},
+          });
+
+    // The pack-covered leads are the FIRST of the batch, so the balance-after
+    // figures on the tariffed rows below stay a contiguous descending run.
+    //
+    // They carry the balance as it stood BEFORE the decrement above, not
+    // `account.balance`: nothing left the balance for these rows, and stamping
+    // them with the post-decrement figure would make the statement jump down to
+    // the closing balance and then back up again on the tariffed rows underneath.
+    const balanceBefore = account.balance + fromBalance * LEAD_PRICE_CENTS;
+
+    for (let i = 0; i < fromPlan; i++) {
+      await tx.sheetCreditTransaction.create({
+        data: {
+          accountId: account.id,
+          type: 'CONSUME',
+          // Zero, not the tariff: nothing left the balance for this row.
+          amount: 0,
+          balanceAfter: balanceBefore,
+          leadId: toCharge[i],
+          subscriptionId: subscription!.id,
+          description: `Lead #${toCharge[i]} envoyé vers Google Sheets (inclus dans le pack)`,
+        },
+      });
+    }
 
     // Descending so each row carries the balance as it stood after that charge,
     // matching how WalletTransaction.balanceAfterMad is read.
-    for (let i = 0; i < toCharge.length; i++) {
+    for (let i = 0; i < fromBalance; i++) {
       await tx.sheetCreditTransaction.create({
         data: {
           accountId: account.id,
           type: 'CONSUME',
           amount: -LEAD_PRICE_CENTS,
-          balanceAfter: account.balance + (toCharge.length - 1 - i) * LEAD_PRICE_CENTS,
-          leadId: toCharge[i],
-          description: `Lead #${toCharge[i]} envoyé vers Google Sheets`,
+          balanceAfter: account.balance + (fromBalance - 1 - i) * LEAD_PRICE_CENTS,
+          leadId: toCharge[fromPlan + i],
+          description: `Lead #${toCharge[fromPlan + i]} envoyé vers Google Sheets`,
         },
       });
     }
@@ -474,10 +532,12 @@ async function drainVendorLocked(vendorId: number, jobIds?: number[]): Promise<D
     if (!candidates.length) return stats;
   }
 
-  const balance = await getCreditBalance(vendorId);
-  // Affordability is in leads: below one lead's worth of cents there is nothing
-  // that can be sent, however many cents are left over.
-  if (centsToLeads(balance) < 1) {
+  const [balance, planRemaining] = await Promise.all([getCreditBalance(vendorId), getPlanRemaining(vendorId)]);
+  // Affordability is in leads: the pack's remaining quota, plus whatever the cents
+  // balance buys at the tariff. Below one lead there is nothing that can be sent,
+  // however many cents are left over.
+  const affordableLeads = planRemaining + centsToLeads(balance);
+  if (affordableLeads < 1) {
     const { count } = await prisma.sheetPushJob.updateMany({
       where: { id: { in: candidates.map((c) => c.id) }, status: { in: ['PENDING', 'BLOCKED_NO_CREDITS'] } },
       // Deliberately does NOT touch `attempts`: an unfunded job must not burn its
@@ -491,7 +551,7 @@ async function drainVendorLocked(vendorId: number, jobIds?: number[]): Promise<D
   }
 
   // Never append more rows than the seller can pay for; the rest stay queued.
-  const affordable = candidates.slice(0, Math.min(candidates.length, centsToLeads(balance)));
+  const affordable = candidates.slice(0, Math.min(candidates.length, affordableLeads));
   if (affordable.length < candidates.length) {
     const remainder = candidates.slice(affordable.length).map((c) => c.id);
     const { count } = await prisma.sheetPushJob.updateMany({
@@ -524,6 +584,11 @@ async function drainVendorLocked(vendorId: number, jobIds?: number[]): Promise<D
   });
   stats.claimed = claimedJobs.length;
 
+  // `include`, never `select`. Every Lead scalar buildLeadRow reads — variantName
+  // and packQuantity among them — rides along for free only because there is no
+  // explicit field list here. Converting this to a `select` writes blank Variante
+  // and Quantité cells in production while the writer's unit tests, which hand-build
+  // the lead object, keep passing.
   const leads = await prisma.lead.findMany({
     where: { id: { in: claimedJobs.map((j) => j.leadId) } },
     include: {
@@ -570,6 +635,33 @@ async function drainVendorLocked(vendorId: number, jobIds?: number[]): Promise<D
 
   const tab = config.googleSheetOutTab || DEFAULT_TAB;
   const rows = live.map((j) => buildLeadRow(leadById.get(j.leadId)!));
+
+  // The outbound layout is append-only, but a seller who connected before a
+  // column was added keeps their old header forever: ensureSheetReady writes row
+  // 1 only when it is empty, and applyHeaderTemplate is otherwise reachable only
+  // from a button nobody is obliged to press. Left alone, buildLeadRow's new
+  // cells would arrive under a blank heading. So widen once, here, before the
+  // rows land — applyHeaderTemplate's prefix branch updates only the missing
+  // tail cells and shifts nothing.
+  //
+  // Guarded by a stored width rather than attempted every tick: this costs two
+  // Google calls and must not become a per-drain tax. A failure is swallowed on
+  // purpose and the marker is left unset so the next tick retries — a header
+  // that is one column short is cosmetic, and it must never cost the seller the
+  // lead rows themselves.
+  if (config.googleSheetOutHeaderCols !== OUTBOUND_COLUMNS.length) {
+    try {
+      const widened = await applyHeaderTemplate(config.googleSheetOutId, tab);
+      if (widened.ok) {
+        await prisma.user.update({
+          where: { id: vendorId },
+          data: { googleSheetOutHeaderCols: OUTBOUND_COLUMNS.length },
+        });
+      }
+    } catch (err) {
+      console.error('[SheetPush] header widen failed for vendor', vendorId, err);
+    }
+  }
 
   let result: SheetWriteResult;
   try {
@@ -741,11 +833,7 @@ export async function runSheetPushDrain(): Promise<DrainStats> {
     await sleep(MIN_GAP_MS);
   }
 
-  if (totals.sent || totals.failed || totals.blocked) {
-    console.log(
-      `[SheetPush] sent=${totals.sent} blocked=${totals.blocked} failed=${totals.failed} retrying=${totals.retrying}`
-    );
-  }
+
   return totals;
 }
 

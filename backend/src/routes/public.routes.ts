@@ -11,8 +11,64 @@ import { maybeAutoBanForOrders } from '../lib/ipBan.js';
 import { getIO } from '../lib/realtime.js';
 import { getNotifiableAgentIds } from '../utils/agentScope.js';
 import { enqueueSheetPush } from '../services/sheetPush.service.js';
+import { clientIp, lookupClientGeo } from '../services/geoIntel.service.js';
 
 const router = Router();
+
+/**
+ * Visitor IP intelligence for landing-page cloaking.
+ *
+ * Replaces the browser's direct call to ipapi.co, whose free quota ran out on
+ * busy days and took every geo rule down with it. Serving this ourselves means
+ * country and IP come from the request (no quota at all), the upstream lookup
+ * used for ISP/VPN data is cached per address, and the visitor cannot feed the
+ * page a spoofed address the way a client-side lookup allowed.
+ *
+ * Public and unauthenticated by design: landing pages run on vendor custom
+ * domains with no session.
+ */
+const geoRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => clientIp(req) || 'unknown',
+  handler: (_req, res) => {
+    res.status(429).json({ status: 'error', message: 'Too many lookups.' });
+  },
+});
+
+router.get(
+  '/geo',
+  geoRateLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    // `full=0` skips the upstream provider entirely — country and IP version
+    // are answered from the request alone.
+    const withEnrichment = req.query.full !== '0';
+    const geo = await lookupClientGeo(req, withEnrichment);
+
+    // Short private cache: the same visitor re-checking within a page session
+    // must not cost another lookup, but no shared cache may key this by URL.
+    res.setHeader('Cache-Control', 'private, max-age=300');
+
+    res.json({
+      status: 'success',
+      data: {
+        ip: geo.ip,
+        countryCode: geo.countryCode,
+        countryName: geo.countryName,
+        org: geo.org,
+        asn: geo.asn,
+        hostname: geo.hostname,
+        vpn: geo.vpn,
+        proxy: geo.proxy,
+        tor: geo.tor,
+        hosting: geo.hosting,
+        source: geo.source,
+      },
+    });
+  })
+);
 
 router.get(
   '/version',
@@ -247,11 +303,49 @@ const orderRateLimiter = rateLimit({
   },
 });
 
+/**
+ * Sanitisers for the pack fields the compiled landing page now posts alongside
+ * the legacy `productVariant` display string.
+ *
+ * This endpoint is public, unauthenticated and carries no validation schema —
+ * just the rate limiter above and a required-fields check. That was tolerable
+ * while everything it stored was inert display text, but `packQuantity` is
+ * subtracted from Product.stockQuantity when the lead is pushed to delivery, so
+ * a hostile POST of 99999 would walk straight into inventory. Hence the clamp.
+ *
+ * Nothing here throws: a customer is sitting on the form, and a junk pack field
+ * must never cost us the lead. Whatever we cannot make sense of becomes NULL,
+ * which the readers resolve back to a quantity of 1.
+ */
+const sanitizeVariantText = (value: unknown, maxLength: number): string | null => {
+  // Numbers are tolerated because option ids are sometimes authored as numerics
+  // in the builder; anything else (objects, arrays) would only ever stringify
+  // into garbage, so it is dropped rather than stored.
+  if (typeof value !== 'string' && typeof value !== 'number') return null;
+  const trimmed = String(value).trim().slice(0, maxLength);
+  return trimmed || null;
+};
+
+const sanitizePackQuantity = (value: unknown): number | null => {
+  // Deliberately strict: a numeric string is rejected rather than parsed, so a
+  // client sending the wrong type is caught here instead of silently working.
+  if (typeof value !== 'number' || !Number.isInteger(value)) return null;
+  return value >= 1 && value <= 99 ? value : null;
+};
+
 router.post(
   '/leads',
   orderRateLimiter,
   asyncHandler(async (req: Request, res: Response) => {
-    const { referralCode, fullName, phone, city, address, productVariant } = req.body;
+    const { referralCode, fullName, phone, city, address } = req.body;
+    // Capped at the same 120 as variantName and as the authenticated edit path.
+    // It was the one field here that reached the database entirely unmeasured,
+    // which left a 1 MB POST body sitting in a column three screens render.
+    const productVariant = sanitizeVariantText(req.body.productVariant, 120);
+    const variantOptionId = sanitizeVariantText(req.body.variantOptionId, 64);
+    // 120 matches the cap the authenticated edit path enforces in lead.routes.ts.
+    const variantName = sanitizeVariantText(req.body.variantName, 120);
+    const packQuantity = sanitizePackQuantity(req.body.packQuantity);
 
     if (!referralCode || !fullName || !phone) {
       throw new AppException(400, 'referralCode, fullName, and phone are required');
@@ -310,6 +404,9 @@ router.post(
         ipAddress,
         ipCountry,
         userAgent,
+        variantOptionId,
+        variantName,
+        packQuantity,
         notes: null
       }
     });

@@ -20,7 +20,7 @@
  *   /users/:uuid (PATCH)                 - self-promotion
  *   /google-sheets/status                - hands back the raw webhook token
  *   *token, *save-keys, *disconnect      - integration credentials
- *   /domain/connect|disconnect,
+ *   /domain/request|verify|disconnect,
  *   /auth/save-subdomain, /auth/subdomain/*  - would move the storefront
  *   /upload/avatar, /upload/kyc          - would rewrite the vendor's identity
  *

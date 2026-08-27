@@ -70,6 +70,7 @@ const TEMPLATE_COLUMNS = [
   'Prix (MAD)',
   'Source',
   'Statut',
+  'Variante',
 ];
 
 /**
@@ -656,7 +657,8 @@ export default function GoogleSheetOutboundPanel() {
                               {t('gso_header_preview', 'leads', 'Aperçu des colonnes')}
                             </p>
                             {/* dir=ltr: these are the sheet's own column names, in the
-                                A→K order they land in — Arabic must not reverse them. */}
+                                left-to-right order they land in — Arabic must not
+                                reverse them. */}
                             <div dir="ltr" className="overflow-x-auto rounded-xl border border-emerald-100">
                               <table className="min-w-full">
                                 <thead>

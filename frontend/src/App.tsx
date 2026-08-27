@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, lazy, Suspense, type ReactNode } from 'react';
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import MaintenanceGuard from './components/MaintenanceGuard';
 import PageLoader from './components/PageLoader';
@@ -148,6 +148,34 @@ import SubAccountGuard from './components/auth/SubAccountGuard';
 import { VENDOR_HELPER_BASE } from './lib/dashboardBase';
 import SheetCreditsHistory from './pages/vendor/SheetCreditsHistory';
 import { settingsApi } from './lib/api';
+
+/* WhatsApp AI agent.
+
+   Lazy rather than eager like most of the tree: the agent studio and the
+   admin console each pull a heavy editor, and only a fraction of accounts
+   ever open them. The vendor pair is mounted twice — once under /dashboard
+   and once under /influencer — because a vendor and an influencer see the
+   same two screens from their own prefix. */
+const AiModelsPage = lazy(() => import('./pages/admin/AiModelsPage'));
+const AgentAccountsPage = lazy(() => import('./pages/admin/AgentAccountsPage'));
+const AgentLogsPage = lazy(() => import('./pages/admin/AgentLogsPage'));
+const SheetPushesPage = lazy(() => import('./pages/admin/SheetPushesPage'));
+const WhatsappAgentPage = lazy(() => import('./pages/vendor/WhatsappAgentPage'));
+const WhatsappInboxPage = lazy(() => import('./pages/vendor/WhatsappInboxPage'));
+const WhatsappLeadsPage = lazy(() => import('./pages/vendor/WhatsappLeadsPage'));
+
+/** The spinner the other lazily-loaded dashboard pages already fall back to. */
+const LazyDashboardPage = ({ children }: { children: ReactNode }) => (
+  <Suspense
+    fallback={
+      <div className="min-h-[400px] flex items-center justify-center p-8">
+        <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    }
+  >
+    {children}
+  </Suspense>
+);
 
 function PageTracker() {
   const location = useLocation();
@@ -437,6 +465,15 @@ function App() {
           <Route path="settings" element={<SettingsPage />} />
 
           <Route path="integrations" element={<IntegrationsPage />} />
+          <Route path="whatsapp-agent" element={
+            <LazyDashboardPage><WhatsappAgentPage /></LazyDashboardPage>
+          } />
+          <Route path="whatsapp-inbox" element={
+            <LazyDashboardPage><WhatsappInboxPage /></LazyDashboardPage>
+          } />
+          <Route path="whatsapp-leads" element={
+            <LazyDashboardPage><WhatsappLeadsPage /></LazyDashboardPage>
+          } />
           <Route path="support" element={<SupportTickets />} />
           <Route path="verification" element={<ProfileVerification />} />
         </Route>
@@ -493,6 +530,15 @@ function App() {
           <Route path="domains" element={<VendorDomains />} />
           <Route path="links" element={<InfluencerLinks />} />
           <Route path="integrations" element={<IntegrationsPage />} />
+          <Route path="whatsapp-agent" element={
+            <LazyDashboardPage><WhatsappAgentPage /></LazyDashboardPage>
+          } />
+          <Route path="whatsapp-inbox" element={
+            <LazyDashboardPage><WhatsappInboxPage /></LazyDashboardPage>
+          } />
+          <Route path="whatsapp-leads" element={
+            <LazyDashboardPage><WhatsappLeadsPage /></LazyDashboardPage>
+          } />
           <Route path="youcan-callback" element={<YouCanCallback />} />
           <Route path="shopify-callback" element={<ShopifyCallback />} />
           <Route path="invoices" element={<UserInvoices />} />
@@ -672,6 +718,29 @@ function App() {
           <Route path="professional-emails" element={
             <RoleGuard allowedRoles={['SUPER_ADMIN']}>
               <AdminProfessionalEmails />
+            </RoleGuard>
+          } />
+          <Route path="ai-models" element={
+            <RoleGuard allowedRoles={['SUPER_ADMIN']}>
+              <LazyDashboardPage><AiModelsPage /></LazyDashboardPage>
+            </RoleGuard>
+          } />
+          <Route path="agent-accounts" element={
+            <RoleGuard allowedRoles={['SUPER_ADMIN']}>
+              <LazyDashboardPage><AgentAccountsPage /></LazyDashboardPage>
+            </RoleGuard>
+          } />
+          {/* Le journal porte des messages clients, comme la boîte de
+              réception : même porte que les deux pages au-dessus. */}
+          <Route path="agent-logs" element={
+            <RoleGuard allowedRoles={['SUPER_ADMIN']}>
+              <LazyDashboardPage><AgentLogsPage /></LazyDashboardPage>
+            </RoleGuard>
+          } />
+          {/* Facturation : FINANCE_ADMIN vend les crédits, comme sur la page Finance. */}
+          <Route path="sheet-pushes" element={
+            <RoleGuard allowedRoles={['SUPER_ADMIN', 'FINANCE_ADMIN']}>
+              <LazyDashboardPage><SheetPushesPage /></LazyDashboardPage>
             </RoleGuard>
           } />
           <Route path="security" element={<SecurityFirewall />} />

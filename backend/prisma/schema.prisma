@@ -114,9 +114,26 @@ model User {
   platformFeeRate Float   @default(0.05)
 
   // Custom Domain Integration
-  customDomain       String? @unique
-  customDomainStatus String  @default("NONE") // NONE, PENDING, ACTIVE, FAILED
-  customDomainCfId   String? // Cloudflare custom hostname ID
+  //
+  // Open to every account by default — connecting a domain is a self-serve
+  // feature, not a paid tier. This flag is therefore a REVOKE switch, not a
+  // grant: an admin turns it off for one account that abused it, which also
+  // releases the domain on Cloudflare (admin.routes.ts). Nothing has to be
+  // turned on for a new seller.
+  customDomainEnabled Boolean @default(true)
+  customDomain        String? @unique
+  customDomainStatus  String  @default("NONE") // NONE, PENDING, ACTIVE, FAILED
+  customDomainCfId    String? // Cloudflare custom hostname ID
+  // The domain a vendor has asked for but not yet proven they own. Deliberately
+  // NOT unique: until ownership is proven a request must not be able to squat
+  // the `customDomain` slot and lock the real owner out forever.
+  customDomainPending String?
+  // Random token the vendor publishes at `_silacod-verify.<domain>` as a TXT
+  // record. Checked before we claim the domain or call Cloudflare.
+  customDomainVerifyToken String?
+  // Last DNS or Cloudflare failure, in French, so the vendor is told why a
+  // connection is stuck instead of staring at PENDING forever.
+  customDomainError   String?
 
   isActive        Boolean   @default(false)
   kycStatus       String    @default("PENDING")
@@ -222,6 +239,21 @@ model User {
   googleSheetOutConnectedAt   DateTime?
   googleSheetOutLastError     String?
   googleSheetOutLastErrorAt   DateTime?
+  // How many columns the seller's header row was last written with. The outbound
+  // layout grows over time (Variante was appended to an 11-column contract), and
+  // a sheet connected before a column existed keeps its short header forever —
+  // `ensureSheetReady` only writes row 1 when it is completely empty. The drain
+  // compares this against OUTBOUND_COLUMNS.length and widens in place once.
+  // Null means "never recorded", i.e. connected before this was tracked.
+  googleSheetOutHeaderCols    Int?
+
+  // WhatsApp AI agent. Same two-column shape as googleSheetsOutbound* above:
+  // `whatsappAgentEnabled` is the admin-set entitlement that AI credits are
+  // sold against, and `whatsappAgentGateFrom` records when it was switched on
+  // so nothing before that instant is retroactively billed. Set on the
+  // false->true transition only.
+  whatsappAgentEnabled  Boolean   @default(false)
+  whatsappAgentGateFrom DateTime?
 
   language String @default("ar") @db.VarChar(5)
 
@@ -236,6 +268,7 @@ model User {
   orders                  Order[]
   wallet                  Wallet?
   sheetCreditAccount      SheetCreditAccount?
+  sheetSubscriptions      SheetSubscription[]
   sheetPushJobs           SheetPushJob[]
   payoutRequests          PayoutRequest[]          @relation("VendorPayouts")
   notifications           Notification[]
@@ -281,6 +314,20 @@ model User {
   agentInvoices         AgentInvoice[]       @relation("AgentInvoices")
   conversationLogs      ConversationLog[]    @relation("UserLogs")
   pixels                UserPixel[]
+
+  // WhatsApp AI agent
+  whatsappAgent           WhatsappAgent?
+  whatsappAgentVoices     WhatsappAgentVoice[]
+  whatsappProductProfiles WhatsappProductProfile[]
+  whatsappSession         WhatsappSession?
+  whatsappAuthCredentials WhatsappAuthCredential[]
+  whatsappContacts        WhatsappContact[]
+  whatsappMessages        WhatsappMessage[]
+  whatsappAgentTurns      WhatsappAgentTurn[]
+  whatsappOutboundJobs    WhatsappOutboundJob[]
+  whatsappAgentUsage      WhatsappAgentUsage[]
+  whatsappAgentLogs       WhatsappAgentLog[]
+  waCreditAccount         WaCreditAccount?
 
   @@index([parentVendorId])
   @@map("users")
@@ -405,6 +452,7 @@ model Product {
   favorites             Favorite[]
   agentAssignments      AgentProductAssignment[]
   subAccountAssignments VendorSubAccountProduct[]
+  whatsappProfiles      WhatsappProductProfile[]
 
   @@map("products")
 }
@@ -507,6 +555,23 @@ model Lead {
   assignedAgentId       Int?
   assignedAgent         User?            @relation("AgentLeads", fields: [assignedAgentId], references: [id])
   productVariant        String?
+  // The pack chosen on the landing page, split into its three real parts.
+  // `productVariant` above stays exactly what it always was — a free-text
+  // display string that is sometimes "Product (Pack)", sometimes a bare pack
+  // name, sometimes a SKU — because 25+ screens and two `contains` filters read
+  // it. These three are additive and authoritative:
+  //   variantOptionId  the express_checkout option's id. The join key. Matching
+  //                    on it instead of on the name is what stops a lead from
+  //                    silently falling through to retail price (see getPackPrice).
+  //   variantName      the pack label alone, never glued to the product name.
+  //   packQuantity     units in that pack, so a "2 + 1 free" pack costs 3 units
+  //                    of stock. Nullable, NOT defaulted to 1: a default would
+  //                    claim "one unit" for every pre-existing row and for every
+  //                    non-landing source, which is indistinguishable from a
+  //                    genuine 1. Readers resolve null via getPackQuantity().
+  variantOptionId       String?
+  variantName           String?
+  packQuantity          Int?
   notes                 String?
   callbackAt            DateTime?
   // Amount the agent settled on during the confirmation call. Overrides the pack
@@ -905,6 +970,16 @@ model SheetCreditTransaction {
   // many NULLs under a unique index, so they are unaffected.
   leadId       Int?               @unique
   lead         Lead?              @relation("SheetCreditCharge", fields: [leadId], references: [id], onDelete: SetNull)
+  // Set when the row was covered by a monthly pack instead of by the cents
+  // balance. Such a row carries `amount: 0` — the lead was paid for by the
+  // subscription, not by the balance — so this column is the ONLY thing that
+  // separates "covered by the pack" from "granted for free" in the ledger.
+  // `type` stays CONSUME either way, deliberately: every predicate that means
+  // "this lead has been paid for" already filters on CONSUME, and a new type
+  // would have had to be added to each of them or leads would be charged twice.
+  subscriptionId Int?
+  subscription   SheetSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
   createdBy    Int?
   createdAt    DateTime           @default(now())
 
@@ -912,7 +987,107 @@ model SheetCreditTransaction {
   // read closing balances off the column instead of replaying the ledger — the
   // same reason WalletTransaction.balanceAfterMad exists.
   @@index([accountId, createdAt])
+  // The finance panel asks "how many leads did this pack actually cover?", which
+  // without this is a scan of the whole ledger.
+  @@index([subscriptionId])
   @@map("sheet_credit_transactions")
+}
+
+/// A monthly pack a seller can be on instead of paying per lead.
+///
+/// The catalogue is a TABLE, not a constant, because the two prices the business
+/// started with ($30 / 20k leads and $50 / 50k) are the kind of number that moves
+/// twice a year, and a redeploy is the wrong unit of work for a price change.
+/// `SheetSubscription` snapshots `priceCents` and `leadQuota` at approval, so
+/// editing a plan never rewrites what an already-running subscription owes or gets.
+model SheetPlan {
+  id         Int     @id @default(autoincrement())
+  /// Stable identifier used by the seeder and by anything that has to name one
+  /// specific plan. The display name is free to change; this is not.
+  code       String  @unique
+  name       String
+  /// What the pack costs per period, in CENTS — same unit as every other amount
+  /// in this file. $30 is 3000.
+  priceCents Int
+  /// Leads the pack covers per period. Consumed leads draw from here BEFORE the
+  /// cents balance, and the counter resets to zero on each renewal.
+  leadQuota  Int
+  /// Period length. 30 days rather than a calendar month so a subscription
+  /// approved on the 31st has an unambiguous end date.
+  periodDays Int     @default(30)
+  /// Hidden from the seller's picker. Never deleted: subscriptions point here.
+  active     Boolean @default(true)
+  sortOrder  Int     @default(0)
+  /// Shown under the price in the picker.
+  description String?
+  /// Accent colour for this pack's card, as `#rrggbb`. NULL means "use the
+  /// default", so an untouched catalogue keeps the emerald it shipped with.
+  ///
+  /// Stored as a hex string rather than a Tailwind class name on purpose: Tailwind
+  /// only emits classes it can see at BUILD time, so a class read out of the
+  /// database would be purged and the card would render unstyled. The client turns
+  /// this into inline styles instead. It is validated to `#rrggbb` on write —
+  /// this value reaches a `style` attribute, so anything else is untrusted input.
+  accentColor String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscriptions SheetSubscription[]
+
+  @@index([active, sortOrder])
+  @@map("sheet_plans")
+}
+
+/// One seller's run on one pack — and, before that, their request to be put on it.
+///
+/// The seller creates the row as PENDING and an admin moves it to ACTIVE; there is
+/// no payment gateway in this codebase, so approval IS the receipt. A row is only
+/// ever ACTIVE for one account at a time (see services/sheetPlans.service.ts), and
+/// `leadsUsed` is the whole billing state — it resets by a NEW row on renewal, not
+/// by zeroing this one, so last month's consumption stays readable.
+model SheetSubscription {
+  id     Int  @id @default(autoincrement())
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId Int
+  plan   SheetPlan @relation(fields: [planId], references: [id])
+
+  /// PENDING, ACTIVE, REJECTED, CANCELLED, EXPIRED
+  status String @default("PENDING")
+
+  /// Snapshots taken at APPROVAL, not at request: the admin approves the plan as
+  /// it stands when they look at it, and nothing downstream re-reads SheetPlan.
+  leadQuota  Int @default(0)
+  priceCents Int @default(0)
+  /// Leads this subscription has covered. Never exceeds `leadQuota` — the claim
+  /// is a guarded UPDATE, not a read-then-write.
+  leadsUsed  Int @default(0)
+
+  requestedAt DateTime  @default(now())
+  startedAt   DateTime?
+  /// When the pack stops covering leads. Past this instant the account falls back
+  /// to the per-lead tariff, whether or not the expiry cron has run yet — every
+  /// read compares against the clock rather than trusting `status`.
+  endsAt      DateTime?
+  reviewedAt  DateTime?
+  reviewedBy  Int?
+  cancelledAt DateTime?
+  /// The admin's reason on a rejection or a cancellation, shown to the seller.
+  adminNote   String?
+  /// What the seller typed when asking, so the admin has context to approve on.
+  requestNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions SheetCreditTransaction[]
+
+  /// The two predicates that matter: "this seller's current pack" and "which
+  /// subscriptions has the expiry cron got to catch".
+  @@index([userId, status])
+  @@index([status, endsAt])
+  @@map("sheet_subscriptions")
 }
 
 // The outbox. A lead is enqueued here on the request thread (one indexed SELECT
@@ -1978,4 +2153,729 @@ model PendingCommit {
   @@index([branch])
   @@index([createdAt])
   @@map("pending_commits")
+}
+
+// ============================================================================
+// WHATSAPP AI AGENT
+//
+// Ported from the standalone "wa-ads-confirmation-agent" project, which was
+// single-tenant: one SQLite file, one settings row, one knowledge base, one
+// WhatsApp session per process. Everything below carries a `userId` because
+// here every vendor and influencer runs their own agent on their own number.
+//
+// The Baileys sockets do NOT live in `silacod-api`. ecosystem.config.cjs pins
+// that app to instances:1 with max_memory_restart:'500M', so a pool of
+// long-lived WhatsApp sockets in that heap would be OOM-restarted mid
+// conversation and killed on every deploy. They live in a second pm2 app,
+// `silacod-wa`, which talks to the API only through the two outbox tables
+// below (WhatsappAgentTurn inbound, WhatsappOutboundJob outbound), shaped
+// field-for-field on SheetPushJob so the same drain pattern applies.
+// ============================================================================
+
+/// Which AI models the platform offers. SUPER_ADMIN owns this table; an account
+/// may only pick a row where isEnabled is true. Keeping it in the database
+/// rather than a constant means a new model can be offered without a deploy.
+model AiModel {
+  id       Int    @id @default(autoincrement())
+  provider String // anthropic, gemini, openai, elevenlabs
+  modelId  String // claude-opus-5, gemini-3.6-flash, ...
+  label    String
+  /// BRAIN (writes the replies) | VISION (reads photos) | STT (voice notes in) | TTS (voice notes out)
+  role     String
+
+  isEnabled Boolean @default(true)
+  /// Exactly one row per role should carry this; enforced by the admin route,
+  /// not by Postgres, because "no default yet" is a legal state during setup.
+  isDefault Boolean @default(false)
+
+  /// Whether `effort` (low..max) may be sent. Sending it to a model that does
+  /// not take it is a 400, so the UI hides the control instead of guessing.
+  supportsEffort Boolean @default(false)
+  supportsVision Boolean @default(false)
+
+  /// Adaptive thinking (`thinking: {type:"adaptive"}`). The Claude 5 family and
+  /// 4.6+ take it; older models want the removed `budget_tokens` instead, which
+  /// is a 400 on anything current. Off means send no thinking parameter at all.
+  supportsThinking Boolean @default(false)
+
+  /// Whether a mid-conversation `{role:"system"}` message is accepted. Opus 5,
+  /// Opus 4.8 and Fable 5 take it; Sonnet 5 returns 400. It matters here because
+  /// the per-customer context block changes every turn: sent as a system message
+  /// it stays out of the cached prefix, and on a model that refuses it we have
+  /// to fold it into the last user turn instead.
+  supportsMidSystem Boolean @default(false)
+
+  /// Server-side refusal fallbacks. A safety classifier declining a customer
+  /// message would otherwise leave the agent silent mid-conversation with no
+  /// reply to send; with this the API re-runs the turn on a fallback model
+  /// inside the same call. Opus 5 and Fable 5 only.
+  supportsFallbacks Boolean @default(false)
+
+  /// Hidden from accounts entirely; only an admin can assign it.
+  ///
+  /// This exists for the Claude CLI engine, which bills a single human's Claude
+  /// subscription rather than the platform's API key. That is fine for testing
+  /// and for numbers the platform itself runs, and wrong for paying tenants:
+  /// one token would serve every vendor's customers, they would share one rate
+  /// limit and one narrow concurrency lane, and there are no per-token costs to
+  /// attribute, so the credit ledger would have nothing behind it.
+  adminOnly Boolean @default(false)
+
+  /// Cents per million tokens. Integers, never floats - see lib/waPricing.ts
+  /// for why money in this codebase is always integer cents.
+  inputCostPerMTokCents  Int @default(0)
+  outputCostPerMTokCents Int @default(0)
+  /// Hard ceiling an account's own maxOutputTokens is clamped to.
+  maxOutputTokens        Int @default(4096)
+
+  notes     String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  agentsAsBrain  WhatsappAgent[] @relation("AgentBrainModel")
+  agentsAsStt    WhatsappAgent[] @relation("AgentSttModel")
+  agentsAsTts    WhatsappAgent[] @relation("AgentTtsModel")
+  agentsAsVision WhatsappAgent[] @relation("AgentVisionModel")
+
+  @@unique([provider, modelId, role])
+  @@index([role, isEnabled])
+  @@map("ai_models")
+}
+
+/// The voice catalogue an account picks from. Seeded with the free Microsoft
+/// Edge neural voices (the only engine with a true Moroccan Arabic voice) and
+/// Gemini's 30 prebuilt voices. An account never edits these rows - it builds
+/// its own named presets on top of them in WhatsappAgentVoice.
+model AiVoice {
+  id       Int     @id @default(autoincrement())
+  provider String // edge, gemini, elevenlabs, openai
+  voiceId  String // ar-MA-MounaNeural, Charon, ...
+  label    String
+  locale   String? // ar-MA, fr-FR, ...
+  gender   String? // FEMALE, MALE
+
+  isEnabled Boolean @default(true)
+  isDefault Boolean @default(false)
+
+  /// Edge speaks SSML, so rate/pitch/volume are real. Gemini has no prosody
+  /// knobs at all - speed and emotion are expressed to it in words instead
+  /// (see WhatsappAgentVoice.stylePrompt), which is why these two capability
+  /// flags exist rather than one "advanced" boolean.
+  supportsProsody Boolean  @default(false)
+  supportsStyle   Boolean  @default(false)
+  /// Named emotions this voice accepts, e.g. cheerful, sad, excited. Empty for
+  /// voices that take a free-text style instruction instead.
+  styles          String[] @default([])
+
+  /// A short pre-rendered sample so the account can hear a voice before saving.
+  previewUrl String?
+
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  presets WhatsappAgentVoice[]
+
+  @@unique([provider, voiceId])
+  @@index([provider, isEnabled])
+  @@map("ai_voices")
+}
+
+/// One row per account that has the agent. Holds everything the standalone
+/// project kept in its two global `settings` and `kb` rows.
+model WhatsappAgent {
+  id     Int  @id @default(autoincrement())
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// The account's own master switch. Distinct from User.whatsappAgentEnabled,
+  /// which is the admin entitlement: the admin sells access, the account
+  /// decides whether the agent is currently answering.
+  enabled     Boolean @default(false)
+  displayName String?
+  /// Reply counters and the daily budget roll on THIS zone, never the server's.
+  timezone    String  @default("Africa/Casablanca")
+
+  // ---- brain -------------------------------------------------------------
+  brainModelId    Int?
+  brainModel      AiModel? @relation("AgentBrainModel", fields: [brainModelId], references: [id], onDelete: SetNull)
+  effort          String   @default("low") // low, medium, high, xhigh, max
+  maxOutputTokens Int      @default(600)
+  historyMessages Int      @default(24)
+
+  visionModelId Int?
+  visionModel   AiModel? @relation("AgentVisionModel", fields: [visionModelId], references: [id], onDelete: SetNull)
+
+  // ---- knowledge base ----------------------------------------------------
+  /// The whole KB: business, playbook, offers, faq, objections, examples, tone,
+  /// goal. Products are NOT in here - they are real Product rows annotated by
+  /// WhatsappProductProfile, so a confirmed order maps to the real catalogue.
+  kb             Json?
+  /// The KB rendered to a prompt once on save rather than on every turn, so the
+  /// cached system block stays byte-stable and keeps hitting the prompt cache.
+  compiledPrompt String?
+  promptVersion  Int     @default(0)
+
+  // ---- routing and behaviour ---------------------------------------------
+  replyTo             String  @default("all") // all | ads_only
+  adKeywords          String?
+  typingDelayMs       Int     @default(200)
+  replyDelayMs        Int     @default(200)
+  handoffKeywords     String  @default("انسان,إنسان,بشري,مسؤول,مدير,شكاية,شكوى,استرجاع,ارجاع,bnadem,mas2ol,chikaya,humain,responsable,réclamation,remboursement,service client,human,agent,real person,manager,complaint,refund")
+  workingHoursEnabled Boolean @default(false)
+  workingHoursStart   String  @default("09:00")
+  workingHoursEnd     String  @default("22:00")
+  afterHoursMessage   String?
+  /// support = keeps handling cancellations and delivery questions after an
+  /// order is confirmed but never re-sells; stop = goes silent.
+  afterConfirmed      String  @default("support")
+
+  // ---- guard rails -------------------------------------------------------
+  maxRepliesPerContact     Int @default(40)
+  maxRepliesPerDay         Int @default(800)
+  minSecondsBetweenReplies Int @default(4)
+  maxInputChars            Int @default(1500)
+  /// input+output tokens per day, 0 = unlimited. Scoped to this account -
+  /// the standalone project summed its whole usage table, which as a
+  /// multi-tenant cap would have let one busy account mute everyone else.
+  dailyTokenBudget         Int @default(2000000)
+
+  // ---- media -------------------------------------------------------------
+  readImages         Boolean @default(true)
+  readVideos         Boolean @default(true)
+  videoFrames        Int     @default(3)
+  maxMediaMb         Int     @default(20)
+  maxMediaPerTurn    Int     @default(3)
+  sendCatalogueMedia Boolean @default(true)
+
+  // ---- speech to text ----------------------------------------------------
+  sttEnabled Boolean  @default(true)
+  sttModelId Int?
+  sttModel   AiModel? @relation("AgentSttModel", fields: [sttModelId], references: [id], onDelete: SetNull)
+  sttPrompt  String?
+
+  /// Transcription engines tried IN ORDER after the primary one above, each
+  /// written as "provider:modelId" — the same device as ttsChain, and for a
+  /// sharper reason.
+  ///
+  /// Every STT vendor here has a quota: Gemini rate-limits, OpenRouter runs a
+  /// key out of credit, Groq throttles. When the primary one says no, the
+  /// customer's voice note reaches the model as
+  /// "[voice note - transcription unavailable]" and the agent answers something
+  /// unrelated — the single worst failure mode on this path, because it is
+  /// invisible and the agent keeps talking. A second engine on a different
+  /// vendor's quota costs nothing until the day it is the only thing working.
+  ///
+  /// ADMIN-SET, like sttModelId: which speech engines the platform pays for is
+  /// not a seller decision.
+  sttChain   String[] @default([])
+  /// EXTRA attempts per link before moving to the next one. 0 by default, and
+  /// deliberately: this sits between the customer pressing send and the agent
+  /// starting to think, so a second engine is almost always a better answer
+  /// than a second try at the one that just refused.
+  sttRetries Int      @default(0)
+
+  // ---- speech out --------------------------------------------------------
+  ttsModelId    Int?
+  ttsModel      AiModel?            @relation("AgentTtsModel", fields: [ttsModelId], references: [id], onDelete: SetNull)
+  activeVoiceId Int?
+  activeVoice   WhatsappAgentVoice? @relation("ActiveVoice", fields: [activeVoiceId], references: [id], onDelete: SetNull)
+  /// never | mirror (voice back only when the customer sent voice) | always
+  ttsMode       String              @default("mirror")
+  ttsMaxChars   Int                 @default(300)
+
+  /// Voice engines tried IN ORDER after the primary one above, each written as
+  /// "provider:model". Ported from the standalone project, where this mattered
+  /// in practice: the Live/native-audio models give a genuinely conversational
+  /// delivery but are preview-tier and fail often enough that a single-shot
+  /// call drops voice replies on real traffic.
+  ttsChain     String[] @default([])
+  /// Attempts per link before moving to the next one.
+  ttsRetries   Int      @default(2)
+  /// never | live_only | always — transcribe the produced audio back and check
+  /// it actually says the reply. Costs one extra call, so it defaults to only
+  /// the Live models, which are the ones that drift.
+  ttsVerify    String   @default("live_only")
+  /// text_only | fallback_edge — what happens when the whole chain fails.
+  ///
+  /// text_only is the default ON PURPOSE. Silently swapping to a different
+  /// voice mid-conversation is worse than sending no voice note: the customer
+  /// has been hearing one person and suddenly hears another. The text reply
+  /// still goes out either way.
+  ttsOnFailure String   @default("text_only")
+  ttsTimeoutMs Int      @default(90000)
+
+  // ---- leads -------------------------------------------------------------
+  /// OFF by default, and deliberately so. A real Lead is not free: it is billed
+  /// at User.saisieFeeMad, it reserves a Google Sheets credit, it can be
+  /// auto-forwarded to the call center, and it enters the auto-release cron.
+  /// Until an account turns this on, a confirmed chat produces a draft it
+  /// promotes by hand from the inbox.
+  autoCreateLead Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("whatsapp_agents")
+}
+
+/// A named voice preset: which catalogue voice, how fast, how it should feel.
+/// Seeded rows arrive with isSystem = true so an account always finds working
+/// defaults; anything it builds itself is isSystem = false and deletable.
+model WhatsappAgentVoice {
+  id     Int  @id @default(autoincrement())
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name     String
+  voiceRef Int?
+  voice    AiVoice? @relation(fields: [voiceRef], references: [id], onDelete: SetNull)
+  /// Denormalised from AiVoice so a preset still renders if a catalogue row is
+  /// disabled, and so a provider the platform later drops fails loudly at
+  /// synthesis rather than silently speaking in someone else's voice.
+  provider String
+  voiceId  String
+
+  /// Percent deltas, the SSML units. 0 means the voice's natural delivery.
+  /// rate is what the user calls "speed": -50 is half pace, +100 is double.
+  rate   Int @default(0)
+  pitch  Int @default(0)
+  volume Int @default(0)
+
+  /// Named emotion for engines with a fixed list (Edge mstts:express-as).
+  style       String?
+  styleDegree Float?  @default(1)
+  /// Free-text delivery instruction for engines you steer in words instead of
+  /// parameters (Gemini). This is where "speak like a Casablanca shopkeeper,
+  /// warm and unhurried" lives.
+  stylePrompt String?
+
+  /// ElevenLabs-only voice settings, ignored by every other provider.
+  stability       Float?
+  similarityBoost Float?
+
+  isSystem   Boolean @default(false)
+  previewUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  activeFor WhatsappAgent[] @relation("ActiveVoice")
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("whatsapp_agent_voices")
+}
+
+/// Agent-only selling information layered on a Product the account already owns
+/// or claimed. The platform catalogue stays the single source of truth for the
+/// name, the real prices and the images; this table adds the things only a
+/// salesperson needs - the anchor price, the pitch, the objection answers, and
+/// which files the agent is allowed to send.
+model WhatsappProductProfile {
+  id        Int     @id @default(autoincrement())
+  userId    Int
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  enabled Boolean @default(true)
+
+  /// What the agent may quote. Null falls back to the Product's own price, so
+  /// an account that changes nothing still gets correct prices.
+  agentPriceMad Float?
+  /// The "was X" the agent anchors against. Never invented - only what is here.
+  oldPriceMad   Float?
+
+  sellingCopy String?
+  benefits    String?
+  variants    String?
+  stockNote   String?
+  /// [{ objection, response }] - same shape as the KB-wide objection list, but
+  /// specific to this product.
+  objections  Json?
+  /// Absolute URLs or platform upload paths the agent may send on "photo?".
+  /// It can send nothing that is not listed here.
+  mediaUrls   String[] @default([])
+  notes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, productId])
+  @@index([userId, enabled])
+  @@map("whatsapp_product_profiles")
+}
+
+/// The account's WhatsApp link. One row per account; the worker reconciles the
+/// live socket against `desiredState` on every tick, so a control call that
+/// never arrives self-heals instead of leaving the two out of step.
+model WhatsappSession {
+  id     Int  @id @default(autoincrement())
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// DISCONNECTED, QR, CONNECTING, CONNECTED, LOGGED_OUT, BANNED
+  status       String @default("DISCONNECTED")
+  /// ON | OFF - what the account asked for, as opposed to where it actually is.
+  desiredState String @default("OFF")
+
+  phoneNumber String?
+  pushName    String?
+
+  /// The pairing QR, as a data URL. Short-lived by design: Baileys rotates it
+  /// roughly every 20s and a stale one just fails to scan.
+  qr          String?
+  qrExpiresAt DateTime?
+
+  lastConnectedAt  DateTime?
+  lastDisconnectAt DateTime?
+  lastError        String?
+
+  /// Which worker owns this session. Same device as SheetPushJob.claimToken:
+  /// without it, two workers would both open a socket for the same number.
+  claimToken String?
+  claimedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([desiredState, status])
+  @@map("whatsapp_sessions")
+}
+
+/// Baileys auth state, one row per signal key rather than one blob, because
+/// the library reads and writes individual keys constantly and a single JSON
+/// column would make every pre-key write rewrite the whole session.
+///
+/// `value` is encrypted with ENCRYPTION_KEY exactly like AppSecret: these keys
+/// are equivalent to being logged into the customer's WhatsApp.
+model WhatsappAuthCredential {
+  id     Int  @id @default(autoincrement())
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// "creds", "pre-key-42", "session-2126...", "app-state-sync-key-..."
+  keyId String
+  value String
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, keyId])
+  @@index([userId])
+  @@map("whatsapp_auth_credentials")
+}
+
+/// A customer conversation.
+model WhatsappContact {
+  id     Int  @id @default(autoincrement())
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// 2126...@s.whatsapp.net, or 1234...@lid for a privacy-masked contact.
+  /// This is the ADDRESSABLE identity and is what we send to.
+  jid      String
+  /// The real dialable number, when WhatsApp gives us one.
+  ///
+  /// NULLABLE on purpose. A @lid contact hides its number, and the digits in
+  /// front of "@lid" are an opaque internal id — storing those as a phone
+  /// produced a plausible-looking 15-digit number that no one can call, put it
+  /// in front of the seller, and would have written it into a billed Lead.
+  /// Null means "not known yet"; the agent asks for it.
+  phone    String?
+  pushName String?
+
+  /// AD (arrived through a Click-to-WhatsApp ad), ORGANIC, MANUAL
+  source      String  @default("ORGANIC")
+  adHeadline  String?
+  adBody      String?
+  adSourceUrl String?
+
+  /// Flipped off automatically the moment a human sends a manual message on
+  /// this chat, so the agent and the operator can never both answer.
+  aiEnabled Boolean @default(true)
+  /// NEW, QUALIFIED, CONFIRMED, REJECTED, HUMAN
+  status    String  @default("NEW")
+
+  /// Everything the agent has collected so far: full_name, phone, city,
+  /// address, product, variant, quantity, price, notes. This is the draft the
+  /// account promotes into a real Lead - see WhatsappAgent.autoCreateLead.
+  draft       Json?
+  confirmedAt DateTime?
+
+  /// Set once the draft has been promoted. Deliberately not a relation: a
+  /// deleted lead must not take the conversation with it.
+  leadId Int?
+
+  aiReplyCount  Int       @default(0)
+  lastReplyAt   DateTime?
+  lastMessageAt DateTime?
+  unreadCount   Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages WhatsappMessage[]
+  turns    WhatsappAgentTurn[]
+  outbound WhatsappOutboundJob[]
+
+  @@unique([userId, jid])
+  @@index([userId, lastMessageAt])
+  @@index([userId, status])
+  @@map("whatsapp_contacts")
+}
+
+model WhatsappMessage {
+  id        Int             @id @default(autoincrement())
+  userId    Int
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contactId Int
+  contact   WhatsappContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  /// WhatsApp own message id. Unique per account: Baileys redelivers history
+  /// on every reconnect, and the standalone project had no such guard, so a
+  /// reconnect replayed old customer messages back through the model.
+  waId String
+
+  direction String // IN | OUT
+  kind      String @default("TEXT") // TEXT, IMAGE, AUDIO, VIDEO, DOCUMENT, STICKER
+
+  body String?
+
+  /// Path on the worker media volume, never under uploads/. `uploads/` is
+  /// mounted twice as unauthenticated static (routes/index.ts and index.ts,
+  /// the second with Access-Control-Allow-Origin:*), so a customer photo or
+  /// voice note stored there would be world-readable by URL. These are served
+  /// only through GET /whatsapp-agent/media/:id after an ownership check.
+  mediaPath String?
+  mediaMime String?
+  mediaSize Int?
+
+  /// Voice notes arrive as audio and reach the model as text.
+  transcript  String?
+  transcribed Boolean @default(false)
+
+  /// True when the agent wrote it, false when a human took over and typed.
+  fromAgent Boolean @default(false)
+  status    String  @default("SENT")
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, waId])
+  @@index([contactId, createdAt])
+  @@index([userId, createdAt])
+  @@map("whatsapp_messages")
+}
+
+/// Inbound outbox. A customer message is written here on the socket callback
+/// and drained by the worker turn loop, which is what takes the model call
+/// off the callback and makes a double-run structurally impossible: the unique
+/// triggerMessageId means the same message can never produce two replies.
+model WhatsappAgentTurn {
+  id        Int             @id @default(autoincrement())
+  userId    Int
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contactId Int
+  contact   WhatsappContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  triggerMessageId String @unique
+
+  /// PENDING, CLAIMED, DONE, FAILED, SKIPPED, BLOCKED_NO_CREDITS
+  status        String    @default("PENDING")
+  claimToken    String?
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now())
+  lastError     String?
+  skipReason    String?
+  finishedAt    DateTime?
+
+  inputTokens      Int @default(0)
+  outputTokens     Int @default(0)
+  cacheReadTokens  Int @default(0)
+  cacheWriteTokens Int @default(0)
+  costCents        Int @default(0)
+
+  charge WaCreditTransaction? @relation("WaCreditCharge")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([userId, createdAt])
+  @@map("whatsapp_agent_turns")
+}
+
+/// Outbound outbox. Sending is never done inline either, so a WhatsApp hiccup
+/// retries instead of losing the reply the account was already charged for.
+model WhatsappOutboundJob {
+  id        Int             @id @default(autoincrement())
+  userId    Int
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contactId Int
+  contact   WhatsappContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  kind    String // TEXT, VOICE, MEDIA
+  payload Json
+
+  /// Makes enqueue idempotent, the same job SheetPushJob.leadId does: a retried
+  /// turn cannot send the customer the same message twice.
+  idempotencyKey String @unique
+
+  status        String    @default("PENDING") // PENDING, SENDING, SENT, FAILED
+  claimToken    String?
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now())
+  lastError     String?
+  sentAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([userId, createdAt])
+  @@map("whatsapp_outbound_jobs")
+}
+
+/// AI credits, cloned from SheetCreditAccount/SheetCreditTransaction so the
+/// admin grants them, and the account reads its balance and history, through
+/// exactly the mechanics they already know from Google Sheets credits.
+model WaCreditAccount {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// CENTS, never a float. See lib/waPricing.ts.
+  balance       Int      @default(0)
+  totalGranted  Int      @default(0)
+  totalConsumed Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  transactions WaCreditTransaction[]
+
+  @@map("wa_credit_accounts")
+}
+
+model WaCreditTransaction {
+  id           Int             @id @default(autoincrement())
+  accountId    Int
+  account      WaCreditAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  type         String // GRANT, CONSUME, ADMIN_DEBIT, REFUND
+  amount       Int // signed: +n on a grant, -n on a consume
+  balanceAfter Int
+  description  String?
+
+  /// The double-charge guard, the same device as SheetCreditTransaction.leadId:
+  /// one CONSUME row per agent turn, enforced by Postgres rather than by
+  /// application logic. Grants carry NULL, and Postgres allows many NULLs under
+  /// a unique index.
+  turnId Int?               @unique
+  turn   WhatsappAgentTurn? @relation("WaCreditCharge", fields: [turnId], references: [id], onDelete: SetNull)
+
+  createdBy Int?
+  createdAt DateTime @default(now())
+
+  @@index([accountId, createdAt])
+  @@map("wa_credit_transactions")
+}
+
+/// Rolled-up token spend, so the admin can see what an account actually costs
+/// against what it was charged. Carries costCents from the first push so a
+/// finance view never has to replay the ledger.
+model WhatsappAgentUsage {
+  id     Int  @id @default(autoincrement())
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// The account local day (WhatsappAgent.timezone), as YYYY-MM-DD.
+  day     String
+  modelId Int?
+
+  turns            Int @default(0)
+  inputTokens      Int @default(0)
+  outputTokens     Int @default(0)
+  cacheReadTokens  Int @default(0)
+  cacheWriteTokens Int @default(0)
+  costCents        Int @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, day, modelId])
+  @@index([userId, day])
+  @@map("whatsapp_agent_usage")
+}
+
+/// The agent's activity log: every action the platform took on a WhatsApp
+/// account, in one table, in the order it happened.
+///
+/// WHY THIS IS NOT console.log. The agent runs in a second pm2 process, decides
+/// on its own, and spends the account's credits doing it. When a seller says
+/// "it answered nonsense" or "it stopped answering", the only honest answer has
+/// to come from a record of what was actually sent to the model and what came
+/// back — and pm2's rolling stdout is gone by the time anyone asks, is not
+/// filterable per account, and is not readable from the dashboard.
+///
+/// WHAT GOES IN request/response. The model request minus the cached system
+/// prompt (it is identical on every turn of an account and would multiply this
+/// table by its size — WhatsappAgent.compiledPrompt already holds it), and the
+/// model answer with its tool calls. Both are truncated by
+/// services/waLogs.service before they are written; nothing here is trusted to
+/// be small.
+///
+/// PII. These rows carry customer messages, so they are SUPER_ADMIN-only at the
+/// route, exactly like the inbox, and they expire — see pruneWaLogs().
+model WhatsappAgentLog {
+  id     Int   @id @default(autoincrement())
+  /// Null for worker-wide events that belong to no single account (boot,
+  /// shutdown, a reconcile tick that failed).
+  userId Int?
+  user   User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// DEBUG, INFO, WARN, ERROR
+  level    String @default("INFO")
+  /// SESSION, INBOUND, OUTBOUND, BRAIN, STT, TTS, CREDITS, LEAD, API, WORKER
+  category String
+  /// Machine-readable slug: "brain.response", "outbound.failed". The UI groups
+  /// on this; `message` is for humans and may be reworded freely.
+  event    String
+  message  String
+
+  /// Deliberately NOT relations. A deleted conversation, or a turn cleaned up
+  /// by retention, must not take the record of what the agent did with it —
+  /// that is the half of the log a complaint is usually about.
+  contactId   Int?
+  /// Denormalised so a row still identifies its conversation after the contact
+  /// is gone.
+  contactJid  String?
+  contactName String?
+  turnId      Int?
+  messageWaId String?
+
+  /// The outgoing call, redacted and truncated.
+  request  Json?
+  /// What came back, or the error body.
+  response Json?
+  /// Anything structured that is neither: model id, attempt number, status.
+  meta     Json?
+
+  /// Present on every ERROR row, and only there.
+  errorText String?
+
+  durationMs   Int?
+  inputTokens  Int?
+  outputTokens Int?
+  costCents    Int?
+
+  /// "worker" or "api" — which process wrote this. The two see different
+  /// halves of the same action and a mixed timeline is unreadable without it.
+  source String @default("worker")
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([level, createdAt])
+  @@index([category, createdAt])
+  @@index([contactId, createdAt])
+  @@map("whatsapp_agent_logs")
 }

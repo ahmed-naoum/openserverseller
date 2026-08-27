@@ -7,16 +7,22 @@ interface CloudflareCustomHostnameResponse {
   success: boolean;
   errors: any[];
   messages: any[];
-  result: {
-    id: string;
-    hostname: string;
-    status: string; // "pending", "active", "moved", "deleted", "blocked"
-    ssl: {
-      status: string; // "pending_validation", "pending_issuance", "active"
-      method: string;
-      type: string;
-    };
+  result: CustomHostname;
+}
+
+export interface CustomHostname {
+  id: string;
+  hostname: string;
+  status: string; // "pending", "active", "moved", "deleted", "blocked"
+  ssl: {
+    status: string; // "pending_validation", "pending_issuance", "active"
+    method: string;
+    type: string;
+    validation_errors?: { message: string }[];
   };
+  /** Cloudflare's own proof-of-control record. Present while status is pending. */
+  ownership_verification?: { type: string; name: string; value: string };
+  verification_errors?: string[];
 }
 
 export class CloudflareDomainService {
@@ -42,7 +48,7 @@ export class CloudflareDomainService {
   /**
    * Add a new custom hostname to Cloudflare
    */
-  static async addCustomHostname(hostname: string): Promise<CloudflareCustomHostnameResponse['result']> {
+  static async addCustomHostname(hostname: string): Promise<CustomHostname> {
     try {
       const zoneId = this.getZoneId();
       const response = await fetch(`${CLOUDFLARE_API_URL}/zones/${zoneId}/custom_hostnames`, {
@@ -76,7 +82,7 @@ export class CloudflareDomainService {
   /**
    * Check the status of a custom hostname
    */
-  static async getHostnameStatus(cfId: string): Promise<CloudflareCustomHostnameResponse['result']> {
+  static async getHostnameStatus(cfId: string): Promise<CustomHostname> {
     try {
       const zoneId = this.getZoneId();
       const response = await fetch(`${CLOUDFLARE_API_URL}/zones/${zoneId}/custom_hostnames/${cfId}`, {
@@ -96,6 +102,33 @@ export class CloudflareDomainService {
       if (error instanceof AppException) throw error;
       console.error('Cloudflare API Error:', error);
       throw new AppException(500, 'Failed to communicate with Cloudflare API');
+    }
+  }
+
+  /**
+   * Look up a hostname already registered on the zone.
+   *
+   * A previous attempt can leave an orphan on Cloudflare while the DB row was
+   * rolled back or never written. Re-POSTing the same hostname then fails with
+   * a duplicate error and the vendor is stuck with no way forward, so `connect`
+   * falls back to adopting the existing record instead.
+   */
+  static async findByHostname(hostname: string): Promise<CustomHostname | null> {
+    try {
+      const zoneId = this.getZoneId();
+      const response = await fetch(
+        `${CLOUDFLARE_API_URL}/zones/${zoneId}/custom_hostnames?hostname=${encodeURIComponent(hostname)}`,
+        { method: 'GET', headers: this.getHeaders() }
+      );
+      const data = (await response.json()) as any;
+      if (!response.ok || !data.success) return null;
+      const match = (data.result || []).find(
+        (entry: CustomHostname) => entry.hostname?.toLowerCase() === hostname.toLowerCase()
+      );
+      return match || null;
+    } catch (error: any) {
+      console.error('Cloudflare API Error (findByHostname):', error);
+      return null;
     }
   }
 

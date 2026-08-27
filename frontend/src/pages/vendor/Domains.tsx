@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Globe, CheckCircle2, AlertCircle, RefreshCw, X, Link as LinkIcon, Server } from 'lucide-react';
+import { Globe, CheckCircle2, Link as LinkIcon, Server } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { authApi, domainApi } from '../../lib/api';
+import { authApi } from '../../lib/api';
+import CustomDomainPanel from '../../components/vendor/CustomDomainPanel';
 import toast from 'react-hot-toast';
 
 export default function Domains() {
@@ -18,15 +19,22 @@ export default function Domains() {
   const [subdomainOtpValue, setSubdomainOtpValue] = useState('');
   const [subdomainLoading, setSubdomainLoading] = useState(false);
 
-  // --- CUSTOM DOMAIN STATE ---
-  const [customDomainInput, setCustomDomainInput] = useState('');
-  const [customDomainLoading, setCustomDomainLoading] = useState(false);
+  // Open to everyone; the flag only ever turns the feature OFF for an account an
+  // admin has revoked. `!== false` rather than a truthy check on purpose: a user
+  // payload cached before this field existed has it undefined, and that must
+  // read as "allowed" rather than hiding the tab from an eligible seller.
+  const canUseCustomDomain = user?.customDomainEnabled !== false;
 
   useEffect(() => {
     if (user?.subdomain) {
       setNewSubdomain(user.subdomain);
     }
   }, [user]);
+
+  // Entitlement can be revoked while the page is open.
+  useEffect(() => {
+    if (!canUseCustomDomain) setActiveTab('subdomain');
+  }, [canUseCustomDomain]);
 
   // --- SUBDOMAIN LOGIC ---
   const handleSubdomainSendOtp = async (e?: any) => {
@@ -69,51 +77,6 @@ export default function Domains() {
     }
   };
 
-  // --- CUSTOM DOMAIN LOGIC ---
-  const handleConnectDomain = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customDomainInput) return;
-    
-    setCustomDomainLoading(true);
-    try {
-      await domainApi.connect(customDomainInput);
-      toast.success("Domaine ajouté avec succès !");
-      await refreshUser();
-      setCustomDomainInput('');
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || err?.response?.data?.error || "Erreur lors de l'ajout du domaine.");
-    } finally {
-      setCustomDomainLoading(false);
-    }
-  };
-
-  const handleRefreshDomainStatus = async () => {
-    setCustomDomainLoading(true);
-    try {
-      await domainApi.refresh();
-      await refreshUser();
-      toast.success("Statut mis à jour.");
-    } catch (err: any) {
-      toast.error("Erreur lors de la mise à jour du statut.");
-    } finally {
-      setCustomDomainLoading(false);
-    }
-  };
-
-  const handleDisconnectDomain = async () => {
-    if (!window.confirm("Êtes-vous sûr de vouloir déconnecter ce domaine ?")) return;
-    setCustomDomainLoading(true);
-    try {
-      await domainApi.disconnect();
-      await refreshUser();
-      toast.success("Domaine déconnecté avec succès.");
-    } catch (err: any) {
-      toast.error("Erreur lors de la déconnexion du domaine.");
-    } finally {
-      setCustomDomainLoading(false);
-    }
-  };
-
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center gap-3 mb-8">
@@ -140,18 +103,20 @@ export default function Domains() {
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600" />
             )}
           </button>
-          <button
-            onClick={() => setActiveTab('custom')}
-            className={`flex-1 flex items-center justify-center gap-2 py-4 px-6 font-semibold text-sm transition-colors relative ${
-              activeTab === 'custom' ? 'text-primary-600 bg-primary-50/50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            <LinkIcon size={18} />
-            {t('domain_custom_tab', 'dashboard') || 'Domaine Personnalisé'}
-            {activeTab === 'custom' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600" />
-            )}
-          </button>
+          {canUseCustomDomain && (
+            <button
+              onClick={() => setActiveTab('custom')}
+              className={`flex-1 flex items-center justify-center gap-2 py-4 px-6 font-semibold text-sm transition-colors relative ${
+                activeTab === 'custom' ? 'text-primary-600 bg-primary-50/50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <LinkIcon size={18} />
+              {t('domain_custom_tab', 'dashboard') || 'Domaine Personnalisé'}
+              {activeTab === 'custom' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600" />
+              )}
+            </button>
+          )}
         </div>
 
         <div className="p-6 sm:p-8">
@@ -294,26 +259,7 @@ export default function Domains() {
               )}
             </div>
           ) : (
-            <div className="relative overflow-hidden rounded-2xl p-10 text-center flex flex-col items-center justify-center min-h-[320px]">
-              {/* Glow Effects */}
-              <div className="absolute -top-20 -left-20 w-56 h-56 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
-              <div className="absolute -bottom-20 -right-20 w-56 h-56 bg-[#ff5722]/5 rounded-full blur-3xl pointer-events-none" />
-
-              <div className="relative z-10 space-y-5 max-w-md mx-auto">
-                <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest bg-indigo-50 text-indigo-600 border border-indigo-100">
-                  <svg className="w-3 h-3 animate-spin" style={{ animationDuration: '3s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-                  {t('domain_soon', 'dashboard') || 'Bientôt disponible'}
-                </span>
-
-                <h3 className="text-xl md:text-2xl font-extrabold text-slate-900 tracking-tight leading-tight pt-1">
-                  {t('domain_custom_prep', 'dashboard') || 'Domaine personnalisé en préparation'}
-                </h3>
-
-                <p className="text-slate-500 text-sm leading-relaxed max-w-sm mx-auto">
-                  {t('domain_custom_prep_desc', 'dashboard') || 'Bientôt, vous pourrez connecter votre propre nom de domaine (ex: myshop.ma) à vos pages de vente et liens de parrainage. Restez connecté !'}
-                </p>
-              </div>
-            </div>
+            <CustomDomainPanel />
           )}
         </div>
       </div>

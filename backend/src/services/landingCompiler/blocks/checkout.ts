@@ -14,7 +14,12 @@ import type { BlockRenderer, BlockContext } from './types.js';
  *  - The old price falls back to retail + 50, then to 150. Both are magic
  *    numbers in the original.
  *  - The header old price ignores the selected pack's own `oldPrice`.
- *  - Phone validation is effectively "9 to 14 digits anywhere".
+ *
+ * One deliberate departure from the original (owner request, 2026-08): the
+ * phone field accepts Moroccan numbers only — 0[5-7] plus 8 digits, or the
+ * same subscriber number behind +212 / 00212 / 212 — where the React form
+ * OR-ed that pattern with a loose "9 to 14 digits anywhere" fallback. Errors
+ * also surface in real time per field instead of only on submit.
  *
  * `border-style: solid` is set explicitly throughout. In the React version it
  * comes from Tailwind's preflight, which sets it globally; without preflight the
@@ -47,7 +52,12 @@ const MESSAGES = {
   cityLetters: 'يرجى كتابة اسم المدينة بالحروف',
   cityLong: 'اسم المدينة طويل جدا',
   phoneRequired: 'رقم الهاتف مطلوب *',
-  phoneInvalid: 'رقم هاتف غير صحيح (مثال: 0612345678)',
+  // The generic message doubles as the fallback for the three precise ones on
+  // pages cached before they existed, so it must stay self-sufficient.
+  phoneInvalid: 'يرجى إدخال رقم هاتف مغربي صحيح (مثال: 0612345678)',
+  phonePrefix: 'يجب أن يبدأ الرقم بـ 06 أو 07 أو 05 (أو +212)',
+  phoneIncomplete: 'الرقم غير مكتمل، يجب أن يتكون من 10 أرقام',
+  phoneLong: 'رقم الهاتف طويل جدا',
   // Only reachable when the address is filled in; an empty one stays valid.
   addressShort: 'العنوان قصير جدا، يرجى كتابته كاملا',
   addressLong: 'العنوان طويل جدا',
@@ -63,18 +73,20 @@ const MESSAGES = {
  * the customer sees can never disagree.
  *
  * The lower bounds stay where the React form had them (2 characters for a name
- * or a city, 9 digits for a phone) — this is the money path, and a stricter
- * floor would start rejecting leads that convert today. The upper bounds are
- * new, and set far above any real Moroccan name, city or address, so they only
- * ever catch a paste or a bot.
+ * or a city) — this is the money path, and a stricter floor would start
+ * rejecting leads that convert today. The upper bounds are new, and set far
+ * above any real Moroccan name, city or address, so they only ever catch a
+ * paste or a bot.
+ *
+ * The phone field has no digit-count entry any more: its rule is the Moroccan
+ * pattern in the runtime, which fixes the length by itself. `phoneMax` remains
+ * as the raw input cap (separators and a leading + included).
  */
 const LIMITS = {
   nameMin: 2,
   nameMax: 60,
   cityMin: 2,
   cityMax: 40,
-  phoneMinDigits: 9,
-  phoneMaxDigits: 14,
   phoneMax: 20,
   /** Applies only once something has been typed — the field stays optional. */
   addressMin: 5,
@@ -154,6 +166,11 @@ export const checkoutBlock: BlockRenderer = {
     `.ck-pack .ck-badge{display:none}` +
     `.ck-pack.is-on .ck-badge{display:block}` +
     `.ck-pack-n{font-weight:700}` +
+    // Units per pack, and deliberately quieter than the name it follows. The
+    // pack's price is the bundle total whatever the quantity, so anything that
+    // reads as loudly as the price would be taken as a discount claim the pack
+    // is not making. It states what the customer receives, nothing more.
+    `.ck-pack-q{margin-inline-start:6px;font-size:12px;font-weight:600;opacity:.6}` +
     `.ck-pack-p{font-weight:800;white-space:nowrap}` +
     `.ck-pack-o{text-decoration:line-through;opacity:.6;font-weight:600;margin-inline-end:6px}` +
     `.ck-badge{position:absolute;top:-4px;inset-inline-start:-8px;padding:2px 8px;font-size:7px;` +
@@ -163,8 +180,15 @@ export const checkoutBlock: BlockRenderer = {
     `.ck-i{width:100%;padding:12px 14px;font:inherit;font-size:16px;border:1px solid #d1d5db;` +
     `border-radius:10px;background:#fff;color:#111827}` +
     `.ck-i:focus{outline:2px solid var(--ck-a);outline-offset:1px;border-color:var(--ck-a)}` +
-    `.ck-i[aria-invalid=true]{border-color:#dc2626}` +
-    `.ck-e{display:none;margin-top:5px;font-size:13px;color:#dc2626}` +
+    `.ck-i[aria-invalid=true]{border-color:#dc2626;outline-color:#dc2626}` +
+    // Positive feedback the moment a field becomes valid — part of the same
+    // live-validation pass that shows the errors, driven by `data-valid`.
+    `.ck-i[data-valid=true]{border-color:#16a34a}` +
+    // display:none -> block restarts the animation, so every new message slides
+    // in even when it replaces a previous one in the same slot.
+    `.ck-e{display:none;margin-top:5px;font-size:13px;font-weight:600;color:#dc2626;` +
+    `animation:ck-ein .18s ease-out}` +
+    `@keyframes ck-ein{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}` +
     `.ck-strip{display:none;margin:0 0 12px;padding:10px 12px;border-radius:10px;` +
     `background:#fef2f2;color:#991b1b;font-size:14px}` +
     `.ck-b{width:100%;padding:15px;font:inherit;font-weight:800;cursor:pointer;` +
@@ -260,6 +284,10 @@ export const checkoutBlock: BlockRenderer = {
         const tint = safeColor(opt?.color || c.packColor, accent);
         const on = i === 0;
         const priceColor = safeColor(opt?.priceColor, '#111827');
+        // Floored: `num` clamps but does not round, and the runtime stores a
+        // floored integer into an Int column — a badge reading "x2.5" next to a
+        // lead recorded as 2 units is a support ticket waiting to happen.
+        const qty = Math.floor(num(opt?.quantity, 1, 1, 99));
 
         // `${tint}08` in the original: 8-digit hex alpha, about a 3% tint. Only
         // valid on 6-digit hex, so anything else gets no fill rather than a
@@ -277,7 +305,13 @@ export const checkoutBlock: BlockRenderer = {
             // Rendered on every pack; CSS shows it only on the selected one, so
             // the runtime can move the selection without rebuilding markup.
             `<span class="ck-badge" style="background:${tint}">محدد</span>` +
-            `<span class="ck-pack-n">${esc(opt?.name || `Pack ${i + 1}`)}</span>` +
+            // Nested inside the name rather than beside it: `.ck-pack` is a
+            // space-between flex row, so a third child would push the badge to
+            // the middle of the row instead of leaving it against the name.
+            // Absent at quantity 1 — "×1" is noise on every single-unit pack.
+            `<span class="ck-pack-n">${esc(opt?.name || `Pack ${i + 1}`)}` +
+            (qty > 1 ? `<span class="ck-pack-q">×${esc(qty)}</span>` : '') +
+            `</span>` +
             `<span class="ck-pack-p">` +
             (opt?.oldPrice
               ? `<span class="ck-pack-o" style="color:${safeColor(opt?.oldPriceColor, '#9ca3af')}">` +
@@ -340,6 +374,10 @@ export const checkoutBlock: BlockRenderer = {
         // product's retail price.
         name: String(o?.name ?? ''),
         price: o?.price ?? null,
+        // Units in the pack, which decide only how much stock the order
+        // reserves — never the money. The price above is the bundle total
+        // whatever this says, so nothing downstream may multiply the two.
+        qty: Math.floor(num(o?.quantity, 1, 1, 99)),
       })),
       pixels: ctx.pixels,
       // Where a completed order goes. Matches ReferralForm's

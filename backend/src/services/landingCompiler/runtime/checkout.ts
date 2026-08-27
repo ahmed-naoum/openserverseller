@@ -79,14 +79,32 @@ export const CHECKOUT_RUNTIME = `
     // the "must not contain digits" error is unreachable in the original.
     function stripDigits(s) { return s.replace(/[0-9\\u0660-\\u0669]/g, ''); }
 
+    // Moroccan numbers only (owner request, 2026-08): 0[5-7] plus 8 digits, or
+    // the same subscriber number behind +212 / 00212 / 212. The input filter
+    // already limits the field to digits, +, spaces and dashes, and toAscii has
+    // run by the time these match, so the separators are all that need removing.
+    function normPhone(v) { return toAscii(v).replace(/[\\s-]/g, ''); }
+    var MA_FULL = /^(?:\\+212|00212|212|0)[5-7][0-9]{8}$/;
+    // Shapes more typing can still turn into a valid number. Anything outside
+    // them is already wrong, so its error can show while the customer types;
+    // anything inside is merely unfinished and must not be nagged mid-keystroke.
+    var MA_PARTIAL = [
+      /^0(?:[5-7][0-9]{0,8})?$/,
+      /^(?:\\+|00)?(?:2(?:1(?:2(?:[5-7][0-9]{0,8})?)?)?)?$/
+    ];
+    function maCanComplete(s) {
+      for (var i = 0; i < MA_PARTIAL.length; i++) if (MA_PARTIAL[i].test(s)) return true;
+      return false;
+    }
+
     // The caps the block rendered its maxlength attributes from. Defaults match
     // that object so an older cached page still validates rather than treating
-    // every limit as zero.
+    // every limit as zero. The phone has no digit caps here any more — the
+    // Moroccan pattern above fixes its length by itself.
     var lim = cfg.lim || {};
     function cap(k, d) { var n = Number(lim[k]); return n > 0 ? n : d; }
     var NAME_MIN = cap('nameMin', 2), NAME_MAX = cap('nameMax', 60);
     var CITY_MIN = cap('cityMin', 2), CITY_MAX = cap('cityMax', 40);
-    var PHONE_MIN = cap('phoneMinDigits', 9), PHONE_MAX = cap('phoneMaxDigits', 14);
     var ADDR_MIN = cap('addressMin', 5), ADDR_MAX = cap('addressMax', 200);
 
     // Arabic (incl. the Supplement and Extended-A ranges Moroccan names use) and
@@ -111,13 +129,15 @@ export const CHECKOUT_RUNTIME = `
       },
       phone: function(v) {
         if (!v.trim()) return cfg.msg.phoneRequired;
-        // The effective rule in ReferralForm is 9-14 ASCII digits anywhere: the
-        // Moroccan pattern is OR-ed with it, and every string it accepts already
-        // has 10-12 digits. Tightening this would start rejecting leads that
-        // convert today.
-        var digits = toAscii(v).replace(/\\D/g, '');
-        if (digits.length < PHONE_MIN || digits.length > PHONE_MAX) return cfg.msg.phoneInvalid;
-        return null;
+        var s = normPhone(v);
+        if (MA_FULL.test(s)) return null;
+        // Still the prefix of a valid number: unfinished, not wrong.
+        if (maCanComplete(s)) return cfg.msg.phoneIncomplete || cfg.msg.phoneInvalid;
+        // A complete valid number with digits after it reads as "too long";
+        // everything else failed on its shape. Each precise message falls back
+        // to the generic one for pages cached before it existed.
+        if (/^(?:\\+212|00212|212|0)[5-7][0-9]{8}/.test(s)) return cfg.msg.phoneLong || cfg.msg.phoneInvalid;
+        return cfg.msg.phonePrefix || cfg.msg.phoneInvalid;
       },
       city: function(v) {
         var s = v.trim();
@@ -146,19 +166,49 @@ export const CHECKOUT_RUNTIME = `
       return checks[key](el.value || '');
     }
 
-    function onInput(el, fn) {
+    // Flips once the customer has tried to submit; from then on every field
+    // re-validates on each keystroke, so the message under a field tracks the
+    // fix as it is typed and disappears the moment the value is right.
+    var submitted = false;
+
+    // A mistake more typing cannot repair — today only a phone that can no
+    // longer become Moroccan. Those show mid-keystroke; everything else
+    // (unfinished numbers, short names) waits for blur or submit, because
+    // nagging a customer who is still typing costs orders.
+    function definiteError(k, v) {
+      if (k !== 'phone') return false;
+      var s = normPhone(v);
+      return !!s && !MA_FULL.test(s) && !maCanComplete(s);
+    }
+
+    function liveValidate(k) {
+      var el = f[k];
+      if (!el) return;
+      var v = el.value || '';
+      var msg = checks[k](v);
+      if (!msg) {
+        clearError(el);
+        markValid(el, !!v.trim());
+        return;
+      }
+      markValid(el, false);
+      if (submitted || definiteError(k, v)) fieldError(el, msg);
+      else clearError(el);
+    }
+
+    function onInput(el, k, fn) {
       if (!el) return;
       el.addEventListener('input', function(){
         if (fn) { var v = fn(this.value); if (v !== this.value) this.value = v; }
-        clearError(el);
+        liveValidate(k);
       });
     }
-    onInput(f.fullName, stripDigits);
-    onInput(f.city, stripDigits);
+    onInput(f.fullName, 'fullName', stripDigits);
+    onInput(f.city, 'city', stripDigits);
     // Mapping first, then the character filter — the order matters, or a mapped
     // digit would be stripped before it could become ASCII.
-    onInput(f.phone, function(v){ return toAscii(v).replace(/[^0-9+\\s-]/g, ''); });
-    onInput(f.address, null);
+    onInput(f.phone, 'phone', function(v){ return toAscii(v).replace(/[^0-9+\\s-]/g, ''); });
+    onInput(f.address, 'address', null);
 
     // Checked on the way out of a field, so a mistake is caught next to the
     // field that caused it rather than at the bottom of the form. An empty
@@ -168,20 +218,36 @@ export const CHECKOUT_RUNTIME = `
       var el = f[k];
       if (!el) return;
       el.addEventListener('blur', function(){
-        if (!(el.value || '').trim()) { clearError(el); return; }
+        if (!(el.value || '').trim()) { clearError(el); markValid(el, false); return; }
         var msg = validate(k);
-        if (msg) fieldError(el, msg); else clearError(el);
+        if (msg) fieldError(el, msg); else { clearError(el); markValid(el, true); }
       });
     });
 
     function slotFor(el) {
       return el && el.parentNode ? el.parentNode.querySelector('[data-ck-err]') : null;
     }
+    // The two marks are mutually exclusive by construction: fieldError drops
+    // data-valid, and markValid(true) is only ever called after checks passed.
+    function markValid(el, on) {
+      if (!el) return;
+      if (on) el.setAttribute('data-valid', 'true');
+      else el.removeAttribute('data-valid');
+    }
     function fieldError(el, msg) {
       if (!el) return;
+      markValid(el, false);
       el.setAttribute('aria-invalid', 'true');
       var slot = slotFor(el);
-      if (slot) { slot.textContent = msg; slot.style.display = 'block'; }
+      if (slot && slot.textContent !== msg) {
+        // Hide, force a reflow, show: without the offsetWidth read the browser
+        // coalesces the two writes and the entrance animation never restarts,
+        // so a replaced message would swap silently instead of sliding in.
+        slot.style.display = 'none';
+        slot.textContent = msg;
+        void slot.offsetWidth;
+        slot.style.display = 'block';
+      }
     }
     function clearError(el) {
       if (!el) return;
@@ -266,8 +332,23 @@ export const CHECKOUT_RUNTIME = `
       return name + ' (' + ((selected && selected.name) || 'Standard') + ')';
     }
 
+    // Units to reserve from stock, sent alongside the composite above rather
+    // than parsed back out of it. Pages compiled before packs carried a
+    // quantity are frozen HTML with no 'qty' in their cfg at all, so anything
+    // that is not a positive number resolves to a single unit — reserving zero
+    // would let a pack sell past the stock it was supposed to run out of.
+    // Floored because the column is an integer and the block only clamps.
+    function packQty() {
+      var n = selected ? Number(selected.qty) : 1;
+      return n >= 1 ? Math.floor(n) : 1;
+    }
+
     form.addEventListener('submit', function(e){
       e.preventDefault();
+      // From here on the whole form validates live on every keystroke — the
+      // customer has asked for a verdict once, so keeping the verdict current
+      // beats staying quiet.
+      submitted = true;
       clearAll();
 
       var name = (f.fullName ? f.fullName.value : '').trim();
@@ -284,7 +365,11 @@ export const CHECKOUT_RUNTIME = `
       var firstEl = null;
       ['fullName','phone','city','address'].forEach(function(k){
         var msg = validate(k);
-        if (!msg) { clearError(f[k]); return; }
+        if (!msg) {
+          clearError(f[k]);
+          markValid(f[k], !!(f[k] && (f[k].value || '').trim()));
+          return;
+        }
         fieldError(f[k], msg);
         if (!first) { first = msg; firstEl = f[k]; }
       });
@@ -311,6 +396,15 @@ export const CHECKOUT_RUNTIME = `
           phone: phoneRaw.trim(),
           city: city,
           address: address,
+          // The pack, in its own three fields. They sit beside the composite
+          // below and never replace it: productVariant is what 25+ screens and
+          // two Prisma 'contains' filters already read, while these are what a
+          // join, a stock decrement and a Sheets column can rely on. Each is
+          // guarded because a block with no options renders no pack list at
+          // all, which leaves 'selected' null for the whole page's lifetime.
+          variantOptionId: (selected && selected.id) || undefined,
+          variantName: (selected && selected.name) || undefined,
+          packQuantity: packQty(),
           productVariant: variant()
         })
       }).then(function(res){

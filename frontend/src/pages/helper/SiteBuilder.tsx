@@ -99,6 +99,8 @@ export default function SiteBuilder() {
   const [ownerSubdomain, setOwnerSubdomain] = useState<string | null>(null);
   const [ownerCustomDomain, setOwnerCustomDomain] = useState<string | null>(null);
   const [ownerCustomDomainStatus, setOwnerCustomDomainStatus] = useState<string | null>(null);
+  /** Other pages by the same owner — options for a cloaking rule in `render` mode. */
+  const [siblingPages, setSiblingPages] = useState<{ code: string; label: string }[]>([]);
 
   // ── Undo / Redo history ──
   type Snapshot = { blocks: EditorBlock[]; pageSettings: any };
@@ -260,6 +262,21 @@ export default function SiteBuilder() {
     if (id) {
       loadLandingPage();
     }
+  }, [id]);
+
+  // Options for the "page to display" picker on render-mode cloaking rules.
+  // Failure is non-fatal: the picker falls back to a plain code input.
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    helperApi
+      .getSiblingPages(Number(id))
+      .then((res: any) => {
+        const body = res.data?.status === 'success' ? res.data.data : res.data;
+        if (!cancelled && Array.isArray(body?.pages)) setSiblingPages(body.pages);
+      })
+      .catch(() => { /* picker degrades to a text input */ });
+    return () => { cancelled = true; };
   }, [id]);
 
   const loadLandingPage = async () => {
@@ -598,7 +615,10 @@ export default function SiteBuilder() {
         priceColor: '#f97316',
         priceSize: 30,
         showPrice: true,
-        options: [], // { name: string, price: number }
+        // { id, name, quantity, price, oldPrice, color, priceColor, priceSize, oldPriceColor, oldPriceSize }
+        // quantity is the number of units the pack ships, used only to decrement stock — price is
+        // already the bundle total, so quantity must never be multiplied into it.
+        options: [],
         packColor: '#f64444', 
         packBorderWidth: 2,
         packBorderRadius: 16,
@@ -1164,7 +1184,18 @@ export default function SiteBuilder() {
                       </select>
                       
                       {activeBlock.content.behavior !== 'checkout' && (
-                        <Field label="Lien de redirection (Optionnel)" type="text" value={activeBlock.content.link} onChange={(v: any) => updateBlockContent('link', v)} />
+                        <>
+                          <Field label="Lien de redirection (Optionnel)" type="text" value={activeBlock.content.link} onChange={(v: any) => updateBlockContent('link', v)} />
+                          <label className="flex items-center gap-2 text-xs text-gray-700 font-medium mt-2.5 cursor-pointer p-2 bg-orange-50/60 rounded-lg border border-orange-100">
+                            <input
+                              type="checkbox"
+                              checked={activeBlock.content.attachSourceToken ?? false}
+                              onChange={(e) => updateBlockContent('attachSourceToken', e.target.checked)}
+                              className="rounded text-orange-500 focus:ring-orange-500 w-3.5 h-3.5 border-gray-300"
+                            />
+                            <span>Transmettre le jeton de provenance (<code className="text-orange-600 font-mono text-[10px]">?_s=...</code>) pour le Cloaking</span>
+                          </label>
+                        </>
                       )}
                     </div>
 
@@ -1218,6 +1249,19 @@ export default function SiteBuilder() {
                         />
                         <p className="text-[9px] text-blue-400 font-medium leading-tight mt-1">
                           Le bouton restera invisible jusqu'à ce que la première vidéo de la page atteigne ce temps de lecture.
+                        </p>
+                      </div>
+
+                      <div className="p-3 bg-purple-50 border border-purple-100 rounded-xl space-y-2">
+                        <label className="block text-[10px] font-bold text-purple-600 uppercase">Limite de Clics Visiteur (Optionnel)</label>
+                        <Field 
+                          label="Nombre max de clics (0 = illimité)" 
+                          type="number" 
+                          value={activeBlock.content.maxClicks || 0} 
+                          onChange={(v: number) => updateBlockContent('maxClicks', Number(v))} 
+                        />
+                        <p className="text-[9px] text-purple-500 font-medium leading-tight mt-1">
+                          Le bouton disparaîtra automatiquement de la page après que le visiteur aura cliqué dessus ce nombre de fois.
                         </p>
                       </div>
                     </div>
@@ -2247,7 +2291,7 @@ export default function SiteBuilder() {
                         <h4 className="text-[10px] font-bold text-gray-400 uppercase">Options du Produit</h4>
                         <button 
                           onClick={() => {
-                            const newOptions = [...(activeBlock.content.options || []), { id: Math.random().toString(36).substr(2, 9), name: '', price: '', priceColor: '', priceSize: '', oldPrice: '', oldPriceColor: '', oldPriceSize: '', color: '' }];
+                            const newOptions = [...(activeBlock.content.options || []), { id: Math.random().toString(36).substr(2, 9), name: '', quantity: 1, price: '', priceColor: '', priceSize: '', oldPrice: '', oldPriceColor: '', oldPriceSize: '', color: '' }];
                             updateBlockContent('options', newOptions);
                           }}
                           className="p-1 hover:bg-orange-50 text-orange-600 rounded-lg transition-all"
@@ -2267,25 +2311,39 @@ export default function SiteBuilder() {
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
-                            <Field 
-                              label="Nom (ex: Pack 1)" 
-                              type="text" 
-                              value={opt.name} 
+                            <Field
+                              label="Nom de la variante"
+                              type="text"
+                              value={opt.name}
                               onChange={(v: string) => {
                                 const newOptions = [...activeBlock.content.options];
                                 newOptions[index].name = v;
                                 updateBlockContent('options', newOptions);
-                              }} 
+                              }}
+                              placeholder="Ex: 2 Pièces + 1 Gratuite"
                             />
-                            <Field 
-                              label="Prix (MAD)" 
-                              type="number" 
-                              value={opt.price} 
+                            {/* Units shipped by the pack, deducted from stock on order creation.
+                                Independent of the price below, which is already the bundle total. */}
+                            <Field
+                              label="Quantité (unités)"
+                              type="number"
+                              value={opt.quantity}
+                              onChange={(v: number) => {
+                                const newOptions = [...activeBlock.content.options];
+                                newOptions[index].quantity = v;
+                                updateBlockContent('options', newOptions);
+                              }}
+                              placeholder="Ex: 3 (2 Pièces + 1 Gratuite)"
+                            />
+                            <Field
+                              label="Prix (MAD)"
+                              type="number"
+                              value={opt.price}
                               onChange={(v: number) => {
                                 const newOptions = [...activeBlock.content.options];
                                 newOptions[index].price = v;
                                 updateBlockContent('options', newOptions);
-                              }} 
+                              }}
                             />
                             {opt.price && (
                               <div className="grid grid-cols-2 gap-4">
@@ -2854,16 +2912,43 @@ export default function SiteBuilder() {
                             />
                           </div>
                           {pageSettings.cloaking?.redirectDesktop && (
-                            <Field 
-                              label="URL de redirection Bureau" 
-                              type="text" 
-                              value={pageSettings.cloaking?.desktopRedirectUrl || ''} 
-                              placeholder="Ex: https://www.silacod.com"
-                              onChange={(v: string) => setPageSettings((prev: any) => ({
-                                ...prev,
-                                cloaking: { ...prev.cloaking, desktopRedirectUrl: v }
-                              }))} 
-                            />
+                            <>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-bold text-gray-600">Action (visiteur PC)</span>
+                                <select
+                                  value={pageSettings.cloaking?.desktopMode || 'redirect'}
+                                  onChange={(e) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, desktopMode: e.target.value }
+                                  }))}
+                                  className="text-[11px] border border-gray-300 rounded px-2 py-1 focus:ring-orange-500 cursor-pointer bg-white"
+                                >
+                                  <option value="redirect">Rediriger vers une URL</option>
+                                  <option value="render">Afficher une autre page (même lien)</option>
+                                </select>
+                              </div>
+                              {(pageSettings.cloaking?.desktopMode || 'redirect') === 'render' ? (
+                                <AlternatePagePicker
+                                  value={pageSettings.cloaking?.desktopAlternateCode || ''}
+                                  pages={siblingPages}
+                                  onChange={(code) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, desktopAlternateCode: code }
+                                  }))}
+                                />
+                              ) : (
+                                <Field
+                                  label="URL de redirection Bureau"
+                                  type="text"
+                                  value={pageSettings.cloaking?.desktopRedirectUrl || ''}
+                                  placeholder="Ex: https://www.silacod.com"
+                                  onChange={(v: string) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, desktopRedirectUrl: v }
+                                  }))}
+                                />
+                              )}
+                            </>
                           )}
                         </div>
 
@@ -2883,16 +2968,43 @@ export default function SiteBuilder() {
                           </div>
                           {pageSettings.cloaking?.filterBots && (
                             <>
-                              <Field 
-                                label="URL pour les Bots (Page safe)" 
-                                type="text" 
-                                value={pageSettings.cloaking?.botRedirectUrl || ''} 
-                                placeholder="Ex: https://wikipedia.org"
-                                onChange={(v: string) => setPageSettings((prev: any) => ({
-                                  ...prev,
-                                  cloaking: { ...prev.cloaking, botRedirectUrl: v }
-                                }))} 
-                              />
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-bold text-gray-600">Action (Bots)</span>
+                                <select
+                                  value={pageSettings.cloaking?.botMode || pageSettings.cloaking?.botsMode || 'redirect'}
+                                  onChange={(e) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, botMode: e.target.value, botsMode: e.target.value }
+                                  }))}
+                                  className="text-[11px] border border-gray-300 rounded px-2 py-1 focus:ring-orange-500 cursor-pointer bg-white"
+                                >
+                                  <option value="redirect">Rediriger vers une URL</option>
+                                  <option value="render">Afficher une autre page (même lien)</option>
+                                </select>
+                              </div>
+                              {(pageSettings.cloaking?.botMode || pageSettings.cloaking?.botsMode || 'redirect') === 'render' ? (
+                                <Field
+                                  label="Code de la page à afficher aux bots (une de vos pages)"
+                                  type="text"
+                                  value={pageSettings.cloaking?.botAlternateCode || pageSettings.cloaking?.botsAlternateCode || ''}
+                                  placeholder="Ex: page-bot-safe"
+                                  onChange={(v: string) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, botAlternateCode: v.trim(), botsAlternateCode: v.trim() }
+                                  }))}
+                                />
+                              ) : (
+                                <Field
+                                  label="URL pour les Bots (Page safe)"
+                                  type="text"
+                                  value={pageSettings.cloaking?.botRedirectUrl || ''}
+                                  placeholder="Ex: https://wikipedia.org"
+                                  onChange={(v: string) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, botRedirectUrl: v }
+                                  }))}
+                                />
+                              )}
                               <MultiSelectSearchList
                                 label="Sélection des Bots / User-Agents à bloquer"
                                 options={DEFAULT_BLOCKED_USER_AGENTS}
@@ -2921,16 +3033,43 @@ export default function SiteBuilder() {
                             />
                           </div>
                           {pageSettings.cloaking?.filterDirect && (
-                            <Field 
-                              label="URL pour Visites Directes" 
-                              type="text" 
-                              value={pageSettings.cloaking?.directRedirectUrl || ''} 
-                              placeholder="Ex: https://google.com"
-                              onChange={(v: string) => setPageSettings((prev: any) => ({
-                                ...prev,
-                                cloaking: { ...prev.cloaking, directRedirectUrl: v }
-                              }))} 
-                            />
+                            <>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-bold text-gray-600">Action (visite directe)</span>
+                                <select
+                                  value={pageSettings.cloaking?.directMode || 'redirect'}
+                                  onChange={(e) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, directMode: e.target.value }
+                                  }))}
+                                  className="text-[11px] border border-gray-300 rounded px-2 py-1 focus:ring-orange-500 cursor-pointer bg-white"
+                                >
+                                  <option value="redirect">Rediriger vers une URL</option>
+                                  <option value="render">Afficher une autre page (même lien)</option>
+                                </select>
+                              </div>
+                              {(pageSettings.cloaking?.directMode || 'redirect') === 'render' ? (
+                                <AlternatePagePicker
+                                  value={pageSettings.cloaking?.directAlternateCode || ''}
+                                  pages={siblingPages}
+                                  onChange={(code) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, directAlternateCode: code }
+                                  }))}
+                                />
+                              ) : (
+                                <Field
+                                  label="URL pour Visites Directes"
+                                  type="text"
+                                  value={pageSettings.cloaking?.directRedirectUrl || ''}
+                                  placeholder="Ex: https://google.com"
+                                  onChange={(v: string) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, directRedirectUrl: v }
+                                  }))}
+                                />
+                              )}
+                            </>
                           )}
                         </div>
 
@@ -2992,16 +3131,41 @@ export default function SiteBuilder() {
                               <p className="text-[10px] text-gray-500 leading-relaxed">
                                 Limite le nombre de fois qu'un même lien peut être ouvert ou rafraîchi. Ex: <span className="font-mono">3</span> = au 4<sup>e</sup> chargement le visiteur est redirigé et doit repasser par la page source. Vide = illimité. <strong>Attention :</strong> si vous mettez une limite, seuls les clics sur un bouton du constructeur sont acceptés (un lien collé à la main n'a pas de jeton et sera redirigé).
                               </p>
-                              <Field
-                                label="URL si mauvaise provenance"
-                                type="text"
-                                value={pageSettings.cloaking?.sourceRedirectUrl || ''}
-                                placeholder="Ex: https://google.com"
-                                onChange={(v: string) => setPageSettings((prev: any) => ({
-                                  ...prev,
-                                  cloaking: { ...prev.cloaking, sourceRedirectUrl: v }
-                                }))}
-                              />
+                              <div className="flex items-center justify-between gap-2 pt-1">
+                                <span className="text-[11px] font-bold text-gray-600">Action (mauvaise provenance)</span>
+                                <select
+                                  value={pageSettings.cloaking?.sourceMode || 'redirect'}
+                                  onChange={(e) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, sourceMode: e.target.value }
+                                  }))}
+                                  className="text-[11px] border border-gray-300 rounded px-2 py-1 focus:ring-orange-500 cursor-pointer bg-white"
+                                >
+                                  <option value="redirect">Rediriger vers une URL</option>
+                                  <option value="render">Afficher une autre page (même lien)</option>
+                                </select>
+                              </div>
+                              {(pageSettings.cloaking?.sourceMode || 'redirect') === 'render' ? (
+                                <AlternatePagePicker
+                                  value={pageSettings.cloaking?.sourceAlternateCode || ''}
+                                  pages={siblingPages}
+                                  onChange={(code) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, sourceAlternateCode: code }
+                                  }))}
+                                />
+                              ) : (
+                                <Field
+                                  label="URL si mauvaise provenance"
+                                  type="text"
+                                  value={pageSettings.cloaking?.sourceRedirectUrl || ''}
+                                  placeholder="Ex: https://google.com"
+                                  onChange={(v: string) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, sourceRedirectUrl: v }
+                                  }))}
+                                />
+                              )}
                             </>
                           )}
                         </div>
@@ -3032,16 +3196,41 @@ export default function SiteBuilder() {
                                   cloaking: { ...prev.cloaking, allowedLanguages: v }
                                 }))} 
                               />
-                              <Field 
-                                label="URL de redirection langue non-autorisée" 
-                                type="text" 
-                                value={pageSettings.cloaking?.languageRedirectUrl || ''} 
-                                placeholder="Ex: https://google.com"
-                                onChange={(v: string) => setPageSettings((prev: any) => ({
-                                  ...prev,
-                                  cloaking: { ...prev.cloaking, languageRedirectUrl: v }
-                                }))} 
-                              />
+                              <div className="flex items-center justify-between gap-2 pt-1">
+                                <span className="text-[11px] font-bold text-gray-600">Action (langue non-autorisée)</span>
+                                <select
+                                  value={pageSettings.cloaking?.languageMode || 'redirect'}
+                                  onChange={(e) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, languageMode: e.target.value }
+                                  }))}
+                                  className="text-[11px] border border-gray-300 rounded px-2 py-1 focus:ring-orange-500 cursor-pointer bg-white"
+                                >
+                                  <option value="redirect">Rediriger vers une URL</option>
+                                  <option value="render">Afficher une autre page (même lien)</option>
+                                </select>
+                              </div>
+                              {(pageSettings.cloaking?.languageMode || 'redirect') === 'render' ? (
+                                <AlternatePagePicker
+                                  value={pageSettings.cloaking?.languageAlternateCode || ''}
+                                  pages={siblingPages}
+                                  onChange={(code) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, languageAlternateCode: code }
+                                  }))}
+                                />
+                              ) : (
+                                <Field 
+                                  label="URL de redirection langue non-autorisée" 
+                                  type="text" 
+                                  value={pageSettings.cloaking?.languageRedirectUrl || ''} 
+                                  placeholder="Ex: https://google.com"
+                                  onChange={(v: string) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, languageRedirectUrl: v }
+                                  }))} 
+                                />
+                              )}
                             </>
                           )}
                         </div>
@@ -3062,16 +3251,43 @@ export default function SiteBuilder() {
                           </div>
                           {pageSettings.cloaking?.filterCountry && (
                             <>
-                              <Field 
-                                label="URL de redirection pays non-autorisé" 
-                                type="text" 
-                                value={pageSettings.cloaking?.countryRedirectUrl || ''} 
-                                placeholder="Ex: https://google.com"
-                                onChange={(v: string) => setPageSettings((prev: any) => ({
-                                  ...prev,
-                                  cloaking: { ...prev.cloaking, countryRedirectUrl: v }
-                                }))} 
-                              />
+                              {/* Redirect vs render: what a blocked-country visitor gets.
+                                  render = serve one of your own pages at the same URL. */}
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-bold text-gray-600">Action (pays non-autorisé)</span>
+                                <select
+                                  value={pageSettings.cloaking?.countryMode || 'redirect'}
+                                  onChange={(e) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, countryMode: e.target.value }
+                                  }))}
+                                  className="text-[11px] border border-gray-300 rounded px-2 py-1 focus:ring-orange-500 cursor-pointer bg-white"
+                                >
+                                  <option value="redirect">Rediriger vers une URL</option>
+                                  <option value="render">Afficher une autre page (même lien)</option>
+                                </select>
+                              </div>
+                              {(pageSettings.cloaking?.countryMode || 'redirect') === 'render' ? (
+                                <AlternatePagePicker
+                                  value={pageSettings.cloaking?.countryAlternateCode || ''}
+                                  pages={siblingPages}
+                                  onChange={(code) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, countryAlternateCode: code }
+                                  }))}
+                                />
+                              ) : (
+                                <Field
+                                  label="URL de redirection pays non-autorisé"
+                                  type="text"
+                                  value={pageSettings.cloaking?.countryRedirectUrl || ''}
+                                  placeholder="Ex: https://google.com"
+                                  onChange={(v: string) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, countryRedirectUrl: v }
+                                  }))}
+                                />
+                              )}
                               <MultiSelectSearchList
                                 label="Sélection des Pays autorisés"
                                 options={DEFAULT_ALLOWED_COUNTRIES}
@@ -3117,16 +3333,41 @@ export default function SiteBuilder() {
                           </div>
                           {pageSettings.cloaking?.filterVpn && (
                             <>
-                              <Field 
-                                label="URL de redirection VPN/Proxy" 
-                                type="text" 
-                                value={pageSettings.cloaking?.vpnRedirectUrl || ''} 
-                                placeholder="Ex: https://google.com"
-                                onChange={(v: string) => setPageSettings((prev: any) => ({
-                                  ...prev,
-                                  cloaking: { ...prev.cloaking, vpnRedirectUrl: v }
-                                }))} 
-                              />
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-bold text-gray-600">Action (VPN/Proxy)</span>
+                                <select
+                                  value={pageSettings.cloaking?.vpnMode || 'redirect'}
+                                  onChange={(e) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, vpnMode: e.target.value }
+                                  }))}
+                                  className="text-[11px] border border-gray-300 rounded px-2 py-1 focus:ring-orange-500 cursor-pointer bg-white"
+                                >
+                                  <option value="redirect">Rediriger vers une URL</option>
+                                  <option value="render">Afficher une autre page (même lien)</option>
+                                </select>
+                              </div>
+                              {(pageSettings.cloaking?.vpnMode || 'redirect') === 'render' ? (
+                                <AlternatePagePicker
+                                  value={pageSettings.cloaking?.vpnAlternateCode || ''}
+                                  pages={siblingPages}
+                                  onChange={(code) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, vpnAlternateCode: code }
+                                  }))}
+                                />
+                              ) : (
+                                <Field 
+                                  label="URL de redirection VPN/Proxy" 
+                                  type="text" 
+                                  value={pageSettings.cloaking?.vpnRedirectUrl || ''} 
+                                  placeholder="Ex: https://google.com"
+                                  onChange={(v: string) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, vpnRedirectUrl: v }
+                                  }))} 
+                                />
+                              )}
                               <div className="flex items-center justify-between pt-1">
                                 <span className="text-[10px] font-bold text-gray-500">Détecter Extensions Chrome (Urban, Browsec, VeePN)</span>
                                 <input 
@@ -3158,16 +3399,43 @@ export default function SiteBuilder() {
                             />
                           </div>
                           {pageSettings.cloaking?.filterIpv6 && (
-                            <Field 
-                              label="URL de redirection IPv6" 
-                              type="text" 
-                              value={pageSettings.cloaking?.ipv6RedirectUrl || ''} 
-                              placeholder="Ex: https://google.com"
-                              onChange={(v: string) => setPageSettings((prev: any) => ({
-                                ...prev,
-                                cloaking: { ...prev.cloaking, ipv6RedirectUrl: v }
-                              }))} 
-                            />
+                            <>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-bold text-gray-600">Action (IPv6)</span>
+                                <select
+                                  value={pageSettings.cloaking?.ipv6Mode || 'redirect'}
+                                  onChange={(e) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, ipv6Mode: e.target.value }
+                                  }))}
+                                  className="text-[11px] border border-gray-300 rounded px-2 py-1 focus:ring-orange-500 cursor-pointer bg-white"
+                                >
+                                  <option value="redirect">Rediriger vers une URL</option>
+                                  <option value="render">Afficher une autre page (même lien)</option>
+                                </select>
+                              </div>
+                              {(pageSettings.cloaking?.ipv6Mode || 'redirect') === 'render' ? (
+                                <AlternatePagePicker
+                                  value={pageSettings.cloaking?.ipv6AlternateCode || ''}
+                                  pages={siblingPages}
+                                  onChange={(code) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, ipv6AlternateCode: code }
+                                  }))}
+                                />
+                              ) : (
+                                <Field 
+                                  label="URL de redirection IPv6" 
+                                  type="text" 
+                                  value={pageSettings.cloaking?.ipv6RedirectUrl || ''} 
+                                  placeholder="Ex: https://google.com"
+                                  onChange={(v: string) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, ipv6RedirectUrl: v }
+                                  }))} 
+                                />
+                              )}
+                            </>
                           )}
                         </div>
 
@@ -3197,16 +3465,41 @@ export default function SiteBuilder() {
                                   cloaking: { ...prev.cloaking, blockedIpRanges: v }
                                 }))} 
                               />
-                              <Field 
-                                label="URL de redirection Plage IP bloquée" 
-                                type="text" 
-                                value={pageSettings.cloaking?.ipRangeRedirectUrl || ''} 
-                                placeholder="Ex: https://google.com"
-                                onChange={(v: string) => setPageSettings((prev: any) => ({
-                                  ...prev,
-                                  cloaking: { ...prev.cloaking, ipRangeRedirectUrl: v }
-                                }))} 
-                              />
+                              <div className="flex items-center justify-between gap-2 pt-1">
+                                <span className="text-[11px] font-bold text-gray-600">Action (Plage IP bloquée)</span>
+                                <select
+                                  value={pageSettings.cloaking?.ipRangeMode || 'redirect'}
+                                  onChange={(e) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, ipRangeMode: e.target.value }
+                                  }))}
+                                  className="text-[11px] border border-gray-300 rounded px-2 py-1 focus:ring-orange-500 cursor-pointer bg-white"
+                                >
+                                  <option value="redirect">Rediriger vers une URL</option>
+                                  <option value="render">Afficher une autre page (même lien)</option>
+                                </select>
+                              </div>
+                              {(pageSettings.cloaking?.ipRangeMode || 'redirect') === 'render' ? (
+                                <AlternatePagePicker
+                                  value={pageSettings.cloaking?.ipRangeAlternateCode || ''}
+                                  pages={siblingPages}
+                                  onChange={(code) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, ipRangeAlternateCode: code }
+                                  }))}
+                                />
+                              ) : (
+                                <Field 
+                                  label="URL de redirection Plage IP bloquée" 
+                                  type="text" 
+                                  value={pageSettings.cloaking?.ipRangeRedirectUrl || ''} 
+                                  placeholder="Ex: https://google.com"
+                                  onChange={(v: string) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, ipRangeRedirectUrl: v }
+                                  }))} 
+                                />
+                              )}
                             </>
                           )}
                         </div>
@@ -3227,16 +3520,41 @@ export default function SiteBuilder() {
                           </div>
                           {pageSettings.cloaking?.filterDns && (
                             <>
-                              <Field 
-                                label="URL de redirection DNS bloqué" 
-                                type="text" 
-                                value={pageSettings.cloaking?.dnsRedirectUrl || ''} 
-                                placeholder="Ex: https://google.com"
-                                onChange={(v: string) => setPageSettings((prev: any) => ({
-                                  ...prev,
-                                  cloaking: { ...prev.cloaking, dnsRedirectUrl: v }
-                                }))} 
-                              />
+                              <div className="flex items-center justify-between gap-2 pt-1">
+                                <span className="text-[11px] font-bold text-gray-600">Action (DNS bloqué)</span>
+                                <select
+                                  value={pageSettings.cloaking?.dnsMode || 'redirect'}
+                                  onChange={(e) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, dnsMode: e.target.value }
+                                  }))}
+                                  className="text-[11px] border border-gray-300 rounded px-2 py-1 focus:ring-orange-500 cursor-pointer bg-white"
+                                >
+                                  <option value="redirect">Rediriger vers une URL</option>
+                                  <option value="render">Afficher une autre page (même lien)</option>
+                                </select>
+                              </div>
+                              {(pageSettings.cloaking?.dnsMode || 'redirect') === 'render' ? (
+                                <AlternatePagePicker
+                                  value={pageSettings.cloaking?.dnsAlternateCode || ''}
+                                  pages={siblingPages}
+                                  onChange={(code) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, dnsAlternateCode: code }
+                                  }))}
+                                />
+                              ) : (
+                                <Field 
+                                  label="URL de redirection DNS bloqué" 
+                                  type="text" 
+                                  value={pageSettings.cloaking?.dnsRedirectUrl || ''} 
+                                  placeholder="Ex: https://google.com"
+                                  onChange={(v: string) => setPageSettings((prev: any) => ({
+                                    ...prev,
+                                    cloaking: { ...prev.cloaking, dnsRedirectUrl: v }
+                                  }))} 
+                                />
+                              )}
                               <MultiSelectSearchList
                                 label="Sélection des Domaines DNS / FAI à bloquer"
                                 options={DEFAULT_BLOCKED_DNS}
@@ -3630,6 +3948,65 @@ export const DEFAULT_ALLOWED_COUNTRIES = [
   'NL - Pays-Bas', 'GB - Royaume-Uni', 'US - États-Unis', 'CA - Canada', 'TR - Turquie',
   'TR - Turquie', 'SE - Suède', 'NO - Norvège', 'PT - Portugal'
 ];
+
+/**
+ * Picks which of the owner's other pages a render-mode cloaking rule shows.
+ *
+ * A <select> of real pages when the sibling list loaded, so the code is never
+ * typed by hand. Falls back to a text input when the list is empty or the
+ * request failed — and when the saved value is a code no longer in the list
+ * (page deleted or deactivated), that value is kept as an option so opening the
+ * settings does not silently clear it.
+ */
+const AlternatePagePicker = ({
+  value,
+  pages,
+  onChange,
+}: {
+  value: string;
+  pages: { code: string; label: string }[];
+  onChange: (code: string) => void;
+}) => {
+  if (!pages.length) {
+    return (
+      <Field
+        label="Code de la page à afficher (une de vos pages)"
+        type="text"
+        value={value || ''}
+        placeholder="Ex: offre-pc"
+        onChange={(v: string) => onChange(v.trim())}
+      />
+    );
+  }
+
+  const missing = value && !pages.some((p) => p.code === value);
+
+  return (
+    <div className="space-y-1">
+      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide block">
+        Page à afficher (une de vos pages)
+      </label>
+      <select
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full text-[11px] border border-gray-300 rounded px-2 py-1.5 focus:ring-orange-500 focus:border-orange-500 cursor-pointer bg-white"
+      >
+        <option value="">— Choisir une page —</option>
+        {missing && <option value={value}>{value} (introuvable)</option>}
+        {pages.map((p) => (
+          <option key={p.code} value={p.code}>
+            {p.label} ({p.code})
+          </option>
+        ))}
+      </select>
+      {!value && (
+        <p className="text-[10px] text-amber-600">
+          Aucune page choisie — la redirection sera utilisée à la place.
+        </p>
+      )}
+    </div>
+  );
+};
 
 const MultiSelectSearchList = ({
   label,

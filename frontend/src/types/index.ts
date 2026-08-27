@@ -131,6 +131,19 @@ export interface Lead {
   userAgent?: string | null;
   createdAt: string;
   callbackAt?: string | Date;
+  /**
+   * The express_checkout pack the customer picked. `productVariant` is the
+   * legacy display string — possibly the product name and the pack label glued
+   * together, and the only one of the four a pre-existing lead has.
+   * `variantOptionId` is the stable join key back to the option, `variantName`
+   * the bare label, `packQuantity` the units of stock behind it (null means
+   * unknown, which resolves to 1). Match on them through lib/leadPack rather
+   * than comparing strings here.
+   */
+  productVariant?: string | null;
+  variantOptionId?: string | null;
+  variantName?: string | null;
+  packQuantity?: number | null;
 }
 
 export interface Order {
@@ -332,7 +345,13 @@ export interface CustomerLinkMeta {
     retailPriceMad?: number | null;
     imageUrl?: string | null;
   } | null;
-  packOptions: { name: string; price: any }[] | null;
+  /**
+   * The link's express_checkout packs, trimmed by the API. `id` is what a row
+   * is matched on (see lib/leadPack) and `quantity` is the units of stock the
+   * pack stands for — both are absent on packs authored before those fields,
+   * which is why the name match survives.
+   */
+  packOptions: { id?: string | number | null; name: string; price: any; quantity?: any }[] | null;
 }
 
 export interface InfluencerCampaign {

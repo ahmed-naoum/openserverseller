@@ -9,6 +9,7 @@ dotenv.config({ override: true });
 
 import express from 'express';
 import cors from 'cors';
+import { isActiveCustomDomain } from './lib/customDomainOrigins.js';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
@@ -35,6 +36,7 @@ const gzipAsync = promisify(zlib.gzip);
 import { startSessionCleanupCron } from './jobs/sessionCleanup.js';
 import { startLogRetentionCron } from './jobs/logRetention.js';
 import { startSheetPushCron } from './jobs/sheetPush.js';
+import { startSheetSubscriptionCron } from './jobs/sheetSubscriptions.js';
 import { setIO } from './lib/realtime.js';
 import { isSessionRecordingEnabled } from './lib/sessionRecording.js';
 import { startSampler, stopSampler, peekSnapshot, warmupServerMetrics } from './services/serverMetrics.service.js';
@@ -170,7 +172,20 @@ const checkOrigin = (origin: string | undefined, callback: (err: Error | null, o
     }
   }
 
-  callback(null, false);
+  // A seller who connected their own domain serves the SPA from it, so its XHRs
+  // arrive with an Origin no static rule above can match. Admitted only while
+  // the domain is ACTIVE — see lib/customDomainOrigins.ts.
+  let originHostname: string;
+  try {
+    originHostname = new URL(origin).hostname;
+  } catch (e) {
+    callback(null, false);
+    return;
+  }
+
+  isActiveCustomDomain(originHostname)
+    .then((allowed) => callback(null, allowed ? origin : false))
+    .catch(() => callback(null, false));
 };
 
 const io = new SocketServer(server, {
@@ -884,6 +899,10 @@ startLogRetentionCron();
 
 // Drain the outbound Google Sheets outbox: leads queued for a seller's own sheet.
 startSheetPushCron();
+
+// Retire lapsed Google Sheets packs and tell their sellers. Also seeds the plan
+// catalogue on the first boot that has the table.
+startSheetSubscriptionCron();
 
 // Cache immutable hardware facts (CPU model, GPU, OS) so the first SOC request is fast.
 // Starts no polling loop — an unwatched server costs nothing after this.

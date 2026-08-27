@@ -6,6 +6,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { sheetCreditsApi } from '../lib/api';
 import { basePathFor } from '../lib/dashboardBase';
 import { centsToLeads, formatMoney } from '../lib/sheetMoney';
+import { accentStyles } from '../lib/planAccent';
 // Wallet, not DollarSign: the figure beside it now carries its own "$", and the two
 // glyphs side by side read as a typo.
 import { Wallet, ChevronRight, ChevronLeft } from 'lucide-react';
@@ -83,7 +84,6 @@ export default function SheetCreditsIndicator() {
   if (!canHaveCredits || isError || !data?.enabled) return null;
 
   const balance = Number(data?.balance ?? 0);
-  const isEmpty = balance <= 0;
 
   /**
    * The reservation behind the balance. Each lead captured under the gate holds the
@@ -102,6 +102,24 @@ export default function SheetCreditsIndicator() {
   const gateCapacity = Number(gate.capacity ?? 0);
   const gateLocked = Number(gate.locked ?? 0);
 
+  /**
+   * The monthly pack, when the account is on one. A pack is capacity that is not
+   * money, so it has to be read BEFORE the balance is judged: an account with a
+   * $0.00 balance and 1 800 leads left on its pack is in perfect health, and
+   * painting that chip rose would send the seller to top up something they do not
+   * need. Both fields are absent on a payload that predates packs, hence the ??.
+   */
+  const plan: any = gate.plan || null;
+  const planRemaining = Number(gate.planRemaining ?? 0);
+
+  /**
+   * The pack's own colour — the admin's "Couleur de la carte" — so the chip in the
+   * header matches the card the seller bought from. Inline styles, not Tailwind
+   * classes: the hex only exists at runtime (see lib/planAccent.ts), and
+   * `accentStyles` re-validates it before it reaches the DOM.
+   */
+  const planAccent = accentStyles(plan?.planAccentColor);
+
   /** Cents per lead, straight from the payload — the tariff is never assumed here. */
   const priceCents = Number(gate.priceCents ?? 0);
   const priceSentence =
@@ -115,7 +133,9 @@ export default function SheetCreditsIndicator() {
   // The server already divides for us; the fallback covers a payload that predates
   // `affordable`. With no tariff at all nothing can be divided, so the chip declines
   // to call a balance "low" rather than guessing.
-  const affordable = Number(gate.affordable ?? centsToLeads(balance, priceCents));
+  const affordable = Number(gate.affordable ?? centsToLeads(balance, priceCents) + planRemaining);
+  // "Nothing left" means nothing left to send with — neither cents nor quota.
+  const isEmpty = affordable <= 0;
   const isLow = !isEmpty && (priceCents > 0 || gate.affordable != null) && affordable <= LOW_BALANCE_LEADS;
 
   const level = gateActive
@@ -155,6 +175,11 @@ export default function SheetCreditsIndicator() {
         onClick={() => setOpen(!open)}
         className={`relative flex items-center gap-1 py-2 px-2 rounded-lg border transition-all shadow-sm hover:shadow-md active:scale-95 ${tone}`}
         title={[
+          // The pack first: it is the reason the balance beside it can sit at $0.00
+          // without anything being wrong, so it has to be the first thing read.
+          plan?.planName
+            ? `${plan.planName} · ${t('sheet_plan_leads_left', 'dashboard', 'Leads inclus')}: ${planRemaining.toLocaleString()}`
+            : '',
           gateActive
             ? t('sheet_credits_gate_tooltip', 'dashboard', 'Disponibles = solde ÷ tarif − non envoyés.')
             : t('sheet_credits_tooltip', 'dashboard', "Solde d'envoi vers Google Sheets"),
@@ -167,6 +192,20 @@ export default function SheetCreditsIndicator() {
         <Wallet size={16} />
         {/* Cents, always through the formatter — printed raw this reads "15" for $0.15. */}
         <span className="text-[11px] font-black leading-none tabular-nums">{formatMoney(balance)}</span>
+        {/* The pack name, when the account is on one. Truncated and capped rather
+            than wrapped: the header row is fixed-height, and a long pack name must
+            never push the language or notification buttons off the edge. */}
+        {/* The pack's own accent, as a pill rather than bare text: the tinted
+            surface keeps the name legible when the chip itself turns amber or
+            rose behind it, whatever colour the admin picked. */}
+        {plan?.planName && (
+          <span
+            style={planAccent.chip}
+            className="hidden sm:inline-block max-w-[90px] truncate px-1.5 py-0.5 rounded-md text-[10px] font-black leading-none uppercase tracking-wide"
+          >
+            {plan.planName}
+          </span>
+        )}
       </button>
 
       {open && (
@@ -205,6 +244,31 @@ export default function SheetCreditsIndicator() {
                 <span className="text-xs font-black leading-none tabular-nums">{formatMoney(balance)}</span>
               </div>
             </div>
+
+            {/* The pack, when there is one. It sits above the three columns because
+                it is the source of most of "Disponibles" and none of "Solde" —
+                without this line a seller reads a frozen balance as a bug. */}
+            {plan && (
+              <div className="px-5 py-3 border-b border-slate-50 flex items-center justify-between gap-3 bg-emerald-50/40">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black text-emerald-800 truncate">{plan.planName}</p>
+                  <p className="text-[9px] font-bold text-emerald-600/70 mt-0.5">
+                    {t('sheet_plan_days_left', 'dashboard', '{count} jour(s) restant(s)').replace(
+                      '{count}',
+                      String(Number(plan.daysLeft ?? 0))
+                    )}
+                  </p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-black text-emerald-700 leading-none tabular-nums">
+                    {planRemaining.toLocaleString()}
+                  </p>
+                  <p className="text-[9px] font-black text-emerald-600/70 uppercase tracking-wider mt-1">
+                    {t('sheet_plan_leads_left', 'dashboard', 'Leads inclus')}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* The same three numbers the leads page shows, laid out as columns
                 rather than a sentence — the popover is 288px wide and the inline
@@ -272,10 +336,17 @@ export default function SheetCreditsIndicator() {
                       {/* Ledger amounts are signed CENTS: a lead charge is -5, which
                           must read "-$0.05". formatMoney already carries the minus, so
                           only the credit side needs a sign glued on. */}
+                      {/* A pack-covered row carries amount 0. Printed through the
+                          same branch it reads "$0.00" in charge-rose, which looks
+                          like a bug; it gets its own calm label instead. */}
                       <span className={`text-[11px] font-black tabular-nums flex-shrink-0 ${
-                        amount > 0 ? 'text-emerald-600' : 'text-rose-500'
+                        amount > 0 ? 'text-emerald-600' : amount === 0 ? 'text-slate-400' : 'text-rose-500'
                       }`}>
-                        {amount > 0 ? `+${formatMoney(amount)}` : formatMoney(amount)}
+                        {amount > 0
+                          ? `+${formatMoney(amount)}`
+                          : amount === 0
+                            ? t('sheet_credits_covered', 'dashboard', 'Inclus')
+                            : formatMoney(amount)}
                       </span>
                     </div>
                   );

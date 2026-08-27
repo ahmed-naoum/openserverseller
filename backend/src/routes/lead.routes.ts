@@ -24,7 +24,13 @@ import {
   LEAD_ROW_MASK,
   type LeadMaskAccessors,
 } from '../lib/leadMasking.js';
-import { getPackPrice } from '../lib/leadPricing.js';
+import {
+  getPackPrice,
+  getPackQuantity,
+  findPackOption,
+  resolveVariantSelection,
+  PACK_PRICE_INCLUDE,
+} from '../lib/leadPricing.js';
 import {
   productScopeOf,
   applyProductScope,
@@ -353,7 +359,7 @@ router.get(
     const {
       page = 1, limit = 50, status, agentId, search, viewMode, excludeProcessed, mode, vendorId, productId,
       // Admin-oriented filters (all optional / additive)
-      city, source, sourceMode, paymentSituation, hasOrder, dateFrom, dateTo, dateField, dateType, sort, withStats,
+      city, source, sourceMode, paymentSituation, hasOrder, sheetPush, dateFrom, dateTo, dateField, dateType, sort, withStats,
       historyStatus,
     } = req.query;
 
@@ -457,6 +463,29 @@ router.get(
     if (hasOrder === 'yes') conditions.push({ order: { isNot: null } });
     if (hasOrder === 'no') conditions.push({ order: null });
 
+    // Google Sheets outbound. Read off SheetPushJob — the outbox row is the only
+    // record of whether a lead ever reached the seller's sheet — and pushed into
+    // `conditions` rather than into the status bucket, so the per-status counts
+    // and the filter options narrow with the list like every other filter here.
+    const sheetPushFilter: Record<string, any> = {
+      SENT: { sheetPushJob: { is: { status: 'SENT' } } },
+      // SENDING is folded in with PENDING: both mean "on its way", same as the
+      // seller-facing buckets in googleSheets.routes (/outbound/sent-status).
+      PENDING: { sheetPushJob: { is: { status: { in: ['PENDING', 'SENDING'] } } } },
+      BLOCKED: { sheetPushJob: { is: { status: 'BLOCKED_NO_CREDITS' } } },
+      FAILED: { sheetPushJob: { is: { status: 'FAILED' } } },
+      // Written once, then deleted from the sheet by the seller by hand.
+      REMOVED: { sheetPushJob: { is: { status: 'REMOVED' } } },
+      // No outbox row at all: never enqueued, so never on its way anywhere.
+      NOT_SENT: { sheetPushJob: { is: null } },
+      // Not about the lead but about who owns it — every lead belonging to an
+      // account the feature is switched on for, sent or not.
+      VENDOR_ENABLED: { vendor: { is: { googleSheetsOutboundEnabled: true } } },
+    };
+    if (sheetPush && sheetPushFilter[sheetPush as string]) {
+      conditions.push(sheetPushFilter[sheetPush as string]);
+    }
+
     const targetDateField = (dateField || dateType) === 'createdAt' ? 'createdAt' : 'updatedAt';
     const createdRange = parseDateRange(dateFrom, dateTo);
 
@@ -546,6 +575,11 @@ router.get(
             },
           },
           order: true,
+          // The Google Sheets outbox row, if the lead was ever enqueued. One-to-one
+          // on a unique leadId, so this is an index lookup per row, not a scan.
+          sheetPushJob: {
+            select: { status: true, origin: true, sentAt: true, attempts: true, lastError: true, updatedAt: true },
+          },
         },
         skip: (pageNum - 1) * limitNum,
         take: limitNum,
@@ -716,6 +750,13 @@ router.get(
           status: l.status,
           callbackAt: l.callbackAt,
           productVariant: l.productVariant,
+          // Without these the id-first pack matching on the client silently
+          // degrades to the legacy name comparison on every screen fed by this
+          // endpoint, so a renamed pack resolves to the wrong price there while
+          // resolving correctly everywhere else.
+          variantOptionId: l.variantOptionId,
+          variantName: l.variantName,
+          packQuantity: l.packQuantity,
           notes: l.notes,
           assignedAgent: l.assignedAgent
             ? {
@@ -733,6 +774,10 @@ router.get(
               accountMode: (l.vendor as any).mode || null,       // SELLER | AFFILIATE
               isInfluencer: (l.vendor as any).isInfluencer || false,
               subdomain: (l.vendor as any).subdomain || null,
+              // The admin-set entitlement ("Google Sheets — Envoi des leads").
+              // The table hides the sheet badge entirely for accounts it is off
+              // for, so a blank cell can't be read as "not sent yet".
+              sheetsEnabled: (l.vendor as any).googleSheetsOutboundEnabled === true,
             }
             : null,
           recentCalls: l.callLogs.length,
@@ -785,6 +830,19 @@ router.get(
               accountMode: (l.referralLink as any).influencer.mode || null,        // SELLER | AFFILIATE
               isInfluencer: (l.referralLink as any).influencer.isInfluencer || false,
               subdomain: (l.referralLink as any).influencer.subdomain || null,
+            }
+            : null,
+          // Where this lead got to in the seller's Google Sheet. null = never
+          // enqueued (the account has the feature off, or auto-push is off and
+          // nobody sent it by hand).
+          sheetPush: (l as any).sheetPushJob
+            ? {
+              status: (l as any).sheetPushJob.status,
+              origin: (l as any).sheetPushJob.origin,
+              sentAt: (l as any).sheetPushJob.sentAt,
+              attempts: (l as any).sheetPushJob.attempts,
+              lastError: (l as any).sheetPushJob.lastError,
+              updatedAt: (l as any).sheetPushJob.updatedAt,
             }
             : null,
           contactClicks: clickMap.get(l.id) || { whatsapp: 0, call: 0, lastWhatsappAt: null, lastCallAt: null },
@@ -2885,6 +2943,12 @@ router.post(
     }
 
     const { fullName, phone, whatsapp, city, address, productId, notes, vendorId: bodyVendorId, sourceMode, package_replacement, package_old_tracking, package_note, package_no_open, customPrice, packName, skipColiaty, source, qte } = req.body;
+    // Units, and deliberately not the pack arithmetic /:id/push-to-delivery uses.
+    // There the agent forwards a landing-page lead, so `quantity` counts packs and
+    // has to be multiplied by the pack size to get units. Here the agent types the
+    // piece count straight into the form and `packName` is free text with no pack
+    // catalogue behind it, so `qte` already IS the unit count. Do not unify them —
+    // multiplying here would oversell every manually inserted order.
     const qteNum = qte && Number(qte) > 0 ? Number(qte) : 1;
 
     // The three Coliaty parcel options, normalised once. A queued lead carries
@@ -3039,6 +3103,17 @@ router.post(
           address,
           status: newLeadStatus,
           productVariant: packName || null,
+          // The Sheets "Variante" column reads variantName, so a manually
+          // inserted lead has to write it too or that cell is blank for every
+          // agent-entered order. Here the two are the same string: this form
+          // asks for a bare pack label, never the composite "product - pack"
+          // display string the landing pages produce.
+          //
+          // packQuantity stays null on purpose. There is no pack catalogue
+          // behind this free-text field to read a size from, and the units are
+          // already counted by `qte` above — filling it in would let a later
+          // push multiply them a second time.
+          variantName: packName || null,
           notes: notes || `Lead inséré ${skipColiaty ? '(en attente d\'expédition)' : 'et poussé à Coliaty manuellement'} par l'agent.${package_note ? ` (Note Coliaty: ${package_note})` : ''}${package_replacement === true || package_replacement === 'true' ? ` [Replacement de: ${package_old_tracking}]` : ''}${packName ? ` [Nom du Pack: ${packName}]` : ''}${(customPrice !== undefined && customPrice !== null && customPrice !== '') ? ` [Prix Custom: ${customPrice} MAD]` : ''}`,
           sourceMode: sourceMode || 'VENDOR',
           source: source || 'MANUAL',
@@ -3461,7 +3536,11 @@ router.patch(
     if (req.user!.roleName === 'CALL_CENTER_AGENT') where.assignedAgentId = req.user!.id;
     applyReferralLinkProductScope(where, productScopeOf(req));
 
-    const lead = await prisma.lead.findFirst({ where });
+    // PACK_PRICE_INCLUDE so a corrected pack label can be resolved back to a real
+    // option below — without the landing page's customStructure the correction
+    // could only be stored as free text, which is what used to make it silently
+    // ineffective downstream.
+    const lead = await prisma.lead.findFirst({ where, include: PACK_PRICE_INCLUDE });
     if (!lead) throw new AppException(404, 'Lead not found');
 
     // Validate server-side too: the agent UI checks these, but a malformed phone
@@ -3518,6 +3597,12 @@ router.patch(
       }
     }
 
+    // Only when the caller actually sent the field — `undefined` means "leave the
+    // pack alone", and re-resolving then would clear a perfectly good selection
+    // on any PATCH that just edits a phone number.
+    const correctedVariant =
+      productVariant !== undefined ? resolveVariantSelection(lead, productVariant) : undefined;
+
     const updated = await prisma.lead.update({
       where: { id: lead.id },
       data: {
@@ -3528,6 +3613,12 @@ router.patch(
         address: address !== undefined ? address : lead.address,
         notes: notes !== undefined ? notes : lead.notes,
         productVariant: productVariant !== undefined ? (String(productVariant).trim() || null) : lead.productVariant,
+        // The three columns move as one with the label above. Writing
+        // `productVariant` alone would leave a stale `variantOptionId`, which
+        // outranks it in findPackOption and getPackQuantity — the courier would
+        // collect the old pack's price and the warehouse would ship the old
+        // pack's unit count, both without a trace.
+        ...(correctedVariant ?? {}),
         confirmedPriceMad: agreedPrice !== undefined ? agreedPrice : lead.confirmedPriceMad,
       },
     });
@@ -3924,9 +4015,11 @@ router.post(
   authorize('CALL_CENTER_AGENT', 'HELPER'),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { 
-      productId, 
-      quantity = 1, 
+    const {
+      productId,
+      // Number of PACKS, not units. A lead that bought "2 Pièces + 1 Gratuite"
+      // once sends quantity=1 and moves 3 units of stock — see effectiveQty below.
+      quantity = 1,
       paymentMethod = 'COD',
       package_reciever,
       package_phone,
@@ -3971,6 +4064,14 @@ router.post(
       throw new AppException(404, 'Lead not found, not assigned to you, or not in ORDERED/CONFIRMED status');
     }
 
+    // Units of stock this push actually moves: packs ordered × units per pack.
+    // Everything inventory-related below counts in this, never in `quantity`.
+    // The include above already carries what getPackQuantity reads — the
+    // `packQuantity` column comes free with the row, and the landing page's
+    // customStructure (the fallback when the column is null) arrives with
+    // `landingPage: true` — so no widening with PACK_PRICE_INCLUDE is needed here.
+    const effectiveQty = Number(quantity || 1) * getPackQuantity(lead);
+
     // Check if an order already exists for this lead (e.g. out of sync status or double click)
     const existingOrder = await prisma.order.findUnique({
       where: { leadId: lead.id }
@@ -4013,34 +4114,33 @@ router.post(
     }
 
     // --- STOCK VALIDATION ---
-    if (productToOrder.stockQuantity < Number(quantity || 1)) {
-      throw new AppException(400, `Stock insuffisant pour ce produit. (Disponible: ${productToOrder.stockQuantity}, Demandé: ${quantity || 1})`);
+    // Pre-existing race, made bigger rather than introduced here: this check sits
+    // ~110 lines and one blocking Coliaty call outside the transaction below, so
+    // two concurrent pushes can both pass it. What used to oversell by a single
+    // unit now oversells by a whole pack's worth. Left as-is deliberately — the
+    // fix is to move the guard inside the transaction, which is out of scope.
+    if (productToOrder.stockQuantity < effectiveQty) {
+      throw new AppException(400, `Stock insuffisant pour ce produit. (Disponible: ${productToOrder.stockQuantity}, Demandé: ${effectiveQty})`);
     }
 
     let unitPrice = productToOrder.retailPriceMad;
 
-    // Check for pack pricing if lead has a productVariant
-    if (lead.productVariant && lead.referralLink?.landingPage?.customStructure) {
-      try {
-        const structure = typeof lead.referralLink.landingPage.customStructure === 'string'
-          ? JSON.parse(lead.referralLink.landingPage.customStructure)
-          : lead.referralLink.landingPage.customStructure;
-        const blocks = structure.blocks || [];
-        const checkoutBlock = blocks.find((b: any) => b.type === 'express_checkout');
-        if (checkoutBlock) {
-          const options = checkoutBlock.content?.options || [];
-          const selected = options.find((o: any) => o.name === lead.productVariant);
-          if (selected && selected.price) {
-            unitPrice = selected.price;
-          }
-        }
-      } catch (e) {
-        console.error('Error parsing pack pricing:', e);
-      }
+    // The pack the customer picked on the landing page overrides the list price.
+    // This used to be a hand-rolled, case-sensitive, name-only copy of the shared
+    // matcher, so it resolved a different pack than the rest of the platform for
+    // any lead whose stored label differed by case or that only carried an id.
+    const selectedPack = findPackOption(lead);
+    if (selectedPack?.price) {
+      unitPrice = Number(selectedPack.price);
     }
-    
+
     // Use override price if provided, then the price agreed on the confirmation
     // call, and only then the pack/retail price.
+    //
+    // `quantity` is a number of PACKS and a pack's price is the whole bundle's
+    // total — "2 Pièces + 1 Gratuite" is 399 MAD for all three pieces, not 399
+    // each. So the multiplier here is `quantity`, never `effectiveQty`: putting
+    // the unit count in this line would bill a 3-unit pack three times over.
     const totalAmountMad =
       package_price !== undefined
         ? Number(package_price)
@@ -4146,13 +4246,23 @@ router.post(
             create: [
               {
                 productId: productToOrder!.id,
-                quantity: Number(quantity),
-                unitPriceMad: unitPrice,
+                // Units, not packs. Seven separate return/cancel paths restore
+                // stock with `increment: item.quantity`, so this row is the only
+                // record of how much inventory the push took — storing the pack
+                // count here would leak the rest of the pack on every return.
+                quantity: effectiveQty,
+                // Kept consistent with the two fields around it: unitPriceMad ×
+                // quantity must equal totalPriceMad. Since the total is the
+                // bundle price, the per-unit figure has to be derived from it
+                // rather than being the pack price (same trick as the agent
+                // insert path above).
+                unitPriceMad: effectiveQty > 0 ? totalAmountMad / effectiveQty : totalAmountMad,
                 totalPriceMad: totalAmountMad,
               },
             ],
           },
         },
+        include: { items: { select: { quantity: true } } },
       });
 
       // Update lead status so it disappears from the active list
@@ -4177,9 +4287,12 @@ router.post(
       });
 
       // --- STOCK DECREMENT ---
+      // Read the figure back off the row that was just written instead of
+      // recomputing it: the return paths give stock back from OrderItem.quantity,
+      // so the two numbers drifting apart silently creates or destroys inventory.
       await tx.product.update({
         where: { id: productToOrder!.id },
-        data: { stockQuantity: { decrement: Number(quantity || 1) } }
+        data: { stockQuantity: { decrement: newOrder.items[0].quantity } }
       });
 
       return newOrder;

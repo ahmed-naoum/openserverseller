@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { translateNotification } from '../../utils/notificationTranslator';
 import { dashboardApi, chatApi, notificationsApi, adminApi, youcanApi, shopifyApi, wooCommerceApi } from '../../lib/api';
+import { waAgentApi } from '../../lib/waAgentApi';
 import { VENDOR_HELPER_BASE, basePathFor, dashboardRootOf, isVendorTree } from '../../lib/dashboardBase';
 import { accountIdOf, isReadOnlySubAccount, requiredPermissionForPage, subCan } from '../../lib/subAccountPermissions';
 import toast from 'react-hot-toast';
@@ -76,7 +77,12 @@ import {
   Ghost,
   FileSpreadsheet,
   UserCog,
-  BarChart3
+  ScrollText,
+  BarChart3,
+  Bot,
+  Brain,
+  Inbox,
+  ClipboardList
 } from 'lucide-react';
 
 /**
@@ -114,6 +120,19 @@ const vendorNav = [
         { name: 'nav_my_orders', href: '/dashboard/leads?mode=AFFILIATE', icon: ShoppingCart },
         { name: 'nav_insert_lead', href: '/dashboard/leads/new?mode=AFFILIATE', icon: Plus },
         { name: 'nav_my_links', href: '/dashboard/links', icon: Link2 },
+      ]
+    },
+    /* Hidden unless the account owns the entitlement — see `waAgent` below.
+       Not an `integrationKey`: that flag reports whether a store is connected
+       and only knows the three storefronts, so it would leave this group
+       permanently visible. */
+    {
+      name: 'nav_whatsapp_agent',
+      icon: Bot,
+      children: [
+        { name: 'nav_whatsapp_agent_config', href: '/dashboard/whatsapp-agent', icon: Bot },
+        { name: 'nav_whatsapp_inbox', href: '/dashboard/whatsapp-inbox', icon: Inbox },
+        { name: 'nav_whatsapp_leads', href: '/dashboard/whatsapp-leads', icon: ClipboardList },
       ]
     },
     { name: 'nav_domains', href: '/dashboard/domains', icon: Globe },
@@ -156,10 +175,14 @@ const rebaseNav = (items: any[], base: string): any[] =>
 
 /**
  * A sub-account gets everything the vendor has except sub-account management —
- * only the account owner hands out permissions.
+ * only the account owner hands out permissions — and the WhatsApp agent, which
+ * is mounted under /dashboard and /influencer only, so a rebased href would
+ * point at a route that does not exist.
  */
 const vendorHelperNav = rebaseNav(
-  vendorNav.filter((item) => item.href !== '/dashboard/sub-accounts'),
+  vendorNav.filter(
+    (item) => item.href !== '/dashboard/sub-accounts' && item.name !== 'nav_whatsapp_agent',
+  ),
   VENDOR_HELPER_BASE,
 );
 
@@ -223,8 +246,20 @@ const navigation = {
       ]
     },
     { name: 'nav_leads', href: '/influencer/leads', icon: Users },
-    { 
-      name: 'nav_finance_payments', 
+    /* The influencer sidebar is its own array — nothing is mirrored from
+       `vendorNav` — so the agent has to be repeated here, pointed at the
+       /influencer mount of the same two pages. Entitlement-gated identically. */
+    {
+      name: 'nav_whatsapp_agent',
+      icon: Bot,
+      children: [
+        { name: 'nav_whatsapp_agent_config', href: '/influencer/whatsapp-agent', icon: Bot },
+        { name: 'nav_whatsapp_inbox', href: '/influencer/whatsapp-inbox', icon: Inbox },
+        { name: 'nav_whatsapp_leads', href: '/influencer/whatsapp-leads', icon: ClipboardList },
+      ]
+    },
+    {
+      name: 'nav_finance_payments',
       icon: DollarSign,
       children: [
         { name: 'nav_wallet', href: '/influencer/wallet', icon: DollarSign },
@@ -286,11 +321,24 @@ const navigation = {
         { name: 'Finance', href: '/admin/finance', icon: DollarSign },
         { name: 'Suivi Paiements', href: '/admin/payment-monitoring', icon: CreditCard },
         { name: 'Factures', href: '/admin/invoices', icon: FileText },
+        { name: 'nav_sheet_pushes', href: '/admin/sheet-pushes', icon: FileSpreadsheet },
+      ]
+    },
+    /* SUPER_ADMIN-only, like Secrets and Déploiement: the two pages behind it
+       are refused for the other admin roles, so the links are hidden for them
+       further down rather than left to lead into a RoleGuard. */
+    {
+      name: 'nav_whatsapp_agent_admin',
+      icon: Bot,
+      children: [
+        { name: 'nav_ai_models', href: '/admin/ai-models', icon: Brain },
+        { name: 'nav_agent_accounts', href: '/admin/agent-accounts', icon: UserCog },
+        { name: 'nav_agent_logs', href: '/admin/agent-logs', icon: ScrollText },
       ]
     },
     { name: 'Marché Public', href: '/admin/marketplace', icon: ShoppingCart },
-    { 
-      name: 'Support & Messages', 
+    {
+      name: 'Support & Messages',
       icon: MessageSquare,
       children: [
         { name: 'Support & Tickets', href: '/admin/support', icon: MessageSquare },
@@ -420,6 +468,33 @@ export default function DashboardLayout() {
         });
       });
     }
+  }, [user?.role, location.pathname]);
+
+  /* WhatsApp AI agent entitlement.
+     A separate concern from `integrationsStatus`: that asks whether a store is
+     connected, this asks whether the account may see the feature at all. The
+     endpoint never 403s — an account without the entitlement is answered
+     `{ enabled: false }` — so a failed request simply leaves the default and
+     the menu group stays hidden. */
+  const [waAgent, setWaAgent] = useState<{ enabled: boolean; unread: number }>({
+    enabled: false,
+    unread: 0,
+  });
+
+  useEffect(() => {
+    if (user?.role !== 'VENDOR' && user?.role !== 'INFLUENCER') return;
+    let cancelled = false;
+    waAgentApi
+      .status()
+      .then((res) => {
+        if (cancelled) return;
+        const data = res.data?.data ?? {};
+        setWaAgent({ enabled: !!data.enabled, unread: Number(data.unread) || 0 });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [user?.role, location.pathname]);
 
   // Confirmation Modal states
@@ -941,6 +1016,12 @@ export default function DashboardLayout() {
     })
     .filter((item: any) => {
       if (item.href === '/admin/backups' && user?.role !== 'SUPER_ADMIN') return false;
+      // The admin AI console is SUPER_ADMIN-only; drop the whole group rather
+      // than leave an accordion whose children have all been filtered away.
+      if (item.name === 'nav_whatsapp_agent_admin' && user?.role !== 'SUPER_ADMIN') return false;
+      // Hidden, not disabled: an account without the entitlement never sees the
+      // agent at all.
+      if (item.name === 'nav_whatsapp_agent' && !waAgent.enabled) return false;
       // Filter by mode for vendor dashboard
       if (isVendorDashboard) {
         if (item.name === 'nav_seller_management') return currentMode === 'SELLER';
@@ -1320,6 +1401,11 @@ export default function DashboardLayout() {
                               {totalUnread}
                             </span>
                           )}
+                          {child.href?.includes('/whatsapp-inbox') && waAgent.unread > 0 && (
+                            <span className="ml-auto bg-emerald-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-emerald-200">
+                              {waAgent.unread}
+                            </span>
+                          )}
                         </Link>
                       );
                     })}
@@ -1364,6 +1450,11 @@ export default function DashboardLayout() {
                             {child.href?.includes('/chat') && totalUnread > 0 && (
                               <span className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-rose-200 animate-in zoom-in duration-300">
                                 {totalUnread}
+                              </span>
+                            )}
+                            {child.href?.includes('/whatsapp-inbox') && waAgent.unread > 0 && (
+                              <span className="bg-emerald-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[1.25rem] flex items-center justify-center shadow-sm shadow-emerald-200 animate-in zoom-in duration-300">
+                                {waAgent.unread}
                               </span>
                             )}
                           </Link>

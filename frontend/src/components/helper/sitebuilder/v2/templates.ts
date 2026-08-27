@@ -186,10 +186,15 @@ export const DEMO_SHOWCASE_TEMPLATE: BuilderTemplate = {
         priceColor: '#ea580c',
         priceSize: 32,
         showPrice: true,
+        // Option ids are hand-written literals, never crypto.randomUUID(): the compiled page sends
+        // the id back as the lead's variantOptionId, and the pricing lookup falls back to the array
+        // index when it is missing — so a seller reordering the packs would silently re-price every
+        // lead captured before the reorder. `quantity` is the real unit count behind the label
+        // ("2 + 1 gratuite" is three units of stock); it only drives stock, never the price.
         options: [
-          { name: '1 Pièce (Offre Standard)', price: 249, oldPrice: 499, color: '#64748b' },
-          { name: '2 Pièces + 1 Gratuite (Pack Best-Seller)', price: 399, oldPrice: 798, color: '#ea580c' },
-          { name: '3 Pièces + 2 Gratuites (Pack Famille)', price: 549, oldPrice: 1245, color: '#10b981' }
+          { id: 'pack-1', name: '1 Pièce (Offre Standard)', quantity: 1, price: 249, oldPrice: 499, color: '#64748b' },
+          { id: 'pack-2', name: '2 Pièces + 1 Gratuite (Pack Best-Seller)', quantity: 3, price: 399, oldPrice: 798, color: '#ea580c' },
+          { id: 'pack-3', name: '3 Pièces + 2 Gratuites (Pack Famille)', quantity: 5, price: 549, oldPrice: 1245, color: '#10b981' }
         ],
         packColor: '#ea580c',
         packBorderWidth: 2,
@@ -384,8 +389,8 @@ export const STARTER_TEMPLATES: BuilderTemplate[] = [
           showOldPrice: true,
           oldPriceValue: 399,
           options: [
-            { id: '1', name: '1 حبة (العرض العادي)', price: 199, oldPrice: 399, color: '#ea580c' },
-            { id: '2', name: '2 حبات + 1 مجاناً (الأكثر طلباً 🔥)', price: 349, oldPrice: 599, color: '#ea580c' }
+            { id: '1', name: '1 حبة (العرض العادي)', quantity: 1, price: 199, oldPrice: 399, color: '#ea580c' },
+            { id: '2', name: '2 حبات + 1 مجاناً (الأكثر طلباً 🔥)', quantity: 3, price: 349, oldPrice: 599, color: '#ea580c' }
           ],
           packColor: '#ea580c',
           packBorderWidth: 2,
@@ -565,8 +570,9 @@ export const STARTER_TEMPLATES: BuilderTemplate[] = [
           showOldPrice: true,
           oldPriceValue: 450,
           options: [
-            { id: '1', name: '1 عبوة للعلاج المكثف', price: 249, oldPrice: 450, color: '#db2777' },
-            { id: '2', name: '2 عبوات + هدية مجانية 🎁', price: 399, oldPrice: 750, color: '#db2777' }
+            { id: '1', name: '1 عبوة للعلاج المكثف', quantity: 1, price: 249, oldPrice: 450, color: '#db2777' },
+            // Two units, not three: the "free gift" is an unspecified extra, not a third bottle.
+            { id: '2', name: '2 عبوات + هدية مجانية 🎁', quantity: 2, price: 399, oldPrice: 750, color: '#db2777' }
           ],
           packColor: '#db2777',
           packBorderWidth: 2,
@@ -699,8 +705,9 @@ export const STARTER_TEMPLATES: BuilderTemplate[] = [
           showOldPrice: true,
           oldPriceValue: 499,
           options: [
-            { id: '1', name: '1 جهاز + كابل شحن سريع', price: 299, oldPrice: 499, color: '#2563eb' },
-            { id: '2', name: '2 أجهزة (توفير 100 درهم إضافي)', price: 499, oldPrice: 899, color: '#2563eb' }
+            // One device: the bundled charging cable is an accessory, not a second unit of stock.
+            { id: '1', name: '1 جهاز + كابل شحن سريع', quantity: 1, price: 299, oldPrice: 499, color: '#2563eb' },
+            { id: '2', name: '2 أجهزة (توفير 100 درهم إضافي)', quantity: 2, price: 499, oldPrice: 899, color: '#2563eb' }
           ],
           packColor: '#2563eb',
           packBorderWidth: 2,

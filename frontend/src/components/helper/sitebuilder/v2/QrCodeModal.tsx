@@ -24,7 +24,9 @@ export default function QrCodeModal({ isOpen, onClose, url, linkCode }: QrCodeMo
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
+    // Above the canvas content: the checkout preview carries z-[10001]
+    // (BlockRenderer.tsx) and would otherwise paint over a z-50 overlay.
+    <div className="fixed inset-0 z-[10010] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
       <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">

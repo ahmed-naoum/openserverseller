@@ -70,7 +70,9 @@ export default function CompileReportModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200"
+      // Above the canvas content: the checkout preview carries z-[10001]
+      // (BlockRenderer.tsx) and would otherwise paint over a z-50 overlay.
+      className="fixed inset-0 z-[10010] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200"
       onClick={onClose}
       role="dialog"
       aria-modal="true"

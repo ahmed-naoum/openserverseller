@@ -920,6 +920,7 @@ router.post(
           subdomain: user.subdomain,
           customDomain: user.customDomain,
           customDomainStatus: user.customDomainStatus,
+          customDomainEnabled: user.customDomainEnabled,
           language: user.language || user.profile?.language || 'ar',
           isInfluencer: user.isInfluencer || user.role.name === 'INFLUENCER',
           instagramUsername: ((user as any).profile)?.instagramUsername,
@@ -2601,6 +2602,9 @@ router.get(
           customDomain: (user as any).parentVendor?.customDomain ?? user.customDomain,
           customDomainStatus:
             (user as any).parentVendor?.customDomainStatus ?? user.customDomainStatus,
+          // A sub-account inherits the vendor's entitlement, like the domain itself.
+          customDomainEnabled:
+            (user as any).parentVendor?.customDomainEnabled ?? user.customDomainEnabled,
           contractAccepted: user.contractAccepted,
           contractSignedAt: user.contractSignedAt,
           kycStatus: user.kycStatus,
@@ -3040,6 +3044,7 @@ router.post(
           subdomain: finalUser?.subdomain,
           customDomain: finalUser?.customDomain,
           customDomainStatus: finalUser?.customDomainStatus,
+          customDomainEnabled: finalUser?.customDomainEnabled,
           mode: finalUser?.mode
         }
       }

@@ -123,12 +123,18 @@ export const buttonBlock: BlockRenderer = {
     const behavior = oneOf(c.behavior, ['checkout', 'link'] as const, c.link ? 'link' : 'checkout');
     const href = behavior === 'link' ? safeUrl(c.link) : '';
 
+    const maxClicks = num(c.maxClicks, 0, 0, 10000);
+    const blockId = esc(block?.id || 'btn_' + Math.random().toString(36).slice(2, 8));
+
     const attrs = [
       `class="${classes.join(' ')}"`,
       `style="${wrapStyle}${animation ? `;animation-timing-function:${timing}` : ''}"`,
       `data-btn`,
+      `data-btn-id="${blockId}"`,
       behavior === 'checkout' ? `data-btn-checkout` : '',
       href ? `data-btn-href="${esc(href)}"` : '',
+      c.attachSourceToken ? `data-btn-send-token` : '',
+      maxClicks > 0 ? `data-btn-max-clicks="${maxClicks}"` : '',
       c.stickyMobile || c.stickyDesktop ? `data-btn-sticky` : '',
       showAfter > 0 ? `data-btn-after="${showAfter}"` : '',
     ]

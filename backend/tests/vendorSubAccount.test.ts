@@ -56,7 +56,8 @@ describe('vendor sub-account access matrix', () => {
       ['POST', '/api/v1/auth/sign-contract'],
       ['POST', '/api/v1/auth/save-subdomain'],
       ['POST', '/api/v1/auth/subdomain/send-otp'],
-      ['POST', '/api/v1/domain/connect'],
+      ['POST', '/api/v1/domain/request'],
+      ['POST', '/api/v1/domain/verify'],
       ['DELETE', '/api/v1/domain/disconnect'],
       ['POST', '/api/v1/youcan/token'],
       ['POST', '/api/v1/youcan/disconnect'],
@@ -256,7 +257,8 @@ describe('vendor sub-account access matrix', () => {
     it('keeps domains look-but-do-not-touch even when granted', () => {
       const withDomains: SubAccountFlags = { subCanManageDomains: true };
       expect(can('/api/v1/domain/status', 'GET', withDomains).allowed).toBe(true);
-      expect(can('/api/v1/domain/connect', 'POST', withDomains).allowed).toBe(false);
+      expect(can('/api/v1/domain/request', 'POST', withDomains).allowed).toBe(false);
+      expect(can('/api/v1/domain/verify', 'POST', withDomains).allowed).toBe(false);
       expect(can('/api/v1/domain/disconnect', 'DELETE', withDomains).allowed).toBe(false);
     });
 

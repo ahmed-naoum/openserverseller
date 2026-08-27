@@ -53,6 +53,56 @@ import {
 } from 'lucide-react';
 import { fetchAllUsers } from '../../lib/apiPaging';
 
+/**
+ * Blocks or unblocks one account's ability to connect its own domain.
+ *
+ * Custom domains are open to everyone, so this is a moderation control, not an
+ * entitlement: the normal state is "allowed" and clicking it bans a single
+ * abusive account. Blocking is destructive — the backend releases the domain on
+ * Cloudflare too — so it asks first. Unblocking is not.
+ *
+ * `!== false` rather than a truthy check, so a row fetched before this column
+ * existed reads as allowed instead of showing every seller as banned.
+ */
+function CustomDomainToggle({ user, mutation }: { user: any; mutation: any }) {
+  const allowed = user.customDomainEnabled !== false;
+  const pending = mutation.isPending && mutation.variables?.uuid === user.uuid;
+
+  const toggle = () => {
+    if (pending) return;
+    if (allowed) {
+      const ok = window.confirm(
+        user.customDomain
+          ? `Bloquer les domaines personnalisés pour ce compte ?\n\n${user.customDomain} sera libéré immédiatement et cessera de servir les pages.`
+          : 'Bloquer les domaines personnalisés pour ce compte ?'
+      );
+      if (!ok) return;
+    }
+    mutation.mutate({ uuid: user.uuid, enabled: !allowed });
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      disabled={pending}
+      title={
+        allowed
+          ? 'Domaines personnalisés autorisés (par défaut) — cliquer pour bloquer ce compte'
+          : 'Domaines personnalisés bloqués sur ce compte — cliquer pour réautoriser'
+      }
+      className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border transition-colors disabled:opacity-50 ${
+        allowed
+          ? 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100'
+          : 'bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-100'
+      }`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${allowed ? 'bg-slate-300' : 'bg-rose-500'}`} />
+      {allowed ? 'Perso autorisé' : 'Perso bloqué'}
+    </button>
+  );
+}
+
 export function parseSocialInput(val: string, platform: 'instagram' | 'tiktok' | 'facebook' | 'youtube' | 'x' | 'snapchat') {
   if (!val) return { username: '', url: '' };
   
@@ -2635,6 +2685,18 @@ export default function AdminUsers() {
     },
   });
 
+  const customDomainMutation = useMutation({
+    mutationFn: ({ uuid, enabled }: { uuid: string; enabled: boolean }) =>
+      adminApi.setUserCustomDomainEnabled(uuid, enabled),
+    onSuccess: (res: any) => {
+      toast.success(res?.data?.message || 'Entitlement mis à jour.');
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Erreur lors de la mise à jour.');
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (uuid: string) => adminApi.deleteUser(uuid),
     onSuccess: () => {
@@ -2883,7 +2945,11 @@ export default function AdminUsers() {
                       </div>
                       
                       {/* Domains */}
-                      {(user.subdomain || user.customDomain) && (
+                      {/* Custom domains are allowed by default, so this compact card
+                          appears only when there is something to say: a domain in use,
+                          or an account an admin has blocked. Blocking an account with no
+                          domain yet is done from the desktop table. */}
+                      {(user.subdomain || user.customDomain || user.customDomainEnabled === false) && (
                         <div className="bg-slate-50 rounded-xl p-2.5 space-y-1.5 text-[11px] border border-slate-100/50">
                           {user.subdomain && (
                             <div className="flex items-center justify-between gap-2">
@@ -2922,6 +2988,12 @@ export default function AdminUsers() {
                               </div>
                             </div>
                           )}
+                          <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-100">
+                            <span className="font-bold text-slate-400 uppercase tracking-widest text-[8px]">
+                              Domaines perso:
+                            </span>
+                            <CustomDomainToggle user={user} mutation={customDomainMutation} />
+                          </div>
                         </div>
                       )}
 
@@ -3127,6 +3199,9 @@ export default function AdminUsers() {
                             {!user.subdomain && !user.customDomain && (
                               <span className="text-xs font-semibold text-slate-300 italic">Aucun</span>
                             )}
+                            <div className="pt-1.5 mt-1 border-t border-slate-50">
+                              <CustomDomainToggle user={user} mutation={customDomainMutation} />
+                            </div>
                           </div>
                         </td>
                         <td className="py-6 px-8">
