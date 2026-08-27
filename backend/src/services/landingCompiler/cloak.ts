@@ -259,18 +259,17 @@ function readSourceRef(urlStr: string): { code: string; host: string } | null {
 
 function parseSourceSpecs(value: string | null | undefined): Array<{ code: string; host?: string }> {
   if (!value) return [];
-  return value
-    .split(/[,\n]/)
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean)
-    .map((entry) => {
-      if (entry.includes('/') || entry.includes('://')) {
-        const ref = readSourceRef(entry.includes('://') ? entry : `https://${entry}`);
-        return ref ? { code: ref.code.toLowerCase(), host: ref.host } : null;
-      }
-      return { code: entry };
-    })
-    .filter((spec): spec is { code: string; host?: string } => spec !== null);
+  const list: Array<{ code: string; host?: string }> = [];
+  const entries = value.split(/[,\n]/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+  for (const entry of entries) {
+    if (entry.includes('/') || entry.includes('://')) {
+      const ref = readSourceRef(entry.includes('://') ? entry : `https://${entry}`);
+      if (ref) list.push({ code: ref.code.toLowerCase(), host: ref.host });
+    } else {
+      list.push({ code: entry });
+    }
+  }
+  return list;
 }
 
 function parseDomainList(value: string | null | undefined): string[] {
