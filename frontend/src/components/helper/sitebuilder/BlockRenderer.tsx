@@ -662,6 +662,66 @@ interface SliderBlockProps {
   resolveUrl: (url?: string) => string;
 }
 
+interface SliderVideoProps {
+  src: string;
+  className: string;
+  isActive: boolean;
+  isEditor: boolean;
+}
+
+// A carousel can hold many video slides, and marquee mode triples the slide array
+// for its seamless loop. Rendered as plain <video autoPlay> they all download and
+// decode on page load; mobile browsers cap concurrent decoders, so slides past
+// that cap never play at all. Each video here loads only once it is on screen,
+// and plays only while it is both on screen and the active slide.
+function SliderVideo({ src, className, isActive, isEditor }: SliderVideoProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [shouldLoad, setShouldLoad] = useState(isEditor);
+  const [isOnScreen, setIsOnScreen] = useState(isEditor);
+
+  useEffect(() => {
+    if (isEditor) return;
+    const el = videoRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsOnScreen(entry.isIntersecting);
+        if (entry.isIntersecting) setShouldLoad(true);
+      },
+      // Start fetching just before the slide is reached, so it is already
+      // painting by the time it scrolls into view instead of flashing empty.
+      { rootMargin: '150px', threshold: 0.01 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isEditor]);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el || !shouldLoad) return;
+    if (isActive && isOnScreen) {
+      const played = el.play();
+      if (played) played.catch(() => {});
+    } else {
+      // Pausing releases the decoder for the slides that are actually visible.
+      el.pause();
+    }
+  }, [isActive, isOnScreen, shouldLoad]);
+
+  return (
+    <video
+      ref={videoRef}
+      src={shouldLoad ? src : undefined}
+      preload={shouldLoad ? 'auto' : 'none'}
+      loop
+      muted
+      playsInline
+      crossOrigin="anonymous"
+      className={className}
+    />
+  );
+}
+
 function SliderBlock({ id, content, isEditor, resolveUrl }: SliderBlockProps) {
   const slides: any[] = content.slides || [];
   const total = slides.length;
@@ -773,7 +833,7 @@ function SliderBlock({ id, content, isEditor, resolveUrl }: SliderBlockProps) {
     );
   }
 
-  const renderMedia = (slide: any) => {
+  const renderMedia = (slide: any, isActive: boolean) => {
     const url = resolveUrl(slide.mediaUrl);
     if (!url) return null;
 
@@ -782,13 +842,10 @@ function SliderBlock({ id, content, isEditor, resolveUrl }: SliderBlockProps) {
 
     if (isVideo) {
       return (
-        <video
+        <SliderVideo
           src={url}
-          autoPlay
-          loop
-          muted
-          playsInline
-          crossOrigin="anonymous"
+          isActive={isActive}
+          isEditor={isEditor}
           className={`w-full h-full ${fitClass}`}
         />
       );
@@ -798,6 +855,8 @@ function SliderBlock({ id, content, isEditor, resolveUrl }: SliderBlockProps) {
       <img
         src={url}
         alt={slide.title || ''}
+        loading="lazy"
+        decoding="async"
         className={`w-full h-full ${fitClass}`}
       />
     );
@@ -932,7 +991,7 @@ function SliderBlock({ id, content, isEditor, resolveUrl }: SliderBlockProps) {
                       className={`w-full bg-gray-100 overflow-hidden relative ${mediaHeight100 ? 'flex-1' : 'flex-shrink-0'}`}
                       style={{ height: mediaHeightStyle }}
                     >
-                      {renderMedia(slide)}
+                      {renderMedia(slide, true)}
                     </div>
                   )}
 
@@ -1078,7 +1137,7 @@ function SliderBlock({ id, content, isEditor, resolveUrl }: SliderBlockProps) {
                       className={`w-full bg-gray-100 overflow-hidden relative ${mediaHeight100 ? 'flex-1' : 'flex-shrink-0'}`}
                       style={{ height: mediaHeightStyle }}
                     >
-                      {renderMedia(slide)}
+                      {renderMedia(slide, isFadeMode ? idx === current : isVisible)}
                     </div>
                   )}
 
@@ -1306,6 +1365,7 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
       <video 
         ref={videoRef}
         src={resolveUrl(content.url)} 
+        poster={resolveUrl(content.poster) || undefined}
         preload="auto"
         controls={content.controls !== false && !showUnmuteOverlay}
         autoPlay={!!content.autoplay}

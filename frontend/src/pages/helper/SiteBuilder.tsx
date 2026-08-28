@@ -725,7 +725,7 @@ export default function SiteBuilder() {
         marginTop: 0,
         marginBottom: 0
       };
-      case 'video': return { url: '', redirectUrl: '', width: 100, autoplay: false, loop: false, muted: false, controls: true, showFullscreenBtn: true, paddingTop: 16, paddingBottom: 16, marginTop: 0, marginBottom: 0 };
+      case 'video': return { url: '', redirectUrl: '', poster: '', width: 100, autoplay: false, loop: false, muted: false, controls: true, showFullscreenBtn: true, paddingTop: 16, paddingBottom: 16, marginTop: 0, marginBottom: 0 };
       default: return {};
     }
   };
@@ -1066,6 +1066,14 @@ export default function SiteBuilder() {
                       value={activeBlock.content.url} 
                       onChange={(v: any) => updateBlockContent('url', v)} 
                       placeholder="https://www.youtube.com/watch?v=... ou /uploads/videos/..." 
+                    />
+
+                    <Field 
+                      label="Image d'aperçu (poster) — optionnel" 
+                      type="text" 
+                      value={activeBlock.content.poster || ''} 
+                      onChange={(v: any) => updateBlockContent('poster', v)} 
+                      placeholder="https://... — affichée avant le chargement de la vidéo" 
                     />
                     
                     <div className="bg-orange-50/60 rounded-xl p-3 border border-orange-100 text-xs text-gray-600 space-y-1">
