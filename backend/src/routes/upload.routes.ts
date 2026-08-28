@@ -513,23 +513,48 @@ const compressVideo = (inputPath: string, userUuid?: string, socketId?: string):
   return new Promise((resolve) => {
     const dir = path.dirname(inputPath);
     const fileBase = path.basename(inputPath, path.extname(inputPath));
-    const compressedFilename = `${fileBase}-compressed.webm`;
+    const compressedFilename = `${fileBase}-compressed.mp4`;
     const outputPath = path.join(dir, compressedFilename);
 
-    // Guaranteed compression & WebM VP9/Opus conversion: 720p cap, maxrate 1.2M
+    // H.264/AAC in MP4, NOT VP9/Opus in WebM.
+    //
+    // The WebM pipeline this replaces was unplayable for a large share of real
+    // visitors: iOS Safari gained WebM support only in 17.4, and even there VP9
+    // is software-decoded, so a 720p landing video painted its first frame and
+    // then stalled forever. H.264 Main is hardware-decoded on every phone still
+    // in use. Landing pages are mostly opened on mobile, so this is the whole
+    // ballgame — bitrate tuning matters far less than picking a codec the
+    // device can actually decode.
+    //
+    // -movflags +faststart is what makes playback *start*: it moves the moov
+    // atom to the front so the browser can begin after the first few KB instead
+    // of waiting on a byte range at the end of the file.
+    //
+    // -preset veryfast rather than ultrafast: ultrafast inflates the file badly
+    // for the same CRF, and upload latency is dominated by the visitor's
+    // network, not by our encode.
     const args = [
       '-y',
       '-i', inputPath,
-      '-c:v', 'libvpx-vp9',
+      '-c:v', 'libx264',
+      '-profile:v', 'main',
+      '-level', '4.0',
+      '-preset', 'veryfast',
+      '-crf', '28',
+      '-maxrate', '1200k',
+      '-bufsize', '2400k',
       '-pix_fmt', 'yuv420p',
-      '-deadline', 'realtime',
-      '-cpu-used', '8',
-      '-b:v', '1M',
-      '-maxrate', '1.2M',
-      '-bufsize', '2.4M',
+      // A keyframe every ~2s, so the player can start and seek without
+      // dragging in a long run of inter-frames first.
+      '-g', '60',
+      '-keyint_min', '60',
+      '-sc_threshold', '0',
       '-vf', 'scale=min(1280\\,iw):min(720\\,ih):force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2',
-      '-c:a', 'libopus',
-      '-b:a', '64k',
+      '-c:a', 'aac',
+      '-b:a', '96k',
+      '-ac', '2',
+      '-ar', '44100',
+      '-movflags', '+faststart',
       outputPath
     ];
 

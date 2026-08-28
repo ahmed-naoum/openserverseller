@@ -57,7 +57,10 @@ export const BUTTON_RUNTIME = `
             var bytes = new TextEncoder().encode(raw);
             var binary = '';
             for (var j = 0; j < bytes.length; j++) binary += String.fromCharCode(bytes[j]);
-            var token = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            // Doubled backslashes: this runtime is a template literal, so a
+            // single \\+ is consumed as an escape and emits /+/g -- an invalid
+            // regex that killed the parse of this entire script on every page.
+            var token = btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
             var sep = href.indexOf('?') >= 0 ? '&' : '?';
             href = href + sep + '_s=' + encodeURIComponent(token);
           } catch (_) {}

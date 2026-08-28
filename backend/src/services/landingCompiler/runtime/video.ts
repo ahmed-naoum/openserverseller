@@ -26,6 +26,33 @@ export const VIDEO_RUNTIME = `
     function showSpinner(on) { if (spin) spin.classList.toggle('on', !!on); }
     function showUnmute(on) { if (unmute) unmute.classList.toggle('on', !!on); }
 
+    // An autoplay video ships without the controls attribute, because the
+    // unmute overlay is supposed to take over the moment playback begins. When
+    // playback never begins -- a rejected play(), a codec the device cannot
+    // decode, a stalled network -- that left a spinner turning over a dead
+    // player with nothing to tap. Giving the controls back is the only exit.
+    var recovered = false;
+    function recover() {
+      if (recovered) return;
+      recovered = true;
+      showSpinner(false);
+      showUnmute(false);
+      v.controls = true;
+    }
+
+    // Only armed once we actually start fetching, and cleared as soon as a
+    // frame is shown, so a slow connection that eventually plays is unaffected.
+    var stallTimer = null;
+    function watch() {
+      if (stallTimer) clearTimeout(stallTimer);
+      stallTimer = setTimeout(recover, 8000);
+    }
+    function settled() {
+      if (stallTimer) { clearTimeout(stallTimer); stallTimer = null; }
+    }
+
+    v.addEventListener('error', recover);
+
     // The spinner starts hidden in CSS so a JS-less visitor never sees one that
     // cannot resolve; it is turned on here only once JS is known to be running.
     showSpinner(true);
@@ -35,6 +62,7 @@ export const VIDEO_RUNTIME = `
 
     function started() {
       playing = true;
+      settled();
       showSpinner(false);
       // The overlay only appears once playback is actually under way; showing it
       // over a still-buffering video invites a tap that does nothing.
@@ -51,7 +79,7 @@ export const VIDEO_RUNTIME = `
     });
 
     v.addEventListener('timeupdate', function(){
-      if (v.currentTime > 0) showSpinner(false);
+      if (v.currentTime > 0) { settled(); showSpinner(false); }
       try {
         window.dispatchEvent(new CustomEvent('video-time-update', {
           detail: { currentTime: v.currentTime }
@@ -87,9 +115,13 @@ export const VIDEO_RUNTIME = `
       v.preload = 'auto';
       // preload alone does not commit the browser to fetching; load() does.
       if (fetch) { try { v.load(); } catch (e) {} }
+      if (fetch) watch();
       if (fetch && wanted) {
         var p = v.play();
-        if (p && p.catch) p.catch(function(){});
+        // A rejection here is the common case on mobile -- a blocked autoplay,
+        // or a codec the device declined -- and swallowing it was what left the
+        // spinner turning with no way forward.
+        if (p && p.catch) p.catch(recover);
       }
     }
 

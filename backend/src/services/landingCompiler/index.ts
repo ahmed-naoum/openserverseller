@@ -36,7 +36,11 @@ const prisma = new PrismaClient();
 //     land with a null packQuantity and cost one unit of stock no matter which
 //     pack the customer picked, and they resolve their price by string-matching a
 //     name instead of by id.
-export const COMPILER_VERSION = 12;
+// 13: the video runtime recovers instead of spinning forever. A stored 12 row
+//     keeps the old runtime, where a rejected play() or an undecodable file left
+//     the buffering spinner turning over an autoplay video that ships without
+//     controls -- nothing to tap, no way to start it.
+export const COMPILER_VERSION = 13;
 
 /**
  * Block types the compiler can render, derived from the renderer registry.
