@@ -270,7 +270,11 @@ describe('express_checkout', () => {
     const cfg = JSON.parse(
       html.match(/<script type="application\/json">(.*?)<\/script>/s)![1]
     );
-    expect(cfg.thankYouUrl).toBe('/thank-you');
+    // The per-link page, not the shared one — it falls back to the default when
+    // the seller has not built a custom thank-you page. The '/thank-you'
+    // segment must survive: the lead signal in index.ts matches on it.
+    expect(cfg.thankYouUrl).toBe('/r/CODE1/thank-you');
+    expect(cfg.thankYouUrl).toContain('/thank-you');
     // A delay is required, not cosmetic: the conversion pixels fire immediately
     // before this and a real navigation cancels requests still in flight.
     expect(cfg.thankYouDelayMs).toBeGreaterThan(0);

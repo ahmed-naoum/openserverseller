@@ -115,6 +115,7 @@ import PublicMarketplace from './pages/marketplace/PublicMarketplace';
 const ProductDetail = lazy(() => import('./pages/marketplace/ProductDetail'));
 const ReferralForm = lazy(() => import('./pages/public/ReferralForm'));
 const ThankYouPage = lazy(() => import('./pages/public/ThankYouPage'));
+const ReferralThankYouPage = lazy(() => import('./pages/public/ReferralThankYouPage'));
 import PendingVerificationPage from './pages/auth/PendingVerificationPage';
 import EmailVerificationPage from './pages/auth/EmailVerificationPage';
 import CompleteRegisterGoogle from './pages/auth/CompleteRegisterGoogle';
@@ -371,6 +372,19 @@ function App() {
               </div>
             }>
               <ReferralForm />
+            </Suspense>
+          } />
+          {/* Per-link thank-you page. The path keeps the '/thank-you' segment on
+              purpose: the analytics lead signal in backend/src/index.ts matches
+              on `path.includes('/thank-you')`, and moving off it would silently
+              stop counting conversions. */}
+          <Route path="/r/:code/thank-you" element={
+            <Suspense fallback={
+              <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+                <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            }>
+              <ReferralThankYouPage />
             </Suspense>
           } />
           <Route path="/thank-you" element={

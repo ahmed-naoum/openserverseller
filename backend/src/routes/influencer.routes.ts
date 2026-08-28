@@ -552,9 +552,79 @@ router.get(
         },
         influencerName: link.influencer.profile?.fullName,
         influencerAvatar: link.influencer.profile?.avatarUrl,
-        landingPage: targetLink.landingPage,
+        // `thankYouStructure` is stripped: it can be a full second page, and the
+        // landing payload is the ad-critical one. The thank-you page is reached
+        // by a full document load anyway (the compiled checkout does
+        // location.replace), so it fetches its own data from
+        // GET /links/:code/thank-you rather than riding along here.
+        landingPage: targetLink.landingPage
+          ? { ...targetLink.landingPage, thankYouStructure: undefined }
+          : targetLink.landingPage,
         pixels: link.influencer.pixels || []
       }
+    });
+  })
+);
+
+/**
+ * The custom thank-you page for a link, or null when the seller has not built one.
+ *
+ * Public and unauthenticated, exactly like the landing-page endpoint above: it is
+ * fetched by the buyer's browser after the order is placed, on a page that has no
+ * session. Deliberately NOT cloaked — the visitor has already ordered, so every
+ * audience rule has been applied and passed on the way in, and re-running them
+ * here could only strand a real customer who just paid.
+ *
+ * Returns the theme and product alongside the blocks so the page can be branded
+ * and show what was bought without a second round trip.
+ */
+router.get(
+  '/links/:code/thank-you',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { code } = req.params;
+
+    const link = await (prisma as any).referralLink.findUnique({
+      where: { code: code as string },
+      include: {
+        product: { include: { images: { where: { isPrimary: true }, take: 1 } } },
+        influencer: { include: { profile: true, pixels: true } },
+        landingPage: {
+          select: { themeColor: true, thankYouStructure: true },
+        },
+      },
+    });
+
+    if (!link || !link.isActive) {
+      throw new AppException(404, 'Referral link not found or inactive');
+    }
+
+    // Same host binding as the landing endpoint: a link may only be read on the
+    // host it belongs to, so one seller's page cannot be framed under another's.
+    if (!validateInfluencerSubdomain(req, link.influencer.subdomain, link.influencer.customDomain)) {
+      throw new AppException(404, 'Referral link not found or inactive');
+    }
+
+    res.json({
+      status: 'success',
+      data: {
+        code: link.code,
+        themeColor: link.landingPage?.themeColor || '#f97316',
+        // null means the seller never built one — the client falls back to the
+        // shared default page rather than rendering an empty screen.
+        thankYouStructure: link.landingPage?.thankYouStructure ?? null,
+        product: link.product
+          ? {
+              id: link.product.id,
+              nameFr: link.product.nameFr,
+              nameAr: link.product.nameAr,
+              retailPriceMad: link.product.retailPriceMad,
+              image: link.product.images?.[0]?.url || null,
+            }
+          : null,
+        influencerName: link.influencer.profile?.fullName || null,
+        influencerAvatar: link.influencer.profile?.avatarUrl || null,
+        pixels: link.influencer.pixels || [],
+      },
     });
   })
 );
@@ -843,8 +913,13 @@ router.delete(
     });
     const linkIds = influencerLinks.map(l => l.id);
 
+    // Ownership mirrors the /customers list (buildCustomerWhere): a lead is the
+    // account's whether it arrived through one of their referral links OR it is
+    // directly owned via vendorId. WhatsApp-promoted, manually-inserted and
+    // sheet-imported leads carry no referralLinkId, so a referralLinkId-only
+    // filter reported them as "not yours" even though the list shows them.
     const lead = await prisma.lead.findFirst({
-      where: { id: leadId, referralLinkId: { in: linkIds } }
+      where: { id: leadId, OR: [{ vendorId: userId }, { referralLinkId: { in: linkIds } }] }
     });
 
     if (!lead) {
@@ -894,12 +969,15 @@ router.post(
     });
     const linkIds = influencerLinks.map(l => l.id);
 
-    // Verify all leads belong to this influencer and are in eligible status (LEAD or NEW)
-    // We only allow deleting leads that haven't been pushed or are still "NEW"
+    // Verify all leads belong to this account and are in eligible status (LEAD or NEW)
+    // We only allow deleting leads that haven't been pushed or are still "NEW".
+    // Ownership mirrors the single delete and the /customers list: referral-link
+    // leads OR leads directly owned via vendorId (WhatsApp, manual, sheet import),
+    // which have no referralLinkId and were otherwise undeletable in bulk too.
     const leads = await prisma.lead.findMany({
-      where: { 
-        id: { in: leadIds }, 
-        referralLinkId: { in: linkIds },
+      where: {
+        id: { in: leadIds },
+        OR: [{ vendorId: userId }, { referralLinkId: { in: linkIds } }],
         status: { in: ['NEW', 'LEAD'] }
       }
     });
@@ -1775,7 +1853,12 @@ router.get(
         customerAddress: lead.address,
         status: (lead as any).order?.status || (lead.status === 'NEW' ? 'LEAD' : lead.status),
         productVariant: lead.productVariant,
-        totalAmountMad: (lead as any).order?.totalAmountMad || lead.requestedPriceMad || 0,
+        // An order-less lead has no order total. Prefer the price the agent
+        // confirmed with the customer — WhatsApp promotion sets
+        // Lead.confirmedPriceMad from the collected draft — then a
+        // customer-requested price, so the Montant column is not blank for a
+        // lead (WhatsApp / manual / sheet) that never became an order.
+        totalAmountMad: (lead as any).order?.totalAmountMad || lead.confirmedPriceMad || lead.requestedPriceMad || 0,
         coliatyPackageCode: (lead as any).order?.coliatyPackageCode,
         coliatyPackageId: (lead as any).order?.coliatyPackageId,
         statusHistory: summaryOnly ? [] : ((lead as any).order?.statusHistory || []),
@@ -2069,6 +2152,7 @@ router.get(
         referralLinkId: true,
         themeColor: true,
         title: true,
+        thankYouStructure: true,
         description: true,
         buttonText: true,
         customStructure: true,
@@ -2205,7 +2289,7 @@ router.put(
     const userId = req.user!.id;
     const linkId = parseInt(String(req.params.id));
     await assertLinkInScope(req, linkId);
-    const { themeColor, title, description, buttonText, customStructure } = req.body;
+    const { themeColor, title, description, buttonText, customStructure, thankYouStructure } = req.body;
 
     const link = await (prisma as any).referralLink.findUnique({
       where: { id: linkId }
@@ -2239,8 +2323,12 @@ router.put(
 
     const landingPage = await (prisma as any).referralLinkLandingPage.upsert({
       where: { referralLinkId: linkId },
-      update: { themeColor, title, description, buttonText, customStructure },
-      create: { referralLinkId: linkId, themeColor, title, description, buttonText, customStructure }
+      // `thankYouStructure` is omitted by every caller that only edits the
+      // landing page, and Prisma treats `undefined` as "leave alone" — so a
+      // normal save cannot wipe the thank-you page. An explicit `null` does
+      // clear it, which is how the builder resets to the shared default page.
+      update: { themeColor, title, description, buttonText, customStructure, thankYouStructure },
+      create: { referralLinkId: linkId, themeColor, title, description, buttonText, customStructure, thankYouStructure }
     });
 
     // The stored HTML now describes the previous version of this page. Clearing

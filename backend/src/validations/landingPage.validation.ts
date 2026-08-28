@@ -114,6 +114,35 @@ const structureSchema = z
     }
   });
 
+/**
+ * Block types that make no sense after the order is already placed.
+ *
+ * `express_checkout` would render a second, live order form on the thank-you
+ * page. Its absence also matters to two other blocks: a button with
+ * `behavior: 'checkout'` and a products card both scroll to the DOM id
+ * `#express-checkout-block` (BlockRenderer.tsx:264, :436), so on a page without
+ * one they are silent no-ops. Rejecting it at save time is clearer than
+ * rendering something broken.
+ *
+ * `products` is deliberately NOT blocked — an upsell after purchase is a real
+ * use case, and its cards link out rather than requiring a local checkout.
+ */
+const THANKYOU_DISALLOWED_TYPES = new Set(['express_checkout']);
+
+const thankYouStructureSchema = structureSchema.superRefine((value, ctx) => {
+  const blocks = Array.isArray(value) ? value : value?.blocks;
+  if (!Array.isArray(blocks)) return;
+  for (const block of blocks) {
+    const type = (block as any)?.type;
+    if (typeof type === 'string' && THANKYOU_DISALLOWED_TYPES.has(type)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `a thank-you page cannot contain a "${type}" block`,
+      });
+    }
+  }
+});
+
 export const landingPageUpdateSchema = z.object({
   // Constrained because it reaches a <style> block, where there is no attribute
   // boundary to escape. The compiler re-checks with an allow-list at output.
@@ -125,6 +154,12 @@ export const landingPageUpdateSchema = z.object({
   description: z.string().max(2000).optional().nullable(),
   buttonText: z.string().max(120).optional(),
   customStructure: structureSchema.optional().nullable(),
+  // Same schema, so the thank-you page gets the identical block guards: the id
+  // pattern, the type enum, the block cap, the depth limit and its own 512 KB
+  // budget. This is the reason it is a sibling column rather than a key inside
+  // customStructure — nested under `settings` it would have inherited
+  // `z.record(z.unknown())` and been validated by nothing at all.
+  thankYouStructure: thankYouStructureSchema.optional().nullable(),
 });
 
 export type LandingPageUpdate = z.infer<typeof landingPageUpdateSchema>;

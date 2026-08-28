@@ -120,20 +120,20 @@ model User {
   // grant: an admin turns it off for one account that abused it, which also
   // releases the domain on Cloudflare (admin.routes.ts). Nothing has to be
   // turned on for a new seller.
-  customDomainEnabled Boolean @default(true)
-  customDomain        String? @unique
-  customDomainStatus  String  @default("NONE") // NONE, PENDING, ACTIVE, FAILED
-  customDomainCfId    String? // Cloudflare custom hostname ID
+  customDomainEnabled     Boolean @default(true)
+  customDomain            String? @unique
+  customDomainStatus      String  @default("NONE") // NONE, PENDING, ACTIVE, FAILED
+  customDomainCfId        String? // Cloudflare custom hostname ID
   // The domain a vendor has asked for but not yet proven they own. Deliberately
   // NOT unique: until ownership is proven a request must not be able to squat
   // the `customDomain` slot and lock the real owner out forever.
-  customDomainPending String?
+  customDomainPending     String?
   // Random token the vendor publishes at `_silacod-verify.<domain>` as a TXT
   // record. Checked before we claim the domain or call Cloudflare.
   customDomainVerifyToken String?
   // Last DNS or Cloudflare failure, in French, so the vendor is told why a
   // connection is stuck instead of staring at PENDING forever.
-  customDomainError   String?
+  customDomainError       String?
 
   isActive        Boolean   @default(false)
   kycStatus       String    @default("PENDING")
@@ -246,6 +246,14 @@ model User {
   // compares this against OUTBOUND_COLUMNS.length and widens in place once.
   // Null means "never recorded", i.e. connected before this was tracked.
   googleSheetOutHeaderCols    Int?
+  // Which outbound columns the seller chose to send, as a JSON array of column
+  // KEYS (see OUTBOUND_COLUMN_DEFS in googleSheetsWriter.ts) in the platform's
+  // canonical order — e.g. ["date","leadId","client","phone"]. Null means "all
+  // columns", the default and the pre-selection behaviour. `date` and `leadId`
+  // are always included whatever this holds: Lead ID must stay at column B for
+  // reconciliation (readSheetLeadIds) to find it, so both leading columns are
+  // pinned and never removable.
+  googleSheetOutColumns       String?
 
   // WhatsApp AI agent. Same two-column shape as googleSheetsOutbound* above:
   // `whatsappAgentEnabled` is the admin-set entitlement that AI credits are
@@ -957,19 +965,19 @@ model SheetCreditAccount {
 }
 
 model SheetCreditTransaction {
-  id           Int                @id @default(autoincrement())
-  accountId    Int
-  account      SheetCreditAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  type         String // GRANT, CONSUME, ADMIN_DEBIT, REFUND
-  amount       Int // signed: +n on a grant, -1 on a consume
-  balanceAfter Int
-  description  String?
+  id             Int                @id @default(autoincrement())
+  accountId      Int
+  account        SheetCreditAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  type           String // GRANT, CONSUME, ADMIN_DEBIT, REFUND
+  amount         Int // signed: +n on a grant, -1 on a consume
+  balanceAfter   Int
+  description    String?
   // THE double-charge guard, and the whole reason this column exists: one CONSUME
   // row per lead, enforced by Postgres rather than by application logic — the same
   // device as AgentInvoiceItem.leadId. Grants carry NULL here, and Postgres allows
   // many NULLs under a unique index, so they are unaffected.
-  leadId       Int?               @unique
-  lead         Lead?              @relation("SheetCreditCharge", fields: [leadId], references: [id], onDelete: SetNull)
+  leadId         Int?               @unique
+  lead           Lead?              @relation("SheetCreditCharge", fields: [leadId], references: [id], onDelete: SetNull)
   // Set when the row was covered by a monthly pack instead of by the cents
   // balance. Such a row carries `amount: 0` — the lead was paid for by the
   // subscription, not by the balance — so this column is the ONLY thing that
@@ -980,8 +988,8 @@ model SheetCreditTransaction {
   subscriptionId Int?
   subscription   SheetSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
 
-  createdBy    Int?
-  createdAt    DateTime           @default(now())
+  createdBy Int?
+  createdAt DateTime @default(now())
 
   // `balanceAfter` is a running snapshot rather than just a delta because panels
   // read closing balances off the column instead of replaying the ledger — the
@@ -1001,23 +1009,23 @@ model SheetCreditTransaction {
 /// `SheetSubscription` snapshots `priceCents` and `leadQuota` at approval, so
 /// editing a plan never rewrites what an already-running subscription owes or gets.
 model SheetPlan {
-  id         Int     @id @default(autoincrement())
+  id          Int     @id @default(autoincrement())
   /// Stable identifier used by the seeder and by anything that has to name one
   /// specific plan. The display name is free to change; this is not.
-  code       String  @unique
-  name       String
+  code        String  @unique
+  name        String
   /// What the pack costs per period, in CENTS — same unit as every other amount
   /// in this file. $30 is 3000.
-  priceCents Int
+  priceCents  Int
   /// Leads the pack covers per period. Consumed leads draw from here BEFORE the
   /// cents balance, and the counter resets to zero on each renewal.
-  leadQuota  Int
+  leadQuota   Int
   /// Period length. 30 days rather than a calendar month so a subscription
   /// approved on the 31st has an unambiguous end date.
-  periodDays Int     @default(30)
+  periodDays  Int     @default(30)
   /// Hidden from the seller's picker. Never deleted: subscriptions point here.
-  active     Boolean @default(true)
-  sortOrder  Int     @default(0)
+  active      Boolean @default(true)
+  sortOrder   Int     @default(0)
   /// Shown under the price in the picker.
   description String?
   /// Accent colour for this pack's card, as `#rrggbb`. NULL means "use the
@@ -1047,9 +1055,9 @@ model SheetPlan {
 /// `leadsUsed` is the whole billing state — it resets by a NEW row on renewal, not
 /// by zeroing this one, so last month's consumption stays readable.
 model SheetSubscription {
-  id     Int  @id @default(autoincrement())
+  id     Int       @id @default(autoincrement())
   userId Int
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   planId Int
   plan   SheetPlan @relation(fields: [planId], references: [id])
 
@@ -1477,8 +1485,26 @@ model ReferralLinkLandingPage {
   buttonText      String  @default("Commander Maintenant")
   customStructure Json? // For flexible sitebuilder blocks (features, faqs, etc.)
 
+  // The post-order page served at /r/:code/thank-you, same { blocks, settings }
+  // shape as customStructure.
+  //
+  // Its OWN column rather than a key inside customStructure, deliberately. The
+  // block guards in landingPage.validation.ts only inspect the top-level
+  // `blocks` array — `settings` is `z.record(z.unknown())` behind a
+  // `.passthrough()`, so a block tree nested there would reach the HTML
+  // generator with no id-pattern check, no type enum and no block cap. A
+  // sibling column gets the same validation pass as the landing page, its own
+  // 512 KB budget, and its own depth measurement (nesting would have put a
+  // normal checkout option leaf at exactly MAX_DEPTH). It also works for the
+  // legacy bare-array rows, which have no `settings` object to nest under.
+  //
+  // Null means "no custom page" and the shared default at /thank-you is used,
+  // so every existing link keeps working untouched.
+  thankYouStructure Json?
+
   // Whether /r/:code may serve pre-compiled HTML for this link. Small enough to
   // live here; the compiled bytes themselves are in ReferralLinkCompiledPage.
+  // Applies to the landing page only — the thank-you page is served by the SPA.
   ssgEnabled Boolean @default(true)
 
   createdAt DateTime @default(now())

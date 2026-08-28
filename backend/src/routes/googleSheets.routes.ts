@@ -12,13 +12,17 @@ import { fetchAllInBatches } from '../lib/pagination.js';
 const SHEET_LEADS_HARD_CAP = 20000;
 import {
   DEFAULT_TAB,
-  OUTBOUND_COLUMNS,
+  OUTBOUND_COLUMN_DEFS,
+  LOCKED_OUTBOUND_KEYS,
   appendRows,
   applyHeaderTemplate,
   buildLeadRow,
   ensureSheetReady,
   getServiceAccountEmail,
   isWriterConfigured,
+  outboundLabels,
+  parseOutboundSelection,
+  resolveOutboundColumns,
 } from '../services/googleSheetsWriter.js';
 import { getCreditBalance, pushLeadsNow, reconcileVendorSheet } from '../services/sheetPush.service.js';
 import { maskingVendorId } from '../lib/leadMasking.js';
@@ -838,6 +842,7 @@ async function buildOutboundStatus(vendorId: number) {
       googleSheetOutConnectedAt: true,
       googleSheetOutLastError: true,
       googleSheetOutLastErrorAt: true,
+      googleSheetOutColumns: true,
     },
   });
 
@@ -869,6 +874,19 @@ async function buildOutboundStatus(vendorId: number) {
   // account with no gate reads back active:false and zeros.
   const gate = await getGateStats(vendorId);
 
+  // The seller's chosen columns. `selectedKeys` null = every column (the default).
+  // `columns` is the preview the panel draws; `columnOptions` is the full toggle list
+  // with each column's locked state and whether it is currently on.
+  const selectedKeys = parseOutboundSelection(vendor?.googleSheetOutColumns);
+  const resolvedColumns = resolveOutboundColumns(selectedKeys);
+  const selectedKeySet = new Set(resolvedColumns.map((c) => c.key));
+  const columnOptions = OUTBOUND_COLUMN_DEFS.map((c) => ({
+    key: c.key,
+    label: c.label,
+    locked: !!c.locked,
+    selected: selectedKeySet.has(c.key),
+  }));
+
   return {
     enabled: !!vendor?.googleSheetsOutboundEnabled,
     configured: isWriterConfigured(),
@@ -884,8 +902,11 @@ async function buildOutboundStatus(vendorId: number) {
     // The share instructions in the UI name this address verbatim.
     serviceAccountEmail: getServiceAccountEmail(),
     // The column contract, so the panel can preview the template without keeping
-    // its own copy of the 11 names — they would drift the day one is renamed.
-    columns: OUTBOUND_COLUMNS,
+    // its own copy of the names — they would drift the day one is renamed. `columns`
+    // is what will actually be written (the seller's selection); `columnOptions` is
+    // the toggle list the panel renders to change it.
+    columns: outboundLabels(resolvedColumns),
+    columnOptions,
     // Left exactly as it was: the panel and the admin screens already read it, and
     // `gate` is added beside it rather than folded into it.
     credits: { balance: await getCreditBalance(vendorId) },
@@ -936,6 +957,7 @@ router.post(
         googleSheetsOutboundEnabled: true,
         googleSheetId: true,
         googleSheetSyncActive: true,
+        googleSheetOutColumns: true,
       },
     });
 
@@ -996,9 +1018,14 @@ router.post(
     }
     const finalTab = cleanTab || DEFAULT_TAB;
 
+    // Carry the seller's existing column choice onto the new sheet, so reconnecting
+    // does not silently reset them to all columns. Null selection = all (the default).
+    const connectColumns = resolveOutboundColumns(parseOutboundSelection(vendor.googleSheetOutColumns));
+    const connectLabels = outboundLabels(connectColumns);
+
     // A real write probe: it creates the tab and the header row, so a sheet that
     // is only shared read-only fails here rather than silently later.
-    const result = await ensureSheetReady(resolvedId, finalTab);
+    const result = await ensureSheetReady(resolvedId, finalTab, connectLabels);
     if (!result.ok) {
       res.status(400).json({
         success: false,
@@ -1025,9 +1052,9 @@ router.post(
         googleSheetOutConnectedAt: new Date(),
         googleSheetOutLastError: null,
         googleSheetOutLastErrorAt: null,
-        // ensureSheetReady has just written (or verified) a full-width header, so
-        // record the width and spare the drain a widen it does not need.
-        googleSheetOutHeaderCols: OUTBOUND_COLUMNS.length,
+        // ensureSheetReady has just written (or verified) the header at the seller's
+        // selected width, so record it and spare the drain a re-apply it does not need.
+        googleSheetOutHeaderCols: connectLabels.length,
         // googleSheetOutAuto is deliberately untouched: the admin may have
         // pre-seeded it, and connecting a sheet is not consent to auto-push.
       },
@@ -1146,6 +1173,7 @@ router.post(
         googleSheetsOutboundEnabled: true,
         googleSheetOutId: true,
         googleSheetOutTab: true,
+        googleSheetOutColumns: true,
       },
     });
 
@@ -1164,7 +1192,9 @@ router.post(
 
     // A test row costs ZERO credits: it is not a lead, no SheetPushJob is created
     // and chargeCredits is never reached. Sellers must be able to verify the
-    // connection as often as they like without paying for it.
+    // connection as often as they like without paying for it. Built at the seller's
+    // selected width so the test row lands under the same columns their leads will.
+    const testColumns = resolveOutboundColumns(parseOutboundSelection(vendor.googleSheetOutColumns));
     const row = buildLeadRow({
       id: 0,
       fullName: 'SILACOD — Test',
@@ -1173,7 +1203,7 @@ router.post(
       address: '-',
       source: 'TEST',
       status: 'TEST',
-    });
+    }, testColumns);
 
     const result = await appendRows(vendor.googleSheetOutId, vendor.googleSheetOutTab || DEFAULT_TAB, [row]);
 
@@ -1221,6 +1251,7 @@ router.post(
         googleSheetsOutboundEnabled: true,
         googleSheetOutId: true,
         googleSheetOutTab: true,
+        googleSheetOutColumns: true,
       },
     });
 
@@ -1240,7 +1271,13 @@ router.post(
     // Formatting costs ZERO credits, exactly like the test row above: no lead row
     // is written, no SheetPushJob is created and chargeCredits is never reached.
     // Sellers must be able to tidy their sheet as often as they like for free.
-    const result = await applyHeaderTemplate(vendor.googleSheetOutId, vendor.googleSheetOutTab || DEFAULT_TAB);
+    // Applied at the seller's selected width.
+    const headerLabels = outboundLabels(resolveOutboundColumns(parseOutboundSelection(vendor.googleSheetOutColumns)));
+    const result = await applyHeaderTemplate(
+      vendor.googleSheetOutId,
+      vendor.googleSheetOutTab || DEFAULT_TAB,
+      headerLabels
+    );
 
     if (!result.ok) {
       res.status(400).json({
@@ -1260,7 +1297,7 @@ router.post(
         googleSheetOutLastError: null,
         googleSheetOutLastErrorAt: null,
         // Same reason as /outbound/connect: the header is now the current width.
-        googleSheetOutHeaderCols: OUTBOUND_COLUMNS.length,
+        googleSheetOutHeaderCols: headerLabels.length,
       },
     });
 
@@ -1270,6 +1307,114 @@ router.post(
         ? 'En-tête ajouté et mis en forme en haut de votre feuille. Aucun crédit n\'a été utilisé.'
         : 'Mise en forme actualisée : en-tête figé, filtre et colonnes ajustées. Aucun crédit n\'a été utilisé.',
       data: { headerInserted: !!result.headerInserted },
+    });
+  })
+);
+
+/**
+ * POST /api/v1/google-sheets/outbound/columns
+ * Saves which columns the seller sends to their sheet, then re-writes the header to
+ * match. `date` and `leadId` are always kept whatever the body says — Lead ID must
+ * stay at column B for reconciliation. The selection is normalised to canonical order
+ * server-side, so the stored value never depends on the order the panel sent.
+ *
+ * Costs ZERO credits: no lead row is written and no SheetPushJob is created.
+ */
+router.post(
+  '/outbound/columns',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const vendorId = req.user?.id;
+    if (!vendorId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const vendor = await prisma.user.findUnique({
+      where: { id: vendorId },
+      select: {
+        googleSheetsOutboundEnabled: true,
+        googleSheetOutId: true,
+        googleSheetOutTab: true,
+      },
+    });
+
+    if (!vendor?.googleSheetsOutboundEnabled) {
+      res.status(403).json({ success: false, message: OUTBOUND_NOT_ENABLED });
+      return;
+    }
+
+    const raw = (req.body || {}).columns;
+    if (!Array.isArray(raw)) {
+      res.status(400).json({ success: false, message: 'Le champ « columns » doit être une liste de clés.' });
+      return;
+    }
+
+    // Keep only real keys, add the locked ones, drop everything else. resolveOutboundColumns
+    // then puts them back in canonical order, so the stored selection is normalised and
+    // order-independent, and always includes date + leadId.
+    const validKeys = new Set(OUTBOUND_COLUMN_DEFS.map((c) => c.key));
+    const requested = raw.map((k: any) => String(k)).filter((k: string) => validKeys.has(k));
+    const withLocked = Array.from(new Set([...LOCKED_OUTBOUND_KEYS, ...requested]));
+    const resolved = resolveOutboundColumns(withLocked);
+    const orderedKeys = resolved.map((c) => c.key);
+    const labels = outboundLabels(resolved);
+
+    // Store null when every column is selected, so "all" stays the default shape and
+    // a newly-added platform column is picked up automatically by such sellers.
+    const isAll = orderedKeys.length === OUTBOUND_COLUMN_DEFS.length;
+    const stored = isAll ? null : JSON.stringify(orderedKeys);
+
+    // Persist first so the choice sticks even if the sheet write fails (revoked
+    // access, etc.); the drain and the next setup-header will reconcile the header.
+    await prisma.user.update({
+      where: { id: vendorId },
+      data: { googleSheetOutColumns: stored },
+    });
+
+    // Re-apply the header immediately when connected, so the sheet matches the new
+    // choice without waiting for the next lead. A failure here is surfaced but does
+    // not undo the saved selection.
+    let headerApplied = false;
+    let headerError: string | null = null;
+    if (vendor.googleSheetOutId) {
+      try {
+        const result = await applyHeaderTemplate(
+          vendor.googleSheetOutId,
+          vendor.googleSheetOutTab || DEFAULT_TAB,
+          labels
+        );
+        if (result.ok) {
+          headerApplied = true;
+          await prisma.user.update({
+            where: { id: vendorId },
+            data: {
+              googleSheetOutHeaderCols: labels.length,
+              googleSheetOutLastError: null,
+              googleSheetOutLastErrorAt: null,
+            },
+          });
+        } else {
+          headerError = result.error || null;
+        }
+      } catch (err: any) {
+        headerError = err?.message || null;
+      }
+    }
+
+    res.json({
+      success: true,
+      message: headerApplied
+        ? 'Colonnes mises à jour et en-tête appliqué. Aucun crédit n\'a été utilisé.'
+        : vendor.googleSheetOutId
+          ? 'Colonnes enregistrées. L\'en-tête sera mis à jour au prochain envoi.'
+          : 'Colonnes enregistrées.',
+      data: {
+        columns: labels,
+        selectedKeys: orderedKeys,
+        headerApplied,
+        headerError,
+      },
     });
   })
 );

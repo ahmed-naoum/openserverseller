@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import BlockRenderer from '../../components/helper/sitebuilder/BlockRenderer';
 import WhatsAppWidget from '../../components/public/WhatsAppWidget';
 import { getCloakingConfig, needsGeoLookup, resolveGeoCloakRedirect, resolveInstantCloakRedirect } from '../../utils/cloaking';
+import { writeOrderHandoff, thankYouPath } from '../../utils/orderHandoff';
 
 const getNoScriptUrl = (pixel: any) => {
   const platform = (pixel.platform || 'META').toUpperCase();
@@ -633,7 +634,7 @@ export default function ReferralForm() {
 
     try {
       setIsSubmitting(true);
-      await publicApi.submitReferralLead({
+      const submitRes: any = await publicApi.submitReferralLead({
         referralCode: code!,
         ...form,
         productVariant: selectedProductFromBlock
@@ -652,28 +653,29 @@ export default function ReferralForm() {
       // Mark the abandoned-checkout attempt as converted.
       socket?.emit('checkout:complete', { code });
 
-      // Track Conversion
-      if (activePixels.length > 0) {
-        activePixels.forEach((pixel: any) => {
-          if (typeof window === 'undefined') return;
-          const platform = (pixel.platform || 'META').toUpperCase();
-          const eventName = pixel.conversionEvent || 'Lead';
+      // Hand the order to the thank-you page, which is where the conversion
+      // event now fires — that page is only reachable after a real order, and
+      // it is the only place with the value to attach. Written before we
+      // navigate so it is present however the browser gets there.
+      const submitBody = submitRes?.data?.status === 'success' ? submitRes.data.data : submitRes?.data;
+      const unitPrice = Number(selectedOption?.price ?? data?.product?.retailPriceMad);
+      writeOrderHandoff({
+        code: code!,
+        orderId: submitBody?.id ?? submitBody?.leadId ?? null,
+        fullName: form.fullName,
+        city: form.city,
+        variantName: selectedOption?.name ?? null,
+        // Deliberately the unit/pack price as displayed, never multiplied by
+        // quantity — packQuantityOf's note applies here too.
+        price: Number.isFinite(unitPrice) ? unitPrice : null,
+        currency: 'MAD',
+        productName:
+          selectedProductFromBlock?.nameFr ||
+          data?.product?.nameFr ||
+          null,
+      });
 
-          if (platform === 'META' && (window as any).fbq) {
-            (window as any).fbq('track', eventName);
-          } else if (platform === 'GOOGLE' && (window as any).gtag) {
-            (window as any).gtag('event', eventName, { 'event_category': 'conversion' });
-          } else if (platform === 'TIKTOK' && (window as any).ttq) {
-            const ttEvent = eventName === 'Purchase' ? 'CompletePayment' : 'CompleteRegistration';
-            (window as any).ttq.track(ttEvent);
-          } else if (platform === 'SNAPCHAT' && (window as any).snaptr) {
-            const snapEvent = eventName === 'Purchase' ? 'PURCHASE' : 'SIGN_UP';
-            (window as any).snaptr('track', snapEvent);
-          }
-        });
-      }
-
-      navigate('/thank-you', { replace: true });
+      navigate(thankYouPath(code!), { replace: true });
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Une erreur est survenue');
     } finally {

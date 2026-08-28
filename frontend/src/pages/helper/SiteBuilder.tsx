@@ -102,6 +102,20 @@ export default function SiteBuilder() {
   /** Other pages by the same owner — options for a cloaking rule in `render` mode. */
   const [siblingPages, setSiblingPages] = useState<{ code: string; label: string }[]>([]);
 
+  // ── Canvas switching: landing page vs its thank-you page ──
+  //
+  // Only ONE canvas is live in `blocks`/`pageSettings` at a time, and the other
+  // waits in `stashRef`. That is deliberate: every block operation, the whole
+  // properties panel and undo/redo all read those two state variables directly,
+  // so swapping what they hold gives the thank-you page the entire builder for
+  // free, with no changes to any of it.
+  type Canvas = 'landing' | 'thankyou';
+  type CanvasState = { blocks: EditorBlock[]; settings: any };
+  const [activeCanvas, setActiveCanvas] = useState<Canvas>('landing');
+  const stashRef = useRef<Partial<Record<Canvas, CanvasState>>>({});
+  /** True once the seller has put anything on the thank-you canvas. */
+  const [hasThankYou, setHasThankYou] = useState(false);
+
   // ── Undo / Redo history ──
   type Snapshot = { blocks: EditorBlock[]; pageSettings: any };
   const historyRef = useRef<Snapshot[]>([]);
@@ -150,6 +164,48 @@ export default function SiteBuilder() {
     setCanUndo(historyIndexRef.current > 0);
     setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
   }, []);
+
+  /**
+   * Moves the editor to the other canvas.
+   *
+   * Stashes what is on screen, restores the target, and RESETS undo history.
+   * The history stack holds `{blocks, pageSettings}` snapshots with no idea
+   * which page they belong to, so carrying it across a switch would let Ctrl+Z
+   * on the thank-you page silently revert landing-page edits. Clearing is the
+   * honest behaviour until history is made per-canvas.
+   */
+  const switchCanvas = useCallback((target: Canvas) => {
+    setActiveCanvas((current) => {
+      if (current === target) return current;
+
+      stashRef.current[current] = {
+        blocks: JSON.parse(JSON.stringify(blocks)),
+        settings: JSON.parse(JSON.stringify(pageSettings)),
+      };
+
+      const incoming = stashRef.current[target];
+      // A thank-you canvas that has never been opened starts empty, not seeded
+      // with a template — an empty structure is what tells the public page to
+      // fall back to the shared default.
+      setBlocks(incoming ? incoming.blocks : []);
+      if (incoming) setPageSettings(incoming.settings);
+
+      setSelectedBlockId(null);
+
+      historyRef.current = [];
+      historyIndexRef.current = -1;
+      skipHistoryRef.current = 0;
+      setCanUndo(false);
+      setCanRedo(false);
+
+      return target;
+    });
+  }, [blocks, pageSettings]);
+
+  // Keeps the tab badge honest as blocks are added or removed.
+  useEffect(() => {
+    if (activeCanvas === 'thankyou') setHasThankYou(blocks.length > 0);
+  }, [activeCanvas, blocks]);
 
   // Track changes with debounce to avoid spamming history on rapid typing
   const historyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -283,7 +339,22 @@ export default function SiteBuilder() {
     try {
       const res = await helperApi.getLandingPage(Number(id));
       const landingPage = res.data.status === 'success' ? res.data.data : res.data;
-      
+
+      // The thank-you canvas waits in the stash until the seller opens its tab.
+      // Null (never built) and an empty array are both "no custom page", and
+      // both leave the public route on the shared default.
+      const ty = landingPage?.thankYouStructure;
+      const tyBlocks: EditorBlock[] = Array.isArray(ty)
+        ? (ty as EditorBlock[])
+        : Array.isArray(ty?.blocks)
+          ? (ty.blocks as EditorBlock[])
+          : [];
+      stashRef.current.thankyou = {
+        blocks: tyBlocks,
+        settings: (!ty || Array.isArray(ty) ? null : ty.settings) || { backgroundColor: '#ffffff' },
+      };
+      setHasThankYou(tyBlocks.length > 0);
+
       if (landingPage?.customStructure) {
         // Handle new structure { blocks: [], settings: {} } or legacy structure []
         if (Array.isArray(landingPage.customStructure)) {
@@ -363,11 +434,25 @@ export default function SiteBuilder() {
   const handleSave = async () => {
     setSaving(true);
     try {
+      // Both canvases are saved every time, whichever one is on screen: the
+      // live one from state, the other from the stash. Saving only the visible
+      // canvas would silently discard the other's unsaved edits.
+      const live: CanvasState = { blocks, settings: pageSettings };
+      const landing = activeCanvas === 'landing' ? live : stashRef.current.landing;
+      const thankyou = activeCanvas === 'thankyou' ? live : stashRef.current.thankyou;
+
       const res: any = await helperApi.updateLandingPage(Number(id), {
         customStructure: {
-          blocks,
-          settings: pageSettings
-        }
+          blocks: landing?.blocks ?? blocks,
+          settings: landing?.settings ?? pageSettings
+        },
+        // An empty canvas is stored as null, not as an empty structure — that is
+        // what makes the public page fall back to the shared default rather than
+        // rendering a blank screen. Undefined would mean "leave alone", so an
+        // explicit null is required to let a seller delete their custom page.
+        thankYouStructure: thankyou && thankyou.blocks.length > 0
+          ? { blocks: thankyou.blocks, settings: thankyou.settings }
+          : null
       });
 
       // The save route compiles the page and reports what happened. Older
@@ -721,6 +806,38 @@ export default function SiteBuilder() {
             <span>✨ Essayer Démo Studio V2</span>
           </button>
         </div>
+        {/* Canvas tabs: the landing page and its thank-you page. Switching swaps
+            which structure `blocks`/`pageSettings` hold, so the whole editor —
+            palette, canvas and properties panel — serves both. */}
+        <div className="flex items-center bg-gray-100 rounded-xl p-0.5 mx-auto">
+          <button
+            type="button"
+            onClick={() => switchCanvas('landing')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeCanvas === 'landing'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Page de vente
+          </button>
+          <button
+            type="button"
+            onClick={() => switchCanvas('thankyou')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeCanvas === 'thankyou'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            title="La page affichée après une commande"
+          >
+            Page de remerciement
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${hasThankYou ? 'bg-emerald-500' : 'bg-gray-300'}`}
+              title={hasThankYou ? 'Page personnalisée active' : 'Page par défaut utilisée'}
+            />
+          </button>
+        </div>
         <div className="flex items-center gap-2">
           {/* Undo / Redo */}
           <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
@@ -744,7 +861,12 @@ export default function SiteBuilder() {
           <div className="w-px h-6 bg-gray-200" />
           {referralCode && (
             <button 
-              onClick={() => window.open(buildReferralUrl(referralCode, ownerSubdomain, ownerCustomDomain, ownerCustomDomainStatus), '_blank')}
+              onClick={() => {
+                const base = buildReferralUrl(referralCode, ownerSubdomain, ownerCustomDomain, ownerCustomDomainStatus);
+                // Preview whichever canvas is being edited. The thank-you page
+                // lives one segment down from the landing page.
+                window.open(activeCanvas === 'thankyou' ? `${base}/thank-you` : base, '_blank');
+              }}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
             >
               <ExternalLink className="w-4 h-4" />
@@ -769,6 +891,10 @@ export default function SiteBuilder() {
           <div className="p-4 border-b border-gray-100">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Composants</h3>
             <div className="space-y-2">
+              {/* text and hero have had full renderers and property panels all
+                  along but no way to insert them. A thank-you page is mostly
+                  words, so they matter most here. */}
+              <ToolButton fullWidth icon={<Type className="w-4 h-4 text-slate-500" />} label="Titre / Texte" onClick={() => addBlock('text')} />
               <ToolButton fullWidth icon={<ImageIcon className="w-4 h-4" />} label="Image" onClick={() => addBlock('image')} />
               <ToolButton fullWidth icon={<Layers className="w-4 h-4 text-purple-500" />} label="Slider / Carrousel" onClick={() => addBlock('slider')} />
               <ToolButton fullWidth icon={<ShoppingBag className="w-4 h-4 text-orange-500" />} label="Propositions Produits" onClick={() => addBlock('products')} />
@@ -776,16 +902,21 @@ export default function SiteBuilder() {
               <ToolButton fullWidth icon={<Video className="w-4 h-4 text-rose-500" />} label="Vidéo" onClick={() => addBlock('video')} />
             </div>
           </div>
-          
+
           <div className="p-4 border-b border-gray-100">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Conversion</h3>
             <div className="grid grid-cols-2 gap-2">
               <ToolButton icon={<LinkIcon className="w-4 h-4" />} label="Button" onClick={() => addBlock('button')} />
               <ToolButton icon={<MessageSquare className="w-4 h-4 text-emerald-500" />} label="WhatsApp" onClick={() => addBlock('whatsapp')} />
             </div>
-            <div className="mt-2">
-              <ToolButton fullWidth icon={<ShoppingCart className="w-4 h-4" />} label="Express Checkout" onClick={() => addBlock('express_checkout')} />
-            </div>
+            {/* Hidden on the thank-you canvas: the order is already placed, a
+                second live order form there is meaningless, and the save route
+                rejects it outright. */}
+            {activeCanvas === 'landing' && (
+              <div className="mt-2">
+                <ToolButton fullWidth icon={<ShoppingCart className="w-4 h-4" />} label="Express Checkout" onClick={() => addBlock('express_checkout')} />
+              </div>
+            )}
           </div>
         </div>
 

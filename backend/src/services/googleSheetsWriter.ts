@@ -52,22 +52,85 @@ export const DEFAULT_TAB = 'SILACOD Leads';
  * an inbound sync pointed at an outbound tab would read our own rows back in as
  * brand-new leads, and then delete them again on the next pass.
  */
-export const OUTBOUND_COLUMNS = [
-  'Date',
-  'Lead ID',
-  'Client',
-  'Téléphone',
-  'Ville',
-  'Adresse',
-  'Produit',
-  'Quantité',
-  'Prix (MAD)',
-  'Source',
-  'Statut',
+export interface OutboundColumn {
+  /** Stable identifier stored in the seller's selection; never localised or renamed. */
+  key: string;
+  /** Header text written to row 1 — the column contract sellers build formulas on. */
+  label: string;
+  /** A pinned column is always sent and cannot be toggled off (see below). */
+  locked?: boolean;
+}
+
+/**
+ * The canonical column set, in contract order.
+ *
+ * `date` and `leadId` are LOCKED: a seller may hide any OTHER column, but these two
+ * always lead the row, in this order. That is what keeps `Lead ID` at column B for
+ * every seller whatever else they hide — the one invariant `readSheetLeadIds` and
+ * `LEAD_ID_COLUMN` depend on. Because Lead ID never moves, per-seller column
+ * selection needs no data migration and can never strand a seller's lead history.
+ *
+ * Still APPEND-ONLY for new columns: a new one goes at the END. `LEAD_ID_COLUMN`
+ * is derived from a position here, and historic rows are read by that column, so
+ * inserting above Lead ID would make those rows answer text instead of an id.
+ */
+export const OUTBOUND_COLUMN_DEFS: OutboundColumn[] = [
+  { key: 'date', label: 'Date', locked: true },
+  { key: 'leadId', label: 'Lead ID', locked: true },
+  { key: 'client', label: 'Client' },
+  { key: 'phone', label: 'Téléphone' },
+  { key: 'city', label: 'Ville' },
+  { key: 'address', label: 'Adresse' },
+  { key: 'product', label: 'Produit' },
+  { key: 'quantity', label: 'Quantité' },
+  { key: 'price', label: 'Prix (MAD)' },
+  { key: 'source', label: 'Source' },
+  { key: 'status', label: 'Statut' },
   // The pack the customer picked on the landing page ("2 Pièces + 1 Gratuite"), on
   // its own rather than glued into Produit — see buildLeadRow.
-  'Variante',
+  { key: 'variant', label: 'Variante' },
 ];
+
+/** The full ordered label list. Back-compat for callers that want every column. */
+export const OUTBOUND_COLUMNS = OUTBOUND_COLUMN_DEFS.map((c) => c.label);
+
+/** Column keys that can never be removed from a seller's selection. */
+export const LOCKED_OUTBOUND_KEYS = OUTBOUND_COLUMN_DEFS.filter((c) => c.locked).map((c) => c.key);
+
+/**
+ * A seller's stored selection, resolved to ordered column defs.
+ *
+ * `selectedKeys` null/empty means "all columns" — the default and the behaviour
+ * before selection existed. Otherwise the result keeps the wanted keys PLUS every
+ * locked column (always, whatever the selection says), and always in the canonical
+ * order above rather than the order the keys arrived in. The result is therefore a
+ * subsequence of OUTBOUND_COLUMN_DEFS that always starts with date + leadId.
+ */
+export function resolveOutboundColumns(selectedKeys?: string[] | null): OutboundColumn[] {
+  if (!Array.isArray(selectedKeys) || selectedKeys.length === 0) return OUTBOUND_COLUMN_DEFS;
+  const wanted = new Set(selectedKeys);
+  return OUTBOUND_COLUMN_DEFS.filter((c) => c.locked || wanted.has(c.key));
+}
+
+/** Parses the stored JSON selection into keys, tolerating null / malformed values. */
+export function parseOutboundSelection(raw?: string | null): string[] | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    const keys = parsed
+      .map((k) => String(k))
+      .filter((k) => OUTBOUND_COLUMN_DEFS.some((c) => c.key === k));
+    return keys.length ? keys : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Header labels for a resolved column set. */
+export function outboundLabels(columns: OutboundColumn[]): string[] {
+  return columns.map((c) => c.label);
+}
 
 /**
  * A1 column letter for a zero-based index.
@@ -78,15 +141,20 @@ export const OUTBOUND_COLUMNS = [
  */
 const columnLetter = (index: number): string => String.fromCharCode('A'.charCodeAt(0) + index);
 
-/** Last column letter of OUTBOUND_COLUMNS — 12 columns → 'L'. */
-const LAST_COLUMN = columnLetter(OUTBOUND_COLUMNS.length - 1);
+/** Widest the contract can ever be — 12 columns → 'L'. Used when clearing stale
+ * header cells a shrunk selection left behind, and as the append span. */
+const CANONICAL_LAST_COLUMN = columnLetter(OUTBOUND_COLUMN_DEFS.length - 1);
+
+/** Last column letter for a specific (possibly narrowed) label set. */
+const lastColumnFor = (labels: string[]): string => columnLetter(Math.max(0, labels.length - 1));
 
 /**
- * Where the lead id lives — derived, never spelled 'B'. The column order above is
- * the single definition of the layout, so a reordering has to carry the readers
- * with it rather than silently making them read the wrong column.
+ * Where the lead id lives — derived, never spelled 'B'. Lead ID is a LOCKED column
+ * pinned at index 1, so this is 'B' for every seller regardless of what else they
+ * hide. That fixed position is exactly why column selection is safe: this reader
+ * never has to know a seller's layout.
  */
-const LEAD_ID_COLUMN = columnLetter(OUTBOUND_COLUMNS.indexOf('Lead ID'));
+const LEAD_ID_COLUMN = columnLetter(OUTBOUND_COLUMN_DEFS.findIndex((c) => c.key === 'leadId'));
 
 // ─── Result shape ────────────────────────────────────────────────────────────
 
@@ -362,8 +430,14 @@ export interface PushableLead {
   } | null;
 }
 
-/** Formats one lead as the cells of OUTBOUND_COLUMNS, in order. */
-export function buildLeadRow(lead: PushableLead): string[] {
+/**
+ * Formats one lead as sheet cells, in order, for the given columns.
+ *
+ * `columns` defaults to the full set. When a seller has hidden columns, pass their
+ * resolved selection (via resolveOutboundColumns) and only those cells are emitted,
+ * in canonical order — the same order their header row is written in.
+ */
+export function buildLeadRow(lead: PushableLead, columns: OutboundColumn[] = OUTBOUND_COLUMN_DEFS): string[] {
   const items = lead.order?.items ?? [];
   // Most specific first, and deliberately WITHOUT a variant step. `order.productVariant`
   // and `productVariant` used to sit in the middle of this chain, which is the whole
@@ -427,25 +501,30 @@ export function buildLeadRow(lead: PushableLead): string[] {
   const priceKnown = (explicitPrice !== null && explicitPrice !== undefined) || price > 0;
   const createdAt = lead.createdAt ? new Date(lead.createdAt) : new Date();
 
-  return [
+  // One cell per column key. Every value is computed the same way it always was;
+  // the only new thing is that the row is projected down to the seller's columns
+  // below, so a hidden column simply never contributes its cell.
+  const cellByKey: Record<string, string> = {
     // "YYYY-MM-DD HH:mm:ss" rather than toISOString(): sellers read this column and
     // sort on it, and a trailing "Z" is noise in a spreadsheet.
-    createdAt.toISOString().replace('T', ' ').slice(0, 19),
-    String(lead.id),
-    sanitizeCell(lead.fullName),
-    sanitizeCell(formatPhone(lead.phone)),
-    sanitizeCell(lead.city),
-    sanitizeCell(lead.address, 1000),
-    sanitizeCell(productName),
-    String(quantity),
-    priceKnown ? String(price) : '',
-    sanitizeCell(lead.source || 'MANUAL'),
-    sanitizeCell(lead.status || 'NEW'),
+    date: createdAt.toISOString().replace('T', ' ').slice(0, 19),
+    leadId: String(lead.id),
+    client: sanitizeCell(lead.fullName),
+    phone: sanitizeCell(formatPhone(lead.phone)),
+    city: sanitizeCell(lead.city),
+    address: sanitizeCell(lead.address, 1000),
+    product: sanitizeCell(productName),
+    quantity: String(quantity),
+    price: priceKnown ? String(price) : '',
+    source: sanitizeCell(lead.source || 'MANUAL'),
+    status: sanitizeCell(lead.status || 'NEW'),
     // The pack label alone, and pointedly NOT the productName chain above: its
     // packageContent and SKU steps are what muddied Produit in the first place, and
     // repeating them here would only move the mess one column right.
-    sanitizeCell(variantLabel),
-  ];
+    variant: sanitizeCell(variantLabel),
+  };
+
+  return columns.map((c) => cellByKey[c.key] ?? '');
 }
 
 // ─── Google calls ────────────────────────────────────────────────────────────
@@ -497,8 +576,14 @@ const notConfigured: SheetWriteResult = {
  * Creating the tab (or writing the header row) is a real write, so success here
  * means success later.
  */
-export async function ensureSheetReady(sheetId: string, tab: string): Promise<SheetWriteResult> {
+export async function ensureSheetReady(
+  sheetId: string,
+  tab: string,
+  labels: string[] = OUTBOUND_COLUMNS
+): Promise<SheetWriteResult> {
   if (!isWriterConfigured()) return notConfigured;
+
+  const lastCol = lastColumnFor(labels);
 
   const meta = await call<{ sheets?: { properties?: { title?: string } }[] }>(
     'GET',
@@ -523,7 +608,7 @@ export async function ensureSheetReady(sheetId: string, tab: string): Promise<Sh
 
   const header = await call<{ values?: string[][] }>(
     'GET',
-    `${SHEETS_API}/${encodeURIComponent(sheetId)}/values/${encodeURIComponent(range(tab, `A1:${LAST_COLUMN}1`))}`
+    `${SHEETS_API}/${encodeURIComponent(sheetId)}/values/${encodeURIComponent(range(tab, `A1:${lastCol}1`))}`
   );
   if (!header.ok) {
     if (header.error?.__notConfigured) return notConfigured;
@@ -535,9 +620,9 @@ export async function ensureSheetReady(sheetId: string, tab: string): Promise<Sh
     const written = await call(
       'PUT',
       `${SHEETS_API}/${encodeURIComponent(sheetId)}/values/${encodeURIComponent(
-        range(tab, `A1:${LAST_COLUMN}1`)
+        range(tab, `A1:${lastCol}1`)
       )}?valueInputOption=RAW`,
-      { values: [OUTBOUND_COLUMNS] }
+      { values: [labels] }
     );
     if (!written.ok) {
       if (written.error?.__notConfigured) return notConfigured;
@@ -564,8 +649,11 @@ export async function appendRows(sheetId: string, tab: string, rows: string[][])
   // insertDataOption=INSERT_ROWS it can insert ABOVE the existing rows — which is
   // how a test row ended up on row 1, pushing the header down to row 2. The full
   // column span is unambiguous: append after the last row that has data.
+  // The full canonical span, not the seller's narrowed width: Google only writes
+  // the cells each row actually carries, so a narrowed row lands in A..(its width)
+  // and the wider range just identifies the table unambiguously.
   const url =
-    `${SHEETS_API}/${encodeURIComponent(sheetId)}/values/${encodeURIComponent(range(tab, `A:${LAST_COLUMN}`))}:append` +
+    `${SHEETS_API}/${encodeURIComponent(sheetId)}/values/${encodeURIComponent(range(tab, `A:${CANONICAL_LAST_COLUMN}`))}:append` +
     '?valueInputOption=RAW&insertDataOption=INSERT_ROWS';
 
   const res = await call<{ updates?: { updatedRange?: string; updatedRows?: number } }>('POST', url, { values: rows });
@@ -660,17 +748,30 @@ const HEADER_BACKGROUND = { red: 0.06, green: 0.45, blue: 0.34 };
  * the comment in `appendRows`. Re-inserting the header at the very top puts the
  * sheet back into the shape the append path expects.
  *
- * It also WIDENS: a sheet connected before a column was appended to OUTBOUND_COLUMNS
- * carries a correct-but-shorter header, and that is not drift. See the two branches
- * below — telling those two states apart is the whole point of them.
+ * `labels` is the seller's chosen header (via outboundLabels(resolveOutboundColumns)),
+ * defaulting to the full set. It handles three shapes at once: an empty sheet, an
+ * older/narrower header to widen, and a header the seller just reshaped by hiding or
+ * showing a column — the last of which also clears the stale labels a narrower
+ * selection strands to the right. Row 1 is only ever overwritten when it is itself a
+ * header (it begins with the locked 'Date' column); a real data row that drifted to
+ * line 1 gets a fresh header inserted above it instead, so no data is lost.
  */
-export async function applyHeaderTemplate(sheetId: string, tab: string): Promise<SheetWriteResult> {
+export async function applyHeaderTemplate(
+  sheetId: string,
+  tab: string,
+  labels: string[] = OUTBOUND_COLUMNS
+): Promise<SheetWriteResult> {
   if (!isWriterConfigured()) return notConfigured;
 
+  const width = labels.length;
+  const lastCol = lastColumnFor(labels);
   const metaUrl =
     `${SHEETS_API}/${encodeURIComponent(sheetId)}?fields=sheets.properties(sheetId,title,gridProperties)`;
   const batchUrl = `${SHEETS_API}/${encodeURIComponent(sheetId)}:batchUpdate`;
-  const headerCells = encodeURIComponent(range(tab, `A1:${LAST_COLUMN}1`));
+  // Written at the seller's width; read across the full canonical width so a header
+  // that used to be wider is seen in full and its stale tail can be cleared.
+  const desiredCells = encodeURIComponent(range(tab, `A1:${lastCol}1`));
+  const canonicalCells = encodeURIComponent(range(tab, `A1:${CANONICAL_LAST_COLUMN}1`));
 
   const findTab = (payload: { sheets?: { properties?: TabProperties }[] } | undefined) =>
     (payload?.sheets ?? []).map((s) => s.properties).find((p) => p?.title === tab);
@@ -713,10 +814,11 @@ export async function applyHeaderTemplate(sheetId: string, tab: string): Promise
     };
   }
 
-  // (b) Row 1 as it stands today.
+  // (b) Row 1 as it stands today, read across the full canonical width so a header
+  // that was previously wider is seen in full (its tail is cleared below).
   const header = await call<{ values?: string[][] }>(
     'GET',
-    `${SHEETS_API}/${encodeURIComponent(sheetId)}/values/${headerCells}`
+    `${SHEETS_API}/${encodeURIComponent(sheetId)}/values/${canonicalCells}`
   );
   if (!header.ok) {
     if (header.error?.__notConfigured) return notConfigured;
@@ -724,56 +826,53 @@ export async function applyHeaderTemplate(sheetId: string, tab: string): Promise
   }
 
   const existing = (header.data?.values?.[0] ?? []).map((cell) => String(cell ?? '').trim());
-  const headerIsInPlace =
-    existing.length === OUTBOUND_COLUMNS.length &&
-    OUTBOUND_COLUMNS.every((column, i) => existing[i] === column);
-
-  /**
-   * The header of an EARLIER, narrower version of the contract: the same names in
-   * the same order, just fewer of them. Every seller who connected before a column
-   * was appended lands here, and they must NOT go down the repair path below — that
-   * one inserts a fresh row and writes the new header into it, which would strand
-   * their old header on line 2 as a junk data row, permanently, for the crime of
-   * clicking "appliquer le modèle".
-   *
-   * A prefix match is what makes this safe to distinguish: OUTBOUND_COLUMNS is
-   * append-only, so identical leading cells prove nothing moved and only the tail
-   * is missing. Anything else — a reordered, renamed or displaced header — is the
-   * genuinely broken case the insert branch was written for.
-   */
-  const headerNeedsWidening =
-    !headerIsInPlace &&
-    existing.length > 0 &&
-    existing.length < OUTBOUND_COLUMNS.length &&
-    existing.every((cell, i) => cell === OUTBOUND_COLUMNS[i]);
+  const matchesDesired = existing.length === width && labels.every((label, i) => existing[i] === label);
+  // A header row always begins with the literal 'Date' — a LOCKED column, so it is
+  // present in every selection and always first. A DATA row begins with a timestamp,
+  // never the word 'Date'. That one cell is how row 1 is told apart from a stray data
+  // row that drifted to the top, which decides overwrite-in-place vs insert-above.
+  const row1IsHeader = existing.length > 0 && existing[0] === OUTBOUND_COLUMN_DEFS[0].label;
 
   let headerInserted = false;
 
-  if (headerNeedsWidening) {
-    // Only the new cells, written exactly where they belong. No insertDimension, so
-    // every existing row stays on the line it is on and nothing shifts underneath
-    // the formulas the seller built against this layout.
-    const tailCells = encodeURIComponent(range(tab, `${columnLetter(existing.length)}1:${LAST_COLUMN}1`));
-    const widened = await call(
+  if (matchesDesired) {
+    // Row 1 is already exactly the desired header — nothing to write. Fall through to
+    // the formatting pass, which is why the seller can click the chip as often as they
+    // like without a new row being pushed into the sheet on every click.
+  } else if (existing.length === 0 || row1IsHeader) {
+    // Empty sheet, an older/narrower header to widen, or a header the seller just
+    // reshaped by hiding/showing a column: writing the desired labels in place covers
+    // all three. No row is inserted, so every existing data row stays where it is and
+    // the formulas built against this layout do not shift.
+    const written = await call(
       'PUT',
-      `${SHEETS_API}/${encodeURIComponent(sheetId)}/values/${tailCells}?valueInputOption=RAW`,
-      { values: [OUTBOUND_COLUMNS.slice(existing.length)] }
+      `${SHEETS_API}/${encodeURIComponent(sheetId)}/values/${desiredCells}?valueInputOption=RAW`,
+      { values: [labels] }
     );
-    if (!widened.ok) {
-      if (widened.error?.__notConfigured) return notConfigured;
-      return classify(widened.error, sheetId);
+    if (!written.ok) {
+      if (written.error?.__notConfigured) return notConfigured;
+      return classify(written.error, sheetId);
     }
+    // "Added" only when row 1 held no header at all; reshaping an existing header
+    // reads as "refreshed" — the two states the route turns into two sentences.
+    headerInserted = existing.length === 0;
 
-    // Header cells really were written, so the route's "en-tête ajouté" sentence is
-    // the honest one: the flag separates written from merely-reformatted, not which
-    // of the two write paths ran. Nothing extra is needed for the formatting — the
-    // pass in (c) already spans the full OUTBOUND_COLUMNS width, so the widened
-    // cells pick up the band, the auto-resize and the filter along with the rest.
-    headerInserted = true;
-  } else if (!headerIsInPlace) {
-    // The guard is load-bearing, not an optimisation: the seller can click the tab
-    // chip as often as they like, and inserting unconditionally would push a fresh
-    // blank row into the sheet on every single click.
+    // A narrower selection leaves the previous, wider header's tail labels stranded to
+    // the right. Blank them so the sheet does not show ghost columns from a past layout.
+    if (existing.length > width) {
+      const staleCells = encodeURIComponent(
+        range(tab, `${columnLetter(width)}1:${CANONICAL_LAST_COLUMN}1`)
+      );
+      const cleared = await call(
+        'PUT',
+        `${SHEETS_API}/${encodeURIComponent(sheetId)}/values/${staleCells}?valueInputOption=RAW`,
+        { values: [new Array(OUTBOUND_COLUMN_DEFS.length - width).fill('')] }
+      );
+      if (!cleared.ok && cleared.error?.__notConfigured) return notConfigured;
+    }
+  } else {
+    // Row 1 is a real data row (drift): insert a fresh row 1 above it and write the
+    // header there, so nothing the seller has is overwritten.
     const inserted = await call('POST', batchUrl, {
       requests: [
         {
@@ -793,8 +892,8 @@ export async function applyHeaderTemplate(sheetId: string, tab: string): Promise
     // RAW for the same reason every other write uses it — see `sanitizeCell`.
     const written = await call(
       'PUT',
-      `${SHEETS_API}/${encodeURIComponent(sheetId)}/values/${headerCells}?valueInputOption=RAW`,
-      { values: [OUTBOUND_COLUMNS] }
+      `${SHEETS_API}/${encodeURIComponent(sheetId)}/values/${desiredCells}?valueInputOption=RAW`,
+      { values: [labels] }
     );
     if (!written.ok) {
       if (written.error?.__notConfigured) return notConfigured;
@@ -804,53 +903,66 @@ export async function applyHeaderTemplate(sheetId: string, tab: string): Promise
     headerInserted = true;
   }
 
-  // (c) Freeze, colour and size the columns in one round trip. Spans the full
-  // OUTBOUND_COLUMNS width, so a header just widened above is formatted with it.
-  const formatted = await call('POST', batchUrl, {
-    requests: [
-      {
-        updateSheetProperties: {
-          properties: { sheetId: gridId, gridProperties: { frozenRowCount: 1 } },
-          fields: 'gridProperties.frozenRowCount',
-        },
+  // (c) Freeze, colour and size the columns in one round trip, at the seller's width.
+  const formatRequests: any[] = [
+    {
+      updateSheetProperties: {
+        properties: { sheetId: gridId, gridProperties: { frozenRowCount: 1 } },
+        fields: 'gridProperties.frozenRowCount',
       },
-      {
-        repeatCell: {
-          range: {
-            sheetId: gridId,
-            startRowIndex: 0,
-            endRowIndex: 1,
-            startColumnIndex: 0,
-            endColumnIndex: OUTBOUND_COLUMNS.length,
-          },
-          cell: {
-            userEnteredFormat: {
-              backgroundColor: HEADER_BACKGROUND,
-              horizontalAlignment: 'CENTER',
-              verticalAlignment: 'MIDDLE',
-              textFormat: {
-                foregroundColor: { red: 1, green: 1, blue: 1 },
-                bold: true,
-                fontSize: 10,
-              },
+    },
+    {
+      repeatCell: {
+        range: { sheetId: gridId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: width },
+        cell: {
+          userEnteredFormat: {
+            backgroundColor: HEADER_BACKGROUND,
+            horizontalAlignment: 'CENTER',
+            verticalAlignment: 'MIDDLE',
+            textFormat: {
+              foregroundColor: { red: 1, green: 1, blue: 1 },
+              bold: true,
+              fontSize: 10,
             },
           },
-          fields: 'userEnteredFormat(backgroundColor,horizontalAlignment,verticalAlignment,textFormat)',
         },
+        fields: 'userEnteredFormat(backgroundColor,horizontalAlignment,verticalAlignment,textFormat)',
       },
-      {
-        // Runs after the header write above, so the widths fit the real titles.
-        autoResizeDimensions: {
-          dimensions: {
-            sheetId: gridId,
-            dimension: 'COLUMNS',
-            startIndex: 0,
-            endIndex: OUTBOUND_COLUMNS.length,
+    },
+    {
+      // Runs after the header write above, so the widths fit the real titles.
+      autoResizeDimensions: {
+        dimensions: { sheetId: gridId, dimension: 'COLUMNS', startIndex: 0, endIndex: width },
+      },
+    },
+  ];
+
+  // When the selection shrank, the old green band lingers on the now-empty trailing
+  // header cells. Reset just those row-1 cells to a plain format so no ghost header
+  // band is left behind. Only row 1 is touched, never the seller's data below it.
+  if (existing.length > width) {
+    formatRequests.push({
+      repeatCell: {
+        range: {
+          sheetId: gridId,
+          startRowIndex: 0,
+          endRowIndex: 1,
+          startColumnIndex: width,
+          endColumnIndex: OUTBOUND_COLUMN_DEFS.length,
+        },
+        cell: {
+          userEnteredFormat: {
+            backgroundColor: { red: 1, green: 1, blue: 1 },
+            horizontalAlignment: 'LEFT',
+            textFormat: { foregroundColor: { red: 0, green: 0, blue: 0 }, bold: false },
           },
         },
+        fields: 'userEnteredFormat(backgroundColor,horizontalAlignment,textFormat)',
       },
-    ],
-  });
+    });
+  }
+
+  const formatted = await call('POST', batchUrl, { requests: formatRequests });
   if (!formatted.ok) {
     if (formatted.error?.__notConfigured) return notConfigured;
     return classify(formatted.error, sheetId);
@@ -870,7 +982,7 @@ export async function applyHeaderTemplate(sheetId: string, tab: string): Promise
               sheetId: gridId,
               startRowIndex: 0,
               startColumnIndex: 0,
-              endColumnIndex: OUTBOUND_COLUMNS.length,
+              endColumnIndex: width,
             },
           },
         },

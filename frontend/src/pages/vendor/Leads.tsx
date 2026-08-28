@@ -1557,6 +1557,16 @@ export default function VendorLeads() {
                     const productImage = rowLink?.product?.imageUrl ?? embeddedProduct?.images?.[0]?.imageUrl;
                     const productName = rowLink?.product?.nameFr ?? embeddedProduct?.nameFr;
                     const productSku = rowLink?.product?.sku ?? embeddedProduct?.sku;
+                    // Leads with no catalog product (WhatsApp promotion, manual
+                    // entry) carry the product the agent captured only inside the
+                    // free-text notes, as "Produit : <name>". Surface that as the
+                    // Product cell's fallback so the column is not a bare '-'.
+                    const noteProductName = (() => {
+                      const notes = (commission.order as any)?.lead?.notes as string | undefined;
+                      if (productName || !notes) return null;
+                      const match = notes.match(/Produit\s*:\s*([^|]+)/i);
+                      return match ? match[1].trim() : null;
+                    })();
                     const productRetailPriceMad = rowLink?.product?.retailPriceMad ?? embeddedProduct?.retailPriceMad;
 
                     // Which pack the customer picked, and what it costs. The
@@ -1724,7 +1734,7 @@ export default function VendorLeads() {
                               </div>
                             )}
                             <div className="flex flex-col">
-                              <span className="text-sm font-bold text-gray-900">{productName || '-'}</span>
+                              <span className="text-sm font-bold text-gray-900">{productName || noteProductName || '-'}</span>
                               <span className="text-[10px] text-gray-400 font-mono mt-0.5 uppercase">
                                 SKU: {productSku || '-'} | QTE: {packQty}
                               </span>

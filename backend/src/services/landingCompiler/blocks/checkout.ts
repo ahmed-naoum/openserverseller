@@ -381,8 +381,11 @@ export const checkoutBlock: BlockRenderer = {
       })),
       pixels: ctx.pixels,
       // Where a completed order goes. Matches ReferralForm's
-      // navigate('/thank-you', { replace: true }).
-      thankYouUrl: '/thank-you',
+      // navigate(thankYouPath(code), { replace: true }) — the per-link page,
+      // which falls back to the shared default when the seller has not built
+      // one, so this is safe for every link. The '/thank-you' segment is load
+      // bearing: the lead signal in backend/src/index.ts matches on it.
+      thankYouUrl: `/r/${encodeURIComponent(ctx.code)}/thank-you`,
       // Long enough for the pixel beacons to leave before the document unloads,
       // short enough that the visitor does not notice a pause.
       thankYouDelayMs: 400,

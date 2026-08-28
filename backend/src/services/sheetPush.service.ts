@@ -30,7 +30,9 @@ import {
   isWriterConfigured,
   readSheetLeadIds,
   DEFAULT_TAB,
-  OUTBOUND_COLUMNS,
+  outboundLabels,
+  parseOutboundSelection,
+  resolveOutboundColumns,
   type SheetWriteResult,
 } from './googleSheetsWriter.js';
 
@@ -163,6 +165,7 @@ interface VendorPushConfig {
   googleSheetOutActive: boolean;
   googleSheetOutAuto: boolean;
   googleSheetOutHeaderCols: number | null;
+  googleSheetOutColumns: string | null;
 }
 
 async function loadVendorConfig(vendorId: number): Promise<VendorPushConfig | null> {
@@ -175,6 +178,7 @@ async function loadVendorConfig(vendorId: number): Promise<VendorPushConfig | nu
       googleSheetOutActive: true,
       googleSheetOutAuto: true,
       googleSheetOutHeaderCols: true,
+      googleSheetOutColumns: true,
     },
   });
 }
@@ -634,32 +638,35 @@ async function drainVendorLocked(vendorId: number, jobIds?: number[]): Promise<D
   if (!live.length) return stats;
 
   const tab = config.googleSheetOutTab || DEFAULT_TAB;
-  const rows = live.map((j) => buildLeadRow(leadById.get(j.leadId)!));
+  // The seller's chosen columns (null selection = all), resolved once for both the
+  // rows and the header. buildLeadRow projects each lead down to exactly these.
+  const columns = resolveOutboundColumns(parseOutboundSelection(config.googleSheetOutColumns));
+  const labels = outboundLabels(columns);
+  const rows = live.map((j) => buildLeadRow(leadById.get(j.leadId)!, columns));
 
-  // The outbound layout is append-only, but a seller who connected before a
-  // column was added keeps their old header forever: ensureSheetReady writes row
-  // 1 only when it is empty, and applyHeaderTemplate is otherwise reachable only
-  // from a button nobody is obliged to press. Left alone, buildLeadRow's new
-  // cells would arrive under a blank heading. So widen once, here, before the
-  // rows land — applyHeaderTemplate's prefix branch updates only the missing
-  // tail cells and shifts nothing.
+  // Keep the sheet's header in step with the current selection before the rows
+  // land. Two states reach here: a seller who connected before a column was added
+  // and never re-applied (their header is a column short), and a seller who just
+  // changed which columns they send (the API applies the header immediately, but a
+  // failed apply leaves the marker stale for the next drain to repair). Left alone,
+  // buildLeadRow's cells would arrive under a mismatched heading. applyHeaderTemplate
+  // overwrites row 1 in place, shifting no data.
   //
-  // Guarded by a stored width rather than attempted every tick: this costs two
-  // Google calls and must not become a per-drain tax. A failure is swallowed on
-  // purpose and the marker is left unset so the next tick retries — a header
-  // that is one column short is cosmetic, and it must never cost the seller the
-  // lead rows themselves.
-  if (config.googleSheetOutHeaderCols !== OUTBOUND_COLUMNS.length) {
+  // Guarded by a stored width rather than attempted every tick: this costs Google
+  // calls and must not become a per-drain tax. A failure is swallowed on purpose and
+  // the marker left stale so the next tick retries — a header out of step is cosmetic
+  // and must never cost the seller the lead rows themselves.
+  if (config.googleSheetOutHeaderCols !== labels.length) {
     try {
-      const widened = await applyHeaderTemplate(config.googleSheetOutId, tab);
-      if (widened.ok) {
+      const applied = await applyHeaderTemplate(config.googleSheetOutId, tab, labels);
+      if (applied.ok) {
         await prisma.user.update({
           where: { id: vendorId },
-          data: { googleSheetOutHeaderCols: OUTBOUND_COLUMNS.length },
+          data: { googleSheetOutHeaderCols: labels.length },
         });
       }
     } catch (err) {
-      console.error('[SheetPush] header widen failed for vendor', vendorId, err);
+      console.error('[SheetPush] header sync failed for vendor', vendorId, err);
     }
   }
 

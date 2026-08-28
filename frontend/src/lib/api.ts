@@ -470,6 +470,8 @@ export const publicApi = {
     const search = typeof window !== 'undefined' ? window.location.search : '';
     return api.get(`/influencer/links/${code}/public${search}`);
   },
+  /** The seller's custom thank-you page for a link, or null to use the default. */
+  getThankYouPage: (code: string) => api.get(`/influencer/links/${code}/thank-you`),
   trackWhatsappClick: (code: string) => api.post(`/influencer/links/${code}/track-whatsapp`),
   submitReferralLead: (data: { referralCode: string; fullName: string; phone: string; city: string; address: string; productVariant?: string; variantOptionId?: string; variantName?: string; packQuantity?: number }) => api.post('/public/leads', data),
   submitContact: (data: { name: string; email: string; subject: string; message: string }) => api.post('/public/contact', data),
@@ -1109,6 +1111,10 @@ export const googleSheetsApi = {
   testOutbound: () => api.post('/google-sheets/outbound/test'),
   // Writes the formatted header template at the top of the seller's tab. Free.
   setupSheetHeader: () => api.post('/google-sheets/outbound/setup-header'),
+  // Saves which columns the seller sends (keys, canonical order enforced server-side)
+  // and re-applies the header to match. Free — no lead row is written.
+  setOutboundColumns: (columns: string[]) =>
+    api.post('/google-sheets/outbound/columns', { columns }),
   getOutboundJobs: (params?: { page?: number; limit?: number; status?: string }) =>
     api.get('/google-sheets/outbound/jobs', { params }),
   pushLeadsToSheet: (leadIds: number[]) =>

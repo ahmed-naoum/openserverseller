@@ -280,6 +280,10 @@ export default function GoogleSheetOutboundPanel() {
   const [showJobs, setShowJobs] = useState(false);
   const [jobsPage, setJobsPage] = useState(1);
   const [headerOpen, setHeaderOpen] = useState(false);
+  // The editable column selection while the popover is open — a set of column KEYS.
+  // Seeded from the server's current view each time the popover opens, so it always
+  // starts from the truth and never drifts from a stale render.
+  const [selectedCols, setSelectedCols] = useState<Set<string>>(new Set());
   /**
    * The template popover is rendered through a portal, anchored to this button.
    *
@@ -305,8 +309,24 @@ export default function GoogleSheetOutboundPanel() {
       setHeaderOpen(false);
       return;
     }
+    // Seed the editable selection from the server's current view before opening.
+    const opts = (data as any)?.columnOptions;
+    if (Array.isArray(opts)) {
+      setSelectedCols(new Set(opts.filter((o: any) => o.selected).map((o: any) => o.key)));
+    }
     measureAnchor();
     setHeaderOpen(true);
+  };
+
+  /** Toggle a non-locked column in the editable selection. Locked columns are fixed. */
+  const toggleColumn = (key: string, locked: boolean) => {
+    if (locked) return;
+    setSelectedCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   };
 
   // A fixed-position portal does not travel with the page, so re-measure while it
@@ -411,6 +431,23 @@ export default function GoogleSheetOutboundPanel() {
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.message || t('gso_header_error', 'leads', "Impossible d'appliquer le modèle"));
+    },
+  });
+
+  /**
+   * Saves which columns the seller sends. The server normalises the keys (canonical
+   * order, always includes Date + Lead ID) and re-applies the header, so on success we
+   * just refetch the status the whole panel reads from.
+   */
+  const setColumnsMutation = useMutation({
+    mutationFn: (keys: string[]) => googleSheetsApi.setOutboundColumns(keys),
+    onSuccess: (res: any) => {
+      setHeaderOpen(false);
+      toast.success(unwrap(res)?.message || t('gso_columns_saved', 'leads', 'Colonnes mises à jour'));
+      queryClient.invalidateQueries({ queryKey: OUTBOUND_STATUS_KEY });
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || t('gso_columns_error', 'leads', 'Impossible de mettre à jour les colonnes'));
     },
   });
 
@@ -600,6 +637,16 @@ export default function GoogleSheetOutboundPanel() {
   const isAuto = !!data?.auto;
   const templateColumns: string[] = Array.isArray(data?.columns) && data.columns.length ? data.columns : TEMPLATE_COLUMNS;
 
+  // The toggle list from the server: [{ key, label, locked, selected }]. Empty on an
+  // older payload, in which case the popover falls back to the read-only preview.
+  const columnOptions: any[] = Array.isArray((data as any)?.columnOptions) ? (data as any).columnOptions : [];
+  // Whether the editable selection differs from what the server currently has, which
+  // decides whether the button saves the new choice or just re-applies the header.
+  const serverSelectedKeys = new Set(columnOptions.filter((o) => o.selected).map((o) => o.key));
+  const selectionChanged =
+    columnOptions.length > 0 &&
+    (serverSelectedKeys.size !== selectedCols.size || [...selectedCols].some((k) => !serverSelectedKeys.has(k)));
+
   return (
     <>
       <Shell>
@@ -654,27 +701,71 @@ export default function GoogleSheetOutboundPanel() {
                         <div className="p-4 space-y-3">
                           <div>
                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
-                              {t('gso_header_preview', 'leads', 'Aperçu des colonnes')}
+                              {t('gso_header_columns', 'leads', 'Colonnes à envoyer')}
                             </p>
-                            {/* dir=ltr: these are the sheet's own column names, in the
-                                left-to-right order they land in — Arabic must not
-                                reverse them. */}
-                            <div dir="ltr" className="overflow-x-auto rounded-xl border border-emerald-100">
-                              <table className="min-w-full">
-                                <thead>
-                                  <tr>
-                                    {templateColumns.map((column: string) => (
-                                      <th
-                                        key={column}
-                                        className="px-2.5 py-1.5 bg-emerald-600 text-white text-[9px] font-black uppercase tracking-wider text-left whitespace-nowrap border-r border-emerald-500/40 last:border-r-0"
-                                      >
-                                        {column}
-                                      </th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                              </table>
-                            </div>
+                            {columnOptions.length > 0 ? (
+                              /* dir=ltr: these are the sheet's own column names, in the
+                                 left-to-right order they land in — Arabic must not
+                                 reverse them. */
+                              <div
+                                dir="ltr"
+                                className="rounded-xl border border-emerald-100 divide-y divide-emerald-50 max-h-56 overflow-y-auto"
+                              >
+                                {columnOptions.map((opt: any) => {
+                                  const checked = opt.locked || selectedCols.has(opt.key);
+                                  return (
+                                    <label
+                                      key={opt.key}
+                                      className={`flex items-center gap-2.5 px-3 py-2 text-[11px] font-bold ${
+                                        opt.locked
+                                          ? 'cursor-default bg-slate-50/60'
+                                          : 'cursor-pointer hover:bg-emerald-50/40'
+                                      }`}
+                                      title={
+                                        opt.locked
+                                          ? t('gso_col_locked_hint', 'leads', 'Colonne obligatoire — toujours envoyée.')
+                                          : undefined
+                                      }
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        disabled={opt.locked}
+                                        onChange={() => toggleColumn(opt.key, opt.locked)}
+                                        className="w-3.5 h-3.5 rounded accent-emerald-600 cursor-pointer disabled:cursor-default"
+                                      />
+                                      <span className={`flex-1 ${checked ? 'text-slate-800' : 'text-slate-400'}`}>
+                                        {opt.label}
+                                      </span>
+                                      {opt.locked && <Lock className="w-3 h-3 text-slate-400 shrink-0" />}
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              /* Fallback for an older status payload without columnOptions. */
+                              <div dir="ltr" className="overflow-x-auto rounded-xl border border-emerald-100">
+                                <table className="min-w-full">
+                                  <thead>
+                                    <tr>
+                                      {templateColumns.map((column: string) => (
+                                        <th
+                                          key={column}
+                                          className="px-2.5 py-1.5 bg-emerald-600 text-white text-[9px] font-black uppercase tracking-wider text-left whitespace-nowrap border-r border-emerald-500/40 last:border-r-0"
+                                        >
+                                          {column}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                </table>
+                              </div>
+                            )}
+                            {columnOptions.length > 0 && (
+                              <p className="text-[10px] font-medium text-slate-400 mt-1.5 leading-relaxed">
+                                {t('gso_columns_hint', 'leads', 'Décochez les colonnes que vous ne voulez pas envoyer. Date et Lead ID sont toujours inclus.')}
+                              </p>
+                            )}
                           </div>
 
                           <p className="flex items-center gap-1.5 text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2 leading-relaxed">
@@ -682,21 +773,39 @@ export default function GoogleSheetOutboundPanel() {
                             {t('gso_header_free', 'leads', "Gratuit — cette opération n'entame pas votre solde.")}
                           </p>
 
-                          <button
-                            type="button"
-                            onClick={() => setupHeaderMutation.mutate()}
-                            disabled={setupHeaderMutation.isPending}
-                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-200 hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                          >
-                            {setupHeaderMutation.isPending ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <LayoutTemplate className="w-3.5 h-3.5" />
-                            )}
-                            {setupHeaderMutation.isPending
-                              ? t('gso_header_applying', 'leads', 'Application...')
-                              : t('gso_header_apply', 'leads', "Appliquer le modèle")}
-                          </button>
+                          {selectionChanged ? (
+                            <button
+                              type="button"
+                              onClick={() => setColumnsMutation.mutate([...selectedCols])}
+                              disabled={setColumnsMutation.isPending}
+                              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-200 hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                            >
+                              {setColumnsMutation.isPending ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Check className="w-3.5 h-3.5" />
+                              )}
+                              {setColumnsMutation.isPending
+                                ? t('gso_columns_saving', 'leads', 'Enregistrement...')
+                                : t('gso_columns_save', 'leads', 'Enregistrer & appliquer')}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setupHeaderMutation.mutate()}
+                              disabled={setupHeaderMutation.isPending}
+                              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-200 hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                            >
+                              {setupHeaderMutation.isPending ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <LayoutTemplate className="w-3.5 h-3.5" />
+                              )}
+                              {setupHeaderMutation.isPending
+                                ? t('gso_header_applying', 'leads', 'Application...')
+                                : t('gso_header_apply', 'leads', "Appliquer le modèle")}
+                            </button>
+                          )}
                         </div>
                       </div>
                     </>,
