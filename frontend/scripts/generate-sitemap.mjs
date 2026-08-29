@@ -10,7 +10,7 @@
  *
  * Usage:
  *   node scripts/generate-sitemap.mjs
- *   API_URL=http://localhost:3001/api node scripts/generate-sitemap.mjs
+ *   API_URL=http://localhost:3001/api/v1 node scripts/generate-sitemap.mjs
  */
 
 import { writeFile } from 'node:fs/promises';
@@ -18,7 +18,24 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const SITE_URL = 'https://silacod.com';
-const API_URL = process.env.API_URL || 'http://localhost:3001/api';
+/**
+ * Must carry the backend's API_PREFIX, which is `/api/v1` (backend/.env, read at
+ * backend/src/index.ts:306) — not `/api`. Mirrors the dev default in
+ * src/lib/api.ts. Getting this wrong 404s every catalogue request and the
+ * sitemap silently ships marketing pages only.
+ */
+const API_URL = process.env.API_URL || 'http://localhost:3001/api/v1';
+
+/** Products are paged out of the marketplace endpoint; it caps `limit` per call. */
+const PRODUCTS_PAGE_SIZE = 100;
+const PRODUCTS_MAX_PAGES = 50;
+
+/**
+ * The public catalogue is the REGULAR marketplace view — the same set an
+ * anonymous visitor sees at /marketplace, and the only one whose /product/:id
+ * pages render without a session.
+ */
+const CATALOGUE_VIEW = 'REGULAR';
 
 /**
  * Language-prefixed URLs are the target structure. Keep false until the
@@ -77,41 +94,77 @@ function urlEntry({ loc, lastmod, changefreq, priority, alternates }) {
   return lines.join('\n');
 }
 
+/** Unwraps the response envelopes this API has used across versions. */
+function productList(body) {
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body?.products)) return body.products;
+  if (Array.isArray(body?.data)) return body.data;
+  if (Array.isArray(body?.data?.products)) return body.data.products;
+  return [];
+}
+
+const normalize = (list) =>
+  list
+    .map((p) => ({
+      id: p.id ?? p._id ?? p.productId,
+      updatedAt: p.updatedAt ?? p.updated_at ?? null,
+    }))
+    .filter((p) => p.id != null);
+
+async function getJson(url) {
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(10_000),
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status} on ${url}`);
+  return res.json();
+}
+
+/**
+ * Walks every page of the public marketplace so the sitemap carries the whole
+ * catalogue. /public/products/featured is only the 12-item homepage widget, so
+ * it is a last-resort fallback rather than the source.
+ */
 async function fetchProducts() {
-  const endpoints = [
-    `${API_URL}/public/products/featured`,
-    `${API_URL}/public/categories`,
-  ];
+  const seen = new Map();
+
   try {
-    const res = await fetch(endpoints[0], {
-      signal: AbortSignal.timeout(10_000),
-      headers: { Accept: 'application/json' },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const body = await res.json();
+    for (let page = 1; page <= PRODUCTS_MAX_PAGES; page++) {
+      const body = await getJson(
+        `${API_URL}/public/marketplace/products` +
+          `?view=${CATALOGUE_VIEW}&page=${page}&limit=${PRODUCTS_PAGE_SIZE}`,
+      );
+      const batch = normalize(productList(body));
+      for (const product of batch) {
+        if (!seen.has(product.id)) seen.set(product.id, product);
+      }
 
-    // Response shape varies by endpoint version; accept the common ones.
-    const list = Array.isArray(body)
-      ? body
-      : Array.isArray(body?.products)
-        ? body.products
-        : Array.isArray(body?.data)
-          ? body.data
-          : [];
+      const total = Number(body?.data?.total ?? body?.total);
+      if (batch.length < PRODUCTS_PAGE_SIZE) break;
+      if (Number.isFinite(total) && seen.size >= total) break;
+    }
 
-    return list
-      .map((p) => ({
-        id: p.id ?? p._id ?? p.productId,
-        updatedAt: p.updatedAt ?? p.updated_at ?? null,
-      }))
-      .filter((p) => p.id);
+    if (seen.size > 0) return [...seen.values()];
+    console.warn('[sitemap] Marketplace returned no products; trying featured.');
   } catch (err) {
-    console.warn(
-      `[sitemap] Catalogue skipped — API unreachable at ${API_URL} (${err.message}).\n` +
-        `[sitemap] Static pages still written. Re-run with the backend up to include products.`,
-    );
-    return [];
+    console.warn(`[sitemap] Marketplace catalogue unavailable (${err.message}); trying featured.`);
   }
+
+  try {
+    const body = await getJson(`${API_URL}/public/products/featured`);
+    const featured = normalize(productList(body));
+    if (featured.length > 0) return featured;
+  } catch (err) {
+    console.warn(`[sitemap] Featured products unavailable (${err.message}).`);
+  }
+
+  console.warn(
+    `[sitemap] WARNING: 0 product URLs. The API at ${API_URL} answered nothing usable.\n` +
+      `[sitemap] Static pages are still written, but the catalogue will drop out of\n` +
+      `[sitemap] the index. Check the backend is up and that API_URL carries the\n` +
+      `[sitemap] /api/v1 prefix, then re-run: npm run sitemap`,
+  );
+  return [];
 }
 
 async function main() {
