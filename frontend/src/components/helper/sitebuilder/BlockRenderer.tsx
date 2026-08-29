@@ -1731,17 +1731,20 @@ function DefaultCheckoutPreview({ content }: { content: any }) {
           {content.title || 'اطلب الآن'}
         </h2>
         {content.showPrice !== false && (
-          <div className="flex items-center justify-center gap-3 mb-2">
+          <div className="flex items-center justify-center gap-1.5 mb-2">
             {content.showOldPrice && (
-              <span 
-                className="font-bold line-through opacity-60"
-                style={{ 
-                  color: content.oldPriceColor || '#9ca3af',
-                  fontSize: `${content.oldPriceSize || (content.priceSize || 30) * 0.7}px`
-                }}
-              >
-                {content.oldPriceValue || 299} <span className="text-xs uppercase ml-0.5">MAD</span>
-              </span>
+              <>
+                <span 
+                  className="font-bold line-through opacity-60"
+                  style={{ 
+                    color: content.oldPriceColor || '#9ca3af',
+                    fontSize: `${content.oldPriceSize || (content.priceSize || 30) * 0.7}px`
+                  }}
+                >
+                  {content.oldPriceValue || 299}
+                </span>
+                <span className="text-slate-300 font-bold text-lg mx-0.5">/</span>
+              </>
             )}
             <div 
               className="font-black"
@@ -1750,8 +1753,11 @@ function DefaultCheckoutPreview({ content }: { content: any }) {
                 fontSize: `${content.priceSize || 32}px`
               }}
             >
-              {content.price || (content.options?.[0]?.price) || 199} <span className="text-sm uppercase ml-1 opacity-60">MAD</span>
+              {content.price || (content.options?.[0]?.price) || 199}
             </div>
+            <span className="text-sm font-bold opacity-60 ml-1">
+              {isRtl ? 'درهم' : (content.currency || 'MAD')}
+            </span>
           </div>
         )}
         <p className="text-slate-500 text-xs font-medium">
@@ -1779,15 +1785,21 @@ function DefaultCheckoutPreview({ content }: { content: any }) {
                   <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Option {i + 1}</div>
                   <div className="font-black text-slate-900 text-xs" style={isFirst ? { color: optionColor } : {}}>{opt.name || `Pack ${i + 1}`}</div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   {opt.oldPrice && (
-                    <span className="font-bold line-through opacity-50 text-xs text-slate-400">
-                      {opt.oldPrice} MAD
-                    </span>
+                    <>
+                      <span className="font-bold line-through opacity-50 text-xs text-slate-400">
+                        {opt.oldPrice}
+                      </span>
+                      <span className="text-slate-300 font-bold text-xs mx-0.5">/</span>
+                    </>
                   )}
                   <div className="font-black text-sm" style={{ color: opt.priceColor || optionColor }}>
-                    {opt.price || '...'} <span className="text-[10px] opacity-60">MAD</span>
+                    {opt.price || '...'}
                   </div>
+                  <span className="text-[10px] font-bold opacity-60 ml-0.5">
+                    {isRtl ? 'درهم' : (content.currency || 'MAD')}
+                  </span>
                 </div>
               </div>
             );

@@ -70,20 +70,20 @@ describe('express_checkout', () => {
     const html = (await withCheckout({ showOldPrice: true }))!;
     expect(html).toContain('class="ck-old"');
     // 249 + 50 — the magic number is preserved from the React original.
-    expect(html).toContain('299 MAD');
+    expect(html).toContain('299');
   });
 
   it('falls back to 150 for the old price when the product has no retail price', async () => {
     const html = (await withCheckout({ showOldPrice: true }, {
       product: { nameFr: 'P', images: [] },
     }))!;
-    expect(html).toContain('150 MAD');
+    expect(html).toContain('150');
   });
 
   it('prefers an explicit oldPriceValue over the retail fallback', async () => {
     const html = (await withCheckout({ showOldPrice: true, oldPriceValue: 499 }))!;
-    expect(html).toContain('499 MAD');
-    expect(html).not.toContain('299 MAD');
+    expect(html).toContain('499');
+    expect(html).not.toContain('299');
   });
 
   it('renders packs with the first pre-selected', async () => {
@@ -98,7 +98,7 @@ describe('express_checkout', () => {
     expect(html).toMatch(/data-pack="p1"[^>]*aria-checked="true"/);
     expect(html).toMatch(/data-pack="p2"[^>]*aria-checked="false"/);
     // The header price follows the first pack, not the product retail price.
-    expect(html).toMatch(/data-ck="price"[^>]*>249 MAD/);
+    expect(html).toMatch(/data-ck="price"[^>]*>249/);
   });
 
   it('drives the selected pack from a class, never an inline style', async () => {
@@ -210,23 +210,17 @@ describe('express_checkout', () => {
       expect(cfgOf(html).packs.map((p: any) => p.qty)).toEqual([99, 1, 1]);
     });
 
-    it('shows the multiplier on a multi-unit pack and stays silent on a single', async () => {
+    it('renders clean pack title without multiplier suffix on multi-unit pack', async () => {
       const html = (await withCheckout({
         options: [
           { id: 'p1', name: 'Un', price: 199, quantity: 1 },
           { id: 'p2', name: 'Trois', price: 399, quantity: 3 },
         ],
       }))!;
-      // Whole pack divs rather than a non-greedy </span> match: the badge is a
-      // span nested inside another span, which such a match would cut in half.
-      // The `[ "]` is what excludes the `ck-packs` container wrapping them.
       const packs = [...markup(html).matchAll(/<div class="ck-pack[ "][\s\S]*?<\/div>/g)].map((m) => m[0]);
       expect(packs).toHaveLength(2);
-      // "×1" on every single-unit pack is noise, and most packs are single-unit.
       expect(packs[0]).not.toContain('ck-pack-q');
-      // Nested inside the name, not beside it: .ck-pack is a space-between flex
-      // row, so a third child would land in the middle of the row.
-      expect(packs[1]).toContain('<span class="ck-pack-n">Trois<span class="ck-pack-q">×3</span></span>');
+      expect(packs[1]).toContain('<span class="ck-pack-n">Trois</span>');
     });
 
     it('posts the pack alongside the legacy string, never instead of it', () => {

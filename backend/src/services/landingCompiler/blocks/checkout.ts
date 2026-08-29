@@ -256,34 +256,39 @@ export const checkoutBlock: BlockRenderer = {
     parts.push(`<h2 class="ck-t">${esc(c.title || DEFAULTS.title)}</h2>`);
     if (c.subtitle) parts.push(`<p class="ck-s">${esc(c.subtitle)}</p>`);
 
+    const currency = c.currency || (rtl ? 'درهم' : 'MAD');
+
     // Opt-out, matching `blockContent.showPrice !== false`.
     if (c.showPrice !== false) {
       const priceColor = safeColor(c.priceColor, '#f64444');
       const priceSize = num(c.priceSize, 30, 8, 120);
       const bits: string[] = [];
 
+      const packs = Array.isArray(c.options) ? c.options : [];
+      const current = packs.length && packs[0]?.price ? packs[0].price : ctx.productPriceMad;
+
       // Opt-in, matching plain truthiness on showOldPrice.
       if (c.showOldPrice) {
         const oldColor = safeColor(c.oldPriceColor, '#9ca3af');
         const oldSize = num(c.oldPriceSize, Math.round(priceSize * 0.7), 6, 120);
-        // `retail + 50`, else 150. Both magic numbers are in the original, and
-        // so is the truthiness test — a product priced at 0 falls to 150 rather
-        // than showing 50. `Number.isFinite` would be wrong here: Number(null)
-        // is 0, which is finite, and would quietly print "50 MAD".
         const retail = Number(ctx.productPriceMad);
         const oldValue = c.oldPriceValue || (retail ? retail + 50 : 150);
         bits.push(
           `<span class="ck-old" style="color:${oldColor};font-size:${oldSize}px">` +
-            `${esc(oldValue)} MAD</span>`
+            `${esc(oldValue)}</span>` +
+          ` <span class="ck-pack-sep" style="font-size:${oldSize}px">/</span> `
         );
       }
 
-      const packs = Array.isArray(c.options) ? c.options : [];
-      const current = packs.length && packs[0]?.price ? packs[0].price : ctx.productPriceMad;
       bits.push(
         `<span class="ck-now" data-ck="price" style="color:${priceColor};font-size:${priceSize}px">` +
-          `${esc(current)} MAD</span>`
+          `${esc(current)}</span>`
       );
+
+      bits.push(
+        ` <span class="ck-curr" style="font-size:${Math.round(priceSize * 0.75)}px">${esc(currency)}</span>`
+      );
+
       parts.push(`<div class="ck-price">${bits.join('')}</div>`);
     }
 
@@ -297,40 +302,25 @@ export const checkoutBlock: BlockRenderer = {
         const tint = safeColor(opt?.color || c.packColor, accent);
         const on = i === 0;
         const priceColor = safeColor(opt?.priceColor, '#111827');
-        // Floored: `num` clamps but does not round, and the runtime stores a
-        // floored integer into an Int column — a badge reading "x2.5" next to a
-        // lead recorded as 2 units is a support ticket waiting to happen.
         const qty = Math.floor(num(opt?.quantity, 1, 1, 99));
 
-        // `${tint}08` in the original: 8-digit hex alpha, about a 3% tint. Only
-        // valid on 6-digit hex, so anything else gets no fill rather than a
-        // malformed colour that would drop the declaration entirely.
         const tintBg = /^#[0-9a-f]{6}$/i.test(tint) ? `${tint}08` : 'transparent';
 
-        // Custom properties, not a conditional inline style: these describe how
-        // the pack looks WHEN selected, and the class decides whether it is.
         const vars =
           `--pk:${tint};--pkw:${packBorder}px;--pkr:${packRadius}px;--pkbg:${tintBg}`;
 
         parts.push(
           `<div class="ck-pack${on ? ' is-on' : ''}" data-pack="${esc(opt?.id ?? i)}"` +
             ` role="radio" tabindex="0" aria-checked="${on ? 'true' : 'false'}" style="${vars}">` +
-            // Rendered on every pack; CSS shows it only on the selected one, so
-            // the runtime can move the selection without rebuilding markup.
             `<span class="ck-badge" style="background:${tint}">محدد</span>` +
-            // Nested inside the name rather than beside it: `.ck-pack` is a
-            // space-between flex row, so a third child would push the badge to
-            // the middle of the row instead of leaving it against the name.
-            // Absent at quantity 1 — "×1" is noise on every single-unit pack.
-            `<span class="ck-pack-n">${esc(opt?.name || `Pack ${i + 1}`)}` +
-            (qty > 1 ? `<span class="ck-pack-q">×${esc(qty)}</span>` : '') +
-            `</span>` +
+            `<span class="ck-pack-n">${esc(opt?.name || `Pack ${i + 1}`)}</span>` +
             `<span class="ck-pack-p">` +
             (opt?.oldPrice
-              ? `<span class="ck-pack-o" style="color:${safeColor(opt?.oldPriceColor, '#9ca3af')}">` +
-                `${esc(opt.oldPrice)}</span>`
+              ? `<span class="ck-pack-o" style="color:${safeColor(opt?.oldPriceColor, '#9ca3af')}">${esc(opt.oldPrice)}</span> ` +
+                `<span class="ck-pack-sep">/</span> `
               : '') +
-            `<span style="color:${priceColor}">${esc(opt?.price ?? '')} MAD</span>` +
+            `<span style="color:${priceColor}">${esc(opt?.price ?? '')}</span>` +
+            ` <span class="ck-curr">${esc(currency)}</span>` +
             `</span>` +
             `</div>`
         );

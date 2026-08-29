@@ -820,17 +820,20 @@ export default function ReferralForm() {
                   {blockContent.title || 'اطلب الآن'}
                 </h2>
                 {blockContent.showPrice !== false && (
-                  <div className="flex items-center justify-center gap-3 mb-2">
+                  <div className="flex items-center justify-center gap-1.5 mb-2">
                     {blockContent.showOldPrice && (
-                      <span 
-                        className="font-bold line-through opacity-60"
-                        style={{ 
-                          color: blockContent.oldPriceColor || '#9ca3af',
-                          fontSize: `${blockContent.oldPriceSize || (blockContent.priceSize || 30) * 0.7}px`
-                        }}
-                      >
-                        {blockContent.oldPriceValue || (product?.retailPriceMad ? Number(product.retailPriceMad) + 50 : 150)} <span className="text-sm uppercase ml-0.5">MAD</span>
-                      </span>
+                      <>
+                        <span 
+                          className="font-bold line-through opacity-60"
+                          style={{ 
+                            color: blockContent.oldPriceColor || '#9ca3af',
+                            fontSize: `${blockContent.oldPriceSize || (blockContent.priceSize || 30) * 0.7}px`
+                          }}
+                        >
+                          {blockContent.oldPriceValue || (product?.retailPriceMad ? Number(product.retailPriceMad) + 50 : 150)}
+                        </span>
+                        <span className="text-gray-300 font-bold text-xl mx-0.5">/</span>
+                      </>
                     )}
                     <div 
                       className="font-black"
@@ -839,8 +842,11 @@ export default function ReferralForm() {
                         fontSize: `${blockContent.priceSize || 30}px` 
                       }}
                     >
-                      {selectedOption?.price || selectedProductFromBlock?.retailPriceMad || selectedProductFromBlock?.priceMad || product?.retailPriceMad} <span className="text-lg uppercase ml-1 opacity-60">MAD</span>
+                      {selectedOption?.price || selectedProductFromBlock?.retailPriceMad || selectedProductFromBlock?.priceMad || product?.retailPriceMad}
                     </div>
+                    <span className="text-lg font-bold opacity-60 ml-1">
+                      {isRtl ? 'درهم' : 'MAD'}
+                    </span>
                   </div>
                 )}
                 <p className="text-sm text-gray-500 font-medium">
@@ -910,8 +916,11 @@ export default function ReferralForm() {
                                 fontSize: opt.priceSize ? `${opt.priceSize}px` : (blockContent.priceSize ? `${blockContent.priceSize}px` : '24px')
                               }}
                             >
-                              {opt.price} <span className="text-[11px] opacity-60 uppercase ml-1">MAD</span>
+                              {opt.price}
                             </div>
+                            <span className="text-[11px] font-bold opacity-60 ml-1">
+                              {isRtl ? 'درهم' : 'MAD'}
+                            </span>
                           </div>
                         </div>
                       );

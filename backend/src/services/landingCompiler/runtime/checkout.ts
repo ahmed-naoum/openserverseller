@@ -59,10 +59,14 @@ export const CHECKOUT_RUNTIME = `
     function paintPrice() {
       if (!priceEl) return;
       var shown = priceNow();
-      // Skipping the write would leave a stale number on screen that disagrees
-      // with what the server will charge.
+      var curr = cfg.currency || 'درهم';
       if (shown !== null && shown !== undefined && shown !== '') {
-        priceEl.textContent = shown + ' MAD';
+        var oldP = selected && selected.oldPrice;
+        if (oldP) {
+          priceEl.innerHTML = '<span class="ck-old ">' + oldP + '</span> <span class="ck-pack-sep">/</span> <span class="ck-now">' + shown + '</span> <span class="ck-curr">' + curr + '</span>';
+        } else {
+          priceEl.innerHTML = '<span class="ck-now">' + shown + '</span> <span class="ck-curr">' + curr + '</span>';
+        }
       }
     }
 
