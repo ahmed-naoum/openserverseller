@@ -3736,6 +3736,25 @@ export default function SiteBuilder() {
                           </p>
                         </div>
 
+                        {/* 11b. DevTools Redirect Trap */}
+                        <div className="space-y-2 pt-2 border-t border-gray-100">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-gray-600">Piège Anti-Inspecteur (Redirection)</span>
+                            <input
+                              type="checkbox"
+                              checked={pageSettings.cloaking?.blockDevTools ?? pageSettings.cloaking?.disableRightClick ?? false}
+                              onChange={(e) => setPageSettings((prev: any) => ({
+                                ...prev,
+                                cloaking: { ...prev.cloaking, blockDevTools: e.target.checked }
+                              }))}
+                              className="rounded text-orange-500 focus:ring-orange-500 w-3.5 h-3.5 border-gray-300 cursor-pointer"
+                            />
+                          </div>
+                          <p className="text-[10px] text-gray-400 font-medium leading-relaxed">
+                            Détecte l'ouverture de l'inspecteur et redirige le visiteur vers silacod.com. Actif uniquement sur ordinateur : sur mobile la détection se déclenchait à tort et redirigeait de vrais visiteurs. Désactivez cette option si vous préférez ne jamais rediriger.
+                          </p>
+                        </div>
+
                         {/* 12. Video Download Protection */}
                         <div className="space-y-2 pt-2 border-t border-gray-100">
                           <div className="flex items-center justify-between">

@@ -235,7 +235,8 @@ export default function ReferralForm() {
     return () => { cancelled = true; };
   }, [data]);
 
-  // Anti-Vol / Right-Click & Inspect Protection
+  // Anti-Vol / Right-Click & Inspect shortcut blocking (disableRightClick).
+  // The DevTools redirect trap moved to its own effect below.
   useEffect(() => {
     const cloaking = getCloakingConfig(data?.landingPage?.customStructure);
     if (!cloaking?.disableRightClick) return;
@@ -269,6 +270,41 @@ export default function ReferralForm() {
       }
     };
 
+    document.addEventListener('contextmenu', handleContextMenu, true);
+    document.addEventListener('keydown', handleKeyDown, true);
+
+    return () => {
+      document.removeEventListener('contextmenu', handleContextMenu, true);
+      document.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [data]);
+
+  // DevTools redirect trap (blockDevTools).
+  //
+  // Split out of disableRightClick so a page can block right-click and the
+  // inspector shortcuts without also arming a redirect. Pages saved before the
+  // split have no blockDevTools key and inherit the old coupling; an explicit
+  // false turns the trap off and leaves the guards above running.
+  //
+  // Desktop only, and deliberately so. Both former detectors fired on ordinary
+  // phones: outerHeight - innerHeight is the browser's own URL bar and toolbars,
+  // which clear 160px on Android Chrome and iOS Safari, and the resize listener
+  // re-ran the probe every time that bar collapsed on scroll. The size probe is
+  // gone rather than re-tuned — no gap size separates a docked DevTools panel
+  // from mobile browser chrome.
+  //
+  // Kept in step with the compiled-page copy in
+  // backend/src/services/landingCompiler/document.ts (cloakGuardScript).
+  useEffect(() => {
+    const cloaking = getCloakingConfig(data?.landingPage?.customStructure);
+    if (!(cloaking?.blockDevTools ?? cloaking?.disableRightClick)) return;
+
+    const isTouch =
+      (navigator.maxTouchPoints || 0) > 0 ||
+      'ontouchstart' in window ||
+      window.matchMedia?.('(pointer:coarse)').matches;
+    if (isTouch) return;
+
     const triggerRedirect = () => {
       try {
         window.location.replace('https://www.silacod.com');
@@ -285,7 +321,14 @@ export default function ReferralForm() {
       },
     });
 
+    // A single slow tick is not evidence: a GC pause or a backgrounded tab
+    // clears 50ms with no debugger attached, and the penalty is throwing the
+    // visitor off the page. Two consecutive hits are required, and a hidden tab
+    // is skipped outright rather than counted.
+    let hits = 0;
+
     const devToolsCheck = () => {
+      if (document.hidden) return;
       try {
         console.log('%c', trapImg);
       } catch {}
@@ -293,26 +336,18 @@ export default function ReferralForm() {
       try {
         (function () {}).constructor('debugger')();
       } catch {}
-      const diff = performance.now() - start;
-      const isDevToolsOpen =
-        diff > 50 ||
-        window.outerWidth - window.innerWidth > 160 ||
-        window.outerHeight - window.innerHeight > 160;
 
-      if (isDevToolsOpen) {
-        triggerRedirect();
+      if (performance.now() - start > 50) {
+        hits += 1;
+        if (hits > 1) triggerRedirect();
+      } else {
+        hits = 0;
       }
     };
 
-    document.addEventListener('contextmenu', handleContextMenu, true);
-    document.addEventListener('keydown', handleKeyDown, true);
-    window.addEventListener('resize', devToolsCheck, true);
     const dtTimer = setInterval(devToolsCheck, 800);
 
     return () => {
-      document.removeEventListener('contextmenu', handleContextMenu, true);
-      document.removeEventListener('keydown', handleKeyDown, true);
-      window.removeEventListener('resize', devToolsCheck, true);
       clearInterval(dtTimer);
     };
   }, [data]);
@@ -336,8 +371,15 @@ export default function ReferralForm() {
         .catch(() => {});
     };
 
+    // document.hidden only. The guard used to also blacken on
+    // !document.hasFocus() plus a window blur listener, which on mobile is close
+    // to permanently true: before the first tap, after tapping any
+    // non-focusable element, while the address bar has focus, and throughout the
+    // Instagram/Facebook/TikTok in-app browsers. Visitors got the "Content
+    // Protected" overlay on a normal read. No web API reports screen recording,
+    // so nothing here can detect it — hidden is the honest signal.
     const handleStreamGuard = () => {
-      const isHidden = document.hidden || !document.hasFocus();
+      const isHidden = document.hidden;
       document.querySelectorAll('video').forEach((v) => {
         const parent = v.parentElement;
         if (!parent) return;
@@ -389,8 +431,6 @@ export default function ReferralForm() {
 
     apply();
     document.addEventListener('contextmenu', blockVideoContextMenu, true);
-    window.addEventListener('blur', handleStreamGuard, true);
-    window.addEventListener('focus', handleStreamGuard, true);
     document.addEventListener('visibilitychange', handleStreamGuard, true);
 
     const observer = new MutationObserver(apply);
@@ -398,8 +438,6 @@ export default function ReferralForm() {
 
     return () => {
       document.removeEventListener('contextmenu', blockVideoContextMenu, true);
-      window.removeEventListener('blur', handleStreamGuard, true);
-      window.removeEventListener('focus', handleStreamGuard, true);
       document.removeEventListener('visibilitychange', handleStreamGuard, true);
       observer.disconnect();
     };

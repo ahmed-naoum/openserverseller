@@ -107,7 +107,7 @@ export interface RenderedPage {
  * Content-protection runtime for the compiled page.
  *
  * The React page runs the equivalent from ReferralForm; the compiled page ships
- * no React, so its guards are emitted here instead. Returns '' when neither flag
+ * no React, so its guards are emitted here instead. Returns '' when no flag
  * is set. The output is appended to the single hashed <script>, so it is covered
  * by the page CSP — an inline `oncontextmenu` attribute would not be.
  *
@@ -128,22 +128,47 @@ function cloakGuardScript(cloaking: any): string {
       `if(code===123||k==='f12'){e.preventDefault();e.stopPropagation();return false;}` +
       `if((e.ctrlKey||e.metaKey)&&(e.shiftKey||e.altKey)&&(k==='i'||k==='j'||k==='c')){e.preventDefault();e.stopPropagation();return false;}` +
       `if((e.ctrlKey||e.metaKey)&&(k==='u'||k==='s')){e.preventDefault();e.stopPropagation();return false;}` +
-      `},true);` +
+      `},true);`
+    );
+  }
 
-      // 2. DevTools Redirect Trap (Console Getter + Debugger Timing + Resize Probe)
+  // DevTools redirect trap.
+  //
+  // Split out of disableRightClick so a page can block right-click and the
+  // inspector shortcuts without also arming a redirect. Pages saved before the
+  // split have no blockDevTools key and inherit the old coupling, so their
+  // behaviour is unchanged; an explicit false turns the trap off and leaves the
+  // keyboard/context-menu guards running.
+  //
+  // Desktop only, and deliberately so. Both former detectors fired on ordinary
+  // phones: outerHeight-innerHeight is the browser's own URL bar and toolbars,
+  // which clear 160px on Android Chrome and iOS Safari, and the resize listener
+  // re-ran the probe every time that bar collapsed on scroll. The size probe is
+  // gone rather than re-tuned — there is no gap size that separates a docked
+  // DevTools panel from mobile browser chrome.
+  const blockDevTools = cloaking.blockDevTools ?? cloaking.disableRightClick;
+  if (blockDevTools) {
+    parts.push(
+      `if(!((navigator.maxTouchPoints||0)>0||('ontouchstart' in window)||(window.matchMedia&&window.matchMedia('(pointer:coarse)').matches))){` +
       `var doRedirect=function(){try{window.location.replace('https://www.silacod.com');}catch(_){d.body.innerHTML='';}};` +
       `var dtImg=new Image();` +
       `Object.defineProperty(dtImg,'id',{get:function(){doRedirect();}});` +
+      // A single slow tick is not evidence: a GC pause or a backgrounded tab
+      // clears 50ms with no debugger attached, and the penalty here is throwing
+      // the visitor off the page. Two consecutive hits are required, and a
+      // hidden tab is skipped outright rather than counted.
+      `var dtHits=0;` +
       `var dtCheck=function(){` +
+      `if(d.hidden)return;` +
       `try{console.log('%c',dtImg);}catch(_){}` +
       `var start=performance.now();` +
-      `(function(){}).constructor('debugger')();` +
-      `var diff=performance.now()-start;` +
-      `var devOpen=(diff>50)||(window.outerWidth-window.innerWidth>160)||(window.outerHeight-window.innerHeight>160);` +
-      `if(devOpen){doRedirect();}` +
+      // Throws when the page CSP withholds unsafe-eval; that must read as
+      // "no debugger", not as an uncaught error every 800ms.
+      `try{(function(){}).constructor('debugger')();}catch(_){}` +
+      `if(performance.now()-start>50){dtHits++;if(dtHits>1){doRedirect();}}else{dtHits=0;}` +
       `};` +
       `setInterval(dtCheck,800);` +
-      `window.addEventListener('resize',dtCheck,true);`
+      `}`
     );
   }
 
@@ -161,8 +186,16 @@ function cloakGuardScript(cloaking: any): string {
       `};` +
 
       // 2. Anti-Screen Sharing & Anti-Stream Blackout Guard
+      //
+      // document.hidden only. The guard used to also blacken on
+      // !document.hasFocus() plus a window blur listener, which on mobile is
+      // close to permanently true: before the first tap, after tapping any
+      // non-focusable element, while the address bar has focus, and throughout
+      // the Instagram/Facebook/TikTok in-app browsers. Visitors got the
+      // "Content Protected" overlay on a normal read. No web API reports screen
+      // recording, so nothing here can detect it — hidden is the honest signal.
       `var handleStreamGuard=function(){` +
-      `var isHidden=d.hidden||!d.hasFocus();` +
+      `var isHidden=d.hidden;` +
       `var vs=d.getElementsByTagName('video');` +
       `for(var i=0;i<vs.length;i++){` +
       `var v=vs[i];var p=v.parentElement;if(!p)continue;` +
@@ -177,8 +210,6 @@ function cloakGuardScript(cloaking: any): string {
       `if(isHidden){try{v.pause();}catch(_){}ov.style.display='flex';}else{ov.style.display='none';}` +
       `}` +
       `};` +
-      `window.addEventListener('blur',handleStreamGuard,true);` +
-      `window.addEventListener('focus',handleStreamGuard,true);` +
       `d.addEventListener('visibilitychange',handleStreamGuard,true);` +
 
       // 3. Apply Video Attributes & MutationObserver

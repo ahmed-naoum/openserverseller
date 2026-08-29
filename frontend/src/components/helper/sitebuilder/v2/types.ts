@@ -89,6 +89,12 @@ export interface PageSettings {
     selectedDns?: string[];
     blockedDns?: string;
     disableRightClick?: boolean;
+    /**
+     * DevTools redirect trap. Undefined on pages saved before it was split out
+     * of disableRightClick, and inherits that flag's value in the renderers so
+     * their behaviour does not change.
+     */
+    blockDevTools?: boolean;
     protectVideos?: boolean;
   };
 }
