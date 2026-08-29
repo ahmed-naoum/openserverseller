@@ -40,7 +40,13 @@ const prisma = new PrismaClient();
 //     keeps the old runtime, where a rejected play() or an undecodable file left
 //     the buffering spinner turning over an autoplay video that ships without
 //     controls -- nothing to tap, no way to start it.
-export const COMPILER_VERSION = 13;
+// 14: end-of-video redirect restored. The settings field has written
+//     content.redirectUrl since ec5b245, but the code that read it was deleted
+//     by the v1/v2 builder refactor (e9a5c34) and never rebuilt, so a stored 13
+//     row carries neither the data-vid-redirect attribute nor a runtime that
+//     would act on it. Six live pages have a destination configured and go
+//     nowhere; they MUST recompile for it to take effect.
+export const COMPILER_VERSION = 14;
 
 /**
  * Block types the compiler can render, derived from the renderer registry.

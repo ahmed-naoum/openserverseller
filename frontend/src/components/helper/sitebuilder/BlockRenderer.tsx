@@ -2,7 +2,15 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { BACKEND_URL, publicApi } from '../../../lib/api';
 import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { buildSourceToken } from '../../../utils/referral';
+import { buildSourceToken, SOURCE_PARAM } from '../../../utils/referral';
+
+/**
+ * Where the end-of-video redirect records the destination it already sent this
+ * visitor to. Must stay identical to the key in
+ * backend/src/services/landingCompiler/runtime/video.ts — the compiled page and
+ * this component are two renderings of the same block and share the tab.
+ */
+const VIDEO_REDIRECT_KEY = 'sc_vid_redirected';
 
 export type BlockType = 'header' | 'hero' | 'image' | 'text' | 'button' | 'express_checkout' | 'spacer' | 'countdown' | 'whatsapp' | 'slider' | 'products' | 'audio' | 'video';
 
@@ -169,7 +177,7 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
                 }}
               >
                 {content.url ? (
-                  <VideoBlockComponent content={content} resolveUrl={resolveUrl} />
+                  <VideoBlockComponent content={content} resolveUrl={resolveUrl} isEditor={isEditor} />
                 ) : (
                   <div className="w-full h-64 bg-gray-100 flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-200">
                     <span className="text-3xl mb-2">🎬</span>
@@ -1268,9 +1276,10 @@ function getVideoEmbedUrl(rawUrl?: string, options: { autoplay?: boolean; loop?:
 interface VideoBlockComponentProps {
   content: any;
   resolveUrl: (url?: string) => string;
+  isEditor: boolean;
 }
 
-function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) {
+function VideoBlockComponent({ content, resolveUrl, isEditor }: VideoBlockComponentProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoadingVideo, setIsLoadingVideo] = useState(true);
@@ -1300,6 +1309,101 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
     }
   }, [content.url, content.autoplay]);
 
+  // --- End-of-video redirect ------------------------------------------------
+  //
+  // Shipped in ec5b245, then deleted wholesale by the v1/v2 builder refactor
+  // (e9a5c34) together with the Button's copy of the same code. The Button's was
+  // rebuilt; this one was not, so the settings field kept saving a destination
+  // that nothing ever read. Kept deliberately in step with the compiled path in
+  // backend/src/services/landingCompiler/runtime/video.ts, which is what
+  // actually serves these pages — the two drifting apart is the whole bug.
+  const redirectTarget = String(content.redirectUrl || '').trim();
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const hasRedirected = useRef(false);
+
+  const goToRedirect = useCallback(() => {
+    if (isEditor || !redirectTarget || hasRedirected.current) return;
+    hasRedirected.current = true;
+
+    let target = redirectTarget;
+    try {
+      const token = buildSourceToken(window.location.href);
+      const sep = target.includes('?') ? '&' : '?';
+      target = `${target}${sep}${SOURCE_PARAM}=${encodeURIComponent(token)}`;
+    } catch {
+      // A token we cannot build is not a reason to strand the visitor here; the
+      // destination's cloak falls back to the referrer.
+    }
+
+    // Recorded before leaving, for the bfcache guard below.
+    try { sessionStorage.setItem(VIDEO_REDIRECT_KEY, redirectTarget); } catch {}
+
+    // replace(), never assign(): this page must not survive in history, so Back
+    // from the destination reaches whatever preceded the video rather than the
+    // video the visitor has already sat through.
+    window.location.replace(target);
+  }, [isEditor, redirectTarget]);
+
+  const handleVideoEnd = () => {
+    setIsPlaying(false);
+    goToRedirect();
+  };
+
+  // Back-button protection. replace() keeps this page out of history, which
+  // covers the ordinary case on its own. This covers the one it cannot: a
+  // bfcache restore, which browsers still produce for a cross-origin
+  // destination. Having already sent this visitor on, send them on again.
+  useEffect(() => {
+    if (isEditor || !redirectTarget) return;
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (!e.persisted) return;
+      let stored = '';
+      try { stored = sessionStorage.getItem(VIDEO_REDIRECT_KEY) || ''; } catch {}
+      if (!stored) return;
+      hasRedirected.current = false;
+      goToRedirect();
+    };
+    window.addEventListener('pageshow', onPageShow);
+    return () => window.removeEventListener('pageshow', onPageShow);
+  }, [isEditor, redirectTarget, goToRedirect]);
+
+  // YouTube and Vimeo render into an iframe, which cannot fire `ended` on an
+  // element we own — the end of playback arrives as a postMessage instead. Both
+  // players stay silent until the parent subscribes, so the handshake in
+  // subscribeToPlayer is load-bearing: the bare listener ec5b245 shipped would
+  // have heard nothing.
+  useEffect(() => {
+    if (isEditor || !redirectTarget) return;
+
+    const onMessage = (event: MessageEvent) => {
+      if (!/^https?:\/\/([\w-]+\.)*(youtube(-nocookie)?\.com|vimeo\.com)$/.test(event.origin || '')) return;
+      let data: any = event.data;
+      if (typeof data === 'string') {
+        try { data = JSON.parse(data); } catch { return; }
+      }
+      // playerState 0 is YouTube's ENDED; Vimeo reports finish/ended by name.
+      const ended =
+        (data?.event === 'infoDelivery' && data?.info?.playerState === 0) ||
+        data?.event === 'finish' ||
+        data?.event === 'ended';
+      if (ended) goToRedirect();
+    };
+
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [isEditor, redirectTarget, goToRedirect]);
+
+  const subscribeToPlayer = () => {
+    if (isEditor || !redirectTarget) return;
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    // Both dialects, unconditionally: the wrong one is ignored, and checking
+    // which host we are talking to costs more than sending two messages.
+    try { win.postMessage(JSON.stringify({ event: 'listening', id: 1 }), '*'); } catch {}
+    try { win.postMessage(JSON.stringify({ method: 'addEventListener', value: 'ended' }), '*'); } catch {}
+    try { win.postMessage(JSON.stringify({ method: 'addEventListener', value: 'finish' }), '*'); } catch {}
+  };
+
   const embedData = getVideoEmbedUrl(content.url, {
     autoplay: !!content.autoplay,
     loop: !!content.loop,
@@ -1318,11 +1422,13 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
       >
         <div className="w-full aspect-video">
           <iframe 
+            ref={iframeRef}
             src={embedData.embedUrl} 
             title="Video Player"
             className="w-full h-full border-0 rounded-2xl"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
+            onLoad={subscribeToPlayer}
           />
         </div>
       </div>
@@ -1384,7 +1490,7 @@ function VideoBlockComponent({ content, resolveUrl }: VideoBlockComponentProps) 
           setIsLoadingVideo(false);
         }}
         onPause={() => setIsPlaying(false)}
-        onEnded={() => setIsPlaying(false)}
+        onEnded={handleVideoEnd}
         onVolumeChange={(e) => {
           if (!e.currentTarget.muted) {
             setIsMuted(false);

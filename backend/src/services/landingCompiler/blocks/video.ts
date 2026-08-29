@@ -105,6 +105,12 @@ export const videoBlock: BlockRenderer = {
     const loop = !!c.loop;
     const controls = c.controls !== false;
 
+    // Same sanitiser as the Button's href: an unusable destination becomes '',
+    // and the attribute is then simply not emitted, so the runtime does nothing
+    // rather than navigating somewhere unexpected.
+    const redirect = safeUrl(c.redirectUrl || '');
+    const redirectAttr = redirect ? ` data-vid-redirect="${esc(redirect)}"` : '';
+
     const embed = videoEmbed(rawUrl, { autoplay, loop, muted: !!c.muted, controls });
     if (embed) {
       // Only the two hosts we construct URLs for; safeUrl re-checks the scheme.
@@ -112,7 +118,7 @@ export const videoBlock: BlockRenderer = {
       if (!src) return `<div class="bk bk-vid" style="${wrapStyle}"></div>`;
       return (
         `<div class="bk bk-vid" style="${wrapStyle}">` +
-        `<div class="bk-vid-i" style="${boxStyle}">` +
+        `<div class="bk-vid-i"${redirectAttr} style="${boxStyle}">` +
         `<div class="bk-vid-f"><iframe src="${esc(src)}" title="Video"` +
         ` loading="lazy"` +
         ` allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"` +
@@ -132,7 +138,7 @@ export const videoBlock: BlockRenderer = {
 
     return (
       `<div class="bk bk-vid" style="${wrapStyle}">` +
-      `<div class="bk-vid-i" data-vid style="${boxStyle}">` +
+      `<div class="bk-vid-i" data-vid${redirectAttr} style="${boxStyle}">` +
       // `metadata`, never `auto`: `auto` pulled the whole file during load — a
       // 2.4 MB webm was 65% of a measured page's weight and finished 3.4 s in,
       // starving the LCP image of bandwidth. `metadata` costs a few KB, still
