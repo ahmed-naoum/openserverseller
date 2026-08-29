@@ -202,6 +202,18 @@ export const checkoutBlock: BlockRenderer = {
 
   render(block: any, ctx: BlockContext): string {
     const c = block?.content || {};
+    // Always true, and that matches React rather than guessing: BlockRenderer's
+    // isRtl tests for Arabic in the block's own labels/title/subtitle/button but
+    // appends the literal 'الاسم الكامل' to the string it tests, so the check
+    // never returns false. The flag is kept rather than inlined because it is
+    // what `field()` below already assumes when it hard-codes dir on every
+    // non-phone input.
+    //
+    // It was previously declared here and never used, which is the whole bug:
+    // the card shipped with no dir at all, so labels, errors, packs and the
+    // button inherited the document's LTR and Arabic sat on the left. Only the
+    // inputs looked right, because those set dir individually. noUnusedLocals is
+    // false in tsconfig, so nothing flagged the dead constant.
     const rtl = true;
 
     const accent = safeColor(c.themeColor, '#f97316');
@@ -225,7 +237,8 @@ export const checkoutBlock: BlockRenderer = {
 
     const cardStyle =
       `--ck-a:${accent};background:${formBg};border-radius:${radius};` +
-      `border-width:${borderWidth}px;border-color:${borderColor}`;
+      `border-width:${borderWidth}px;border-color:${borderColor}` +
+      (rtl ? `;text-align:right` : '');
 
     const uid = String(ctx.index);
     const parts: string[] = [];
@@ -237,7 +250,7 @@ export const checkoutBlock: BlockRenderer = {
 
     parts.push(
       `<div class="bk" style="${wrapStyle}">` +
-        `<div class="ck" data-ck-root${anchor} style="${cardStyle}">`
+        `<div class="ck" data-ck-root${anchor}${rtl ? ' dir="rtl"' : ''} style="${cardStyle}">`
     );
 
     parts.push(`<h2 class="ck-t">${esc(c.title || DEFAULTS.title)}</h2>`);
