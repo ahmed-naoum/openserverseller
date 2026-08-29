@@ -144,6 +144,22 @@ function withVendorLock<T>(vendorId: number, fn: () => Promise<T>): Promise<T> {
 /** vendorId -> when they were last told their balance is empty. */
 const emptyNoticeSentAt = new Map<number, number>();
 
+/**
+ * Canonical phone key for duplicate detection across Moroccan and international numbers:
+ * Maps Eastern Arabic digits to ASCII, strips non-digits, and reduces Moroccan numbers
+ * (06..., 05..., 07..., 212..., 00212...) to their 9-digit subscriber core.
+ */
+function phoneKey(raw?: string | null): string {
+  const ascii = String(raw ?? '').replace(/[٠-٩]/g, (d) =>
+    String(d.charCodeAt(0) - 0x0660)
+  );
+  const digits = ascii.replace(/\D/g, '');
+  if (/^0[5-7]\d{8}$/.test(digits)) return digits.slice(1);
+  if (/^212[5-7]\d{8}$/.test(digits)) return digits.slice(3);
+  if (/^00212[5-7]\d{8}$/.test(digits)) return digits.slice(5);
+  return digits;
+}
+
 async function notifyEmptyBalance(vendorId: number, pending: number) {
   const last = emptyNoticeSentAt.get(vendorId) ?? 0;
   if (Date.now() - last < EMPTY_NOTICE_COOLDOWN_MS) return;
@@ -506,9 +522,72 @@ async function drainVendorLocked(vendorId: number, jobIds?: number[]): Promise<D
     },
     orderBy: { id: 'asc' },
     take: BATCH_SIZE,
-    select: { id: true, leadId: true, attempts: true },
+    select: { id: true, leadId: true, attempts: true, origin: true },
   });
   if (!candidates.length) return stats;
+
+  const candidateLeads = await prisma.lead.findMany({
+    where: { id: { in: candidates.map((c) => c.leadId) } },
+    select: { id: true, createdAt: true, phone: true },
+  });
+  const candidateLeadMap = new Map(candidateLeads.map((l) => [l.id, l]));
+
+  // Automatic sending duplicate filter: Automatic jobs must never send duplicate
+  // phone numbers to Google Sheets or charge credits for them.
+  const candidateKeys = new Set<string>();
+  for (const lead of candidateLeads) {
+    const key = phoneKey(lead.phone);
+    if (key) candidateKeys.add(key);
+  }
+
+  if (candidateKeys.size) {
+    const inSheetLeads = await prisma.lead.findMany({
+      where: {
+        vendorId,
+        id: { notIn: candidates.map((c) => c.leadId) },
+        sheetPushJob: { status: { in: ['SENT', 'PENDING', 'SENDING', 'BLOCKED_NO_CREDITS'] } },
+      },
+      select: { phone: true },
+      take: 20000,
+    });
+    const existingSheetKeys = new Set(
+      inSheetLeads.map((l) => phoneKey(l.phone)).filter(Boolean)
+    );
+
+    const seenBatchKeys = new Set<string>();
+    const duplicateJobIds: number[] = [];
+
+    for (const job of candidates) {
+      if (job.origin === 'AUTO') {
+        const lead = candidateLeadMap.get(job.leadId);
+        const key = lead ? phoneKey(lead.phone) : '';
+        if (key) {
+          if (existingSheetKeys.has(key) || seenBatchKeys.has(key)) {
+            duplicateJobIds.push(job.id);
+            continue;
+          }
+          seenBatchKeys.add(key);
+        }
+      }
+    }
+
+    if (duplicateJobIds.length) {
+      await prisma.sheetPushJob.updateMany({
+        where: { id: { in: duplicateJobIds } },
+        data: {
+          status: 'SKIPPED',
+          lastError: 'Doublon ignoré : numéro de téléphone déjà dans la feuille.',
+        },
+      });
+      stats.skipped += duplicateJobIds.length;
+
+      const dupSet = new Set(duplicateJobIds);
+      for (let i = candidates.length - 1; i >= 0; i--) {
+        if (dupSet.has(candidates[i].id)) candidates.splice(i, 1);
+      }
+      if (!candidates.length) return stats;
+    }
+  }
 
   // Never write a lead the seller cannot even see.
   //
@@ -517,10 +596,6 @@ async function drainVendorLocked(vendorId: number, jobIds?: number[]): Promise<D
   // older, visible lead on a newer locked one — putting the customer's number in the
   // sheet while the dashboard still masked it in the table. The rule is simply: you
   // can only send what you can see.
-  const candidateLeads = await prisma.lead.findMany({
-    where: { id: { in: candidates.map((c) => c.leadId) } },
-    select: { id: true, createdAt: true },
-  });
   const lockedLeadIds = await getLockedLeadIds(vendorId, candidateLeads);
   if (lockedLeadIds.size) {
     const lockedJobIds = candidates.filter((c) => lockedLeadIds.has(c.leadId)).map((c) => c.id);
