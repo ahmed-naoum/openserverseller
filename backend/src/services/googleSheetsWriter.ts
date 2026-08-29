@@ -89,6 +89,10 @@ export const OUTBOUND_COLUMN_DEFS: OutboundColumn[] = [
   // The pack the customer picked on the landing page ("2 Pièces + 1 Gratuite"), on
   // its own rather than glued into Produit — see buildLeadRow.
   { key: 'variant', label: 'Variante' },
+  // The catalogue reference on its own, separate from the display name in Produit —
+  // the value a seller matches against their own stock sheet. Appended last, per the
+  // contract note above.
+  { key: 'sku', label: 'SKU' },
 ];
 
 /** The full ordered label list. Back-compat for callers that want every column. */
@@ -100,16 +104,30 @@ export const LOCKED_OUTBOUND_KEYS = OUTBOUND_COLUMN_DEFS.filter((c) => c.locked)
 /**
  * A seller's stored selection, resolved to ordered column defs.
  *
- * `selectedKeys` null/empty means "all columns" — the default and the behaviour
- * before selection existed. Otherwise the result keeps the wanted keys PLUS every
- * locked column (always, whatever the selection says), and always in the canonical
- * order above rather than the order the keys arrived in. The result is therefore a
- * subsequence of OUTBOUND_COLUMN_DEFS that always starts with date + leadId.
+ * `selectedKeys` null/empty means "all columns, canonical order" — the default and
+ * the behaviour before selection existed. Otherwise the result keeps the wanted
+ * keys IN THE ORDER THEY WERE STORED — the seller chooses what comes first — plus
+ * every locked column (always, whatever the selection says). The locked columns
+ * are pinned to the front in canonical order regardless of the stored order:
+ * Lead ID at column B is the one invariant `readSheetLeadIds` and `LEAD_ID_COLUMN`
+ * depend on, so no selection may ever move it.
+ *
+ * Selections stored before ordering existed were normalised to canonical order at
+ * save time, so honouring the stored order changes nothing for them.
  */
 export function resolveOutboundColumns(selectedKeys?: string[] | null): OutboundColumn[] {
   if (!Array.isArray(selectedKeys) || selectedKeys.length === 0) return OUTBOUND_COLUMN_DEFS;
-  const wanted = new Set(selectedKeys);
-  return OUTBOUND_COLUMN_DEFS.filter((c) => c.locked || wanted.has(c.key));
+  const byKey = new Map(OUTBOUND_COLUMN_DEFS.map((c) => [c.key, c] as const));
+  const locked = OUTBOUND_COLUMN_DEFS.filter((c) => c.locked);
+  const seen = new Set(locked.map((c) => c.key));
+  const rest: OutboundColumn[] = [];
+  for (const key of selectedKeys) {
+    const col = byKey.get(key);
+    if (!col || seen.has(key)) continue;
+    seen.add(key);
+    rest.push(col);
+  }
+  return [...locked, ...rest];
 }
 
 /** Parses the stored JSON selection into keys, tolerating null / malformed values. */
@@ -133,15 +151,34 @@ export function outboundLabels(columns: OutboundColumn[]): string[] {
 }
 
 /**
+ * Order-sensitive fingerprint of a header, stored in `googleSheetOutHeaderCols` —
+ * the Int column that used to hold the label COUNT. The count was a good enough
+ * "header out of step?" marker until sellers could reorder columns: a reorder keeps
+ * the count while changing the header, so the drain's repair guard would never fire
+ * on one. Values stored before this change (a count like 12) simply mismatch the
+ * fingerprint once, costing each seller a single idempotent header re-apply on
+ * their next push. Bounded below 2^31 so it always fits the column.
+ */
+export function headerSignature(labels: string[]): number {
+  // NUL as the joiner — no header label can contain it, so two different lists
+  // can never join to the same string. Built via fromCharCode, not an escape in a
+  // string literal, so no raw control byte ever lands in this source file.
+  const joined = labels.join(String.fromCharCode(0));
+  let h = labels.length;
+  for (let i = 0; i < joined.length; i++) h = (h * 31 + joined.charCodeAt(i)) % 1000000007;
+  return h;
+}
+
+/**
  * A1 column letter for a zero-based index.
  *
  * SINGLE LETTER ONLY: at index 26 this arithmetic yields '[' rather than 'AA', so
  * OUTBOUND_COLUMNS cannot pass 26 entries without teaching this the two-letter form
- * first. Twelve is comfortably inside that ceiling.
+ * first. Thirteen is comfortably inside that ceiling.
  */
 const columnLetter = (index: number): string => String.fromCharCode('A'.charCodeAt(0) + index);
 
-/** Widest the contract can ever be — 12 columns → 'L'. Used when clearing stale
+/** Widest the contract can ever be — 13 columns → 'M'. Used when clearing stale
  * header cells a shrunk selection left behind, and as the append span. */
 const CANONICAL_LAST_COLUMN = columnLetter(OUTBOUND_COLUMN_DEFS.length - 1);
 
@@ -425,7 +462,7 @@ export interface PushableLead {
     items?: {
       quantity: number;
       totalPriceMad: number;
-      product?: { nameFr?: string | null; nameAr?: string | null; nameEn?: string | null } | null;
+      product?: { sku?: string | null; nameFr?: string | null; nameAr?: string | null; nameEn?: string | null } | null;
     }[];
   } | null;
 }
@@ -446,9 +483,10 @@ export function buildLeadRow(lead: PushableLead, columns: OutboundColumn[] = OUT
   // not put either of them back here to fill a cell that came out blank.
   //
   // The linkedProduct steps stay: a lead with no order has nothing product-shaped of
-  // its own, so it falls back to the product behind the link it came through — SKU
-  // first, because that is the value a seller can match against their own catalogue,
-  // with the name as a safety net.
+  // its own, so it falls back to the product behind the link it came through — the
+  // display name first, because Produit is a column sellers read, and a bare SKU
+  // there reads as the wrong product. The SKU remains only as the last resort for
+  // a catalogue entry that has no name in any language.
   const linkedProduct = lead.referralLink?.product;
   const productName =
     items
@@ -456,10 +494,20 @@ export function buildLeadRow(lead: PushableLead, columns: OutboundColumn[] = OUT
       .filter(Boolean)
       .join(', ') ||
     lead.order?.packageContent ||
-    linkedProduct?.sku ||
     linkedProduct?.nameFr ||
     linkedProduct?.nameAr ||
     linkedProduct?.nameEn ||
+    linkedProduct?.sku ||
+    '';
+  // The reference for the SKU column, resolved the same way Produit is: the ordered
+  // items first, then the product behind the link. Kept apart from the name — the
+  // whole point of the column — and honestly blank when the catalogue has none.
+  const productSku =
+    items
+      .map((i) => i.product?.sku)
+      .filter(Boolean)
+      .join(', ') ||
+    linkedProduct?.sku ||
     '';
   // This column printed a hardcoded 1 for anything without an order — which is every
   // landing prospect — so it stated the opposite of the truth on every multi-unit pack
@@ -522,6 +570,7 @@ export function buildLeadRow(lead: PushableLead, columns: OutboundColumn[] = OUT
     // packageContent and SKU steps are what muddied Produit in the first place, and
     // repeating them here would only move the mess one column right.
     variant: sanitizeCell(variantLabel),
+    sku: sanitizeCell(productSku),
   };
 
   return columns.map((c) => cellByKey[c.key] ?? '');

@@ -71,6 +71,7 @@ const TEMPLATE_COLUMNS = [
   'Source',
   'Statut',
   'Variante',
+  'SKU',
 ];
 
 /**
@@ -283,7 +284,10 @@ export default function GoogleSheetOutboundPanel() {
   // The editable column selection while the popover is open — a set of column KEYS.
   // Seeded from the server's current view each time the popover opens, so it always
   // starts from the truth and never drifts from a stale render.
-  const [selectedCols, setSelectedCols] = useState<Set<string>>(new Set());
+  // The editable column list, IN ORDER — top-to-bottom here is left-to-right in the
+  // sheet. Seeded from the server's columnOptions when the popover opens; the order
+  // of the selected rows is what gets saved, so reordering is a real edit.
+  const [colList, setColList] = useState<{ key: string; label: string; locked: boolean; selected: boolean }[]>([]);
   /**
    * The template popover is rendered through a portal, anchored to this button.
    *
@@ -310,9 +314,15 @@ export default function GoogleSheetOutboundPanel() {
       return;
     }
     // Seed the editable selection from the server's current view before opening.
+    // The server already sends the selected columns first, in the seller's order.
     const opts = (data as any)?.columnOptions;
     if (Array.isArray(opts)) {
-      setSelectedCols(new Set(opts.filter((o: any) => o.selected).map((o: any) => o.key)));
+      setColList(opts.map((o: any) => ({
+        key: String(o.key),
+        label: String(o.label),
+        locked: !!o.locked,
+        selected: !!o.selected,
+      })));
     }
     measureAnchor();
     setHeaderOpen(true);
@@ -321,10 +331,21 @@ export default function GoogleSheetOutboundPanel() {
   /** Toggle a non-locked column in the editable selection. Locked columns are fixed. */
   const toggleColumn = (key: string, locked: boolean) => {
     if (locked) return;
-    setSelectedCols((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+    setColList((prev) => prev.map((c) => (c.key === key ? { ...c, selected: !c.selected } : c)));
+  };
+
+  /**
+   * Swap a row with its neighbour — how the seller decides what comes first.
+   * The locked pair (Date, Lead ID) is pinned at the top and never trades places:
+   * Lead ID at column B is the invariant the server's sheet reconciliation reads.
+   */
+  const moveColumn = (index: number, delta: -1 | 1) => {
+    setColList((prev) => {
+      const target = index + delta;
+      if (target < 0 || target >= prev.length) return prev;
+      if (prev[index].locked || prev[target].locked) return prev;
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
       return next;
     });
   };
@@ -637,15 +658,20 @@ export default function GoogleSheetOutboundPanel() {
   const isAuto = !!data?.auto;
   const templateColumns: string[] = Array.isArray(data?.columns) && data.columns.length ? data.columns : TEMPLATE_COLUMNS;
 
-  // The toggle list from the server: [{ key, label, locked, selected }]. Empty on an
-  // older payload, in which case the popover falls back to the read-only preview.
+  // The toggle list from the server: [{ key, label, locked, selected }], selected
+  // first in the seller's order. Empty on an older payload, in which case the
+  // popover falls back to the read-only preview.
   const columnOptions: any[] = Array.isArray((data as any)?.columnOptions) ? (data as any).columnOptions : [];
-  // Whether the editable selection differs from what the server currently has, which
-  // decides whether the button saves the new choice or just re-applies the header.
-  const serverSelectedKeys = new Set(columnOptions.filter((o) => o.selected).map((o) => o.key));
+  // What would be saved: the checked rows, top to bottom. Compared element by
+  // element against the server's order — a reorder alone is a real change even
+  // when the same columns stay checked.
+  const serverOrderedKeys = columnOptions.filter((o) => o.selected).map((o) => String(o.key));
+  const editedOrderedKeys = colList.filter((o) => o.locked || o.selected).map((o) => o.key);
   const selectionChanged =
     columnOptions.length > 0 &&
-    (serverSelectedKeys.size !== selectedCols.size || [...selectedCols].some((k) => !serverSelectedKeys.has(k)));
+    colList.length > 0 &&
+    (serverOrderedKeys.length !== editedOrderedKeys.length ||
+      editedOrderedKeys.some((k, i) => k !== serverOrderedKeys[i]));
 
   return (
     <>
@@ -703,42 +729,73 @@ export default function GoogleSheetOutboundPanel() {
                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
                               {t('gso_header_columns', 'leads', 'Colonnes à envoyer')}
                             </p>
-                            {columnOptions.length > 0 ? (
+                            {colList.length > 0 ? (
                               /* dir=ltr: these are the sheet's own column names, in the
                                  left-to-right order they land in — Arabic must not
-                                 reverse them. */
+                                 reverse them. Top-to-bottom here IS that order. */
                               <div
                                 dir="ltr"
                                 className="rounded-xl border border-emerald-100 divide-y divide-emerald-50 max-h-56 overflow-y-auto"
                               >
-                                {columnOptions.map((opt: any) => {
-                                  const checked = opt.locked || selectedCols.has(opt.key);
+                                {colList.map((opt, idx) => {
+                                  const checked = opt.locked || opt.selected;
+                                  // Locked rows sit at the top and never move, so the
+                                  // row under a locked one cannot move up either.
+                                  const canUp = !opt.locked && idx > 0 && !colList[idx - 1].locked;
+                                  const canDown = !opt.locked && idx < colList.length - 1;
                                   return (
-                                    <label
+                                    <div
                                       key={opt.key}
-                                      className={`flex items-center gap-2.5 px-3 py-2 text-[11px] font-bold ${
-                                        opt.locked
-                                          ? 'cursor-default bg-slate-50/60'
-                                          : 'cursor-pointer hover:bg-emerald-50/40'
+                                      className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold ${
+                                        opt.locked ? 'bg-slate-50/60' : 'hover:bg-emerald-50/40'
                                       }`}
-                                      title={
-                                        opt.locked
-                                          ? t('gso_col_locked_hint', 'leads', 'Colonne obligatoire — toujours envoyée.')
-                                          : undefined
-                                      }
                                     >
-                                      <input
-                                        type="checkbox"
-                                        checked={checked}
-                                        disabled={opt.locked}
-                                        onChange={() => toggleColumn(opt.key, opt.locked)}
-                                        className="w-3.5 h-3.5 rounded accent-emerald-600 cursor-pointer disabled:cursor-default"
-                                      />
-                                      <span className={`flex-1 ${checked ? 'text-slate-800' : 'text-slate-400'}`}>
-                                        {opt.label}
-                                      </span>
-                                      {opt.locked && <Lock className="w-3 h-3 text-slate-400 shrink-0" />}
-                                    </label>
+                                      <label
+                                        className={`flex items-center gap-2.5 flex-1 min-w-0 ${
+                                          opt.locked ? 'cursor-default' : 'cursor-pointer'
+                                        }`}
+                                        title={
+                                          opt.locked
+                                            ? t('gso_col_locked_hint', 'leads', 'Colonne obligatoire — toujours envoyée.')
+                                            : undefined
+                                        }
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={checked}
+                                          disabled={opt.locked}
+                                          onChange={() => toggleColumn(opt.key, opt.locked)}
+                                          className="w-3.5 h-3.5 rounded accent-emerald-600 cursor-pointer disabled:cursor-default"
+                                        />
+                                        <span className={`flex-1 truncate ${checked ? 'text-slate-800' : 'text-slate-400'}`}>
+                                          {opt.label}
+                                        </span>
+                                      </label>
+                                      {opt.locked ? (
+                                        <Lock className="w-3 h-3 text-slate-400 shrink-0" />
+                                      ) : (
+                                        <div className="flex items-center gap-0.5 shrink-0">
+                                          <button
+                                            type="button"
+                                            onClick={() => moveColumn(idx, -1)}
+                                            disabled={!canUp}
+                                            title={t('gso_col_move_up', 'leads', 'Monter')}
+                                            className="p-0.5 rounded text-slate-400 hover:text-emerald-700 hover:bg-emerald-100/60 disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-slate-400"
+                                          >
+                                            <ChevronUp className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => moveColumn(idx, 1)}
+                                            disabled={!canDown}
+                                            title={t('gso_col_move_down', 'leads', 'Descendre')}
+                                            className="p-0.5 rounded text-slate-400 hover:text-emerald-700 hover:bg-emerald-100/60 disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-slate-400"
+                                          >
+                                            <ChevronDown className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
                                   );
                                 })}
                               </div>
@@ -761,9 +818,9 @@ export default function GoogleSheetOutboundPanel() {
                                 </table>
                               </div>
                             )}
-                            {columnOptions.length > 0 && (
+                            {colList.length > 0 && (
                               <p className="text-[10px] font-medium text-slate-400 mt-1.5 leading-relaxed">
-                                {t('gso_columns_hint', 'leads', 'Décochez les colonnes que vous ne voulez pas envoyer. Date et Lead ID sont toujours inclus.')}
+                                {t('gso_columns_hint', 'leads', 'Décochez les colonnes à ne pas envoyer et réordonnez-les avec les flèches — l\'ordre ici est l\'ordre dans la feuille. Date et Lead ID restent toujours en tête.')}
                               </p>
                             )}
                           </div>
@@ -776,7 +833,7 @@ export default function GoogleSheetOutboundPanel() {
                           {selectionChanged ? (
                             <button
                               type="button"
-                              onClick={() => setColumnsMutation.mutate([...selectedCols])}
+                              onClick={() => setColumnsMutation.mutate(editedOrderedKeys)}
                               disabled={setColumnsMutation.isPending}
                               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-200 hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                             >

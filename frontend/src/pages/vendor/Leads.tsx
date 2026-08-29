@@ -314,6 +314,22 @@ export default function VendorLeads() {
     deleteIds: [],
     groups: {},
   });
+  // Duplicate-number gate for the SHEET push, filled by the server's free
+  // pre-check: numbers already in the sheet on another lead, or repeated inside
+  // the selection. `cleanIds` always go; `includeIds` are the duplicates the
+  // seller re-ticked to send anyway.
+  const [sheetDupCheck, setSheetDupCheck] = useState<{
+    isOpen: boolean;
+    cleanIds: number[];
+    dups: Array<{
+      leadId: number;
+      fullName: string;
+      phone: string;
+      inSheet: { leadId: number; fullName: string; status: string; sentAt: string | null } | null;
+      batchLeadIds: number[];
+    }>;
+    includeIds: number[];
+  }>({ isOpen: false, cleanIds: [], dups: [], includeIds: [] });
   const [historyModal, setHistoryModal] = useState<{
     isOpen: boolean;
     customerName: string;
@@ -828,7 +844,7 @@ export default function VendorLeads() {
    * confirmation states the price before anything is spent — a mis-click on a
    * 200-row selection is otherwise 200 credits gone.
    */
-  const handlePushToSheet = (ids: number[]) => {
+  const executeSheetPush = (ids: number[]) => {
     if (!ids || ids.length === 0) return;
 
     setConfirmModal({
@@ -860,6 +876,58 @@ export default function VendorLeads() {
         }
       }
     });
+  };
+
+  /**
+   * Entry point for both sheet-push buttons: first asks the server which of
+   * these numbers are doublons — already in the sheet on another lead, or
+   * repeated inside the selection — and routes through the duplicate modal when
+   * any are found, so the seller decides whether they go. The check is free and
+   * read-only; if it errors, the push proceeds as before rather than blocking.
+   */
+  const handlePushToSheet = async (ids: number[]) => {
+    if (!ids || ids.length === 0) return;
+
+    let dups: any[] = [];
+    let checked = false;
+    try {
+      setIsPushingSheet(true);
+      const res = await googleSheetsApi.checkSheetDuplicates(ids);
+      dups = res?.data?.data?.duplicates ?? [];
+      checked = true;
+    } catch {
+      // Advisory only — a failed check must never stop a seller from sending.
+    } finally {
+      setIsPushingSheet(false);
+    }
+
+    if (!checked || dups.length === 0) {
+      executeSheetPush(ids);
+      return;
+    }
+
+    const dupIds = new Set(dups.map((d: any) => Number(d.leadId)));
+    const cleanIds = ids.filter((id) => !dupIds.has(Number(id)));
+    // Defaults: a number already in the sheet stays fully excluded; a number
+    // repeated only inside the selection keeps its first lead and excludes the
+    // repeats, so an unedited confirm sends each customer exactly once.
+    const includeIds: number[] = [];
+    for (const d of dups) {
+      if (d.inSheet) continue;
+      const group = [Number(d.leadId), ...(d.batchLeadIds || []).map(Number)].sort((a, b) => a - b);
+      if (Number(d.leadId) === group[0]) includeIds.push(Number(d.leadId));
+    }
+    setSheetDupCheck({ isOpen: true, cleanIds, dups, includeIds });
+  };
+
+  /** Tick/untick one duplicate in the sheet-push modal ("send anyway"). */
+  const toggleSheetDup = (leadId: number) => {
+    setSheetDupCheck((prev) => ({
+      ...prev,
+      includeIds: prev.includeIds.includes(leadId)
+        ? prev.includeIds.filter((id) => id !== leadId)
+        : [...prev.includeIds, leadId],
+    }));
   };
 
   // Merge the two histories the way the modal has always shown them: one
@@ -2431,6 +2499,143 @@ export default function VendorLeads() {
                   >
                     <Headphones size={16} />
                     {hasDuplicateSelections ? t('dup_has_selections', 'leads', 'Doublons sélectionnés') : t('confirm_count', 'leads', 'Confirmer ({count})').replace('{count}', String(duplicateCheck.ids.length + duplicateCheck.deleteIds.length))}
+                  </button>
+                );
+              })()}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Sheet-push duplicate numbers modal: the server flagged numbers already
+          in the sheet (on another lead) or repeated in the selection; the seller
+          ticks the ones to send anyway. Nothing was charged to get here. */}
+      {sheetDupCheck.isOpen && createPortal(
+        <div data-modal-portal style={{ zIndex: 2147483647 }} className="fixed inset-0 flex items-center justify-center p-4">
+          <div
+            data-modal-backdrop
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-md cursor-pointer"
+            onClick={() => setSheetDupCheck(prev => ({ ...prev, isOpen: false }))}
+          />
+          <div
+            data-modal-content
+            className="relative z-10 bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl border border-white/20 animate-in zoom-in-95 duration-300"
+          >
+            <div className="p-8 border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+                    <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center">
+                      <AlertCircle className="w-6 h-6 text-amber-500" />
+                    </div>
+                    {t('sheet_dup_title', 'leads', 'Numéros en double détectés')}
+                  </h2>
+                  <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-2">
+                    {t('sheet_dup_subtitle', 'leads', '{count} doublon(s) sur {total} lead(s) sélectionné(s)')
+                      .replace('{count}', String(sheetDupCheck.dups.length))
+                      .replace('{total}', String(sheetDupCheck.cleanIds.length + sheetDupCheck.dups.length))}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSheetDupCheck(prev => ({ ...prev, isOpen: false }))}
+                  className="p-3 rounded-2xl bg-gray-50 text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-all"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-8 space-y-6">
+              <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex gap-4">
+                <div className="w-10 h-10 bg-amber-500 text-white rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/20">
+                  <FileSpreadsheet size={20} />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-amber-900 uppercase tracking-tight">
+                    {t('sheet_dup_strip_title', 'leads', 'Ces numéros existent déjà')}
+                  </p>
+                  <p className="text-xs text-amber-700/70 font-medium mt-1 leading-relaxed">
+                    {t('sheet_dup_strip_desc', 'leads', 'Chaque numéro ci-dessous est déjà dans votre feuille sur un autre lead, ou apparaît plusieurs fois dans votre sélection. Cochez uniquement ceux que vous voulez envoyer quand même — les leads sans doublon partiront normalement.')}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-100 divide-y divide-slate-50 overflow-hidden">
+                {sheetDupCheck.dups.map((dup) => {
+                  const included = sheetDupCheck.includeIds.includes(dup.leadId);
+                  return (
+                    <label
+                      key={dup.leadId}
+                      className={`flex items-center gap-4 px-5 py-4 cursor-pointer transition-colors ${
+                        included ? 'bg-emerald-50/40' : 'bg-white hover:bg-slate-50/60'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={included}
+                        onChange={() => toggleSheetDup(dup.leadId)}
+                        className="w-4 h-4 rounded accent-emerald-600 cursor-pointer shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-black text-slate-800 truncate">{dup.fullName || '—'}</p>
+                        <p className="text-xs font-bold text-slate-400 flex items-center gap-1.5 mt-0.5" dir="ltr">
+                          <Phone className="w-3 h-3 shrink-0" />
+                          {dup.phone}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        {dup.inSheet ? (
+                          <>
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-50 border border-red-100 text-[9px] font-black uppercase tracking-widest text-red-600">
+                              <FileSpreadsheet className="w-3 h-3" />
+                              {t('sheet_dup_in_sheet', 'leads', 'Déjà dans la feuille')}
+                            </span>
+                            {dup.inSheet.sentAt && (
+                              <p className="text-[10px] font-bold text-slate-400 mt-1">
+                                {new Date(dup.inSheet.sentAt).toLocaleDateString('fr-FR')}
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-100 text-[9px] font-black uppercase tracking-widest text-amber-600">
+                            {t('sheet_dup_in_batch', 'leads', 'Répété dans la sélection')}
+                          </span>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-100 flex items-center gap-3">
+              <button
+                onClick={() => setSheetDupCheck(prev => ({ ...prev, isOpen: false }))}
+                className="flex-1 px-6 py-4 bg-gray-50 text-gray-500 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-gray-100 hover:text-gray-800 transition-all"
+              >
+                {t('cancel', 'leads', 'Annuler')}
+              </button>
+              {(() => {
+                const total = sheetDupCheck.cleanIds.length + sheetDupCheck.includeIds.length;
+                return (
+                  <button
+                    onClick={() => {
+                      const ids = [...sheetDupCheck.cleanIds, ...sheetDupCheck.includeIds];
+                      setSheetDupCheck(prev => ({ ...prev, isOpen: false }));
+                      // Hands off to the usual confirmation, which states the cost
+                      // for exactly the rows that survived the duplicate pass.
+                      executeSheetPush(ids);
+                    }}
+                    disabled={total === 0}
+                    className={`flex-[2] px-8 py-4 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all shadow-xl flex items-center justify-center gap-2 ${
+                      total === 0
+                        ? 'bg-gray-300 cursor-not-allowed shadow-none'
+                        : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
+                    }`}
+                  >
+                    <FileSpreadsheet size={16} />
+                    {t('sheet_dup_continue', 'leads', 'Continuer ({count})').replace('{count}', String(total))}
                   </button>
                 );
               })()}

@@ -27,6 +27,7 @@ import {
   appendRows,
   applyHeaderTemplate,
   buildLeadRow,
+  headerSignature,
   isWriterConfigured,
   readSheetLeadIds,
   DEFAULT_TAB,
@@ -605,7 +606,7 @@ async function drainVendorLocked(vendorId: number, jobIds?: number[]): Promise<D
             select: {
               quantity: true,
               totalPriceMad: true,
-              product: { select: { nameFr: true, nameAr: true, nameEn: true } },
+              product: { select: { sku: true, nameFr: true, nameAr: true, nameEn: true } },
             },
           },
         },
@@ -652,17 +653,19 @@ async function drainVendorLocked(vendorId: number, jobIds?: number[]): Promise<D
   // buildLeadRow's cells would arrive under a mismatched heading. applyHeaderTemplate
   // overwrites row 1 in place, shifting no data.
   //
-  // Guarded by a stored width rather than attempted every tick: this costs Google
-  // calls and must not become a per-drain tax. A failure is swallowed on purpose and
-  // the marker left stale so the next tick retries — a header out of step is cosmetic
-  // and must never cost the seller the lead rows themselves.
-  if (config.googleSheetOutHeaderCols !== labels.length) {
+  // Guarded by a stored fingerprint rather than attempted every tick: this costs
+  // Google calls and must not become a per-drain tax. The fingerprint is order-
+  // sensitive where the old width marker was not — a seller reordering columns
+  // changes the header without changing its width. A failure is swallowed on
+  // purpose and the marker left stale so the next tick retries — a header out of
+  // step is cosmetic and must never cost the seller the lead rows themselves.
+  if (config.googleSheetOutHeaderCols !== headerSignature(labels)) {
     try {
       const applied = await applyHeaderTemplate(config.googleSheetOutId, tab, labels);
       if (applied.ok) {
         await prisma.user.update({
           where: { id: vendorId },
-          data: { googleSheetOutHeaderCols: labels.length },
+          data: { googleSheetOutHeaderCols: headerSignature(labels) },
         });
       }
     } catch (err) {

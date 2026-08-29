@@ -1119,6 +1119,11 @@ export const googleSheetsApi = {
     api.get('/google-sheets/outbound/jobs', { params }),
   pushLeadsToSheet: (leadIds: number[]) =>
     api.post('/google-sheets/outbound/push', { leadIds }),
+  // Which of these leads carry a phone number already in the sheet (on another
+  // lead) or repeated inside the selection. Free, read-only — called before a
+  // push so the seller can decide whether the duplicates go anyway.
+  checkSheetDuplicates: (leadIds: number[]) =>
+    api.post('/google-sheets/outbound/check-duplicates', { leadIds }),
   // Which of these leads already have a row in the seller's sheet — drives the
   // little sheet badge in the leads table.
   getSheetSentStatus: (leadIds: number[]) =>

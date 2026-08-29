@@ -19,6 +19,7 @@ import {
   buildLeadRow,
   ensureSheetReady,
   getServiceAccountEmail,
+  headerSignature,
   isWriterConfigured,
   outboundLabels,
   parseOutboundSelection,
@@ -880,7 +881,13 @@ async function buildOutboundStatus(vendorId: number) {
   const selectedKeys = parseOutboundSelection(vendor?.googleSheetOutColumns);
   const resolvedColumns = resolveOutboundColumns(selectedKeys);
   const selectedKeySet = new Set(resolvedColumns.map((c) => c.key));
-  const columnOptions = OUTBOUND_COLUMN_DEFS.map((c) => ({
+  // Selected columns first, in the seller's own order — the list in the panel is
+  // also the preview of the sheet, so it must read top-to-bottom the way the sheet
+  // reads left-to-right. The hidden columns trail behind in canonical order.
+  const columnOptions = [
+    ...resolvedColumns,
+    ...OUTBOUND_COLUMN_DEFS.filter((c) => !selectedKeySet.has(c.key)),
+  ].map((c) => ({
     key: c.key,
     label: c.label,
     locked: !!c.locked,
@@ -1053,8 +1060,8 @@ router.post(
         googleSheetOutLastError: null,
         googleSheetOutLastErrorAt: null,
         // ensureSheetReady has just written (or verified) the header at the seller's
-        // selected width, so record it and spare the drain a re-apply it does not need.
-        googleSheetOutHeaderCols: connectLabels.length,
+        // selected shape, so record it and spare the drain a re-apply it does not need.
+        googleSheetOutHeaderCols: headerSignature(connectLabels),
         // googleSheetOutAuto is deliberately untouched: the admin may have
         // pre-seeded it, and connecting a sheet is not consent to auto-push.
       },
@@ -1296,8 +1303,8 @@ router.post(
       data: {
         googleSheetOutLastError: null,
         googleSheetOutLastErrorAt: null,
-        // Same reason as /outbound/connect: the header is now the current width.
-        googleSheetOutHeaderCols: headerLabels.length,
+        // Same reason as /outbound/connect: the header is now the current shape.
+        googleSheetOutHeaderCols: headerSignature(headerLabels),
       },
     });
 
@@ -1350,20 +1357,24 @@ router.post(
       return;
     }
 
-    // Keep only real keys, add the locked ones, drop everything else. resolveOutboundColumns
-    // then puts them back in canonical order, so the stored selection is normalised and
-    // order-independent, and always includes date + leadId.
+    // Keep only real keys, IN THE ORDER THE SELLER SENT THEM — that order is the
+    // point: it becomes the column order in their sheet. resolveOutboundColumns
+    // dedupes and pins the locked pair (date + leadId) to the front whatever the
+    // request says, so Lead ID can never leave column B.
     const validKeys = new Set(OUTBOUND_COLUMN_DEFS.map((c) => c.key));
     const requested = raw.map((k: any) => String(k)).filter((k: string) => validKeys.has(k));
-    const withLocked = Array.from(new Set([...LOCKED_OUTBOUND_KEYS, ...requested]));
-    const resolved = resolveOutboundColumns(withLocked);
+    const resolved = resolveOutboundColumns([...LOCKED_OUTBOUND_KEYS, ...requested]);
     const orderedKeys = resolved.map((c) => c.key);
     const labels = outboundLabels(resolved);
 
-    // Store null when every column is selected, so "all" stays the default shape and
-    // a newly-added platform column is picked up automatically by such sellers.
-    const isAll = orderedKeys.length === OUTBOUND_COLUMN_DEFS.length;
-    const stored = isAll ? null : JSON.stringify(orderedKeys);
+    // Store null only for the full set in canonical order, so "all, untouched" stays
+    // the default shape and a newly-added platform column is picked up automatically
+    // by such sellers. A full set in a CUSTOM order must persist as an explicit list,
+    // or the reordering would silently revert.
+    const isCanonical =
+      orderedKeys.length === OUTBOUND_COLUMN_DEFS.length &&
+      orderedKeys.every((k, i) => k === OUTBOUND_COLUMN_DEFS[i].key);
+    const stored = isCanonical ? null : JSON.stringify(orderedKeys);
 
     // Persist first so the choice sticks even if the sheet write fails (revoked
     // access, etc.); the drain and the next setup-header will reconcile the header.
@@ -1389,7 +1400,7 @@ router.post(
           await prisma.user.update({
             where: { id: vendorId },
             data: {
-              googleSheetOutHeaderCols: labels.length,
+              googleSheetOutHeaderCols: headerSignature(labels),
               googleSheetOutLastError: null,
               googleSheetOutLastErrorAt: null,
             },
@@ -1714,6 +1725,162 @@ router.post(
         alreadySent: stats.alreadySent,
         balance: stats.balance,
       },
+    });
+  })
+);
+
+/**
+ * How two phone strings are decided to be the same customer: Eastern Arabic
+ * digits mapped to ASCII, everything non-digit dropped, and a Moroccan number
+ * reduced to its 9-digit subscriber part so "0612345678", "+212612345678" and
+ * "00212 6 12 34 56 78" all collide. Anything non-Moroccan compares by its bare
+ * digits. Empty in, empty out — two blank phones must never count as a match.
+ */
+function phoneKey(raw?: string | null): string {
+  const ascii = String(raw ?? '').replace(/[٠-٩]/g, (d) =>
+    String(d.charCodeAt(0) - 0x0660)
+  );
+  const digits = ascii.replace(/\D/g, '');
+  if (/^0[5-7]\d{8}$/.test(digits)) return digits.slice(1);
+  if (/^212[5-7]\d{8}$/.test(digits)) return digits.slice(3);
+  if (/^00212[5-7]\d{8}$/.test(digits)) return digits.slice(5);
+  return digits;
+}
+
+/** A job in one of these states has a row in the sheet, or one queued to land. */
+const IN_SHEET_STATUSES = ['SENT', 'PENDING', 'SENDING', 'BLOCKED_NO_CREDITS'];
+
+/**
+ * POST /api/v1/google-sheets/outbound/check-duplicates
+ * Body: { leadIds: number[] }
+ *
+ * Answers, BEFORE a push, which of these leads carry a phone number that is
+ * already in the seller's sheet on a DIFFERENT lead (a SENT row, or one queued
+ * to land), and which of them share a number with each other inside the same
+ * selection. Read-only and free: nothing is enqueued, nothing is charged.
+ *
+ * The leads table calls this first and shows the duplicates for the seller to
+ * decide on; the push endpoint itself stays permissive on purpose, so "send it
+ * anyway" is just the same push call and needs no override flag. REMOVED rows
+ * do not count — the seller deleted them from the sheet, so the number is not
+ * in it any more.
+ */
+router.post(
+  '/outbound/check-duplicates',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const vendorId = req.user?.id;
+    if (!vendorId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const { leadIds } = req.body || {};
+    if (!Array.isArray(leadIds) || leadIds.length === 0) {
+      res.status(400).json({ success: false, message: 'Aucun prospect sélectionné.' });
+      return;
+    }
+    // Same ceiling as /outbound/push: this always precedes a push of the same ids.
+    if (leadIds.length > 200) {
+      res.status(400).json({
+        success: false,
+        message: 'Maximum 200 prospects par envoi. Réduisez votre sélection.',
+      });
+      return;
+    }
+
+    const vendor = await prisma.user.findUnique({
+      where: { id: vendorId },
+      select: { googleSheetsOutboundEnabled: true },
+    });
+    if (!vendor?.googleSheetsOutboundEnabled) {
+      res.status(403).json({ success: false, message: OUTBOUND_NOT_ENABLED });
+      return;
+    }
+
+    const ids = Array.from(
+      new Set(leadIds.map((id: any) => Number(id)).filter((id: number) => Number.isInteger(id) && id > 0))
+    );
+
+    // Scoped to the seller, like every read here: an id belonging to someone
+    // else simply drops out rather than erroring, matching pushLeadsNow.
+    const requested = await prisma.lead.findMany({
+      where: { id: { in: ids }, vendorId },
+      select: { id: true, fullName: true, phone: true, createdAt: true },
+    });
+
+    const keyByLead = new Map(requested.map((l) => [l.id, phoneKey(l.phone)] as const));
+    const wantedKeys = new Set(Array.from(keyByLead.values()).filter(Boolean));
+
+    // Every lead already in (or queued for) the sheet, EXCLUDING the requested
+    // ones — a lead is not its own duplicate, and a re-send of the same lead is
+    // already handled by the push path's "déjà envoyé" counting. Bounded by the
+    // same hard cap as the sheet-leads list; phones are matched in JS because the
+    // equality is normalised, which SQL cannot express against free-typed text.
+    const inSheetLeads = wantedKeys.size
+      ? await prisma.lead.findMany({
+          where: {
+            vendorId,
+            id: { notIn: ids },
+            sheetPushJob: { status: { in: IN_SHEET_STATUSES } },
+          },
+          select: {
+            id: true,
+            fullName: true,
+            phone: true,
+            sheetPushJob: { select: { status: true, sentAt: true } },
+          },
+          orderBy: { id: 'desc' },
+          take: SHEET_LEADS_HARD_CAP,
+        })
+      : [];
+
+    // First match per number wins — with id desc above, that is the most recent
+    // row in the sheet carrying it, which is the one worth showing the seller.
+    const inSheetByKey = new Map<string, (typeof inSheetLeads)[number]>();
+    for (const lead of inSheetLeads) {
+      const key = phoneKey(lead.phone);
+      if (key && wantedKeys.has(key) && !inSheetByKey.has(key)) inSheetByKey.set(key, lead);
+    }
+
+    // Members of the selection itself that share a number.
+    const batchByKey = new Map<string, number[]>();
+    for (const lead of requested) {
+      const key = keyByLead.get(lead.id)!;
+      if (!key) continue;
+      const group = batchByKey.get(key) ?? [];
+      group.push(lead.id);
+      batchByKey.set(key, group);
+    }
+
+    const duplicates = requested
+      .map((lead) => {
+        const key = keyByLead.get(lead.id)!;
+        if (!key) return null;
+        const inSheet = inSheetByKey.get(key) ?? null;
+        const batchLeadIds = (batchByKey.get(key) ?? []).filter((id) => id !== lead.id);
+        if (!inSheet && batchLeadIds.length === 0) return null;
+        return {
+          leadId: lead.id,
+          fullName: lead.fullName,
+          phone: lead.phone,
+          createdAt: lead.createdAt,
+          inSheet: inSheet
+            ? {
+                leadId: inSheet.id,
+                fullName: inSheet.fullName,
+                status: inSheet.sheetPushJob?.status ?? 'SENT',
+                sentAt: inSheet.sheetPushJob?.sentAt ?? null,
+              }
+            : null,
+          batchLeadIds,
+        };
+      })
+      .filter(Boolean);
+
+    res.json({
+      success: true,
+      data: { checked: requested.length, duplicates },
     });
   })
 );
