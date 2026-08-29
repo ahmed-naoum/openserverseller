@@ -125,6 +125,28 @@ export function canonicalUrl(req: Request, subdomain: string | null): string | n
   return `${req.protocol}://${target}${req.originalUrl}`;
 }
 
+/**
+ * The per-link thank-you page, handed to the SPA.
+ *
+ * nginx routes the whole of /r/ here (`location ^~ /r/`), not just /r/:code, so
+ * every path under it that this router does not answer falls through to the
+ * API's JSON 404 handler — and nginx only intercepts 5xx, so that JSON reached
+ * the buyer. The checkout runtime redirects to `/r/<code>/thank-you` after an
+ * order is placed (blocks/checkout.ts), which meant every completed order ended
+ * on `{"status":"error","message":"Cannot find GET /r/<code>/thank-you"}`.
+ *
+ * React already has this route and does the real work: ReferralThankYouPage
+ * fetches the link's own page and falls back to the shared default when the
+ * seller never built one, so serving the shell is the whole fix.
+ *
+ * Not compiled, and not cloaked, for the same reason the API endpoint behind it
+ * is not: the visitor has already ordered, every audience rule was applied on
+ * the way in, and re-deciding here could only strand a real customer.
+ *
+ * 200, not 404: this is a page the buyer is meant to reach.
+ */
+router.get('/:code/thank-you', (_req: Request, res: Response) => serveSpaFallback(res, 200));
+
 router.get('/:code', async (req: Request, res: Response) => {
   const code = String(req.params.code || '');
 
