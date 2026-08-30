@@ -358,7 +358,7 @@ export const CHECKOUT_RUNTIME = `
       var val = capiValue();
       for (var i = 0; i < cfg.pixels.length; i++) {
         var p = cfg.pixels[i];
-        var ev = p.conversionEvent || 'Lead';
+        var ev = p.conversionEvent || 'Purchase';
         try {
           if (p.platform === 'META' && window.fbq) {
             window.fbq('track', ev,

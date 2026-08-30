@@ -86,7 +86,7 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
   const [type, setType] = useState<'GLOBAL' | 'SINGLE'>('GLOBAL');
   const [pixelId, setPixelId] = useState('');
   const [targetId, setTargetId] = useState('');
-  const [conversionEvent, setConversionEvent] = useState<'Lead' | 'Purchase'>('Lead');
+  const [conversionEvent, setConversionEvent] = useState<'Lead' | 'Purchase'>('Purchase');
   const [accessToken, setAccessToken] = useState('');
 
   // Conversions API modal state (META only)
@@ -168,7 +168,7 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
     setType('GLOBAL');
     setPixelId('');
     setTargetId('');
-    setConversionEvent('Lead');
+    setConversionEvent('Purchase');
     setAccessToken('');
   };
 

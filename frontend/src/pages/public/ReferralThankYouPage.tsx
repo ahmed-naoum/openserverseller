@@ -90,7 +90,7 @@ export default function ReferralThankYouPage() {
 
     pixels.forEach((pixel: any) => {
       const platform = (pixel.platform || 'META').toUpperCase();
-      const eventName = pixel.conversionEvent || 'Lead';
+      const eventName = pixel.conversionEvent || 'Purchase';
       const w = window as any;
 
       // Value and currency are what make the event usable for optimisation and

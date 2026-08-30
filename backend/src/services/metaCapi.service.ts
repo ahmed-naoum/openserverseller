@@ -210,7 +210,7 @@ export async function reportLeadToMetaCapi(input: CapiLeadInput): Promise<void> 
     if (!active.length) return;
 
     for (const pixel of active) {
-      const eventName = pixel.conversionEvent === 'Purchase' ? 'Purchase' : 'Lead';
+      const eventName = String(pixel.conversionEvent || 'Purchase').trim() === 'Lead' ? 'Lead' : 'Purchase';
       const event = buildCapiEvent(input, eventName);
       const result = await postToGraph(
         pixel.pixelId,
