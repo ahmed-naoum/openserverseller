@@ -703,10 +703,31 @@ export default function ReferralForm() {
       // Mark the abandoned-checkout attempt as converted.
       socket?.emit('checkout:complete', { code });
 
-      // Hand the order to the thank-you page, which is where the conversion
-      // event now fires — that page is only reachable after a real order, and
-      // it is the only place with the value to attach. Written before we
-      // navigate so it is present however the browser gets there.
+      // Track browser conversion event immediately upon checkout submit
+      if (data?.pixels && data.pixels.length && typeof window !== 'undefined') {
+        const w = window as any;
+        data.pixels.forEach((pixel: any) => {
+          const platform = (pixel.platform || 'META').toUpperCase();
+          const eventName = pixel.conversionEvent || 'Purchase';
+          try {
+            if (platform === 'META' && w.fbq) {
+              w.fbq('track', eventName,
+                Number.isFinite(unitPrice) ? { value: unitPrice, currency: 'MAD' } : {},
+                { eventID: capiEventId }
+              );
+            } else if (platform === 'GOOGLE' && w.gtag) {
+              w.gtag('event', eventName, { event_category: 'conversion', value: unitPrice, currency: 'MAD' });
+            } else if (platform === 'TIKTOK' && w.ttq) {
+              w.ttq.track(eventName === 'Purchase' ? 'CompletePayment' : 'CompleteRegistration', { value: unitPrice, currency: 'MAD' });
+            } else if (platform === 'SNAPCHAT' && w.snaptr) {
+              w.snaptr('track', eventName === 'Purchase' ? 'PURCHASE' : 'SIGN_UP', { price: unitPrice, currency: 'MAD' });
+            }
+          } catch (e) {
+            console.error('[BrowserPixel] track failed:', e);
+          }
+        });
+      }
+
       const submitBody = submitRes?.data?.status === 'success' ? submitRes.data.data : submitRes?.data;
       writeOrderHandoff({
         code: code!,
@@ -714,8 +735,6 @@ export default function ReferralForm() {
         fullName: form.fullName,
         city: form.city,
         variantName: selectedOption?.name ?? null,
-        // Deliberately the unit/pack price as displayed, never multiplied by
-        // quantity — packQuantityOf's note applies here too.
         price: Number.isFinite(unitPrice) ? unitPrice : null,
         currency: 'MAD',
         productName:
