@@ -245,23 +245,29 @@ export async function sendMetaCapiTestEvent(pixel: {
   pixelId: string;
   accessToken: string;
   testEventCode?: string | null;
+  conversionEvent?: string | null;
 }): Promise<CapiSendResult> {
   if (!pixel.testEventCode) {
     return { ok: false, error: 'TEST_CODE_REQUIRED' };
   }
+  const eventName = (pixel.conversionEvent || 'Purchase').trim() === 'Lead' ? 'Lead' : 'Purchase';
   const event = buildCapiEvent(
     {
       influencerId: 0,
       code: 'test',
-      leadId: 0,
-      fullName: 'Test Silacod',
-      phone: '0612345678',
+      leadId: Math.floor(Math.random() * 899999) + 100000,
+      fullName: 'Test Customer',
+      phone: '212612345678',
       city: 'Casablanca',
+      ipAddress: '41.140.0.1',
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       eventId: `test-${Date.now()}`,
-      value: 1,
-      sourceUrl: 'https://silacod.com/capi-test',
+      value: 100,
+      currency: 'MAD',
+      productName: 'Produit Test',
+      sourceUrl: 'https://silacod.com/r/test',
     },
-    'Lead'
+    eventName
   );
   return postToGraph(pixel.pixelId, pixel.accessToken, [event], pixel.testEventCode);
 }

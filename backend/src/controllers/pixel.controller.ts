@@ -227,6 +227,7 @@ export const testPixelCapi = async (req: Request, res: Response) => {
       pixelId: pixel.pixelId,
       accessToken: token,
       testEventCode,
+      conversionEvent: pixel.conversionEvent,
     });
 
     if (result.ok) {
