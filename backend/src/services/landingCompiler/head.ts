@@ -47,12 +47,29 @@ export interface HeadInput {
 export function pixelRowsForCode(pixels: any[], code: string): any[] {
   if (!Array.isArray(pixels)) return [];
 
-  const single = pixels.filter(
-    (p) => p?.type === 'SINGLE' && Array.isArray(p?.targetIds) && p.targetIds.includes(code)
-  );
+  const parseTargetIds = (raw: any): string[] => {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw.map(String);
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.map(String);
+        return [raw];
+      } catch {
+        return [raw];
+      }
+    }
+    return [];
+  };
+
+  const single = pixels.filter((p) => {
+    if (String(p?.type || '').toUpperCase() !== 'SINGLE') return false;
+    const ids = parseTargetIds(p?.targetIds);
+    return ids.includes(code);
+  });
   if (single.length) return single;
 
-  return pixels.filter((p) => p?.type === 'GLOBAL');
+  return pixels.filter((p) => String(p?.type || '').toUpperCase() === 'GLOBAL' || !p?.type);
 }
 
 /**
