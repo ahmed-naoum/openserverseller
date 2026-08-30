@@ -669,8 +669,23 @@ const extractToken = (req: Request): string | null => {
   return null;
 };
 
+/**
+ * The WhatsApp agent pages are exempt from the global limiter. The inbox is a
+ * chat UI: it polls conversations, streams media, and fires a request per
+ * keystroke-ish interaction, so one vendor working their inbox blows through
+ * 100 req/min in normal use and then eats the 10-minute IP block — which also
+ * takes down the rest of the site for everyone behind the same NAT. Every
+ * endpoint under /whatsapp-agent is behind `authenticate` (+ the entitlement
+ * gate), so an anonymous flood gets 401s from cheap middleware, not free reign.
+ */
+const isWhatsappAgentRequest = (req: Request): boolean =>
+  (req.originalUrl || '').includes('/whatsapp-agent');
+
 const shouldSkipRateLimit = async (req: Request): Promise<boolean> => {
   try {
+    if (isWhatsappAgentRequest(req)) {
+      return true;
+    }
     const settings = await fetchSecuritySettings();
     const clientIP = req.ip || req.socket.remoteAddress || 'unknown';
 
@@ -746,6 +761,12 @@ export const rateLimitCheckMiddleware = async (
   const clientIP = req.ip || req.socket.remoteAddress || 'unknown';
 
   if (isIPRateLimitBlocked(clientIP)) {
+    // The agent pages are exempt from the limiter, but that exemption must not
+    // erase a block the same IP earned elsewhere — pass through, keep the block.
+    if (isWhatsappAgentRequest(req)) {
+      return next();
+    }
+
     const skip = await shouldSkipRateLimit(req);
     if (skip) {
       // Staff share an office IP with everyone else behind the same NAT, so a

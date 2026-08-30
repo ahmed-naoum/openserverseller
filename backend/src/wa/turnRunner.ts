@@ -587,7 +587,7 @@ async function loadHistory(
 }
 
 /** Applies what the agent decided. Runs once, after the tool loop. */
-async function applyIntents(
+export async function applyIntents(
   userId: number,
   contactId: number,
   intents: BrainIntents,
@@ -612,8 +612,11 @@ async function applyIntents(
   } else if (intents.reject) {
     data.status = 'REJECTED';
   } else if (intents.human) {
+    // Flag the conversation for a human but keep the AI answering. Pausing it
+    // here left customers on read whenever nobody picked up the escalation;
+    // the real takeover moment is a human replying from the inbox, and THAT
+    // is what sets aiEnabled=false (whatsappInbox.routes.ts send handler).
     data.status = 'HUMAN';
-    data.aiEnabled = false;
   }
 
   if (Object.keys(data).length) {
