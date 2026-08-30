@@ -103,6 +103,10 @@ export interface CapiLeadInput {
   value?: number | null;
   currency?: string;
   productName?: string | null;
+  /** Platform product id → content_ids, for catalog/dynamic ads matching. */
+  productId?: number | string | null;
+  /** Units in the chosen pack → num_items. */
+  quantity?: number | null;
   /** Landing page URL the order was placed on. */
   sourceUrl?: string | null;
 }
@@ -137,6 +141,18 @@ export function buildCapiEvent(input: CapiLeadInput, eventName: string): Record<
   if (Number.isFinite(value) && value >= 0) customData.value = value;
   if (input.productName) customData.content_name = String(input.productName).slice(0, 200);
   customData.order_id = String(input.leadId);
+  // Standard parameters Meta reads for catalog matching and delivery
+  // optimisation. content_ids only helps a seller whose catalog uses our
+  // product ids, and costs nothing when it does not; num_items mirrors the
+  // pack size the stock decrement uses.
+  if (input.productId !== null && input.productId !== undefined && input.productId !== '') {
+    customData.content_ids = [String(input.productId)];
+    customData.content_type = 'product';
+  }
+  const qty = Number(input.quantity);
+  if (Number.isInteger(qty) && qty >= 1) customData.num_items = qty;
+  // Every order on the platform is cash-on-delivery to the door.
+  if (eventName === 'Purchase') customData.delivery_category = 'home_delivery';
 
   const event: Record<string, any> = {
     event_name: eventName,
@@ -265,6 +281,8 @@ export async function sendMetaCapiTestEvent(pixel: {
       value: 100,
       currency: 'MAD',
       productName: 'Produit Test',
+      productId: 'test-product',
+      quantity: 1,
       sourceUrl: 'https://silacod.com/r/test',
     },
     eventName

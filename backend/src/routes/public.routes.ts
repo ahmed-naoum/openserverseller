@@ -498,6 +498,8 @@ router.post(
         value: capiValue ?? (Number.isFinite(retailValue) ? retailValue : null),
         currency: 'MAD',
         productName: link.product?.nameFr || link.product?.nameAr || null,
+        productId: link.productId,
+        quantity: packQuantity,
         sourceUrl:
           sanitizeSourceUrl(req.body.eventSourceUrl) ||
           sanitizeSourceUrl(req.headers.referer) ||

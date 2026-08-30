@@ -90,6 +90,24 @@ describe('buildCapiEvent', () => {
     expect(ev.custom_data).toMatchObject({ currency: 'MAD', value: 249, order_id: '42' });
   });
 
+  it('carries the standard catalog/delivery parameters when the order has them', () => {
+    const ev = buildCapiEvent({ ...input, productId: 77, quantity: 3 }, 'Purchase');
+    expect(ev.custom_data.content_ids).toEqual(['77']);
+    expect(ev.custom_data.content_type).toBe('product');
+    expect(ev.custom_data.num_items).toBe(3);
+    // Every platform order is COD to the door; the parameter only applies to
+    // purchases, so a Lead event must not carry it.
+    expect(ev.custom_data.delivery_category).toBe('home_delivery');
+    expect(buildCapiEvent({ ...input, productId: 77 }, 'Lead').custom_data.delivery_category).toBeUndefined();
+  });
+
+  it('omits catalog parameters rather than inventing them', () => {
+    const ev = buildCapiEvent(input, 'Purchase');
+    expect(ev.custom_data.content_ids).toBeUndefined();
+    expect(ev.custom_data.content_type).toBeUndefined();
+    expect(ev.custom_data.num_items).toBeUndefined();
+  });
+
   it('never emits a raw phone, name or city anywhere in the payload', () => {
     const flat = JSON.stringify(buildCapiEvent(input, 'Purchase')).toLowerCase();
     expect(flat).not.toContain('0612345678');
