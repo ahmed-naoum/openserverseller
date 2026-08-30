@@ -98,7 +98,7 @@ describe('express_checkout', () => {
     expect(html).toMatch(/data-pack="p1"[^>]*aria-checked="true"/);
     expect(html).toMatch(/data-pack="p2"[^>]*aria-checked="false"/);
     // The header price follows the first pack, not the product retail price.
-    expect(html).toMatch(/data-ck="price"[^>]*>249/);
+    expect(html).toMatch(/data-ck="price"[\s\S]*?249/);
   });
 
   it('drives the selected pack from a class, never an inline style', async () => {

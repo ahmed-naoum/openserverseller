@@ -821,7 +821,7 @@ export default function ReferralForm() {
                 </h2>
                 {blockContent.showPrice !== false && (
                   <div className="flex items-center justify-center gap-1.5 mb-2">
-                    {blockContent.showOldPrice && (
+                    {(blockContent.showOldPrice || selectedOption?.oldPrice) && (
                       <>
                         <span 
                           className="font-bold line-through opacity-60"
@@ -830,7 +830,7 @@ export default function ReferralForm() {
                             fontSize: `${blockContent.oldPriceSize || (blockContent.priceSize || 30) * 0.7}px`
                           }}
                         >
-                          {blockContent.oldPriceValue || (product?.retailPriceMad ? Number(product.retailPriceMad) + 50 : 150)}
+                          {selectedOption?.oldPrice || blockContent.oldPriceValue || (product?.retailPriceMad ? Number(product.retailPriceMad) + 50 : 150)}
                         </span>
                         <span className="text-gray-300 font-bold text-xl mx-0.5">/</span>
                       </>

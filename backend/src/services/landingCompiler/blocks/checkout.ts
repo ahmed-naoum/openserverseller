@@ -281,7 +281,7 @@ export const checkoutBlock: BlockRenderer = {
       }
 
       bits.push(
-        `<span class="ck-now" data-ck="price" style="color:${priceColor};font-size:${priceSize}px">` +
+        `<span class="ck-now" style="color:${priceColor};font-size:${priceSize}px">` +
           `${esc(current)}</span>`
       );
 
@@ -289,7 +289,7 @@ export const checkoutBlock: BlockRenderer = {
         ` <span class="ck-curr" style="font-size:${Math.round(priceSize * 0.75)}px">${esc(currency)}</span>`
       );
 
-      parts.push(`<div class="ck-price">${bits.join('')}</div>`);
+      parts.push(`<div class="ck-price" data-ck="price">${bits.join('')}</div>`);
     }
 
     const packs = Array.isArray(c.options) ? c.options : [];
