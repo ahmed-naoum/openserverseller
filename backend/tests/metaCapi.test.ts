@@ -108,6 +108,12 @@ describe('buildCapiEvent', () => {
     expect(ev.custom_data.num_items).toBeUndefined();
   });
 
+  it('hashes the region as st when the city catalogue resolved one', () => {
+    const ev = buildCapiEvent({ ...input, state: 'Casablanca-Settat' }, 'Purchase');
+    expect(ev.user_data.st).toEqual([sha('casablanca-settat')]);
+    expect(buildCapiEvent(input, 'Purchase').user_data.st).toBeUndefined();
+  });
+
   it('never emits a raw phone, name or city anywhere in the payload', () => {
     const flat = JSON.stringify(buildCapiEvent(input, 'Purchase')).toLowerCase();
     expect(flat).not.toContain('0612345678');

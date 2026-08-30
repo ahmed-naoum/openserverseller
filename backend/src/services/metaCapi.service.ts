@@ -93,6 +93,8 @@ export interface CapiLeadInput {
   fullName: string;
   phone: string;
   city?: string | null;
+  /** Region/state (`st`), resolved from the city catalogue when the city matches. */
+  state?: string | null;
   ipAddress?: string | null;
   userAgent?: string | null;
   /** Browser identifiers forwarded by the page. Passed through unhashed. */
@@ -123,6 +125,8 @@ export function buildCapiEvent(input: CapiLeadInput, eventName: string): Record<
   if (fn) userData.fn = [sha256(fn)];
   if (ln) userData.ln = [sha256(ln)];
   if (city) userData.ct = [sha256(city.replace(/\s+/g, ''))];
+  const state = normalizeText(input.state ?? null);
+  if (state) userData.st = [sha256(state.replace(/\s+/g, ''))];
   // Every checkout is Moroccan COD; the country signal is nearly free match
   // quality. Hashed like the rest, per spec.
   userData.country = [sha256('ma')];
@@ -210,6 +214,31 @@ async function postToGraph(
 }
 
 /**
+ * The customer's region (`st`), from the city catalogue every city input on the
+ * platform reads. The lead stores the city as free text, so this only resolves
+ * when the spelling matches a catalogue row — best-effort by design: a miss
+ * costs one optional matching parameter, never the event.
+ */
+async function regionForCity(city?: string | null): Promise<string | null> {
+  const s = typeof city === 'string' ? city.trim() : '';
+  if (!s) return null;
+  try {
+    const row = await prisma.city.findFirst({
+      where: {
+        OR: [
+          { name: { equals: s, mode: 'insensitive' } },
+          { nameAr: s },
+        ],
+      },
+      select: { region: true },
+    });
+    return row?.region || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Reports a captured lead to every Meta pixel active for this link that has a
  * CAPI token.
  */
@@ -226,9 +255,13 @@ export async function reportLeadToMetaCapi(input: CapiLeadInput): Promise<void> 
     );
     if (!active.length) return;
 
+    // Runs after the customer's response has gone out, so this lookup is free
+    // where it matters; callers may still pre-fill state to skip it.
+    const state = input.state ?? (await regionForCity(input.city));
+
     for (const pixel of active) {
       const eventName = String(pixel.conversionEvent || 'Purchase').trim() === 'Lead' ? 'Lead' : 'Purchase';
-      const event = buildCapiEvent(input, eventName);
+      const event = buildCapiEvent({ ...input, state }, eventName);
       const result = await postToGraph(
         pixel.pixelId,
         pixel.accessToken as string,
@@ -276,6 +309,7 @@ export async function sendMetaCapiTestEvent(pixel: {
       fullName: 'Test Customer',
       phone: '212612345678',
       city: 'Casablanca',
+      state: 'Casablanca-Settat',
       ipAddress: '41.140.0.1',
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       eventId: `test-${Date.now()}`,
