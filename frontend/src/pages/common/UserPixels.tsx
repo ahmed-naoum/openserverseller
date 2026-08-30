@@ -227,7 +227,10 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
   const handleCapiTest = async (pixel: UserPixel) => {
     try {
       setCapiTesting(true);
-      const res = await userPixelApi.testCapi(pixel.id);
+      const payload: any = {};
+      if (capiTestCode.trim()) payload.testEventCode = capiTestCode.trim();
+      if (capiToken.trim() && !capiToken.startsWith('•')) payload.token = capiToken.trim();
+      const res = await userPixelApi.testCapi(pixel.id, payload);
       toast.success(res.data?.message || 'Événement de test envoyé', { duration: 6000 });
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Échec de l\'événement de test', { duration: 8000 });

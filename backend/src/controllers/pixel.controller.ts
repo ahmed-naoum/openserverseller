@@ -210,14 +210,23 @@ export const testPixelCapi = async (req: Request, res: Response) => {
     if (!pixel || pixel.userId !== userId) {
       return res.status(404).json({ status: 'error', message: 'Pixel non trouvé' });
     }
-    if (pixel.platform !== 'META' || !pixel.accessToken) {
+
+    const token = (typeof req.body?.token === 'string' && req.body.token.trim())
+      ? req.body.token.trim()
+      : pixel.accessToken;
+
+    if (pixel.platform !== 'META' || !token) {
       return res.status(400).json({ status: 'error', message: "Configurez d'abord un token d'accès API Conversions sur ce pixel" });
     }
 
+    const testEventCode = (typeof req.body?.testEventCode === 'string' && req.body.testEventCode.trim())
+      ? req.body.testEventCode.trim()
+      : pixel.testEventCode;
+
     const result = await sendMetaCapiTestEvent({
       pixelId: pixel.pixelId,
-      accessToken: pixel.accessToken,
-      testEventCode: pixel.testEventCode,
+      accessToken: token,
+      testEventCode,
     });
 
     if (result.ok) {
@@ -229,7 +238,7 @@ export const testPixelCapi = async (req: Request, res: Response) => {
     if (result.error === 'TEST_CODE_REQUIRED') {
       return res.status(400).json({
         status: 'error',
-        message: 'Ajoutez d\'abord un code de test (onglet "Événements de test" de Meta Events Manager) pour ne pas polluer vos vraies données.',
+        message: 'Entrez d\'abord un code de test (onglet "Événements de test" dans Meta Events Manager).',
       });
     }
     return res.status(400).json({ status: 'error', message: `Meta a refusé l'événement: ${result.error}` });

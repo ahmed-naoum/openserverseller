@@ -1011,7 +1011,8 @@ export const userPixelApi = {
   delete: (id: number) => api.delete(`/user-pixels/${id}`),
   verify: (pixelId: string) => api.post('/user-pixels/verify', { pixelId }),
   /** Fires a synthetic Lead at Meta's Test Events tab to prove the CAPI token works. */
-  testCapi: (id: number) => api.post(`/user-pixels/${id}/test-capi`),
+  testCapi: (id: number, data?: { testEventCode?: string; token?: string }) =>
+    api.post(`/user-pixels/${id}/test-capi`, data),
 };
 
 /** One DNS record the seller has to create at their registrar. */
