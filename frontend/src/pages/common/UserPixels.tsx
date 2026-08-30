@@ -568,17 +568,17 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
                   </div>
                   <textarea
                     value={
-                      showCapiToken && capiToken.startsWith('•')
-                        ? (capiPixel.accessTokenHint
-                            ? `EAAB...${capiPixel.accessTokenHint} (Token masqué en sécurité)`
-                            : 'Token actif enregistré')
+                      showCapiToken
+                        ? (capiToken.startsWith('•')
+                            ? (capiPixel.accessTokenHint ? `EAA...${capiPixel.accessTokenHint}` : 'Token_Enregistre')
+                            : capiToken)
                         : capiToken
                     }
                     onChange={(e) => setCapiToken(e.target.value)}
                     rows={3}
                     placeholder={t('pixel_capi_token_placeholder2', 'dashboard') || 'Collez le token généré dans Meta Events Manager → Paramètres → API Conversions'}
                     className={`w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:border-blue-600 transition-all font-mono text-xs resize-none ${
-                      !showCapiToken && capiToken ? '[-webkit-text-security:disc] [text-security:disc]' : ''
+                      !showCapiToken && capiToken && !capiToken.startsWith('•') ? '[-webkit-text-security:disc] [text-security:disc]' : ''
                     }`}
                     style={{ '--tw-ring-color': `rgba(59, 130, 246, 0.2)` } as any}
                   />
