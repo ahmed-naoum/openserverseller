@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Activity, Plus, Trash2, CheckCircle2, XCircle, Target, ChevronDown, Globe, Music, Ghost, Facebook, Server, Send, KeyRound } from 'lucide-react';
+import { Activity, Plus, Trash2, CheckCircle2, XCircle, Target, ChevronDown, Globe, Music, Ghost, Facebook, Server, Send, KeyRound, Eye, EyeOff } from 'lucide-react';
 import { userPixelApi, influencerApi, productsApi } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -93,6 +93,7 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
   const [capiPixel, setCapiPixel] = useState<UserPixel | null>(null);
   const [capiToken, setCapiToken] = useState('');
   const [capiTestCode, setCapiTestCode] = useState('');
+  const [showCapiToken, setShowCapiToken] = useState(false);
   const [capiSaving, setCapiSaving] = useState(false);
   const [capiTesting, setCapiTesting] = useState(false);
 
@@ -535,20 +536,44 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
 
               <div className="space-y-5">
                 <div>
-                  <label className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-1.5">
-                    <KeyRound className="w-4 h-4 text-blue-600" />
-                    {t('pixel_capi_token_label2', 'dashboard') || "Token d'accès"}
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-bold text-gray-700 flex items-center gap-1.5">
+                      <KeyRound className="w-4 h-4 text-blue-600" />
+                      {t('pixel_capi_token_label2', 'dashboard') || "Token d'accès"}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowCapiToken(!showCapiToken)}
+                      className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 transition-colors bg-slate-100 hover:bg-blue-50 px-2.5 py-1 rounded-lg border border-slate-200"
+                      title={showCapiToken ? "Masquer le token" : "Afficher le token"}
+                    >
+                      {showCapiToken ? (
+                        <>
+                          <EyeOff className="w-3.5 h-3.5" />
+                          <span>{t('hide', 'dashboard') || 'Masquer'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>{t('show', 'dashboard') || 'Afficher'}</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                   <textarea
                     value={capiToken}
                     onChange={(e) => setCapiToken(e.target.value)}
                     rows={3}
                     placeholder={
                       capiPixel.hasAccessToken
-                        ? (t('pixel_capi_token_stored', 'dashboard') || 'Un token est déjà enregistré. Collez-en un nouveau pour le remplacer.')
+                        ? (showCapiToken
+                            ? `Un token est actuellement enregistré (EAA...${capiPixel.accessTokenHint || ''}). Collez-en un nouveau pour le remplacer.`
+                            : '•••••••••••••••••••••••••••••••••••••••• (Token masqué en sécurité)')
                         : (t('pixel_capi_token_placeholder2', 'dashboard') || 'Collez le token généré dans Meta Events Manager → Paramètres → API Conversions')
                     }
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:border-blue-600 transition-all font-mono text-xs resize-none"
+                    className={`w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:border-blue-600 transition-all font-mono text-xs resize-none ${
+                      !showCapiToken && capiToken ? '[-webkit-text-security:disc] [text-security:disc]' : ''
+                    }`}
                     style={{ '--tw-ring-color': `rgba(59, 130, 246, 0.2)` } as any}
                   />
                 </div>
