@@ -174,19 +174,25 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
 
   const openCapiModal = (pixel: UserPixel) => {
     setCapiPixel(pixel);
-    setCapiToken('');
+    setCapiToken(pixel.hasAccessToken ? '••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••' : '');
     setCapiTestCode(pixel.testEventCode || '');
+    setShowCapiToken(false);
   };
 
   const handleCapiSave = async () => {
     if (!capiPixel) return;
     try {
       setCapiSaving(true);
-      // Only send what changed: an untouched token field means "keep the
-      // stored token", not "replace it with an empty string".
+      // Only send what changed: an untouched token field starting with '•'
+      // means "keep the stored token", not "replace it".
       const payload: any = {};
-      if (capiToken.trim()) payload.accessToken = capiToken.trim();
-      if ((capiPixel.testEventCode || '') !== capiTestCode.trim()) payload.testEventCode = capiTestCode.trim();
+      const trimmed = capiToken.trim();
+      if (trimmed && !trimmed.startsWith('•')) {
+        payload.accessToken = trimmed;
+      }
+      if ((capiPixel.testEventCode || '') !== capiTestCode.trim()) {
+        payload.testEventCode = capiTestCode.trim();
+      }
       if (!Object.keys(payload).length) {
         setCapiPixel(null);
         return;
@@ -561,16 +567,16 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
                     </button>
                   </div>
                   <textarea
-                    value={capiToken}
+                    value={
+                      showCapiToken && capiToken.startsWith('•')
+                        ? (capiPixel.accessTokenHint
+                            ? `EAAB...${capiPixel.accessTokenHint} (Token masqué en sécurité)`
+                            : 'Token actif enregistré')
+                        : capiToken
+                    }
                     onChange={(e) => setCapiToken(e.target.value)}
                     rows={3}
-                    placeholder={
-                      capiPixel.hasAccessToken
-                        ? (showCapiToken
-                            ? `Un token est actuellement enregistré (EAA...${capiPixel.accessTokenHint || ''}). Collez-en un nouveau pour le remplacer.`
-                            : '•••••••••••••••••••••••••••••••••••••••• (Token masqué en sécurité)')
-                        : (t('pixel_capi_token_placeholder2', 'dashboard') || 'Collez le token généré dans Meta Events Manager → Paramètres → API Conversions')
-                    }
+                    placeholder={t('pixel_capi_token_placeholder2', 'dashboard') || 'Collez le token généré dans Meta Events Manager → Paramètres → API Conversions'}
                     className={`w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:border-blue-600 transition-all font-mono text-xs resize-none ${
                       !showCapiToken && capiToken ? '[-webkit-text-security:disc] [text-security:disc]' : ''
                     }`}
