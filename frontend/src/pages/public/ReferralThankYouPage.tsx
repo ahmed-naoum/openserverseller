@@ -80,6 +80,14 @@ export default function ReferralThankYouPage() {
   useEffect(() => {
     if (firedRef.current) return;
     if (loading) return;
+    // Only the SPA checkout writes an order handoff, and it is the one flow
+    // whose conversion fires here. The compiled landing page fires its own
+    // fbq('track', ..., {eventID}) before navigating, so firing again on
+    // arrival — without that eventID — would give Meta a second Purchase it
+    // cannot deduplicate, double-counting every compiled-flow order. The same
+    // guard keeps a direct or revisited thank-you URL from minting phantom
+    // conversions.
+    if (!order) return;
     const pixels = data?.pixels || [];
     if (!pixels.length || typeof window === 'undefined') return;
 
