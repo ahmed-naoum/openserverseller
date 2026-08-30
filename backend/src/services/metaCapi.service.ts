@@ -25,10 +25,11 @@ import { pixelRowsForCode } from './landingCompiler/head.js';
 
 /**
  * Graph API version, overridable without a deploy for the day Meta retires it.
- * v23.0 was current mid-2025 and versions get ~2 years of support.
+ * v26.0 is what the Conversions API docs ship in their examples as of mid-2026,
+ * and the Conversions API guarantees every version at least two years.
  */
 function graphVersion(): string {
-  return process.env.META_GRAPH_VERSION || 'v23.0';
+  return process.env.META_GRAPH_VERSION || 'v26.0';
 }
 
 const GRAPH_TIMEOUT_MS = 8000;
