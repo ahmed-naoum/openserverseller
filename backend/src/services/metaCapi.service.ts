@@ -82,8 +82,10 @@ export function splitFullName(fullName: string): { fn: string | null; ln: string
 }
 
 export interface CapiLeadInput {
-  /** Seller whose pixels apply — the referral link's influencer. */
-  influencerId: number;
+  /** Seller or affiliate whose pixels apply. */
+  influencerId?: number | null;
+  /** Product owner vendorId. */
+  vendorId?: number | null;
   /** Referral code, for the SINGLE/GLOBAL pixel precedence. */
   code: string;
   leadId: number;
@@ -193,20 +195,15 @@ async function postToGraph(
 /**
  * Reports a captured lead to every Meta pixel active for this link that has a
  * CAPI token.
- *
- * Called WITHOUT await from POST /public/leads — the customer's 201 must not
- * wait on graph.facebook.com. Pixels are loaded here rather than piggybacked on
- * the lead query so sellers without tokens cost the hot path nothing but this
- * one indexed lookup after the response has already gone out.
- *
- * Precedence must mirror the browser exactly (a SINGLE pixel on this code
- * silences all GLOBALs, across platforms), or the server would report to a
- * pixel the page never fired and the event_id dedupe would have nothing to
- * pair with — hence pixelRowsForCode, the same function the compiler uses.
  */
 export async function reportLeadToMetaCapi(input: CapiLeadInput): Promise<void> {
   try {
-    const all = await prisma.userPixel.findMany({ where: { userId: input.influencerId } });
+    const userIds = Array.from(
+      new Set([input.influencerId, input.vendorId].filter((id): id is number => typeof id === 'number' && id > 0))
+    );
+    if (!userIds.length) return;
+
+    const all = await prisma.userPixel.findMany({ where: { userId: { in: userIds } } });
     const active = pixelRowsForCode(all, input.code).filter(
       (p: any) => String(p.platform || 'META').toUpperCase() === 'META' && p.accessToken
     );

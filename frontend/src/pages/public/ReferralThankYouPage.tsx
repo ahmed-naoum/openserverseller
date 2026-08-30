@@ -98,11 +98,29 @@ export default function ReferralThankYouPage() {
       const meta = value != null ? { value, currency } : undefined;
 
       try {
-        if (platform === 'META' && w.fbq) {
-          // The same event id the submit handed the backend, which forwarded
-          // it to the Conversions API — Meta dedupes the two by it. Absent
-          // handoff (direct visit, blocked storage) simply means no pairing.
-          w.fbq('track', eventName, meta, order?.capiEventId ? { eventID: order.capiEventId } : undefined);
+        if (platform === 'META') {
+          if (!w.fbq && pixel.pixelId) {
+            (function(f: any, b: any, e: any, v: any, n?: any, t?: any, s?: any) {
+              if (f.fbq) return;
+              n = f.fbq = function() {
+                n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+              };
+              if (!f._fbq) f._fbq = n;
+              n.push = n;
+              n.loaded = !0;
+              n.version = '2.0';
+              n.queue = [];
+              t = b.createElement(e);
+              t.async = !0;
+              t.src = v;
+              s = b.getElementsByTagName(e)[0];
+              if (s && s.parentNode) s.parentNode.insertBefore(t, s);
+            })(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
+            w.fbq('init', pixel.pixelId);
+          }
+          if (w.fbq) {
+            w.fbq('track', eventName, meta, order?.capiEventId ? { eventID: order.capiEventId } : undefined);
+          }
         } else if (platform === 'GOOGLE' && w.gtag) {
           w.gtag('event', eventName, { event_category: 'conversion', ...(value != null ? { value, currency } : {}) });
         } else if (platform === 'TIKTOK' && w.ttq) {

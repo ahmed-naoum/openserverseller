@@ -475,11 +475,13 @@ router.post(
     // below must not wait on graph.facebook.com, and the reporter swallows its
     // own failures. Pixels without a CAPI token cost one indexed query, after
     // the response is already on the wire.
-    if (link.influencerId) {
+    const targetUserId = link.influencerId || vendorId;
+    if (targetUserId) {
       const capiValue = sanitizeCapiValue(req.body.value);
       const retailValue = Number(link.product?.retailPriceMad);
       void reportLeadToMetaCapi({
         influencerId: link.influencerId,
+        vendorId,
         code: link.code,
         leadId: lead.id,
         fullName,
