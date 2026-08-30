@@ -390,7 +390,7 @@ export const checkoutBlock: BlockRenderer = {
       thankYouUrl: `/r/${encodeURIComponent(ctx.code)}/thank-you`,
       // Long enough for the pixel beacons to leave before the document unloads,
       // short enough that the visitor does not notice a pause.
-      thankYouDelayMs: 400,
+      thankYouDelayMs: 1000,
       // Last tier of the price chain, so a pack with no price of its own
       // still updates the header to something truthful.
       retailPrice: ctx.productPriceMad,
