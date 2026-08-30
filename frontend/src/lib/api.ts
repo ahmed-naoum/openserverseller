@@ -473,7 +473,7 @@ export const publicApi = {
   /** The seller's custom thank-you page for a link, or null to use the default. */
   getThankYouPage: (code: string) => api.get(`/influencer/links/${code}/thank-you`),
   trackWhatsappClick: (code: string) => api.post(`/influencer/links/${code}/track-whatsapp`),
-  submitReferralLead: (data: { referralCode: string; fullName: string; phone: string; city: string; address: string; productVariant?: string; variantOptionId?: string; variantName?: string; packQuantity?: number }) => api.post('/public/leads', data),
+  submitReferralLead: (data: { referralCode: string; fullName: string; phone: string; city: string; address: string; productVariant?: string; variantOptionId?: string; variantName?: string; packQuantity?: number; capiEventId?: string; fbp?: string; fbc?: string; value?: number; eventSourceUrl?: string }) => api.post('/public/leads', data),
   submitContact: (data: { name: string; email: string; subject: string; message: string }) => api.post('/public/contact', data),
   checkBlock: (path: string) => api.get('/public/check-block', { params: { path } }),
   getProductsByAccounts: (accountIds: string) => api.get('/public/products-by-accounts', { params: { accountIds } }),
@@ -1005,9 +1005,13 @@ export const notificationsApi = {
 
 export const userPixelApi = {
   list: (platform?: string) => api.get('/user-pixels', { params: { platform } }),
-  create: (data: { name: string; type: string; pixelId: string; platform?: string; targetIds?: string[]; conversionEvent?: string }) => api.post('/user-pixels', data),
+  create: (data: { name: string; type: string; pixelId: string; platform?: string; targetIds?: string[]; conversionEvent?: string; accessToken?: string; testEventCode?: string }) => api.post('/user-pixels', data),
+  /** Partial update — pass accessToken/testEventCode as '' to clear them. */
+  update: (id: number, data: { name?: string; conversionEvent?: string; accessToken?: string | null; testEventCode?: string | null }) => api.patch(`/user-pixels/${id}`, data),
   delete: (id: number) => api.delete(`/user-pixels/${id}`),
   verify: (pixelId: string) => api.post('/user-pixels/verify', { pixelId }),
+  /** Fires a synthetic Lead at Meta's Test Events tab to prove the CAPI token works. */
+  testCapi: (id: number) => api.post(`/user-pixels/${id}/test-capi`),
 };
 
 /** One DNS record the seller has to create at their registrar. */

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Activity, Plus, Trash2, CheckCircle2, XCircle, Target, ChevronDown, Globe, Music, Ghost, Facebook } from 'lucide-react';
+import { Activity, Plus, Trash2, CheckCircle2, XCircle, Target, ChevronDown, Globe, Music, Ghost, Facebook, Server, Send, KeyRound } from 'lucide-react';
 import { userPixelApi, influencerApi, productsApi } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -14,6 +14,10 @@ interface UserPixel {
   platform: 'META' | 'GOOGLE' | 'TIKTOK' | 'SNAPCHAT';
   conversionEvent: string;
   targetIds: string[];
+  /** The Conversions API token itself never leaves the server — only these. */
+  hasAccessToken?: boolean;
+  accessTokenHint?: string | null;
+  testEventCode?: string | null;
 }
 
 interface UserPixelsProps {
@@ -83,6 +87,14 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
   const [pixelId, setPixelId] = useState('');
   const [targetId, setTargetId] = useState('');
   const [conversionEvent, setConversionEvent] = useState<'Lead' | 'Purchase'>('Lead');
+  const [accessToken, setAccessToken] = useState('');
+
+  // Conversions API modal state (META only)
+  const [capiPixel, setCapiPixel] = useState<UserPixel | null>(null);
+  const [capiToken, setCapiToken] = useState('');
+  const [capiTestCode, setCapiTestCode] = useState('');
+  const [capiSaving, setCapiSaving] = useState(false);
+  const [capiTesting, setCapiTesting] = useState(false);
 
   const details = PLATFORM_DETAILS[platform] || PLATFORM_DETAILS.META;
   const PlatformIcon = details.icon;
@@ -125,7 +137,8 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
         pixelId,
         platform,
         conversionEvent,
-        targetIds: type === 'SINGLE' ? [targetId] : []
+        targetIds: type === 'SINGLE' ? [targetId] : [],
+        ...(platform === 'META' && accessToken.trim() ? { accessToken: accessToken.trim() } : {})
       });
       toast.success('Pixel ajouté avec succès');
       setIsModalOpen(false);
@@ -155,6 +168,65 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
     setPixelId('');
     setTargetId('');
     setConversionEvent('Lead');
+    setAccessToken('');
+  };
+
+  const openCapiModal = (pixel: UserPixel) => {
+    setCapiPixel(pixel);
+    setCapiToken('');
+    setCapiTestCode(pixel.testEventCode || '');
+  };
+
+  const handleCapiSave = async () => {
+    if (!capiPixel) return;
+    try {
+      setCapiSaving(true);
+      // Only send what changed: an untouched token field means "keep the
+      // stored token", not "replace it with an empty string".
+      const payload: any = {};
+      if (capiToken.trim()) payload.accessToken = capiToken.trim();
+      if ((capiPixel.testEventCode || '') !== capiTestCode.trim()) payload.testEventCode = capiTestCode.trim();
+      if (!Object.keys(payload).length) {
+        setCapiPixel(null);
+        return;
+      }
+      await userPixelApi.update(capiPixel.id, payload);
+      toast.success(t('pixel_capi_saved', 'dashboard') || 'API Conversions enregistrée');
+      setCapiPixel(null);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Erreur lors de l\'enregistrement');
+    } finally {
+      setCapiSaving(false);
+    }
+  };
+
+  const handleCapiRemove = async () => {
+    if (!capiPixel?.hasAccessToken) return;
+    if (!confirm(t('pixel_capi_remove_confirm', 'dashboard') || 'Supprimer le token API Conversions de ce pixel ?')) return;
+    try {
+      setCapiSaving(true);
+      await userPixelApi.update(capiPixel.id, { accessToken: '' });
+      toast.success(t('pixel_capi_removed', 'dashboard') || 'Token supprimé');
+      setCapiPixel(null);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Erreur lors de la suppression du token');
+    } finally {
+      setCapiSaving(false);
+    }
+  };
+
+  const handleCapiTest = async (pixel: UserPixel) => {
+    try {
+      setCapiTesting(true);
+      const res = await userPixelApi.testCapi(pixel.id);
+      toast.success(res.data?.message || 'Événement de test envoyé', { duration: 6000 });
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Échec de l\'événement de test', { duration: 8000 });
+    } finally {
+      setCapiTesting(false);
+    }
   };
 
   return (
@@ -248,6 +320,32 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
                       {pixel.conversionEvent}
                     </span>
                   </div>
+
+                  {pixel.platform === 'META' && (
+                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                      <span className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+                        <Server className="w-3 h-3" />
+                        {t('pixel_capi_label', 'dashboard') || 'API Conversions'}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {pixel.hasAccessToken ? (
+                          <span className="text-xs font-bold px-2 py-1 rounded-md bg-green-100 text-green-700">
+                            {(t('pixel_capi_active', 'dashboard') || 'Active')}{pixel.accessTokenHint ? ` ····${pixel.accessTokenHint}` : ''}
+                          </span>
+                        ) : (
+                          <span className="text-xs font-bold px-2 py-1 rounded-md bg-gray-200 text-gray-500">
+                            {t('pixel_capi_off', 'dashboard') || 'Non configurée'}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => openCapiModal(pixel)}
+                          className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline"
+                        >
+                          {pixel.hasAccessToken ? (t('pixel_capi_manage', 'dashboard') || 'Gérer') : (t('pixel_capi_configure', 'dashboard') || 'Configurer')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {pixel.type === 'SINGLE' && (
                     <div className="text-xs font-medium text-gray-500 flex items-center gap-1.5 p-1">
@@ -375,6 +473,26 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
                   </div>
                 </div>
 
+                {platform === 'META' && (
+                  <div>
+                    <label className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-1.5">
+                      <KeyRound className="w-4 h-4 text-blue-600" />
+                      {t('pixel_capi_token_label', 'dashboard') || "Token d'accès API Conversions (optionnel)"}
+                    </label>
+                    <textarea
+                      value={accessToken}
+                      onChange={(e) => setAccessToken(e.target.value)}
+                      rows={2}
+                      placeholder={t('pixel_capi_token_placeholder', 'dashboard') || 'Ex: EAAxxxxxxxxxx... (Events Manager → Paramètres → API Conversions → Générer un token)'}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:border-blue-600 transition-all font-mono text-xs resize-none"
+                      style={{ '--tw-ring-color': `rgba(59, 130, 246, 0.2)` } as any}
+                    />
+                    <p className="text-[11px] text-gray-400 mt-1.5 leading-relaxed">
+                      {t('pixel_capi_hint', 'dashboard') || 'Avec un token, chaque commande est aussi envoyée à Meta depuis nos serveurs (événements dédupliqués) — le suivi résiste aux bloqueurs de pub et à iOS 14+.'}
+                    </p>
+                  </div>
+                )}
+
                 <button
                   onClick={handleSave}
                   disabled={isSubmitting || !name || !pixelId || (type === 'SINGLE' && !targetId)}
@@ -382,6 +500,105 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
                 >
                   {isSubmitting ? (t('pixel_saving', 'dashboard') || 'Enregistrement...') : (t('pixel_save', 'dashboard') || 'Sauvegarder le Pixel')}
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {capiPixel && createPortal(
+        <div
+          className="fixed inset-0 bg-slate-900/65 backdrop-blur-md z-[999999] flex items-center justify-center p-4 cursor-pointer animate-in fade-in duration-200"
+          onClick={() => setCapiPixel(null)}
+        >
+          <div
+            className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 sm:p-8">
+              <div className="flex justify-between items-center mb-2">
+                <h2 className="text-2xl font-black text-gray-900 flex items-center gap-2">
+                  <Server className="w-6 h-6 text-blue-600" />
+                  {t('pixel_capi_title', 'dashboard') || 'API Conversions Meta'}
+                </h2>
+                <button
+                  onClick={() => setCapiPixel(null)}
+                  className="p-2 text-gray-400 hover:text-gray-600 bg-gray-50 rounded-full"
+                >
+                  <XCircle className="w-6 h-6" />
+                </button>
+              </div>
+              <p className="text-sm text-gray-500 mb-6">
+                {capiPixel.name} — <span className="font-mono">{capiPixel.pixelId}</span>
+              </p>
+
+              <div className="space-y-5">
+                <div>
+                  <label className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-1.5">
+                    <KeyRound className="w-4 h-4 text-blue-600" />
+                    {t('pixel_capi_token_label2', 'dashboard') || "Token d'accès"}
+                  </label>
+                  <textarea
+                    value={capiToken}
+                    onChange={(e) => setCapiToken(e.target.value)}
+                    rows={3}
+                    placeholder={
+                      capiPixel.hasAccessToken
+                        ? (t('pixel_capi_token_stored', 'dashboard') || 'Un token est déjà enregistré. Collez-en un nouveau pour le remplacer.')
+                        : (t('pixel_capi_token_placeholder2', 'dashboard') || 'Collez le token généré dans Meta Events Manager → Paramètres → API Conversions')
+                    }
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:border-blue-600 transition-all font-mono text-xs resize-none"
+                    style={{ '--tw-ring-color': `rgba(59, 130, 246, 0.2)` } as any}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    {t('pixel_capi_test_code', 'dashboard') || 'Code de test (optionnel)'}
+                  </label>
+                  <input
+                    type="text"
+                    value={capiTestCode}
+                    onChange={(e) => setCapiTestCode(e.target.value)}
+                    placeholder="Ex: TEST12345"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:border-blue-600 transition-all font-medium"
+                    style={{ '--tw-ring-color': `rgba(59, 130, 246, 0.2)` } as any}
+                  />
+                  <p className="text-[11px] text-gray-400 mt-1.5 leading-relaxed">
+                    {t('pixel_capi_test_code_hint', 'dashboard') || 'Trouvez-le dans Events Manager → onglet "Événements de test". Requis pour le bouton d\'essai ci-dessous ; retirez-le une fois la configuration validée.'}
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    onClick={handleCapiSave}
+                    disabled={capiSaving}
+                    className="flex-1 py-3.5 text-white rounded-xl font-black transition-colors disabled:opacity-50 shadow-lg bg-blue-600 hover:bg-blue-700 shadow-blue-600/20"
+                  >
+                    {capiSaving ? (t('pixel_saving', 'dashboard') || 'Enregistrement...') : (t('pixel_capi_save', 'dashboard') || 'Enregistrer')}
+                  </button>
+                  {capiPixel.hasAccessToken && (
+                    <button
+                      onClick={() => handleCapiTest(capiPixel)}
+                      disabled={capiTesting}
+                      className="flex-1 py-3.5 rounded-xl font-bold transition-colors disabled:opacity-50 border-2 border-blue-100 text-blue-700 bg-blue-50 hover:bg-blue-100 flex items-center justify-center gap-2"
+                    >
+                      <Send className="w-4 h-4" />
+                      {capiTesting ? (t('pixel_capi_testing', 'dashboard') || 'Envoi...') : (t('pixel_capi_send_test', 'dashboard') || 'Envoyer un test')}
+                    </button>
+                  )}
+                </div>
+
+                {capiPixel.hasAccessToken && (
+                  <button
+                    onClick={handleCapiRemove}
+                    disabled={capiSaving}
+                    className="w-full py-2 text-sm font-bold text-red-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors disabled:opacity-50"
+                  >
+                    {t('pixel_capi_remove', 'dashboard') || 'Supprimer le token'}
+                  </button>
+                )}
               </div>
             </div>
           </div>

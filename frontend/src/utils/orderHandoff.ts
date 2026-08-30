@@ -36,6 +36,12 @@ export interface OrderHandoff {
   price?: number | null;
   currency?: string;
   productName?: string | null;
+  /**
+   * Event id the submit POSTed to the backend, which forwarded it to Meta's
+   * Conversions API. The thank-you page's fbq call must carry the same id so
+   * Meta pairs the two events instead of counting the order twice.
+   */
+  capiEventId?: string | null;
   /** Epoch ms, set on write. */
   at: number;
 }

@@ -248,7 +248,14 @@ describe('express_checkout', () => {
   it('carries the pixels needed to fire a conversion on submit', async () => {
     const html = (await withCheckout({}, {
       influencerPixels: [
-        { type: 'GLOBAL', platform: 'META', pixelId: '99', conversionEvent: 'Purchase' },
+        // The Conversions API token rides on the same row in the database. The
+        // exact-shape assertion below is the regression net: if it ever
+        // reaches cfg.pixels, anyone viewing source on the landing page can
+        // post arbitrary events to the seller's pixel.
+        {
+          type: 'GLOBAL', platform: 'META', pixelId: '99', conversionEvent: 'Purchase',
+          accessToken: 'EAACapiSecretToken123', testEventCode: 'TEST777',
+        },
       ],
     }))!;
     const cfg = JSON.parse(
@@ -257,6 +264,7 @@ describe('express_checkout', () => {
     expect(cfg.pixels).toEqual([
       { platform: 'META', pixelId: '99', conversionEvent: 'Purchase' },
     ]);
+    expect(html).not.toContain('EAACapiSecretToken123');
   });
 
   it('redirects to the thank-you page after a successful order', async () => {
@@ -283,7 +291,7 @@ describe('express_checkout', () => {
       '../src/services/landingCompiler/runtime/checkout.js'
     );
     // Order matters — a redirect scheduled before track() would race the beacon.
-    expect(CHECKOUT_RUNTIME.indexOf('track();')).toBeLessThan(
+    expect(CHECKOUT_RUNTIME.indexOf('track(capiEventId);')).toBeLessThan(
       CHECKOUT_RUNTIME.indexOf('location.replace(')
     );
   });

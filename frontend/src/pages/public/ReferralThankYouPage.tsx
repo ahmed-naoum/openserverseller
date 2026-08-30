@@ -99,7 +99,10 @@ export default function ReferralThankYouPage() {
 
       try {
         if (platform === 'META' && w.fbq) {
-          w.fbq('track', eventName, meta);
+          // The same event id the submit handed the backend, which forwarded
+          // it to the Conversions API — Meta dedupes the two by it. Absent
+          // handoff (direct visit, blocked storage) simply means no pairing.
+          w.fbq('track', eventName, meta, order?.capiEventId ? { eventID: order.capiEventId } : undefined);
         } else if (platform === 'GOOGLE' && w.gtag) {
           w.gtag('event', eventName, { event_category: 'conversion', ...(value != null ? { value, currency } : {}) });
         } else if (platform === 'TIKTOK' && w.ttq) {

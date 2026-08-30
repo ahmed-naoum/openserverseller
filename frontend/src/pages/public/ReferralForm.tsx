@@ -9,6 +9,7 @@ import BlockRenderer from '../../components/helper/sitebuilder/BlockRenderer';
 import WhatsAppWidget from '../../components/public/WhatsAppWidget';
 import { getCloakingConfig, needsGeoLookup, resolveGeoCloakRedirect, resolveInstantCloakRedirect } from '../../utils/cloaking';
 import { writeOrderHandoff, thankYouPath } from '../../utils/orderHandoff';
+import { makeCapiEventId, readCookie, fbcValue } from '../../utils/capi';
 
 const getNoScriptUrl = (pixel: any) => {
   const platform = (pixel.platform || 'META').toUpperCase();
@@ -672,6 +673,11 @@ export default function ReferralForm() {
 
     try {
       setIsSubmitting(true);
+      const unitPrice = Number(selectedOption?.price ?? data?.product?.retailPriceMad);
+      // Minted per attempt and sent both to our backend (which forwards it as
+      // the Conversions API event_id) and to the thank-you page's fbq call —
+      // the shared id is what lets Meta dedupe the server/browser pair.
+      const capiEventId = makeCapiEventId();
       const submitRes: any = await publicApi.submitReferralLead({
         referralCode: code!,
         ...form,
@@ -685,7 +691,13 @@ export default function ReferralForm() {
         // posts — the two checkout implementations feed the same endpoint.
         variantOptionId: selectedOption?.id ? String(selectedOption.id) : undefined,
         variantName: selectedOption?.name ? String(selectedOption.name) : undefined,
-        packQuantity: packQuantityOf(selectedOption)
+        packQuantity: packQuantityOf(selectedOption),
+        // Conversions API companions, all optional and advisory server-side.
+        capiEventId,
+        fbp: readCookie('_fbp') || undefined,
+        fbc: fbcValue() || undefined,
+        value: Number.isFinite(unitPrice) ? unitPrice : undefined,
+        eventSourceUrl: window.location.href
       });
 
       // Mark the abandoned-checkout attempt as converted.
@@ -696,7 +708,6 @@ export default function ReferralForm() {
       // it is the only place with the value to attach. Written before we
       // navigate so it is present however the browser gets there.
       const submitBody = submitRes?.data?.status === 'success' ? submitRes.data.data : submitRes?.data;
-      const unitPrice = Number(selectedOption?.price ?? data?.product?.retailPriceMad);
       writeOrderHandoff({
         code: code!,
         orderId: submitBody?.id ?? submitBody?.leadId ?? null,
@@ -711,6 +722,7 @@ export default function ReferralForm() {
           selectedProductFromBlock?.nameFr ||
           data?.product?.nameFr ||
           null,
+        capiEventId,
       });
 
       navigate(thankYouPath(code!), { replace: true });

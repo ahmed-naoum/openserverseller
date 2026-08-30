@@ -12,6 +12,7 @@ import { getIO } from '../lib/realtime.js';
 import { getNotifiableAgentIds } from '../utils/agentScope.js';
 import { enqueueSheetPush } from '../services/sheetPush.service.js';
 import { clientIp, lookupClientGeo } from '../services/geoIntel.service.js';
+import { reportLeadToMetaCapi } from '../services/metaCapi.service.js';
 
 const router = Router();
 
@@ -333,6 +334,41 @@ const sanitizePackQuantity = (value: unknown): number | null => {
   return value >= 1 && value <= 99 ? value : null;
 };
 
+/**
+ * Conversions API companions the checkout runtimes post alongside the lead.
+ * All optional, all advisory — they tune the server-side Meta event and touch
+ * nothing else, so each one degrades to null rather than ever rejecting an
+ * order.
+ */
+const sanitizeCapiEventId = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const s = value.trim();
+  return /^[A-Za-z0-9._-]{1,100}$/.test(s) ? s : null;
+};
+
+const sanitizeFbCookie = (value: unknown): string | null => {
+  // The _fbp/_fbc cookie grammar: "fb.<digit>.<timestamp>.<id>". Anything else
+  // would lower Meta's match quality rather than raise it.
+  if (typeof value !== 'string') return null;
+  const s = value.trim();
+  return /^fb\.[0-9]\.[0-9]+\.[\x21-\x7e]{1,400}$/.test(s) ? s : null;
+};
+
+const sanitizeCapiValue = (value: unknown): number | null => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return value >= 0 && value <= 1_000_000 ? value : null;
+};
+
+const sanitizeSourceUrl = (value: unknown): string | null => {
+  if (typeof value !== 'string' || value.length > 2000) return null;
+  try {
+    const u = new URL(value);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.toString() : null;
+  } catch {
+    return null;
+  }
+};
+
 router.post(
   '/leads',
   orderRateLimiter,
@@ -432,6 +468,39 @@ router.post(
       await enqueueSheetPush(lead.id, vendorId, lead.source);
     } catch (err) {
       console.error('[SheetPush] enqueue failed:', err);
+    }
+
+    // Server-side Meta conversion event, deduplicated against the browser's fbq
+    // call by the event id the page posted. Deliberately NOT awaited: the 201
+    // below must not wait on graph.facebook.com, and the reporter swallows its
+    // own failures. Pixels without a CAPI token cost one indexed query, after
+    // the response is already on the wire.
+    if (link.influencerId) {
+      const capiValue = sanitizeCapiValue(req.body.value);
+      const retailValue = Number(link.product?.retailPriceMad);
+      void reportLeadToMetaCapi({
+        influencerId: link.influencerId,
+        code: link.code,
+        leadId: lead.id,
+        fullName,
+        phone,
+        city,
+        ipAddress,
+        userAgent,
+        fbp: sanitizeFbCookie(req.body.fbp),
+        fbc: sanitizeFbCookie(req.body.fbc),
+        eventId: sanitizeCapiEventId(req.body.capiEventId),
+        // The price shown at checkout when the page sent it; the product's
+        // retail price otherwise, because a Purchase event without a value is
+        // rejected by Meta outright.
+        value: capiValue ?? (Number.isFinite(retailValue) ? retailValue : null),
+        currency: 'MAD',
+        productName: link.product?.nameFr || link.product?.nameAr || null,
+        sourceUrl:
+          sanitizeSourceUrl(req.body.eventSourceUrl) ||
+          sanitizeSourceUrl(req.headers.referer) ||
+          `https://${req.headers.host}/r/${encodeURIComponent(link.code)}`,
+      });
     }
 
     // Increment conversions (Ventes) when the lead is successfully created

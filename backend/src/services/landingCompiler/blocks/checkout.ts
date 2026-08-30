@@ -266,30 +266,29 @@ export const checkoutBlock: BlockRenderer = {
 
       const packs = Array.isArray(c.options) ? c.options : [];
       const current = packs.length && packs[0]?.price ? packs[0].price : ctx.productPriceMad;
+      const firstPackOldPrice = packs.length ? packs[0]?.oldPrice : null;
+      const hasOldPrice = c.showOldPrice || !!firstPackOldPrice;
 
-      // Opt-in, matching plain truthiness on showOldPrice.
-      if (c.showOldPrice) {
-        const oldColor = safeColor(c.oldPriceColor, '#9ca3af');
-        const oldSize = num(c.oldPriceSize, Math.round(priceSize * 0.7), 6, 120);
-        const retail = Number(ctx.productPriceMad);
-        const oldValue = c.oldPriceValue || (retail ? retail + 50 : 150);
+      const oldColor = safeColor(c.oldPriceColor, '#9ca3af');
+      const oldSize = num(c.oldPriceSize, Math.round(priceSize * 0.7), 6, 120);
+      const retail = Number(ctx.productPriceMad);
+      const oldValue = firstPackOldPrice || c.oldPriceValue || (retail ? retail + 50 : 150);
+
+      if (hasOldPrice) {
         bits.push(
-          `<span class="ck-old" style="color:${oldColor};font-size:${oldSize}px">` +
-            `${esc(oldValue)}</span>` +
-          ` <span class="ck-pack-sep" style="font-size:${oldSize}px">/</span> `
+          `<span class="ck-old" data-ck="price-old"><span data-ck="price-old-val" style="color:${oldColor};font-size:${oldSize}px">${esc(oldValue)}</span> <span class="ck-pack-sep" style="font-size:${oldSize}px">/</span> </span>`
         );
       }
 
       bits.push(
-        `<span class="ck-now" style="color:${priceColor};font-size:${priceSize}px">` +
-          `${esc(current)}</span>`
+        `<span class="ck-now" style="color:${priceColor};font-size:${priceSize}px"><span data-ck="price">${esc(current)}</span></span>`
       );
 
       bits.push(
         ` <span class="ck-curr" style="font-size:${Math.round(priceSize * 0.75)}px">${esc(currency)}</span>`
       );
 
-      parts.push(`<div class="ck-price" data-ck="price">${bits.join('')}</div>`);
+      parts.push(`<div class="ck-price">${bits.join('')}</div>`);
     }
 
     const packs = Array.isArray(c.options) ? c.options : [];

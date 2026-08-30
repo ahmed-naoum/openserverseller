@@ -33,28 +33,42 @@ export interface HeadInput {
 }
 
 /**
- * Chooses which of an influencer's pixels apply to this link.
+ * The raw pixel rows that apply to this link, precedence applied.
  *
  * Mirrors ReferralForm.tsx: a SINGLE pixel naming this code wins outright, and
  * only if none does do the GLOBAL pixels apply. Keeping the precedence identical
  * matters — an influencer who set a per-link pixel is deliberately excluding the
  * global one, and quietly firing both would corrupt their attribution.
+ *
+ * Also the precedence the Conversions API reporter uses (metaCapi.service.ts),
+ * and it must stay the ONE implementation: a server event sent for a pixel the
+ * page never fired would have no browser twin to deduplicate against.
  */
-export function selectActivePixels(pixels: any[], code: string): ActivePixel[] {
+export function pixelRowsForCode(pixels: any[], code: string): any[] {
   if (!Array.isArray(pixels)) return [];
-
-  const normalise = (p: any): ActivePixel => ({
-    platform: String(p.platform || 'META').toUpperCase(),
-    pixelId: String(p.pixelId || ''),
-    conversionEvent: String(p.conversionEvent || 'Lead'),
-  });
 
   const single = pixels.filter(
     (p) => p?.type === 'SINGLE' && Array.isArray(p?.targetIds) && p.targetIds.includes(code)
   );
-  if (single.length) return single.map(normalise).filter((p) => p.pixelId);
+  if (single.length) return single;
 
-  return pixels.filter((p) => p?.type === 'GLOBAL').map(normalise).filter((p) => p.pixelId);
+  return pixels.filter((p) => p?.type === 'GLOBAL');
+}
+
+/**
+ * Chooses which of an influencer's pixels apply to this link, reduced to the
+ * three fields a page needs. The projection is load-bearing, not cosmetic:
+ * rows can carry a Conversions API access token, and this is the doorway
+ * through which pixels reach compiled HTML.
+ */
+export function selectActivePixels(pixels: any[], code: string): ActivePixel[] {
+  return pixelRowsForCode(pixels, code)
+    .map((p: any): ActivePixel => ({
+      platform: String(p.platform || 'META').toUpperCase(),
+      pixelId: String(p.pixelId || ''),
+      conversionEvent: String(p.conversionEvent || 'Lead'),
+    }))
+    .filter((p) => p.pixelId);
 }
 
 /** Verbatim from ReferralForm.getNoScriptUrl — the fallback beacon for JS-less clients. */

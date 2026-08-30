@@ -36,6 +36,23 @@ const router = Router();
 const prisma = new PrismaClient();
 
 /**
+ * A pixel row as the public landing/thank-you payloads may carry it.
+ *
+ * An explicit allow-list, not an omit: UserPixel now holds the Conversions API
+ * access token, and these two endpoints are unauthenticated — returning the
+ * row as stored would hand every visitor a secret that can post arbitrary
+ * events to the seller's pixel. New columns stay private until someone adds
+ * them here on purpose.
+ */
+const toPublicPixel = (p: any) => ({
+  type: p.type,
+  pixelId: p.pixelId,
+  platform: p.platform,
+  targetIds: p.targetIds,
+  conversionEvent: p.conversionEvent,
+});
+
+/**
  * Refuse a per-link action when a scoped sub-account was not handed the link's
  * product.
  *
@@ -560,7 +577,7 @@ router.get(
         landingPage: targetLink.landingPage
           ? { ...targetLink.landingPage, thankYouStructure: undefined }
           : targetLink.landingPage,
-        pixels: link.influencer.pixels || []
+        pixels: (link.influencer.pixels || []).map(toPublicPixel)
       }
     });
   })
@@ -623,7 +640,7 @@ router.get(
           : null,
         influencerName: link.influencer.profile?.fullName || null,
         influencerAvatar: link.influencer.profile?.avatarUrl || null,
-        pixels: link.influencer.pixels || [],
+        pixels: (link.influencer.pixels || []).map(toPublicPixel),
       },
     });
   })

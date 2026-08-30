@@ -1390,6 +1390,12 @@ model UserPixel {
   targetIds       Json? // Array of string (e.g., ReferralLink codes)
   conversionEvent String @default("Lead") // e.g., "Lead" or "Purchase"
 
+  // Meta Conversions API. The token is a server-side secret: it must never be
+  // serialized into a compiled page, a public link payload, or even the owner's
+  // own pixel listing (which returns a hint instead). META platform only.
+  accessToken   String?
+  testEventCode String? // Meta Events Manager "Test events" code, e.g. "TEST12345"
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

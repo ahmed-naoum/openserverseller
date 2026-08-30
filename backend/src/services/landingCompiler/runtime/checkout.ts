@@ -42,6 +42,8 @@ export const CHECKOUT_RUNTIME = `
     var strip = root.querySelector('[data-ck="strip"]');
     var panel = root.querySelector('[data-ck="success"]');
     var priceEl = root.querySelector('[data-ck="price"]');
+    var priceOldWrapper = root.querySelector('[data-ck="price-old"]');
+    var priceOldValEl = root.querySelector('[data-ck="price-old-val"]');
     var selected = cfg.packs && cfg.packs.length ? cfg.packs[0] : null;
     // selectedProductFromBlock (ReferralForm.tsx:47): the product a card in a
     // products block was clicked for. Null on every page without one.
@@ -59,13 +61,16 @@ export const CHECKOUT_RUNTIME = `
     function paintPrice() {
       if (!priceEl) return;
       var shown = priceNow();
-      var curr = cfg.currency || 'درهم';
       if (shown !== null && shown !== undefined && shown !== '') {
-        var oldP = selected && selected.oldPrice;
+        priceEl.textContent = String(shown);
+      }
+      var oldP = selected && selected.oldPrice;
+      if (priceOldWrapper) {
         if (oldP) {
-          priceEl.innerHTML = '<span class="ck-old ">' + oldP + '</span> <span class="ck-pack-sep">/</span> <span class="ck-now">' + shown + '</span> <span class="ck-curr">' + curr + '</span>';
-        } else {
-          priceEl.innerHTML = '<span class="ck-now">' + shown + '</span> <span class="ck-curr">' + curr + '</span>';
+          if (priceOldValEl) priceOldValEl.textContent = String(oldP);
+          priceOldWrapper.style.display = '';
+        } else if (!cfg.showOldPrice) {
+          priceOldWrapper.style.display = 'none';
         }
       }
     }
@@ -308,14 +313,57 @@ export const CHECKOUT_RUNTIME = `
       paintPrice();
     });
 
-    function track() {
+    // --- Conversions API companions -------------------------------------
+    // The backend re-reports the Meta conversion server-side (Conversions
+    // API), so the browser hands it what only the browser has: the _fbp/_fbc
+    // cookies and an event id shared with the fbq call below. Meta then pairs
+    // the two reports by that id instead of counting the order twice. All of
+    // it is best-effort — a blocked cookie or an old browser only weakens the
+    // match, never the order.
+    function readCookie(name) {
+      try {
+        var m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+        return m ? decodeURIComponent(m[1]) : null;
+      } catch (e) { return null; }
+    }
+    // The click id survives in the URL longer than the cookie exists: fbevents
+    // may not have run yet (deferred SDK) or may be blocked, so a missing _fbc
+    // is rebuilt from fbclid exactly the way the pixel itself would build it.
+    function fbcValue() {
+      var v = readCookie('_fbc');
+      if (v) return v;
+      try {
+        var id = new URLSearchParams(location.search).get('fbclid');
+        if (id) return 'fb.1.' + Date.now() + '.' + id;
+      } catch (e) {}
+      return null;
+    }
+    function makeEventId() {
+      try {
+        if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+      } catch (e) {}
+      return 'ck.' + Date.now().toString(36) + '.' + Math.random().toString(36).slice(2, 10);
+    }
+    // The displayed price as a number, for the pixel's value and the server
+    // event alike — the two must agree or Meta's dedupe pairs mismatched
+    // payloads. Seller-authored prices can carry stray text, hence the strip.
+    function capiValue() {
+      var shown = priceNow();
+      var n = parseFloat(String(shown == null ? '' : shown).replace(/[^0-9.]/g, ''));
+      return isFinite(n) && n >= 0 ? n : null;
+    }
+
+    function track(eventId) {
       if (!cfg.pixels) return;
+      var val = capiValue();
       for (var i = 0; i < cfg.pixels.length; i++) {
         var p = cfg.pixels[i];
         var ev = p.conversionEvent || 'Lead';
         try {
           if (p.platform === 'META' && window.fbq) {
-            window.fbq('track', ev);
+            window.fbq('track', ev,
+              val !== null ? { value: val, currency: 'MAD' } : {},
+              eventId ? { eventID: eventId } : undefined);
           } else if (p.platform === 'GOOGLE' && window.gtag) {
             window.gtag('event', ev, { 'event_category': 'conversion' });
           } else if (p.platform === 'TIKTOK' && window.ttq) {
@@ -391,6 +439,12 @@ export const CHECKOUT_RUNTIME = `
       var label = btn.textContent;
       btn.textContent = cfg.msg.sending;
 
+      // Minted per attempt, shared by the POST below and the fbq call after
+      // it succeeds — the server's Conversions API event carries the same id,
+      // which is what lets Meta deduplicate the pair.
+      var capiEventId = makeEventId();
+      var orderValue = capiValue();
+
       fetch('/api/v1/public/leads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -409,7 +463,14 @@ export const CHECKOUT_RUNTIME = `
           variantOptionId: (selected && selected.id) || undefined,
           variantName: (selected && selected.name) || undefined,
           packQuantity: packQty(),
-          productVariant: variant()
+          productVariant: variant(),
+          // Conversions API companions. JSON.stringify drops the undefineds,
+          // and the server treats every one of them as optional and advisory.
+          capiEventId: capiEventId,
+          fbp: readCookie('_fbp') || undefined,
+          fbc: fbcValue() || undefined,
+          value: orderValue !== null ? orderValue : undefined,
+          eventSourceUrl: location.href
         })
       }).then(function(res){
         // A 502 from nginx or an offline network yields a non-JSON body; without
@@ -423,7 +484,7 @@ export const CHECKOUT_RUNTIME = `
           e2.fromServer = true;
           throw e2;
         }
-        track();
+        track(capiEventId);
 
         // Confirm immediately, then navigate. The panel is only on screen for a
         // moment, but without it the button sits in its "sending" state for the
