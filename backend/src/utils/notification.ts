@@ -1,8 +1,10 @@
 import { prisma } from '../lib/prisma.js';
+import { sendPushToUser } from '../lib/push.js';
 
 
 /**
- * Creates a notification in the database and broadcasts it to the target user via Socket.io.
+ * Creates a notification in the database, broadcasts it to the target user via Socket.io
+ * (app open) and pushes it through Firebase to their phones (app closed / offline).
  * 
  * @param userId The integer ID of the user in the database
  * @param type The category of the notification (e.g. 'PRODUCT_CLAIM_STATUS', 'NEW_LEAD', etc.)
@@ -33,6 +35,14 @@ export async function createNotification(userId: number, type: string, title: st
         io.to(`user:${user.uuid}`).emit('new-notification', notification);
       }
     }
+
+    // Push to the user's phones. Fire-and-forget: a Firebase hiccup must not fail the caller.
+    void sendPushToUser(userId, {
+      notificationId: notification.id,
+      type,
+      title,
+      body,
+    });
 
     return notification;
   } catch (error) {

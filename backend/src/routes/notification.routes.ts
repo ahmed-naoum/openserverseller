@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { authenticate } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { resolvePage, resolvePageSize } from '../lib/pagination.js';
+import { registerPushToken, unregisterPushToken } from '../lib/push.js';
 
 const router = Router();
 
@@ -44,6 +45,46 @@ router.get(
         },
       },
     });
+  })
+);
+
+// ---------------------------------------------------------------------------
+// Device push tokens (mobile app). Registered before the `/:id` routes so that
+// "push-token" is never parsed as a notification id.
+// ---------------------------------------------------------------------------
+router.post(
+  '/push-token',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+    const platform = typeof req.body?.platform === 'string' ? req.body.platform.trim().toLowerCase() : '';
+    const provider = typeof req.body?.provider === 'string' ? req.body.provider.trim().toLowerCase() : 'fcm';
+
+    if (token.length < 20 || token.length > 4096) {
+      return res.status(400).json({ status: 'error', message: 'Jeton push invalide' });
+    }
+    if (!['android', 'ios', 'web'].includes(platform)) {
+      return res.status(400).json({ status: 'error', message: 'Plateforme invalide' });
+    }
+    if (!['fcm', 'apns', 'expo'].includes(provider)) {
+      return res.status(400).json({ status: 'error', message: 'Fournisseur push invalide' });
+    }
+
+    await registerPushToken(req.user!.id, { token, platform, provider });
+    res.json({ status: 'success', message: 'Appareil enregistré pour les notifications push' });
+  })
+);
+
+router.delete(
+  '/push-token',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+    if (!token) {
+      return res.status(400).json({ status: 'error', message: 'Jeton push requis' });
+    }
+    const removed = await unregisterPushToken(req.user!.id, token);
+    res.json({ status: 'success', message: removed ? 'Appareil désinscrit' : 'Aucun appareil correspondant' });
   })
 );
 

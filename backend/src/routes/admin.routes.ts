@@ -1886,14 +1886,13 @@ router.patch(
     });
 
     if (status === 'REJECTED') {
-      await prisma.notification.create({
-        data: {
-          userId: bankAccount.userId,
-          title: "Compte Bancaire Rejeté",
-          body: `Votre compte bancaire (${bankAccount.bankName}) a été rejeté. Veuillez ajouter un nouveau RIB (RIB: ${bankAccount.ribAccount}).`,
-          type: "ERROR"
-        }
-      });
+      const { createNotification } = await import('../utils/notification.js');
+      await createNotification(
+        bankAccount.userId,
+        'ERROR',
+        'Compte Bancaire Rejeté',
+        `Votre compte bancaire (${bankAccount.bankName}) a été rejeté. Veuillez ajouter un nouveau RIB (RIB: ${bankAccount.ribAccount}).`
+      );
     }
 
     await checkAndActivateUser(bankAccount.userId);

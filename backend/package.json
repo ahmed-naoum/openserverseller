@@ -50,6 +50,7 @@
     "express-rate-limit": "^7.5.1",
     "express-validator": "^7.2.1",
     "face-api.js": "^0.22.2",
+    "firebase-admin": "^14.3.0",
     "geoip-lite": "^1.4.10",
     "google-auth-library": "^10.6.1",
     "helmet": "^8.0.0",

@@ -54,6 +54,9 @@ model User {
   parentVendor   User?  @relation("VendorSubAccounts", fields: [parentVendorId], references: [id], onDelete: Cascade)
   subAccounts    User[] @relation("VendorSubAccounts")
 
+  // Phones registered for Firebase push (SILACOD mobile app)
+  pushTokens     PushToken[]
+
   // Per-page grants for a sub-account. All default to false: a freshly created
   // helper can see nothing until its vendor explicitly hands over a page.
   subCanViewDashboard    Boolean @default(true)
@@ -1134,6 +1137,23 @@ model SheetPushJob {
   @@index([status, nextAttemptAt])
   @@index([vendorId, createdAt])
   @@map("sheet_push_jobs")
+}
+
+/// A phone registered for push notifications (Firebase Cloud Messaging / APNs).
+/// One row per device token; a token moving to another account is re-assigned.
+model PushToken {
+  id         Int       @id @default(autoincrement())
+  userId     Int
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token      String    @unique
+  platform   String // android | ios | web
+  provider   String    @default("fcm") // fcm | apns | expo
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  lastSeenAt DateTime?
+
+  @@index([userId])
+  @@map("push_tokens")
 }
 
 model Notification {
